@@ -111,6 +111,11 @@ export interface AuditFilters {
   offset: number;
 }
 
+export interface AuditVocabularyEntry {
+  action: string;
+  entity_type: string;
+}
+
 export const notificationsApi = {
   listAnnouncements: () => api.get<{ items: Announcement[] }>("/api/announcements"),
   getAnnouncement: (id: number) => api.get<Announcement>(`/api/announcements/${id}`),
@@ -147,4 +152,6 @@ export const notificationsApi = {
 
   queryAudit: (filters: AuditFilters) =>
     api.get<{ items: AuditRow[]; total: number }>("/api/audit", { query: { ...filters } }),
+  getAuditActions: () => api.get<{ items: AuditVocabularyEntry[] }>("/api/audit/actions"),
+  getAuditEntry: (id: number) => api.get<AuditRow>(`/api/audit/${id}`),
 };

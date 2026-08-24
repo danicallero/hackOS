@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { DateTimeInput } from "@/components/common/datetime-input";
-import { Modal } from "@/components/common/modal";
+import { EntityCombobox } from "@/components/common/entity-combobox";
 import { PageHeader } from "@/components/common/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,14 +22,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
+import { getActionLabel } from "@/lib/audit-labels";
 import { fromDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
-import { type AuditRow, notificationsApi } from "@/lib/notifications";
+import { type AuditRow, type AuditVocabularyEntry, notificationsApi } from "@/lib/notifications";
 import { useCan } from "@/lib/session";
 
 const LIMIT = 50;
 
-const timeFmt = new Intl.DateTimeFormat("en-GB", {
+export const auditTimeFmt = new Intl.DateTimeFormat("en-GB", {
   day: "2-digit",
   month: "short",
   year: "numeric",
@@ -37,7 +38,9 @@ const timeFmt = new Intl.DateTimeFormat("en-GB", {
   minute: "2-digit",
 });
 
-function actorLabel(row: Pick<AuditRow, "actor_name" | "actor_surname" | "actor_email">) {
+export function auditActorLabel(
+  row: Pick<AuditRow, "actor_name" | "actor_surname" | "actor_email">,
+) {
   const fullName = [row.actor_name, row.actor_surname].filter(Boolean).join(" ").trim();
   return fullName || row.actor_email || null;
 }
@@ -71,7 +74,18 @@ export default function AuditPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
-  const [selected, setSelected] = useState<AuditRow | null>(null);
+  const [vocabulary, setVocabulary] = useState<AuditVocabularyEntry[]>([]);
+
+  // Load once: the full {action, entityType} vocabulary actually present in
+  // audit_log, backing the Action/Entity type comboboxes below instead of
+  // free-text guessing.
+  useEffect(() => {
+    if (!canRead) return;
+    notificationsApi
+      .getAuditActions()
+      .then((r) => setVocabulary(r.items))
+      .catch(() => setVocabulary([]));
+  }, [canRead]);
 
   // Debounce the filter bar, and reset to page 1 on any change.
   useEffect(() => {
@@ -136,20 +150,23 @@ export default function AuditPage() {
 
   const hasFilters = Object.values(filters).some((v) => v.trim() !== "");
 
+  const actionOptions = Array.from(new Set(vocabulary.map((v) => v.action)))
+    .sort()
+    .map((action) => ({ action, label: getActionLabel(action, t) }));
+  const entityTypeOptions = Array.from(new Set(vocabulary.map((v) => v.entity_type)))
+    .sort()
+    .map((entityType) => ({ entityType }));
+
   const columns: Column<AuditRow>[] = [
     {
       id: "when",
       header: t("colWhen"),
-      cell: (r) => <span className="text-sm">{timeFmt.format(new Date(r.created_at))}</span>,
+      cell: (r) => <span className="text-sm">{auditTimeFmt.format(new Date(r.created_at))}</span>,
     },
     {
       id: "action",
       header: t("colAction"),
-      cell: (r) => (
-        <Badge variant="secondary" className="font-mono text-xs">
-          {r.action}
-        </Badge>
-      ),
+      cell: (r) => <Badge variant="secondary">{getActionLabel(r.action, t)}</Badge>,
     },
     {
       id: "entity",
@@ -180,7 +197,7 @@ export default function AuditPage() {
             onClick={(e) => e.stopPropagation()}
             title={`#${r.actor_id}`}
           >
-            {actorLabel(r) ?? `#${r.actor_id}`}
+            {auditActorLabel(r) ?? `#${r.actor_id}`}
           </Link>
         ) : (
           <span className="text-muted-foreground text-sm">{t("systemActor")}</span>
@@ -212,24 +229,30 @@ export default function AuditPage() {
           <Label htmlFor="audit-action" className="text-muted-foreground text-xs">
             {t("colAction")}
           </Label>
-          <Input
+          <EntityCombobox
             id="audit-action"
+            options={actionOptions}
             value={filters.action}
-            onChange={(e) => setFilters((f) => ({ ...f, action: e.target.value }))}
-            placeholder={`${t("egPrefix")} create, update`}
-            className="h-9 w-40"
+            onChange={(v) => setFilters((f) => ({ ...f, action: v }))}
+            getId={(o) => o.action}
+            getLabel={(o) => o.label}
+            placeholder={t("allActionsPlaceholder")}
+            className="h-9 w-48"
           />
         </div>
         <div className="space-y-1">
           <Label htmlFor="audit-entity-type" className="text-muted-foreground text-xs">
             {t("entityTypeLabel")}
           </Label>
-          <Input
+          <EntityCombobox
             id="audit-entity-type"
+            options={entityTypeOptions}
             value={filters.entityType}
-            onChange={(e) => setFilters((f) => ({ ...f, entityType: e.target.value }))}
-            placeholder={`${t("egPrefix")} user, announcement`}
-            className="h-9 w-44"
+            onChange={(v) => setFilters((f) => ({ ...f, entityType: v }))}
+            getId={(o) => o.entityType}
+            getLabel={(o) => o.entityType}
+            placeholder={t("allEntityTypesPlaceholder")}
+            className="h-9 w-48"
           />
         </div>
         <div className="space-y-1">
@@ -294,8 +317,8 @@ export default function AuditPage() {
             ? { message: loadError, onRetry: () => setRetryNonce((value) => value + 1) }
             : undefined
         }
-        onRowClick={setSelected}
-        getRowLabel={(r) => `${r.action} ${r.entity_type} ${r.entity_id}`}
+        getRowHref={(r) => `/audit/${r.id}`}
+        getRowLabel={(r) => `${getActionLabel(r.action, t)} ${r.entity_type} ${r.entity_id}`}
         empty={{
           icon: ScrollTextIcon,
           title: t("noAuditEntriesTitle"),
@@ -328,93 +351,6 @@ export default function AuditPage() {
             </Button>
           </div>
         </div>
-      )}
-
-      {selected && (
-        <Modal
-          open={Boolean(selected)}
-          onOpenChange={(open) => {
-            if (!open) setSelected(null);
-          }}
-          title={`${selected.action} — ${selected.entity_type} #${selected.entity_id}`}
-          icon={ScrollTextIcon}
-          size="lg"
-        >
-          <div className="space-y-4 text-sm">
-            <dl className="grid grid-cols-2 gap-3">
-              <div>
-                <dt className="text-muted-foreground text-xs">{t("colWhen")}</dt>
-                <dd className="wrap-break-word">{timeFmt.format(new Date(selected.created_at))}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground text-xs">{t("colSource")}</dt>
-                <dd className="wrap-break-word">{selected.source ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground text-xs">{t("colEntity")}</dt>
-                <dd className="wrap-break-word">
-                  {selected.entity_type === "user" ? (
-                    <Link
-                      href={`/users/${selected.entity_id}`}
-                      className="hover:underline"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {t("userInline", { id: selected.entity_id })}
-                    </Link>
-                  ) : (
-                    `${selected.entity_type} #${selected.entity_id}`
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground text-xs">{t("colActor")}</dt>
-                <dd className="wrap-break-word">
-                  {selected.actor_id ? (
-                    <Link
-                      href={`/users/${selected.actor_id}`}
-                      className="hover:underline"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {actorLabel(selected) ?? `#${selected.actor_id}`}
-                    </Link>
-                  ) : (
-                    t("systemActor")
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground text-xs">{t("reasonLabel")}</dt>
-                <dd className="wrap-break-word">{selected.reason ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground text-xs">{t("ipLabel")}</dt>
-                <dd className="wrap-break-word">{selected.ip ?? "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground text-xs">{t("userAgentLabel")}</dt>
-                <dd className="wrap-break-word">{selected.user_agent ?? "—"}</dd>
-              </div>
-            </dl>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <p className="text-muted-foreground text-xs">{t("beforeLabel")}</p>
-                <pre className="bg-muted max-h-64 overflow-auto rounded-md p-3 text-xs">
-                  {selected.before === null || selected.before === undefined
-                    ? "—"
-                    : JSON.stringify(selected.before, null, 2)}
-                </pre>
-              </div>
-              <div className="space-y-1">
-                <p className="text-muted-foreground text-xs">{t("afterLabel")}</p>
-                <pre className="bg-muted max-h-64 overflow-auto rounded-md p-3 text-xs">
-                  {selected.after === null || selected.after === undefined
-                    ? "—"
-                    : JSON.stringify(selected.after, null, 2)}
-                </pre>
-              </div>
-            </div>
-          </div>
-        </Modal>
       )}
     </div>
   );
