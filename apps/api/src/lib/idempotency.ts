@@ -9,6 +9,9 @@ import { ConflictError } from "./errors.js";
  * accept an `Idempotency-Key` header. Same key + same request body replays
  * the stored response instead of re-executing; same key with a DIFFERENT
  * body is a 409; a concurrent in-flight duplicate is a 409 with retry hint.
+ * A 5xx response is never replayed — it is a transient/server-side failure,
+ * not a stable client-visible outcome, so the record is released instead
+ * (see `idempotencyOnSend`) and the same key/body can retry immediately (#534).
  *
  * Usage: add `preHandler: idempotencyGuard` to the route and wrap the
  * handler result normally — the onSend hook persists the response.
@@ -105,11 +108,25 @@ export async function idempotencyOnSend(
   payload: unknown,
 ): Promise<unknown> {
   if (req.idempotency && !req.idempotency.replayed) {
-    await pool.query(
-      `UPDATE idempotency_keys SET response_status = $3, response_body = $4, completed_at = now()
-       WHERE key = $1 AND scope = $2`,
-      [req.idempotency.key, req.idempotency.scope, reply.statusCode, payload ?? null],
-    );
+    if (reply.statusCode >= 500) {
+      // A 5xx is a transient/server-side failure, not a stable client-visible
+      // outcome (issue #534) — persisting it would replay the same error
+      // forever, and mobile's offline scan queue reuses the scan id as the
+      // key, so this is exactly the H22/H25/H26 recovery path. Release the
+      // record instead so the same key/body can retry and actually
+      // re-execute; guard on response_status IS NULL keeps exactly one
+      // winner if a concurrent request is racing this same row.
+      await pool.query(
+        `DELETE FROM idempotency_keys WHERE key = $1 AND scope = $2 AND response_status IS NULL`,
+        [req.idempotency.key, req.idempotency.scope],
+      );
+    } else {
+      await pool.query(
+        `UPDATE idempotency_keys SET response_status = $3, response_body = $4, completed_at = now()
+         WHERE key = $1 AND scope = $2`,
+        [req.idempotency.key, req.idempotency.scope, reply.statusCode, payload ?? null],
+      );
+    }
   }
   return payload;
 }

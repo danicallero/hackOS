@@ -1,0 +1,170 @@
+import "./env.js";
+import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { App } from "../../src/app.js";
+import {
+  asUser,
+  buildTestApp,
+  createUser,
+  createUserWithCapabilities,
+  truncateAll,
+} from "../helpers.js";
+import { issueTicket } from "./fixtures.js";
+
+/**
+ * A first idempotent execution that fails with a 5xx must not have that
+ * failure replayed as the permanent result — mobile's offline scan queue
+ * reuses the scan id as the Idempotency-Key, so a persisted 500 would jam
+ * that scan forever (H22, H25, H26; issue #534).
+ */
+
+let app: App;
+let staff: number;
+
+beforeEach(async () => {
+  await truncateAll();
+  const { valkey } = await import("../../src/lib/valkey.js");
+  await valkey.flushdb();
+  staff = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
+  app ??= await buildTestApp();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+afterAll(async () => {
+  await app?.close();
+  const { stopQueues } = await import("../../src/lib/queues.js");
+  const { closeValkey } = await import("../../src/lib/valkey.js");
+  const { pool } = await import("../../src/db/pool.js");
+  await stopQueues();
+  await closeValkey();
+  await pool.end();
+});
+
+/** Makes the ticket-lookup query inside checkIn() throw exactly once. */
+async function failNextTicketLookup() {
+  const { pool } = await import("../../src/db/pool.js");
+  const original = pool.query.bind(pool);
+  let failed = false;
+  return vi.spyOn(pool, "query").mockImplementation(((text: unknown, params?: unknown) => {
+    if (!failed && typeof text === "string" && text.includes("FROM tickets WHERE token")) {
+      failed = true;
+      return Promise.reject(new Error("simulated transient failure"));
+    }
+    return original(text as string, params as unknown[]);
+  }) as typeof pool.query);
+}
+
+describe("idempotencyGuard 5xx handling", () => {
+  it("does not replay a transient 500; the same key/body retries and succeeds", async () => {
+    const uid = await createUser();
+    const token = await issueTicket(uid);
+    const headers = { ...asUser(staff), "idempotency-key": "transient-500" };
+    const payload = { ticketToken: token, badgeId: "B-500" };
+
+    const spy = await failNextTicketLookup();
+    const failed = await app.inject({
+      method: "POST",
+      url: "/api/accreditation/check-in",
+      headers,
+      payload,
+    });
+    expect(failed.statusCode).toBe(500);
+    spy.mockRestore();
+
+    const { pool } = await import("../../src/db/pool.js");
+    const scope = `POST /api/accreditation/check-in u:${staff}`;
+    const afterFailure = await pool.query(
+      `SELECT * FROM idempotency_keys WHERE key = $1 AND scope = $2`,
+      ["transient-500", scope],
+    );
+    expect(afterFailure.rows).toHaveLength(0);
+
+    const retry = await app.inject({
+      method: "POST",
+      url: "/api/accreditation/check-in",
+      headers,
+      payload,
+    });
+    expect(retry.statusCode).toBe(200);
+    expect(retry.headers["idempotency-replayed"]).toBeUndefined();
+
+    const logs = await pool.query(`SELECT * FROM check_in_logs WHERE user_id = $1`, [uid]);
+    expect(logs.rows).toHaveLength(1);
+
+    const record = await pool.query(
+      `SELECT response_status FROM idempotency_keys WHERE key = $1 AND scope = $2`,
+      ["transient-500", scope],
+    );
+    expect(record.rows[0].response_status).toBe(200);
+
+    const replay = await app.inject({
+      method: "POST",
+      url: "/api/accreditation/check-in",
+      headers,
+      payload,
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.headers["idempotency-replayed"]).toBe("true");
+    expect(
+      (await pool.query(`SELECT * FROM check_in_logs WHERE user_id = $1`, [uid])).rows,
+    ).toHaveLength(1);
+  });
+
+  it("lets a concurrent retry win after a transient failure releases the key", async () => {
+    const uid = await createUser();
+    const token = await issueTicket(uid);
+    const headers = { ...asUser(staff), "idempotency-key": "transient-500-concurrent" };
+    const payload = { ticketToken: token, badgeId: "B-500-C" };
+
+    const spy = await failNextTicketLookup();
+    const failed = await app.inject({
+      method: "POST",
+      url: "/api/accreditation/check-in",
+      headers,
+      payload,
+    });
+    expect(failed.statusCode).toBe(500);
+    spy.mockRestore();
+
+    const [a, b] = await Promise.all([
+      app.inject({ method: "POST", url: "/api/accreditation/check-in", headers, payload }),
+      app.inject({ method: "POST", url: "/api/accreditation/check-in", headers, payload }),
+    ]);
+    const codes = [a.statusCode, b.statusCode].sort();
+    // Exactly one executes (200); the other either replays it (200) or sees
+    // the still-in-flight window (409) — never a stuck-forever failure.
+    expect(codes[0]).toBe(200);
+    expect([200, 409]).toContain(codes[1]);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const logs = await pool.query(`SELECT * FROM check_in_logs WHERE user_id = $1`, [uid]);
+    expect(logs.rows).toHaveLength(1);
+  });
+
+  it("still persists and replays a 4xx business error (no different-body retry needed)", async () => {
+    const uid = await createUser();
+    const token = await issueTicket(uid);
+    const headers = { ...asUser(staff), "idempotency-key": "ticket-as-badge" };
+    const payload = { ticketToken: token, badgeId: token };
+
+    const first = await app.inject({
+      method: "POST",
+      url: "/api/accreditation/check-in",
+      headers,
+      payload,
+    });
+    expect(first.statusCode).toBe(409);
+
+    const replay = await app.inject({
+      method: "POST",
+      url: "/api/accreditation/check-in",
+      headers,
+      payload,
+    });
+    expect(replay.statusCode).toBe(409);
+    expect(replay.headers["idempotency-replayed"]).toBe("true");
+  });
+});
