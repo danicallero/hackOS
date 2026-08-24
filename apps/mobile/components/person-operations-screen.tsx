@@ -119,17 +119,18 @@ function AccreditationRevealActions({
 type PersonLoadState = "loading" | "ready" | "missing" | "error";
 
 /**
- * The badge shown in the top-right corner: for non-participant roles it's
- * just the role (there's no "accepted place" concept for staff/sponsors/etc),
- * for participants it flags a missing accepted place, and it's omitted
- * entirely once a participant has one. Unassigned people always get the
- * "no place" flag — only an accepted participant is exempt from it.
+ * The badge shown in the top-right corner: for staff/admin/sponsor/mentor/
+ * judge it's just the role (there's no "accepted place" concept for them).
+ * For participants and unassigned people it flags a missing accepted place
+ * or an unconfirmed one, and is omitted entirely once they've confirmed.
  */
 function personRolePill(
   person: ScannerPerson,
   t: ReturnType<typeof useLocale>["t"],
 ): { label: string; tone: "accent" | "warning" } | null {
   switch (person.role) {
+    case "admin":
+      return { label: t("roleAdmin"), tone: "accent" };
     case "staff":
       return { label: t("roleStaff"), tone: "accent" };
     case "sponsor":
@@ -139,9 +140,9 @@ function personRolePill(
     case "judge":
       return { label: t("roleJudge"), tone: "accent" };
     case "participant":
-      return person.accepted ? null : { label: t("scannerNoAcceptedPlace"), tone: "warning" };
     case "unassigned":
-      return { label: t("scannerNoAcceptedPlace"), tone: "warning" };
+      if (!person.accepted) return { label: t("scannerNoAcceptedPlace"), tone: "warning" };
+      return person.confirmed ? null : { label: t("scannerPlaceUnconfirmed"), tone: "warning" };
     default:
       return null;
   }
