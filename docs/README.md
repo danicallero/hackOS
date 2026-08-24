@@ -42,6 +42,8 @@ Architecture & modules:
   tenancy), the reasoning behind the big decisions, and the small-vs-real
   deployment profiles. Start here for the whole-system picture;
   `deploy/README.md` is the operational runbook.
+- [Database schema](./database-schema.md) — the generated DBML ERD for the
+  current post-migration schema, plus the migration identity/checksum rules.
 - [Module summaries (M1–M5)](./modules-1-5.md) — schemas, hooks, UI layouts and
   state transitions touched by each module, with the corrections made where the
   original brief assumed something the schema contradicts.

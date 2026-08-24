@@ -24,6 +24,7 @@
     "check:copy": "node scripts/check-copy.mjs",
     "check:pages": "node scripts/check-page-size.mjs",
     "migrate": "pnpm --filter @hackos/api migrate",
+    "schema:dump": "pnpm --filter @hackos/api schema:dump",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
     "prepare": "husky"

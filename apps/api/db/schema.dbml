@@ -1,0 +1,956 @@
+// GENERATED FILE — do not edit manually.
+// Refresh with: pnpm schema:dump
+// Source: the public schema after applying apps/api/db/migrations/*.sql.
+// This is a human-facing ERD snapshot, not an executable migration.
+
+Project hackos {
+  database_type: 'PostgreSQL'
+}
+
+Enum app_response_status {
+  draft
+  submitted
+  review
+  accepted
+  confirmed
+  declined
+  rejected
+  expired
+  accepted_internal
+  rejected_internal
+}
+
+Enum notification_channel {
+  in_app
+  email
+  discord
+  push
+}
+
+Enum queue_status {
+  waiting
+  called
+  in_room
+  presenting
+  completed
+  returned_to_queue
+  no_show
+  skipped
+  cancelled
+  disqualified
+}
+
+Enum token_type {
+  primary_email
+  secondary_email
+  account_claim
+  password_reset
+  sponsor_invite
+  spot_confirmation
+}
+
+Table accounts {
+  id integer [pk, increment, not null]
+  user_id integer [not null]
+  account_id text [not null]
+  provider_id text [not null]
+  access_token text
+  refresh_token text
+  id_token text
+  access_token_expires_at "timestamp with time zone"
+  refresh_token_expires_at "timestamp with time zone"
+  scope text
+  password text
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+
+  indexes {
+  (provider_id, account_id) [unique]
+  }
+}
+
+Table activities {
+  id integer [pk, increment, not null]
+  name text [not null]
+  description text
+  category text [not null, default: `'general'::text`]
+  requires_scan boolean [not null, default: `false`]
+  color text
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  schedule_id integer [unique]
+  primary_language text [not null, default: `'es'::text`]
+  name_i18n jsonb
+  description_i18n jsonb
+}
+
+Table activity_logs {
+  id integer [pk, increment, not null]
+  user_id integer [not null]
+  activity_id integer [not null]
+  notes text
+  logged_at "timestamp with time zone" [not null, default: `now()`]
+  logged_by integer [not null]
+  source_device_id text
+  source_scan_id text
+}
+
+Table announcement_reads {
+  announcement_id integer [not null]
+  user_id integer [not null]
+  read_at "timestamp with time zone" [not null, default: `now()`]
+
+  indexes {
+  (announcement_id, user_id) [pk]
+  }
+}
+
+Table announcement_recipients {
+  announcement_id integer [not null]
+  user_id integer [not null]
+
+  indexes {
+  (announcement_id, user_id) [pk]
+  }
+}
+
+Table announcements {
+  id integer [pk, increment, not null]
+  author_id integer [not null]
+  title text [not null]
+  body text [not null]
+  publish_at "timestamp with time zone"
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  expires_at "timestamp with time zone"
+  fanned_out_at "timestamp with time zone"
+  notify_users boolean [not null, default: `false`]
+  screen_placement text [not null, default: `'none'::text`]
+  translations jsonb [not null, default: `'{}'::jsonb`]
+  audiences "text[]" [not null, default: `'{}'::text[]`]
+  channels "text[]" [not null, default: `'{in_app,email,push}'::text[]`]
+}
+
+Table applicant_reviews {
+  response_id integer [not null]
+  author_id integer [not null]
+  score integer
+  notes text
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+
+  indexes {
+  (response_id, author_id) [pk]
+  }
+}
+
+Table application_responses {
+  id integer [pk, increment, not null]
+  user_id integer [not null]
+  application_id integer [not null]
+  referrer_user_id integer
+  referrer_application_id integer
+  status app_response_status [not null, default: `'draft'::app_response_status`]
+  responses jsonb [not null, default: `'{}'::jsonb`]
+  staff_notes text
+  confirmation_token_id integer
+  confirmed_at "timestamp with time zone"
+  declined_at "timestamp with time zone"
+  decision_sent_at "timestamp with time zone"
+  submitted_at "timestamp with time zone"
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+
+  indexes {
+  (user_id, application_id) [unique]
+  }
+}
+
+Table applications {
+  id integer [pk, increment, not null]
+  name text [not null]
+  type text [not null]
+  template jsonb [not null]
+  description text
+  active boolean [not null, default: `true`]
+  open_at "timestamp with time zone"
+  close_at "timestamp with time zone"
+  capacity integer
+  confirmation_window_hours integer [not null, default: `168`]
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  ask_shirt_size boolean [not null, default: `false`]
+  ask_food_intolerances boolean [not null, default: `false`]
+  sections jsonb [not null, default: `'[]'::jsonb`]
+}
+
+Table attempt_review {
+  attempt_id integer [pk, not null]
+  scores jsonb [not null, default: `'{}'::jsonb`]
+  notes text
+  status text [not null, default: `'draft'::text`]
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table attempt_review_versions {
+  id integer [pk, increment, not null]
+  attempt_id integer [not null]
+  author_id integer [not null]
+  changed_fields "text[]" [not null]
+  previous jsonb
+  new jsonb
+  created_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table audit_log {
+  id integer [pk, increment, not null]
+  actor_id integer
+  entity_type text [not null]
+  entity_id text [not null]
+  action text [not null]
+  source text
+  before jsonb
+  after jsonb
+  reason text
+  ip text
+  user_agent text
+  created_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table capability_grant_quarantine {
+  id integer [pk, increment, not null]
+  group_id integer [not null]
+  capability text [not null]
+  reason text [not null]
+  quarantined_at "timestamp with time zone" [not null, default: `now()`]
+
+  Note: 'H8/H53 repair queue for grants outside packages/shared/src/capabilities.ts; these grants never participate in authorization.'
+}
+
+Table challenge_versions {
+  id integer [pk, increment, not null]
+  challenge_id integer [not null]
+  editor_id integer
+  snapshot jsonb [not null]
+  created_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table challenge_winners {
+  id integer [pk, increment, not null]
+  challenge_id integer [not null]
+  rank smallint [not null]
+  repo_id integer [not null]
+  set_by integer [not null]
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+
+  indexes {
+  (challenge_id, rank) [unique]
+  (challenge_id, repo_id) [unique]
+  }
+}
+
+Table challenges {
+  id integer [pk, increment, not null]
+  author integer [not null]
+  title text [not null]
+  description text [not null, default: `''::text`]
+  criteria text
+  judging_panel_criteria jsonb
+  prizes jsonb
+  devpost_tags jsonb [not null, default: `'[]'::jsonb`]
+  max_presentation_seconds integer
+  auto_call_count integer [not null, default: `3`]
+  visibility text [not null, default: `'hidden'::text`]
+  available_from "timestamp with time zone"
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+  title_i18n jsonb
+  criteria_i18n jsonb
+  description_i18n jsonb
+  max_in_waiting_area integer [not null, default: `2`]
+}
+
+Table check_in_logs {
+  id integer [pk, increment, not null]
+  user_id integer [not null]
+  badge_id text
+  checked_in_at "timestamp with time zone" [not null, default: `now()`]
+  check_in_method text [not null, default: `'manual'::text`]
+  staff_id integer [not null]
+  notes text
+}
+
+Table data_subject_requests {
+  id integer [pk, increment, not null]
+  subject_user_id integer [not null]
+  requested_by integer [not null]
+  type text [not null]
+  status text [not null, default: `'pending'::text`]
+  reason text
+  storage_key text
+  error text
+  requested_at "timestamp with time zone" [not null, default: `now()`]
+  started_at "timestamp with time zone"
+  completed_at "timestamp with time zone"
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table devpost_participants {
+  repo_id integer [not null]
+  email text [not null]
+  name text
+  surname text
+  devpost_username text
+  user_id integer
+  import_batch text [not null]
+  merge_status text [not null, default: `'unmatched'::text`]
+  linked_by integer
+  linked_at "timestamp with time zone"
+  claim_email_sent_at "timestamp with time zone"
+  created_at "timestamp with time zone" [not null, default: `now()`]
+
+  indexes {
+  (repo_id, email) [pk]
+  }
+}
+
+Table devpost_prizes {
+  name text [pk, not null]
+  last_batch text
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table email_verification_tokens {
+  id integer [pk, increment, not null]
+  token text [unique, not null]
+  type token_type [not null]
+  email text [not null]
+  user_id integer
+  enterprise_id integer
+  expires_at "timestamp with time zone" [not null]
+  used_at "timestamp with time zone"
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  kind text
+  group_ids "integer[]" [not null, default: `'{}'::integer[]`]
+  wildcard_authorized boolean [not null, default: `false`, note: 'Durable proof that a wildcard holder authorized this deferred group grant.']
+}
+
+Table enterprise_invite_link_redemptions {
+  id integer [pk, increment, not null]
+  link_id integer [not null]
+  user_id integer
+  email text [not null]
+  name text
+  redeemed_at "timestamp with time zone" [not null, default: `now()`]
+
+  indexes {
+  (link_id, user_id) [unique]
+  }
+}
+
+Table enterprise_invite_links {
+  id integer [pk, increment, not null]
+  token text [unique, not null]
+  enterprise_id integer [not null]
+  created_by integer
+  max_redeems integer
+  redeemed_count integer [not null, default: `0`]
+  expires_at "timestamp with time zone"
+  revoked_at "timestamp with time zone"
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table enterprise_judges {
+  enterprise_id integer [not null]
+  user_id integer [not null]
+  added_by integer
+  added_at "timestamp with time zone" [not null, default: `now()`]
+
+  indexes {
+  (enterprise_id, user_id) [pk]
+  }
+}
+
+Table enterprises {
+  id integer [pk, increment, not null]
+  name text [unique, not null]
+  logo_url text
+  website text
+  tier_id integer
+  director_id integer
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  description text
+  visibility text [not null, default: `'hidden'::text`]
+  available_from "timestamp with time zone"
+  display_priority integer
+  logo_negative_url text
+}
+
+Table event_config {
+  id integer [pk, not null]
+  name text
+  tagline text
+  timezone text [not null, default: `'Europe/Madrid'::text`]
+  hacking_starts_at "timestamp with time zone"
+  hacking_ends_at "timestamp with time zone"
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+  show_start_countdown boolean [not null, default: `false`]
+  venue_name text
+  venue_latitude "double precision"
+  venue_longitude "double precision"
+  pass_back_fields jsonb [not null, default: `'[]'::jsonb`]
+  pass_field_labels jsonb [not null, default: `'{}'::jsonb`]
+  event_starts_at "timestamp with time zone"
+  pass_field_visibility jsonb [not null, default: `'{}'::jsonb`]
+  event_ends_at "timestamp with time zone"
+  wifi_ssid text
+  wifi_password text
+  require_sponsor_shirt_size boolean [not null, default: `false`]
+  require_sponsor_dietary boolean [not null, default: `false`]
+  require_staff_shirt_size boolean [not null, default: `false`]
+  require_staff_dietary boolean [not null, default: `false`]
+  shirt_sizes "text[]" [not null, default: `'{XS,S,M,L,XL,XXL}'::text[]`]
+  participants_can_create_projects boolean [not null, default: `false`]
+  presence_auto_entry_at "timestamp with time zone"
+  presence_certainty_window_minutes integer [not null, default: `720`]
+}
+
+Table food_intolerances {
+  id integer [pk, increment, not null]
+  label jsonb [not null]
+  description jsonb
+  proposed_by integer [not null]
+  created_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table group_capabilities {
+  group_id integer [not null]
+  capability text [not null]
+
+  indexes {
+  (group_id, capability) [pk]
+  }
+}
+
+Table idempotency_keys {
+  key text [not null]
+  scope text [not null]
+  request_hash text [not null]
+  response_status integer
+  response_body jsonb
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  completed_at "timestamp with time zone"
+
+  indexes {
+  (key, scope) [pk]
+  }
+}
+
+Table judging_session {
+  id integer [pk, increment, not null]
+  judge_id integer [not null]
+  queue_entry_id integer [not null]
+  room_id integer
+  started_at "timestamp with time zone" [not null, default: `now()`]
+  submitted_at "timestamp with time zone"
+  ended_at "timestamp with time zone"
+}
+
+Table manual_attendee_roles {
+  user_id integer [pk, not null]
+  role text [not null]
+  assigned_by integer
+  assigned_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table meal_scan_batch_items {
+  id integer [pk, increment, not null]
+  batch_id integer [not null]
+  activity_id integer [not null]
+  device_id text [not null]
+  client_scan_id text [not null]
+  badge_id text [not null]
+  allow_repeat boolean [not null, default: `false`]
+  scanned_at "timestamp with time zone"
+  status text [not null, default: `'pending'::text`]
+  result jsonb
+  error jsonb
+  processed_at "timestamp with time zone"
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+
+  indexes {
+  (device_id, client_scan_id) [unique]
+  }
+}
+
+Table meal_scan_batches {
+  id integer [pk, increment, not null]
+  activity_id integer [not null]
+  device_id text [not null]
+  submitted_by integer [not null]
+  status text [not null, default: `'pending'::text`]
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table notification_outbox {
+  id integer [pk, increment, not null]
+  user_id integer [not null]
+  category text [not null]
+  channel notification_channel [not null]
+  payload jsonb
+  status text [not null, default: `'queued'::text`]
+  attempts integer [not null, default: `0`]
+  last_error text
+  next_attempt_at "timestamp with time zone" [default: `now()`]
+  sent_at "timestamp with time zone"
+  read_at "timestamp with time zone"
+  created_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table notification_preferences {
+  user_id integer [not null]
+  category text [not null]
+  channel notification_channel [not null]
+  enabled boolean [not null, default: `true`]
+
+  indexes {
+  (user_id, category, channel) [pk]
+  }
+}
+
+Table permission_group_includes {
+  parent_group_id integer [not null]
+  child_group_id integer [not null]
+
+  indexes {
+  (parent_group_id, child_group_id) [pk]
+  }
+}
+
+Table permission_group_members {
+  user_id integer [not null]
+  group_id integer [not null]
+  assigned_by integer
+  assigned_at "timestamp with time zone" [not null, default: `now()`]
+
+  indexes {
+  (user_id, group_id) [pk]
+  }
+}
+
+Table permission_groups {
+  id integer [pk, increment, not null]
+  name text [unique, not null]
+  description text
+  template_key text [note: 'H8 template catalogue key used to calculate template drift; does not restrict normal group editing.']
+}
+
+Table push_tokens {
+  id integer [pk, increment, not null]
+  user_id integer [not null]
+  token text [unique, not null]
+  platform text
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table queue_entries {
+  id integer [pk, increment, not null]
+  challenge_id integer [not null]
+  repo_id integer [not null]
+  assigned_room_id integer
+  status queue_status [not null, default: `'waiting'::queue_status`]
+  position integer
+  priority integer [not null, default: `0`]
+  call_count integer [not null, default: `0`]
+  called_at "timestamp with time zone"
+  presentation_started_at "timestamp with time zone"
+  completed_at "timestamp with time zone"
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+  precalled_at "timestamp with time zone"
+}
+
+Table queue_group_challenges {
+  queue_group_id integer [not null]
+  challenge_id integer [unique, not null]
+
+  indexes {
+  (queue_group_id, challenge_id) [pk]
+  }
+}
+
+Table queue_groups {
+  id integer [pk, increment, not null]
+  enterprise_id integer [not null]
+  display_name text [not null]
+  created_by integer
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+  judging_panel_criteria jsonb [note: 'Merged judging form for a shared queue (H46): the de-duplicated union of the member challenges\' judging_panel_criteria, admin-reviewed. NULL = resolve the member challenge\'s own criteria (every 1:1 group).']
+}
+
+Table queue_history {
+  id integer [pk, increment, not null]
+  queue_entry_id integer [not null]
+  actor_id integer
+  previous_status text [not null]
+  new_status text [not null]
+  action text [not null]
+  reason text
+  metadata jsonb
+  created_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table queue_settings {
+  id integer [pk, not null]
+  handoff_buffer_minutes integer [not null, default: `5`]
+  schedule_start_at "timestamp with time zone"
+  schedule_end_at "timestamp with time zone"
+  pre_call_notification_eta_minutes integer [not null, default: `10`]
+  requeue_prompt_default text [not null, default: `'ask'::text`]
+  called_too_long_threshold_minutes integer [not null, default: `10`]
+}
+
+Table repo_devpost_prizes {
+  repo_id integer [not null]
+  prize text [not null]
+  created_at "timestamp with time zone" [not null, default: `now()`]
+
+  indexes {
+  (repo_id, prize) [pk]
+  }
+}
+
+Table repos {
+  id integer [pk, increment, not null]
+  name text [not null]
+  description text [not null, default: `''::text`]
+  github_url text
+  devpost_url text
+  demo_url text
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+  source text [not null, default: `'devpost'::text`]
+  created_by integer
+
+  Note: 'A project/team. Deliberately independent from application_responses — registration teams and submission teams need not match.'
+}
+
+Table room_queue_groups {
+  room_id integer [unique, not null]
+  assigned_at "timestamp with time zone" [not null, default: `now()`]
+  assigned_by integer
+  queue_group_id integer [not null]
+
+  indexes {
+  (room_id, queue_group_id) [pk]
+  }
+}
+
+Table room_queue_state {
+  room_id integer [pk, not null]
+  is_paused boolean [not null, default: `true`]
+  max_in_waiting_area integer [not null, default: `2`]
+  desired_minutes_per_team integer [not null, default: `8`]
+  started_at "timestamp with time zone"
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table rooms {
+  id integer [pk, increment, not null]
+  name text [not null]
+  slug text [unique, not null]
+  location text
+  status text [not null, default: `'paused'::text`]
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table schedule {
+  id integer [pk, increment, not null]
+  title text [not null]
+  description text
+  location text
+  type text
+  starts_at "timestamp with time zone" [not null]
+  ends_at "timestamp with time zone" [not null]
+  visibility text [not null, default: `'hidden'::text`]
+  publish_at "timestamp with time zone"
+  reminded_at "timestamp with time zone"
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+  requires_scan boolean [not null, default: `false`]
+  audiences "text[]" [not null, default: `'{}'::text[]`]
+  contact_note text
+  notes text
+  primary_language text [not null, default: `'es'::text`]
+  title_i18n jsonb
+  description_i18n jsonb
+}
+
+Table schedule_owners {
+  id integer [pk, increment, not null]
+  schedule_id integer [not null]
+  user_id integer
+  assigned_by integer
+  assigned_at "timestamp with time zone" [not null, default: `now()`]
+  free_text_name text
+
+  indexes {
+  (schedule_id, user_id) [unique]
+  }
+}
+
+Table sessions {
+  id integer [pk, increment, not null]
+  user_id integer [not null]
+  token text [unique, not null]
+  expires_at "timestamp with time zone" [not null]
+  ip_address text
+  user_agent text
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table sponsor_faq {
+  id integer [pk, not null]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+  items jsonb [not null, default: `'[]'::jsonb`]
+}
+
+Table sponsor_tiers {
+  id integer [pk, increment, not null]
+  name text [unique, not null]
+  description text
+  max_seats integer [not null, default: `1`]
+  max_challenges integer [not null, default: `1`]
+  max_judges integer [not null, default: `0`]
+  logo_priority integer [not null, default: `0`]
+  created_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table sponsors {
+  id integer [pk, increment, not null]
+  enterprise_id integer [not null]
+  user_id integer
+  joined_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table submissions {
+  repo_id integer [not null]
+  user_id integer [not null]
+  imported_from text [not null, default: `'manual'::text`]
+  external_id text
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  status text [not null, default: `'active'::text`]
+  invited_by integer
+  responded_at "timestamp with time zone"
+
+  indexes {
+  (repo_id, user_id) [pk]
+  }
+}
+
+Table tickets {
+  user_id integer [pk, not null]
+  token text [unique, not null]
+  issued_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table time_logs {
+  id integer [pk, increment, not null]
+  user_id integer [not null]
+  kind text [not null]
+  scanned_at "timestamp with time zone" [not null, default: `now()`]
+  scanned_by integer
+  notes text
+}
+
+Table tv_slots {
+  id bigint [pk, not null, default: `nextval('tv_slots_id_seq'::regclass)`]
+  label text
+  starts_at "timestamp with time zone" [not null]
+  ends_at "timestamp with time zone" [not null]
+  items jsonb [not null]
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table universities {
+  id integer [pk, increment, not null]
+  name text [unique, not null]
+  proposed_by integer [not null]
+  created_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table users {
+  id integer [pk, increment, not null]
+  email text [unique, not null]
+  email_verified boolean [not null, default: `false`]
+  image text
+  name text
+  surname text
+  dni text
+  badge_id text [unique]
+  badge_id_history "text[]" [not null, default: `'{}'::text[]`]
+  food_intolerances "integer[]" [not null, default: `'{}'::integer[]`]
+  food_intolerance_notes text
+  university_id integer
+  shirt_size text
+  language text [not null, default: `'en'::text`]
+  secondary_email text
+  secondary_email_verified_at "timestamp with time zone"
+  notes text
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+  anonymized_at "timestamp with time zone"
+  dietary_data_state text [not null, default: `'not_provided'::text`]
+  ui_prefs jsonb [not null, default: `'{}'::jsonb`]
+
+  Note: 'No role column: role is derived at login from relationships (admin > staff > judge > sponsor > participant). Permissions come from capability groups only (H8).'
+}
+
+Table verifications {
+  id integer [pk, increment, not null]
+  identifier text [not null]
+  value text [not null]
+  expires_at "timestamp with time zone" [not null]
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table wallet_access_tokens {
+  id integer [pk, increment, not null]
+  token text [unique, not null]
+  user_id integer [not null]
+  purpose text [not null]
+  expires_at "timestamp with time zone" [not null]
+  created_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table wallet_pass_devices {
+  pass_id integer [not null]
+  device_library_identifier text [not null]
+  push_token text
+  registered_at "timestamp with time zone" [not null, default: `now()`]
+
+  indexes {
+  (pass_id, device_library_identifier) [pk]
+  }
+}
+
+Table wallet_passes {
+  id integer [pk, increment, not null]
+  user_id integer [not null]
+  purpose text [not null]
+  platform text [not null]
+  serial_number text [not null]
+  authentication_token text [not null]
+  google_object_id text
+  status text [not null, default: `'active'::text`]
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  last_updated_at "timestamp with time zone" [not null, default: `now()`]
+  update_tag text [not null, default: `(((EXTRACT(epoch FROM now()) * (1000)::numeric))::bigint)::text`]
+}
+
+Ref: accounts.user_id > users.id
+Ref: activities.schedule_id > schedule.id
+Ref: activity_logs.activity_id > activities.id
+Ref: activity_logs.logged_by > users.id
+Ref: activity_logs.user_id > users.id
+Ref: announcement_reads.announcement_id > announcements.id
+Ref: announcement_reads.user_id > users.id
+Ref: announcement_recipients.announcement_id > announcements.id
+Ref: announcement_recipients.user_id > users.id
+Ref: announcements.author_id > users.id
+Ref: applicant_reviews.author_id > users.id
+Ref: applicant_reviews.response_id > application_responses.id
+Ref: application_responses.application_id > applications.id
+Ref: application_responses.confirmation_token_id > email_verification_tokens.id
+Ref: application_responses.referrer_application_id > application_responses.id
+Ref: application_responses.referrer_user_id > users.id
+Ref: application_responses.user_id > users.id
+Ref: attempt_review.attempt_id > queue_entries.id
+Ref: attempt_review_versions.attempt_id > queue_entries.id
+Ref: attempt_review_versions.author_id > users.id
+Ref: audit_log.actor_id > users.id
+Ref: challenge_versions.challenge_id > challenges.id
+Ref: challenge_versions.editor_id > users.id
+Ref: challenge_winners.challenge_id > challenges.id
+Ref: challenge_winners.repo_id > repos.id
+Ref: challenge_winners.set_by > users.id
+Ref: challenges.author > sponsors.id
+Ref: check_in_logs.staff_id > users.id
+Ref: check_in_logs.user_id > users.id
+Ref: data_subject_requests.requested_by > users.id
+Ref: data_subject_requests.subject_user_id > users.id
+Ref: devpost_participants.linked_by > users.id
+Ref: devpost_participants.repo_id > repos.id
+Ref: devpost_participants.user_id > users.id
+Ref: email_verification_tokens.enterprise_id > enterprises.id
+Ref: email_verification_tokens.user_id > users.id
+Ref: enterprise_invite_link_redemptions.link_id > enterprise_invite_links.id
+Ref: enterprise_invite_link_redemptions.user_id > users.id
+Ref: enterprise_invite_links.created_by > users.id
+Ref: enterprise_invite_links.enterprise_id > enterprises.id
+Ref: enterprise_judges.added_by > users.id
+Ref: enterprise_judges.enterprise_id > enterprises.id
+Ref: enterprise_judges.user_id > users.id
+Ref: enterprises.director_id > users.id
+Ref: enterprises.tier_id > sponsor_tiers.id
+Ref: food_intolerances.proposed_by > users.id
+Ref: group_capabilities.group_id > permission_groups.id
+Ref: judging_session.judge_id > users.id
+Ref: judging_session.queue_entry_id > queue_entries.id
+Ref: judging_session.room_id > rooms.id
+Ref: manual_attendee_roles.assigned_by > users.id
+Ref: manual_attendee_roles.user_id > users.id
+Ref: meal_scan_batch_items.activity_id > activities.id
+Ref: meal_scan_batch_items.batch_id > meal_scan_batches.id
+Ref: meal_scan_batches.activity_id > activities.id
+Ref: meal_scan_batches.submitted_by > users.id
+Ref: notification_outbox.user_id > users.id
+Ref: notification_preferences.user_id > users.id
+Ref: permission_group_includes.child_group_id > permission_groups.id
+Ref: permission_group_includes.parent_group_id > permission_groups.id
+Ref: permission_group_members.assigned_by > users.id
+Ref: permission_group_members.group_id > permission_groups.id
+Ref: permission_group_members.user_id > users.id
+Ref: push_tokens.user_id > users.id
+Ref: queue_entries.assigned_room_id > rooms.id
+Ref: queue_entries.challenge_id > challenges.id
+Ref: queue_entries.repo_id > repos.id
+Ref: queue_group_challenges.challenge_id > challenges.id
+Ref: queue_group_challenges.queue_group_id > queue_groups.id
+Ref: queue_groups.created_by > users.id
+Ref: queue_groups.enterprise_id > enterprises.id
+Ref: queue_history.actor_id > users.id
+Ref: queue_history.queue_entry_id > queue_entries.id
+Ref: repo_devpost_prizes.repo_id > repos.id
+Ref: repos.created_by > users.id
+Ref: room_queue_groups.assigned_by > users.id
+Ref: room_queue_groups.queue_group_id > queue_groups.id
+Ref: room_queue_groups.room_id > rooms.id
+Ref: room_queue_state.room_id > rooms.id
+Ref: schedule_owners.assigned_by > users.id
+Ref: schedule_owners.schedule_id > schedule.id
+Ref: schedule_owners.user_id > users.id
+Ref: sessions.user_id > users.id
+Ref: sponsors.enterprise_id > enterprises.id
+Ref: sponsors.user_id > users.id
+Ref: submissions.invited_by > users.id
+Ref: submissions.repo_id > repos.id
+Ref: submissions.user_id > users.id
+Ref: tickets.user_id > users.id
+Ref: time_logs.scanned_by > users.id
+Ref: time_logs.user_id > users.id
+Ref: universities.proposed_by > users.id
+Ref: users.university_id > universities.id
+Ref: wallet_access_tokens.user_id > users.id
+Ref: wallet_pass_devices.pass_id > wallet_passes.id
+Ref: wallet_passes.user_id > users.id
