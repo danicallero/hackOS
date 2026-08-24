@@ -48,7 +48,6 @@ import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import {
   clearQueue,
-  enqueueAllChallengeQueues,
   generateQueue,
   listQueueGroups,
   type MergedPanelPreview,
@@ -59,7 +58,6 @@ import {
   updateQueueGroup,
 } from "@/lib/queue";
 import { queueSummaryValues } from "@/lib/queue-summary";
-import { GenerateQueuesAction } from "./generate-queues-action";
 
 type Stage = "idle" | "pick" | "review";
 
@@ -93,10 +91,9 @@ function byEnterprise(groups: QueueGroup[]): EnterpriseQueues[] {
   return [...map.values()];
 }
 
-export function QueuesPanel({ canGenerate }: { canGenerate: boolean }) {
+export function QueuesPanel() {
   const { t } = useLocale();
   const [groups, setGroups] = useState<QueueGroup[] | null>(null);
-  const [generating, setGenerating] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -114,21 +111,6 @@ export function QueuesPanel({ canGenerate }: { canGenerate: boolean }) {
 
   const enterprises = useMemo(() => byEnterprise(groups ?? []), [groups]);
 
-  const generateAll = async () => {
-    setGenerating(true);
-    try {
-      const result = await enqueueAllChallengeQueues(crypto.randomUUID());
-      toast.success(
-        t("queuesGenerated", { inserted: result.inserted, challenges: result.challenges.length }),
-      );
-      await load();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotGenerateQueues"));
-    } finally {
-      setGenerating(false);
-    }
-  };
-
   if (groups === null) {
     return (
       <div className="flex justify-center py-10">
@@ -143,11 +125,6 @@ export function QueuesPanel({ canGenerate }: { canGenerate: boolean }) {
 
   return (
     <div className="space-y-4">
-      {canGenerate && (
-        <div className="flex justify-end">
-          <GenerateQueuesAction busy={generating} onGenerate={() => void generateAll()} />
-        </div>
-      )}
       {enterprises.map((enterprise) => (
         <EnterpriseQueuesCard
           key={enterprise.enterpriseId}
@@ -232,7 +209,7 @@ function EnterpriseQueuesCard({
     try {
       const result = await generateQueue(queueId);
       await onChanged();
-      toast.success(t("queueGenerated", { inserted: result.inserted + result.revived }));
+      toast.success(t("queueGenerated", { count: result.inserted + result.revived }));
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotGenerateQueues"));
     } finally {

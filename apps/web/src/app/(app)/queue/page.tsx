@@ -17,6 +17,7 @@ import { type SseEnvelope, useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import {
+  enqueueAllChallengeQueues,
   getAllRoomViews,
   getRoomAssignments,
   type RoomAssignments,
@@ -24,6 +25,7 @@ import {
 } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
+import { GenerateQueuesAction } from "./generate-queues-action";
 import { QueuesPanel } from "./queues-panel";
 import { RoomQueueCard } from "./room-queue-card";
 
@@ -43,6 +45,7 @@ export default function QueueOperationsPage() {
     values: ["rooms", "queues"] as const,
     defaultValue: "rooms",
   });
+  const [busy, setBusy] = useState(false);
   const [roomAssignments, setRoomAssignments] = useState<Record<number, RoomAssignments | null>>(
     {},
   );
@@ -121,6 +124,22 @@ export default function QueueOperationsPage() {
     void loadAdminData();
   }, [loadAdminData]);
 
+  const onGenerate = useCallback(async () => {
+    setBusy(true);
+    try {
+      const result = await enqueueAllChallengeQueues(crypto.randomUUID());
+      toast.success(
+        t("queuesGenerated", { inserted: result.inserted, challenges: result.challenges.length }),
+      );
+      roomViews.refetch();
+      await loadAdminData();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotGenerateQueues"));
+    } finally {
+      setBusy(false);
+    }
+  }, [loadAdminData, roomViews, t]);
+
   if (!canUse) {
     return <AccessDenied ask={t("queueOpsAccessDeniedDesc")} />;
   }
@@ -150,19 +169,26 @@ export default function QueueOperationsPage() {
     <div className="space-y-6" data-wide>
       <PageHeader
         title={t("queueOperations")}
+        primaryAction={
+          canAdmin && tab === "queues" ? (
+            <GenerateQueuesAction busy={busy} onGenerate={() => void onGenerate()} />
+          ) : undefined
+        }
         secondaryActions={
-          <label
-            className="text-muted-foreground flex items-center gap-2 text-sm"
-            htmlFor="arrival-hints"
-            title={t("arrivalHintsDescription")}
-          >
-            <Switch
-              id="arrival-hints"
-              checked={arrivalHints}
-              onCheckedChange={toggleArrivalHints}
-            />
-            {t("arrivalHints")}
-          </label>
+          tab === "rooms" ? (
+            <label
+              className="text-muted-foreground flex items-center gap-2 text-sm"
+              htmlFor="arrival-hints"
+              title={t("arrivalHintsDescription")}
+            >
+              <Switch
+                id="arrival-hints"
+                checked={arrivalHints}
+                onCheckedChange={toggleArrivalHints}
+              />
+              {t("arrivalHints")}
+            </label>
+          ) : undefined
         }
       />
 
@@ -200,7 +226,7 @@ export default function QueueOperationsPage() {
         </TabsContent>
 
         <TabsContent value="queues" className="pt-2">
-          <QueuesPanel canGenerate={canAdmin} />
+          <QueuesPanel />
         </TabsContent>
       </Tabs>
     </div>
