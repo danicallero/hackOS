@@ -159,6 +159,11 @@ jobs:
       CI: true
       NODE_ENV: test
       TEST_DATABASE_URL: postgres://hackos:hackos@localhost:5432/hackos_test
+      S3_ENDPOINT: http://localhost:9000
+      S3_ACCESS_KEY: hackos
+      S3_SECRET_KEY: hackos-secret
+      S3_BUCKET: hackos
+      S3_REGION: us-east-1
     services:
       postgres:
         image: postgres:17-alpine
@@ -213,8 +218,54 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Start MinIO
+        run: |
+          docker run --detach --name hackos-ci-minio \
+            --publish 9000:9000 \
+            --publish 9001:9001 \
+            --env MINIO_ROOT_USER=hackos \
+            --env MINIO_ROOT_PASSWORD=hackos-secret \
+            --health-cmd "mc ready local" \
+            --health-interval 5s \
+            --health-timeout 5s \
+            --health-retries 12 \
+            minio/minio:latest \
+            server /data --console-address ":9001"
+
+      - name: Wait for MinIO
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..60}; do
+            status="$(docker inspect --format '{{.State.Health.Status}}' hackos-ci-minio)"
+            case "$status" in
+              healthy)
+                exit 0
+                ;;
+              unhealthy)
+                docker logs hackos-ci-minio
+                exit 1
+                ;;
+            esac
+            sleep 1
+          done
+          docker logs hackos-ci-minio
+          exit 1
+
+      - name: Create MinIO test bucket
+        run: >-
+          docker run --rm --network host --entrypoint /bin/sh
+          -e MINIO_ROOT_USER=hackos
+          -e MINIO_ROOT_PASSWORD=hackos-secret
+          minio/mc:latest
+          -c 'mc alias set local http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" && mc mb --ignore-existing local/hackos'
+
       - name: Run API integration tests
         run: pnpm --filter @hackos/api test
+
+      - name: Stop MinIO
+        if: always()
+        run: docker rm --force hackos-ci-minio || true
 
   web-test:
     name: web unit tests

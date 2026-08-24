@@ -176,8 +176,8 @@ the selective `typecheck` check, and the API, web and mobile unit suites are
 separate required checks. Workspace checks run only when their area changes;
 shared packages, dependency/toolchain changes, and workflow changes run all
 affected gates. The API job provides fresh Postgres, Valkey and Mailpit service
-containers with readiness healthchecks; local API runs still use
-`pnpm infra:up` and the commands above.
+containers plus health-checked MinIO, then provisions the test bucket; local
+API runs still use `pnpm infra:up` and the commands above.
 
 ## Repository guide
 
