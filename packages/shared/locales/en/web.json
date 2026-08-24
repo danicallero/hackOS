@@ -2363,5 +2363,11 @@
   "couldNotLoadQueues": "Could not load judging queues.",
   "couldNotSaveQueue": "Could not save the queue.",
   "continue": "Continue",
-  "restore": "Restore"
+  "restore": "Restore",
+  "noQueuesYet": "No judging queues yet.",
+  "noRoomServingQueue": "No room",
+  "sharedQueueBadge": "{count} challenges",
+  "queueTeams": "Teams",
+  "clearQueueGroup": "Unlink",
+  "queueGroupCleared": "Room unlinked."
 }

@@ -39,6 +39,7 @@ import {
   type QueueGroup,
   type Room,
   type RoomAssignments,
+  removeRoomQueueGroup,
   updateRoom,
 } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
@@ -502,6 +503,10 @@ export default function QueueRoomsPage() {
                 queueGroups={queueGroups}
                 onSetQueueGroup={async (queueGroupId) => {
                   await assignRoomQueueGroup(selectedRoom.id, queueGroupId);
+                  await loadRoomDetails(selectedRoom.id);
+                }}
+                onClearQueueGroup={async (queueGroupId) => {
+                  await removeRoomQueueGroup(selectedRoom.id, queueGroupId);
                   await loadRoomDetails(selectedRoom.id);
                 }}
                 canSetQueueGroup={queueGroups.length > 0}

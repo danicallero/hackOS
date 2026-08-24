@@ -2363,5 +2363,11 @@
   "couldNotLoadQueues": "No se han podido cargar las colas de evaluación.",
   "couldNotSaveQueue": "No se ha podido guardar la cola.",
   "continue": "Continuar",
-  "restore": "Restaurar"
+  "restore": "Restaurar",
+  "noQueuesYet": "Todavía no hay colas de evaluación.",
+  "noRoomServingQueue": "Sin sala",
+  "sharedQueueBadge": "{count} retos",
+  "queueTeams": "Equipos",
+  "clearQueueGroup": "Desvincular",
+  "queueGroupCleared": "Sala desvinculada."
 }

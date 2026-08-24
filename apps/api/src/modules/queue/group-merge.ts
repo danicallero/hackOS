@@ -31,6 +31,7 @@ import { compactQueueGroupPositions } from "./ordering.js";
 export interface QueueGroupSummary {
   id: number;
   enterpriseId: number;
+  enterpriseName: string;
   displayName: string;
   challenges: Array<{ id: number; title: string }>;
   rooms: Array<{ id: number; name: string }>;
@@ -42,7 +43,8 @@ export interface QueueGroupSummary {
 }
 
 const GROUP_SUMMARY_SQL = `
-  SELECT qg.id, qg.enterprise_id, qg.display_name, qg.judging_panel_criteria,
+  SELECT qg.id, qg.enterprise_id, e.name AS enterprise_name,
+         qg.display_name, qg.judging_panel_criteria,
          COALESCE((SELECT jsonb_agg(jsonb_build_object('id', c.id, 'title', c.title) ORDER BY c.id)
                      FROM queue_group_challenges qgc
                      JOIN challenges c ON c.id = qgc.challenge_id
@@ -56,11 +58,13 @@ const GROUP_SUMMARY_SQL = `
                    JOIN queue_entries qe ON qe.challenge_id = qgc.challenge_id
                   WHERE qgc.queue_group_id = qg.id
                     AND qe.status <> 'waiting') AS judging_started
-    FROM queue_groups qg`;
+    FROM queue_groups qg
+    JOIN enterprises e ON e.id = qg.enterprise_id`;
 
 function toSummary(row: {
   id: number;
   enterprise_id: number;
+  enterprise_name: string;
   display_name: string;
   judging_panel_criteria: unknown;
   challenges: Array<{ id: number; title: string }>;
@@ -70,6 +74,7 @@ function toSummary(row: {
   return {
     id: Number(row.id),
     enterpriseId: Number(row.enterprise_id),
+    enterpriseName: row.enterprise_name,
     displayName: row.display_name,
     challenges: row.challenges ?? [],
     rooms: row.rooms ?? [],
@@ -88,6 +93,27 @@ export async function listEnterpriseQueueGroups(
   const { rows } = await pool.query(
     `${GROUP_SUMMARY_SQL} WHERE qg.enterprise_id = $1 ORDER BY qg.display_name ASC, qg.id ASC`,
     [enterpriseId],
+  );
+  return rows.map(toSummary);
+}
+
+/**
+ * Every queue the caller may manage, across enterprises — the "all queues"
+ * admin surface. The scope IS the caller's authority: a global queue/sponsor
+ * administrator sees every queue on the platform, a sponsor representative
+ * sees only their own enterprises', and anyone else sees none.
+ */
+export async function listManageableQueueGroups(
+  userId: number,
+  isAdmin: boolean,
+): Promise<QueueGroupSummary[]> {
+  const { rows } = await pool.query(
+    `${GROUP_SUMMARY_SQL}
+      WHERE $1::boolean
+         OR EXISTS (SELECT 1 FROM sponsors s
+                     WHERE s.enterprise_id = qg.enterprise_id AND s.user_id = $2)
+      ORDER BY e.name ASC, qg.display_name ASC, qg.id ASC`,
+    [isAdmin, userId],
   );
   return rows.map(toSummary);
 }

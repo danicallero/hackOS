@@ -190,6 +190,80 @@ describe("merging challenges into a shared queue", () => {
   });
 });
 
+describe("the all-queues listing", () => {
+  it("shows an admin every enterprise's queues, including ones no room serves", async () => {
+    const alpha = await createEnterpriseChallenges(2);
+    const beta = await createEnterpriseChallenges(1);
+    await merge(alpha.enterpriseId, alpha.challengeIds, "ACME's Challenges");
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/queue/groups",
+      headers: asUser(adminId),
+    });
+    const groups = res.json().groups as Array<{
+      id: number;
+      enterpriseId: number;
+      displayName: string;
+      shared: boolean;
+      rooms: unknown[];
+    }>;
+    // The merge collapsed alpha's two queues into one; beta keeps its own.
+    expect(groups).toHaveLength(2);
+    expect(groups.find((g) => g.enterpriseId === alpha.enterpriseId)).toMatchObject({
+      displayName: "ACME's Challenges",
+      shared: true,
+    });
+    expect(groups.find((g) => g.enterpriseId === beta.enterpriseId)?.shared).toBe(false);
+    // A queue serving no room is still listed — it is only reachable here.
+    expect(groups.every((g) => g.rooms.length === 0)).toBe(true);
+  });
+
+  it("scopes a sponsor rep to their own enterprise's queues", async () => {
+    const alpha = await createEnterpriseChallenges(2);
+    await createEnterpriseChallenges(1);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/queue/groups",
+      headers: asUser(alpha.repId),
+    });
+    const groups = res.json().groups as Array<{ enterpriseId: number }>;
+    expect(groups).toHaveLength(2);
+    expect(groups.every((g) => g.enterpriseId === alpha.enterpriseId)).toBe(true);
+  });
+
+  it("shows nothing to someone who manages no enterprise", async () => {
+    await createEnterpriseChallenges(2);
+    const outsider = await createUser();
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/queue/groups",
+      headers: asUser(outsider),
+    });
+    expect(res.json().groups).toEqual([]);
+  });
+
+  it("names the rooms serving each queue", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const { enterpriseId, challengeIds } = await createEnterpriseChallenges(2);
+    const roomId = await createRoom({ name: "Sala A" });
+    const body = (await merge(enterpriseId, challengeIds, "Shared")).json();
+    await pool.query(`INSERT INTO room_queue_groups (room_id, queue_group_id) VALUES ($1, $2)`, [
+      roomId,
+      body.id,
+    ]);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/queue/groups",
+      headers: asUser(adminId),
+    });
+    const groups = res.json().groups as Array<{ rooms: Array<{ name: string }> }>;
+    expect(groups[0]!.rooms.map((room) => room.name)).toEqual(["Sala A"]);
+  });
+});
+
 describe("merge permissions", () => {
   it("lets the enterprise's own rep merge, and nobody else", async () => {
     const { enterpriseId, repId, challengeIds } = await createEnterpriseChallenges(2);

@@ -155,6 +155,11 @@ grant as the judge roster (`assertCanManageEnterpriseJudging`: `queue:admin`,
 | `POST /api/enterprises/:id/queue-groups/:queueGroupId/split` | gives every member challenge its own 1:1 group back |
 | `PATCH /api/queue/groups/:queueGroupId` | the admin's review: the shared name and the merged form |
 
+`GET /api/queue/groups` is the cross-enterprise version of the first row and
+backs both the room-assignment picker and the all-queues management view: a
+`queue:admin`/`sponsors:manage` caller gets every queue on the platform, a
+sponsor representative only their own enterprises', anyone else none.
+
 The merge itself, in one transaction:
 
 1. **Locks every one of the enterprise's `queue_groups` rows, lowest id
@@ -214,10 +219,38 @@ queue", the TV. For a 1:1 group that is the challenge title, exactly as before.
 The TV clusters rooms by `queue_group_id` rather than challenge id, so several
 rooms working one shared queue are a single card.
 
-## Not yet done
+## Where this lives in the UI
 
-- `roomPace`'s presentation ceiling still picks the group's lowest challenge
-  id rather than aggregating limits across a merged group's challenges.
-- Which rooms serve a shared queue is set from the room side
-  (`POST /api/queue/rooms/:roomId/queue-group`), not from the queue-group
-  configuration screen.
+Per `docs/DESIGN.md` §7 (additive capability-gated workspaces, no new
+top-level areas) and §5 (sub-views are a `TabBar`, not another nav item),
+queue management is **not** a new destination. Queue operations (`/queue`,
+Live judging workspace) carries a two-tab `TabBar` — two projections of one
+thing:
+
+- **Rooms** — the room-keyed cards that were already there: live queue,
+  team search, per-entry actions.
+- **Queues** — queue-group-keyed (`queues-panel.tsx`): every queue in the
+  caller's scope with its name, challenges, serving rooms, progress and team
+  lookup, plus the naming and shared-vs-per-challenge controls. **A queue no
+  room serves is only reachable here**, which is why the room-keyed tab alone
+  was not enough.
+
+The page keeps one `PageHeader` and one primary action ("Generate queues")
+across both tabs (§4).
+
+Naming and merging deliberately do **not** live on the enterprise profile: an
+admin would have to know which enterprise to open first, and one destination
+must not have two homes (§4).
+
+Room → queue linking stays on `/queue/rooms`, which is already
+`sponsorVisible: true` in `nav.ts` and already permits the enterprise's own
+reps server-side — so enterprises route their own queues to their own rooms,
+including **unlinking** a room they would rather leave idle.
+
+## Deliberately not aggregated
+
+`roomPace`'s presentation-time ceiling resolves a merged group to its **lowest
+challenge id** and uses that challenge's limit. That is a product decision, not
+a gap: limits are **never** summed, averaged, or otherwise combined across a
+group's challenges. If a merged group ever needs a single number, it picks one
+member's — don't replace this with anything computed from the set.

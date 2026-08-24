@@ -196,28 +196,26 @@ export interface RoomAssignments {
   judges: RoomJudgeAssignment[];
 }
 
-/** GET /api/queue/groups — the groups the caller may assign a room to. */
+/**
+ * One judging queue. A queue with more than one challenge is a *shared*
+ * queue: one line in every list, one call per team, one judging form (H46).
+ *
+ * `GET /api/queue/groups` returns every queue the caller may manage (all of
+ * them for a queue/sponsor administrator, their own enterprises' for a rep)
+ * and `GET /api/enterprises/:id/queue-groups` the same shape for one
+ * enterprise — so the room-assignment picker and the all-queues management
+ * view share this type.
+ */
 export interface QueueGroup {
   id: number;
-  display_name: string;
-  enterprise_id: number;
-  enterprise_name: string;
-  challenges: Array<{ id: number; title: string }>;
-}
-
-/**
- * GET /api/enterprises/:id/queue-groups — one row per judging queue the
- * enterprise runs. A queue with more than one challenge is a shared queue:
- * one line in every list, one call per team, one judging form.
- */
-export interface EnterpriseQueueGroup {
-  id: number;
   enterpriseId: number;
+  enterpriseName: string;
   displayName: string;
   challenges: Array<{ id: number; title: string }>;
   rooms: Array<{ id: number; name: string }>;
   criteria: Question[] | null;
   shared: boolean;
+  /** Merging and splitting are refused from here on. */
   judgingStarted: boolean;
 }
 
@@ -227,9 +225,10 @@ export interface MergedPanelPreview {
   renamedKeys: Array<{ from: string; to: string }>;
 }
 
+/** One enterprise's queues. `listQueueGroups` is the cross-enterprise view. */
 export const listEnterpriseQueueGroups = (enterpriseId: number) =>
   api
-    .get<{ groups: EnterpriseQueueGroup[] }>(`/api/enterprises/${enterpriseId}/queue-groups`)
+    .get<{ groups: QueueGroup[] }>(`/api/enterprises/${enterpriseId}/queue-groups`)
     .then((r) => r.groups);
 
 export const previewQueueGroupMerge = (enterpriseId: number, challengeIds: number[]) =>
@@ -241,12 +240,12 @@ export const mergeQueueGroups = (
   enterpriseId: number,
   body: { challengeIds: number[]; displayName: string },
 ) =>
-  api.post<EnterpriseQueueGroup>(`/api/enterprises/${enterpriseId}/queue-groups/merge`, body, {
+  api.post<QueueGroup>(`/api/enterprises/${enterpriseId}/queue-groups/merge`, body, {
     headers: { "Idempotency-Key": crypto.randomUUID() },
   });
 
 export const splitQueueGroup = (enterpriseId: number, queueGroupId: number) =>
-  api.post<{ groups: EnterpriseQueueGroup[] }>(
+  api.post<{ groups: QueueGroup[] }>(
     `/api/enterprises/${enterpriseId}/queue-groups/${queueGroupId}/split`,
     {},
     { headers: { "Idempotency-Key": crypto.randomUUID() } },
@@ -255,7 +254,7 @@ export const splitQueueGroup = (enterpriseId: number, queueGroupId: number) =>
 export const updateQueueGroup = (
   queueGroupId: number,
   body: { displayName?: string; criteria?: Question[] },
-) => api.patch<EnterpriseQueueGroup>(`/api/queue/groups/${queueGroupId}`, body);
+) => api.patch<QueueGroup>(`/api/queue/groups/${queueGroupId}`, body);
 
 /** GET /api/queue/me — participant view (H38). */
 export interface MyQueueRoom {
@@ -336,6 +335,7 @@ export const updateQueueSettings = (body: {
   preCallNotificationEtaMinutes?: number;
   requeuePromptDefault?: QueueSettings["requeue_prompt_default"];
 }) => api.patch<QueueSettings>("/api/queue/settings", body);
+/** Every queue the caller may manage, across enterprises. */
 export const listQueueGroups = () =>
   api.get<{ groups: QueueGroup[] }>("/api/queue/groups").then((r) => r.groups);
 export const assignRoomQueueGroup = (roomId: number, queueGroupId: number) =>

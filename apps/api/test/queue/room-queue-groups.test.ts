@@ -337,9 +337,9 @@ describe("room -> queue group assignment access", () => {
       url: "/api/queue/groups",
       headers: asUser(alpha.repId),
     });
-    const groups = asRep.json().groups as { enterprise_id: number; challenges: unknown[] }[];
+    const groups = asRep.json().groups as { enterpriseId: number; challenges: unknown[] }[];
     expect(groups).toHaveLength(2);
-    expect(groups.every((g) => g.enterprise_id === alpha.enterpriseId)).toBe(true);
+    expect(groups.every((g) => g.enterpriseId === alpha.enterpriseId)).toBe(true);
     expect(groups[0]!.challenges).toHaveLength(1);
   });
 });

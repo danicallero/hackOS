@@ -167,6 +167,7 @@ export function AssignmentsEditor({
   queueGroupFallback,
   queueGroups,
   onSetQueueGroup,
+  onClearQueueGroup,
   canSetQueueGroup,
 }: {
   roomId: number;
@@ -174,6 +175,9 @@ export function AssignmentsEditor({
   queueGroupFallback: number;
   queueGroups: QueueGroup[];
   onSetQueueGroup: (queueGroupId: number) => Promise<void>;
+  /** Leaves the room serving nothing — an enterprise routes its queue to the
+   *  rooms it actually wants, not to every room assigned to it. */
+  onClearQueueGroup: (queueGroupId: number) => Promise<void>;
   canSetQueueGroup: boolean;
 }) {
   const { t } = useLocale();
@@ -212,14 +216,14 @@ export function AssignmentsEditor({
               <SelectContent>
                 {queueGroups.map((group) => (
                   <SelectItem key={group.id} value={String(group.id)}>
-                    {group.enterprise_name} · {group.display_name}
+                    {group.enterpriseName} · {group.displayName}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <Button
               className="shrink-0"
-              disabled={busy === "queueGroup" || !queueGroupId}
+              disabled={busy !== null || !queueGroupId}
               onClick={async () => {
                 setBusy("queueGroup");
                 try {
@@ -236,6 +240,28 @@ export function AssignmentsEditor({
             >
               {t("setQueueGroup")}
             </Button>
+            {assigned && (
+              <Button
+                variant="outline"
+                className="shrink-0"
+                disabled={busy !== null}
+                onClick={async () => {
+                  setBusy("clearQueueGroup");
+                  try {
+                    await onClearQueueGroup(assigned.id);
+                    toast.success(t("queueGroupCleared"));
+                  } catch (err) {
+                    toast.error(
+                      err instanceof ApiError ? err.message : t("couldNotAssignQueueGroup"),
+                    );
+                  } finally {
+                    setBusy(null);
+                  }
+                }}
+              >
+                {t("clearQueueGroup")}
+              </Button>
+            )}
           </div>
         )}
       </div>
