@@ -2,6 +2,7 @@ import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { Job } from "bullmq";
 import type { Queryable } from "../../db/pool.js";
 import { pool } from "../../db/pool.js";
+import { observeParticipantInvalidation } from "../../lib/metrics.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { broadcast } from "../../lib/sse.js";
 import { notify, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
@@ -177,23 +178,46 @@ export async function notifyTeamPreCall(
 export async function notifyChallengeQueueChanged(
   _client: Queryable,
   challengeId: number,
-): Promise<void> {
-  await getQueue(QUEUE_PARTICIPANT_INVALIDATIONS).add(
-    "challenge-changed",
-    { challengeId },
-    {
-      // H38 (#544): one delayed job per challenge is the debounce window.
-      // Repeated transitions during a burst reuse this job instead of making
-      // every participant refetch once per transition.
-      jobId: `challenge-${challengeId}`,
-      delay: 250,
-      removeOnComplete: true,
-      removeOnFail: true,
-    },
-  );
+): Promise<"queued" | "coalesced" | "dropped"> {
+  const queue = getQueue(QUEUE_PARTICIPANT_INVALIDATIONS);
+  const jobId = `challenge-${challengeId}`;
+  const locallyCoalesced = participantInvalidationJobsInFlight.has(jobId);
+  participantInvalidationJobsInFlight.add(jobId);
+  try {
+    // The lookup is only telemetry; the jobId remains the correctness
+    // mechanism. A concurrent caller may win between getJob() and add(), but
+    // that race affects the counter only, never the single-job invariant.
+    const existing = locallyCoalesced || Boolean(await queue.getJob(jobId));
+    await queue.add(
+      "challenge-changed",
+      { challengeId },
+      {
+        // H38 (#544): one delayed job per challenge is the debounce window.
+        // Repeated transitions during a burst reuse this job instead of making
+        // every participant refetch once per transition.
+        jobId,
+        delay: 250,
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
+    const outcome = existing ? "coalesced" : "queued";
+    observeParticipantInvalidation(outcome);
+    return outcome;
+  } catch (err) {
+    // The durable queue transition has already committed when this helper is
+    // called. Participant refresh is best effort, so a Valkey/BullMQ outage
+    // must not turn a successful operational action into a 500 (H29/H38).
+    observeParticipantInvalidation("dropped");
+    console.error(`[queue] participant invalidation for challenge ${challengeId} dropped`, err);
+    return "dropped";
+  } finally {
+    participantInvalidationJobsInFlight.delete(jobId);
+  }
 }
 
 export const QUEUE_PARTICIPANT_INVALIDATIONS = "queue-participant-invalidations";
+const participantInvalidationJobsInFlight = new Set<string>();
 
 /** H38 (#544): worker-side fan-out, deliberately outside queue transition requests. */
 export async function publishChallengeQueueInvalidation(challengeId: number): Promise<void> {
@@ -204,13 +228,18 @@ export async function publishChallengeQueueInvalidation(challengeId: number): Pr
       WHERE qe.challenge_id = $1`,
     [challengeId],
   );
-  await Promise.all(
+  const results = await Promise.all(
     rows.map((row: { user_id: number }) =>
       broadcast(`${SSE_TOPICS.USER_PREFIX}${row.user_id}`, EVENTS.USER_QUEUE_CHANGED, {
         challengeId,
       }),
     ),
   );
+  const degraded = results.filter((result) => result === null).length;
+  if (degraded > 0) {
+    for (let i = 0; i < degraded; i++) observeParticipantInvalidation("degraded");
+    if (degraded === results.length) observeParticipantInvalidation("dropped");
+  }
 }
 
 registerWorker(QUEUE_PARTICIPANT_INVALIDATIONS, async (job: Job<{ challengeId: number }>) => {

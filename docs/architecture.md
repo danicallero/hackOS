@@ -260,6 +260,30 @@ hijacked. All of it is scraped at `/metrics` (`hackos_sse_local_connections`,
 `hackos_sse_disconnects_total`, `hackos_sse_rejections_total`). See
 `docs/env-vars.md`.
 
+**Event-day priority lanes (#544).** Non-streaming HTTP requests pass through
+an in-process admission scheduler derived from the existing per-process
+`DB_POOL_MAX` value; it does not resize or reconfigure the #540 pool. P0 is
+queue operators, judges and accreditation/presence staff; P1 is sponsor/judge
+collaboration; P2 is public TV/content; P3 is participant and other
+best-effort traffic. P0/P1 retain reserved admission slots while P2/P3 is
+busy, and the bounded best-effort wait queue may shed P2/P3 with `429`.
+Long-lived SSE requests bypass this scheduler so they continue to be governed
+only by #540's connection budgets and write backpressure. Monitor
+`hackos_http_requests_total`,
+`hackos_http_request_admission_wait_seconds`, and
+`hackos_http_request_admission_queue_size` by lane, plus
+`hackos_sse_local_connections` by lane and normalized topic family.
+
+Participant queue invalidations are one delayed BullMQ job per challenge;
+called and pre-call notifications remain immediate. Their scheduling and
+fan-out outcomes are exposed as
+`hackos_queue_participant_invalidations_total{outcome="queued|coalesced|dropped|degraded"}`.
+For browser-only refetch storms the optional
+`POST /api/telemetry/refetch-storm` contract accepts only bounded enum fields
+(`surface`, `topic`, `trigger`) plus `refetches` (1–1000) and
+`windowSeconds` (1–300). It never accepts identities, URLs, user agents or free text, keeping
+`hackos_browser_refetch_storms_total` and related metrics low-cardinality.
+
 Mobile push is a different path entirely: the outbox dispatcher (worker) sends
 to Expo, which routes to APNs/FCM — see the notifications module and
 [`mobile.md`](./mobile.md).
@@ -320,6 +344,10 @@ use (Postgres defaults `max_connections` to 100). `/metrics` exposes pool
 saturation (`hackos_db_pool_total/idle/waiting`), acquire-wait latency
 (`hackos_db_pool_wait_seconds`), and aborted queries
 (`hackos_db_query_timeouts_total`) to watch before that budget is exceeded.
+The admission scheduler is intentionally a separate guardrail: its wait and
+lane counters show whether P3 refetch bursts are being delayed or shed before
+they can occupy all request-start slots, while the unchanged pool metrics show
+actual database pressure.
 Headroom, in order of reach-for:
 1. Bigger box / more memory (the partial indexes keep the hot claim query cheap).
 2. A connection pooler (PgBouncer) once api+worker replica count pushes the

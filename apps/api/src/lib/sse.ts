@@ -5,6 +5,7 @@ import client from "prom-client";
 import { config } from "../config.js";
 import { TooManyRequestsError } from "./errors.js";
 import { register } from "./metrics.js";
+import { laneForSseTopic, metricTopicForSse, type RequestLane } from "./request-lanes.js";
 import { valkey, valkeySub } from "./valkey.js";
 
 /**
@@ -21,6 +22,7 @@ import { valkey, valkeySub } from "./valkey.js";
 const CHANNEL_PREFIX = "sse:";
 const HEARTBEAT_INTERVAL_MS = 25_000;
 const localSubscribers = new Map<string, Set<FastifyReply>>();
+const subscriberLanes = new Map<FastifyReply, RequestLane>();
 let relayStarted = false;
 
 // Connection budgets (H540): reject before hijacking the response, so a
@@ -34,13 +36,20 @@ const draining = new Map<FastifyReply, NodeJS.Timeout>();
 
 new client.Gauge({
   name: "hackos_sse_local_connections",
-  help: "SSE connections currently held open by this process, by topic",
-  labelNames: ["topic"],
+  help: "SSE connections currently held open by this process, by priority lane and topic family",
+  labelNames: ["lane", "topic"],
   registers: [register],
   collect() {
     this.reset();
     for (const [topic, conns] of localSubscribers) {
-      this.set({ topic }, conns.size);
+      const counts = new Map<RequestLane, number>();
+      for (const reply of conns) {
+        const lane = subscriberLanes.get(reply) ?? laneForSseTopic(topic);
+        counts.set(lane, (counts.get(lane) ?? 0) + 1);
+      }
+      for (const [lane, count] of counts) {
+        this.set({ lane, topic: metricTopicForSse(topic) }, count);
+      }
     }
   },
 });
@@ -232,6 +241,7 @@ export async function subscribe(
     localSubscribers.set(topic, conns);
   }
   conns.add(reply);
+  subscriberLanes.set(reply, laneForSseTopic(topic));
   globalConnCount++;
   clientConnCounts.set(clientKey, clientCount + 1);
 
@@ -250,6 +260,7 @@ export async function subscribe(
       sseDisconnectsTotal.inc({ reason: "normal" });
     }
     conns.delete(reply);
+    subscriberLanes.delete(reply);
     if (conns.size === 0) localSubscribers.delete(topic);
     globalConnCount--;
     const remaining = (clientConnCounts.get(clientKey) ?? 1) - 1;

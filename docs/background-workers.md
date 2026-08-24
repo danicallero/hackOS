@@ -40,7 +40,7 @@ queue no matter how many times scheduling runs (idempotent scheduling).
 | `announcements-publisher` | `notifications/announcements-publisher.ts` | **15 s** | announcements whose `publish_at` has passed → reveals their configured screen placement and, when selected, fans out inbox/email/push through each recipient's preferences exactly once |
 | `spot-confirmation expirer` | `applications/expirer.ts` | **60 s** | accepted responses whose confirmation window elapsed → `expired` (`expireDueConfirmations`), then scoped wallet tokens dead for over a day (`purgeExpiredWalletAccessTokens`, issue #369) |
 | `queue-pump` | `queue/pump.ts` | repeatable | for each active room, tops up the live judging queue (`callNextForRoom`) |
-| `queue-participant-invalidations` | `queue/notify.ts` | event-driven, 250 ms debounce | coalesces participant H38 read-model refresh fan-out by challenge after queue transitions commit; called/pre-call events bypass it and remain immediate |
+| `queue-participant-invalidations` | `queue/notify.ts` | event-driven, 250 ms debounce | coalesces participant H38 read-model refresh fan-out by challenge after queue transitions commit; called/pre-call events bypass it and remain immediate; Prometheus records `queued`, `coalesced`, `dropped` (broker unavailable) and `degraded` (partial fan-out) outcomes |
 | `tv-scheduler` | `queue/tv-scheduler.ts` | **5 s** | resolves what the venue screens should show (operator override → covering `tv_slots` window → default `rooms`), drops an override whose `expiresAt` passed, and broadcasts `tv.mode.changed` **only when the resolved state changed** — so a slot boundary reaches the fleet unattended without waking every screen every tick (H42). The public TV SSE endpoint receives only the dedicated payload-free `public-tv` invalidation mirror and refetches its sanitized projection; the operational TV event remains off the public stream. |
 | `presence-event-end-closer` | `logistics/presence-closer.ts` | **60 s** | once `event_config.event_ends_at` passes, force-closes every still-open door session with an audited `out` at that instant (`scanned_by NULL` = system actor, migration 0708). H24 product override of the original "the system never closes a session itself" rule; an `out` outside the certainty window credits no hours, so it only restores the in/out invariant. |
 
@@ -132,7 +132,7 @@ controllers. This is the honest map:
 | **Spot-confirmation expiry** (H15) | **Async** | `spot-confirmation expirer` tick every 60 s |
 | **Scheduled announcement reveals** | **Async** | `announcements-publisher` tick every 15 s |
 | **Judging queue top-up** (H29+) | **Async** | `queue-pump` tick |
-| **Participant queue read-model invalidation** (H38) | **Async** | one delayed BullMQ job per challenge coalesces transition bursts; its worker fans out personal refresh signals |
+| **Participant queue read-model invalidation** (H38) | **Async** | one delayed BullMQ job per challenge coalesces transition bursts; its worker fans out personal refresh signals. A broker failure is best-effort `dropped`, while partial SSE publication is `degraded`; called/pre-call notifications stay immediate. |
 | **TV slot boundaries / override expiry** (H42) | **Async** | `tv-scheduler` tick every 5 s |
 
 **Takeaway for future work:** if you want something processed in the background,

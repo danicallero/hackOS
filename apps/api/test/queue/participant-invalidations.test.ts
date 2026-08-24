@@ -40,6 +40,10 @@ describe("participant queue invalidations (H38, #544)", () => {
     ]);
     expect(jobs).toHaveLength(1);
     expect(jobs[0]?.data).toEqual({ challengeId });
+
+    const { register } = await import("../../src/lib/metrics.js");
+    const metrics = await register.metrics();
+    expect(metrics).toContain('hackos_queue_participant_invalidations_total{outcome="coalesced"}');
   });
 
   it("worker fan-out publishes one refresh per affected participant", async () => {

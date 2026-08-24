@@ -17,7 +17,9 @@ import { pool } from "./db/pool.js";
 import { dbTimeoutsTotal, isTimeoutError } from "./lib/db-errors.js";
 import { AppError } from "./lib/errors.js";
 import { idempotencyOnSend } from "./lib/idempotency.js";
-import { register } from "./lib/metrics.js";
+import { observeHttpRequest, register } from "./lib/metrics.js";
+import { RequestAdmission, type RequestAdmissionLease } from "./lib/request-admission.js";
+import { classifyRequestLane, isSseRequest } from "./lib/request-lanes.js";
 import { openApiSecurityForPolicy, registerRoutePolicyInfrastructure } from "./lib/route-policy.js";
 import { broadcast } from "./lib/sse.js";
 import { mutationDomainForPath, publicContentMutationForPath } from "./lib/sse-routing.js";
@@ -43,6 +45,7 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
   queue: "Judging queue, TV displays and their realtime streams (H29–H42).",
   logistics: "Accreditation, badge/presence scanning and on-site activities (H22–H27).",
   notifications: "Announcements and the notification outbox (H47–H51).",
+  telemetry: "Low-cardinality browser observations for event-day realtime load (H38, #544).",
   audit: "Read access to the audit trail for sensitive mutations (H53).",
   api: "Everything not yet grouped under a more specific tag above.",
 };
@@ -69,6 +72,7 @@ function docsTagFor(url: string): keyof typeof TAG_DESCRIPTIONS {
   if (url.startsWith("/api/accreditation") || url.startsWith("/api/activities")) return "logistics";
   if (url.startsWith("/api/announcements") || url.startsWith("/api/notifications"))
     return "notifications";
+  if (url.startsWith("/api/telemetry/")) return "telemetry";
   if (url.startsWith("/api/audit")) return "audit";
   return "api";
 }
@@ -253,8 +257,50 @@ export async function buildApp(): Promise<App> {
   await app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
   await app.register(requestContextPlugin);
   await app.register(authContextPlugin);
+
+  // Event-day admission is deliberately a separate, in-process scheduler
+  // from #540's pg pool and SSE budgets. It derives its ceiling from the
+  // existing per-process pool size without changing that configuration and
+  // reserves slots for P0/P1 operational traffic when participant/public
+  // requests surge (H29, H38, H41-H42, H540, #544).
+  const requestAdmission = new RequestAdmission({
+    maxConcurrent: config.dbPoolMax,
+    maxBestEffortPending: Math.max(16, config.dbPoolMax * 8),
+  });
+  const admissionLeases = new WeakMap<FastifyRequest, RequestAdmissionLease>();
+
+  app.addHook("onRequest", async (req) => {
+    const lane = classifyRequestLane({ url: req.url, method: req.method, userId: req.userId });
+    observeHttpRequest(lane, req.method);
+    // A long-lived SSE socket must never hold an admission slot for its whole
+    // lifetime. The connection budget/backpressure contract remains entirely
+    // owned by sse.ts (#540).
+    if (
+      isSseRequest(req.url) ||
+      req.url.split("?", 1)[0] === "/healthz" ||
+      req.url.split("?", 1)[0] === "/metrics"
+    ) {
+      return;
+    }
+    const lease = await requestAdmission.acquire(lane);
+    admissionLeases.set(req, lease);
+  });
+
+  const releaseAdmission = (req: FastifyRequest) => {
+    const lease = admissionLeases.get(req);
+    if (!lease) return;
+    lease.release();
+    admissionLeases.delete(req);
+  };
+  app.addHook("onResponse", async (req) => releaseAdmission(req));
+  app.addHook("onError", async (req) => releaseAdmission(req));
+
   app.addHook("onSend", idempotencyOnSend);
   app.addHook("onResponse", async (req, reply) => {
+    // Browser diagnostics are intentionally not a domain mutation: emitting
+    // an audit refresh for every observation would amplify the storm it is
+    // measuring (H53, #544).
+    if (req.url.split("?", 1)[0]?.startsWith("/api/telemetry/")) return;
     if (
       !["POST", "PUT", "PATCH", "DELETE"].includes(req.method) ||
       reply.statusCode >= 300 ||
@@ -399,8 +445,10 @@ export async function buildApp(): Promise<App> {
       schema: {
         description:
           "Prometheus scrape endpoint (H540): pg pool saturation/wait, query " +
-          "timeouts, SSE connection counts/disconnects/rejections, and Node " +
-          "process defaults.",
+          "timeouts, #544 priority-lane request rate/admission wait and bounded " +
+          "best-effort queue depth, SSE connection counts by lane/topic, " +
+          "participant invalidation outcomes, browser refetch observations, " +
+          "and Node process defaults.",
       },
     },
     async (_req, reply) => {
