@@ -114,9 +114,10 @@ export function JudgesCard({ enterpriseId }: { enterpriseId: number }) {
               search={searchCandidates}
               placeholder={t("selectJudgePlaceholder")}
             />
+            {/* `lg` is the 40px control height the pickers/inputs in this
+                library use, so the action lines up with the field beside it. */}
             <Button
-              size="sm"
-              variant="outline"
+              size="lg"
               disabled={busy || !selectedUserId}
               onClick={() => add(Number(selectedUserId))}
             >
