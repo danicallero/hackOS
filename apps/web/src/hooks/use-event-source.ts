@@ -3,6 +3,7 @@
 import { EVENTS } from "@hackos/shared/events";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_URL } from "@/lib/env";
+import { subscribeToSse } from "@/lib/sse-broker";
 
 /**
  * SSE consumption for the queue/judging vertical (H38, H41-H42). The server
@@ -47,32 +48,15 @@ export function useEventSource(
   useEffect(() => {
     if (!enabled || !path) return;
 
-    const source = new EventSource(`${API_URL}${path}`, { withCredentials: true });
-    source.onopen = () => setConnected(true);
-    source.onerror = () => setConnected(false); // EventSource retries on its own
-
-    const handler = (e: MessageEvent) => {
-      let envelope: SseEnvelope;
-      try {
-        envelope = JSON.parse(e.data);
-      } catch {
-        return; // ignore comments/heartbeats and malformed frames
-      }
-      onEventRef.current?.(envelope);
-    };
-
     const names = eventsKey ? eventsKey.split(",") : null;
-    if (names) {
-      for (const name of names) source.addEventListener(name, handler as EventListener);
-    } else {
-      source.onmessage = handler;
-    }
+    const unsubscribe = subscribeToSse(`${API_URL}${path}`, {
+      events: names ?? undefined,
+      onConnectionChange: setConnected,
+      onEvent: (envelope) => onEventRef.current?.(envelope),
+    });
 
     return () => {
-      if (names) {
-        for (const name of names) source.removeEventListener(name, handler as EventListener);
-      }
-      source.close();
+      unsubscribe();
       setConnected(false);
     };
   }, [path, enabled, eventsKey]);
