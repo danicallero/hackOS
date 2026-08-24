@@ -21,25 +21,29 @@ import { useSessionContext } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
 import { GenerateQueuesAction } from "./generate-queues-action";
 import { QueueOperatorConsole } from "./operator-console";
+import { queueOperationsAccess } from "./queue-access";
 import { QueuesPanel } from "./queues-panel";
 import { TeamQueueSearch } from "./team-queue-search";
 
 export default function QueueOperationsPage() {
   const { t } = useLocale();
-  const { can, canAny } = useSessionContext();
-  const canUse = canAny(
-    CAPABILITIES.QUEUE_OPERATE,
-    CAPABILITIES.QUEUE_ADMIN,
-    CAPABILITIES.JUDGE_PANEL,
-  );
+  const { can, me } = useSessionContext();
   const canAdmin = can(CAPABILITIES.QUEUE_ADMIN);
+  const { canViewRooms, canUse, defaultTab } = queueOperationsAccess({
+    canOperate: can(CAPABILITIES.QUEUE_OPERATE),
+    canAdmin,
+    canJudge: can(CAPABILITIES.JUDGE_PANEL),
+    canManageSponsors: can(CAPABILITIES.SPONSORS_MANAGE),
+    isSponsorRep: Boolean(me?.isSponsorRep),
+  });
   // Two projections of the same thing (DESIGN §5: sub-views are a TabBar, not
   // another nav item): rooms working queues, and the queues themselves. A
   // queue no room serves is only reachable from the second.
-  const { tab, setTab } = useUrlTab({
+  const { tab: requestedTab, setTab } = useUrlTab({
     values: ["rooms", "queues"] as const,
-    defaultValue: "rooms",
+    defaultValue: defaultTab,
   });
+  const tab = canViewRooms ? requestedTab : "queues";
   const [busy, setBusy] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [arrivalHints, setArrivalHints] = useState(
@@ -90,7 +94,7 @@ export default function QueueOperationsPage() {
       EVENTS.QUEUE_NOTIFY_ENTER,
       EVENTS.QUEUE_TEAM_CALLED,
     ],
-    { enabled: canUse, onEvent: announceTeamEnter },
+    { enabled: canViewRooms, onEvent: announceTeamEnter },
   );
 
   const rooms = useMemo(() => roomViews.data ?? [], [roomViews.data]);
@@ -114,7 +118,7 @@ export default function QueueOperationsPage() {
     return <AccessDenied ask={t("queueOpsAccessDeniedDesc")} />;
   }
 
-  if (roomViews.loading) {
+  if (canViewRooms && roomViews.loading) {
     return (
       <div className="flex items-center justify-center py-20">
         <Spinner className="size-6" />
@@ -122,7 +126,7 @@ export default function QueueOperationsPage() {
     );
   }
 
-  if (roomViews.error) {
+  if (canViewRooms && roomViews.error) {
     return (
       <div className="space-y-6">
         <PageHeader title={t("queueOperations")} />
@@ -165,21 +169,23 @@ export default function QueueOperationsPage() {
       <Tabs value={tab} onValueChange={setTab}>
         <div className="flex items-center gap-2">
           <TabBar aria-label={t("queueOperations")} className="min-w-0 flex-1 justify-start">
-            <TabsTrigger value="rooms">{t("rooms")}</TabsTrigger>
+            {canViewRooms && <TabsTrigger value="rooms">{t("rooms")}</TabsTrigger>}
             <TabsTrigger value="queues">{t("judgingQueues")}</TabsTrigger>
           </TabBar>
-          <Button
-            variant={searchOpen ? "secondary" : "outline"}
-            size="icon-sm"
-            aria-label={t("queueOpenSearch")}
-            aria-expanded={searchOpen}
-            onClick={() => setSearchOpen((open) => !open)}
-          >
-            <SearchIcon className="size-4" />
-          </Button>
+          {canViewRooms && (
+            <Button
+              variant={searchOpen ? "secondary" : "outline"}
+              size="icon-sm"
+              aria-label={t("queueOpenSearch")}
+              aria-expanded={searchOpen}
+              onClick={() => setSearchOpen((open) => !open)}
+            >
+              <SearchIcon className="size-4" />
+            </Button>
+          )}
         </div>
 
-        {searchOpen && (
+        {canViewRooms && searchOpen && (
           <TeamQueueSearch
             rooms={rooms}
             canOperate={can(CAPABILITIES.QUEUE_OPERATE) || canAdmin}
@@ -191,23 +197,25 @@ export default function QueueOperationsPage() {
           />
         )}
 
-        <TabsContent value="rooms" className="pt-2">
-          {rooms.length === 0 ? (
-            <EmptyState
-              icon={TicketIcon}
-              title={t("noRoomsYet")}
-              description={t("noRoomsYetDescription")}
-            />
-          ) : (
-            <QueueOperatorConsole
-              rooms={rooms}
-              canOperate={can(CAPABILITIES.QUEUE_OPERATE) || canAdmin}
-              onChanged={() => {
-                roomViews.refetch();
-              }}
-            />
-          )}
-        </TabsContent>
+        {canViewRooms && (
+          <TabsContent value="rooms" className="pt-2">
+            {rooms.length === 0 ? (
+              <EmptyState
+                icon={TicketIcon}
+                title={t("noRoomsYet")}
+                description={t("noRoomsYetDescription")}
+              />
+            ) : (
+              <QueueOperatorConsole
+                rooms={rooms}
+                canOperate={can(CAPABILITIES.QUEUE_OPERATE) || canAdmin}
+                onChanged={() => {
+                  roomViews.refetch();
+                }}
+              />
+            )}
+          </TabsContent>
+        )}
 
         <TabsContent value="queues" className="pt-2">
           <QueuesPanel />

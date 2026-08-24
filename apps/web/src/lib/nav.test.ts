@@ -155,6 +155,16 @@ describe("sponsor representative + judge (H8/H55)", () => {
   });
 });
 
+describe("sponsor queue management (H46/H55)", () => {
+  it("shows queue operations to a sponsor representative without staff capabilities", () => {
+    expect(visibleHrefs(contextFor([], { isSponsorRep: true }))).toContain("/queue");
+  });
+
+  it("shows queue operations to an org-wide sponsor manager", () => {
+    expect(visibleHrefs(contextFor([CAPABILITIES.SPONSORS_MANAGE]))).toContain("/queue");
+  });
+});
+
 describe("admin wildcard (H8)", () => {
   const ctx = contextFor([CAPABILITIES.ADMIN_ALL]);
 

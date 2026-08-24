@@ -53,9 +53,9 @@ export default function QueueDetailPage() {
   const { t } = useLocale();
   const params = useParams<{ id: string }>();
   const queueGroupId = Number(params.id);
-  const { can, me } = useSessionContext();
+  const { canAny, me } = useSessionContext();
   const canManage = canAccessSponsorWorkspace(
-    can(CAPABILITIES.QUEUE_ADMIN),
+    canAny(CAPABILITIES.QUEUE_ADMIN, CAPABILITIES.SPONSORS_MANAGE),
     Boolean(me?.isSponsorRep),
   );
 

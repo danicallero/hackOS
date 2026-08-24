@@ -242,7 +242,9 @@ export const WORKSPACES: Workspace[] = [
           CAPABILITIES.QUEUE_OPERATE,
           CAPABILITIES.QUEUE_ADMIN,
           CAPABILITIES.JUDGE_PANEL,
+          CAPABILITIES.SPONSORS_MANAGE,
         ],
+        sponsorVisible: true,
       },
       {
         title: "judging",
