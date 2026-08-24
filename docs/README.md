@@ -51,6 +51,11 @@ Architecture & modules:
   map that shows which module work runs in the request and which is handed off.
 - [Challenges & Devpost projects](./challenges-devpost.md) — the `challenges`
   and `projects` modules and the Devpost intake pipeline.
+- [Queue groups (H46)](./queue-groups.md) — the enterprise-scoped grouping
+  layer between challenges and the rooms/queues that judge them: why
+  `queue_entries.challenge_id` stays untouched, the two database-enforced
+  invariants (a group never spans enterprises; every challenge has exactly one
+  group), and the 1:1 backfill. Schema only so far — no consumers yet.
 - [Event config & the Apple Wallet pass](./event-config-wallet.md) — the
   `event_config` singleton (identity, doors-open vs hacking window, venue) and
   how the Wallet pass renders from it (field visibility, captions, back fields),
