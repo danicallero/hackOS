@@ -666,8 +666,8 @@ export async function setScheduleBulkPublishAt(
 
 // ── H59: responsible person(s) ("owners") for a schedule item ──────────
 // Modeled on the `sponsors` (enterprise members) join table, not
-// `room_judges` — a flat resource-to-users link, not scoped to a compound
-// resource.
+// `enterprise_judges` — a flat resource-to-users link, not scoped to a
+// compound resource.
 
 /**
  * One row can be either a real account (`userId` set, name/surname/email

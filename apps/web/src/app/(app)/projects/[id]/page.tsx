@@ -67,7 +67,7 @@ export default function ProjectDetailPage() {
   // reps reach a scoped detail view via the same association the backend
   // already checks (requireRepositoryAccess), not just projects:read.
   const canRead =
-    can(CAPABILITIES.PROJECTS_READ) || Boolean(me?.isRoomJudge) || Boolean(me?.isSponsorRep);
+    can(CAPABILITIES.PROJECTS_READ) || Boolean(me?.isEnterpriseJudge) || Boolean(me?.isSponsorRep);
   const canEdit = can(CAPABILITIES.PROJECTS_EDIT);
   const canImport = can(CAPABILITIES.PROJECTS_IMPORT);
   const id = Number(params.id);

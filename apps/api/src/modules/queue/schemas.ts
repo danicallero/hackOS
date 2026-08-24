@@ -9,12 +9,6 @@ export const roomChallengeParam = z.object({
   roomId: z.coerce.number().int().positive(),
   challengeId: z.coerce.number().int().positive(),
 });
-export const roomJudgeParam = z.object({
-  roomId: z.coerce.number().int().positive(),
-  challengeId: z.coerce.number().int().positive(),
-  userId: z.coerce.number().int().positive(),
-});
-
 export const createRoomBody = z.object({
   name: z.string().min(1),
   slug: z.string().min(1),
@@ -29,11 +23,6 @@ export const updateRoomBody = z.object({
 });
 
 export const assignChallengeBody = z.object({ challengeId: z.coerce.number().int().positive() });
-export const assignJudgeBody = z.object({
-  challengeId: z.coerce.number().int().positive(),
-  userId: z.coerce.number().int().positive(),
-});
-
 export const roomQueueStateBody = z.object({
   maxInWaitingArea: z.coerce.number().int().min(1).optional(),
   desiredMinutesPerTeam: z.coerce.number().int().min(1).optional(),

@@ -202,7 +202,7 @@ and page gates must agree. It does not silently grant form management or
 response editing beyond the operations that require decision access.
 
 Dashboard and domain-page decisions use effective capabilities plus the
-independent `isRoomJudge` and `isSponsorRep` association facts. The derived
+independent `isEnterpriseJudge` and `isSponsorRep` association facts. The derived
 single-priority `role` remains available for display and domain-state
 presentation only; it must not decide access or hide one association when an
 account has both.

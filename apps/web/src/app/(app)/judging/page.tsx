@@ -74,7 +74,7 @@ export default function QueuePage() {
     judge: can(CAPABILITIES.JUDGE_PANEL),
     admin: can(CAPABILITIES.QUEUE_ADMIN),
     exportData: can(CAPABILITIES.JUDGING_EXPORT),
-    isRoomJudge: me?.isRoomJudge ?? false,
+    isEnterpriseJudge: me?.isEnterpriseJudge ?? false,
   });
 
   const [rooms, setRooms] = useState<Room[]>([]);

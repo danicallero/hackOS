@@ -65,7 +65,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       can,
       canAny: (...capabilities: Capability[]) => capabilities.some(can),
       isPureApplicant:
-        !!me && !me.hasEventAccess && !me.isRoomJudge && !me.isSponsorRep && caps.size === 0,
+        !!me && !me.hasEventAccess && !me.isEnterpriseJudge && !me.isSponsorRep && caps.size === 0,
     };
   }, [me, status, refresh]);
 

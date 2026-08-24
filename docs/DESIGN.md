@@ -574,7 +574,7 @@ rg -n 'tracking-(tight|wide|wider|widest)' apps/web/src/components
 The system never does these. Treat a diff that introduces one as a bug:
 
 1. No role-based UI. `me.role` is display-only; gating is always by
-   capability or association fact (`isRoomJudge`, `isSponsorRep`).
+   capability or association fact (`isEnterpriseJudge`, `isSponsorRep`).
 2. No hardcoded colours (hex/oklch) or off-token spacing in components.
 3. No hardcoded user-facing strings — everything through the i18n dictionary,
    all three locales at once.

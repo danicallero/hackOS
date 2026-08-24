@@ -31,18 +31,15 @@ import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import {
   assignRoomChallenge,
-  assignRoomJudge,
   createRoom,
   deleteRoom,
   getRoomAssignments,
   listRooms,
   type Room,
   type RoomAssignments,
-  removeRoomJudge,
   updateRoom,
 } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
-import type { UserList } from "@/lib/types";
 import { type Challenge, canAccessSponsorWorkspace } from "../../challenges/shared";
 import { AssignmentsEditor, ChallengeResultsPanel } from "./room-panels";
 
@@ -64,7 +61,6 @@ export default function QueueRoomsPage() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [assignments, setAssignments] = useState<Record<number, RoomAssignments | null>>({});
   const [challenges, setChallenges] = useState<Challenge[]>([]);
-  const [users, setUsers] = useState<UserList["users"]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
@@ -91,16 +87,12 @@ export default function QueueRoomsPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [roomRows, challengeRows, userRows] = await Promise.all([
+      const [roomRows, challengeRows] = await Promise.all([
         listRooms(),
         api.get<{ challenges: Challenge[] }>(canAdmin ? "/api/challenges" : "/api/challenges/mine"),
-        canAdmin
-          ? api.get<UserList>("/api/users", { query: { limit: 200 } })
-          : Promise.resolve({ users: [] }),
       ]);
       setRooms(roomRows);
       setChallenges(challengeRows.challenges);
-      setUsers(userRows.users);
       setCreateDraft((draft) => (draft.name ? draft : { ...emptyRoomEditor() }));
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("couldNotLoadRoomAdminData");
@@ -115,16 +107,8 @@ export default function QueueRoomsPage() {
     async (roomId: number) => {
       setRoomDetailsError(null);
       try {
-        const [roomAssignments, judgeCandidates] = await Promise.all([
-          getRoomAssignments(roomId),
-          api.get<UserList>(`/api/queue/rooms/${roomId}/judge-candidates`).catch((err) => {
-            // H46: a room without an assigned challenge has no judge candidates yet.
-            if (err instanceof ApiError && err.status === 404) return { users: [] };
-            throw err;
-          }),
-        ]);
+        const roomAssignments = await getRoomAssignments(roomId);
         setAssignments((current) => ({ ...current, [roomId]: roomAssignments }));
-        setUsers(judgeCandidates.users);
       } catch (err) {
         const message = err instanceof ApiError ? err.message : t("couldNotLoadRoomDetails");
         setRoomDetailsError(message);
@@ -517,18 +501,9 @@ export default function QueueRoomsPage() {
                 assignments={selectedRoomAssignments}
                 challengeFallback={selectedChallengeFallback}
                 challenges={challenges}
-                users={users}
                 onAddChallenge={async (challengeId) => {
                   if (!canAdmin) return;
                   await assignRoomChallenge(selectedRoom.id, challengeId);
-                  await loadRoomDetails(selectedRoom.id);
-                }}
-                onAddJudge={async (challengeId, userId) => {
-                  await assignRoomJudge(selectedRoom.id, challengeId, userId);
-                  await loadRoomDetails(selectedRoom.id);
-                }}
-                onRemoveJudge={async (challengeId, userId) => {
-                  await removeRoomJudge(selectedRoom.id, challengeId, userId);
                   await loadRoomDetails(selectedRoom.id);
                 }}
                 canSetChallenge={canAdmin}

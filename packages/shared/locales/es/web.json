@@ -448,6 +448,7 @@
   "judgeAssigned": "Juez asignado.",
   "couldNotAssignJudge": "No se ha podido asignar el juez.",
   "addJudge": "Añadir juez",
+  "judges": "Jueces",
   "judgesCount": "Jueces ({count})",
   "judgeRemoved": "Juez eliminado.",
   "couldNotRemoveJudge": "No se ha podido eliminar el juez.",

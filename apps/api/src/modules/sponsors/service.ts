@@ -296,6 +296,126 @@ export async function removeEnterpriseMember(
   });
 }
 
+// ── judge roster (DELTA(Hxx): enterprise_judges replaces room_judges) ─────────
+
+export interface EnterpriseJudge {
+  userId: number;
+  name: string | null;
+  surname: string | null;
+  email: string;
+  addedAt: Date;
+  addedBy: number | null;
+}
+
+function judgeRow(r: Record<string, unknown>): EnterpriseJudge {
+  return {
+    userId: Number(r.user_id),
+    name: (r.name as string | null) ?? null,
+    surname: (r.surname as string | null) ?? null,
+    email: String(r.email),
+    addedAt: r.added_at as Date,
+    addedBy: r.added_by == null ? null : Number(r.added_by),
+  };
+}
+
+/** The enterprise's judge roster: any user, not only its sponsor reps. */
+export async function listEnterpriseJudges(enterpriseId: number): Promise<EnterpriseJudge[]> {
+  await getEnterprise(enterpriseId); // 404 if it doesn't exist
+  const { rows } = await pool.query(
+    `SELECT ej.user_id, u.name, u.surname, u.email, ej.added_at, ej.added_by
+       FROM enterprise_judges ej
+       JOIN users u ON u.id = ej.user_id
+      WHERE ej.enterprise_id = $1
+      ORDER BY u.name NULLS LAST, u.surname NULLS LAST, u.email`,
+    [enterpriseId],
+  );
+  return rows.map(judgeRow);
+}
+
+/**
+ * Add a judge. The candidate pool is every account (an enterprise may bring
+ * outside judges), and the add is silent — no invitation or consent step; the
+ * judge simply finds the judging workspace on their next login.
+ */
+export async function addEnterpriseJudge(
+  enterpriseId: number,
+  userId: number,
+  actorId: number | null,
+): Promise<EnterpriseJudge> {
+  await getEnterprise(enterpriseId);
+  const { rows: userRows } = await pool.query(`SELECT id FROM users WHERE id = $1`, [userId]);
+  if (!userRows[0]) throw new NotFoundError("User not found", { userId });
+
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `INSERT INTO enterprise_judges (enterprise_id, user_id, added_by)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (enterprise_id, user_id) DO NOTHING
+       RETURNING user_id`,
+      [enterpriseId, userId, actorId],
+    );
+    if (!rows[0]) {
+      throw new ConflictError("User is already a judge for this enterprise", {
+        enterpriseId,
+        userId,
+      });
+    }
+    await audit(client, {
+      actorId,
+      entityType: "enterprise",
+      entityId: enterpriseId,
+      action: "judge_added",
+      after: { userId },
+    });
+    const { rows: judges } = await client.query(
+      `SELECT ej.user_id, u.name, u.surname, u.email, ej.added_at, ej.added_by
+         FROM enterprise_judges ej
+         JOIN users u ON u.id = ej.user_id
+        WHERE ej.enterprise_id = $1 AND ej.user_id = $2`,
+      [enterpriseId, userId],
+    );
+    return judgeRow(judges[0]);
+  });
+}
+
+/** Remove a judge; their contextual access to the enterprise's rooms goes with it. */
+export async function removeEnterpriseJudge(
+  enterpriseId: number,
+  userId: number,
+  actorId: number | null,
+): Promise<void> {
+  await withTransaction(async (client) => {
+    const { rowCount } = await client.query(
+      `DELETE FROM enterprise_judges WHERE enterprise_id = $1 AND user_id = $2`,
+      [enterpriseId, userId],
+    );
+    if (!rowCount) {
+      throw new NotFoundError("User is not a judge for this enterprise", { enterpriseId, userId });
+    }
+    await audit(client, {
+      actorId,
+      entityType: "enterprise",
+      entityId: enterpriseId,
+      action: "judge_removed",
+      before: { userId },
+    });
+  });
+}
+
+/**
+ * Candidate pool for the judge picker: every account, unscoped — an enterprise
+ * may add judges who are neither its reps nor event participants.
+ */
+export async function listJudgeCandidates() {
+  const { rows } = await pool.query(
+    `SELECT id, email, name, surname
+       FROM users
+      ORDER BY name ASC NULLS LAST, surname ASC NULLS LAST, email ASC
+      LIMIT 500`,
+  );
+  return rows;
+}
+
 export interface PublicSponsor {
   enterpriseId: number;
   name: string;

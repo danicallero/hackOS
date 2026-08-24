@@ -65,6 +65,14 @@ export const memberParams = z.object({
   userId: z.coerce.number().int().positive(),
 });
 
+/** DELTA(Hxx): add a user to an enterprise's judge roster (`enterprise_judges`). */
+export const addJudgeBody = z.object({ userId: z.number().int().positive() }).strict();
+
+export const judgeParams = z.object({
+  id: z.coerce.number().int().positive(),
+  userId: z.coerce.number().int().positive(),
+});
+
 const LOGO_CONTENT_TYPES = [
   "image/png",
   "image/jpeg",

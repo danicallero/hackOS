@@ -96,7 +96,7 @@ describe("canAccessSponsorWorkspace", () => {
   });
 
   it("admits a sponsor representative who also judges (sponsor+judge, H55 additive access)", () => {
-    // isRoomJudge doesn't change this check — the sponsor workspace is
+    // isEnterpriseJudge doesn't change this check — the sponsor workspace is
     // reachable purely from the sponsor association, same as any other
     // capability combination the account happens to hold.
     expect(canAccessSponsorWorkspace(false, true)).toBe(true);

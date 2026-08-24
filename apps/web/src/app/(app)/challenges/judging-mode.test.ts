@@ -52,6 +52,7 @@ describe("roomsMissingJudges", () => {
       judges: [
         {
           challenge_id: 42,
+          enterprise_id: 3,
           title: "Challenge",
           user_id: 7,
           name: "Ada",

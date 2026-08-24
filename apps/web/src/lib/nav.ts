@@ -109,7 +109,7 @@ export interface NavVisibilityContext {
   /** Linked sponsor representative (association-based portal, H55). */
   isSponsorRep: boolean;
   /** Assigned as a judge to at least one room (association-based, H55). */
-  isRoomJudge: boolean;
+  isEnterpriseJudge: boolean;
   /** Holds at least one capability (H59 "staff" audience — see callerScheduleAudiences). */
   hasAnyCapability: boolean;
   /** No confirmed spot and no operational role — see NavItem.hideForPureApplicant. */
@@ -130,7 +130,7 @@ export function isNavItemVisible(item: NavItem, ctx: NavVisibilityContext): bool
   if (item.hideIfNoProject && !ctx.hasProject) return false;
   if (item.hideIfNoQueueItems && !ctx.hasQueueItems) return false;
   if (item.sponsorVisible && ctx.isSponsorRep) return true;
-  if (item.judgeVisible && ctx.isRoomJudge) return true;
+  if (item.judgeVisible && ctx.isEnterpriseJudge) return true;
   // Unlike sponsorVisible/judgeVisible (additional grants layered on top of a
   // capability/anyCapability gate), staffVisible is the item's only gate —
   // it must not fall through to the unconditional `return true` below.

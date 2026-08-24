@@ -138,15 +138,15 @@ export async function listOwnedChallenges(userId: number) {
   return rows.map(challengeReadModel);
 }
 
-/** Challenges assigned to a user through room_judges (H46 contextual judge access). */
+/** Challenges a user judges through `enterprise_judges` (H46 contextual judge access). */
 export async function listAssignedJudgeChallenges(userId: number) {
   const { rows } = await pool.query(
     `SELECT DISTINCT ${EDITABLE_COLUMNS_FROM_CHALLENGE}, ent.name AS enterprise_name
-       FROM room_judges rj
-       JOIN challenges c ON c.id = rj.challenge_id
-       JOIN sponsors author ON author.id = c.author
+       FROM enterprise_judges ej
+       JOIN sponsors author ON author.enterprise_id = ej.enterprise_id
+       JOIN challenges c ON c.author = author.id
        JOIN enterprises ent ON ent.id = author.enterprise_id
-      WHERE rj.user_id = $1
+      WHERE ej.user_id = $1
       ORDER BY c.id`,
     [userId],
   );

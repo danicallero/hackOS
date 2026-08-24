@@ -138,7 +138,7 @@ export async function checkInUser(
          SELECT 1 FROM manual_attendee_roles WHERE user_id = $1
          UNION ALL SELECT 1 FROM application_responses WHERE user_id = $1 AND status <> 'draft'
          UNION ALL SELECT 1 FROM sponsors WHERE user_id = $1
-         UNION ALL SELECT 1 FROM room_judges WHERE user_id = $1
+         UNION ALL SELECT 1 FROM enterprise_judges WHERE user_id = $1
          UNION ALL
          SELECT 1
            FROM effective_groups eg

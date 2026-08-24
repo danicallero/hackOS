@@ -103,7 +103,7 @@ describe("judging workspace H29-H40", () => {
         judge: false,
         admin: false,
         exportData: false,
-        isRoomJudge: true,
+        isEnterpriseJudge: true,
       }),
     ).toEqual({
       canUse: true,

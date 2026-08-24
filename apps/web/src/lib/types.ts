@@ -23,7 +23,7 @@ export interface Me {
   role: "admin" | "judge" | "sponsor" | "staff" | "mentor" | "participant" | "unassigned";
   capabilities: Capability[];
   /** Association facts underlying `role` (H55) — a sponsor rep who also judges needs both workspaces. */
-  isRoomJudge: boolean;
+  isEnterpriseJudge: boolean;
   isSponsorRep: boolean;
   /** Confirmed spot or manual attendee role — drives ticket/wallet exposure and participant-only nav. */
   hasEventAccess: boolean;

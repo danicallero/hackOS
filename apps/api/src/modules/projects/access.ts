@@ -40,7 +40,16 @@ export async function resolveRepositoryAccessScope(
   }
 
   const [judgeRows, sponsorRows] = await Promise.all([
-    pool.query(`SELECT DISTINCT challenge_id FROM room_judges WHERE user_id = $1`, [userId]),
+    // A roster judge (`enterprise_judges`) reaches every challenge authored by
+    // an enterprise they judge for — the enterprise, not a room, is the scope.
+    pool.query(
+      `SELECT DISTINCT c.id AS challenge_id
+         FROM enterprise_judges ej
+         JOIN sponsors author ON author.enterprise_id = ej.enterprise_id
+         JOIN challenges c ON c.author = author.id
+        WHERE ej.user_id = $1`,
+      [userId],
+    ),
     pool.query(
       `SELECT DISTINCT c.id
          FROM challenges c
@@ -60,7 +69,7 @@ export async function resolveRepositoryAccessScope(
     // an unrelated authenticated account must still receive a 403.
     const relationship = await pool.query(
       `SELECT 1 FROM sponsors WHERE user_id = $1
-       UNION ALL SELECT 1 FROM room_judges WHERE user_id = $1
+       UNION ALL SELECT 1 FROM enterprise_judges WHERE user_id = $1
        LIMIT 1`,
       [userId],
     );

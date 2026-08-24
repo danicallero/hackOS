@@ -96,7 +96,12 @@ export async function assertCanViewPanel(
   }
   if (await ownsChallenge(userId, challengeId)) return;
   const assigned = await pool.query(
-    `SELECT 1 FROM room_judges WHERE user_id = $1 AND challenge_id = $2 LIMIT 1`,
+    `SELECT 1
+       FROM challenges c
+       JOIN sponsors author ON author.id = c.author
+       JOIN enterprise_judges ej ON ej.enterprise_id = author.enterprise_id
+      WHERE ej.user_id = $1 AND c.id = $2
+      LIMIT 1`,
     [userId, challengeId],
   );
   if (assigned.rowCount) return;
@@ -151,7 +156,7 @@ export const requireChallengeListAccess: preHandlerHookHandler = async (request)
   if (await isChallengeAdmin(request.userId)) return;
   const relationship = await pool.query(
     `SELECT 1 FROM sponsors WHERE user_id = $1
-     UNION ALL SELECT 1 FROM room_judges WHERE user_id = $1
+     UNION ALL SELECT 1 FROM enterprise_judges WHERE user_id = $1
      LIMIT 1`,
     [request.userId],
   );
