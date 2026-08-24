@@ -9,29 +9,36 @@ import { putObject } from "../../lib/storage.js";
 import {
   enterpriseAccessFor,
   requireEnterpriseAccess,
+  requireEnterpriseJudgeManager,
   requireSponsorPortalAccess,
 } from "./access.js";
 import {
+  addJudgeBody,
   addMemberBody,
   bulkVisibilityBody,
   CONTENT_TYPE_EXT,
   createEnterpriseBody,
   enterpriseIdParam,
+  judgeParams,
   memberParams,
   OWNER_EDITABLE_KEYS,
   sponsorFaqBody,
   updateEnterpriseBody,
 } from "./schemas.js";
 import {
+  addEnterpriseJudge,
   addEnterpriseMember,
   createEnterprise,
   getEnterprise,
   getSponsorFaq,
+  listEnterpriseJudges,
   listEnterpriseMembers,
   listEnterprises,
+  listJudgeCandidates,
   listPublicSponsors,
   listUserEnterprises,
   myEnterprise,
+  removeEnterpriseJudge,
   removeEnterpriseMember,
   setEnterpriseLogo,
   setEnterprisesVisibility,
@@ -225,6 +232,83 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       await removeEnterpriseMember(req.params.id, req.params.userId, req.userId);
+      return { removed: true as const };
+    },
+  );
+
+  // ── judge roster (DELTA(Hxx)) ───────────────────────────────────────────────
+  // Judges belong to an enterprise, not to a room: whoever is on this roster
+  // judges in every room currently serving one of the enterprise's challenges.
+  const judgePolicy = {
+    kind: "contextual",
+    policy: "enterprise-judge-manage",
+    resource: enterpriseParam,
+  } as const;
+
+  r.get(
+    "/api/enterprises/:id/judges",
+    {
+      ...access(judgePolicy),
+      preHandler: requireEnterpriseJudgeManager(enterpriseParam),
+      schema: {
+        params: enterpriseIdParam,
+        summary: "List enterprise judges",
+        description:
+          "The enterprise's judge roster. Roster membership grants judging access to every room currently serving one of the enterprise's challenges (H46). Readable by a queue:admin or the enterprise's own representatives.",
+      },
+    },
+    async (req) => ({ judges: await listEnterpriseJudges(req.params.id) }),
+  );
+
+  r.get(
+    "/api/enterprises/:id/judge-candidates",
+    {
+      ...access(judgePolicy),
+      preHandler: requireEnterpriseJudgeManager(enterpriseParam),
+      schema: {
+        params: enterpriseIdParam,
+        summary: "List judge candidates",
+        description:
+          "Accounts that may be added to the enterprise's judge roster (H46). Deliberately unscoped: an enterprise may bring outside judges who are neither its representatives nor event participants.",
+      },
+    },
+    async () => ({ users: await listJudgeCandidates() }),
+  );
+
+  r.post(
+    "/api/enterprises/:id/judges",
+    {
+      ...access(judgePolicy),
+      preHandler: requireEnterpriseJudgeManager(enterpriseParam),
+      schema: {
+        params: enterpriseIdParam,
+        body: addJudgeBody,
+        summary: "Add enterprise judge",
+        description:
+          "Adds an account to the enterprise's judge roster (H46). The add is silent — the judge is not asked to confirm and gains the judging workspace on their next login. 409 if they are already on the roster.",
+      },
+    },
+    async (req, reply) => {
+      const judge = await addEnterpriseJudge(req.params.id, req.body.userId, req.userId);
+      reply.code(201);
+      return judge;
+    },
+  );
+
+  r.delete(
+    "/api/enterprises/:id/judges/:userId",
+    {
+      ...access(judgePolicy),
+      preHandler: requireEnterpriseJudgeManager(enterpriseParam),
+      schema: {
+        params: judgeParams,
+        summary: "Remove enterprise judge",
+        description:
+          "Removes an account from the enterprise's judge roster (H46), revoking its judging access to the enterprise's rooms and challenges.",
+      },
+    },
+    async (req) => {
+      await removeEnterpriseJudge(req.params.id, req.params.userId, req.userId);
       return { removed: true as const };
     },
   );

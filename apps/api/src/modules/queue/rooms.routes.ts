@@ -11,21 +11,18 @@ import { actor } from "./actor.js";
 import {
   accessibleRoomIds,
   requireRoomAccessOrCapability,
-  requireRoomJudgeManager,
   requireRoomJudgeOrCapability,
   requireRoomListAccess,
 } from "./contextual-access.js";
 import { scheduleTopUp } from "./pump.js";
 import {
   assignChallengeBody,
-  assignJudgeBody,
   challengeIdParam,
   createRoomBody,
   enqueueChallengeBody,
   queueSettingsBody,
   roomChallengeParam,
   roomIdParam,
-  roomJudgeParam,
   roomQueueStateBody,
   updateRoomBody,
 } from "./schemas.js";
@@ -156,7 +153,7 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     },
   );
 
-  // ── room_challenges / room_judges assignment ────────────────────────────
+  // ── room_challenges assignment ─────────────────────────────────────────
   typed.post(
     "/api/queue/rooms/:roomId/challenges",
     {
@@ -193,12 +190,6 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
                  assigned_at = now()`,
           [req.params.roomId, req.body.challengeId, req.userId],
         );
-        if (before && before.challenge_id !== req.body.challengeId) {
-          await client.query(`DELETE FROM room_judges WHERE room_id = $1 AND challenge_id <> $2`, [
-            req.params.roomId,
-            req.body.challengeId,
-          ]);
-        }
         await audit(client, {
           actorId: req.userId,
           entityType: "room",
@@ -229,127 +220,11 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
             [req.params.roomId, req.params.challengeId],
           )
         ).rows[0];
-        await client.query(`DELETE FROM room_judges WHERE room_id = $1 AND challenge_id = $2`, [
-          req.params.roomId,
-          req.params.challengeId,
-        ]);
         await audit(client, {
           actorId: req.userId,
           entityType: "room",
           entityId: req.params.roomId,
           action: "remove_challenge",
-          before,
-          ...auditRequest(req),
-        });
-      });
-      return { ok: true };
-    },
-  );
-
-  typed.get(
-    "/api/queue/rooms/:roomId/judge-candidates",
-    {
-      preHandler: requireRoomJudgeManager("room"),
-      config: {
-        routeAccessPolicy: {
-          kind: "contextual",
-          policy: "room-judge-manage",
-          resource: { source: "params", field: "roomId" },
-        },
-      },
-      schema: { params: roomIdParam },
-    },
-    async () => {
-      const { rows } = await pool.query(
-        `SELECT id, email, name, surname
-           FROM users
-          ORDER BY name ASC NULLS LAST, surname ASC NULLS LAST, email ASC
-          LIMIT 500`,
-      );
-      return { users: rows };
-    },
-  );
-
-  typed.post(
-    "/api/queue/rooms/:roomId/judges",
-    {
-      preHandler: requireRoomJudgeManager("body"),
-      config: {
-        routeAccessPolicy: {
-          kind: "contextual",
-          policy: "room-judge-manage",
-          resource: { source: "params", field: "roomId" },
-        },
-      },
-      schema: { params: roomIdParam, body: assignJudgeBody },
-    },
-    async (req, reply) => {
-      await withTransaction(async (client) => {
-        const roomChallenge = (
-          await client.query(
-            `SELECT * FROM room_challenges WHERE room_id = $1 AND challenge_id = $2 FOR UPDATE`,
-            [req.params.roomId, req.body.challengeId],
-          )
-        ).rows[0];
-        if (!roomChallenge) {
-          throw new NotFoundError("Room challenge assignment not found", {
-            roomId: req.params.roomId,
-            challengeId: req.body.challengeId,
-          });
-        }
-        const { rows } = await client.query(
-          `INSERT INTO room_judges (room_id, challenge_id, user_id, assigned_by)
-           VALUES ($1, $2, $3, $4)
-           ON CONFLICT (room_id, challenge_id, user_id) DO UPDATE
-             SET assigned_by = EXCLUDED.assigned_by,
-                 assigned_at = now()
-           RETURNING *`,
-          [req.params.roomId, req.body.challengeId, req.body.userId, req.userId],
-        );
-        await audit(client, {
-          actorId: req.userId,
-          entityType: "room_judge",
-          entityId: `${req.params.roomId}:${req.body.challengeId}:${req.body.userId}`,
-          action: "assign",
-          after: rows[0],
-          ...auditRequest(req),
-        });
-      });
-      reply.code(201);
-      return {
-        roomId: req.params.roomId,
-        challengeId: req.body.challengeId,
-        userId: req.body.userId,
-      };
-    },
-  );
-
-  typed.delete(
-    "/api/queue/rooms/:roomId/judges/:challengeId/:userId",
-    {
-      preHandler: requireRoomJudgeManager("params"),
-      config: {
-        routeAccessPolicy: {
-          kind: "contextual",
-          policy: "room-judge-manage",
-          resource: { source: "params", field: "roomId" },
-        },
-      },
-      schema: { params: roomJudgeParam },
-    },
-    async (req) => {
-      await withTransaction(async (client) => {
-        const before = (
-          await client.query(
-            `DELETE FROM room_judges WHERE room_id = $1 AND challenge_id = $2 AND user_id = $3 RETURNING *`,
-            [req.params.roomId, req.params.challengeId, req.params.userId],
-          )
-        ).rows[0];
-        await audit(client, {
-          actorId: req.userId,
-          entityType: "room_judge",
-          entityId: `${req.params.roomId}:${req.params.challengeId}:${req.params.userId}`,
-          action: "remove",
           before,
           ...auditRequest(req),
         });
