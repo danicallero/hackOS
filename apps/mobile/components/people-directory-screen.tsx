@@ -212,10 +212,10 @@ const ROLE_FILTERS: Array<{
   labelKey:
     | "roleAll"
     | "roleAdmin"
-    | "roleSponsor"
-    | "roleJudge"
     | "roleStaff"
+    | "roleSponsor"
     | "roleMentor"
+    | "roleJudge"
     | "roleParticipants";
   icon:
     | "person.2"
@@ -226,10 +226,10 @@ const ROLE_FILTERS: Array<{
 }> = [
   { value: "all", labelKey: "roleAll", icon: "person.2" },
   { value: "admin", labelKey: "roleAdmin", icon: "person.crop.circle.badge.checkmark" },
-  { value: "sponsor", labelKey: "roleSponsor", icon: "briefcase" },
-  { value: "judge", labelKey: "roleJudge", icon: "checkmark.seal" },
   { value: "staff", labelKey: "roleStaff", icon: "person.crop.circle.badge.checkmark" },
+  { value: "sponsor", labelKey: "roleSponsor", icon: "briefcase" },
   { value: "mentor", labelKey: "roleMentor", icon: "person.2" },
+  { value: "judge", labelKey: "roleJudge", icon: "checkmark.seal" },
   { value: "participant", labelKey: "roleParticipants", icon: "person" },
 ];
 
@@ -241,7 +241,7 @@ function PersonRow({ person, onPress }: { person: ScannerPerson; onPress: () => 
   // name above (someone with no name on file at all).
   const showEmailLine = Boolean(fullName) && Boolean(person.email);
   const participantWarning =
-    person.role === "participant" && !person.accepted
+    person.role === "unassigned" || (person.role === "participant" && !person.accepted)
       ? { label: t("scannerNoAcceptedPlace"), tone: "destructive" as const }
       : person.role === "participant" && !person.confirmed
         ? { label: t("scannerPlaceUnconfirmed"), tone: "warning" as const }
@@ -334,10 +334,10 @@ function roleLabel(role: ScannerPerson["role"], t: ReturnType<typeof useLocale>[
   return (
     {
       admin: t("roleAdmin"),
-      sponsor: t("roleSponsor"),
-      judge: t("roleJudge"),
       staff: t("roleStaff"),
+      sponsor: t("roleSponsor"),
       mentor: t("roleMentor"),
+      judge: t("roleJudge"),
       participant: t("roleParticipant"),
       unassigned: t("roleUnassigned"),
     } as const
