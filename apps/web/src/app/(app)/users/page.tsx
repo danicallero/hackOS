@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { usePersistedState } from "@/hooks/use-persisted-state";
 import { ApiError, api } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi } from "@/lib/logistics";
@@ -283,15 +284,15 @@ export default function UsersPage() {
   const { t } = useLocale();
   const ROLE_LABEL = useMemo(() => roleLabel(t), [t]);
   const COLUMN_LABEL = useMemo(() => columnLabel(t), [t]);
-  const [q, setQ] = useState("");
+  const [q, setQ] = usePersistedState("users-list:q", "");
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
-  const [emailFilter, setEmailFilter] = useState("all");
-  const [roleFilter, setRoleFilter] = useState("all");
-  const [spotFilter, setSpotFilter] = useState("all");
+  const [emailFilter, setEmailFilter] = usePersistedState("users-list:email", "all");
+  const [roleFilter, setRoleFilter] = usePersistedState("users-list:role", "all");
+  const [spotFilter, setSpotFilter] = usePersistedState("users-list:spot", "all");
   const [visibleColumns, setVisibleColumns] = useState<Set<UserColumnId>>(DEFAULT_COLUMNS);
   const [columnsHydrated, setColumnsHydrated] = useState(false);
   const canScanPresence = useCan(CAPABILITIES.PRESENCE_SCAN);
@@ -557,6 +558,7 @@ export default function UsersPage() {
         columns={columns}
         data={filteredUsers}
         getRowId={(u) => String(u.id)}
+        stateKey="users-list"
         getRowHref={(u) => `/users/${u.id}`}
         getRowLabel={(u) => `${u.name ?? ""} ${u.surname ?? ""}`.trim() || u.email}
         pageSize={15}

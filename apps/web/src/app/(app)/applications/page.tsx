@@ -248,6 +248,7 @@ export default function ApplicationsPage() {
         columns={columns}
         data={forms}
         getRowId={(f) => String(f.id)}
+        stateKey="applications-list"
         loading={loading}
         error={loadError ? { message: loadError, onRetry: load } : undefined}
         getRowHref={(f) => `/applications/${f.id}`}

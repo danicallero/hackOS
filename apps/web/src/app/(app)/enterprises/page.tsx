@@ -303,6 +303,7 @@ export default function EnterprisesPage() {
         columns={columns}
         data={enterprises}
         getRowId={(e) => String(e.id)}
+        stateKey="enterprises-list"
         getRowHref={(e) => `/enterprises/${e.id}`}
         getRowLabel={(e) => e.name}
         searchable={(e) => `${e.name} ${e.website ?? ""}`}

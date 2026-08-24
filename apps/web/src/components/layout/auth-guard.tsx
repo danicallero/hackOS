@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Spinner } from "@/components/common/spinner";
+import { useTrackNavigation } from "@/hooks/use-track-navigation";
 import { withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 
@@ -22,6 +23,7 @@ import { useSessionContext } from "@/lib/session";
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { status } = useSessionContext();
   const router = useRouter();
+  useTrackNavigation();
 
   useEffect(() => {
     if (status === "unauthenticated") {

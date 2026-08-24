@@ -9,7 +9,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { ScrollTextIcon } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { usePersistedState } from "@/hooks/use-persisted-state";
 import { ApiError } from "@/lib/api";
 import { getActionLabel } from "@/lib/audit-labels";
 import { fromDatetimeLocal } from "@/lib/datetime";
@@ -66,9 +67,9 @@ const EMPTY_FILTERS: FilterState = {
 export default function AuditPage() {
   const { t } = useLocale();
   const canRead = useCan(CAPABILITIES.AUDIT_READ);
-  const [filters, setFilters] = useState(EMPTY_FILTERS);
-  const [debounced, setDebounced] = useState(EMPTY_FILTERS);
-  const [offset, setOffset] = useState(0);
+  const [filters, setFilters] = usePersistedState("audit-list:filters", EMPTY_FILTERS);
+  const [debounced, setDebounced] = useState(filters);
+  const [offset, setOffset] = usePersistedState("audit-list:offset", 0);
   const [items, setItems] = useState<AuditRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -87,14 +88,22 @@ export default function AuditPage() {
       .catch(() => setVocabulary([]));
   }, [canRead]);
 
-  // Debounce the filter bar, and reset to page 1 on any change.
+  // Debounce the filter bar, and reset to page 1 on any change — but not on
+  // mount, where `filters` may be a restored value (BackLink round-trip) and
+  // the matching `offset` was restored right alongside it.
+  const filtersMounted = useRef(false);
   useEffect(() => {
+    if (!filtersMounted.current) {
+      filtersMounted.current = true;
+      setDebounced(filters);
+      return;
+    }
     const handle = setTimeout(() => {
       setDebounced(filters);
       setOffset(0);
     }, 300);
     return () => clearTimeout(handle);
-  }, [filters]);
+  }, [filters, setOffset]);
 
   // Soft, in-place refresh instead of a hard reload — audit entries are
   // created by every sensitive mutation in the app (H53), so this stays on
@@ -311,6 +320,7 @@ export default function AuditPage() {
         columns={columns}
         data={items}
         getRowId={(r) => String(r.id)}
+        stateKey="audit-list"
         loading={loading}
         error={
           loadError

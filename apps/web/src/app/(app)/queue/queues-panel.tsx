@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import {
@@ -94,6 +95,7 @@ function byEnterprise(groups: QueueGroup[]): EnterpriseQueues[] {
 export function QueuesPanel() {
   const { t } = useLocale();
   const [groups, setGroups] = useState<QueueGroup[] | null>(null);
+  useScrollRestoration("queue-queues-list:scroll", groups !== null);
 
   const load = useCallback(async () => {
     try {

@@ -178,6 +178,7 @@ export default function ChallengesPage() {
         columns={columns}
         data={challenges}
         getRowId={(c) => String(c.id)}
+        stateKey="challenges-list"
         getRowHref={(c) => `/challenges/${c.id}`}
         getRowLabel={(c) => textForDisplay(c.title)}
         searchable={(c) =>
