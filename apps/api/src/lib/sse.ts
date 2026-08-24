@@ -1,6 +1,10 @@
 import type { OutgoingHttpHeaders } from "node:http";
 import { EVENTS, SSE_TOPICS, type SseEnvelope } from "@hackos/shared/events";
-import type { FastifyReply } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
+import client from "prom-client";
+import { config } from "../config.js";
+import { TooManyRequestsError } from "./errors.js";
+import { register } from "./metrics.js";
 import { valkey, valkeySub } from "./valkey.js";
 
 /**
@@ -10,13 +14,48 @@ import { valkey, valkeySub } from "./valkey.js";
  *
  * Envelope ids are per-topic monotonic counters (Valkey INCR) so clients can
  * detect gaps after reconnect; SSE auto-reconnect + full-state refetch on the
- * consumer side is the recovery contract.
+ * consumer side is the recovery contract — this is why a backpressured
+ * client is disconnected (below) rather than buffered indefinitely.
  */
 
 const CHANNEL_PREFIX = "sse:";
 const HEARTBEAT_INTERVAL_MS = 25_000;
 const localSubscribers = new Map<string, Set<FastifyReply>>();
 let relayStarted = false;
+
+// Connection budgets (H540): reject before hijacking the response, so a
+// rejection is a normal Fastify JSON error rather than an aborted stream.
+let globalConnCount = 0;
+const clientConnCounts = new Map<string, number>();
+
+// Backpressure (H540): tracks a reply currently waiting to drain, so repeat
+// writes to the same slow client are skipped instead of piling up.
+const draining = new Map<FastifyReply, NodeJS.Timeout>();
+
+new client.Gauge({
+  name: "hackos_sse_local_connections",
+  help: "SSE connections currently held open by this process, by topic",
+  labelNames: ["topic"],
+  registers: [register],
+  collect() {
+    this.reset();
+    for (const [topic, conns] of localSubscribers) {
+      this.set({ topic }, conns.size);
+    }
+  },
+});
+const sseDisconnectsTotal = new client.Counter({
+  name: "hackos_sse_disconnects_total",
+  help: "SSE connections closed, by reason",
+  labelNames: ["reason"],
+  registers: [register],
+});
+const sseRejectionsTotal = new client.Counter({
+  name: "hackos_sse_rejections_total",
+  help: "SSE subscribe() calls rejected for exceeding a connection budget",
+  labelNames: ["scope"],
+  registers: [register],
+});
 
 export interface PublicInvalidation {
   topic: string;
@@ -55,6 +94,32 @@ function assertPayloadFreePublicInvalidation(topic: string, type: string, data: 
   }
 }
 
+/**
+ * Write a chunk to one SSE reply, disconnecting the client if it can't keep
+ * up. If `reply.raw.write()` reports its kernel buffer is full, wait up to
+ * `SSE_WRITE_TIMEOUT_MS` for `drain`; if it doesn't arrive in time, destroy
+ * the connection (triggers the normal `close` cleanup below) instead of
+ * buffering unboundedly. While a reply is draining, further writes to it are
+ * skipped rather than queued.
+ */
+function writeChunk(reply: FastifyReply, chunk: string): void {
+  if (draining.has(reply)) return;
+  const ok = reply.raw.write(chunk);
+  if (ok) return;
+
+  // Left in `draining` until `close` fires, so the close handler can tell a
+  // slow-client disconnect apart from a normal one; cleared here only on a
+  // successful drain (connection continues).
+  const timer = setTimeout(() => {
+    reply.raw.destroy();
+  }, config.SSE_WRITE_TIMEOUT_MS);
+  reply.raw.once("drain", () => {
+    clearTimeout(timer);
+    draining.delete(reply);
+  });
+  draining.set(reply, timer);
+}
+
 async function ensureRelay(): Promise<void> {
   if (relayStarted) return;
   relayStarted = true;
@@ -64,7 +129,7 @@ async function ensureRelay(): Promise<void> {
     const conns = localSubscribers.get(topic);
     if (!conns?.size) return;
     for (const reply of conns) {
-      reply.raw.write(message);
+      writeChunk(reply, message);
     }
   });
 }
@@ -114,11 +179,38 @@ export async function broadcast<T>(
   }
 }
 
+function clientKeyFor(req: FastifyRequest): string {
+  return req.userId != null ? `user:${req.userId}` : `ip:${req.ip}`;
+}
+
 /**
  * Attach a Fastify reply as an SSE subscriber of `topic`. Call from a GET
  * handler; the function keeps the connection open until the client drops.
+ *
+ * Enforces global/per-topic/per-client connection budgets (H540) before
+ * touching the response, so a rejection is a normal `TooManyRequestsError`
+ * JSON response rather than an aborted stream.
  */
-export async function subscribe(topic: string, reply: FastifyReply): Promise<void> {
+export async function subscribe(
+  topic: string,
+  req: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  if (globalConnCount >= config.SSE_MAX_CONNECTIONS_GLOBAL) {
+    sseRejectionsTotal.inc({ scope: "global" });
+    throw new TooManyRequestsError("SSE connection budget exhausted");
+  }
+  if ((localSubscribers.get(topic)?.size ?? 0) >= config.SSE_MAX_CONNECTIONS_PER_TOPIC) {
+    sseRejectionsTotal.inc({ scope: "topic" });
+    throw new TooManyRequestsError(`SSE connection budget exhausted for topic ${topic}`);
+  }
+  const clientKey = clientKeyFor(req);
+  const clientCount = clientConnCounts.get(clientKey) ?? 0;
+  if (clientCount >= config.SSE_MAX_CONNECTIONS_PER_CLIENT) {
+    sseRejectionsTotal.inc({ scope: "client" });
+    throw new TooManyRequestsError("SSE connection budget exhausted for this client");
+  }
+
   await ensureRelay();
   // `@fastify/cors` stores its headers on Fastify's reply object.  Writing
   // straight to `reply.raw` bypasses Fastify's normal response serialization,
@@ -132,7 +224,7 @@ export async function subscribe(topic: string, reply: FastifyReply): Promise<voi
     connection: "keep-alive",
     "x-accel-buffering": "no",
   });
-  reply.raw.write(`: connected topic=${topic}\n\n`);
+  writeChunk(reply, `: connected topic=${topic}\n\n`);
 
   let conns = localSubscribers.get(topic);
   if (!conns) {
@@ -140,14 +232,28 @@ export async function subscribe(topic: string, reply: FastifyReply): Promise<voi
     localSubscribers.set(topic, conns);
   }
   conns.add(reply);
+  globalConnCount++;
+  clientConnCounts.set(clientKey, clientCount + 1);
 
   const heartbeat = setInterval(() => {
-    reply.raw.write(`: ping\n\n`);
+    writeChunk(reply, `: ping\n\n`);
   }, HEARTBEAT_INTERVAL_MS);
 
   reply.raw.on("close", () => {
     clearInterval(heartbeat);
+    const timer = draining.get(reply);
+    if (timer) {
+      clearTimeout(timer);
+      draining.delete(reply);
+      sseDisconnectsTotal.inc({ reason: "slow_client" });
+    } else {
+      sseDisconnectsTotal.inc({ reason: "normal" });
+    }
     conns.delete(reply);
     if (conns.size === 0) localSubscribers.delete(topic);
+    globalConnCount--;
+    const remaining = (clientConnCounts.get(clientKey) ?? 1) - 1;
+    if (remaining <= 0) clientConnCounts.delete(clientKey);
+    else clientConnCounts.set(clientKey, remaining);
   });
 }

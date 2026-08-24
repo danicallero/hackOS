@@ -76,6 +76,15 @@ the same `DATABASE_URL`/config-loading code path.
 | `CORS_ORIGINS` | container | no | Comma-separated browser origins allowed to make credentialed requests. In production this is the *only* CORS allowlist (no wildcard fallback, since credentials are always on); it must include `https://${WEB_DOMAIN}` or the web app's authenticated calls get blocked by the browser before they reach the API. |
 | `MOBILE_APP_SCHEME` | container | no | Custom URL scheme of the Expo mobile app (default `hackos`), added to Better Auth's `trustedOrigins` for the `expo()` plugin (H4, H55). Only worth changing if `apps/mobile`'s `app.json` `scheme` is renamed from the default. |
 | `LOG_LEVEL` | container | no | Pino log level (`info` by default). Turning it to `debug` in production is noisy but harmless; there's no separate audit-log toggle — sensitive-mutation auditing (H53) happens in Postgres regardless of this setting. |
+| `DB_POOL_MAX` | container | no (default 20, 5 in tests) | Max size of this process's `pg` pool (H540). Per-process — api and worker each hold their own, and every replica of each multiplies it: `(api replicas × DB_POOL_MAX) + (worker replicas × DB_POOL_MAX)` must stay under Postgres's own `max_connections` (default 100), with headroom for `migrate`'s one-shot connections and admin/superuser use. Raise it for big-event load — see `docs/architecture.md` and `docs/big-event-readiness.md`. |
+| `DB_IDLE_TIMEOUT_MS` | container | no (default 30000) | How long an idle pooled connection is kept before being closed. |
+| `DB_CONNECTION_TIMEOUT_MS` | container | no (default 10000) | How long `pool.connect()` waits for a free connection before rejecting — bounds request latency under pool saturation instead of hanging. |
+| `DB_STATEMENT_TIMEOUT_MS` | container | no (default 30000) | Postgres `statement_timeout`: aborts a runaway query instead of holding a connection (and a lock) forever. |
+| `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` | container | no (default 30000) | Postgres `idle_in_transaction_session_timeout`: reclaims a connection stuck mid-transaction (a crashed handler between `BEGIN` and `COMMIT`/`ROLLBACK`). |
+| `SSE_MAX_CONNECTIONS_GLOBAL` | container | no (default 2000) | **api only** (worker has no SSE). Total concurrent SSE connections this process accepts before rejecting new `subscribe()` calls with `429`. A generous safety net against a runaway reconnect loop, not a tight production cap. |
+| `SSE_MAX_CONNECTIONS_PER_TOPIC` | container | no (default 500) | **api only**. Same budget, scoped to one topic (e.g. `queue`, `public-tv`). |
+| `SSE_MAX_CONNECTIONS_PER_CLIENT` | container | no (default 20) | **api only**. Same budget, scoped to one client (`user:<id>` when authenticated, else caller IP). |
+| `SSE_WRITE_TIMEOUT_MS` | container | no (default 5000) | **api only**. How long a backpressured SSE client (its socket buffer full, `write()` returned `false`) has to drain before it's disconnected — bounds memory growth from a slow/stalled client instead of buffering indefinitely. |
 | `S3_ACCESS_KEY`, `S3_SECRET_KEY` | container | yes | Credentials the API signs S3 requests with (uploads, presigned downloads, sponsor logos). Either the MinIO root pair or a scoped service account with the same permissions. |
 | `S3_BUCKET` | container | no | Bucket the API reads/writes (default `hackos`). Must match what `minio-init` provisioned. |
 | `S3_PUBLIC_URL` | container | no | The **browser-reachable** base URL objects are served from. Without it, stored file/logo URLs default to the internal `http://minio:9000` host, which the browser can't resolve — logos silently fail to load even though the upload itself succeeded. Only the `enterprises/` prefix (sponsor logos) is ever public; application uploads stay private behind the API's presigned-download route. |
@@ -109,12 +118,15 @@ browser or links back to the web app), plus:
 |---|---|---|---|
 | `WORKERS_INLINE` | container | fixed `false` | Baked into the compose file, not user-configurable here. In dev this flag runs BullMQ workers inside the API process; in this deployment it's forced off because the worker container *is* the dedicated process — see `docs/background-workers.md`. |
 | `WORKER_MEM_LIMIT` | compose-level | no | Memory cap, default `512m`. Bump this if you scale worker replicas for notification/queue throughput (dispatcher uses `SELECT ... FOR UPDATE SKIP LOCKED`, so replicas don't double-send). |
+| `NOTIFICATION_OUTBOX_BATCH_SIZE` | container | no | Rows the outbox dispatcher claims per 5s tick, default `100` — each row dispatched and committed in its own transaction, so raising this doesn't grow the duplicate-send risk of a mid-batch crash. Only the `worker` container's value matters in production (it's the one running the dispatcher). See `docs/big-event-readiness.md`. |
 
 Everything else — `DATABASE_URL`/`VALKEY_URL` inputs, `BETTER_AUTH_URL`,
-`BETTER_AUTH_SECRET`, the S3 block, the mail block, both wallet blocks — is
-identical to `api` and **must use the same values**: the worker is what
-actually sends the emails and pushes wallet-pass updates that `api` only
-queues.
+`BETTER_AUTH_SECRET`, the S3 block, the mail block, both wallet blocks, the
+`DB_*` pool/timeout block (H540) — is identical to `api` and **must use the
+same values**: the worker is what actually sends the emails and pushes
+wallet-pass updates that `api` only queues, and it holds its own `pg` pool
+sized by the same `DB_POOL_MAX` math. The `SSE_*` vars are **not** applicable
+here — the worker has no HTTP listener, so no SSE connections to budget.
 
 ## web
 

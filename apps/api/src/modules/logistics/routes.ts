@@ -597,8 +597,8 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/logistics/stream",
     { ...routeAccess(access.logisticsRead), preHandler: logisticsRead },
-    async (_req, reply) => {
-      await subscribe("logistics", reply);
+    async (req, reply) => {
+      await subscribe("logistics", req, reply);
     },
   );
 

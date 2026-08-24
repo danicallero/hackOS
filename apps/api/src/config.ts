@@ -9,6 +9,24 @@ const envSchema = z.object({
   HOST: z.string().default("0.0.0.0"),
 
   DATABASE_URL: z.string().default("postgres://hackos:hackos@localhost:5433/hackos"),
+  /**
+   * Postgres pool tuning (H540). `DB_POOL_MAX` is per-process — api and
+   * worker each hold their own pool, and every replica of each multiplies
+   * it — so (api replicas × DB_POOL_MAX) + (worker replicas × DB_POOL_MAX)
+   * must stay under Postgres's own `max_connections`, with headroom for
+   * `migrate`'s one-shot connections and admin/superuser use. Raise it for
+   * big-event load — see docs/big-event-readiness.md, docs/env-vars.md and
+   * docs/architecture.md.
+   */
+  DB_POOL_MAX: z.coerce.number().int().min(1).max(200).optional(),
+  /** How long an idle pooled connection is kept before being closed. */
+  DB_IDLE_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(30_000),
+  /** How long to wait for a free connection before `pool.connect()` rejects. */
+  DB_CONNECTION_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(10_000),
+  /** Postgres `statement_timeout`: kills a runaway query instead of holding a connection forever. */
+  DB_STATEMENT_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(30_000),
+  /** Postgres `idle_in_transaction_session_timeout`: reclaims a connection stuck mid-transaction. */
+  DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(30_000),
   VALKEY_URL: z.string().default("redis://localhost:6379"),
 
   BETTER_AUTH_URL: z.string().default("http://localhost:3000"),
@@ -105,6 +123,28 @@ const envSchema = z.object({
   LOG_LEVEL: z.string().default("info"),
 
   /**
+   * SSE connection budgets and slow-client backpressure (H540). Defaults are
+   * a generous safety net (bound runaway reconnect loops / a stuck client),
+   * not a tight production cap — see docs/env-vars.md.
+   */
+  SSE_MAX_CONNECTIONS_GLOBAL: z.coerce.number().int().positive().default(2_000),
+  SSE_MAX_CONNECTIONS_PER_TOPIC: z.coerce.number().int().positive().default(500),
+  SSE_MAX_CONNECTIONS_PER_CLIENT: z.coerce.number().int().positive().default(20),
+  /** How long a slow client has to drain a backpressured write before being disconnected. */
+  SSE_WRITE_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
+
+  /**
+   * Rows claimed per outbox-dispatcher tick (H52, plan/07 §5.4), each
+   * dispatched and committed in its own transaction (dispatcher.ts) so
+   * raising this doesn't grow the duplicate-send blast radius of a mid-batch
+   * crash. The drain runs every 5s regardless of batch size; 100 covers a
+   * mass-send (an announcement fanned out to every attendee on 2-3 channels
+   * at once) without needing to bump it per event. See
+   * docs/big-event-readiness.md.
+   */
+  NOTIFICATION_OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(500).default(100),
+
+  /**
    * Apple Wallet / PassKit (H28). Neither platform is boot-mandatory — a
    * deploy without these just serves a clear 503 on the wallet endpoints
    * instead of an invalid/empty-signature pass. `*_PEM` values are
@@ -193,6 +233,7 @@ export const config = {
   isTest: parsed.NODE_ENV === "test",
   isProd: parsed.NODE_ENV === "production",
   workersInline: parsed.WORKERS_INLINE ?? parsed.NODE_ENV !== "production",
+  dbPoolMax: parsed.DB_POOL_MAX ?? (parsed.NODE_ENV === "test" ? 5 : 20),
   trustProxy: parsed.TRUST_PROXY ?? parsed.NODE_ENV === "production",
   appleWalletConfigured: Boolean(
     parsed.APPLE_PASS_CERTIFICATE_PEM &&

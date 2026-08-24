@@ -129,8 +129,8 @@ export function registerWorkflowRoutes(app: FastifyInstance): void {
       preHandler: requireCapability(CAPABILITIES.EXPORTS_RUN),
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.EXPORTS_RUN }),
     },
-    async (_req, reply) => {
-      await subscribe(SSE_TOPICS.EXPORTS, reply);
+    async (req, reply) => {
+      await subscribe(SSE_TOPICS.EXPORTS, req, reply);
     },
   );
 }

@@ -226,7 +226,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           "Authenticated operational SSE stream for global queue operators, judging administrators and global judging-panel holders. Assigned relationship-only judges use scoped reads; raw queue events are never public.",
       },
     },
-    async (_req, reply) => subscribe("queue", reply),
+    async (req, reply) => subscribe("queue", req, reply),
   );
 
   typed.get(
@@ -239,7 +239,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           "Public, payload-free SSE invalidations for venue screens. Clients refetch the sanitized TV projection after each event; no operational queue or display payload crosses this stream.",
       },
     },
-    async (_req, reply) => subscribe(SSE_TOPICS.PUBLIC_TV, reply),
+    async (req, reply) => subscribe(SSE_TOPICS.PUBLIC_TV, req, reply),
   );
 
   typed.get(
@@ -252,7 +252,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           "Public, payload-free SSE invalidations for TV and public content. Clients refetch their public projection after an event.",
       },
     },
-    async (_req, reply) => subscribe(SSE_TOPICS.PUBLIC_CONTENT, reply),
+    async (req, reply) => subscribe(SSE_TOPICS.PUBLIC_CONTENT, req, reply),
   );
 
   typed.get(
@@ -267,7 +267,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           "Payload-free, domain-scoped refresh stream for signed-in clients. The topic is required; sensitive audit and logistics streams retain their capability boundary, while domain events disclose no mutation payload.",
       },
     },
-    async (req, reply) => subscribe(req.query.topic, reply),
+    async (req, reply) => subscribe(req.query.topic, req, reply),
   );
 
   typed.get(
@@ -281,7 +281,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           "Authenticated SSE stream for the current participant's queue notifications only.",
       },
     },
-    async (req, reply) => subscribe(`user:${req.userId}`, reply),
+    async (req, reply) => subscribe(`user:${req.userId}`, req, reply),
   );
 
   typed.get(
