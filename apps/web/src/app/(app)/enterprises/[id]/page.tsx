@@ -48,6 +48,7 @@ import { ChallengesSummaryCard, EditCard, LogoCard, MembersCard } from "./enterp
 import { InviteLinksCard } from "./invite-links-card";
 import { JudgesCard } from "./judges-card";
 import { EnterpriseOverviewCard } from "./overview-card";
+import { QueueGroupsCard } from "./queue-groups-card";
 
 export default function EnterpriseDetailPage() {
   const { t } = useLocale();
@@ -154,8 +155,9 @@ export default function EnterpriseDetailPage() {
         <TabsContent value="challenges" className="pt-2">
           <ChallengesSummaryCard enterprise={enterprise} canManage={canManage} />
         </TabsContent>
-        <TabsContent value="judges" className="pt-2">
+        <TabsContent value="judges" className="space-y-6 pt-2">
           <JudgesCard enterpriseId={enterprise.id} />
+          <QueueGroupsCard enterpriseId={enterprise.id} />
         </TabsContent>
         {canManage && (
           <TabsContent value="members" className="pt-2">

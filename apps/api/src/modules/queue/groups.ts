@@ -41,6 +41,19 @@ export const CHALLENGE_ROOM_IDS_SQL = `
     JOIN room_queue_groups rqg ON rqg.queue_group_id = self.queue_group_id
    WHERE self.challenge_id = $1`;
 
+/**
+ * The name a queue carries, for any query that already has `challenges c` in
+ * scope. Always the queue group's `display_name`: a solo group's name follows
+ * its challenge's title (0412's trigger), so this reads as the challenge title
+ * for every 1:1 group and as the admin-chosen shared-queue name for a merged
+ * one. The COALESCE is a safety net for the group-less challenge 0410's
+ * trigger makes impossible.
+ */
+export const QUEUE_GROUP_LABEL_JOIN = `
+  LEFT JOIN queue_group_challenges qgc_label ON qgc_label.challenge_id = c.id
+  LEFT JOIN queue_groups qg_label ON qg_label.id = qgc_label.queue_group_id`;
+export const QUEUE_GROUP_LABEL_SQL = `COALESCE(qg_label.display_name, c.title)`;
+
 export async function roomChallengeIds(client: Queryable, roomId: number): Promise<number[]> {
   const { rows } = await client.query(`${ROOM_CHALLENGE_IDS_SQL} ORDER BY qgc.challenge_id ASC`, [
     roomId,

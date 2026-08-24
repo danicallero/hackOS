@@ -1,5 +1,6 @@
 import { pool } from "../../db/pool.js";
 import { toCsv } from "../../lib/csv.js";
+import { resolveChallengePanel } from "./criteria-merge.js";
 
 /** H40: CSV export helpers. Plain text/csv responses, no external dep. */
 
@@ -30,12 +31,9 @@ export async function exportQueueCsv(challengeId: number): Promise<string> {
 }
 
 export async function exportEvaluationsCsv(challengeId: number): Promise<string> {
-  const challenge = (
-    await pool.query(`SELECT judging_panel_criteria FROM challenges WHERE id = $1`, [challengeId])
-  ).rows[0];
-  const raw: unknown[] = Array.isArray(challenge?.judging_panel_criteria)
-    ? challenge.judging_panel_criteria
-    : [];
+  // H46: scored against the queue group's merged form when there is one, so
+  // the export's columns match the form judges actually filled.
+  const raw: unknown[] = await resolveChallengePanel(pool, challengeId);
   // One column per criterion (H40); accept both string and {key} shapes.
   const criteria = raw
     .map((c) =>

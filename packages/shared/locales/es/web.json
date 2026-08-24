@@ -2346,5 +2346,22 @@
   "cookieNoticeBody": "hackOS guarda una cookie de sesión propia y algunos ajustes locales para que tu tema, diseño y preferencias de sesión no se reinicien cada vez que parpadeas. Un logro histórico, lo sabemos.",
   "cookieNoticeJoke": "Nada de rastreadores publicitarios. No vendemos tu tráfico. No comerciamos con tu información como si fuera material de oficina.\nUrsula von der Leyen puede respirar tranquila.",
   "cookieNoticePrivacyLink": "Lee nuestra política de privacidad",
-  "presenceResolveConflict": "Resolver conflicto"
+  "presenceResolveConflict": "Resolver conflicto",
+  "judgingQueues": "Colas de evaluación",
+  "oneSharedQueue": "Una cola compartida",
+  "queueName": "Nombre de la cola",
+  "challengesInThisQueue": "Retos en esta cola",
+  "mergedJudgingForm": "Formulario de evaluación unificado",
+  "noJudgingQuestions": "Todavía no hay preguntas.",
+  "questionKeyRenamed": "Renombrada a «{key}»",
+  "createSharedQueue": "Crear cola compartida",
+  "sharedQueueCreated": "Cola compartida creada.",
+  "splitSharedQueueTitle": "¿Separar esta cola?",
+  "splitSharedQueueDesc": "Cada reto recupera su propia cola y su formulario de evaluación. El formulario unificado se descarta.",
+  "splitSharedQueue": "Separar cola",
+  "queuesLockedOnceJudgingStarts": "Las colas ya no se pueden unir ni separar: la evaluación ya ha empezado.",
+  "couldNotLoadQueues": "No se han podido cargar las colas de evaluación.",
+  "couldNotSaveQueue": "No se ha podido guardar la cola.",
+  "continue": "Continuar",
+  "restore": "Restaurar"
 }

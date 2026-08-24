@@ -37,6 +37,8 @@ export async function createChallenge(
  */
 export async function createEnterpriseChallenges(
   count: number,
+  /** Per-challenge judging panels, index-aligned; omit for panel-less challenges. */
+  panels: unknown[][] = [],
 ): Promise<{ enterpriseId: number; repId: number; challengeIds: number[] }> {
   const repId = await createUser();
   const enterprise = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [
@@ -50,9 +52,13 @@ export async function createEnterpriseChallenges(
   const challengeIds: number[] = [];
   for (let i = 0; i < count; i++) {
     const { rows } = await pool.query(
-      `INSERT INTO challenges (author, title, devpost_tags)
-       VALUES ($1, $2, '[]'::jsonb) RETURNING id`,
-      [sponsor.rows[0].id, `Challenge ${i + 1} ${crypto.randomUUID().slice(0, 8)}`],
+      `INSERT INTO challenges (author, title, devpost_tags, judging_panel_criteria)
+       VALUES ($1, $2, '[]'::jsonb, $3) RETURNING id`,
+      [
+        sponsor.rows[0].id,
+        `Challenge ${i + 1} ${crypto.randomUUID().slice(0, 8)}`,
+        panels[i] ? JSON.stringify(panels[i]) : null,
+      ],
     );
     challengeIds.push(Number(rows[0].id));
   }

@@ -1,0 +1,166 @@
+import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { ZodTypeProvider } from "fastify-type-provider-zod";
+import { z } from "zod";
+import { pool } from "../../db/pool.js";
+import { NotFoundError } from "../../lib/errors.js";
+import { idempotencyGuard } from "../../lib/idempotency.js";
+import {
+  assertCanManageEnterpriseJudging,
+  requireEnterpriseJudgeManager,
+} from "../sponsors/access.js";
+import { actor } from "./actor.js";
+import {
+  listEnterpriseQueueGroups,
+  mergeQueueGroups,
+  previewMergedPanel,
+  splitQueueGroup,
+  updateQueueGroup,
+} from "./group-merge.js";
+import { queueGroupEnterpriseId } from "./groups.js";
+import {
+  enterpriseQueueGroupParam,
+  mergeQueueGroupsBody,
+  previewMergeBody,
+  queueGroupIdParam,
+  updateQueueGroupBody,
+} from "./schemas.js";
+
+const enterpriseParam = { source: "params", field: "id" } as const;
+const enterpriseIdParam = z.object({ id: z.coerce.number().int().positive() });
+
+function auditRequest(req: FastifyRequest) {
+  return {
+    ip: req.ip,
+    userAgent:
+      typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : undefined,
+  };
+}
+
+/**
+ * Queue-group configuration (H46): merging an enterprise's challenges into
+ * one shared judging queue, splitting them back apart, and reviewing the
+ * merged judging form. Enterprise-scoped and gated by the same grant as the
+ * judge roster — a global queue/sponsor admin, or the enterprise's own reps.
+ */
+export function registerQueueGroupRoutes(app: FastifyInstance): void {
+  const typed = app.withTypeProvider<ZodTypeProvider>();
+
+  const enterprisePolicy = {
+    kind: "contextual",
+    policy: "enterprise-judge-manage",
+    resource: enterpriseParam,
+  } as const;
+
+  typed.get(
+    "/api/enterprises/:id/queue-groups",
+    {
+      preHandler: requireEnterpriseJudgeManager(enterpriseParam),
+      config: { routeAccessPolicy: enterprisePolicy },
+      schema: {
+        params: enterpriseIdParam,
+        summary: "List the enterprise's judging queues",
+        description:
+          "Every queue group the enterprise runs, with the challenges feeding each one, the rooms serving it, its merged judging form, and whether judging has already started for it. An enterprise with a single challenge has exactly one group and no choice to make; more than one group, or a group with more than one challenge, is what the shared-queue configuration screen edits.",
+      },
+    },
+    async (req) => ({ groups: await listEnterpriseQueueGroups(req.params.id) }),
+  );
+
+  typed.post(
+    "/api/enterprises/:id/queue-groups/preview-merge",
+    {
+      preHandler: requireEnterpriseJudgeManager(enterpriseParam),
+      config: { routeAccessPolicy: enterprisePolicy },
+      schema: {
+        params: enterpriseIdParam,
+        body: previewMergeBody,
+        summary: "Preview a merged judging form",
+        description:
+          "The judging form merging these challenges would produce, without writing anything: the de-duplicated union of their questions, how many duplicates were folded away, and any question key renamed because two different questions claimed it. Feeds the review step shown before the merge is confirmed.",
+      },
+    },
+    async (req) => previewMergedPanel(req.body.challengeIds),
+  );
+
+  typed.post(
+    "/api/enterprises/:id/queue-groups/merge",
+    {
+      preHandler: [requireEnterpriseJudgeManager(enterpriseParam), idempotencyGuard],
+      config: { routeAccessPolicy: enterprisePolicy },
+      schema: {
+        params: enterpriseIdParam,
+        body: mergeQueueGroupsBody,
+        summary: "Merge challenges into one shared judging queue",
+        description:
+          "Moves the named challenges into a single queue group called `displayName`, renumbers their queues into one shared ordering, hands the rooms that served the absorbed queues to the merged one, and stores the de-duplicated union of their judging forms as the group's own. Teams queued for more than one of the merged challenges are called once from then on, not once per challenge. Every challenge must belong to this enterprise, and the merge is refused once judging has started for any of them.",
+      },
+    },
+    async (req, reply) => {
+      const result = await mergeQueueGroups({
+        enterpriseId: req.params.id,
+        challengeIds: req.body.challengeIds,
+        displayName: req.body.displayName,
+        actorId: actor(req.userId),
+        request: auditRequest(req),
+      });
+      reply.code(201);
+      return result;
+    },
+  );
+
+  typed.post(
+    "/api/enterprises/:id/queue-groups/:queueGroupId/split",
+    {
+      preHandler: [requireEnterpriseJudgeManager(enterpriseParam), idempotencyGuard],
+      config: { routeAccessPolicy: enterprisePolicy },
+      schema: {
+        params: enterpriseQueueGroupParam,
+        summary: "Split a shared queue back into one queue per challenge",
+        description:
+          "Gives every challenge in the group its own queue again, each named after its challenge and scored with its own judging form; the merged form is discarded. Rooms keep serving the group that remains. Refused once judging has started for any of the group's challenges.",
+      },
+    },
+    async (req) => ({
+      groups: await splitQueueGroup({
+        enterpriseId: req.params.id,
+        queueGroupId: req.params.queueGroupId,
+        actorId: actor(req.userId),
+        request: auditRequest(req),
+      }),
+    }),
+  );
+
+  typed.patch(
+    "/api/queue/groups/:queueGroupId",
+    {
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "queue-group-manage",
+          resource: { source: "params", field: "queueGroupId" },
+        },
+      },
+      schema: {
+        params: queueGroupIdParam,
+        body: updateQueueGroupBody,
+        summary: "Rename a shared queue or edit its judging form",
+        description:
+          "Saves the admin's review of a merged group: the name judges, teams and venue screens see, and the questions its single judging form asks. Only a shared group has either — a one-challenge group is named by its challenge and scored by that challenge's own form. Permitted for a global queue/sponsor administrator or a representative of the group's enterprise.",
+      },
+    },
+    async (req) => {
+      const enterpriseId = await queueGroupEnterpriseId(pool, req.params.queueGroupId);
+      if (enterpriseId == null) {
+        throw new NotFoundError("Queue group not found", { queueGroupId: req.params.queueGroupId });
+      }
+      await assertCanManageEnterpriseJudging(req, enterpriseId);
+      return updateQueueGroup({
+        queueGroupId: req.params.queueGroupId,
+        displayName: req.body.displayName,
+        criteria: req.body.criteria,
+        actorId: actor(req.userId),
+        request: auditRequest(req),
+      });
+    },
+  );
+}

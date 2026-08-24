@@ -5,6 +5,7 @@
 // shares with the reviews-overview detail live in lib/attempt-review.ts.
 
 import { EVENTS } from "@hackos/shared/events";
+import type { Question } from "@hackos/shared/questions";
 import { AlertTriangleIcon, CheckCircle2Icon, WifiOffIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -36,18 +37,26 @@ import { EMPTY_PANEL, errorMessage } from "./helpers";
 export function ReviewForm({
   entry,
   challenge,
+  panel: roomPanel,
   roomId,
   canJudge,
   onCloseExisting,
 }: {
   entry: QueueEntry | null;
   challenge: Challenge | null;
+  /**
+   * The room's own judging form (H46). A room serving a shared queue scores
+   * every team with one merged form, whichever of the group's challenges they
+   * applied to, so it wins over the challenge's own panel; for a
+   * one-challenge queue the two are the same list.
+   */
+  panel?: Question[] | null;
   roomId: number | null;
   canJudge: boolean;
   onCloseExisting?: () => void;
 }) {
   const { t } = useLocale();
-  const panel = challenge?.judging_panel_criteria ?? EMPTY_PANEL;
+  const panel = roomPanel ?? challenge?.judging_panel_criteria ?? EMPTY_PANEL;
   const [scores, setScores] = useState<Answers>({});
   const [notes, setNotes] = useState("");
   const [status, setStatus] = useState<string>("draft");

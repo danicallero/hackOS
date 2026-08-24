@@ -323,13 +323,15 @@ type RoomGroup = {
   rooms: RoomView[];
 };
 
-/** Rooms sharing a challenge collapse into one joint group; a room without a
- * challenge (or the sole room on its challenge) is its own single-room group. */
+/** Rooms working the same queue collapse into one joint group; a room with no
+ * queue (or the sole room on its queue) is its own single-room group. The key
+ * is the queue group, not the challenge: rooms serving a shared queue are one
+ * card even though several challenges feed it (H46). */
 function groupRoomsByChallenge(rooms: RoomView[]): RoomGroup[] {
   const order: string[] = [];
   const groups = new Map<string, RoomGroup>();
   for (const room of rooms) {
-    const key = room.challenge ? `challenge-${room.challenge.id}` : `room-${room.room.id}`;
+    const key = room.challenge ? `queue-${room.challenge.queue_group_id}` : `room-${room.room.id}`;
     let group = groups.get(key);
     if (!group) {
       group = { id: key, challenge: room.challenge, rooms: [] };

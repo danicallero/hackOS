@@ -78,8 +78,21 @@ export interface QueueSettings {
 export interface RoomView {
   room: Room;
   state: RoomQueueState | null;
-  /** The single challenge this room judges (read-only in the panel). */
-  challenge: { id: number; title: string; enterprise_name: string } | null;
+  /**
+   * The queue this room serves (read-only in the panel), named by its queue
+   * group: a challenge title while the group holds one challenge, the
+   * admin-chosen shared name once several are merged (H46). `criteria` is the
+   * one judging form every team in this queue is scored with.
+   */
+  challenge: {
+    id: number;
+    title: string;
+    enterprise_name: string;
+    queue_group_id: number;
+    /** Operator/judge feed only — the public TV projection omits both. */
+    challenge_count?: number;
+    judging_panel_criteria?: Question[] | null;
+  } | null;
   active: QueueEntry | null;
   called: QueueEntry[];
   next: QueueEntry[];
@@ -191,6 +204,58 @@ export interface QueueGroup {
   enterprise_name: string;
   challenges: Array<{ id: number; title: string }>;
 }
+
+/**
+ * GET /api/enterprises/:id/queue-groups — one row per judging queue the
+ * enterprise runs. A queue with more than one challenge is a shared queue:
+ * one line in every list, one call per team, one judging form.
+ */
+export interface EnterpriseQueueGroup {
+  id: number;
+  enterpriseId: number;
+  displayName: string;
+  challenges: Array<{ id: number; title: string }>;
+  rooms: Array<{ id: number; name: string }>;
+  criteria: Question[] | null;
+  shared: boolean;
+  judgingStarted: boolean;
+}
+
+export interface MergedPanelPreview {
+  questions: Question[];
+  duplicatesDropped: number;
+  renamedKeys: Array<{ from: string; to: string }>;
+}
+
+export const listEnterpriseQueueGroups = (enterpriseId: number) =>
+  api
+    .get<{ groups: EnterpriseQueueGroup[] }>(`/api/enterprises/${enterpriseId}/queue-groups`)
+    .then((r) => r.groups);
+
+export const previewQueueGroupMerge = (enterpriseId: number, challengeIds: number[]) =>
+  api.post<MergedPanelPreview>(`/api/enterprises/${enterpriseId}/queue-groups/preview-merge`, {
+    challengeIds,
+  });
+
+export const mergeQueueGroups = (
+  enterpriseId: number,
+  body: { challengeIds: number[]; displayName: string },
+) =>
+  api.post<EnterpriseQueueGroup>(`/api/enterprises/${enterpriseId}/queue-groups/merge`, body, {
+    headers: { "Idempotency-Key": crypto.randomUUID() },
+  });
+
+export const splitQueueGroup = (enterpriseId: number, queueGroupId: number) =>
+  api.post<{ groups: EnterpriseQueueGroup[] }>(
+    `/api/enterprises/${enterpriseId}/queue-groups/${queueGroupId}/split`,
+    {},
+    { headers: { "Idempotency-Key": crypto.randomUUID() } },
+  );
+
+export const updateQueueGroup = (
+  queueGroupId: number,
+  body: { displayName?: string; criteria?: Question[] },
+) => api.patch<EnterpriseQueueGroup>(`/api/queue/groups/${queueGroupId}`, body);
 
 /** GET /api/queue/me — participant view (H38). */
 export interface MyQueueRoom {

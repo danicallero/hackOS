@@ -3,6 +3,8 @@ import { NotFoundError } from "../../lib/errors.js";
 import {
   CHALLENGE_ROOM_IDS_SQL,
   GROUP_SIBLING_CHALLENGE_IDS_SQL,
+  QUEUE_GROUP_LABEL_JOIN,
+  QUEUE_GROUP_LABEL_SQL,
   roomChallengeIds,
 } from "./groups.js";
 import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
@@ -53,23 +55,25 @@ const QUEUE_ENTRY_SELECT = `qe.*, r.name AS repo_name, r.description AS repo_des
 
 /**
  * The read-only label a room's queue carries (H29/H41/H46): the queue_group's
- * enterprise, plus the group's name. For a 1:1 group — every group today — the
- * name is its single challenge's live title, so nothing changes visibly; a
- * merged group falls back to `queue_groups.display_name`, the admin-chosen
- * name of the shared queue. `id` stays the member challenge id the judging
- * panel and TV already key off, so the payload shape is unchanged.
+ * enterprise, plus the group's name. The name is always `display_name` — a
+ * solo group's follows its challenge's title (0412), so a 1:1 group still
+ * shows the challenge title and a merged one shows the admin-chosen name of
+ * the shared queue. `id` stays a member challenge id the judging panel and TV
+ * already key off; `judging_panel_criteria` is the single form every team in
+ * this queue is scored with, which for a merged group is the group's own.
  */
 async function roomQueueLabel(roomId: number) {
   const { rows } = await pool.query(
     `SELECT c.id, c.title, qg.id AS queue_group_id, qg.display_name,
             e.name AS enterprise_name,
+            COALESCE(qg.judging_panel_criteria, c.judging_panel_criteria) AS judging_panel_criteria,
             (SELECT COUNT(*)::int FROM queue_group_challenges q
               WHERE q.queue_group_id = qg.id) AS challenge_count
        FROM room_queue_groups rqg
        JOIN queue_groups qg ON qg.id = rqg.queue_group_id
        JOIN enterprises e ON e.id = qg.enterprise_id
        LEFT JOIN LATERAL (
-         SELECT ch.id, ch.title
+         SELECT ch.id, ch.title, ch.judging_panel_criteria
            FROM queue_group_challenges qgc
            JOIN challenges ch ON ch.id = qgc.challenge_id
           WHERE qgc.queue_group_id = qg.id
@@ -84,11 +88,14 @@ async function roomQueueLabel(roomId: number) {
   if (!row) return null;
   return {
     id: row.id === null ? null : Number(row.id),
-    title: Number(row.challenge_count) > 1 ? row.display_name : row.title,
+    title: row.display_name,
     enterprise_name: row.enterprise_name,
     queue_group_id: Number(row.queue_group_id),
     queue_group_name: row.display_name,
     challenge_count: Number(row.challenge_count),
+    judging_panel_criteria: Array.isArray(row.judging_panel_criteria)
+      ? row.judging_panel_criteria
+      : null,
   };
 }
 
@@ -409,6 +416,10 @@ export async function publicRoomViews() {
           id: view.challenge.id,
           title: view.challenge.title,
           enterprise_name: view.challenge.enterprise_name,
+          // H46: rooms cluster on the TV by the queue they serve, which is the
+          // group — two rooms working a shared queue are one card even though
+          // `id` names whichever member challenge came first.
+          queue_group_id: view.challenge.queue_group_id,
         }
       : null,
     active: entry(view.active),
@@ -509,7 +520,7 @@ export async function myQueueStatus(userId: number) {
   // the point of the shared queue. Identical to the old room-per-challenge
   // set for every 1:1 group. Once called, the frontend shows `called_room`.
   const { rows: entries } = await pool.query(
-    `SELECT qe.*, c.title AS challenge_title, r.name AS repo_name,
+    `SELECT qe.*, ${QUEUE_GROUP_LABEL_SQL} AS challenge_title, r.name AS repo_name,
             ar.id AS called_room_id, ar.name AS called_room_name, ar.location AS called_room_location,
             COALESCE(
               (SELECT jsonb_agg(
@@ -524,11 +535,12 @@ export async function myQueueStatus(userId: number) {
             ) AS possible_rooms
        FROM queue_entries qe
       JOIN challenges c ON c.id = qe.challenge_id
+      ${QUEUE_GROUP_LABEL_JOIN}
       JOIN repos r ON r.id = qe.repo_id
       LEFT JOIN rooms ar ON ar.id = qe.assigned_room_id
       WHERE qe.repo_id = ANY($1)
         AND qe.status NOT IN ('cancelled', 'disqualified')
-      ORDER BY r.name ASC, c.title ASC, qe.id ASC`,
+      ORDER BY r.name ASC, challenge_title ASC, qe.id ASC`,
     [repoIds],
   );
 

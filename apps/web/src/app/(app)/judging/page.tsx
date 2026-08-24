@@ -495,6 +495,7 @@ export default function QueuePage() {
             <ReviewForm
               entry={selectedReviewEntry ?? active}
               challenge={activeChallenge}
+              panel={view.challenge?.judging_panel_criteria ?? null}
               roomId={activeRoomId}
               canJudge={
                 canJudge && (active?.status === "presenting" || selectedReviewEntry != null)

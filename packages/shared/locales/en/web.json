@@ -2346,5 +2346,22 @@
   "cookieNoticeBody": "hackOS keeps a first-party session cookie and a few local settings so your theme, layout, and session preferences do not reset every time you blink. Groundbreaking, we know.",
   "cookieNoticeJoke": "No ad trackers. No selling your traffic. No trading your information like office supplies.\nUrsula von der Leyen may breathe easier now.",
   "cookieNoticePrivacyLink": "Read our privacy policy",
-  "presenceResolveConflict": "Resolve conflict"
+  "presenceResolveConflict": "Resolve conflict",
+  "judgingQueues": "Judging queues",
+  "oneSharedQueue": "One shared queue",
+  "queueName": "Queue name",
+  "challengesInThisQueue": "Challenges in this queue",
+  "mergedJudgingForm": "Merged judging form",
+  "noJudgingQuestions": "No questions yet.",
+  "questionKeyRenamed": "Renamed to “{key}”",
+  "createSharedQueue": "Create shared queue",
+  "sharedQueueCreated": "Shared queue created.",
+  "splitSharedQueueTitle": "Split this queue?",
+  "splitSharedQueueDesc": "Every challenge gets its own queue and judging form back. The merged form is discarded.",
+  "splitSharedQueue": "Split queue",
+  "queuesLockedOnceJudgingStarts": "Queues can no longer be merged or split: judging has started.",
+  "couldNotLoadQueues": "Could not load judging queues.",
+  "couldNotSaveQueue": "Could not save the queue.",
+  "continue": "Continue",
+  "restore": "Restore"
 }

@@ -55,7 +55,8 @@ Architecture & modules:
   layer between challenges and the rooms/queues that judge them: why
   `queue_entries.challenge_id` stays untouched, the two database-enforced
   invariants (a group never spans enterprises; every challenge has exactly one
-  group), and the 1:1 backfill. Schema only so far — no consumers yet.
+  group), the 1:1 backfill, and the admin merge that turns several of an
+  enterprise's challenges into one shared judging queue with one form.
 - [Event config & the Apple Wallet pass](./event-config-wallet.md) — the
   `event_config` singleton (identity, doors-open vs hacking window, venue) and
   how the Wallet pass renders from it (field visibility, captions, back fields),
