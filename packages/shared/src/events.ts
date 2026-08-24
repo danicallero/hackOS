@@ -46,6 +46,7 @@ export const EVENTS = {
   QUEUE_ROOM_CHANGED: "queue.room.state_changed", // pause/resume/settings
   QUEUE_NOTIFY_ENTER: "queue.entry.notify_enter", // H31
   QUEUE_TEAM_CALLED: "queue.entry.team_called", // H29/H38, operator-facing echo of a "called" transition
+  QUEUE_OPERATOR_ARRIVAL_CHANGED: "queue.operator.arrival_changed", // shared operator acknowledgement
   TV_MODE_CHANGED: "tv.mode.changed", // H42, also fired when a timetable slot takes over
   TV_SCHEDULE_CHANGED: "tv.schedule.changed", // H42: the tv_slots timetable was edited
   CONTENT_SCHEDULE_CHANGED: "content.schedule.changed", // H47

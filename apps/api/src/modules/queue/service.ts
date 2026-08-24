@@ -14,6 +14,7 @@ import {
   notifyTeamCalled,
   repoMemberIds,
 } from "./notify.js";
+import { clearOperatorArrivalAck } from "./operator-arrivals.js";
 import {
   compactQueueGroupPositions,
   nextBottomPosition,
@@ -209,6 +210,7 @@ export async function callNextForRoom(
         action: "call_next",
         metadata: { roomId, forced: Boolean(opts.force) },
       });
+      await clearOperatorArrivalAck(client, entry.id);
       await notifyTeamCalled(client, {
         entryId: entry.id,
         challengeId: entry.challenge_id,
@@ -853,6 +855,7 @@ export async function manualCall(
       reason,
       metadata: { roomId, manual: true },
     });
+    if (targetStatus === "called") await clearOperatorArrivalAck(client, entryId);
     await audit(client, {
       actorId,
       entityType: "queue_entry",

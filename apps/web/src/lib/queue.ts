@@ -322,6 +322,19 @@ export interface MyQueueEntry {
 // ── reads ────────────────────────────────────────────────────────────────
 export const getRoomView = (roomId: number) => api.get<RoomView>(`/api/queue/rooms/${roomId}/view`);
 export const getAllRoomViews = () => api.get<RoomView[]>("/api/tv/rooms");
+export interface OperatorArrivalAck {
+  entryId: number;
+  acknowledgedAt: string;
+  acknowledgedBy: number | null;
+}
+export const getOperatorArrivalAcks = () =>
+  api.get<{ items: OperatorArrivalAck[] }>("/api/queue/operator-arrivals").then((r) => r.items);
+export const acknowledgeOperatorArrival = (entryId: number, idempotencyKey?: string) =>
+  api.post<OperatorArrivalAck>(
+    `/api/queue/entries/${entryId}/operator-arrival`,
+    {},
+    idem(idempotencyKey),
+  );
 // TV display state, the timetable and the live-screen config live in lib/tv.ts.
 export const getChallengeProgress = (challengeId: number) =>
   api.get<ChallengeProgress>(`/api/queue/challenges/${challengeId}/progress`);
@@ -412,6 +425,17 @@ export const entryAction = <T = unknown>(
   body?: Record<string, unknown>,
   idempotencyKey?: string,
 ) => api.post<T>(`/api/queue/entries/${entryId}/${action}`, body, idem(idempotencyKey));
+export const moveQueueEntryToPosition = (
+  entryId: number,
+  position: number,
+  reason?: string,
+  idempotencyKey?: string,
+) =>
+  api.post(
+    `/api/queue/entries/${entryId}/move-to`,
+    { position, ...(reason ? { reason } : {}) },
+    idem(idempotencyKey),
+  );
 export const getEntryHistory = (entryId: number) =>
   api.get(`/api/queue/entries/${entryId}/history`);
 

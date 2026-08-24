@@ -17,7 +17,12 @@ import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { type SseEnvelope, useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import { enqueueAllChallengeQueues, getAllRoomViews, type RoomView } from "@/lib/queue";
+import {
+  enqueueAllChallengeQueues,
+  getAllRoomViews,
+  getOperatorArrivalAcks,
+  type RoomView,
+} from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
 import { GenerateQueuesAction } from "./generate-queues-action";
@@ -88,8 +93,16 @@ export default function QueueOperationsPage() {
       EVENTS.QUEUE_ROOM_CHANGED,
       EVENTS.QUEUE_NOTIFY_ENTER,
       EVENTS.QUEUE_TEAM_CALLED,
+      EVENTS.QUEUE_OPERATOR_ARRIVAL_CHANGED,
     ],
     { enabled: canUse, onEvent: announceTeamEnter },
+  );
+
+  const operatorArrivals = useLiveQuery(
+    () => getOperatorArrivalAcks(),
+    "/api/queue/stream",
+    [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_TEAM_CALLED, EVENTS.QUEUE_OPERATOR_ARRIVAL_CHANGED],
+    { enabled: canUse },
   );
 
   const rooms = useMemo(() => roomViews.data ?? [], [roomViews.data]);
@@ -183,8 +196,12 @@ export default function QueueOperationsPage() {
           ) : (
             <QueueOperatorConsole
               rooms={rooms}
+              arrivalAcks={operatorArrivals.data ?? []}
               canOperate={can(CAPABILITIES.QUEUE_OPERATE) || canAdmin}
-              onChanged={() => roomViews.refetch()}
+              onChanged={() => {
+                roomViews.refetch();
+                operatorArrivals.refetch();
+              }}
             />
           )}
         </TabsContent>
