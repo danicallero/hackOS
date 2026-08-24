@@ -118,6 +118,35 @@ function AccreditationRevealActions({
 
 type PersonLoadState = "loading" | "ready" | "missing" | "error";
 
+/**
+ * The badge shown in the top-right corner: for non-participant roles it's
+ * just the role (there's no "accepted place" concept for staff/sponsors/etc),
+ * for participants it flags a missing accepted place, and it's omitted
+ * entirely once a participant has one. Unassigned people always get the
+ * "no place" flag — only an accepted participant is exempt from it.
+ */
+function personRolePill(
+  person: ScannerPerson,
+  t: ReturnType<typeof useLocale>["t"],
+): { label: string; tone: "accent" | "warning" } | null {
+  switch (person.role) {
+    case "staff":
+      return { label: t("roleStaff"), tone: "accent" };
+    case "sponsor":
+      return { label: t("roleSponsor"), tone: "accent" };
+    case "mentor":
+      return { label: t("roleMentor"), tone: "accent" };
+    case "judge":
+      return { label: t("roleJudge"), tone: "accent" };
+    case "participant":
+      return person.accepted ? null : { label: t("scannerNoAcceptedPlace"), tone: "warning" };
+    case "unassigned":
+      return { label: t("scannerNoAcceptedPlace"), tone: "warning" };
+    default:
+      return null;
+  }
+}
+
 export function PersonOperationsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const userId = Number(id);
@@ -460,6 +489,8 @@ export function PersonOperationsScreen() {
       </View>
     );
   }
+
+  const rolePill = personRolePill(person, t);
 
   const fullName =
     [person.name, person.surname].filter(Boolean).join(" ") ||
@@ -829,7 +860,7 @@ export function PersonOperationsScreen() {
       </ScrollView>
 
       <AdaptiveBackButton top={insets.top + 6} onPress={() => router.back()} />
-      {!person.accepted ? (
+      {rolePill ? (
         <View
           pointerEvents="none"
           style={{
@@ -841,7 +872,7 @@ export function PersonOperationsScreen() {
             top: insets.top + 6,
           }}
         >
-          <StatusPill tone="warning">{t("scannerNoAcceptedPlace")}</StatusPill>
+          <StatusPill tone={rolePill.tone}>{rolePill.label}</StatusPill>
         </View>
       ) : null}
     </>
