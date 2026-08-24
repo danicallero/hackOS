@@ -29,6 +29,8 @@ export interface QueueEntry {
   presentation_started_at: string | null;
   completed_at: string | null;
   precalled_at: string | null;
+  /** Approximate wait in minutes, present on room queue projections. */
+  eta_minutes?: number | null;
   created_at: string;
   updated_at: string;
   /** Joined into read models. */
@@ -322,19 +324,6 @@ export interface MyQueueEntry {
 // ── reads ────────────────────────────────────────────────────────────────
 export const getRoomView = (roomId: number) => api.get<RoomView>(`/api/queue/rooms/${roomId}/view`);
 export const getAllRoomViews = () => api.get<RoomView[]>("/api/tv/rooms");
-export interface OperatorArrivalAck {
-  entryId: number;
-  acknowledgedAt: string;
-  acknowledgedBy: number | null;
-}
-export const getOperatorArrivalAcks = () =>
-  api.get<{ items: OperatorArrivalAck[] }>("/api/queue/operator-arrivals").then((r) => r.items);
-export const acknowledgeOperatorArrival = (entryId: number, idempotencyKey?: string) =>
-  api.post<OperatorArrivalAck>(
-    `/api/queue/entries/${entryId}/operator-arrival`,
-    {},
-    idem(idempotencyKey),
-  );
 // TV display state, the timetable and the live-screen config live in lib/tv.ts.
 export const getChallengeProgress = (challengeId: number) =>
   api.get<ChallengeProgress>(`/api/queue/challenges/${challengeId}/progress`);
@@ -343,9 +332,16 @@ export const getRoomAssignments = (roomId: number) =>
   api.get<RoomAssignments>(`/api/queue/rooms/${roomId}/assignments`);
 /** GET /api/queue/repos/:id/challenges — every challenge queue a repo belongs to (H40). */
 export interface RepoChallenge {
+  entry_id: number;
+  repo_id: number;
   id: number;
   title: string;
+  queue_group_id: number | null;
+  queue_name: string | null;
   status: QueueStatus | string;
+  position: number | null;
+  called_at: string | null;
+  eta_minutes: number | null;
   room_id: number | null;
   room_name: string | null;
   judging_rooms: Array<{ id: number; name: string }>;
@@ -407,6 +403,7 @@ export const enqueueAllChallengeQueues = (idempotencyKey?: string) =>
 // double-clicks/retries (apps/api/src/lib/idempotency.ts).
 type EntryAction =
   | "notify-enter"
+  | "remind-waiting"
   | "bring-in"
   | "start"
   | "complete"

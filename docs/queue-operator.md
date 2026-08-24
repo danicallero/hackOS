@@ -11,12 +11,31 @@ room** list, and a single **Coming next** entry. Room state, location, waiting
 area counts, and queue positions are intentionally omitted because the
 operator is already looking at the active room's operational view.
 
-The main action is **They're here**. It is a shared operational note, not a
-queue transition: every operator sees the acknowledgement on the numbered
-waiting-room row. **Notify room entry** is the separate participant
-notification for telling a team to enter the judging room. Adding a team to a
-waiting area, prioritising it, or sending it to the end of the queue are
-exceptional actions behind the row's overflow menu.
+**Remind waiting room** stays visible on a called team row and repeats the
+original “come to room X and wait” notification without asking the team to
+enter. **Notify room entry** is the separate participant notification for
+telling a team to enter the judging room and lives in the row's overflow menu.
+The overflow trigger sits in the top-right corner of each team card, keeping
+the numbered name and its visible action easy to scan.
+Adding a team to a waiting area, prioritising it, or sending it to the end of
+the queue are exceptional actions shown in the team lookup when the row has
+room for them.
+
+The search icon beside the Rooms / Judging queues tabs opens a shared team
+lookup. It searches the teams currently visible to the operator, then loads
+every active queue membership for the selected team, including its position,
+plain-text queue status, and approximate call time when available. Position
+changes and other exceptional queue actions remain visible inline: move the
+team to the top, send it to the end, or (for queue administrators) disqualify
+it. Adding a waiting team to a judging room uses one compact dropdown
+containing every room that serves that queue, so a shared queue can be routed
+to the correct room without making the row wider for each room.
+The normal room board remains focused on arrivals rather than calling teams.
+The inline actions follow the judging-panel safety rules: a team already in a
+waiting room is not offered another waiting-room call; a team being evaluated
+cannot be reordered; and queue actions are blocked while one of the team's
+members is actively being evaluated in another room. The API enforces the
+same guard inside the transaction, so a stale screen cannot bypass it.
 
 ## Data contract
 
@@ -32,22 +51,16 @@ Waiting entries are deduplicated with `challenge.queue_group_id` plus
 its destination. Active and called entries remain attached to their concrete
 room because those states are room-specific.
 
-The shared `queue_operator_arrival_ack` table stores the door acknowledgement
-for a currently-called entry. It is intentionally not a `queue_history` row:
-the team has not changed queue state. Acknowledgements are audited and emitted
-on the authenticated queue SSE stream, so two operator consoles converge. The
-acknowledgement is removed when the entry is called again and is automatically
-out of the read model after the team leaves `called`.
-
 ## Operator actions
 
 The board is capability-gated by `QUEUE_OPERATE` (or `QUEUE_ADMIN`) and uses
 the existing audited entry actions:
 
 - notify a called team that it can enter the judging room;
-- acknowledge that a called team is physically at the waiting-area door;
+- remind a called team to come to the waiting room again;
 - manually send an exceptional waiting team to a room's waiting area;
 - prioritise a team or send it to the end of the queue;
+- disqualify a team from the team lookup (queue administrators only);
 - requeue or mark a called team absent.
 
 Every mutation uses a fresh idempotency key and refreshes the live projection
@@ -61,7 +74,4 @@ audited position engine.
 When this branch is combined with `danicallero/shared-queue-merge`, keep the
 `Queues` tab and replace only the Rooms-tab `RoomQueueCard` grid with
 `QueueOperatorConsole`. The shared-queue field required by this screen is
-`RoomView.challenge.queue_group_id`. The console also reads
-`GET /api/queue/operator-arrivals` and writes
-`POST /api/queue/entries/:entryId/operator-arrival`; both are capability-gated
-and the write is audited.
+`RoomView.challenge.queue_group_id`.

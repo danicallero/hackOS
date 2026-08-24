@@ -4,7 +4,6 @@ import { registerEntriesRoutes } from "./entries.routes.js";
 import { registerQueueGroupRoutes } from "./groups.routes.js";
 import { registerJudgingRoutes } from "./judging.routes.js";
 import { registerOperationsRoutes } from "./operations.routes.js";
-import { registerOperatorArrivalRoutes } from "./operator-arrivals.routes.js";
 import { scheduleQueuePump } from "./pump.js";
 import { registerReadsRoutes } from "./reads.routes.js";
 import { registerRoomsRoutes } from "./rooms.routes.js";
@@ -23,7 +22,6 @@ export async function registerQueueModule(app: FastifyInstance): Promise<void> {
   registerEntriesRoutes(app);
   registerJudgingRoutes(app);
   registerOperationsRoutes(app);
-  registerOperatorArrivalRoutes(app);
   registerReadsRoutes(app);
 
   if (!config.isTest) {

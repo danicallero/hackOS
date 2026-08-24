@@ -14,7 +14,6 @@ import {
   notifyTeamCalled,
   repoMemberIds,
 } from "./notify.js";
-import { clearOperatorArrivalAck } from "./operator-arrivals.js";
 import {
   compactQueueGroupPositions,
   nextBottomPosition,
@@ -210,7 +209,6 @@ export async function callNextForRoom(
         action: "call_next",
         metadata: { roomId, forced: Boolean(opts.force) },
       });
-      await clearOperatorArrivalAck(client, entry.id);
       await notifyTeamCalled(client, {
         entryId: entry.id,
         challengeId: entry.challenge_id,
@@ -321,6 +319,42 @@ export async function notifyEnter(entryId: number, actorId: number): Promise<Que
     });
   }
   return entry;
+}
+
+/** H29: remind a team already in the waiting room to come to this room and wait. */
+export async function remindWaitingRoom(entryId: number, actorId: number): Promise<QueueEntryRow> {
+  return withTransaction(async (client) => {
+    const entry = await lockEntry(client, entryId);
+    assertFrom(entry, ["called"], "remind_waiting_room");
+    if (entry.assigned_room_id == null) {
+      throw new ConflictError("Called team has no waiting room", { entryId });
+    }
+
+    const { rows: roomRows } = await client.query(
+      `SELECT name, location FROM rooms WHERE id = $1`,
+      [entry.assigned_room_id],
+    );
+    const room = roomRows[0] as { name: string; location: string | null } | undefined;
+    if (!room)
+      throw new NotFoundError("Waiting room not found", { roomId: entry.assigned_room_id });
+
+    await writeQueueHistory(client, {
+      entryId,
+      actorId,
+      previousStatus: entry.status,
+      newStatus: entry.status,
+      action: "remind_waiting_room",
+    });
+    await notifyTeamCalled(client, {
+      entryId,
+      challengeId: entry.challenge_id,
+      repoId: entry.repo_id,
+      roomId: entry.assigned_room_id,
+      roomName: room.name,
+      roomLocation: room.location,
+    });
+    return entry;
+  });
 }
 
 // ── H32: bring_in / start / complete ────────────────────────────────────────
@@ -439,6 +473,7 @@ export async function requeue(
 ): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
+    await assertEntryCanMove(client, entry);
     assertFrom(entry, ["called"], "requeue");
     const pos = await placeEntry(client, entry.challenge_id, entryId, position);
     const res = await client.query(
@@ -556,6 +591,7 @@ export async function moveToPosition(
 ): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
+    await assertEntryCanMove(client, entry);
     assertFrom(entry, MOVE_TO_POSITION_FROM, "move_to_position");
     const position = await placeEntry(client, entry.challenge_id, entryId, { rank });
     const res = await client.query(
@@ -589,6 +625,7 @@ export async function skipToEnd(
 ): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
+    await assertEntryCanMove(client, entry);
     assertFrom(entry, SKIP_FROM, "skip");
     const position = await placeEntry(client, entry.challenge_id, entryId, "bottom");
     const res = await client.query(
@@ -614,24 +651,49 @@ export async function skipToEnd(
 
 const MOVE_TOP_FROM = ["waiting", "called"];
 
-/** Statuses in which a team is actively occupying a room's waiting area / floor. */
-const BUSY_IN_ROOM_STATUSES = ["called", "in_room", "presenting"];
+/** Statuses in which a team is actively being evaluated, not merely waiting at the door. */
+const EVALUATING_STATUSES = ["in_room", "presenting"];
 
 /**
- * H58: is this repo currently active (called/in_room/presenting) in some room?
+ * H58: is this repo currently being evaluated in some room?
  * Returns that room's name so callers can surface `Busy in <room>` instead of
  * silently yanking the team out of its current room.
  */
-async function repoBusyRoomName(client: pg.PoolClient, repoId: number): Promise<string | null> {
+async function repoBusyRoomName(
+  client: pg.PoolClient,
+  repoId: number,
+  excludeEntryId?: number | null,
+): Promise<string | null> {
   const { rows } = await client.query(
     `SELECT r.name
        FROM queue_entries qe
        JOIN rooms r ON r.id = qe.assigned_room_id
       WHERE qe.repo_id = $1 AND qe.status = ANY($2)
+        AND ($3::int IS NULL OR qe.id <> $3::int)
       LIMIT 1`,
-    [repoId, BUSY_IN_ROOM_STATUSES],
+    [repoId, EVALUATING_STATUSES, excludeEntryId ?? null],
   );
   return rows[0]?.name ?? null;
+}
+
+/**
+ * Reordering is safe only while this entry is not being evaluated and none
+ * of the team's members is active in another room. A called entry may still
+ * be moved out of its own waiting room; the current entry is therefore
+ * excluded from the shared-member guard.
+ */
+async function assertEntryCanMove(client: pg.PoolClient, entry: QueueEntryRow): Promise<void> {
+  const blocked = await isRepoBlockedByBusyMember(client, entry.repo_id, {
+    roomId: entry.assigned_room_id,
+    excludeEntryId: entry.id,
+    statuses: EVALUATING_STATUSES,
+  });
+  if (!blocked) return;
+  const busyRoom = await repoBusyRoomName(client, entry.repo_id, entry.id);
+  throw new ConflictError(
+    busyRoom ? `Busy in ${busyRoom}` : "Team has a member busy in another room (H30)",
+    { entryId: entry.id, repoId: entry.repo_id, ...(busyRoom ? { roomName: busyRoom } : {}) },
+  );
 }
 
 /**
@@ -639,10 +701,10 @@ async function repoBusyRoomName(client: pg.PoolClient, repoId: number): Promise<
  * search. "Adding" a team only ever moves the existing entry (never creates a
  * second one).
  *
- * H58: a team that is active in a room's waiting area (called/in_room/
- * presenting) must NOT be extracted from it by the search "Top" action —
- * doing so bypasses the validation the "add to waiting room" path enforces.
- * Block with an explicit `Busy in <room>` error and leave the state untouched.
+ * H58: a team being evaluated, or a team with a member active in another room,
+ * must NOT be extracted from its current judging flow by the search "Top"
+ * action. A called team may still be moved out of its own waiting room; that
+ * is the operator's explicit top-priority action.
  */
 export async function moveToTop(
   entryId: number,
@@ -651,14 +713,7 @@ export async function moveToTop(
 ): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
-    const busyRoom = await repoBusyRoomName(client, entry.repo_id);
-    if (busyRoom) {
-      throw new ConflictError(`Busy in ${busyRoom}`, {
-        entryId,
-        repoId: entry.repo_id,
-        roomName: busyRoom,
-      });
-    }
+    await assertEntryCanMove(client, entry);
     assertFrom(entry, MOVE_TOP_FROM, "move_to_top");
     const position = await placeEntry(client, entry.challenge_id, entryId, "top");
     const res = await client.query(
@@ -812,6 +867,9 @@ export async function manualCall(
     if (entry.status === targetStatus) {
       throw new ConflictError(`Entry is already ${targetStatus}`, { entryId });
     }
+    if (targetStatus === "called" && entry.status !== "waiting") {
+      throw new ConflictError("Only a waiting team can be sent to a waiting room", { entryId });
+    }
     if (
       await isRepoBlockedByBusyMember(client, entry.repo_id, {
         roomId,
@@ -855,7 +913,6 @@ export async function manualCall(
       reason,
       metadata: { roomId, manual: true },
     });
-    if (targetStatus === "called") await clearOperatorArrivalAck(client, entryId);
     await audit(client, {
       actorId,
       entityType: "queue_entry",

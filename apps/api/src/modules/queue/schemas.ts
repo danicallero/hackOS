@@ -6,7 +6,6 @@ export const roomIdParam = z.object({ roomId: z.coerce.number().int().positive()
 export const repoIdParam = z.object({ repoId: z.coerce.number().int().positive() });
 export const challengeIdParam = z.object({ challengeId: z.coerce.number().int().positive() });
 export const entryIdParam = z.object({ entryId: z.coerce.number().int().positive() });
-export const operatorArrivalAckBody = z.object({});
 export const roomQueueGroupParam = z.object({
   roomId: z.coerce.number().int().positive(),
   queueGroupId: z.coerce.number().int().positive(),

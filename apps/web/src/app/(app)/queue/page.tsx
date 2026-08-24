@@ -2,7 +2,7 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { ArrowRightIcon, TicketIcon } from "lucide-react";
+import { ArrowRightIcon, SearchIcon, TicketIcon } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -17,17 +17,13 @@ import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { type SseEnvelope, useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import {
-  enqueueAllChallengeQueues,
-  getAllRoomViews,
-  getOperatorArrivalAcks,
-  type RoomView,
-} from "@/lib/queue";
+import { enqueueAllChallengeQueues, getAllRoomViews, type RoomView } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
 import { GenerateQueuesAction } from "./generate-queues-action";
 import { QueueOperatorConsole } from "./operator-console";
 import { QueuesPanel } from "./queues-panel";
+import { TeamQueueSearch } from "./team-queue-search";
 
 export default function QueueOperationsPage() {
   const { t } = useLocale();
@@ -46,6 +42,7 @@ export default function QueueOperationsPage() {
     defaultValue: "rooms",
   });
   const [busy, setBusy] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [arrivalHints, setArrivalHints] = useState(
     () => window.localStorage.getItem("queue-ops-arrival-hints") === "1",
   );
@@ -93,16 +90,8 @@ export default function QueueOperationsPage() {
       EVENTS.QUEUE_ROOM_CHANGED,
       EVENTS.QUEUE_NOTIFY_ENTER,
       EVENTS.QUEUE_TEAM_CALLED,
-      EVENTS.QUEUE_OPERATOR_ARRIVAL_CHANGED,
     ],
     { enabled: canUse, onEvent: announceTeamEnter },
-  );
-
-  const operatorArrivals = useLiveQuery(
-    () => getOperatorArrivalAcks(),
-    "/api/queue/stream",
-    [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_TEAM_CALLED, EVENTS.QUEUE_OPERATOR_ARRIVAL_CHANGED],
-    { enabled: canUse },
   );
 
   const rooms = useMemo(() => roomViews.data ?? [], [roomViews.data]);
@@ -181,10 +170,33 @@ export default function QueueOperationsPage() {
       />
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabBar aria-label={t("queueOperations")} className="w-full justify-start">
-          <TabsTrigger value="rooms">{t("rooms")}</TabsTrigger>
-          <TabsTrigger value="queues">{t("judgingQueues")}</TabsTrigger>
-        </TabBar>
+        <div className="flex items-center gap-2">
+          <TabBar aria-label={t("queueOperations")} className="min-w-0 flex-1 justify-start">
+            <TabsTrigger value="rooms">{t("rooms")}</TabsTrigger>
+            <TabsTrigger value="queues">{t("judgingQueues")}</TabsTrigger>
+          </TabBar>
+          <Button
+            variant={searchOpen ? "secondary" : "outline"}
+            size="icon-sm"
+            aria-label={t("queueOpenSearch")}
+            aria-expanded={searchOpen}
+            onClick={() => setSearchOpen((open) => !open)}
+          >
+            <SearchIcon className="size-4" />
+          </Button>
+        </div>
+
+        {searchOpen && (
+          <TeamQueueSearch
+            rooms={rooms}
+            canOperate={can(CAPABILITIES.QUEUE_OPERATE) || canAdmin}
+            canAdmin={canAdmin}
+            onClose={() => setSearchOpen(false)}
+            onChanged={() => {
+              roomViews.refetch();
+            }}
+          />
+        )}
 
         <TabsContent value="rooms" className="pt-2">
           {rooms.length === 0 ? (
@@ -196,11 +208,9 @@ export default function QueueOperationsPage() {
           ) : (
             <QueueOperatorConsole
               rooms={rooms}
-              arrivalAcks={operatorArrivals.data ?? []}
               canOperate={can(CAPABILITIES.QUEUE_OPERATE) || canAdmin}
               onChanged={() => {
                 roomViews.refetch();
-                operatorArrivals.refetch();
               }}
             />
           )}
