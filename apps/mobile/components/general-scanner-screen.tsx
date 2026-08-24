@@ -57,10 +57,9 @@ export function GeneralScannerScreen() {
     if (sync.lastSync) loadPeople();
   }, [loadPeople, sync.lastSync]);
 
-  // Server-side per-role counts (cached + invalidated on every write —
-  // apps/api/src/lib/read-cache.ts) so a refresh here is a cheap cache hit
-  // rather than the operator pulling and recomputing from the full local
-  // roster. Falls back to the local roster below when offline.
+  // Server-side per-role counts are refreshed by scoped logistics events,
+  // rather than a global cache version. Falls back to the local roster below
+  // when offline.
   const loadRoleStats = useCallback(() => {
     void apiFetch<{ byRole: ScannerRoleStat[] }>("/api/scanner/role-stats")
       .then((res) => setRoleStats(res.byRole))

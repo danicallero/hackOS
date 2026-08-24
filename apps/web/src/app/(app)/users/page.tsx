@@ -321,7 +321,7 @@ export default function UsersPage() {
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // creates/edits a user elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+  const liveRefresh = useAutoRefresh("/api/events/stream?topic=identity", [EVENTS.DOMAIN_CHANGED]);
 
   // Live occupancy for the optional Presence column — only fetched for staff
   // who could otherwise see it via the presence/stats panels anyway.

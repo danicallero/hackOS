@@ -172,8 +172,8 @@ export async function logisticsStats() {
  * the same role classification the scanner roster snapshot uses (H22-H26 —
  * see `scannerSnapshot` in scanner-sync.ts), so the client can sum whatever
  * combination of role groups the operator has filtered to. Answered as a
- * plain GET, so it rides the app-wide read cache (30s TTL, invalidated on
- * any write — app.ts) instead of needing bespoke caching here.
+ * direct read from Postgres; freshness comes from the existing logistics SSE
+ * events rather than a global cache version.
  */
 export type ScannerRole =
   | "admin"

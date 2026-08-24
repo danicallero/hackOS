@@ -237,8 +237,6 @@ describe("GET /api/me (H7)", () => {
 
     const challengeId = await createChallenge();
     await enqueueRepo(challengeId, repoId, 1);
-    const { invalidateReadCache } = await import("../../src/lib/read-cache.js");
-    await invalidateReadCache();
     const withQueueToo = await a.inject({ method: "GET", url: "/api/me", headers: asUser(member) });
     expect(withQueueToo.json().hasProject).toBe(true);
     expect(withQueueToo.json().hasQueueItems).toBe(true);

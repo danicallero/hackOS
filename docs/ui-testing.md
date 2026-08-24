@@ -159,9 +159,9 @@ Gotchas that cost real time:
 
 - **Gesture points use `type`, not `phase`** — `begin` / `move` / `end`. A
   single `tap` cannot scroll a `SectionList`; use `gesture`.
-- **Seeded rows won't appear** until the versioned read cache is bumped:
-  `docker exec hackos-valkey-1 valkey-cli INCR read-cache:version`. Schedule
-  rows also need `visibility = 'shown'`, not `'public'`.
+- **Seeded rows won't appear** until the page is refreshed: reads are direct
+  from Postgres, and live pages refresh through their domain-scoped SSE topic.
+  Schedule rows still need `visibility = 'shown'`, not `'public'`.
 - **Sign-in needs `mobileAccess`** (`apps/api/src/modules/identity/mobile-access.ts`):
   a fresh account bounces straight back to the form unless it has an accepted
   `application_responses` row or any capability. The bounce is silent, so

@@ -348,8 +348,6 @@ describe("call_next (H29, H30)", () => {
     // Once the blocking entry leaves called/in_room/presenting, the skip clears.
     const { pool } = await import("../../src/db/pool.js");
     await pool.query(`UPDATE queue_entries SET status = 'completed' WHERE id = $1`, [entryA]);
-    const { invalidateReadCache } = await import("../../src/lib/read-cache.js");
-    await invalidateReadCache(); // direct SQL bypasses the broadcast() that normally does this
 
     const cleared = await app.inject({
       method: "GET",

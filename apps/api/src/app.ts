@@ -16,9 +16,9 @@ import { config } from "./config.js";
 import { pool } from "./db/pool.js";
 import { AppError } from "./lib/errors.js";
 import { idempotencyOnSend } from "./lib/idempotency.js";
-import { cacheJson, invalidateReadCache, readCachedJson, readCacheKey } from "./lib/read-cache.js";
 import { openApiSecurityForPolicy, registerRoutePolicyInfrastructure } from "./lib/route-policy.js";
 import { broadcast } from "./lib/sse.js";
+import { mutationDomainForPath, publicContentMutationForPath } from "./lib/sse-routing.js";
 import { valkey } from "./lib/valkey.js";
 import { registerModules } from "./modules/index.js";
 import { authContextPlugin } from "./plugins/auth-context.js";
@@ -250,44 +250,27 @@ export async function buildApp(): Promise<App> {
   await app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
   await app.register(authContextPlugin);
   app.addHook("onSend", idempotencyOnSend);
-  app.addHook("preHandler", async (req, reply) => {
-    try {
-      const key = await readCacheKey(req);
-      if (!key) return;
-      req.readCacheKey = key;
-      const cached = await readCachedJson(key);
-      if (cached !== null) {
-        reply.header("x-read-cache", "HIT");
-        return reply.send(cached);
-      }
-      reply.header("x-read-cache", "MISS");
-    } catch (err) {
-      // Cache availability must never prevent a normal API read.
-      logSoftFailure(req, err, "read cache lookup failed");
-    }
-  });
-  app.addHook("preSerialization", async (req, reply, payload) => {
-    if (reply.statusCode >= 300) return payload;
-    try {
-      await cacheJson(req.readCacheKey, payload);
-    } catch (err) {
-      logSoftFailure(req, err, "read cache write failed");
-    }
-    return payload;
-  });
   app.addHook("onResponse", async (req, reply) => {
-    // This is the catch-all synchronization contract: a successful mutation
-    // emits an intentionally payload-free event so it cannot expose data from
-    // an endpoint to an unrelated open window. Domain streams still carry
-    // their specific events for consumers that can update more selectively.
-    if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method) && reply.statusCode < 300) {
-      try {
-        await invalidateReadCache();
-        await broadcast(SSE_TOPICS.GLOBAL, EVENTS.DATA_CHANGED, { at: new Date().toISOString() });
-      } catch (err) {
-        logSoftFailure(req, err, "global SSE broadcast failed");
-      }
+    if (
+      !["POST", "PUT", "PATCH", "DELETE"].includes(req.method) ||
+      reply.statusCode >= 300 ||
+      req.idempotency?.replayed
+    )
+      return;
+
+    // H53 has its own refresh topic. Domain services remain responsible for
+    // richer operational events, while this hook covers simple CRUD read
+    // models that have no other realtime contract (H7-H55, issue #533).
+    const topics = new Set<string>([SSE_TOPICS.AUDIT]);
+    const domain = mutationDomainForPath(req.url);
+    if (domain) topics.add(domain);
+    const broadcasts = [...topics].map((topic) => broadcast(topic, EVENTS.DOMAIN_CHANGED, {}));
+    if (publicContentMutationForPath(req.url)) {
+      broadcasts.push(broadcast(SSE_TOPICS.PUBLIC_CONTENT, EVENTS.DATA_CHANGED, {}));
     }
+    await Promise.all(broadcasts).catch((err) =>
+      logSoftFailure(req, err, "scoped SSE refresh failed"),
+    );
   });
 
   await app.register(swagger, {

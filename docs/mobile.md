@@ -109,9 +109,8 @@ route below. No migration needed.
   mentors only once their application is confirmed
   (`isAccreditationEligible` in `lib/scanner-group-filter.ts` mirrors this
   server-side rule for the offline fallback below). "Inside" reuses
-  `occupancyEstimate()` rather than re-deriving presence semantics. A plain
-  GET, so it rides the existing app-wide read cache (30s TTL, invalidated on
-  any write — no bespoke caching needed) instead of the client pulling and
+  `occupancyEstimate()` rather than re-deriving presence semantics. It is a
+  direct read from the authoritative API, so the client avoids pulling and
   recomputing from the full roster snapshot on every refresh. The scanner
   home screen (`components/general-scanner-screen.tsx`) also opens the
   existing `/api/logistics/stream` SSE topic
@@ -621,7 +620,7 @@ run them with the root `test:ui:native` commands described in
 *looks* like, so a PR that changes a screen's appearance also carries
 screenshots from a running simulator — see
 [`docs/ui-testing.md`](./ui-testing.md) § Screenshots on UI PRs for the
-build/drive/capture recipe and the local-port, read-cache, and
+build/drive/capture recipe and the local-port and
 `mobileAccess` traps that eat time on the first attempt.
 
 ## Scanner state transitions

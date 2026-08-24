@@ -141,8 +141,8 @@ export function ReviewForm({
     };
   }, [entry, canJudge, loadRemote, roomId, t]);
 
-  useEventSource("/api/events/stream", {
-    events: [EVENTS.DATA_CHANGED],
+  useEventSource(entry ? `/api/queue/entries/${entry.id}/stream` : "", {
+    events: [EVENTS.QUEUE_REVIEW_CHANGED],
     enabled: entry != null,
     onEvent: () => void loadRemote(true),
   });

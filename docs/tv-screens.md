@@ -44,15 +44,15 @@ and a quiet tick doesn't wake every screen.
 `/api/tv/stream` and `/api/content/stream` are deliberately invalidation-only
 public streams. The former subscribes to the dedicated `public-tv` topic, which
 is mirrored only from `queue` and `tv`; the latter subscribes to
-`public-content`, mirrored only from `content`. Their `data.changed` envelope
-is empty — no display, room, account, project, or source-event payload — so a
-screen refetches the public `/api/tv/mode`, sanitized `/api/tv/rooms`, and
-public content projections after it arrives without observing unrelated system
-writes. The room projection includes only visible room/challenge/team-status
-fields, never team-member identities, email, project links, or cross-room
-operator diagnostics. Raw `tv.mode.changed` and queue events remain on
-authenticated operational channels, so opening a venue screen cannot grant
-judging access.
+`public-content`, mirrored from `content` and explicit public sponsor/challenge
+changes. Their `data.changed` envelope is empty — no display, room, account,
+project, or source-event payload — so a screen refetches the public
+`/api/tv/mode`, sanitized `/api/tv/rooms`, and public content projections after
+it arrives without observing unrelated system writes. The room projection includes only
+visible room/challenge/team-status fields, never team-member identities, email,
+project links, or cross-room operator diagnostics. Raw `tv.mode.changed` and
+queue events remain on authenticated operational channels, so opening a venue
+screen cannot grant judging access.
 
 ### Rotation inside a slot
 

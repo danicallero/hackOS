@@ -146,7 +146,9 @@ export function ResponsesTab({
 
   // Soft, in-place refresh instead of a hard reload when a response changes
   // (submitted, reviewed, decided) elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+  const liveRefresh = useAutoRefresh("/api/events/stream?topic=applications", [
+    EVENTS.DOMAIN_CHANGED,
+  ]);
 
   // Debounce so server-side search/filter doesn't fire on every keystroke.
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.

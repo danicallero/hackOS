@@ -84,8 +84,8 @@ export default function AuditPage() {
 
   // Soft, in-place refresh instead of a hard reload — audit entries are
   // created by every sensitive mutation in the app (H53), so this stays on
-  // the global stream.
-  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+  // the audit-scoped stream.
+  const liveRefresh = useAutoRefresh("/api/events/stream?topic=audit", [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {

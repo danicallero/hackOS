@@ -129,7 +129,9 @@ export default function ApplicationDetailPage() {
 
   // Soft, in-place refresh instead of a hard reload when someone else edits
   // this form, its questions, or a response changes its stats elsewhere.
-  const liveRefresh = useAutoRefresh("/api/events/stream", [EVENTS.DATA_CHANGED]);
+  const liveRefresh = useAutoRefresh("/api/events/stream?topic=applications", [
+    EVENTS.DOMAIN_CHANGED,
+  ]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {

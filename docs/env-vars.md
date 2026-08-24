@@ -39,7 +39,7 @@ at the bottom before copying secrets into six separate service screens.
 | Variable | Kind | Required | What it does |
 |---|---|---|---|
 | `VALKEY_PASSWORD` | container | yes 🔒 | Passed to `valkey-server --requirepass`, so any client — including the healthcheck itself — must authenticate. Also embedded in `api`/`worker`'s `VALKEY_URL` (`redis://:<password>@valkey:6379`); a mismatch means BullMQ jobs and SSE fan-out silently stop working. |
-| `VALKEY_MEM_LIMIT` | compose-level | no | Memory cap, default `512m`. Valkey here holds only ephemeral queue/cache/SSE state (persistence is off — `--save ""` `--appendonly no`), so an OOM restart loses in-flight jobs but never durable data; Postgres is the source of truth. |
+| `VALKEY_MEM_LIMIT` | compose-level | no | Memory cap, default `512m`. Valkey here holds only ephemeral queue/SSE state (persistence is off — `--save ""` `--appendonly no`), so an OOM restart loses in-flight jobs but never durable data; Postgres is the source of truth. |
 | `INSTANCE_NETWORK` | compose-level | no | Same private network as postgres — this is how `api`/`worker` reach `valkey:6379` by name. |
 
 ## minio
@@ -69,7 +69,7 @@ the same `DATABASE_URL`/config-loading code path.
 | Variable | Kind | Required | What it does |
 |---|---|---|---|
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | compose-level | yes | Interpolated into `DATABASE_URL` (`postgres://user:pass@postgres:5432/db`) before the container ever starts. Must be the exact values given to the `postgres` service — this repo has no runtime reconciliation between them. |
-| `VALKEY_PASSWORD` | compose-level | yes 🔒 | Interpolated into `VALKEY_URL` the same way, for BullMQ and the SSE/read-cache layer. |
+| `VALKEY_PASSWORD` | compose-level | yes 🔒 | Interpolated into `VALKEY_URL` the same way, for BullMQ and the SSE/sequence-counter layer. |
 | `API_DOMAIN` | compose-level | yes | The public hostname this API answers on. Becomes both `BETTER_AUTH_URL` (so Better Auth issues cookies/links for the right origin) and the Traefik router's `Host()` rule. |
 | `WEB_DOMAIN` | compose-level | yes | Becomes `WEB_URL` — the browser-facing origin auth emails (verification, password reset) link back to after the API finishes its part. Without it, those links point at the API itself instead of a real page. |
 | `BETTER_AUTH_SECRET` | container | yes 🔒 | Signs and encrypts Better Auth sessions/tokens. Rotating it invalidates every existing session — everyone gets logged out — so treat it as a "break glass" secret, not something to rotate casually. |

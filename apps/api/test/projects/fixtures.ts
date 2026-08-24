@@ -119,7 +119,7 @@ export async function admitParticipant(userId: number): Promise<void> {
  * `hacking_ends_at` directly. `open=true` sets a window comfortably
  * spanning "now"; `open=false` clears both bounds (unset reads as closed,
  * not unrestricted — see `src/lib/hacking-window.ts`). Direct SQL bypasses
- * the API, so the GET read cache is dropped by hand afterwards.
+ * the API, so no realtime event is emitted for the seed itself.
  */
 export async function setHackingWindow(open: boolean): Promise<void> {
   const [startsAt, endsAt] = open
@@ -130,6 +130,4 @@ export async function setHackingWindow(open: boolean): Promise<void> {
      ON CONFLICT (id) DO UPDATE SET hacking_starts_at = $1, hacking_ends_at = $2`,
     [startsAt, endsAt],
   );
-  const { invalidateReadCache } = await import("../../src/lib/read-cache.js");
-  await invalidateReadCache();
 }
