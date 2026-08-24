@@ -59,12 +59,39 @@ export async function setChallengeWinner(
     // be a legitimate winner candidate either through a queue entry or
     // through the devpost prize-tag mapping (repo_devpost_prizes / challenge
     // devpost_tags), same "entered" test loadEligibleRepos uses on the web.
+    //
+    // Eligibility is scoped to the challenge's *queue group*, not the bare
+    // challenge id: challenges merged into one shared queue are judged
+    // together, so a repo evaluated through that queue counts as entered in
+    // every challenge the group feeds (draft §5). Since 0410 every challenge
+    // sits in its own 1:1 group, so today the group resolves to exactly
+    // `challengeId` and this behaves identically to the pre-group check; the
+    // `UNION SELECT $1` keeps that true even for a challenge with no group
+    // row at all. The win is still recorded against the challenge_id the
+    // sponsor is picking for — `challenge_winners` is unchanged.
+    //
+    // NOTE: when a repo qualifies via several challenges in one group, the
+    // draft's §5 picker (asking which challenge_id to attribute the win to)
+    // is deliberately deferred to the PR that ships queue-group merging UI.
+    // No group can hold more than one challenge yet, so there is nothing
+    // ambiguous to resolve; only this eligibility check has to be N-correct.
     const entrant = await client.query(
-      `SELECT 1 FROM queue_entries WHERE challenge_id = $1 AND repo_id = $2
+      `WITH group_challenges AS (
+         SELECT sibling.challenge_id
+           FROM queue_group_challenges self
+           JOIN queue_group_challenges sibling
+             ON sibling.queue_group_id = self.queue_group_id
+          WHERE self.challenge_id = $1
+         UNION
+         SELECT $1::integer
+       )
+       SELECT 1 FROM queue_entries q
+         JOIN group_challenges g ON g.challenge_id = q.challenge_id
+        WHERE q.repo_id = $2
        UNION
        SELECT 1 FROM repo_devpost_prizes p
-        JOIN challenges c ON c.id = $1
-       WHERE p.repo_id = $2 AND p.prize IN (SELECT jsonb_array_elements_text(c.devpost_tags))`,
+         JOIN challenges c ON c.id IN (SELECT challenge_id FROM group_challenges)
+        WHERE p.repo_id = $2 AND p.prize IN (SELECT jsonb_array_elements_text(c.devpost_tags))`,
       [challengeId, repoId],
     );
     if (entrant.rowCount === 0) {

@@ -109,6 +109,23 @@ owners can still update the judging panel and presentation duration until that
 judging deadline, but the public/general fields (`title`, `description`,
 `criteria`, `prizes`) are admin-only.
 
+**Winner eligibility is queue-group scoped (H46).** `winners.ts` records each
+win against the exact `challenge_id` the sponsor is picking for —
+`challenge_winners` keeps its `UNIQUE(challenge_id, rank)` and
+`UNIQUE(challenge_id, repo_id)` unchanged. What widened is the *entrant* check:
+a repo qualifies if it has a `queue_entries` row (or a `repo_devpost_prizes` ↔
+`challenges.devpost_tags` match, for enterprises that opted out of the queue)
+against **any challenge in the target challenge's `queue_group`**, not only the
+target challenge itself. Since `0410_queue_groups.sql` gives every challenge its
+own 1:1 group, that set is today exactly `{challengeId}` and the rule is
+indistinguishable from the pre-group behaviour; it only widens once an
+enterprise merges several of its challenges into one shared judging queue, at
+which point a repo judged once through that queue is a legitimate candidate for
+every prize the queue feeds. When a repo qualifies through more than one
+challenge in a group, choosing which `challenge_id` the win is attributed to is
+a UI decision deferred to the PR that ships queue-group merging — no group
+holds more than one challenge yet, so there is nothing ambiguous to resolve.
+
 ### 1.3 Projects module (`apps/api/src/modules/projects/`)
 
 | Method & path | Capability | Story | Behaviour |
@@ -315,7 +332,8 @@ global capability or the exact relationship receive `403`.
   can edit only their linked enterprise and its owner-editable fields; an
   unrelated enterprise id is forbidden. Nested project/challenge operations
   continue to validate the supplied parent and child pair in the same domain
-  transaction (for example, a winner repo must be entered in that challenge).
+  transaction (for example, a winner repo must be entered in that challenge, or
+  in one sharing its queue group — see §1.2).
 
 - Every mutating route is guarded by `requireCapability`/`requireAnyCapability`
   by capability, never by role (H8): `projects:import` for all Devpost intake,

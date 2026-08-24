@@ -261,26 +261,31 @@ export default function ScheduleDetailScreen() {
                   </Text>
                 </View>
 
-                {staffItem.contactNote ? (
-                  <DetailTextSection
-                    label={t("scheduleContactNoteLabel")}
-                    value={staffItem.contactNote}
-                  />
-                ) : null}
                 {staffItem.notes ? (
                   <DetailTextSection label={t("scheduleNotesLabel")} value={staffItem.notes} />
                 ) : null}
-                {staffItem.owners ? (
-                  <View style={{ gap: 8 }}>
-                    <Text style={sectionHeaderStyle}>{t("scheduleOwnersLabel")}</Text>
-                    <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 24 }}>
-                      {staffItem.owners.length > 0
-                        ? staffItem.owners.map(ownerDisplayName).join(", ")
-                        : t("scheduleOwnersEmpty")}
-                    </Text>
-                  </View>
-                ) : null}
               </>
+            ) : null}
+
+            {/* contactNote/owners: sent for sponsors too (public payload), so
+                render straight off `detailItem` rather than gating behind
+                staffItem (staff-only), or sponsors never see the contact info
+                the API already sent them. */}
+            {detailItem?.contactNote ? (
+              <DetailTextSection
+                label={t("scheduleContactNoteLabel")}
+                value={detailItem.contactNote}
+              />
+            ) : null}
+            {detailItem?.owners ? (
+              <View style={{ gap: 8 }}>
+                <Text style={sectionHeaderStyle}>{t("scheduleOwnersLabel")}</Text>
+                <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 24 }}>
+                  {detailItem.owners.length > 0
+                    ? detailItem.owners.map(ownerDisplayName).join(", ")
+                    : t("scheduleOwnersEmpty")}
+                </Text>
+              </View>
             ) : null}
           </View>
         )}
