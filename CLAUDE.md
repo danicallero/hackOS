@@ -94,6 +94,19 @@ must keep working. Workers run inline in dev (`WORKERS_INLINE`), as a separate
 container (`node dist/worker.js`) in production. Don't hardcode
 `localhost` — everything configurable comes from `src/config.ts` (zod-validated env).
 
+## Pull requests and merges
+
+- **Opening a PR never authorizes merging it.** Treat every newly opened PR as
+  a handoff for human review and leave it open unless the user's current
+  message explicitly instructs you to merge or enable auto-merge.
+- Merge permission does not carry over from earlier messages, broad ownership
+  language, a request to "finish" the issue, green CI, or repository merge
+  conventions. If the current message only asks you to open/create/prepare a
+  PR, stop after opening it and report the URL and check status.
+- Never enable auto-merge unless the user's current message explicitly requests
+  auto-merge. When that same-message authorization exists, use a merge commit
+  (`gh pr merge --merge`), never squash.
+
 ## Documentation
 
 Docs are not a side project — a change isn't done until the doc that
