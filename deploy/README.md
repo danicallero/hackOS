@@ -53,7 +53,9 @@ posture. Pick one per instance — don't mix them for the same instance.
   `DATABASE_URL` / `VALKEY_URL` / `S3_ENDPOINT`.
 - **Migrations** run as a one-shot `migrate` container (bundled with the `api`
   service) before the API starts, guarded by a Postgres advisory lock so
-  replicas/redeploys can't race.
+  replicas/redeploys can't race. The API repeats the same no-op-safe check
+  immediately before listening, covering redeploys where the orchestrator
+  reuses an already-completed one-shot container.
 
 ---
 

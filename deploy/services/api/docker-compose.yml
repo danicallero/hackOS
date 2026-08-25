@@ -91,7 +91,9 @@ services:
     build:
       context: ../../..
       dockerfile: apps/api/Dockerfile
-    command: ["node", "dist/server.js"]
+    # H10/H53: repeat the advisory-locked migration check here as a guard for
+    # redeploys that reuse an already-completed one-shot `migrate` container.
+    command: ["sh", "-c", "node dist/migrate.js && exec node dist/server.js"]
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
