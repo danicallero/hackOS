@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react-native";
+import { screen } from "@testing-library/react-native";
 import type { ScheduleItem } from "@/lib/schedule";
 
 const mockLoad = jest.fn();
@@ -130,23 +130,15 @@ describe("schedule detail title and staff fields (H47, H59)", () => {
     jest.clearAllMocks();
   });
 
-  it("repeats a long title only when the native header may truncate it", async () => {
+  it("keeps the activity title in native navigation without repeating it", async () => {
     await renderMobile(<ScheduleDetailScreen />);
 
-    expect(await screen.findByRole("header", { name: mockActivity.title })).toBeTruthy();
     expect(mockSetOptions).toHaveBeenCalledWith(
       expect.objectContaining({
         options: expect.objectContaining({ title: mockActivity.title }),
       }),
     );
-  });
-
-  it("does not repeat a short title in the content", async () => {
-    mockSchedule = [{ ...mockActivity, title: "Check-in" }];
-
-    await renderMobile(<ScheduleDetailScreen />);
-
-    await waitFor(() => expect(screen.queryByRole("header", { name: "Check-in" })).toBeNull());
+    expect(screen.queryByText(mockActivity.title)).toBeNull();
   });
 
   it("hides scan, visibility, and publish fields for staff-only items", async () => {
