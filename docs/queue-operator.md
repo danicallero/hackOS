@@ -92,7 +92,9 @@ challenge definitions, room definitions, unrelated notifications, and the
 audit trail. It cannot recall emails already delivered by a provider. Clients
 receive queue, project, and audit invalidations after the transaction commits;
 the request also accepts an `Idempotency-Key` so a retried browser request
-cannot repeat the reset.
+cannot repeat the reset. The reset transaction opts out of the normal
+statement timeout so large deletes can finish, but it still needs an available
+database connection and should be run during a quiet operational window.
 
 ## Integration boundary
 

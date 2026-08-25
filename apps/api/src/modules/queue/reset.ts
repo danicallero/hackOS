@@ -109,6 +109,14 @@ export async function resetJudgingData(
   idempotency: IdempotencyExclusion = { key: null, scope: null },
 ): Promise<JudgingDataResetResult> {
   return withTransaction(async (client) => {
+    // This is an explicitly confirmed maintenance operation, not a normal
+    // request-sized mutation. Disable the pool's default statement timeout
+    // before taking the table locks so a large delete or a short wait for an
+    // in-flight Q transaction cannot abort the all-or-nothing reset. The
+    // transaction still rolls back completely if the database reports an
+    // error.
+    await client.query(`SET LOCAL statement_timeout = 0`);
+
     // Lock in a stable alphabetical order so two destructive requests cannot
     // deadlock. These are the Q/project tables touched by H16-H40.
     await client.query(`
