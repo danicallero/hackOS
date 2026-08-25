@@ -159,6 +159,11 @@ pnpm --filter @hackos/web test        # web unit tests
 pnpm --filter @hackos/mobile typecheck
 pnpm --filter @hackos/mobile test     # mobile Jest tests
 
+# Representative event-day load (H22-H42, H46, #544)
+pnpm --filter @hackos/api event-day:load -- --mode smoke
+pnpm --filter @hackos/api event-day:load -- --mode prepare
+pnpm --filter @hackos/api event-day:load -- --mode load
+
 pnpm test:ui                          # Playwright + fast native screen tests
 pnpm test:ui:install                  # install Playwright browsers once
 pnpm test:ui:native                   # Detox on a simulator/device

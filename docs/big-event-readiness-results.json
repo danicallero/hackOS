@@ -1,0 +1,183 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-25T00:13:24.030Z",
+  "gitCommit": "29c27e980ddc4290ba0887df2f1781ec98a8cd55",
+  "command": "/opt/homebrew/Cellar/node/25.2.1/bin/node /Users/dani/orca/workspaces/fablehackos/issue-544-queue-coalesce-gate/apps/api/scripts/event-day-load.ts -- --mode load --fixture /private/tmp/hackos-event-day-fixture.json --duration-seconds 10 --output /Users/dani/orca/workspaces/fablehackos/issue-544-queue-coalesce-gate/docs/big-event-readiness-results.json",
+  "environment": {
+    "node": "v25.2.1",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpuCount": 12,
+    "baseUrl": "http://127.0.0.1:3000",
+    "database": {
+      "host": "localhost:5433",
+      "database": "hackos_test"
+    },
+    "dbPoolMax": "20",
+    "workersInline": "true",
+    "nodeEnv": "test"
+  },
+  "fixture": {
+    "participants": 600,
+    "operators": 20,
+    "judges": 20,
+    "tvs": 4,
+    "rooms": 4,
+    "queueEntries": 600,
+    "reviewEntries": 40
+  },
+  "workload": {
+    "durationSeconds": 10,
+    "elapsedSeconds": 12.869341,
+    "samples": 2129,
+    "sseConnectionsOpened": 628
+  },
+  "lanes": {
+    "P0": {
+      "count": 724,
+      "throughputRps": 56.25773689577423,
+      "p50Ms": 527.865583,
+      "p95Ms": 853.4086659999999,
+      "p99Ms": 880.0994170000001,
+      "maxMs": 951.1015,
+      "errorRate": 0
+    },
+    "P1": {
+      "count": 120,
+      "throughputRps": 9.32448677830512,
+      "p50Ms": 910.447958,
+      "p95Ms": 936.85275,
+      "p99Ms": 939.8782079999999,
+      "maxMs": 960.289208,
+      "errorRate": 0
+    },
+    "P2": {
+      "count": 84,
+      "throughputRps": 6.527140744813584,
+      "p50Ms": 12.361915999999837,
+      "p95Ms": 76.14537500000006,
+      "p99Ms": 81.0972499999998,
+      "maxMs": 81.0972499999998,
+      "errorRate": 0
+    },
+    "P3": {
+      "count": 1201,
+      "throughputRps": 93.32257183953708,
+      "p50Ms": 132.93975,
+      "p95Ms": 1023.836125,
+      "p99Ms": 1043.4270000000001,
+      "maxMs": 1046.1685,
+      "errorRate": 0.35387177352206495
+    }
+  },
+  "admission": {
+    "waitSeconds": {
+      "P0": {
+        "count": 720,
+        "sum": 198.33216644299995,
+        "p95Estimate": 0.5
+      },
+      "P1": {
+        "count": 100,
+        "sum": 72.946700296,
+        "p95Estimate": 1
+      },
+      "P2": {
+        "count": 80,
+        "sum": 0.00010670900000000001,
+        "p95Estimate": 0.001
+      },
+      "P3": {
+        "count": 176,
+        "sum": 144.15078653999993,
+        "p95Estimate": 1
+      }
+    },
+    "queueSizeMax": {
+      "P0": 429,
+      "P1": 100,
+      "P2": 0,
+      "P3": 160
+    }
+  },
+  "realtime": {
+    "ssePeakByLane": {
+      "P0": 4,
+      "P1": 1,
+      "P2": 4,
+      "P3": 1
+    },
+    "ssePhysicalConnectionsOpenedByLane": {
+      "P0": 4,
+      "P1": 20,
+      "P2": 4,
+      "P3": 600
+    },
+    "ssePhysicalConnectionsPeak": 628,
+    "invalidationOutcomes": {
+      "queued": 3,
+      "coalesced": 117,
+      "dropped": 0,
+      "degraded": 0
+    },
+    "browserRefetch": {
+      "storms": 1,
+      "refetches": 600
+    },
+    "finalSseByLane": {
+      "P0": 0,
+      "P1": 0,
+      "P2": 0,
+      "P3": 0
+    }
+  },
+  "budgets": {
+    "P0": {
+      "p95LatencyMs": 2000,
+      "maxErrorRate": 0.02
+    },
+    "P1": {
+      "p95LatencyMs": 2000,
+      "maxErrorRate": 0.02
+    },
+    "P2": {
+      "p95LatencyMs": 3000,
+      "maxErrorRate": 0.05
+    },
+    "P3": {
+      "p95LatencyMs": 5000,
+      "maxErrorRate": 1
+    }
+  },
+  "validation": {
+    "p0p1Passed": true,
+    "budgetChecks": [
+      {
+        "lane": "P0",
+        "p95LatencyMs": 853.4086659999999,
+        "maxErrorRate": 0,
+        "budget": {
+          "p95LatencyMs": 2000,
+          "maxErrorRate": 0.02
+        },
+        "passed": true
+      },
+      {
+        "lane": "P1",
+        "p95LatencyMs": 936.85275,
+        "maxErrorRate": 0,
+        "budget": {
+          "p95LatencyMs": 2000,
+          "maxErrorRate": 0.02
+        },
+        "passed": true
+      }
+    ],
+    "p3DegradationAllowed": true
+  },
+  "caveats": [
+    "This is a single-process local representative run; it does not claim production capacity or validate #540 deployment budgets.",
+    "P3 queue/me responses are intentionally best effort and 429/degraded outcomes are retained in the result rather than treated as a harness failure.",
+    "SSE physical connections are opened directly with one user topic per participant; browser-side broker deduplication is represented by one stream per client and one aggregate refetch report."
+  ]
+}
