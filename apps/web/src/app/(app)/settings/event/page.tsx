@@ -13,7 +13,14 @@
 // Settings → Libraries, next to the other shared reference lists.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { MailPlusIcon, MapPinIcon, TagIcon, UserCheckIcon, WalletCardsIcon } from "lucide-react";
+import {
+  MailPlusIcon,
+  MapPinIcon,
+  TagIcon,
+  TriangleAlertIcon,
+  UserCheckIcon,
+  WalletCardsIcon,
+} from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { PageHeader } from "@/components/common/page-header";
@@ -30,10 +37,11 @@ import { EventConfigProvider } from "./event-config-context";
 import { EventTab } from "./event-tab";
 import { InvitesTab } from "./invites-tab";
 import { PresenceTab } from "./presence-tab";
+import { ResetJudgingDataTab } from "./reset-judging-data-tab";
 import { VenueTab } from "./venue-tab";
 import { WalletTab } from "./wallet-tab";
 
-const CATEGORIES = ["event", "venue", "wallet", "presence", "invites"] as const;
+const CATEGORIES = ["event", "venue", "wallet", "presence", "invites", "danger"] as const;
 type Category = (typeof CATEGORIES)[number];
 
 export default function EventSettingsPage() {
@@ -43,12 +51,14 @@ export default function EventSettingsPage() {
   const canWallet = useCan(CAPABILITIES.WALLET_MANAGE);
   const canPresence = useCan(CAPABILITIES.PRESENCE_MANAGE);
   const canInvites = useCan(CAPABILITIES.INVITES_MANAGE);
+  const canDanger = useCan(CAPABILITIES.ADMIN_ALL);
   const canByCategory: Record<Category, boolean> = {
     event: canEvent,
     venue: canVenue,
     wallet: canWallet,
     presence: canPresence,
     invites: canInvites,
+    danger: canDanger,
   };
   const visibleCategories = CATEGORIES.filter((c) => canByCategory[c]);
 
@@ -69,6 +79,7 @@ export default function EventSettingsPage() {
     wallet: false,
     presence: false,
     invites: false,
+    danger: false,
   });
   const [anyDirty, setAnyDirty] = useState(false);
 
@@ -101,6 +112,7 @@ export default function EventSettingsPage() {
             {canWallet && <TabsTrigger value="wallet">{t("walletPassSectionTitle")}</TabsTrigger>}
             {canPresence && <TabsTrigger value="presence">{t("presencePolicyTitle")}</TabsTrigger>}
             {canInvites && <TabsTrigger value="invites">{t("invitesSectionTitle")}</TabsTrigger>}
+            {canDanger && <TabsTrigger value="danger">{t("dangerZone")}</TabsTrigger>}
           </TabBar>
 
           {canEvent && (
@@ -135,6 +147,11 @@ export default function EventSettingsPage() {
                 icon={MailPlusIcon}
                 onDirtyChange={(dirty) => setDirty("invites", dirty)}
               />
+            </TabsContent>
+          )}
+          {canDanger && (
+            <TabsContent value="danger" className="pt-4">
+              <ResetJudgingDataTab icon={TriangleAlertIcon} />
             </TabsContent>
           )}
         </Tabs>
