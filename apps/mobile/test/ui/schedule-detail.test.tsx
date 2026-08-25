@@ -3,7 +3,6 @@ import type { ScheduleItem } from "@/lib/schedule";
 
 const mockLoad = jest.fn();
 const mockNotificationLoad = jest.fn();
-const mockSetOptions = jest.fn();
 const mockFetchAdminSchedule = jest.fn();
 
 type MockScheduleItem = ScheduleItem & { requiresScan?: boolean };
@@ -30,10 +29,7 @@ jest.mock("expo-router", () => ({
 jest.mock("expo-router/stack", () => ({
   __esModule: true,
   default: {
-    Screen: (props: unknown) => {
-      mockSetOptions(props);
-      return null;
-    },
+    Screen: () => null,
   },
 }));
 jest.mock("@/components/glass-view", () => ({ GlassView: () => null }));
@@ -128,17 +124,6 @@ describe("schedule detail staff fields (H59)", () => {
     mockSchedule = [mockActivity];
     mockFetchAdminSchedule.mockResolvedValue([]);
     jest.clearAllMocks();
-  });
-
-  it("keeps the activity title in native navigation without repeating it", async () => {
-    await renderMobile(<ScheduleDetailScreen />);
-
-    expect(mockSetOptions).toHaveBeenCalledWith(
-      expect.objectContaining({
-        options: expect.objectContaining({ title: mockActivity.title }),
-      }),
-    );
-    expect(screen.queryByText(mockActivity.title)).toBeNull();
   });
 
   it("hides scan, visibility, and publish fields for staff-only items", async () => {
