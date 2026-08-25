@@ -248,7 +248,9 @@ Production is designed as one isolated stack per event. The API, worker and web
 services can be deployed independently; Postgres, Valkey and MinIO stay on a
 private network, while Traefik exposes only the API and web routes. A one-shot
 migration command runs before the API starts and uses a Postgres advisory lock
-to make concurrent deploys safe.
+to make concurrent deploys safe. The API repeats this no-op-safe migration
+check immediately before listening so a reused one-shot container cannot leave
+the running image ahead of the database schema.
 
 [`deploy/README.md`](deploy/README.md) documents both the recommended
 per-service Dokploy setup and a single Compose stack, including secrets,
