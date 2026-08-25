@@ -214,7 +214,7 @@ describe("POST /api/queue/admin/reset", () => {
       projectNotifications: 1,
       devpostClaimNotifications: 1,
       queuePreferences: 2,
-      queueIdempotencyKeys: 2,
+      queueIdempotencyKeys: 1,
       devpostClaimTokens: 1,
       challengeMappingsReset: 1,
     });
