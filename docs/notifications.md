@@ -120,6 +120,13 @@ itself. Two background workers do the actual work:
 their preferences matrix even with zero override rows; `queue` is the one
 mandatory (non-optional) category (H51).
 
+Push batches are sent to every current token for the user. A batch is marked
+`sent` when at least one Expo ticket succeeds; a failed ticket is logged by the
+worker with its platform and a masked token. This avoids retrying a push to a
+device that already received it, while still showing partial failures in the
+worker log. A `DeviceNotRegistered` ticket removes that token from
+`push_tokens`.
+
 ## Automatic translation (optional)
 
 `translations` (`title`/`body` per `es | gl | en`) can be filled by hand, or
