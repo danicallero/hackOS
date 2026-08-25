@@ -1,6 +1,8 @@
 import Fastify from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  describeRoutePolicy,
+  emailVerificationForRoute,
   openApiSecurityForPolicy,
   type RouteAccessPolicy,
   registerRoutePolicyInfrastructure,
@@ -185,5 +187,83 @@ describe("RouteAccessPolicy infrastructure", () => {
       { sessionToken: [] },
       { bearerToken: [] },
     ]);
+  });
+
+  it("defaults every authenticated mutation to H1 verification and preserves explicit boundaries", () => {
+    expect(emailVerificationForRoute("GET", { kind: "authenticated" })).toBe("none");
+    expect(emailVerificationForRoute("POST", { kind: "authenticated" })).toBe("caller");
+    expect(
+      emailVerificationForRoute("PATCH", { kind: "capability", capability: "users:write" }),
+    ).toBe("caller");
+    expect(
+      emailVerificationForRoute("PUT", {
+        kind: "authenticated",
+        emailVerification: "none",
+      }),
+    ).toBe("none");
+    expect(
+      emailVerificationForRoute("POST", {
+        kind: "token",
+        policy: "application-confirmation",
+        emailVerification: "target",
+      }),
+    ).toBe("target");
+    expect(describeRoutePolicy({ kind: "authenticated", emailVerification: "none" }, "POST")).toBe(
+      "authenticated + email-verification:none",
+    );
+  });
+
+  it("rejects caller verification on public/token routes and target verification elsewhere", () => {
+    const app = Fastify();
+    apps.push(app);
+    registerRoutePolicyInfrastructure(app, { enforce: true });
+
+    expect(() =>
+      app.post(
+        "/api/public/bad-verification",
+        {
+          config: {
+            routeAccessPolicy: {
+              kind: "public",
+              anonymousCategory: "public-content",
+              emailVerification: "caller",
+            },
+          },
+        },
+        async () => ({ ok: true }),
+      ),
+    ).toThrow("cannot require caller email verification");
+
+    expect(() =>
+      app.post(
+        "/api/auth/bad-verification",
+        {
+          config: {
+            routeAccessPolicy: {
+              kind: "token",
+              policy: "test",
+              emailVerification: "caller",
+            },
+          },
+        },
+        async () => ({ ok: true }),
+      ),
+    ).toThrow("cannot require caller email verification");
+
+    expect(() =>
+      app.post(
+        "/api/capability/bad-target",
+        {
+          config: {
+            routeAccessPolicy: {
+              kind: "capability",
+              capability: "users:write",
+              emailVerification: "target",
+            },
+          },
+        },
+        async () => ({ ok: true }),
+      ),
+    ).toThrow("only for token access");
   });
 });

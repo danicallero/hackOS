@@ -1,5 +1,18 @@
 import { ALL_CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
 import type { FastifyInstance, FastifyRequest, RouteOptions } from "fastify";
+import { requireVerifiedEmail } from "./email-verification.js";
+
+/**
+ * H1's verification boundary. `caller` is enforced by the shared
+ * preHandler; `target` is for session-less token protocols whose service must
+ * check the user named by the token; `none` is reserved for account/security
+ * lifecycle, read-only POSTs, and reversible preparation work.
+ */
+export type EmailVerificationRequirement = "caller" | "target" | "none";
+
+interface RouteAccessOptions {
+  emailVerification?: EmailVerificationRequirement;
+}
 
 /**
  * Machine-readable API access contract (H8, H53).  Route modules declare one
@@ -15,7 +28,7 @@ export type AnonymousAccessCategory =
   | "public-invalidation"
   | "telemetry";
 
-export type RouteAccessPolicy =
+export type RouteAccessPolicy = (
   | { kind: "public"; anonymousCategory: AnonymousAccessCategory }
   | { kind: "token"; policy: string }
   | { kind: "authenticated" }
@@ -33,7 +46,9 @@ export type RouteAccessPolicy =
        * from the authenticated caller rather than a single route resource.
        */
       resource?: ContextualResourceLocator;
-    };
+    }
+) &
+  RouteAccessOptions;
 
 /** Identifies the route input a contextual resolver must bind to. */
 export interface ContextualResourceLocator {
@@ -85,6 +100,27 @@ function isApplicationRoute(route: RouteOptions): boolean {
 function validatePolicy(policy: RouteAccessPolicy, route: RouteOptions): void {
   if (!policy || typeof policy !== "object" || !("kind" in policy)) {
     throw new Error(`Route ${String(route.method)} ${route.url} has invalid policy metadata`);
+  }
+  if (
+    policy.emailVerification !== undefined &&
+    !["caller", "target", "none"].includes(policy.emailVerification)
+  ) {
+    throw new Error(
+      `Route ${String(route.method)} ${route.url} has an invalid email-verification requirement`,
+    );
+  }
+  if (
+    policy.emailVerification === "caller" &&
+    (policy.kind === "public" || policy.kind === "token")
+  ) {
+    throw new Error(
+      `Route ${String(route.method)} ${route.url} cannot require caller email verification for ${policy.kind} access`,
+    );
+  }
+  if (policy.emailVerification === "target" && policy.kind !== "token") {
+    throw new Error(
+      `Route ${String(route.method)} ${route.url} can require target email verification only for token access`,
+    );
   }
   if (policy.kind === "public") {
     if (
@@ -194,6 +230,13 @@ export function registerRoutePolicyInfrastructure(
   const exemptions: RoutePolicyExemption[] = [];
   app.decorate("routePolicyLedger", ledger);
   app.decorate("routePolicyExemptions", exemptions);
+  app.addHook("preHandler", async (request) => {
+    const policy = request.routeOptions.config?.routeAccessPolicy;
+    if (!policy) return;
+    if (emailVerificationForRoute(request.method, policy) === "caller") {
+      await requireVerifiedEmail(request);
+    }
+  });
   app.addHook("onRoute", (route) => {
     if (!isApplicationRoute(route)) return;
 
@@ -223,22 +266,53 @@ export function registerRoutePolicyInfrastructure(
   });
 }
 
-/** Stable, human-readable representation shared by the audit script and tests. */
-export function describeRoutePolicy(policy: RouteAccessPolicy): string {
-  switch (policy.kind) {
-    case "public":
-      return `public:${policy.anonymousCategory}`;
-    case "token":
-      return `token:${policy.policy}`;
-    case "authenticated":
-      return "authenticated";
-    case "capability":
-      if (policy.capability) return `capability:${policy.capability}`;
-      if (policy.allOf) return `capability:allOf(${policy.allOf.join(",")})`;
-      return `capability:anyOf(${policy.anyOf?.join(",")})`;
-    case "contextual":
-      return `contextual:${policy.policy}${policy.resource ? ` (${policy.resource.source}.${policy.resource.field})` : ""}`;
+const MUTATION_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/**
+ * Resolve the effective H1 verification rule for a declared route. Mutating
+ * authenticated/capability/contextual routes are protected by default so a
+ * newly added event mutation cannot silently bypass H1. Routes that are
+ * account lifecycle, read-only despite using POST, or reversible preparation
+ * must opt out with `emailVerification: "none"`.
+ */
+export function emailVerificationForRoute(
+  method: string,
+  policy: RouteAccessPolicy,
+): EmailVerificationRequirement {
+  if (policy.emailVerification) return policy.emailVerification;
+  if (
+    MUTATION_METHODS.has(method.toUpperCase()) &&
+    policy.kind !== "public" &&
+    policy.kind !== "token"
+  ) {
+    return "caller";
   }
+  return "none";
+}
+
+/** Stable, human-readable representation shared by the audit script and tests. */
+export function describeRoutePolicy(policy: RouteAccessPolicy, method?: string): string {
+  const description = (() => {
+    switch (policy.kind) {
+      case "public":
+        return `public:${policy.anonymousCategory}`;
+      case "token":
+        return `token:${policy.policy}`;
+      case "authenticated":
+        return "authenticated";
+      case "capability":
+        if (policy.capability) return `capability:${policy.capability}`;
+        if (policy.allOf) return `capability:allOf(${policy.allOf.join(",")})`;
+        return `capability:anyOf(${policy.anyOf?.join(",")})`;
+      case "contextual":
+        return `contextual:${policy.policy}${policy.resource ? ` (${policy.resource.source}.${policy.resource.field})` : ""}`;
+    }
+  })();
+  const requirement = method ? emailVerificationForRoute(method, policy) : policy.emailVerification;
+  const explicitRequirement = policy.emailVerification !== undefined;
+  return requirement && (requirement !== "none" || explicitRequirement)
+    ? `${description} + email-verification:${requirement}`
+    : description;
 }
 
 /** OpenAPI's session/bearer marker derives exclusively from route policy. */

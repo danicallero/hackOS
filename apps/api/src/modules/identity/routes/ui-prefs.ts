@@ -55,7 +55,7 @@ export function registerUiPrefsRoutes(app: FastifyInstance): void {
     "/api/me/ui-prefs",
     {
       preHandler: requireAuth,
-      config: routeAccess({ kind: "authenticated" }),
+      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
       schema: {
         body: uiPrefsPatchBody,
         summary: "Merge-patch one namespaced key of the caller's UI preferences",

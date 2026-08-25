@@ -221,6 +221,10 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     autoSignIn: false,
+    // H1 is deliberately sign-in-friendly: an unverified account may create
+    // a session and browse/save preparation work. The shared route-policy
+    // verification boundary blocks event mutations instead of changing this
+    // Better Auth setting, which would also block the allowed sign-in flow.
     requireEmailVerification: false,
     minPasswordLength: 8,
     revokeSessionsOnPasswordReset: true,

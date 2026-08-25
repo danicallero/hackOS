@@ -311,7 +311,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.post(
     "/api/logistics/people/search",
     {
-      ...routeAccess(access.logisticsRead),
+      ...routeAccess({ ...access.logisticsRead, emailVerification: "none" }),
       preHandler: logisticsRead,
       schema: {
         body: personSearchBody,
@@ -327,7 +327,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.post(
     "/api/accreditation/lookup",
     {
-      ...routeAccess(access.accredit),
+      ...routeAccess({ ...access.accredit, emailVerification: "none" }),
       preHandler: accredit,
       schema: {
         body: lookupBody,
@@ -341,7 +341,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.post(
     "/api/accreditation/lookup-user",
     {
-      ...routeAccess(access.accredit),
+      ...routeAccess({ ...access.accredit, emailVerification: "none" }),
       preHandler: accredit,
       schema: {
         body: lookupUserBody,
@@ -431,7 +431,11 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
 
   typed.post(
     "/api/presence/lookup",
-    { ...routeAccess(access.presence), preHandler: presence, schema: { body: presenceLookupBody } },
+    {
+      ...routeAccess({ ...access.presence, emailVerification: "none" }),
+      preHandler: presence,
+      schema: { body: presenceLookupBody },
+    },
     async (req) => presenceLookup(req.body.badgeId),
   );
 
@@ -774,7 +778,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.post(
     "/api/schedule/translate",
     {
-      ...routeAccess(access.scheduleManage),
+      ...routeAccess({ ...access.scheduleManage, emailVerification: "none" }),
       preHandler: scheduleManage,
       schema: {
         body: scheduleTranslateBody,

@@ -73,7 +73,7 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
     "/api/me/secondary-email",
     {
       preHandler: requireAuth,
-      config: routeAccess({ kind: "authenticated" }),
+      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
       schema: {
         body: z.object({ email: z.string().email() }),
         response: { 200: z.object({ status: z.literal(true) }) },
@@ -157,7 +157,7 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
     "/api/me/secondary-email",
     {
       preHandler: requireAuth,
-      config: routeAccess({ kind: "authenticated" }),
+      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
       schema: {
         summary: "Remove my secondary email",
         description:
@@ -220,7 +220,7 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
     "/api/me/secondary-email/verify",
     {
       preHandler: requireAuth,
-      config: routeAccess({ kind: "authenticated" }),
+      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
       schema: {
         body: z.object({ token: z.string().min(1) }),
         response: {

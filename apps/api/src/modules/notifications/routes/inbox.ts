@@ -39,7 +39,7 @@ export function registerInboxRoutes(app: FastifyInstance): void {
   typedApp.post(
     "/api/me/notifications/:id/read",
     {
-      ...routeAccess({ kind: "authenticated" }),
+      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
       preHandler: requireAuth,
       schema: {
         summary: "Mark notification as read",
@@ -56,7 +56,7 @@ export function registerInboxRoutes(app: FastifyInstance): void {
   typedApp.delete(
     "/api/me/notifications/:id",
     {
-      ...routeAccess({ kind: "authenticated" }),
+      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
       preHandler: requireAuth,
       schema: {
         summary: "Delete an inbox notification",

@@ -362,7 +362,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/me",
     {
       preHandler: requireAuth,
-      config: routeAccess({ kind: "authenticated" }),
+      // H1: account/profile setup is allowed before primary-email
+      // verification; event transactions are guarded by the shared default.
+      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
       schema: {
         body: selfPatchSchema,
         response: { 200: userResponseSchema },
@@ -445,7 +447,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     "/api/me",
     {
       preHandler: requireAuth,
-      config: routeAccess({ kind: "authenticated" }),
+      // Account removal is a security/privacy lifecycle action, not an event
+      // transaction, so an unverified account may still use it (H1, H54).
+      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
       schema: {
         description:
           "H54 self-service account deletion. Only allowed when the account has no retained " +

@@ -6,6 +6,7 @@ import { config } from "../../config.js";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
+import { assertVerifiedPrimaryEmail } from "../../lib/email-verification.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { hasEventAccess } from "../identity/role.js";
@@ -629,6 +630,40 @@ async function lockResponse(client: pg.PoolClient, responseId: number): Promise<
     [responseId],
   );
   if (!rows[0]) throw new NotFoundError("Response not found");
+  return rows[0];
+}
+
+/**
+ * H1/H15: resolve the target without locking it, lock the target user's
+ * verification state first, then lock the response. This matches submit's
+ * user→response order and avoids a deadlock when a submit races a token
+ * confirmation or decline.
+ */
+async function lockVerifiedResponseByToken(
+  client: pg.PoolClient,
+  token: string,
+  action: "confirmation" | "decline",
+): Promise<ResponseRow> {
+  const { rows: targetRows } = await client.query(
+    `SELECT r.id, r.user_id FROM email_verification_tokens t
+     JOIN application_responses r ON r.id =
+       (SELECT id FROM application_responses WHERE confirmation_token_id = t.id)
+     WHERE t.token = $1 AND t.type = 'spot_confirmation'`,
+    [token],
+  );
+  const target = targetRows[0] as { id: number; user_id: number } | undefined;
+  if (!target) throw new NotFoundError(`Invalid ${action} token`);
+  await assertVerifiedPrimaryEmail(client, target.user_id, { forUpdate: true });
+
+  const { rows } = await client.query(
+    `SELECT r.* FROM email_verification_tokens t
+     JOIN application_responses r ON r.id =
+       (SELECT id FROM application_responses WHERE confirmation_token_id = t.id)
+     WHERE t.token = $1 AND t.type = 'spot_confirmation' AND r.id = $2
+     FOR UPDATE OF r`,
+    [token, target.id],
+  );
+  if (!rows[0]) throw new NotFoundError(`Invalid ${action} token`);
   return rows[0];
 }
 
@@ -1627,16 +1662,7 @@ async function doDecline(
  */
 export async function confirmByToken(token: string): Promise<EmailConfirmResult> {
   return withTransaction(async (client) => {
-    const { rows } = await client.query(
-      `SELECT r.* FROM email_verification_tokens t
-       JOIN application_responses r ON r.id =
-         (SELECT id FROM application_responses WHERE confirmation_token_id = t.id)
-       WHERE t.token = $1 AND t.type = 'spot_confirmation'
-       FOR UPDATE OF r`,
-      [token],
-    );
-    const resp = rows[0] as ResponseRow | undefined;
-    if (!resp) throw new NotFoundError("Invalid confirmation token");
+    const resp = await lockVerifiedResponseByToken(client, token, "confirmation");
     const result = await doConfirm(client, resp, "email_link", resp.user_id);
     const grant = await issueWalletAccessToken(client, resp.user_id, "ticket");
     const { rows: userRows } = await client.query(`SELECT email FROM users WHERE id = $1`, [
@@ -1658,6 +1684,12 @@ export async function confirmByResponseId(
   requireOwner?: number,
 ): Promise<ConfirmResult> {
   return withTransaction(async (client) => {
+    // Lock the caller's verification state before the response, matching
+    // submitResponse's user→response order. The ownership check below still
+    // prevents acting on somebody else's response.
+    if (requireOwner != null) {
+      await assertVerifiedPrimaryEmail(client, requireOwner, { forUpdate: true });
+    }
     const resp = await lockResponse(client, responseId);
     if (requireOwner != null && resp.user_id !== requireOwner) {
       throw new ForbiddenError("Not your application");
@@ -1671,16 +1703,7 @@ export async function declineByToken(token: string): Promise<{
   alreadyDeclined: boolean;
 }> {
   const result = await withTransaction(async (client) => {
-    const { rows } = await client.query(
-      `SELECT r.* FROM email_verification_tokens t
-       JOIN application_responses r ON r.id =
-         (SELECT id FROM application_responses WHERE confirmation_token_id = t.id)
-       WHERE t.token = $1 AND t.type = 'spot_confirmation'
-       FOR UPDATE OF r`,
-      [token],
-    );
-    const resp = rows[0] as ResponseRow | undefined;
-    if (!resp) throw new NotFoundError("Invalid decline token");
+    const resp = await lockVerifiedResponseByToken(client, token, "decline");
     const decline = await doDecline(client, resp, "email_link", resp.user_id);
     return { ...decline, userId: resp.user_id };
   });
@@ -1695,6 +1718,9 @@ export async function declineByResponseId(
   requireOwner?: number,
 ): Promise<{ status: string; alreadyDeclined: boolean }> {
   const result = await withTransaction(async (client) => {
+    if (requireOwner != null) {
+      await assertVerifiedPrimaryEmail(client, requireOwner, { forUpdate: true });
+    }
     const resp = await lockResponse(client, responseId);
     if (requireOwner != null && resp.user_id !== requireOwner) {
       throw new ForbiddenError("Not your application");

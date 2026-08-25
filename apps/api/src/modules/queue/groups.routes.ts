@@ -55,6 +55,10 @@ export function registerQueueGroupRoutes(app: FastifyInstance): void {
     policy: "enterprise-judge-manage",
     resource: enterpriseParam,
   } as const;
+  const enterprisePreviewPolicy = {
+    ...enterprisePolicy,
+    emailVerification: "none",
+  } as const;
 
   typed.get(
     "/api/enterprises/:id/queue-groups",
@@ -75,7 +79,7 @@ export function registerQueueGroupRoutes(app: FastifyInstance): void {
     "/api/enterprises/:id/queue-groups/preview-merge",
     {
       preHandler: requireEnterpriseJudgeManager(enterpriseParam),
-      config: { routeAccessPolicy: enterprisePolicy },
+      config: { routeAccessPolicy: enterprisePreviewPolicy },
       schema: {
         params: enterpriseIdParam,
         body: previewMergeBody,
