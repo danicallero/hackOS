@@ -41,14 +41,22 @@ new client.Gauge({
   registers: [register],
   collect() {
     this.reset();
+    const countsByLabel = new Map<RequestLane, Map<string, number>>();
     for (const [topic, conns] of localSubscribers) {
-      const counts = new Map<RequestLane, number>();
+      const metricTopic = metricTopicForSse(topic);
       for (const reply of conns) {
         const lane = subscriberLanes.get(reply) ?? laneForSseTopic(topic);
-        counts.set(lane, (counts.get(lane) ?? 0) + 1);
+        let topicCounts = countsByLabel.get(lane);
+        if (!topicCounts) {
+          topicCounts = new Map();
+          countsByLabel.set(lane, topicCounts);
+        }
+        topicCounts.set(metricTopic, (topicCounts.get(metricTopic) ?? 0) + 1);
       }
-      for (const [lane, count] of counts) {
-        this.set({ lane, topic: metricTopicForSse(topic) }, count);
+    }
+    for (const [lane, topicCounts] of countsByLabel) {
+      for (const [topic, count] of topicCounts) {
+        this.set({ lane, topic }, count);
       }
     }
   },
