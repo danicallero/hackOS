@@ -1,4 +1,5 @@
 import type { SseEnvelope } from "@hackos/shared/events";
+import { observePhysicalSseConnection, telemetryScopeForStream } from "./realtime-telemetry";
 
 type Subscriber = {
   events?: readonly string[];
@@ -14,6 +15,19 @@ type Stream = {
 };
 
 const streams = new Map<string, Stream>();
+
+function streamKey(url: string): string {
+  try {
+    const parsed = new URL(
+      url,
+      typeof window === "undefined" ? "http://sse.invalid" : window.location.origin,
+    );
+    parsed.searchParams.sort();
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
 
 function parseEnvelope(event: MessageEvent): SseEnvelope | null {
   try {
@@ -46,7 +60,8 @@ function addNamedEvent(stream: Stream, eventName: string) {
  * browser tab (H22-H38, H41-H42). The final unsubscribe owns teardown.
  */
 export function subscribeToSse(url: string, subscriber: Subscriber): () => void {
-  let stream = streams.get(url);
+  const key = streamKey(url);
+  let stream = streams.get(key);
   if (!stream) {
     const source = new EventSource(url, { withCredentials: true });
     stream = {
@@ -55,7 +70,8 @@ export function subscribeToSse(url: string, subscriber: Subscriber): () => void 
       subscribers: new Set(),
       eventHandlers: new Map(),
     };
-    streams.set(url, stream);
+    streams.set(key, stream);
+    if (telemetryScopeForStream(url)) observePhysicalSseConnection(url, "opened");
 
     source.onopen = () => {
       if (!stream) return;
@@ -82,6 +98,7 @@ export function subscribeToSse(url: string, subscriber: Subscriber): () => void 
       stream.source.removeEventListener(eventName, handler);
     }
     stream.source.close();
-    streams.delete(url);
+    if (telemetryScopeForStream(url)) observePhysicalSseConnection(url, "closed");
+    streams.delete(key);
   };
 }

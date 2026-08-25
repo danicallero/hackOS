@@ -137,7 +137,7 @@ export default function MyQueuePage() {
     if (retrying) return;
     retrySnapshot.current = { data: entries, error };
     setRetrying(true);
-    refetch();
+    refetch("retry");
   }, [entries, error, refetch, retrying]);
 
   useEffect(() => {

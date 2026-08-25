@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { physicalSseConnectionStats } from "./realtime-telemetry";
 import { subscribeToSse } from "./sse-broker";
 
 class FakeEventSource extends EventTarget {
@@ -50,6 +51,7 @@ describe("SSE broker", () => {
     });
 
     expect(FakeEventSource.instances).toHaveLength(1);
+    expect(physicalSseConnectionStats(url)).toMatchObject({ active: 1, opened: 1 });
     const source = FakeEventSource.instances[0];
     source.onopen?.();
     source.emit("queue.changed", { type: "queue.changed", id: "1", at: "now", data: {} });
@@ -62,6 +64,22 @@ describe("SSE broker", () => {
     expect(source.close).not.toHaveBeenCalled();
     unsubscribeSecond();
     expect(source.close).toHaveBeenCalledOnce();
+    expect(physicalSseConnectionStats(url)).toMatchObject({ active: 0, closed: 1 });
+  });
+
+  it("canonicalizes equivalent topic URLs before opening a physical stream", () => {
+    const first = subscribeToSse("/api/queue/stream?topic=queue&mode=live", {
+      events: ["queue.changed"],
+      onConnectionChange: vi.fn(),
+    });
+    const second = subscribeToSse("/api/queue/stream?mode=live&topic=queue", {
+      events: ["queue.changed"],
+      onConnectionChange: vi.fn(),
+    });
+
+    expect(FakeEventSource.instances).toHaveLength(1);
+    first();
+    second();
   });
 
   it("keeps event filters isolated between subscribers", () => {
