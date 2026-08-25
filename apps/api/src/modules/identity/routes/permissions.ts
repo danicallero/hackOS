@@ -9,6 +9,7 @@ import {
   assertKnownCapabilities,
   invalidateAllCapabilities,
   invalidateCapabilities,
+  requireAnyCapability,
   requireCapability,
 } from "../../../lib/capabilities.js";
 import { ConflictError, NotFoundError } from "../../../lib/errors.js";
@@ -26,13 +27,19 @@ import { getPermissionGroupTemplate, PERMISSION_GROUP_TEMPLATES } from "../templ
 
 /**
  * Permission-group management (H8): groups of capabilities, groups of groups
- * (cycles rejected with 409), member assignment. Everything guarded by
- * PERMISSIONS_MANAGE, everything audited (H53) in the same transaction, and
- * capability decisions are read from PostgreSQL per request, so committed
- * graph changes take effect on the next request without a Valkey cache window.
+ * (cycles rejected with 409), member assignment. Mutations are guarded by
+ * PERMISSIONS_MANAGE; the read-only group choice list is also available to
+ * invitation managers for deferred staff assignments. Everything is audited
+ * (H53) in the same transaction, and capability decisions are read from
+ * PostgreSQL per request, so committed graph changes take effect on the next
+ * request without a Valkey cache window.
  */
 
 const manage = requireCapability(CAPABILITIES.PERMISSIONS_MANAGE);
+const readGroups = requireAnyCapability(
+  CAPABILITIES.PERMISSIONS_MANAGE,
+  CAPABILITIES.INVITES_MANAGE,
+);
 
 const groupIdParams = z.object({ groupId: z.coerce.number().int() });
 const templateKeyParams = z.object({ templateKey: z.string().min(1).max(120) });
@@ -243,8 +250,11 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
   api.get(
     "/api/permission-groups",
     {
-      preHandler: manage,
-      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      preHandler: readGroups,
+      config: routeAccess({
+        kind: "capability",
+        anyOf: [CAPABILITIES.PERMISSIONS_MANAGE, CAPABILITIES.INVITES_MANAGE],
+      }),
       schema: {
         response: {
           200: z.array(
@@ -257,6 +267,9 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
             }),
           ),
         },
+        summary: "List permission groups for assignments",
+        description:
+          "Lists permission-group choices for permission and invitation managers; mutation operations remain restricted to permissions managers (H8).",
       },
     },
     async () => {
