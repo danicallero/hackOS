@@ -210,8 +210,8 @@ Liquid Glass availability check; otherwise it is `"opaque"`. A custom
 renderer must forward `style`, `children`, and `testID`, preserve the supplied
 rounded geometry, and provide a visible opaque material for the opaque mode.
 It may use `isInteractive` to enable or disable its own interactive glass
-effect. The tab shell still owns hit testing, selection animation, and route
-changes.
+effect and `reducedMotion` to disable its own material transitions. The tab
+shell still owns hit testing, selection animation, and route changes.
 
 `fallbackTheme` is the other customization seam. It lets an app with an
 intentionally dark screen provide dark fallback tokens without forcing the
@@ -266,6 +266,20 @@ behaviour such as:
   the currently active event.
 
 The shell does not replace that press event with a delayed JS callback.
+
+### Reduced motion
+
+The shell reads Reanimated's `useReducedMotion()` preference. When the user
+has enabled Reduce Motion / Remove animations:
+
+- route selection still changes normally;
+- the selection lens still follows a finger during a direct scrub, because
+  that is direct manipulation rather than an autonomous animation;
+- the arrival animation is replaced with an immediate position update; and
+- the resolved `reducedMotion` flag is passed to a custom `surfaceComponent` so
+  its own material transitions can be disabled as well.
+
+Reduced motion changes animation, not information architecture or navigation.
 
 ### Finger scrub
 
@@ -355,7 +369,7 @@ the usual cause of lists ending too high.
 real Liquid Glass availability gate used by `GlassView`; it does not assume
 that an iOS runtime automatically means Liquid Glass is available.
 
-## Accessibility and testing
+## Accessibility and screen readers
 
 Every direct control is a native `Pressable` with:
 
@@ -363,9 +377,26 @@ Every direct control is a native `Pressable` with:
 - the visible label as its accessibility label; and
 - a selected accessibility state supplied by Expo Router.
 
+That gives VoiceOver on iOS and TalkBack/other Android screen readers a
+standard focusable tab for each direct destination. The finger-scrub gesture is
+an enhancement, never the only way to navigate: a screen-reader user can move
+focus to a tab and activate it with the normal accessibility action. Retapping
+the focused tab continues to go through Expo Router's `tabPress` event, so
+screen-reader activation preserves the same scroll-to-top/live-activity
+behaviour as a touch tap.
+
 The overflow button must expose its current label and selected state from the
-adapter. Keep the full route registry mounted so accessibility and deep-link
-navigation do not depend on which capability set happened to render first.
+adapter, and its native menu actions must have visible localized labels. The
+menu itself should remain a real native menu so VoiceOver/TalkBack get their
+standard open, focus, selection, and dismiss behaviour. Icons inside a tab or
+overflow button are decorative because the control already has a text label;
+custom consumers should pass icon nodes with `accessible={false}`. The
+selection lens is also excluded from accessibility focus.
+
+Keep the full route registry mounted so accessibility and deep-link navigation
+do not depend on which capability set happened to render first.
+
+## Testing
 
 Recommended test layers:
 
@@ -374,9 +405,11 @@ Recommended test layers:
 2. Navigation contract tests for route-group normalization, overflow no-op,
    replacement, and exhaustive destination descriptors.
 3. React Native Testing Library tests for labels, selected state, menu actions,
-   retap behaviour, and the final-tab selection after a scrub.
+   retap behaviour, reduced-motion selection, and the final-tab selection after
+   a scrub.
 4. A simulator/device pass on iOS 26+, an older iOS runtime, and Android for
-   visual alignment, native menu presentation, and gesture feel.
+   visual alignment, native menu presentation, gesture feel, VoiceOver, and
+   TalkBack.
 
 UI changes also require screenshots in the PR comment. Capture at least the
 following states: Liquid Glass with a direct selection, opaque dark fallback,

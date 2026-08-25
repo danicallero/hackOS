@@ -32,6 +32,7 @@ import Animated, {
   runOnJS,
   type SharedValue,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
@@ -64,6 +65,8 @@ export interface RouterTabsSurfaceProps {
   isInteractive: boolean;
   /** The shell's resolved material mode for the current platform. */
   mode: RouterTabsSurfaceMode;
+  /** System reduced-motion preference for custom material animations. */
+  reducedMotion: boolean;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
@@ -227,6 +230,7 @@ function RouterTabsContent({
   const directTabCount = directTabs.length;
   const directTabNames = useMemo(() => directTabs.map(({ name }) => name), [directTabs]);
   const { switchTab } = useTabTrigger({ name: directTabNames[0] ?? "" });
+  const reducedMotion = useReducedMotion();
   const selectedDirectTabIndex = directTabs.findIndex((tab) => isTabActive(pathname, tab));
   const [directGroupWidth, setDirectGroupWidth] = useState(0);
   const [isScrubbing, setIsScrubbing] = useState(false);
@@ -242,11 +246,11 @@ function RouterTabsContent({
       return;
     }
 
-    selectionOffset.value = withSpring(
-      selectedDirectTabIndex * directTabCellWidth,
-      TAB_SELECTION_SPRING,
-    );
-  }, [directTabCellWidth, selectedDirectTabIndex, selectionOffset]);
+    const nextOffset = selectedDirectTabIndex * directTabCellWidth;
+    selectionOffset.value = reducedMotion
+      ? nextOffset
+      : withSpring(nextOffset, TAB_SELECTION_SPRING);
+  }, [directTabCellWidth, reducedMotion, selectedDirectTabIndex, selectionOffset]);
 
   const commitTabSelection = useCallback(
     (nextIndex: number) => {
@@ -292,16 +296,23 @@ function RouterTabsContent({
         if (success) {
           const nextIndex = tabIndexForPosition(event.x, directGroupWidth, directTabCount);
           if (nextIndex >= 0) {
-            selectionOffset.value = withSpring(
-              nextIndex * directTabCellWidth,
-              TAB_SELECTION_SPRING,
-            );
+            const nextOffset = nextIndex * directTabCellWidth;
+            selectionOffset.value = reducedMotion
+              ? nextOffset
+              : withSpring(nextOffset, TAB_SELECTION_SPRING);
             runOnJS(commitTabSelection)(nextIndex);
           }
         }
         runOnJS(setIsScrubbing)(false);
       });
-  }, [commitTabSelection, directGroupWidth, directTabCellWidth, directTabCount, selectionOffset]);
+  }, [
+    commitTabSelection,
+    directGroupWidth,
+    directTabCellWidth,
+    directTabCount,
+    reducedMotion,
+    selectionOffset,
+  ]);
 
   return (
     <View
@@ -329,6 +340,7 @@ function RouterTabsContent({
         >
           <TabSurface
             liquidGlass={liquidGlass}
+            reducedMotion={reducedMotion}
             surfaceComponent={surfaceComponent}
             style={{ borderRadius: tabBarHeight / 2, flex: 1 }}
             theme={theme}
@@ -339,6 +351,7 @@ function RouterTabsContent({
               selectionInset={tabItemVerticalInset}
               liquidGlass={liquidGlass}
               offset={selectionOffset}
+              reducedMotion={reducedMotion}
               surfaceComponent={surfaceComponent}
               theme={theme}
               visible={selectedDirectTabIndex >= 0 || isScrubbing}
@@ -363,6 +376,7 @@ function RouterTabsContent({
       {overflow ? (
         <TabSurface
           liquidGlass={liquidGlass}
+          reducedMotion={reducedMotion}
           surfaceComponent={surfaceComponent}
           style={{
             borderRadius: tabBarHeight / 2,
@@ -438,6 +452,7 @@ const RouterTabButton = forwardRef<View, RouterTabButtonProps>(function RouterTa
     <Pressable
       ref={ref}
       {...props}
+      accessible
       accessibilityLabel={label}
       accessibilityRole="tab"
       accessibilityState={{ ...accessibilityState, selected: isFocused }}
@@ -485,6 +500,7 @@ function TabSelectionBlob({
   selectionInset,
   liquidGlass,
   offset,
+  reducedMotion,
   surfaceComponent,
   theme,
   visible,
@@ -494,6 +510,7 @@ function TabSelectionBlob({
   selectionInset: number;
   liquidGlass: boolean;
   offset: SharedValue<number>;
+  reducedMotion: boolean;
   surfaceComponent: RouterTabsSurfaceComponent;
   theme: RouterTabsTheme;
   visible: boolean;
@@ -506,6 +523,8 @@ function TabSelectionBlob({
 
   return (
     <Animated.View
+      accessible={false}
+      importantForAccessibility="no-hide-descendants"
       pointerEvents="none"
       style={[
         {
@@ -521,6 +540,7 @@ function TabSelectionBlob({
       <SurfaceComponent
         isInteractive={liquidGlass}
         mode={liquidGlass ? "liquid-glass" : "opaque"}
+        reducedMotion={reducedMotion}
         surfaceComponent={surfaceComponent}
         style={{
           backgroundColor: !liquidGlass ? theme.selectedSurface : undefined,
@@ -537,6 +557,7 @@ function TabSelectionBlob({
 function TabSurface({
   children,
   liquidGlass,
+  reducedMotion,
   surfaceComponent,
   style,
   testID,
@@ -544,6 +565,7 @@ function TabSurface({
 }: {
   children: ReactNode;
   liquidGlass: boolean;
+  reducedMotion: boolean;
   surfaceComponent: RouterTabsSurfaceComponent;
   style?: StyleProp<ViewStyle>;
   testID?: string;
@@ -566,6 +588,7 @@ function TabSurface({
     <SurfaceComponent
       isInteractive={liquidGlass}
       mode={liquidGlass ? "liquid-glass" : "opaque"}
+      reducedMotion={reducedMotion}
       surfaceComponent={surfaceComponent}
       style={surfaceStyle}
       testID={testID}
@@ -579,13 +602,20 @@ function SurfaceComponent({
   children,
   isInteractive,
   mode,
+  reducedMotion,
   surfaceComponent,
   style,
   testID,
 }: RouterTabsSurfaceProps & { surfaceComponent: RouterTabsSurfaceComponent }) {
   const Surface = surfaceComponent;
   return (
-    <Surface isInteractive={isInteractive} mode={mode} style={style} testID={testID}>
+    <Surface
+      isInteractive={isInteractive}
+      mode={mode}
+      reducedMotion={reducedMotion}
+      style={style}
+      testID={testID}
+    >
       {children}
     </Surface>
   );

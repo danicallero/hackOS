@@ -157,7 +157,15 @@ export function OpaqueRouterTabs({ capabilities, hasUnreadNotifications }: Opaqu
 
     return {
       href: definition.href,
-      icon: <SymbolView name={icon} size={22} tintColor={tabIconColor} weight="semibold" />,
+      icon: (
+        <SymbolView
+          name={icon}
+          size={22}
+          tintColor={tabIconColor}
+          weight="semibold"
+          accessible={false}
+        />
+      ),
       label: t(definition.labelKey),
       name: definition.triggerName,
       selectedIcon: (
@@ -166,6 +174,7 @@ export function OpaqueRouterTabs({ capabilities, hasUnreadNotifications }: Opaqu
           size={22}
           tintColor={tabSelectedColor}
           weight="semibold"
+          accessible={false}
         />
       ),
       testID: `opaque-tab-${key}`,
@@ -288,6 +297,7 @@ function OpaqueOverflowMenu({ activeIconColor, iconColor, overflowIds }: OpaqueO
           size={22}
           tintColor={activeOverflowId ? activeIconColor : iconColor}
           weight="semibold"
+          accessible={false}
         />
       </View>
     </MenuView>
