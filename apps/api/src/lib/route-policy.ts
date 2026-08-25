@@ -12,7 +12,8 @@ export type AnonymousAccessCategory =
   | "public-content"
   | "public-announcement"
   | "public-tv"
-  | "public-invalidation";
+  | "public-invalidation"
+  | "telemetry";
 
 export type RouteAccessPolicy =
   | { kind: "public"; anonymousCategory: AnonymousAccessCategory }
@@ -94,6 +95,7 @@ function validatePolicy(policy: RouteAccessPolicy, route: RouteOptions): void {
         "public-announcement",
         "public-tv",
         "public-invalidation",
+        "telemetry",
       ].includes(policy.anonymousCategory)
     ) {
       throw new Error(`Route ${String(route.method)} ${route.url} has an invalid public category`);

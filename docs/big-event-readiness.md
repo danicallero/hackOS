@@ -133,6 +133,95 @@ adding replicas, since each extra connection costs Postgres memory.
    and `notification_outbox` queued depth (should hover near zero, not
    climb).
 
+## Representative event-day load harness (#544)
+
+The repository-owned harness is `apps/api/scripts/event-day-load.ts`. It drives
+the real HTTP and SSE routes against a clean local database and reports one
+sample per request, grouped by the existing P0/P1/P2/P3 lane classifier. The
+fixture is intentionally separate from the normal dev database: it creates
+600 participants, 20 operators, 20 judges, four rooms, four TV clients, a
+600-entry queue, one meal activity, and a single enterprise judge roster.
+
+The run overlaps participant `GET /api/queue/me` refetches and personal SSE
+streams with queue calls, accreditation, meal scans, collaborative review
+autosaves, TV refetches, and public/operational SSE streams. It reads
+admission-wait histograms, lane queue gauges, SSE connection metrics,
+participant invalidation outcomes, and bounded browser refetch observations.
+The machine-readable result from the measured run is
+[`big-event-readiness-results.json`](./big-event-readiness-results.json).
+
+### Clean local recipe
+
+Run this in a terminal with no API test suite or other process using
+`hackos_test`; the fixture command drops and recreates that database schema.
+Keep the API process in a second terminal so the reset completes before the
+server starts:
+
+```sh
+pnpm infra:up
+pnpm --filter @hackos/api event-day:load -- \
+  --mode prepare \
+  --database-url postgres://hackos:hackos@localhost:5433/hackos_test \
+  --fixture /private/tmp/hackos-event-day-fixture.json
+
+# second terminal, after prepare reports 600 participants / 20 operators / 20 judges
+NODE_ENV=test WORKERS_INLINE=true DB_POOL_MAX=20 \
+DATABASE_URL=postgres://hackos:hackos@localhost:5433/hackos_test \
+VALKEY_URL=redis://localhost:6379/15 PORT=3000 \
+pnpm --filter @hackos/api dev
+
+# third terminal, while the API above is healthy
+NODE_ENV=test WORKERS_INLINE=true DB_POOL_MAX=20 \
+DATABASE_URL=postgres://hackos:hackos@localhost:5433/hackos_test \
+VALKEY_URL=redis://localhost:6379/15 \
+pnpm --filter @hackos/api event-day:load -- \
+  --mode load \
+  --fixture /private/tmp/hackos-event-day-fixture.json \
+  --duration-seconds 10 \
+  --output docs/big-event-readiness-results.json
+```
+
+The load command exits non-zero only when a P0/P1 budget fails. P3 `429`
+responses and degraded participant refreshes remain in the result because P3
+is explicitly best effort. Run the deterministic in-process harness check
+with `pnpm --filter @hackos/api event-day:load -- --mode smoke` before changing
+the scenario. Stop the API and run `pnpm infra:down` after the measurement.
+
+### Budgets and measured local capacity
+
+These are the release gates encoded in the harness; P2 is monitored and P3 is
+measured but may degrade under admission pressure:
+
+| Lane | p95 latency budget | Error budget | Measured p95 | Measured errors | Result |
+|---|---:|---:|---:|---:|---|
+| P0 operations | ≤ 2,000 ms | ≤ 2% | 804 ms | 0% | pass |
+| P1 judging/review | ≤ 2,000 ms | ≤ 2% | 860 ms | 0% | pass |
+| P2 public TVs | ≤ 3,000 ms | ≤ 5% | 205 ms | 0% | observed |
+| P3 participants | measured, not release-gating | best effort | 941 ms | 35.4% shed | allowed degradation |
+
+The clean local run lasted 10 seconds (12.5 seconds including setup/drain),
+processed 2,121 HTTP/SSE samples, and sustained 58.0 P0 requests/s, 9.6 P1
+requests/s, 6.1 P2 requests/s, and 96.2 P3 requests/s over the measured
+window. Admission wait p95 estimates were 0.5 s (P0), 1 s (P1), 1 ms (P2),
+and 1 s (P3); the largest observed waiting queues were P0 427, P1 100, P2
+0, P3 160. P3 shedding is therefore visible rather than silently consuming
+reserved operational capacity.
+
+The run opened 628 physical SSE connections: 600 participant personal streams,
+20 judging-review streams, four operator queue streams, and four public TV
+streams. The participant invalidation counters were queued 3, coalesced 117,
+dropped 0, degraded 0; the browser observation recorded one bounded report for
+600 refetches. These counts verify the intended queue transition coalescing and
+SSE/refetch measurement path, not a production capacity guarantee.
+
+This command does not change #540-owned pool sizing, statement/idle timeouts,
+SSE backpressure, or connection budgets. `DB_POOL_MAX=20`, test mode, and
+Valkey database 15 are explicit run-environment choices so the result is
+repeatable; production sizing remains governed by #540 and the deployment
+tables above. The result is single-process, local Docker infrastructure on an
+Apple Silicon host, so repeat it on event-like hardware before setting a
+production capacity claim.
+
 ## Monitoring queries
 
 Run these against `postgres` during the event (`docker exec -it <postgres

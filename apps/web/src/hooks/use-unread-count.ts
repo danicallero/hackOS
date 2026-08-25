@@ -32,8 +32,9 @@ export function useUnreadCount(enabled = true): number {
   });
 
   useEffect(() => {
-    window.addEventListener(NOTIFICATIONS_READ_EVENT, refetch);
-    return () => window.removeEventListener(NOTIFICATIONS_READ_EVENT, refetch);
+    const handleNotificationsRead = () => refetch("manual");
+    window.addEventListener(NOTIFICATIONS_READ_EVENT, handleNotificationsRead);
+    return () => window.removeEventListener(NOTIFICATIONS_READ_EVENT, handleNotificationsRead);
   }, [refetch]);
 
   return data?.total ?? 0;

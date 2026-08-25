@@ -28,7 +28,7 @@ import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { Spinner } from "@/components/common/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Section } from "@/components/ui/surface";
-import { type SseEnvelope, useEventSource, useLiveQuery } from "@/hooks/use-event-source";
+import { type SseEnvelope, useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { getMyQueue, type MyQueueEntry, type MyQueueRoom } from "@/lib/queue";
@@ -83,34 +83,6 @@ function formatEta(minutes: number | null, t: Translate): string | null {
 
 export default function MyQueuePage() {
   const { t } = useLocale();
-  const {
-    data: entries,
-    error,
-    loading,
-    refetch,
-  } = useLiveQuery<MyQueueEntry[]>(getMyQueue, "/api/queue/me/stream", CALL_EVENTS);
-
-  // `useLiveQuery` keeps the last successful read model when a refresh fails.
-  // Keep retry disabled until that in-flight refresh publishes a new result.
-  const [retrying, setRetrying] = useState(false);
-  const retrySnapshot = useRef<{ data: MyQueueEntry[] | null; error: unknown }>({
-    data: null,
-    error: null,
-  });
-
-  const retry = useCallback(() => {
-    if (retrying) return;
-    retrySnapshot.current = { data: entries, error };
-    setRetrying(true);
-    refetch();
-  }, [entries, error, refetch, retrying]);
-
-  useEffect(() => {
-    if (!retrying) return;
-    const snapshot = retrySnapshot.current;
-    if (entries !== snapshot.data || error !== snapshot.error) setRetrying(false);
-  }, [entries, error, retrying]);
-
   // Queue entries that got a pre-call heads-up but haven't been called yet.
   const [precalled, setPrecalled] = useState<Set<number>>(new Set());
 
@@ -144,7 +116,35 @@ export default function MyQueuePage() {
     [t],
   );
 
-  useEventSource("/api/queue/me/stream", { events: CALL_EVENTS, onEvent: onStreamEvent });
+  const {
+    data: entries,
+    error,
+    loading,
+    refetch,
+  } = useLiveQuery<MyQueueEntry[]>(getMyQueue, "/api/queue/me/stream", CALL_EVENTS, {
+    onEvent: onStreamEvent,
+  });
+
+  // `useLiveQuery` keeps the last successful read model when a refresh fails.
+  // Keep retry disabled until that in-flight refresh publishes a new result.
+  const [retrying, setRetrying] = useState(false);
+  const retrySnapshot = useRef<{ data: MyQueueEntry[] | null; error: unknown }>({
+    data: null,
+    error: null,
+  });
+
+  const retry = useCallback(() => {
+    if (retrying) return;
+    retrySnapshot.current = { data: entries, error };
+    setRetrying(true);
+    refetch("retry");
+  }, [entries, error, refetch, retrying]);
+
+  useEffect(() => {
+    if (!retrying) return;
+    const snapshot = retrySnapshot.current;
+    if (entries !== snapshot.data || error !== snapshot.error) setRetrying(false);
+  }, [entries, error, retrying]);
 
   // Memoize list so downstream useMemo hooks have a stable reference even when
   // entries is null or undefined (each render would otherwise create a new array).

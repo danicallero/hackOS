@@ -1,8 +1,14 @@
 "use client";
 
 import { EVENTS } from "@hackos/shared/events";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { API_URL } from "@/lib/env";
+import {
+  observeRefetch,
+  type RealtimeRefetchTrigger,
+  telemetryScopeForStream,
+} from "@/lib/realtime-telemetry";
+import { subscribeToSse } from "@/lib/sse-broker";
 
 /**
  * SSE consumption for the queue/judging vertical (H38, H41-H42). The server
@@ -47,32 +53,15 @@ export function useEventSource(
   useEffect(() => {
     if (!enabled || !path) return;
 
-    const source = new EventSource(`${API_URL}${path}`, { withCredentials: true });
-    source.onopen = () => setConnected(true);
-    source.onerror = () => setConnected(false); // EventSource retries on its own
-
-    const handler = (e: MessageEvent) => {
-      let envelope: SseEnvelope;
-      try {
-        envelope = JSON.parse(e.data);
-      } catch {
-        return; // ignore comments/heartbeats and malformed frames
-      }
-      onEventRef.current?.(envelope);
-    };
-
     const names = eventsKey ? eventsKey.split(",") : null;
-    if (names) {
-      for (const name of names) source.addEventListener(name, handler as EventListener);
-    } else {
-      source.onmessage = handler;
-    }
+    const unsubscribe = subscribeToSse(`${API_URL}${path}`, {
+      events: names ?? undefined,
+      onConnectionChange: setConnected,
+      onEvent: (envelope) => onEventRef.current?.(envelope),
+    });
 
     return () => {
-      if (names) {
-        for (const name of names) source.removeEventListener(name, handler as EventListener);
-      }
-      source.close();
+      unsubscribe();
       setConnected(false);
     };
   }, [path, enabled, eventsKey]);
@@ -107,7 +96,13 @@ export function useLiveQuery<T>(
     /** Optional side effect for a matching event (for example an operational alert). */
     onEvent?: (event: SseEnvelope) => void;
   } = {},
-): { data: T | null; error: unknown; loading: boolean; connected: boolean; refetch: () => void } {
+): {
+  data: T | null;
+  error: unknown;
+  loading: boolean;
+  connected: boolean;
+  refetch: (trigger?: RealtimeRefetchTrigger) => void;
+} {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
@@ -117,27 +112,62 @@ export function useLiveQuery<T>(
     fetcherRef.current = fetcher;
   }, [fetcher]);
 
-  const refetch = useCallback(() => {
-    let cancelled = false;
-    fetcherRef
-      .current()
-      .then((d) => {
-        if (!cancelled) {
-          setData(d);
-          setError(null);
-        }
-      })
-      .catch((e) => !cancelled && setError(e))
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const telemetryScope = useMemo(() => telemetryScopeForStream(streamPath), [streamPath]);
+  const requestRef = useRef<{
+    cancelled: boolean;
+    queuedTrigger: RealtimeRefetchTrigger | null;
+  } | null>(null);
+  const disposedRef = useRef(false);
+  const refetchRef = useRef<(trigger?: RealtimeRefetchTrigger) => void>(() => undefined);
+
+  const refetch = useCallback(
+    (trigger: RealtimeRefetchTrigger = "manual") => {
+      const current = requestRef.current;
+      if (current) {
+        // Keep one trailing read for events that arrived while the previous
+        // request was in flight; an event burst must not fan out into N reads.
+        current.queuedTrigger = trigger;
+        return;
+      }
+
+      const request = { cancelled: false, queuedTrigger: null as RealtimeRefetchTrigger | null };
+      requestRef.current = request;
+      observeRefetch(telemetryScope, trigger);
+
+      fetcherRef
+        .current()
+        .then((d) => {
+          if (!request.cancelled) {
+            setData(d);
+            setError(null);
+          }
+        })
+        .catch((e) => !request.cancelled && setError(e))
+        .finally(() => {
+          if (!request.cancelled) setLoading(false);
+          if (requestRef.current !== request) return;
+          requestRef.current = null;
+          if (!disposedRef.current && request.queuedTrigger) {
+            refetchRef.current(request.queuedTrigger);
+          }
+        });
+
+      return () => {
+        request.cancelled = true;
+      };
+    },
+    [telemetryScope],
+  );
+
+  useEffect(() => {
+    refetchRef.current = refetch;
+  }, [refetch]);
 
   const queryKeyValue = JSON.stringify(queryKey);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: queryKeyValue intentionally refetches when caller scope changes.
   useEffect(() => {
+    disposedRef.current = false;
     if (!enabled) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset loading on refetch; no lazier pattern for this state reset
     setLoading(true);
@@ -154,7 +184,7 @@ export function useLiveQuery<T>(
     (event: SseEnvelope) => {
       onMatchingEventRef.current?.(event);
       if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(refetch, debounceMs);
+      timer.current = setTimeout(() => refetch("sse"), debounceMs);
     },
     [refetch, debounceMs],
   );
@@ -163,7 +193,9 @@ export function useLiveQuery<T>(
 
   useEffect(
     () => () => {
+      disposedRef.current = true;
       if (timer.current) clearTimeout(timer.current);
+      if (requestRef.current) requestRef.current.cancelled = true;
     },
     [],
   );

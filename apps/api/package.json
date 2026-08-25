@@ -13,6 +13,7 @@
     "schema:dump": "tsx scripts/schema-dbml.ts",
     "seed": "tsx scripts/seed.ts",
     "seed:mock": "tsx scripts/seed-mock.ts",
+    "event-day:load": "tsx scripts/event-day-load.ts",
     "superadmin:create": "tsx scripts/create-superadmin.ts",
     "superadmin:grant": "node scripts/grant-superadmin.mjs",
     "route-policy:audit": "tsx scripts/route-policy-audit.ts",

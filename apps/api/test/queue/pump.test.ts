@@ -22,6 +22,13 @@ beforeEach(async () => {
   await truncateAll();
   const { valkey } = await import("../../src/lib/valkey.js");
   await valkey.flushdb();
+  const { pool } = await import("../../src/db/pool.js");
+  await pool.query(
+    `UPDATE queue_settings
+        SET schedule_start_at = NULL, schedule_end_at = NULL,
+            pre_call_notification_eta_minutes = 10
+      WHERE id = 1`,
+  );
 });
 
 afterAll(async () => {
@@ -96,12 +103,11 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
     expect(rows[2].status).toBe("waiting");
   });
 
-  it("skips H35-paused rooms but fills an explicitly non-paused room regardless of lifecycle status", async () => {
+  it("skips H35-paused rooms but fills an explicitly resumed room", async () => {
     const challengeId = await createChallenge();
     const pausedRoom = await createRoom({ isPaused: true });
-    // `rooms.status` is a display/lifecycle field, NOT an auto-fill gate — only
-    // is_paused pauses the pump. This fixture explicitly creates a non-paused
-    // room even though its display status is `paused`.
+    // `rooms.status` is a legacy display field. The H35 queue-state pause is
+    // the source of truth and the API derives active/paused from it.
     const liveRoom = await createRoom({ status: "paused" });
     await assignChallengeToRoom(pausedRoom, challengeId);
     await assignChallengeToRoom(liveRoom, challengeId);
@@ -111,8 +117,8 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
     await pump();
 
     const entry = await getEntry(entryId);
-    expect(entry.status).toBe("called"); // pump ran despite status='paused'
-    expect(entry.assigned_room_id).toBe(liveRoom); // into the non-paused room; the H35-paused room is skipped
+    expect(entry.status).toBe("called");
+    expect(entry.assigned_room_id).toBe(liveRoom);
   });
 
   it("does not fill an H35-paused room even when it is the only option (H35)", async () => {
@@ -125,6 +131,46 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
     await pump();
 
     expect((await getEntry(entryId)).status).toBe("waiting");
+  });
+
+  it("keeps pump and pre-call silent outside the judging window (#544)", async () => {
+    const challengeId = await createChallenge();
+    const roomId = await createRoom({ maxInWaitingArea: 1, desiredMinutesPerTeam: 5 });
+    await assignChallengeToRoom(roomId, challengeId);
+    const member = await createUser();
+    const { repoId } = await createRepoWithTeam([member]);
+    const entryId = await enqueueRepo(challengeId, repoId, 1);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE queue_settings
+          SET schedule_start_at = now() + interval '1 hour',
+              schedule_end_at = now() + interval '2 hours',
+              pre_call_notification_eta_minutes = 10
+        WHERE id = 1`,
+    );
+
+    await pump();
+
+    expect((await getEntry(entryId)).status).toBe("waiting");
+    expect((await getEntry(entryId)).precalled_at).toBeNull();
+    const outbox = await pool.query(
+      `SELECT 1 FROM notification_outbox WHERE user_id = $1 AND category = 'queue'`,
+      [member],
+    );
+    expect(outbox.rows).toHaveLength(0);
+  });
+
+  it("does not pre-call from a paused room (#544)", async () => {
+    const challengeId = await createChallenge();
+    const roomId = await createRoom({ isPaused: true, desiredMinutesPerTeam: 5 });
+    await assignChallengeToRoom(roomId, challengeId);
+    const member = await createUser();
+    const { repoId } = await createRepoWithTeam([member]);
+    const entryId = await enqueueRepo(challengeId, repoId, 1);
+
+    await pump();
+
+    expect((await getEntry(entryId)).precalled_at).toBeNull();
   });
 
   it("honours the H30 member-busy guard and retries the team on a later tick", async () => {
@@ -203,6 +249,8 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
     const push = outbox.rows.find((r) => r.channel === "push");
     expect(push.payload.etaMinutes).toBeLessThanOrEqual(10);
     expect(push.payload.template).toBe("queue.precall");
+    const { valkey } = await import("../../src/lib/valkey.js");
+    expect(await valkey.get(`sse:seq:user:${member}`)).toBe("1"); // immediate, not debounced
 
     // second tick: no duplicate warning
     await pump();

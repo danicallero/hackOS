@@ -2,7 +2,6 @@ import { pool } from "../../db/pool.js";
 import { NotFoundError } from "../../lib/errors.js";
 import {
   CHALLENGE_ROOM_IDS_SQL,
-  GROUP_SIBLING_CHALLENGE_IDS_SQL,
   QUEUE_GROUP_LABEL_JOIN,
   QUEUE_GROUP_LABEL_SQL,
   roomChallengeIds,
@@ -586,23 +585,6 @@ export async function hasMyQueueItems(userId: number): Promise<boolean> {
 
 /** H38: for each repo the user is in, their status/position/ETA in that challenge's queue. */
 export async function myQueueStatus(userId: number) {
-  const repoIds = (
-    await pool.query(
-      `SELECT repo_id FROM submissions WHERE user_id = $1 AND status = 'active'
-       UNION
-       SELECT repo_id FROM devpost_participants WHERE user_id = $1
-       UNION
-       SELECT dp.repo_id
-         FROM devpost_participants dp
-         JOIN users u ON u.id = $1
-        WHERE lower(dp.email) = lower(u.email)
-           OR (u.secondary_email_verified_at IS NOT NULL
-               AND lower(dp.email) = lower(u.secondary_email))`,
-      [userId],
-    )
-  ).rows.map((r: { repo_id: number }) => r.repo_id);
-  if (repoIds.length === 0) return [];
-
   // H38: participants need to know WHERE to go. `called_room` is the concrete
   // room the entry was actually assigned to (post call_next/manual_call).
   //
@@ -611,9 +593,66 @@ export async function myQueueStatus(userId: number) {
   // in a shared group can be called into any of the group's rooms, which is
   // the point of the shared queue. Identical to the old room-per-challenge
   // set for every 1:1 group. Once called, the frontend shows `called_room`.
+  // #544: rank and pace every relevant entry in one bounded, set-based read.
+  // `repo_occurrence` lets the window count each team once across a shared
+  // queue while preserving the historical rank of sibling entries.
   const { rows: entries } = await pool.query(
-    `SELECT qe.*, ${QUEUE_GROUP_LABEL_SQL} AS challenge_title, r.name AS repo_name,
+    `WITH my_repos AS (
+       SELECT repo_id FROM submissions WHERE user_id = $1 AND status = 'active'
+       UNION
+       SELECT repo_id FROM devpost_participants WHERE user_id = $1
+       UNION
+       SELECT dp.repo_id
+         FROM devpost_participants dp
+         JOIN users u ON u.id = $1
+        WHERE lower(dp.email) = lower(u.email)
+           OR (u.secondary_email_verified_at IS NOT NULL
+               AND lower(dp.email) = lower(u.secondary_email))
+     ), my_entries AS (
+       SELECT qe.id, qe.challenge_id,
+              COALESCE(qgc.queue_group_id, -qe.challenge_id) AS queue_key
+         FROM queue_entries qe
+         JOIN my_repos mr ON mr.repo_id = qe.repo_id
+         LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+        WHERE qe.status NOT IN ('cancelled', 'disqualified')
+     ), waiting_order AS (
+       SELECT qe.id, qe.repo_id, qe.position,
+              COALESCE(qgc.queue_group_id, -qe.challenge_id) AS queue_key,
+              ROW_NUMBER() OVER (
+                PARTITION BY COALESCE(qgc.queue_group_id, -qe.challenge_id), qe.repo_id
+                ORDER BY qe.position ASC, qe.id ASC
+              ) AS repo_occurrence
+         FROM queue_entries qe
+         LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+        WHERE qe.status = 'waiting'
+          AND COALESCE(qgc.queue_group_id, -qe.challenge_id) IN (
+            SELECT DISTINCT queue_key FROM my_entries
+          )
+     ), waiting_ranks AS (
+       SELECT id,
+              CASE WHEN position IS NULL THEN 1
+                   ELSE SUM((repo_occurrence = 1)::int) OVER (
+                     PARTITION BY queue_key
+                     ORDER BY position ASC, id ASC
+                     ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                   ) + CASE WHEN repo_occurrence = 1 THEN 0 ELSE 1 END
+              END::int AS queue_rank
+         FROM waiting_order
+     ), queue_pace AS (
+       SELECT qgc.challenge_id,
+              COALESCE(AVG(rqs.desired_minutes_per_team), 8) /
+                GREATEST(1, COUNT(rqs.room_id)) AS minutes_per_slot
+         FROM queue_group_challenges qgc
+         JOIN (SELECT DISTINCT challenge_id FROM my_entries) mine
+           ON mine.challenge_id = qgc.challenge_id
+         LEFT JOIN room_queue_groups rqg ON rqg.queue_group_id = qgc.queue_group_id
+         LEFT JOIN room_queue_state rqs ON rqs.room_id = rqg.room_id
+        GROUP BY qgc.challenge_id
+     )
+     SELECT qe.*, ${QUEUE_GROUP_LABEL_SQL} AS challenge_title, r.name AS repo_name,
             ar.id AS called_room_id, ar.name AS called_room_name, ar.location AS called_room_location,
+            wr.queue_rank,
+            COALESCE(qp.minutes_per_slot, 8) AS minutes_per_slot,
             COALESCE(
               (SELECT jsonb_agg(
                         jsonb_build_object('id', rm.id, 'name', rm.name, 'location', rm.location)
@@ -629,11 +668,13 @@ export async function myQueueStatus(userId: number) {
       JOIN challenges c ON c.id = qe.challenge_id
       ${QUEUE_GROUP_LABEL_JOIN}
       JOIN repos r ON r.id = qe.repo_id
+      JOIN my_entries mine ON mine.id = qe.id
       LEFT JOIN rooms ar ON ar.id = qe.assigned_room_id
-      WHERE qe.repo_id = ANY($1)
-        AND qe.status NOT IN ('cancelled', 'disqualified')
+      LEFT JOIN waiting_ranks wr ON wr.id = qe.id
+      LEFT JOIN queue_pace qp ON qp.challenge_id = qe.challenge_id
+      WHERE qe.status NOT IN ('cancelled', 'disqualified')
       ORDER BY r.name ASC, challenge_title ASC, qe.id ASC`,
-    [repoIds],
+    [userId],
   );
 
   const results = [];
@@ -650,24 +691,15 @@ export async function myQueueStatus(userId: number) {
     called_room_name: string | null;
     called_room_location: string | null;
     possible_rooms: { id: number; name: string; location: string | null }[];
+    queue_rank: number | null;
+    minutes_per_slot: string | number;
   }[]) {
     let position: number | null = null;
     let etaMinutes: number | null = null;
     if (e.status === "waiting") {
-      // H46: rank within the whole queue_group's shared ordering, counting
-      // distinct teams ahead — a team merged into one line item across two of
-      // the group's challenges is one team ahead of you, not two. Identical to
-      // the old per-challenge count for every 1:1 group.
-      const { rows: aheadRows } = await pool.query(
-        `SELECT COUNT(DISTINCT repo_id)::int AS ahead FROM queue_entries
-          WHERE challenge_id IN (${GROUP_SIBLING_CHALLENGE_IDS_SQL}) AND status = 'waiting'
-            AND (position < $2 OR (position = $2 AND id < $3))`,
-        [e.challenge_id, e.position, e.id],
-      );
-      const rank: number = Number(aheadRows[0].ahead) + 1;
+      const rank = Number(e.queue_rank);
       position = rank;
-      const perSlot = await challengeEtaMinutesPerSlot(e.challenge_id);
-      etaMinutes = Math.round(rank * perSlot);
+      etaMinutes = Math.round(rank * Number(e.minutes_per_slot));
     }
     results.push({
       entryId: e.id,
