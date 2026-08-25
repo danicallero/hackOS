@@ -10,6 +10,9 @@ available on every platform:
 - Four direct tabs and a separate overflow circle are used when navigation is
   crowded. Five direct tabs fit on compact layouts when there is no overflow;
   tablet-width layouts fit six.
+- The overflow circle is a real menu control, not a fake fifth tab: while an
+  overflow destination is active it keeps the same Liquid Glass/opaque surface
+  and swaps the ellipsis for that destination's selected icon.
 - The direct surface is one continuous scrub area. The selection lens follows
   the finger on the UI thread and navigation commits to the cell under the
   finger when the gesture ends.
@@ -112,6 +115,24 @@ or navigate overflow entries; that policy belongs to the adapter.
 
 ## Public API
 
+The reusable module has no default export. Its package-facing exports are:
+
+| Export | Kind | Use |
+| --- | --- | --- |
+| `RouterTabs` | component | Renders the headless Expo Router tab shell. |
+| `isRouterTabsLiquidGlassAvailable` | function | Reports whether this runtime can render native Liquid Glass. |
+| `RouterTabItem`, `RouterTabRoute` | types | Direct-cell descriptors and the complete route registry. |
+| `RouterTabsProps`, `RouterTabsTheme` | types | Shell configuration and semantic colours. |
+| `RouterTabsSurfaceProps`, `RouterTabsSurfaceComponent`, `RouterTabsSurfaceMode` | types | Material injection contract for a design system or custom renderer. |
+| `MAX_DIRECT_TABS`, `MAX_TABS_WITHOUT_OVERFLOW` | constants | Default direct-cell budgets: 4 with overflow, 5 without. |
+| `ROUTER_TAB_BAR_HEIGHT`, `ROUTER_TAB_OVERFLOW_WIDTH` | constants | Compact surface/circle size: 64 pt. Tablet geometry is resolved by the inset helpers. |
+| `useRouterTabBarInsets`, `useRouterTabBarBottomInset`, `useRouterTabBarScrollBottomInset` | hooks | Safe-area and scroll-clearance contract for route content. |
+
+The source currently lives in `apps/mobile/components/router-tabs.tsx` and
+`apps/mobile/lib/router-tabs-inset.ts`; those files are the intended package
+boundary. The app-specific `OpaqueRouterTabs` adapter must stay outside that
+boundary.
+
 ### `RouterTabItem`
 
 | Field | Type | Meaning |
@@ -166,13 +187,30 @@ use any icon library and own its inactive/active rendering.
 | `fallbackTheme` | no | Partial theme used only by the opaque fallback when the screen's scheme differs from the system scheme. |
 | `surfaceComponent` | no | Custom material renderer. The built-in Expo Glass renderer is used when omitted. |
 | `onTabPress` | no | Called by an ordinary direct-tab press. Use for haptics or analytics. |
-| `onTabSelect` | no | Called after a direct tab is released, including a scrubbed selection. |
+| `onTabSelect` | no | Called only when a horizontal scrub commits to a new direct cell. Ordinary taps stay in Expo Router's `TabTrigger` event pipeline. |
 | `testID` | no | Prefix for the shell, direct buttons, and overflow group. |
 
 `RouterTabs` does not automatically move excess descriptors into the overflow
 menu. The caller must partition `tabs`, pass the full `routes` registry, and
 render the corresponding menu. In development, the shell warns if more direct
 descriptors than the active budget are supplied.
+
+The intended adapter flow is:
+
+1. Build one complete `RouterTabRoute[]` registry, including routes that will
+   only be reachable from the overflow menu.
+2. Decide which descriptors are direct cells using the app's own capability,
+   account, or feature policy.
+3. Pass only those direct descriptors as `tabs`, in the order used for both
+   visual layout and finger scrubbing.
+4. Render the overflow menu only when there are hidden destinations. Keep its
+   action handling outside `RouterTabs`, because menu selection may need
+   replacement/no-op semantics rather than a normal tab push.
+
+This makes the shell usable with a fixed five-tab app as well as an app whose
+navigation changes at runtime. Never conditionally remove a route from the
+`routes` registry after the shell mounts; keep the complete `TabList` stable
+and change only the visible descriptors/menu actions.
 
 ### Material abstraction
 
@@ -247,6 +285,13 @@ The menu adapter owns three decisions:
    replacement semantics and make selecting the current section a no-op; do
    not push a new stack entry for each selection.
 
+The selected overflow icon is rendered inside the shell's existing overflow
+surface. Do not replace that surface with a separate opaque button when the
+current route is hidden: the material, size, circular geometry, and hit target
+must remain identical in both the ellipsis and selected-icon states. The menu
+button should expose the current section as its accessible label and selected
+state, while the menu actions expose the localized destination labels.
+
 For a route-aware adapter, normalize Expo Router route groups before comparing
 paths. `/(tabs)/others/queue` and `/others/queue` can represent the same
 screen depending on where the pathname was read.
@@ -265,7 +310,12 @@ behaviour such as:
 - implementing a domain-specific retap action, such as returning Schedule to
   the currently active event.
 
-The shell does not replace that press event with a delayed JS callback.
+The shell does not replace that press event with a delayed JS callback. In
+particular, `onTabSelect` is not called for ordinary taps; it exists for a
+scrub's single commit so a consumer can add one haptic/analytics event without
+duplicating Expo Router's `tabPress` behaviour. A consumer that needs retap
+behaviour must listen to the screen's own navigation `tabPress` event, not try
+to infer it from `onTabSelect`.
 
 ### Reduced motion
 
@@ -351,6 +401,36 @@ Convenience hooks:
   `contentInsetAdjustmentBehavior="automatic"`. UIKit already adds the device
   bottom safe area there, so this hook subtracts it once on iOS and preserves
   the full custom clearance on Android.
+
+Typical route usage:
+
+```tsx
+const bottomInset = useRouterTabBarBottomInset();
+
+<FlatList
+  contentContainerStyle={{ paddingBottom: bottomInset }}
+  scrollIndicatorInsets={{ bottom: bottomInset }}
+/>
+```
+
+For a list that uses UIKit automatic adjustment on iOS, use the platform-aware
+hook instead:
+
+```tsx
+const scrollBottomInset = useRouterTabBarScrollBottomInset();
+
+<FlatList
+  contentInsetAdjustmentBehavior="automatic"
+  contentContainerStyle={{ paddingBottom: scrollBottomInset }}
+/>
+```
+
+The hook values are already safe-area-aware and update on rotation, window
+resizing, Dynamic Island/home-indicator changes, and keyboard-driven inset
+changes. Do not add the device bottom inset a second time to either example.
+For a floating action button, position its bottom edge above
+`tabBarBottomPadding + tabBarHeight` (plus the control's own visual margin),
+or use the same inset object to derive that placement.
 
 Do not add another hard-coded `paddingBottom`, safe-area spacer, or absolute
 bar height in a route that uses this component. Those duplicate clearances are

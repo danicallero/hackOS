@@ -144,6 +144,12 @@ route below. No migration needed.
 
 ## Navigation & tabs
 
+The reusable component contract is documented in
+[`docs/router-tabs.md`](./router-tabs.md). This section documents only the
+hackOS adapter: capability policy, localized destinations, and the native
+`Others` menu. Keeping those concerns separate is what lets the tab shell be
+distributed to other Expo Router apps without importing hackOS code.
+
 - `lib/tabs.ts` (`primaryTabs`/`overflowTabs`) — pure functions mapping
   `me.capabilities` to the custom tab bar; see `docs/navigation.md` for the
   full model. Every platform uses `components/opaque-router-tabs.tsx` through
