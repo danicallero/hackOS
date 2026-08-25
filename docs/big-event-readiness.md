@@ -194,16 +194,16 @@ measured but may degrade under admission pressure:
 
 | Lane | p95 latency budget | Error budget | Measured p95 | Measured errors | Result |
 |---|---:|---:|---:|---:|---|
-| P0 operations | ≤ 2,000 ms | ≤ 2% | 853 ms | 0% | pass |
-| P1 judging/review | ≤ 2,000 ms | ≤ 2% | 937 ms | 0% | pass |
-| P2 public TVs | ≤ 3,000 ms | ≤ 5% | 76 ms | 0% | observed |
-| P3 participants | measured, not release-gating | best effort | 1,024 ms | 35.4% shed | allowed degradation |
+| P0 operations | ≤ 2,000 ms | ≤ 2% | 804 ms | 0% | pass |
+| P1 judging/review | ≤ 2,000 ms | ≤ 2% | 860 ms | 0% | pass |
+| P2 public TVs | ≤ 3,000 ms | ≤ 5% | 205 ms | 0% | observed |
+| P3 participants | measured, not release-gating | best effort | 941 ms | 35.4% shed | allowed degradation |
 
-The clean local run lasted 10 seconds (12.9 seconds including setup/drain),
-processed 2,129 HTTP/SSE samples, and sustained 56.3 P0 requests/s, 9.3 P1
-requests/s, 6.5 P2 requests/s, and 93.3 P3 requests/s over the measured
+The clean local run lasted 10 seconds (12.5 seconds including setup/drain),
+processed 2,121 HTTP/SSE samples, and sustained 58.0 P0 requests/s, 9.6 P1
+requests/s, 6.1 P2 requests/s, and 96.2 P3 requests/s over the measured
 window. Admission wait p95 estimates were 0.5 s (P0), 1 s (P1), 1 ms (P2),
-and 1 s (P3); the largest observed waiting queues were P0 429, P1 100, P2
+and 1 s (P3); the largest observed waiting queues were P0 427, P1 100, P2
 0, P3 160. P3 shedding is therefore visible rather than silently consuming
 reserved operational capacity.
 

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-25T00:13:24.030Z",
-  "gitCommit": "29c27e980ddc4290ba0887df2f1781ec98a8cd55",
+  "generatedAt": "2026-08-25T00:29:16.212Z",
+  "gitCommit": "ba44c0a5264214b4f3cd42334134e48d80262176",
   "command": "/opt/homebrew/Cellar/node/25.2.1/bin/node /Users/dani/orca/workspaces/fablehackos/issue-544-queue-coalesce-gate/apps/api/scripts/event-day-load.ts -- --mode load --fixture /private/tmp/hackos-event-day-fixture.json --duration-seconds 10 --output /Users/dani/orca/workspaces/fablehackos/issue-544-queue-coalesce-gate/docs/big-event-readiness-results.json",
   "environment": {
     "node": "v25.2.1",
@@ -28,45 +28,45 @@
   },
   "workload": {
     "durationSeconds": 10,
-    "elapsedSeconds": 12.869341,
-    "samples": 2129,
+    "elapsedSeconds": 12.487313,
+    "samples": 2121,
     "sseConnectionsOpened": 628
   },
   "lanes": {
     "P0": {
       "count": 724,
-      "throughputRps": 56.25773689577423,
-      "p50Ms": 527.865583,
-      "p95Ms": 853.4086659999999,
-      "p99Ms": 880.0994170000001,
-      "maxMs": 951.1015,
+      "throughputRps": 57.978846209749044,
+      "p50Ms": 558.620709,
+      "p95Ms": 803.9120420000002,
+      "p99Ms": 833.407667,
+      "maxMs": 839.2275,
       "errorRate": 0
     },
     "P1": {
       "count": 120,
-      "throughputRps": 9.32448677830512,
-      "p50Ms": 910.447958,
-      "p95Ms": 936.85275,
-      "p99Ms": 939.8782079999999,
-      "maxMs": 960.289208,
+      "throughputRps": 9.609753515428018,
+      "p50Ms": 837.621,
+      "p95Ms": 860.032667,
+      "p99Ms": 865.4175419999999,
+      "maxMs": 866.488166,
       "errorRate": 0
     },
     "P2": {
-      "count": 84,
-      "throughputRps": 6.527140744813584,
-      "p50Ms": 12.361915999999837,
-      "p95Ms": 76.14537500000006,
-      "p99Ms": 81.0972499999998,
-      "maxMs": 81.0972499999998,
+      "count": 76,
+      "throughputRps": 6.086177226437745,
+      "p50Ms": 17.361541999999645,
+      "p95Ms": 204.58062500000005,
+      "p99Ms": 213.84225000000015,
+      "maxMs": 213.84225000000015,
       "errorRate": 0
     },
     "P3": {
       "count": 1201,
-      "throughputRps": 93.32257183953708,
-      "p50Ms": 132.93975,
-      "p95Ms": 1023.836125,
-      "p99Ms": 1043.4270000000001,
-      "maxMs": 1046.1685,
+      "throughputRps": 96.17761643357542,
+      "p50Ms": 54.62325000000001,
+      "p95Ms": 941.0158749999999,
+      "p99Ms": 955.1898329999999,
+      "maxMs": 958.1914999999999,
       "errorRate": 0.35387177352206495
     }
   },
@@ -74,27 +74,27 @@
     "waitSeconds": {
       "P0": {
         "count": 720,
-        "sum": 198.33216644299995,
+        "sum": 183.67034212300015,
         "p95Estimate": 0.5
       },
       "P1": {
         "count": 100,
-        "sum": 72.946700296,
+        "sum": 58.13671154699998,
         "p95Estimate": 1
       },
       "P2": {
-        "count": 80,
-        "sum": 0.00010670900000000001,
+        "count": 72,
+        "sum": 0.000094712,
         "p95Estimate": 0.001
       },
       "P3": {
         "count": 176,
-        "sum": 144.15078653999993,
+        "sum": 135.41639196600002,
         "p95Estimate": 1
       }
     },
     "queueSizeMax": {
-      "P0": 429,
+      "P0": 427,
       "P1": 100,
       "P2": 0,
       "P3": 160
@@ -103,9 +103,9 @@
   "realtime": {
     "ssePeakByLane": {
       "P0": 4,
-      "P1": 1,
+      "P1": 20,
       "P2": 4,
-      "P3": 1
+      "P3": 600
     },
     "ssePhysicalConnectionsOpenedByLane": {
       "P0": 4,
@@ -154,7 +154,7 @@
     "budgetChecks": [
       {
         "lane": "P0",
-        "p95LatencyMs": 853.4086659999999,
+        "p95LatencyMs": 803.9120420000002,
         "maxErrorRate": 0,
         "budget": {
           "p95LatencyMs": 2000,
@@ -164,7 +164,7 @@
       },
       {
         "lane": "P1",
-        "p95LatencyMs": 936.85275,
+        "p95LatencyMs": 860.032667,
         "maxErrorRate": 0,
         "budget": {
           "p95LatencyMs": 2000,
