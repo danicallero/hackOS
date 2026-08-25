@@ -1,6 +1,6 @@
 import { EVENTS, type SseEnvelope } from "@hackos/shared/events";
-import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useFocusEffect, useScrollToTop } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, RefreshControl, Text, useColorScheme, View } from "react-native";
 import { EmptyState, StatusPill } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -10,6 +10,7 @@ import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { subscribeToCategory } from "@/lib/notification-events";
+import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { subscribeToServerEvent } from "@/lib/server-events";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
@@ -40,6 +41,7 @@ export default function QueueScreen() {
   const { t } = useLocale();
   const { me } = useMeContext();
   const androidTopInset = useAndroidTopInset();
+  const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const [precalled, setPrecalled] = useState<Set<number>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
 
@@ -49,6 +51,9 @@ export default function QueueScreen() {
     fetchQueue,
   );
   const entries = data ?? [];
+
+  const listRef = useRef<FlatList<QueueEntry>>(null);
+  useScrollToTop(listRef);
 
   useEffect(() => {
     void load();
@@ -108,6 +113,7 @@ export default function QueueScreen() {
 
   return (
     <FlatList
+      ref={listRef}
       data={orderedEntries}
       keyExtractor={(item) => String(item.entryId)}
       contentInsetAdjustmentBehavior="automatic"
@@ -115,6 +121,7 @@ export default function QueueScreen() {
         flexGrow: 1,
         gap: 12,
         padding: 16,
+        paddingBottom: tabBarBottomInset + 16,
         paddingTop: 16 + androidTopInset,
       }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}

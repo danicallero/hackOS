@@ -10,6 +10,7 @@ jest.mock("expo-router", () => ({
   useFocusEffect: () => {},
   useNavigation: () => ({ setOptions: mockSetOptions }),
   useRouter: () => ({ push: mockPush }),
+  useScrollToTop: () => {},
 }));
 jest.mock("@expo/ui/community/menu", () => ({
   MenuView: ({ children }: { children: unknown }) => {

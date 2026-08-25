@@ -11,7 +11,7 @@ import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Stack } from "expo-router/stack";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, Text, useWindowDimensions, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView } from "@/components/glass-view";
 import { AdaptiveBackButton, AdaptiveToolbarButton } from "@/components/native-ui";
@@ -23,6 +23,7 @@ import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { subscribeToManualActivityScan } from "@/lib/manual-activity-scan";
 import { useMeContext } from "@/lib/me-context";
+import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import {
   enqueueLocalScan,
   findPersonByBadge,
@@ -51,10 +52,9 @@ export function ActivityScannerScreen() {
   }>();
   const activityId = Number(id);
   const router = useRouter();
-  const { width } = useWindowDimensions();
-  const usesTopTabBar = process.env.EXPO_OS === "ios" && width >= 700;
   const { language, t } = useLocale();
   const insets = useSafeAreaInsets();
+  const tabBarBottomInset = useRouterTabBarBottomInset();
   const { me } = useMeContext();
   const ownerUserId = me?.id;
   const syncState = useScannerSync();
@@ -224,12 +224,12 @@ export function ActivityScannerScreen() {
           borderRadius: 999,
           height: 44,
           justifyContent: "center",
-          left: usesTopTabBar ? 16 : "22.5%",
-          maxWidth: usesTopTabBar ? undefined : "55%",
+          left: "22.5%",
+          maxWidth: "55%",
           paddingHorizontal: 16,
           position: "absolute",
-          right: usesTopTabBar ? "52%" : "22.5%",
-          top: insets.top + (usesTopTabBar ? 72 : 12),
+          right: "22.5%",
+          top: insets.top + 12,
         }}
       >
         <Text
@@ -246,7 +246,7 @@ export function ActivityScannerScreen() {
           left: 0,
           position: "absolute",
           right: 0,
-          top: insets.top + (usesTopTabBar ? 116 : 56),
+          top: insets.top + 56,
         }}
       >
         <ActivityStatistics activity={activity} stats={stats} />
@@ -254,10 +254,10 @@ export function ActivityScannerScreen() {
       <View
         pointerEvents="box-none"
         style={{
-          left: usesTopTabBar ? "52%" : 16,
+          left: 16,
           position: "absolute",
           right: 16,
-          top: insets.top + (usesTopTabBar ? 72 : 150),
+          top: insets.top + 150,
         }}
       >
         <ScannerQueueStatus
@@ -268,7 +268,7 @@ export function ActivityScannerScreen() {
           onRetryOne={(id) => void syncState.retryOne(id)}
           onDelete={(id) => void syncState.discardScan(id)}
           clockSkewMs={syncState.clockSkewMs}
-          fillWidth={usesTopTabBar}
+          fillWidth={false}
         />
       </View>
       {error ? (
@@ -277,7 +277,7 @@ export function ActivityScannerScreen() {
           glassEffectStyle="regular"
           style={{
             borderRadius: 18,
-            bottom: insets.bottom + 26,
+            bottom: tabBarBottomInset + 26,
             left: 16,
             minHeight: 60,
             overflow: "hidden",
@@ -311,6 +311,7 @@ export function ActivityScannerScreen() {
           language={language}
           registering={registering}
           result={result}
+          tabBarBottomInset={tabBarBottomInset}
           onCancel={() => {
             setResult(null);
             setRegistering(false);
@@ -331,6 +332,7 @@ function ActivityResultPanel({
   language,
   registering,
   result,
+  tabBarBottomInset,
   onCancel,
   onContinue,
   onRegisterAnother,
@@ -339,6 +341,7 @@ function ActivityResultPanel({
   language: "en" | "es" | "gl";
   registering: boolean;
   result: ActivityScanResult;
+  tabBarBottomInset: number;
   onCancel: () => void;
   onContinue: () => void;
   onRegisterAnother: () => void;
@@ -363,7 +366,9 @@ function ActivityResultPanel({
         bottom: 0,
         justifyContent: "center",
         left: 0,
-        padding: 20,
+        paddingBottom: tabBarBottomInset + 20,
+        paddingHorizontal: 20,
+        paddingTop: 20,
         position: "absolute",
         right: 0,
         top: 0,

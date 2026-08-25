@@ -2,7 +2,7 @@ import { EVENTS } from "@hackos/shared/events";
 import { usePathname, useRouter } from "expo-router";
 import { Stack } from "expo-router/stack";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, Text, useWindowDimensions, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView } from "@/components/glass-view";
 import { QrCamera } from "@/components/QrCamera";
@@ -11,6 +11,7 @@ import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
+import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import { findPersonByBadge, findPersonByTicket, listScannerPeople } from "@/lib/scanner-db";
 import {
   isAccreditationEligible,
@@ -33,11 +34,10 @@ interface ScannerRoleStat {
 
 export function GeneralScannerScreen() {
   const router = useRouter();
-  const { width } = useWindowDimensions();
-  const usesTopTabBar = process.env.EXPO_OS === "ios" && width >= 700;
   const pathname = usePathname();
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
+  const tabBarBottomInset = useRouterTabBarBottomInset();
   const [error, setError] = useState<string | null>(null);
   const sync = useScannerSync();
   const [people, setPeople] = useState<ScannerPerson[]>([]);
@@ -164,16 +164,7 @@ export function GeneralScannerScreen() {
       />
       <View
         pointerEvents="box-none"
-        style={
-          usesTopTabBar
-            ? // The native tab bar's real on-screen width doesn't line up
-              // with any fixed breakpoint we can compute here (it's driven
-              // by the OS's own layout, not `width`), so a pill sharing
-              // that row risks landing underneath it at some window size —
-              // this row is always clear, regardless of resolution.
-              { left: 0, position: "absolute", right: 0, top: insets.top + 150 }
-            : { left: 0, position: "absolute", right: 0, top: insets.top + 4 }
-        }
+        style={{ left: 0, position: "absolute", right: 0, top: insets.top + 4 }}
       >
         <ScannerQueueStatus
           queue={sync.queue}
@@ -203,7 +194,7 @@ export function GeneralScannerScreen() {
           glassEffectStyle="regular"
           style={{
             borderRadius: 14,
-            bottom: insets.bottom + 26,
+            bottom: tabBarBottomInset + 26,
             left: 16,
             minHeight: 60,
             overflow: "hidden",

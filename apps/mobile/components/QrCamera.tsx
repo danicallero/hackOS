@@ -20,6 +20,7 @@ import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { getBarcodeFrameObservation } from "@/lib/qr-frame";
 import { advanceQrScanCandidate, type QrScanCandidate } from "@/lib/qr-scan-stability";
+import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import { scannerCameraControls } from "@/lib/scanner-camera-controls";
 import CameraCapabilities from "@/modules/camera-capabilities";
 import { colors } from "@/theme/colors";
@@ -39,6 +40,7 @@ export function QrCamera({
   const { t } = useLocale();
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
+  const tabBarBottomInset = useRouterTabBarBottomInset();
   const locked = useRef(false);
   const scanCandidate = useRef<QrScanCandidate | null>(null);
   const [{ height, width }, setViewport] = useState({ height: 0, width: 0 });
@@ -217,7 +219,7 @@ export function QrCamera({
           glassEffectStyle="regular"
           isInteractive
           colorScheme="dark"
-          style={[styles.cameraControl, { bottom: insets.bottom + 26 }]}
+          style={[styles.cameraControl, { bottom: tabBarBottomInset + 4 }]}
         >
           <Pressable
             accessibilityLabel={
@@ -247,7 +249,7 @@ export function QrCamera({
         style={[
           styles.cameraControl,
           cameraControls.manualEntrySide === "left" && styles.cameraControlLeft,
-          { bottom: insets.bottom + 26 },
+          { bottom: tabBarBottomInset + 4 },
         ]}
       >
         <Pressable
@@ -296,7 +298,9 @@ export function QrCamera({
           pointerEvents="box-none"
           style={[
             styles.manualEntryWrapper,
-            { bottom: (keyboardHeight > 0 ? keyboardHeight : insets.bottom) + 40 },
+            {
+              bottom: keyboardHeight > 0 ? keyboardHeight + 40 : tabBarBottomInset + 40,
+            },
           ]}
         >
           <GlassView colorScheme="dark" glassEffectStyle="regular" style={styles.manualEntrySheet}>

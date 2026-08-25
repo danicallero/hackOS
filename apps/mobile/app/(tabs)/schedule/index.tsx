@@ -33,6 +33,10 @@ import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import {
+  useRouterTabBarBottomInset,
+  useRouterTabBarScrollBottomInset,
+} from "@/lib/router-tabs-inset";
+import {
   type AdminScheduleItem,
   addScheduleOwner,
   createScheduleItem,
@@ -67,9 +71,9 @@ const SECTION_HEADER_HEIGHT = 34;
 // padding reserves this much space so its last card never renders behind it.
 const FAB_SIZE = 52;
 const FAB_MARGIN = 24;
-// Extra clearance above the safe-area inset, so the FAB reads as clearly
-// floating above the tab bar rather than sitting right at its edge.
-const FAB_BOTTOM_OFFSET = 20;
+// Short clearance above the tab bar: enough to keep the FAB tappable without
+// making it float far up into the schedule content.
+const FAB_BOTTOM_OFFSET = 4;
 
 function audienceMatches(item: ScheduleItem, selected: AudienceFilterValue[]): boolean {
   if (selected.length === 0) return true;
@@ -99,7 +103,10 @@ export default function ScheduleScreen() {
   const scrollRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollAnimated = useRef(false);
   const navigation = useNavigation();
+  const tabNavigation = navigation.getParent?.();
   const insets = useSafeAreaInsets();
+  const tabBarBottomInset = useRouterTabBarBottomInset();
+  const tabBarScrollBottomInset = useRouterTabBarScrollBottomInset();
   const canManage = has(me?.capabilities ?? [], CAPABILITIES.SCHEDULE_MANAGE);
 
   const { data, loading, error, staleSince, load, setData } = useCachedApi(
@@ -124,35 +131,20 @@ export default function ScheduleScreen() {
   const [formTarget, setFormTarget] = useState<"create" | ScheduleItem | null>(null);
 
   const filterActive = selectedKinds.length > 0 || selectedAudiences.length > 0;
-  // Real Liquid Glass (iOS 26+) gets the fully native header below: a real
-  // grouped UIBarButtonItem pair plus the system's own integrated search
-  // field. Everywhere else (Android, iOS <26) `GlassView` itself already
-  // falls back to an opaque non-glass surface, but a *native* header can't
-  // express our custom multi-touch-zone pill or the animated search
-  // expand — so those platforms get the original hand-rolled header instead,
-  // rendered inline in the screen body with `headerShown: false`.
+  // Real Liquid Glass (iOS 26+) gets the native header below: the OS owns the
+  // toolbar grouping and integrated search behavior. Earlier iOS and Android
+  // keep the original hand-rolled header because it supports the shared
+  // action pill and in-place search expansion.
   const glassAvailable = isRealLiquidGlassAvailable();
   const androidTopInset = useAndroidTopInset();
   const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
-  // Fixed, not measured: on the glass path the bell/filter buttons are real
-  // native UIBarButtonItems (Stack.Toolbar.Button below), not a JS view, so
-  // there's no ref to measureInWindow — the header's own height is a known
-  // 44pt compact bar, so anchoring just below it is reliable without one.
   const filterAnchor = glassAvailable
     ? { top: insets.top + 52, right: 16 }
     : { top: legacyTopInset + 60, right: 16 };
 
-  // Native header (compact title + Apple's own integrated search button,
-  // which handles its own expand animation, keyboard, and Cancel affordance)
-  // — avoids re-implementing that transition and the clipping issues a
-  // custom absolutely-positioned dropdown hit inside it (see
-  // ScheduleFilterPanel). Not a large title: the title stays inline with the
-  // toolbar/search row (matching the old hand-rolled header), and — since
-  // this isn't a large title — tapping search collapses it away and
-  // expanding Cancel restores it, same as before. Opaque, not transparent:
-  // this `SectionList`'s sticky section headers stick at scroll-view-local
-  // y=0, not below the title bar, so a transparent header let the sticky
-  // date render behind/through it instead of under an opaque bar.
+  // Keep the native search on the glass path. The custom header below is the
+  // fallback for platforms where the native header cannot express the old
+  // compact action/search layout.
   useLayoutEffect(() => {
     if (!glassAvailable) {
       navigation.setOptions({ headerShown: false });
@@ -164,9 +156,6 @@ export default function ScheduleScreen() {
       headerLargeTitle: false,
       headerTransparent: false,
       headerShadowVisible: false,
-      // Opaque (not transparent — see above), but painted the same color as
-      // the screen body so the bar reads as part of the page instead of a
-      // visually distinct nav bar.
       headerStyle: { backgroundColor: colors.background },
       headerTitleAlign: "left",
       headerTitleStyle: { color: colors.label, fontSize: 28, fontWeight: "800" },
@@ -174,6 +163,7 @@ export default function ScheduleScreen() {
         placeholder: t("scheduleSearchPlaceholder"),
         autoCapitalize: "none",
         hideWhenScrolling: true,
+        allowToolbarIntegration: false,
         placement: "integratedButton",
         onChangeText: (event: { nativeEvent: { text: string } }) =>
           setSearchQuery(event.nativeEvent.text),
@@ -255,7 +245,7 @@ export default function ScheduleScreen() {
   // Jumps straight to "what's happening now" (or the marker between cards)
   // instead of opening at the beginning of a multi-day schedule. Reused below
   // both for the initial mount and for re-triggering on tab (re)selection —
-  // native tab presses fire "tabPress" whether or not this tab was already
+  // custom tab presses fire "tabPress" whether or not this tab was already
   // focused, so the listener below covers both "switch back to Schedule" and
   // "tap Schedule again while already on it".
   // `animated` is false on mount — the list should simply *open* on the active
@@ -322,11 +312,8 @@ export default function ScheduleScreen() {
   }, [sections, scrollToActive, loading]);
 
   // Mirrors expo-router's own bundled `useScrollToTop`. The tab navigator emits
-  // "tabPress" with `target` set to the *screen's* route key, and
-  // react-navigation's emitter only delivers an event to listeners registered
-  // under that exact target — so it has to be this screen's own navigation
-  // object. A listener installed on the navigator (via getParent()) is filed
-  // under the navigator's key and therefore never fires at all.
+  // "tabPress" from the parent tab navigation, so the listener belongs there
+  // rather than on this screen's nested Stack navigation.
   //
   // The event is emitted *before* the tab switch is dispatched, which is what
   // makes the isFocused() check below mean "Schedule was already the open tab":
@@ -335,7 +322,7 @@ export default function ScheduleScreen() {
   useEffect(() => {
     // "tabPress" isn't part of the generic event map expo-router's
     // `useNavigation()` exposes, hence the narrow cast rather than `any`.
-    const tabAware = navigation as unknown as {
+    const tabAware = (tabNavigation ?? navigation) as unknown as {
       addListener: (type: "tabPress", callback: () => void) => () => void;
     };
     return tabAware.addListener("tabPress", () => {
@@ -343,7 +330,7 @@ export default function ScheduleScreen() {
       scrollRetries.current = 0;
       scrollToActive(true);
     });
-  }, [navigation, scrollToActive]);
+  }, [navigation, scrollToActive, tabNavigation]);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -410,10 +397,6 @@ export default function ScheduleScreen() {
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
       {glassAvailable ? (
-        // Native toolbar buttons, not a hand-rolled glass pill — adjacent
-        // Stack.Toolbar.Buttons get grouped into one native Liquid Glass
-        // capsule (with Apple's own divider) by the OS, so there's no
-        // separator view or shadow style to get wrong here.
         <Stack.Toolbar placement="right">
           <Stack.Toolbar.Button
             icon="bell.badge"
@@ -460,7 +443,7 @@ export default function ScheduleScreen() {
           isInteractive
           style={{
             borderRadius: 26,
-            bottom: FAB_BOTTOM_OFFSET + insets.bottom,
+            bottom: tabBarBottomInset + FAB_BOTTOM_OFFSET,
             height: FAB_SIZE,
             position: "absolute",
             right: FAB_MARGIN,
@@ -490,8 +473,8 @@ export default function ScheduleScreen() {
           // already-inset-aware FAB offset, which let the list scroll well
           // past the last card into empty space.
           paddingBottom: canManage
-            ? FAB_BOTTOM_OFFSET + insets.bottom + FAB_SIZE + 16
-            : insets.bottom + 24,
+            ? tabBarScrollBottomInset + FAB_BOTTOM_OFFSET + FAB_SIZE + 16
+            : tabBarScrollBottomInset + 16,
         }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         stickySectionHeadersEnabled

@@ -459,38 +459,44 @@ the rules that bind UI work:
 
 ## 12. Mobile specifics
 
-**Summary: Expo Router with native platform behaviour — the iOS tab bar, the
-system Wallet button, native confirmations — plus offline-first scanner UX.
-Full architecture: [`mobile.md`](./mobile.md).**
+**Summary: Expo Router with a custom platform-adaptive tab bar, the system
+Wallet button, native confirmations — plus offline-first scanner UX. Full
+architecture: [`mobile.md`](./mobile.md).**
 
-- **Tab budget is hard.** The bar is a real platform tab bar
-  (`expo-router/unstable-native-tabs`), and iOS's `UITabBarController`
-  silently collapses anything past its fifth item into its own "More"
-  screen, bypassing app UI — a 6-tab bar is not an available option. Every
-  route declares a trigger; which ones show is toggled per experience with
-  `hidden`, so hidden screens stay routable.
+- **Tab budget is hard.** Every platform uses the custom Expo Router shell in
+  `components/router-tabs.tsx`: iOS 26+ renders Liquid Glass surfaces, while
+  earlier iOS and Android use the same geometry with solid surfaces. Five total
+  destinations are rendered directly on compact screens; tablet-width layouts
+  can fit up to six before using a separate `Others` circle. The complete route
+  registry remains mounted so hidden screens stay routable. The direct group is
+  a single finger-scrub surface: its
+  selection lens follows the touch continuously and release selects the cell
+  under the final finger coordinate, including a jump across several direct
+  tabs. `Others` stays a separate native menu trigger.
   - **Participants** (no scan capability): schedule, queue, wallet,
-    notifications + **Account** directly in slot 5. No overflow at all.
+    notifications, and **Account** are all direct because the set has five
+    destinations.
   - **Operators** (any scan capability or admin `*`): daily tools win the
     bar — schedule, **Scanner**, Activities (only with `activity:scan`),
-    notifications — and slot 5 becomes the **"Others" overflow selector**;
-    the less-frequent personal tabs (Queue, Wallet, Account) move behind it
-    as pseudo-tabs (`lib/tabs.ts` `primaryTabs`/`overflowTabs`).
-- **The overflow selector is a tab that opens a dropdown, not a screen.**
-  The "Others" trigger is declared with `role="search"`, which on iOS 18+
-  renders it as the separated (Liquid Glass) capsule, visually split from
-  the tab group — ellipsis icon, hidden label. It never navigates: an
-  invisible native `MenuView` (`@expo/ui/community/menu`) is absolutely
-  positioned over the capsule and opens a native dropdown listing the
-  overflow pseudo-tabs with icon + localized label. (Android additionally
-  needs a plain `Pressable` overlay calling the menu's imperative `show()`,
-  because the Compose interop tree intermittently drops the first touch.)
+    notifications — and the separate **"Others" overflow selector** holds
+    the less-frequent personal tabs (Queue, Wallet, Account) and any queue
+    operations destination as pseudo-tabs (`lib/tabs.ts`
+    `primaryTabs`/`overflowTabs`).
+- **The overflow selector is a separate circle that opens a dropdown, not a
+  screen.** `Others` is a direct custom button, not a fake `role="search"`
+  tab. It opens a native `MenuView` (`@expo/ui/community/menu`) listing the
+  overflow pseudo-tabs with icon + localized label; the compact layout uses a
+  64pt bar and circle, while tablet-width layouts use a slightly thinner 56pt
+  pair. Both keep 16pt horizontal display padding so iOS SwiftUI and Android
+  Compose share the same target.
 - **Pseudo-tabs simulate tab navigation, with a dedicated contract**
   (`lib/operations-navigation.ts` `resolveOperationsNavigationAction`):
   selecting the section you're already in is a **no-op**; selecting another
   always uses `router.replace()`, never `push()` — a tab switch, not a
   stack push, so overflow screens never stack duplicates and back behaviour
-  stays sane. Within a section, deeper screens push normally on top of it.
+  stays sane. Direct tabs use the headless Expo Router tab state (`JUMP_TO`)
+  and emit `tabPress`, preserving each tab's stack and its scroll-to-top/live-
+  activity handlers. Within a section, deeper screens push normally on top of it.
   Normalize Expo Router route groups before matching paths (`/others/...`
   vs `/(tabs)/others/...`). Do not re-implement overflow entries as plain
   stack links — earlier versions regressed exactly this way.

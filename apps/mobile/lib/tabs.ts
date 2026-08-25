@@ -47,18 +47,16 @@ export function visibleTabs(capabilities: string[]): TabKey[] {
 }
 
 /**
- * Tabs shown directly in the platform tab bar. Only ever four destinations
- * plus, at most, one overflow slot — a native
- * `UITabBarController` silently collapses everything past its fifth item
- * into its own system "More" screen, which bypasses our overflow menu
- * entirely. Operators prioritize their daily tools here and keep the less
- * frequently used personal destinations in the overflow selector.
+ * Tabs shown directly in the custom tab bar. The bar reserves a separate
+ * Others circle only when the complete set is crowded. Operators prioritize
+ * their daily tools here; five destinations fit directly, while larger sets
+ * use four direct tabs plus Others.
  */
 export function primaryTabs(capabilities: string[]): TabKey[] {
   if (queueOperationsInPrimaryBar(capabilities)) {
     return ["schedule", "operations", "notifications"];
   }
-  if (!isOperator(capabilities)) return [...PARTICIPANT_PRIMARY_TAB_KEYS, "account"];
+  if (!isOperator(capabilities)) return [...PARTICIPANT_PRIMARY_TAB_KEYS];
 
   return [
     "schedule",
@@ -68,9 +66,9 @@ export function primaryTabs(capabilities: string[]): TabKey[] {
   ];
 }
 
-/** Tabs represented inside the native Others selector rather than the main bar. */
+/** Tabs represented inside the Others selector rather than the main bar. */
 export function overflowTabs(capabilities: string[]): OverflowTabKey[] {
-  if (!isOperator(capabilities) && !canOperateQueues(capabilities)) return [];
+  if (!isOperator(capabilities) && !canOperateQueues(capabilities)) return ["account"];
   return [
     "queue",
     "wallet",
@@ -81,21 +79,22 @@ export function overflowTabs(capabilities: string[]): OverflowTabKey[] {
   ];
 }
 
-/** True whenever any tab lives outside the primary bar and needs the overflow selector. */
+/** True only when the complete tab set cannot fit as five direct destinations. */
 export function shouldUseOverflowMenu(capabilities: string[]): boolean {
-  return overflowTabs(capabilities).length > 0;
+  // Five destinations still fit as ordinary direct tabs. Others is reserved
+  // for a genuinely crowded navigation set, where the bar keeps four direct
+  // cells and moves the remaining destinations behind the native menu.
+  return visibleTabs(capabilities).length > 5;
 }
 
 /**
  * True on real iPad hardware, and identically true for this same iPad build
  * running "Designed for iPad" on an Apple Silicon Mac — UIKit reports both
- * as the `.pad` interface idiom. Either way `NativeTabs` abandons iPhone's
- * fixed bottom bar for a top-anchored bar (regular-width UITabBarController
- * adaptivity, see WWDC24 "Elevate your tab and sidebar experience in
- * iPadOS"), so screen-position math tuned for the bottom bar no longer
- * lines up with anything real. Idiom — unlike a size-class check — is fixed
- * for the process lifetime, so this doesn't flip mid-session as a Mac
- * window is resized.
+ * as the `.pad` interface idiom. Idiom — unlike a size-class check — is fixed
+ * for the process lifetime, so this doesn't flip mid-session as a Mac window
+ * is resized. Other layouts use this seam for regular-width native Stack
+ * header behavior; the custom tab bar itself stays in one cross-platform
+ * geometry.
  */
 export function isPadIdiom(): boolean {
   return isPadIdiomForPlatform(Platform);

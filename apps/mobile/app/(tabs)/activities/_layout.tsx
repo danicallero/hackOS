@@ -33,15 +33,14 @@ export default function ActivitiesLayout() {
             placeholder: t("scannerPeopleSearchPlaceholder"),
             autoCapitalize: "none",
             hideWhenScrolling: true,
+            allowToolbarIntegration: false,
             placement: "integratedButton",
           },
         }}
       />
-      {/* Kept as a direct child of this Stack (not a nested one) so its
-          transparent native bar merges into NativeTabs' own shared row on
-          iPad, the same way `[id]` above does — see `others/_layout.tsx`
-          for the fuller explanation of why a second Stack here would create
-          a visible double bar. */}
+      {/* Kept as a direct child of this Stack (not a nested one) so the
+          detail route shares the same navigation chrome as `[id]` above.
+          A second Stack would create a duplicate native header. */}
       <Stack.Screen
         name="person/[id]"
         options={{

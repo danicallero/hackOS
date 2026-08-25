@@ -1,6 +1,10 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { Platform, StyleSheet } from "react-native";
 
+jest.mock("expo-router", () => ({
+  useScrollToTop: () => {},
+}));
+
 const mockApiFetch = jest.fn();
 let resolveNextPage: ((value: { items: unknown[]; total: number }) => void) | null = null;
 

@@ -1,6 +1,6 @@
 import { MenuView } from "@expo/ui/community/menu";
 import { type ActivityKindSymbolName, isMealActivityKind } from "@hackos/shared/activity-kinds";
-import { useFocusEffect, useNavigation, useRouter } from "expo-router";
+import { useFocusEffect, useNavigation, useRouter, useScrollToTop } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, useColorScheme, View } from "react-native";
 import { EmptyState, StatusPill } from "@/components/native-ui";
@@ -13,6 +13,7 @@ import {
   sameActivities,
 } from "@/lib/activity-list";
 import { useLocale } from "@/lib/i18n";
+import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { listScannerActivities } from "@/lib/scanner-db";
 import { resolveActivityText, type ScannerActivity } from "@/lib/scanner-types";
 import { activityKindSymbol, scheduleTypeLabel } from "@/lib/schedule";
@@ -37,6 +38,9 @@ export function ActivitiesScreen() {
   const [error, setError] = useState<Error | null>(null);
   const listRef = useRef<FlatList<ScannerActivity>>(null);
   const returningFromScanner = useRef(false);
+  const tabBarBottomInset = useRouterTabBarScrollBottomInset();
+
+  useScrollToTop(listRef);
 
   const load = useCallback(async () => {
     try {
@@ -101,6 +105,7 @@ export function ActivitiesScreen() {
         placeholder: t("scannerActivitiesSearchPlaceholder"),
         autoCapitalize: "none",
         hideWhenScrolling: true,
+        allowToolbarIntegration: false,
         // iOS 26 otherwise expands this into a full field on regular-width
         // iPads whenever UIKit decides there is enough trailing space.
         placement: "integratedButton",
@@ -160,7 +165,11 @@ export function ActivitiesScreen() {
       ref={listRef}
       testID="activities-list"
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ flexGrow: 1, padding: 16, paddingBottom: 32 }}
+      contentContainerStyle={{
+        flexGrow: 1,
+        padding: 16,
+        paddingBottom: Math.max(32, tabBarBottomInset + 16),
+      }}
       data={filtered}
       keyExtractor={(item) => String(item.id)}
       keyboardDismissMode="on-drag"

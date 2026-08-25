@@ -16,7 +16,7 @@ Web: `apps/web/src/lib/nav.ts` (data) + `apps/web/src/components/layout/app-side
   - [Stable personal area](#stable-personal-area-personal_nav)
   - [Work workspaces](#work-workspaces-workspaces)
   - [Behaviour](#behaviour)
-- [Mobile: overflow selector for operators](#mobile-overflow-selector-for-operators-h55)
+- [Mobile: custom tabs and overflow selector](#mobile-custom-tabs-and-overflow-selector-h55)
 - [Decision-only applications](#decision-only-applications)
 - [Association-aware domain pages](#association-aware-domain-pages)
 
@@ -112,49 +112,70 @@ every workspace and every item (`apps/web/src/lib/session.tsx`).
 - Every href in `nav.ts` is a stable, published URL: existing deep links and
   bookmarks must keep working without a redirect.
 
-## Mobile: overflow selector for operators (H55)
+## Mobile: custom tabs and overflow selector (H55)
 
 `apps/mobile/lib/tabs.ts` computes `primaryTabs()`/`overflowTabs()` from
-effective capabilities. The bar is a real platform tab bar
-(`expo-router/unstable-native-tabs` in `app/(tabs)/_layout.tsx`), and a
-native `UITabBarController` silently collapses anything past its fifth item
-into iOS's own "More" screen — which bypasses the app's custom overflow menu
-entirely — so the bar is capped at five items, and which triggers show is
-toggled per experience with `hidden` (hidden screens stay routable):
+effective capabilities. Every platform uses the custom Expo Router shell in
+`components/router-tabs.tsx`, with iOS 26+ Liquid Glass surfaces and solid
+surfaces on earlier iOS and Android. Five total destinations are rendered
+directly on compact layouts; tablet-width layouts can fit up to six before the
+separate `Others` circle is needed. The full route registry remains mounted so
+hidden destinations stay routable:
 
-- **Non-operator account**: schedule, queue, wallet, notifications +
-  **Account** directly in the fifth slot. No overflow menu at all.
+- **Non-operator account**: schedule, queue, wallet, notifications, and
+  **Account** are all direct because the set has five destinations.
 - **Operator** (any of `accredit:scan`, `presence:scan`, `activity:scan`, or
   the admin wildcard): the daily shift tools take the bar — schedule,
   **Scanner**, Activities (`activity:scan` holders only), notifications —
-  scanning must never sit behind an ellipsis. The fifth slot becomes the
-  **"Others" overflow selector**, and the less-frequent personal
-  destinations (Queue, Wallet, Account) move behind it as pseudo-tabs.
+  scanning must never sit behind an ellipsis. The separate
+  **"Others" overflow selector** holds Queue, Wallet, Account, and any queue
+  operations destination as pseudo-tabs.
 - **Queue-only operator** (`queue:operate`, `queue:admin`, or `*`, without a
   scanner capability): Queue operations is a direct tab alongside Schedule and
   Alerts; Queue, Wallet, and Account move to Others. If the person also has a
   scanner capability, Queue operations joins Others so Scanner stays directly
   reachable.
 
-The "Others" slot is a tab trigger that opens a **native dropdown selector**,
-not a screen. It's declared with `role="search"`, which on iOS 18+ renders it
-as the separated (Liquid Glass) capsule visually split from the tab group,
-with an ellipsis icon and hidden label. The trigger itself never navigates:
-an invisible native `MenuView` (`@expo/ui/community/menu`) is positioned over
-the capsule and pops the dropdown listing Queue, Wallet, Account, and (for a
-scanner operator with queue access) Queue operations with
-icons and localized labels. On Android, a plain `Pressable` overlay opens the
-same menu via its imperative `show()`, because the Compose interop tree
-intermittently drops the very first touch.
+The "Others" slot is a **native dropdown selector**, not a screen. It is a
+direct custom button in its own perfect circle; it does not need fake
+`role="search"` semantics or a full-width layer over another tab. iOS and
+Android use `@expo/ui/community/menu` for the native dropdown, with a 64pt
+bar, a 64pt circular control, and 16pt horizontal display padding on both
+platforms so the iOS SwiftUI `Menu` and Android Compose dropdown share the
+same geometry and hit target (tablet-width layouts use a slightly thinner 56pt
+surface and can fit up to six direct destinations). Selecting an item navigates to the corresponding overflow
+pseudo-tab with the same replacement contract below; the native menu exposes
+the current overflow section as the single checked choice.
 
 Selection simulates tab navigation
 (`apps/mobile/lib/operations-navigation.ts`
 `resolveOperationsNavigationAction`): picking the section already on screen
 is a no-op, and picking another always `router.replace()`s — a tab switch,
 never a stack push — so overflow screens don't stack duplicates and back
-behaviour stays sane; deeper screens inside a section still push normally on
-top of it. Pathname matching normalizes Expo Router route groups first
+behaviour stays sane. Direct tabs use the headless Expo Router tab state
+(`JUMP_TO`) and emit `tabPress`, preserving each tab's stack and its
+scroll-to-top/live-activity handlers; deeper screens inside a section still
+push normally on top of it. Pathname matching normalizes Expo Router route groups first
 (`/others/...` vs `/(tabs)/others/...`).
+
+The direct surface is one continuous scrub surface: on touch-down the Liquid
+Glass selection lens follows the finger in real time, including across several
+tabs. On release, the tab whose cell contains the final finger coordinate is
+selected with the same replacement semantics; navigation never fires midway
+through the drag. The gesture runs through native gesture-handler/Reanimated
+worklets so JS-thread stalls do not make the lens jump. The separate Others
+circle remains a native menu and is not part of the scrub sequence.
+
+`RouterTabs` also publishes its geometry through `useRouterTabBarInsets()`.
+Routes rendered by its `TabSlot` can use `contentBottomInset` for
+`paddingBottom`/`scrollIndicatorInsets.bottom`, and `tabBarHeight` plus
+`tabBarBottomPadding` when positioning controls above the bar. The hook tracks
+the platform safe area, so consumers do not need to duplicate device-specific
+bottom constants. Screens that keep iOS
+`contentInsetAdjustmentBehavior="automatic"` should use the companion
+`useRouterTabBarScrollBottomInset()` for `contentContainerStyle.paddingBottom`;
+it removes the safe-area portion UIKit already contributes while preserving the
+full clearance on Android.
 
 `OVERFLOW_TAB_KEYS` and the exhaustive descriptor maps in
 `apps/mobile/lib/overflow-tabs.ts` are the single source of truth for these
@@ -169,13 +190,13 @@ This guards every new destination without requiring someone to remember an
 extra hand-written navigation case. Keep this registry free of React Native
 runtime imports so its contract tests remain deterministic outside Expo.
 
-On iPad/macOS, pages opened from the real Others hub remain in the hub's
-single native Stack. The `operations` and `team` child layouts therefore use a
-plain `Slot` on that idiom instead of introducing another navigator: a nested
-Stack produces a second navigation-bar row and stops iOS from integrating
-back, status, search, and filter controls alongside the top tab chrome. On
-iPhone those layouts retain their own Stack because overflow destinations are
-header-less pseudo-tabs and still need local navigation chrome.
+On iPad/macOS, overflow pages remain in the parent Others Stack and the
+`operations` and `team` child layouts therefore use a plain `Slot` on that
+idiom instead of introducing another navigator: a nested Stack produces a
+second navigation-bar row and stops iOS from integrating back, status, search,
+and filter controls alongside the custom tab chrome. On compact devices those
+layouts retain their own Stack because overflow destinations are header-less
+pseudo-tabs and still need local navigation chrome.
 
 ## Decision-only applications
 

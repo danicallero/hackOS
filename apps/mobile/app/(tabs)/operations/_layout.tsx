@@ -17,7 +17,7 @@ export default function OperationsLayout() {
             placeholder: t("queueOpsSearchPlaceholder"),
             autoCapitalize: "none",
             hideWhenScrolling: true,
-            allowToolbarIntegration: true,
+            allowToolbarIntegration: false,
             placement: "integratedButton",
           },
         }}

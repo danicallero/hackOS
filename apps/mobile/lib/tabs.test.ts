@@ -40,9 +40,9 @@ describe("visibleTabs (H55)", () => {
   });
 });
 
-describe("primaryTabs (H55; a native tab bar collapses past 5 items into iOS's own 'More')", () => {
-  it("shows account as the fifth bar slot with no scan capability", () => {
-    expect(primaryTabs([])).toEqual(["schedule", "queue", "wallet", "notifications", "account"]);
+describe("primaryTabs (H55; the custom bar keeps five direct tabs when they fit)", () => {
+  it("keeps Account in Others once four participant tabs fill the bar", () => {
+    expect(primaryTabs([])).toEqual(["schedule", "queue", "wallet", "notifications"]);
   });
 
   it("replaces queue and wallet with operational tools for staff", () => {
@@ -74,8 +74,8 @@ describe("primaryTabs (H55; a native tab bar collapses past 5 items into iOS's o
 });
 
 describe("overflowTabs / shouldUseOverflowMenu", () => {
-  it("has nothing in overflow with no scan capability", () => {
-    expect(overflowTabs([])).toEqual([]);
+  it("keeps Account behind Others for participants", () => {
+    expect(overflowTabs([])).toEqual(["account"]);
     expect(shouldUseOverflowMenu([])).toBe(false);
   });
 
@@ -84,7 +84,8 @@ describe("overflowTabs / shouldUseOverflowMenu", () => {
     expect(shouldUseOverflowMenu([CAPABILITIES.ACCREDIT_SCAN])).toBe(true);
   });
 
-  it("unrelated capabilities don't trigger overflow", () => {
+  it("keeps Account behind Others for unrelated capabilities", () => {
+    expect(overflowTabs([CAPABILITIES.SCHEDULE_MANAGE])).toEqual(["account"]);
     expect(shouldUseOverflowMenu([CAPABILITIES.SCHEDULE_MANAGE])).toBe(false);
   });
 
@@ -106,7 +107,7 @@ describe("overflowTabs / shouldUseOverflowMenu", () => {
   });
 });
 
-describe("overflow destination descriptors (shared by the iPhone popover and the iPad/macOS hub list)", () => {
+describe("overflow destination descriptors (shared by the custom menu and fallback hub)", () => {
   it("has an icon, a route, and a label key for every overflow destination", () => {
     for (const key of OVERFLOW_TAB_KEYS) {
       expect(OVERFLOW_TAB_ICON[key]).toEqual(expect.any(String));
@@ -121,11 +122,11 @@ describe("isPadIdiom", () => {
     expect(isPadIdiomForPlatform({ OS: "ios", isPad: true })).toBe(true);
   });
 
-  it("is false on iPhone, which keeps the bottom-anchored popover", () => {
+  it("is false on iPhone, while the custom bar keeps the same bottom geometry", () => {
     expect(isPadIdiomForPlatform({ OS: "ios", isPad: false })).toBe(false);
   });
 
-  it("is false on Android regardless of `isPad`, since NativeTabs there is never top-anchored", () => {
+  it("is false on Android regardless of `isPad`, since the tab bar is cross-platform", () => {
     expect(isPadIdiomForPlatform({ OS: "android", isPad: true })).toBe(false);
   });
 });

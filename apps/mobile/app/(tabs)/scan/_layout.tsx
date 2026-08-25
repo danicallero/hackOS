@@ -11,7 +11,7 @@ export default function ScannerLayout() {
         options={{
           title: t("tabScan"),
           // Keep the camera edge-to-edge while letting iOS place its native
-          // directory action alongside the adaptive iPad/macOS tab chrome.
+          // directory action alongside the regular-width navigation chrome.
           headerShown: process.env.EXPO_OS === "ios",
           headerTransparent: true,
           headerShadowVisible: false,
@@ -34,15 +34,14 @@ export default function ScannerLayout() {
             placeholder: t("scannerPeopleSearchPlaceholder"),
             autoCapitalize: "none",
             hideWhenScrolling: true,
+            allowToolbarIntegration: false,
             placement: "integratedButton",
           },
         }}
       />
-      {/* Kept as direct children of this Stack (not a nested one) so their
-          transparent native bar merges into NativeTabs' own shared row on
-          iPad, the same way `index` above does — see
-          `(tabs)/others/_layout.tsx` for the fuller explanation of why a
-          second Stack here would create a visible double bar. */}
+      {/* Kept as direct children of this Stack (not nested ones) so they share
+          the same navigation chrome as `index`. A second Stack would create
+          a duplicate native header. */}
       <Stack.Screen
         name="person/[id]"
         options={{

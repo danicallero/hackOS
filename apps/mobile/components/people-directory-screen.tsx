@@ -1,12 +1,19 @@
 import { MenuView } from "@expo/ui/community/menu";
-import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import {
+  useFocusEffect,
+  useLocalSearchParams,
+  useNavigation,
+  useRouter,
+  useScrollToTop,
+} from "expo-router";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { EmptyState, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { emitManualActivityScan } from "@/lib/manual-activity-scan";
+import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { listScannerPeople } from "@/lib/scanner-db";
 import type { ScannerPerson } from "@/lib/scanner-types";
 import { isPadIdiom } from "@/lib/tabs";
@@ -26,6 +33,10 @@ export function PeopleDirectoryScreen() {
   const [error, setError] = useState<Error | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const usesListTitle = isPadIdiom();
+  const tabBarBottomInset = useRouterTabBarScrollBottomInset();
+  const listRef = useRef<FlatList<ScannerPerson>>(null);
+
+  useScrollToTop(listRef);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -88,6 +99,7 @@ export function PeopleDirectoryScreen() {
         placeholder: t("scannerPeopleSearchPlaceholder"),
         autoCapitalize: "none",
         hideWhenScrolling: true,
+        allowToolbarIntegration: false,
         // iOS 26 otherwise expands this into a full field on regular-width
         // iPads whenever UIKit decides there is enough trailing space.
         placement: "integratedButton",
@@ -150,9 +162,14 @@ export function PeopleDirectoryScreen() {
 
   return (
     <FlatList
+      ref={listRef}
       contentInsetAdjustmentBehavior="automatic"
       style={{ backgroundColor: colors.background }}
-      contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 16, paddingBottom: 32 }}
+      contentContainerStyle={{
+        flexGrow: 1,
+        paddingBottom: Math.max(32, tabBarBottomInset + 16),
+        paddingHorizontal: 16,
+      }}
       data={filtered}
       keyExtractor={(person) => String(person.userId)}
       ItemSeparatorComponent={() => <Separator inset={72} />}

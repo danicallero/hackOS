@@ -111,7 +111,7 @@ describe("queue operations search (H29-H31)", () => {
     await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(ROOMS.length + 1));
 
     expect(mockSetOptions.mock.calls.at(-1)?.[0].headerSearchBarOptions).toMatchObject({
-      allowToolbarIntegration: true,
+      allowToolbarIntegration: false,
       hideWhenScrolling: true,
       placement: "integratedButton",
     });

@@ -10,8 +10,8 @@ import { screen, waitFor } from "@testing-library/react-native";
  *  2. `onScrollToIndexFailed` only re-issued the same doomed call — the list
  *     never moves, so it never measures new rows. It must jump to the estimated
  *     offset first.
- *  3. "tabPress" is emitted targeted at the *screen's* route key, so the
- *     listener has to live on this screen's own navigation object.
+ *  3. "tabPress" is emitted by the parent tab navigator, so the listener has
+ *     to live on that parent rather than the nested screen Stack.
  */
 
 const mockPush = jest.fn();
@@ -60,11 +60,16 @@ jest.mock("expo-router", () => ({
   useFocusEffect: () => {},
   useNavigation: () => ({
     setOptions: jest.fn(),
-    // The real screen-level navigation object react-navigation hands a tab
-    // screen: `tabPress` is delivered here, targeted at this route's key.
+    // The real screen-level navigation object remains the source of focus
+    // state; tabPress itself is delivered by its parent tab navigator.
     isFocused: () => mockIsFocused,
-    addListener: (type: string, callback: () => void) => {
-      if (type === "tabPress") mockTabPressListeners.push(callback);
+    getParent: () => ({
+      addListener: (type: string, callback: () => void) => {
+        if (type === "tabPress") mockTabPressListeners.push(callback);
+        return () => {};
+      },
+    }),
+    addListener: () => {
       return () => {};
     },
   }),

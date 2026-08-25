@@ -1,10 +1,11 @@
-import { useNavigation } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useNavigation, useScrollToTop } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { ActionButton, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
+import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { fetchScanLog, type ScanLogEntry } from "@/lib/scan-log";
 import { colors } from "@/theme/colors";
 
@@ -39,6 +40,10 @@ export function ScanLogScreen() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const tabBarBottomInset = useRouterTabBarScrollBottomInset();
+  const scrollRef = useRef<ScrollView>(null);
+
+  useScrollToTop(scrollRef);
 
   useEffect(() => {
     navigation.setOptions({
@@ -127,8 +132,13 @@ export function ScanLogScreen() {
 
   return (
     <ScrollView
+      ref={scrollRef}
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ gap: 20, padding: 16, paddingBottom: 36 }}
+      contentContainerStyle={{
+        gap: 20,
+        padding: 16,
+        paddingBottom: Math.max(32, tabBarBottomInset + 16),
+      }}
     >
       {groups.map((group) => (
         <Section

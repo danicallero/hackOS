@@ -145,22 +145,26 @@ route below. No migration needed.
 ## Navigation & tabs
 
 - `lib/tabs.ts` (`primaryTabs`/`overflowTabs`) — pure functions mapping
-  `me.capabilities` to the tab bar; see `docs/navigation.md` for the full
-  model. The native bar holds at most five items (iOS collapses a sixth into
-  its own "More" screen). With no scan capability, the bar is the four
-  participant tabs plus Account, and there is no overflow at all. For
-  `ACCREDIT_SCAN`/`PRESENCE_SCAN`/`ACTIVITY_SCAN` (or the admin `*`
-  wildcard) holders, the daily tools take the bar — schedule, Scanner,
-  Activities (for `ACTIVITY_SCAN`), notifications — and the fifth slot is
-  the "Others" selector: a `role="search"` tab trigger (the separated
-  capsule on iOS 18+) overlaid with a native `MenuView` dropdown listing
-  Queue, Wallet, and Account as pseudo-tabs. Queue-only operators instead get
-  Queue operations in the primary bar; scanner operators with queue access find it
-  in this selector, preserving Scanner's direct placement.
-- `app/(tabs)/_layout.tsx` — reads capabilities from a shared `/api/me` fetch
-  (`lib/me-context.tsx`, `lib/use-me.ts`) and hides tabs via Expo Router's
-  `href: null` mechanism rather than omitting the route, so the underlying
-  screen stays reachable. The fetch refetches on app foreground, so a
+  `me.capabilities` to the custom tab bar; see `docs/navigation.md` for the
+  full model. Every platform uses `components/opaque-router-tabs.tsx` through
+  the reusable `components/router-tabs.tsx` shell: iOS 26+ renders Liquid
+  Glass surfaces, while earlier iOS and Android use the same geometry with
+  solid surfaces. Five total destinations are shown directly on compact
+  layouts; tablet-width layouts can place up to six before using `Others`,
+  whose bar surface and circle become 56pt instead of 64pt. With no
+  scan capability, Schedule, Queue, Wallet, Notifications, and Account are
+  all direct. For `ACCREDIT_SCAN`/`PRESENCE_SCAN`/`ACTIVITY_SCAN` (or the
+  admin `*` wildcard) holders, the daily tools take the bar — Schedule,
+  Scanner, Activities (for `ACTIVITY_SCAN`), Notifications — and Queue,
+  Wallet, Account, and any secondary operations stay in Others. Queue-only
+  operators instead get Queue operations in the primary bar; scanner
+  operators with queue access find it in Others, preserving Scanner's direct
+  placement.
+  `app/(tabs)/_layout.tsx` — reads capabilities from a shared `/api/me` fetch
+  (`lib/me-context.tsx`, `lib/use-me.ts`) and keeps the custom RouterTabs shell
+  mounted while the profile revalidates. Every route stays registered in the
+  hidden `TabList`; only the direct buttons and, when needed, the separate
+  Others circle are capability-driven. The fetch refetches on app foreground, so a
   capability change made elsewhere (web admin) shows up without a reinstall
   (H55's explicit acceptance bar). `useMe` only surfaces `loading: true` for
   the *first* fetch (no cached profile yet, e.g. after sign-in); a foreground
@@ -168,13 +172,12 @@ route below. No migration needed.
   active` blip iOS sends when Control Center, Notification Center, or the app
   switcher briefly covers the app — refreshes quietly instead. The tab layout
   mirrors that split (`meLoading && !me`), so a background revalidation never
-  unmounts `NativeTabs`, which previously reset to its first registered tab
-  (Schedule) on remount and flashed it in over whatever tab was selected.
+  flashes Schedule over the selected tab.
 
-  The entries inside the native "Others" dropdown (Queue, Wallet, Account, and
-  Queue operations when a scanner operator has queue access —
-  routes under `app/(tabs)/others/`) are intentionally pseudo-tabs
-  (`lib/operations-navigation.ts`):
+  The entries inside the native `Others` dropdown (Account for participants;
+  Queue, Wallet, Account, and Queue operations when a scanner operator has
+  queue access — routes under `app/(tabs)/others/`) are intentionally
+  pseudo-tabs (`lib/operations-navigation.ts`):
 
   - Selecting the pseudo-tab whose section is already on screen is a no-op.
   - Changing pseudo-tabs always uses `replace()`, never `push()`, so repeated
@@ -327,24 +330,34 @@ route below. No migration needed.
   filled/accent means on, outline/grey off. The header branches on
   `isRealLiquidGlassAvailable()` (`components/glass-view.tsx`): on iOS 26+ it's
   a real native header (`app/(tabs)/schedule/_layout.tsx` gives this tab its
-  own Stack so `navigation.setOptions` can drive one) with a compact left-
-  aligned title, `Stack.Toolbar.Button` pair for notifications/filter — real
-  adjacent `UIBarButtonItem`s the OS groups into one Liquid Glass capsule on
-  its own, no manual divider or shadow to get wrong — and Apple's own
+  own Stack so `navigation.setOptions` can drive one) with a compact
+  left-aligned title, `Stack.Toolbar.Button` pair for notifications/filter —
+  real adjacent `UIBarButtonItem`s the OS groups into one Liquid Glass capsule
+  on its own, no manual divider or shadow to get wrong — and Apple's own
   integrated search button (`headerSearchBarOptions`, which owns its
   expand/collapse animation and Cancel affordance). Everywhere else (iOS
   <26, Android) `LegacyScheduleHeader` renders the original hand-rolled
-  header in the screen body instead: a title row with a glass bell+filter
-  pill (`components/schedule-filter-button.tsx`'s `ScheduleFilterTrigger`)
+  header in the screen body instead: a title row with a glass bell+filter pill
   and a separate glass search button that swaps the row for an inline text
   field with a Cancel button. `ScheduleFilterPanel` (also in
   schedule-filter-button.tsx) is the dropdown for both paths, rendered as a
   `Modal` so it isn't clipped by either header's bounds — kind filter open to
-  everyone, audience filter only to `schedule:manage` holders. **Known gap**:
-  on the non-glass fallback the tab bar renders transparent under this
-  screen and its own content isn't contained above it (same symptom on
-  Alerts, unaffected by anything here); root cause still open, see PR
-  history for what's been ruled out. The Add button (admin only) is a
+  everyone, audience filter only to `schedule:manage` holders. The custom tab
+  bar is an absolute overlay, so the screen keeps its full-height content and
+  the list can pass behind the translucent Liquid Glass surface (opaque on
+  Android and earlier iOS). Its direct surface is one native gesture
+  surface: the selection lens follows the finger from touch-down and
+  navigation commits on release to the tab cell under the finger, while the
+  separate Others circle remains the native dropdown. On the native-search path,
+  `allowToolbarIntegration` is disabled so `integratedButton` stays in the
+  header instead of being adopted by the custom bottom bar. The tab shell
+  publishes `useRouterTabBarInsets()` from `lib/router-tabs-inset.ts`:
+  `contentBottomInset` is the reusable safe clearance for scroll endings and
+  `tabBarHeight`/`tabBarBottomPadding` can position floating controls above the
+  bar. Scroll views that retain iOS automatic inset adjustment use
+  `useRouterTabBarScrollBottomInset()` so UIKit's bottom safe area is not counted
+  twice. The Add button
+  (admin only) is a
   floating glass FAB pinned bottom-right, mirroring the edit FAB on
   `app/schedule/[id].tsx` and the scanner screen's torch button, rather than
   living in the header row. Admin rows are swipeable to reveal edit/delete
@@ -374,8 +387,9 @@ to scan. `operations/_layout.tsx` and `others/operations/_layout.tsx` wrap
 it in its own `Stack` so it can use the same native
 `headerLargeTitle`/`headerSearchBarOptions` search bar as
 `people-directory-screen.tsx`; both use iOS 26's `integratedButton`
-placement so the inactive search control stays a compact native button on
-regular-width iPads instead of expanding into a full trailing field. Queue
+placement with toolbar integration disabled, so the inactive search control
+stays a compact native button in the header on regular-width iPads instead of
+moving into the custom bottom bar or expanding into a full trailing field. Queue
 operations also pairs that search action with the same native filter pattern
 as People Finder, offering all, live, and paused rooms. Typing a query swaps
 the filtered room grid for a flat, sorted list. The results include

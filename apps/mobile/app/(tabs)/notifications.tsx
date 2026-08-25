@@ -1,5 +1,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
+import { useScrollToTop } from "expo-router";
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -40,6 +41,7 @@ import {
   subscribeToCategory,
   subscribeToNotificationChanges,
 } from "@/lib/notification-events";
+import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { subscribeToServerEvent } from "@/lib/server-events";
 import { has } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
@@ -327,6 +329,10 @@ const MessagesView = memo(function MessagesView({
   const pullProgress = useSharedValue(0);
   const pullArmed = useSharedValue(false);
   const pullBand = useSharedValue(0);
+  const tabBarBottomInset = useRouterTabBarScrollBottomInset();
+  const scrollRef = useRef<ScrollView>(null);
+
+  useScrollToTop(scrollRef);
 
   // Two independent caches, both kept warm at once — "unread only" needs to
   // show every unread message (the server's real unread total), not just
@@ -607,11 +613,12 @@ const MessagesView = memo(function MessagesView({
 
   return (
     <Animated.ScrollView
+      ref={scrollRef}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
         gap: 16,
         padding: 16,
-        paddingBottom: 32,
+        paddingBottom: Math.max(32, tabBarBottomInset + 16),
         paddingTop: 16 + androidTopInset,
       }}
       keyboardShouldPersistTaps="handled"
@@ -1035,6 +1042,10 @@ const PreferencesView = memo(function PreferencesView({
   const [actionError, setActionError] = useState<Error | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const actionRetry = useRef<(() => Promise<void>) | null>(null);
+  const tabBarBottomInset = useRouterTabBarScrollBottomInset();
+  const scrollRef = useRef<ScrollView>(null);
+
+  useScrollToTop(scrollRef);
 
   const fetchPreferences = useCallback(
     () => apiFetch<Preferences>("/api/me/notification-preferences"),
@@ -1098,11 +1109,12 @@ const PreferencesView = memo(function PreferencesView({
   }
 
   const scrollProps = {
+    ref: scrollRef,
     contentInsetAdjustmentBehavior: "automatic" as const,
     contentContainerStyle: {
       gap: 18,
       padding: 16,
-      paddingBottom: 32,
+      paddingBottom: Math.max(32, tabBarBottomInset + 16),
       paddingTop: 16 + androidTopInset,
     },
     keyboardShouldPersistTaps: "handled" as const,
