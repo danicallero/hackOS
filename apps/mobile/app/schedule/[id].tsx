@@ -2,7 +2,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useLocalSearchParams } from "expo-router";
 import Stack from "expo-router/stack";
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView } from "@/components/glass-view";
 import { EmptyState } from "@/components/native-ui";
@@ -44,11 +44,28 @@ const sectionHeaderStyle = {
   textTransform: "uppercase" as const,
 };
 
+const fallbackTitleStyle = {
+  color: colors.label,
+  fontSize: 22,
+  fontWeight: "800" as const,
+  lineHeight: 28,
+};
+
+function titleMayTruncateInNativeHeader(title: string, width: number): boolean {
+  // The native large and compact headers both reserve space for navigation
+  // controls. This conservative estimate keeps long localized titles
+  // available in the content without repeating ordinary short titles (H47,
+  // H59).
+  const approximateCapacity = Math.max(24, Math.floor(width / 16));
+  return title.length > approximateCapacity;
+}
+
 export default function ScheduleDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t, language } = useLocale();
   const { me } = useMeContext();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const canManage = has(me?.capabilities ?? [], CAPABILITIES.SCHEDULE_MANAGE);
   const { data, loading, error, staleSince, load, setData } = useCachedApi(
     "schedule",
@@ -104,6 +121,12 @@ export default function ScheduleDetailScreen() {
     ? { ...adminItem, ...resolveScheduleText(adminItem, language) }
     : item;
   const staffItem = adminItem ?? (item?.notes !== undefined ? item : null);
+  const staffOnly = (staffItem?.audiences ?? []).length === 0;
+  const showStaffVisibility = Boolean(staffItem && !staffOnly);
+  const showStaffPublishAt = staffItem?.visibility === "hidden" && !staffOnly;
+  const showTitleFallback = Boolean(
+    item && titleMayTruncateInNativeHeader(detailItem?.title ?? item.title, width),
+  );
   const startsAt = detailItem ? new Date(detailItem.startsAt) : null;
   const endsAt = detailItem ? new Date(detailItem.endsAt) : null;
   const date = startsAt?.toLocaleDateString(language, {
@@ -188,6 +211,12 @@ export default function ScheduleDetailScreen() {
           )
         ) : (
           <View style={{ gap: 24 }}>
+            {showTitleFallback ? (
+              <Text accessibilityRole="header" selectable style={fallbackTitleStyle}>
+                {detailItem?.title ?? item.title}
+              </Text>
+            ) : null}
+
             {detailItem?.description ? (
               <View style={{ gap: 10 }}>
                 <Text style={sectionHeaderStyle}>{t("scheduleDescription")}</Text>
@@ -235,26 +264,32 @@ export default function ScheduleDetailScreen() {
                     <PlainInfoRow
                       label={t("scheduleFilterAudience")}
                       value={scheduleAudienceSummary(staffItem, t)}
+                      last={staffOnly}
                     />
-                    {adminItem ? (
+                    {!staffOnly && adminItem ? (
                       <PlainInfoRow
                         label={t("scheduleRequiresScanLabel")}
                         value={adminItem.requiresScan ? t("yesLabel") : t("noLabel")}
                       />
                     ) : null}
-                    <PlainInfoRow
-                      label={t("scheduleVisibilityLabel")}
-                      value={staffItem.visibility === "shown" ? t("yesLabel") : t("noLabel")}
-                    />
-                    <PlainInfoRow
-                      label={t("schedulePublishAtLabel")}
-                      value={
-                        staffItem.publishAt
-                          ? new Date(staffItem.publishAt).toLocaleString(language)
-                          : t("accountNotSet")
-                      }
-                      last
-                    />
+                    {showStaffVisibility ? (
+                      <PlainInfoRow
+                        label={t("scheduleVisibilityLabel")}
+                        value={staffItem.visibility === "shown" ? t("yesLabel") : t("noLabel")}
+                        last={!showStaffPublishAt}
+                      />
+                    ) : null}
+                    {showStaffPublishAt ? (
+                      <PlainInfoRow
+                        label={t("schedulePublishAtLabel")}
+                        value={
+                          staffItem.publishAt
+                            ? new Date(staffItem.publishAt).toLocaleString(language)
+                            : t("accountNotSet")
+                        }
+                        last
+                      />
+                    ) : null}
                   </View>
                   <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
                     {t("scheduleStaffSeeAllHint")}
