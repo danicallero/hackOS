@@ -351,7 +351,9 @@ route below. No migration needed.
   separate Others circle remains the native dropdown. On the native-search path,
   `allowToolbarIntegration` is disabled so `integratedButton` stays in the
   header instead of being adopted by the custom bottom bar. The tab shell
-  publishes `useRouterTabBarInsets()` from `lib/router-tabs-inset.ts`:
+  publishes `useRouterTabBarInsets()` from `lib/router-tabs-inset.ts` (the
+  reusable shell contract is documented in
+  [`router-tabs.md`](./router-tabs.md)):
   `contentBottomInset` is the reusable safe clearance for scroll endings and
   `tabBarHeight`/`tabBarBottomPadding` can position floating controls above the
   bar. Scroll views that retain iOS automatic inset adjustment use

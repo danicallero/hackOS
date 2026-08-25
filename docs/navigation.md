@@ -114,6 +114,11 @@ every workspace and every item (`apps/web/src/lib/session.tsx`).
 
 ## Mobile: custom tabs and overflow selector (H55)
 
+The reusable shell's public contract is documented in
+[`router-tabs.md`](./router-tabs.md). This section records the hackOS-specific
+capability mapping and pseudo-tab policy; it is not a replacement for the
+component API reference.
+
 `apps/mobile/lib/tabs.ts` computes `primaryTabs()`/`overflowTabs()` from
 effective capabilities. Every platform uses the custom Expo Router shell in
 `components/router-tabs.tsx`, with iOS 26+ Liquid Glass surfaces and solid

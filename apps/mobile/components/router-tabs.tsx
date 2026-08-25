@@ -1,3 +1,4 @@
+import { GlassView as ExpoGlassView, isLiquidGlassAvailable } from "expo-glass-effect";
 import { type Href, usePathname } from "expo-router";
 import {
   TabList,
@@ -7,14 +8,21 @@ import {
   type TabTriggerSlotProps,
   useTabTrigger,
 } from "expo-router/ui";
-import { forwardRef, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import {
-  type ColorSchemeName,
+  type ComponentType,
+  forwardRef,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
   type ColorValue,
+  Platform,
   Pressable,
   type StyleProp,
   Text,
-  useColorScheme,
   View,
   type ViewStyle,
 } from "react-native";
@@ -27,7 +35,6 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
-import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import {
   RouterTabBarInsetsProvider,
   ROUTER_TAB_BAR_HEIGHT as TAB_BAR_HEIGHT,
@@ -48,49 +55,88 @@ export const ROUTER_TAB_OVERFLOW_WIDTH = ROUTER_TAB_BAR_HEIGHT;
 const ROUTER_TAB_BAR_HORIZONTAL_PADDING = 16;
 const TAB_SELECTION_SPRING = { damping: 20, mass: 0.8, stiffness: 220 };
 
-export interface RouterTabItem {
-  href: Href;
-  icon: ReactNode;
-  label: string;
-  name: string;
-  selectedIcon?: ReactNode;
+export type RouterTabsSurfaceMode = "liquid-glass" | "opaque";
+
+/** Props a custom tab-surface renderer must accept. */
+export interface RouterTabsSurfaceProps {
+  children?: ReactNode;
+  /** Whether the native material should use its interactive treatment. */
+  isInteractive: boolean;
+  /** The shell's resolved material mode for the current platform. */
+  mode: RouterTabsSurfaceMode;
+  style?: StyleProp<ViewStyle>;
   testID?: string;
 }
 
+/** Injectable material adapter for consumers that do not use Expo Glass. */
+export type RouterTabsSurfaceComponent = ComponentType<RouterTabsSurfaceProps>;
+
+/** True only when the current Expo runtime can render native Liquid Glass. */
+export function isRouterTabsLiquidGlassAvailable(): boolean {
+  return (Platform.OS === "ios" || Platform.OS === "macos") && isLiquidGlassAvailable();
+}
+
+/** A direct cell in the visual tab bar. The caller owns icon rendering. */
+export interface RouterTabItem {
+  /** Expo Router destination for this direct tab. */
+  href: Href;
+  /** Inactive icon node; keep its layout size stable across states. */
+  icon: ReactNode;
+  /** One-line visible label and the control's accessibility label. */
+  label: string;
+  /** Unique `TabTrigger` name shared with the complete route registry. */
+  name: string;
+  /** Optional active icon node; `icon` is reused when omitted. */
+  selectedIcon?: ReactNode;
+  /** Optional stable selector for native UI tests. */
+  testID?: string;
+}
+
+/** A route registered with Expo Router, including hidden overflow routes. */
 export interface RouterTabRoute {
   href: Href;
   name: string;
 }
 
+/** Semantic colours used by Liquid Glass and its opaque fallback. */
 export interface RouterTabsTheme {
-  barBackground: ColorValue;
-  icon: ColorValue;
+  /** Inactive label token. */
   label: ColorValue;
-  selectedIcon: ColorValue;
+  /** Active label token. */
   selectedLabel: ColorValue;
+  /** Opaque active-lens fill used without real Liquid Glass. */
   selectedSurface: ColorValue;
+  /** Optional React Native box shadow for the bar and active lens. */
   shadow?: string;
+  /** Opaque bar fill used without real Liquid Glass. */
   surface: ColorValue;
+  /** Transparent token used by the overlay and hit targets. */
   transparent: ColorValue;
 }
 
+/** Props for the reusable Expo Router tab shell. */
 export interface RouterTabsProps {
-  /** Direct destinations. Five fit when no overflow control is supplied. */
+  /** Direct destinations in visual and scrub order. */
   tabs: RouterTabItem[];
-  /** Full route registry, including destinations hidden behind the overflow. */
+  /** Full route registry, including destinations hidden behind `overflow`. */
   routes?: RouterTabRoute[];
-  /** A ready-to-render overflow button. It is placed in its own circle. */
+  /** Ready-to-render overflow control; it is placed in its own circle. */
   overflow?: ReactNode;
+  /** Side effects for ordinary direct-tab presses, such as haptics. */
   onTabPress?: (tab: RouterTabItem) => void;
-  /** Called after a direct tab is released, including a scrubbed selection. */
+  /** Side effects after a direct tab release, including a scrub selection. */
   onTabSelect?: (index: number) => void;
-  /** Direct-cell budget when the overflow control is present. */
+  /** Direct-cell budget when `overflow` is present; defaults to four. */
   maxDirectTabs?: number;
-  /** Direct-cell budget when no overflow control is present. */
+  /** Direct-cell budget without `overflow`; defaults to five. */
   maxTabsWithoutOverflow?: number;
-  /** Optional screen-surface scheme for opaque fallbacks such as a dark scanner. */
-  fallbackColorScheme?: ColorSchemeName;
+  /** Theme overrides for opaque fallbacks on intentionally themed screens. */
+  fallbackTheme?: Partial<RouterTabsTheme>;
+  /** Optional material adapter; Expo Glass is used when omitted. */
+  surfaceComponent?: RouterTabsSurfaceComponent;
+  /** Prefix for the shell's native test identifiers. */
   testID?: string;
+  /** Semantic colours for both rendering paths. */
   theme: RouterTabsTheme;
 }
 
@@ -107,17 +153,15 @@ export function RouterTabs({
   overflow,
   routes,
   tabs,
-  fallbackColorScheme,
+  fallbackTheme,
   maxDirectTabs = MAX_DIRECT_TABS,
   maxTabsWithoutOverflow = MAX_TABS_WITHOUT_OVERFLOW,
+  surfaceComponent = DefaultRouterTabsSurface,
   testID = "router-tabs",
   theme,
 }: RouterTabsProps) {
-  const liquidGlass = isRealLiquidGlassAvailable();
-  const systemScheme = useColorScheme();
-  const resolvedTheme = liquidGlass
-    ? theme
-    : resolveFallbackTheme(theme, fallbackColorScheme ?? systemScheme);
+  const liquidGlass = isRouterTabsLiquidGlassAvailable();
+  const resolvedTheme = liquidGlass ? theme : { ...theme, ...fallbackTheme };
   const directTabLimit = overflow ? maxDirectTabs : maxTabsWithoutOverflow;
   const directTabs = tabs.slice(0, directTabLimit);
   const registeredRoutes = routes ?? tabs.map(({ href, name }) => ({ href, name }));
@@ -139,6 +183,7 @@ export function RouterTabs({
           onTabPress={onTabPress}
           onTabSelect={onTabSelect}
           overflow={overflow}
+          surfaceComponent={surfaceComponent}
           testID={testID}
           theme={resolvedTheme}
         />
@@ -152,41 +197,13 @@ export function RouterTabs({
   );
 }
 
-function resolveFallbackTheme(
-  theme: RouterTabsTheme,
-  colorScheme: ColorSchemeName,
-): RouterTabsTheme {
-  if (colorScheme === "dark") {
-    return {
-      ...theme,
-      barBackground: "#000000",
-      icon: "#98989e",
-      label: "#98989e",
-      selectedIcon: "#0a84ff",
-      selectedLabel: "#0a84ff",
-      selectedSurface: "#2c2c2e",
-      surface: "#1c1c1e",
-    };
-  }
-
-  return {
-    ...theme,
-    barBackground: "#f2f2f7",
-    icon: "#6c6c70",
-    label: "#6c6c70",
-    selectedIcon: "#007aff",
-    selectedLabel: "#007aff",
-    selectedSurface: "#e5e5ea",
-    surface: "#ffffff",
-  };
-}
-
 interface RouterTabsContentProps {
   directTabs: RouterTabItem[];
   liquidGlass: boolean;
   onTabPress?: (tab: RouterTabItem) => void;
   onTabSelect?: (index: number) => void;
   overflow?: ReactNode;
+  surfaceComponent: RouterTabsSurfaceComponent;
   testID: string;
   theme: RouterTabsTheme;
 }
@@ -197,6 +214,7 @@ function RouterTabsContent({
   onTabPress,
   onTabSelect,
   overflow,
+  surfaceComponent,
   testID,
   theme,
 }: RouterTabsContentProps) {
@@ -311,6 +329,7 @@ function RouterTabsContent({
         >
           <TabSurface
             liquidGlass={liquidGlass}
+            surfaceComponent={surfaceComponent}
             style={{ borderRadius: tabBarHeight / 2, flex: 1 }}
             theme={theme}
           >
@@ -320,6 +339,7 @@ function RouterTabsContent({
               selectionInset={tabItemVerticalInset}
               liquidGlass={liquidGlass}
               offset={selectionOffset}
+              surfaceComponent={surfaceComponent}
               theme={theme}
               visible={selectedDirectTabIndex >= 0 || isScrubbing}
             />
@@ -343,6 +363,7 @@ function RouterTabsContent({
       {overflow ? (
         <TabSurface
           liquidGlass={liquidGlass}
+          surfaceComponent={surfaceComponent}
           style={{
             borderRadius: tabBarHeight / 2,
             height: tabBarHeight,
@@ -464,6 +485,7 @@ function TabSelectionBlob({
   selectionInset,
   liquidGlass,
   offset,
+  surfaceComponent,
   theme,
   visible,
 }: {
@@ -472,6 +494,7 @@ function TabSelectionBlob({
   selectionInset: number;
   liquidGlass: boolean;
   offset: SharedValue<number>;
+  surfaceComponent: RouterTabsSurfaceComponent;
   theme: RouterTabsTheme;
   visible: boolean;
 }) {
@@ -495,8 +518,10 @@ function TabSelectionBlob({
         animatedStyle,
       ]}
     >
-      <GlassView
+      <SurfaceComponent
         isInteractive={liquidGlass}
+        mode={liquidGlass ? "liquid-glass" : "opaque"}
+        surfaceComponent={surfaceComponent}
         style={{
           backgroundColor: !liquidGlass ? theme.selectedSurface : undefined,
           borderCurve: "continuous",
@@ -512,12 +537,14 @@ function TabSelectionBlob({
 function TabSurface({
   children,
   liquidGlass,
+  surfaceComponent,
   style,
   testID,
   theme,
 }: {
   children: ReactNode;
   liquidGlass: boolean;
+  surfaceComponent: RouterTabsSurfaceComponent;
   style?: StyleProp<ViewStyle>;
   testID?: string;
   theme: RouterTabsTheme;
@@ -536,8 +563,52 @@ function TabSurface({
   ];
 
   return (
-    <GlassView isInteractive={liquidGlass} style={surfaceStyle} testID={testID}>
+    <SurfaceComponent
+      isInteractive={liquidGlass}
+      mode={liquidGlass ? "liquid-glass" : "opaque"}
+      surfaceComponent={surfaceComponent}
+      style={surfaceStyle}
+      testID={testID}
+    >
       {children}
-    </GlassView>
+    </SurfaceComponent>
+  );
+}
+
+function SurfaceComponent({
+  children,
+  isInteractive,
+  mode,
+  surfaceComponent,
+  style,
+  testID,
+}: RouterTabsSurfaceProps & { surfaceComponent: RouterTabsSurfaceComponent }) {
+  const Surface = surfaceComponent;
+  return (
+    <Surface isInteractive={isInteractive} mode={mode} style={style} testID={testID}>
+      {children}
+    </Surface>
+  );
+}
+
+function DefaultRouterTabsSurface({
+  children,
+  isInteractive,
+  mode,
+  style,
+  testID,
+}: RouterTabsSurfaceProps) {
+  if (mode === "liquid-glass") {
+    return (
+      <ExpoGlassView isInteractive={isInteractive} style={style} testID={testID}>
+        {children}
+      </ExpoGlassView>
+    );
+  }
+
+  return (
+    <View style={style} testID={testID}>
+      {children}
+    </View>
   );
 }

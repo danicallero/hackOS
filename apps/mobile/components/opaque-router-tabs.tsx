@@ -4,7 +4,12 @@ import { usePathname, useRouter } from "expo-router";
 import type { SFSymbol } from "expo-symbols";
 import { useColorScheme, useWindowDimensions, View } from "react-native";
 
-import { type RouterTabItem, type RouterTabRoute, RouterTabs } from "@/components/router-tabs";
+import {
+  type RouterTabItem,
+  type RouterTabRoute,
+  RouterTabs,
+  type RouterTabsTheme,
+} from "@/components/router-tabs";
 import { SymbolView } from "@/components/symbol";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -166,6 +171,20 @@ export function OpaqueRouterTabs({ capabilities, hasUnreadNotifications }: Opaqu
       testID: `opaque-tab-${key}`,
     };
   });
+  const fallbackTheme: Partial<RouterTabsTheme> =
+    fallbackColorScheme === "dark"
+      ? {
+          label: "#98989e",
+          selectedLabel: "#0a84ff",
+          selectedSurface: "#2c2c2e",
+          surface: "#1c1c1e",
+        }
+      : {
+          label: "#6c6c70",
+          selectedLabel: "#007aff",
+          selectedSurface: "#e5e5ea",
+          surface: "#ffffff",
+        };
 
   return (
     <RouterTabs
@@ -182,15 +201,12 @@ export function OpaqueRouterTabs({ capabilities, hasUnreadNotifications }: Opaqu
       }
       maxDirectTabs={directTabLimit}
       maxTabsWithoutOverflow={maxTabsWithoutOverflow}
-      fallbackColorScheme={fallbackColorScheme}
+      fallbackTheme={fallbackTheme}
       routes={REGISTERED_TAB_ROUTES}
       tabs={tabs}
       testID="opaque-router-tabs"
       theme={{
-        barBackground: colors.background,
-        icon: colors.secondaryLabel,
         label: colors.secondaryLabel,
-        selectedIcon: colors.accent,
         selectedLabel: colors.accent,
         selectedSurface: colors.accentSurface,
         shadow: colors.controlShadow,
