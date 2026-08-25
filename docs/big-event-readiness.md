@@ -186,9 +186,9 @@ pnpm --filter @hackos/api event-day:load -- \
   --output docs/big-event-readiness-results.json
 ```
 
-The load command exits non-zero only when a P0/P1 budget fails. P3 `429`
-responses and degraded participant refreshes remain in the result because P3
-is explicitly best effort. Run the deterministic in-process harness check
+The load command exits non-zero when a P0, P1, or P2 release budget fails. P3
+`429` responses and degraded participant refreshes remain in the result because
+P3 is explicitly best effort. Run the deterministic in-process harness check
 with `pnpm --filter @hackos/api event-day:load -- --mode smoke` before changing
 the scenario. Stop the API and run `pnpm infra:down` after the measurement.
 
