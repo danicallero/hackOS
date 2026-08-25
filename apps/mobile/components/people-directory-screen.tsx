@@ -8,7 +8,14 @@ import {
 } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
-import { EmptyState, Separator } from "@/components/native-ui";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
+import {
+  EmptyState,
+  LegacyHeaderIconButton,
+  LegacyScreenHeader,
+  Separator,
+} from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
@@ -17,6 +24,7 @@ import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { listScannerPeople } from "@/lib/scanner-db";
 import type { ScannerPerson } from "@/lib/scanner-types";
 import { isPadIdiom } from "@/lib/tabs";
+import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
 
@@ -25,14 +33,20 @@ export function PeopleDirectoryScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const { t } = useLocale();
+  const insets = useSafeAreaInsets();
   const sync = useScannerSync();
   const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [roleFilter, setRoleFilter] = useState<"all" | ScannerPerson["role"]>("all");
   const [people, setPeople] = useState<ScannerPerson[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const usesListTitle = isPadIdiom();
+  const glassAvailable = isRealLiquidGlassAvailable();
+  const androidTopInset = useAndroidTopInset();
+  const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
+  const showInlineListTitle = usesListTitle && glassAvailable;
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const listRef = useRef<FlatList<ScannerPerson>>(null);
 
@@ -88,13 +102,20 @@ export function PeopleDirectoryScreen() {
   }
 
   useLayoutEffect(() => {
+    if (!glassAvailable) {
+      navigation.setOptions({ headerShown: false });
+      return;
+    }
     navigation.setOptions({
       // Both entry points open the same people directory. Keep the screen
       // title stable; the search field already explains the available action.
       title: usesListTitle ? "" : t("scannerPeople"),
-      // Large titles are an iOS-only presentation; on Android the native
-      // app bar stays compact and opaque so the list scrolls below it.
+      // Large titles are an iOS-only presentation; the transparent native
+      // header lets the list use UIKit's automatic inset and collapse the
+      // title without painting a layer over it.
       headerLargeTitle: process.env.EXPO_OS === "ios" && !usesListTitle,
+      headerTransparent: true,
+      headerShadowVisible: false,
       headerSearchBarOptions: {
         placeholder: t("scannerPeopleSearchPlaceholder"),
         autoCapitalize: "none",
@@ -128,7 +149,7 @@ export function PeopleDirectoryScreen() {
         </MenuView>
       ),
     });
-  }, [navigation, roleFilter, t, usesListTitle]);
+  }, [glassAvailable, navigation, roleFilter, t, usesListTitle]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
@@ -160,11 +181,68 @@ export function PeopleDirectoryScreen() {
     });
   }
 
-  return (
+  const legacyHeader = !glassAvailable ? (
+    <LegacyScreenHeader
+      actions={
+        <GlassView
+          colorScheme="auto"
+          glassEffectStyle="regular"
+          isInteractive
+          style={{ borderRadius: 22, height: 44, width: 44 }}
+        >
+          <MenuView
+            actions={ROLE_FILTERS.map((filter) => ({
+              id: filter.value,
+              title: t(filter.labelKey),
+              image: filter.icon,
+              state: (roleFilter === filter.value ? "on" : "off") as "on" | "off",
+            }))}
+            onPressAction={({ nativeEvent }) =>
+              setRoleFilter(nativeEvent.event as typeof roleFilter)
+            }
+          >
+            <LegacyHeaderIconButton
+              icon={
+                roleFilter === "all"
+                  ? "line.3.horizontal.decrease"
+                  : "line.3.horizontal.decrease.circle.fill"
+              }
+              accessibilityLabel={t("scannerFilterGroups")}
+              accessibilityState={{ selected: roleFilter !== "all" }}
+              tintColor={roleFilter === "all" ? colors.label : colors.accent}
+              onPress={() => undefined}
+            />
+          </MenuView>
+        </GlassView>
+      }
+      cancelLabel={t("cancel")}
+      leading={
+        <LegacyHeaderIconButton
+          icon="chevron.left"
+          accessibilityLabel={t("back")}
+          onPress={() => router.back()}
+        />
+      }
+      onCloseSearch={() => {
+        setSearchOpen(false);
+        setQuery("");
+      }}
+      onOpenSearch={() => setSearchOpen(true)}
+      onSearchQueryChange={setQuery}
+      searchLabel={t("scheduleSearch")}
+      searchOpen={searchOpen}
+      searchPlaceholder={t("scannerPeopleSearchPlaceholder")}
+      searchQuery={query}
+      title={t("scannerPeople")}
+      topInset={legacyTopInset}
+    />
+  ) : null;
+
+  const list = (
     <FlatList
       ref={listRef}
       contentInsetAdjustmentBehavior="automatic"
-      style={{ backgroundColor: colors.background }}
+      style={{ backgroundColor: colors.background, flex: 1 }}
       contentContainerStyle={{
         flexGrow: 1,
         paddingBottom: Math.max(32, tabBarBottomInset + 16),
@@ -175,9 +253,9 @@ export function PeopleDirectoryScreen() {
       ItemSeparatorComponent={() => <Separator inset={72} />}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
       ListHeaderComponent={
-        usesListTitle || (loadError && people.length > 0) || syncError ? (
-          <View style={{ gap: 16, paddingBottom: usesListTitle ? 16 : 0, paddingTop: 8 }}>
-            {usesListTitle ? (
+        showInlineListTitle || (loadError && people.length > 0) || syncError ? (
+          <View style={{ gap: 16, paddingBottom: showInlineListTitle ? 16 : 0, paddingTop: 8 }}>
+            {showInlineListTitle ? (
               <Text style={{ color: colors.label, fontSize: 34, fontWeight: "700" }}>
                 {t("scannerPeople")}
               </Text>
@@ -221,6 +299,14 @@ export function PeopleDirectoryScreen() {
       }
       renderItem={({ item }) => <PersonRow person={item} onPress={() => openPerson(item)} />}
     />
+  );
+
+  if (glassAvailable) return list;
+  return (
+    <View style={{ backgroundColor: colors.background, flex: 1 }}>
+      {legacyHeader}
+      {list}
+    </View>
   );
 }
 

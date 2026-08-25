@@ -336,10 +336,13 @@ route below. No migration needed.
   on its own, no manual divider or shadow to get wrong — and Apple's own
   integrated search button (`headerSearchBarOptions`, which owns its
   expand/collapse animation and Cancel affordance). Everywhere else (iOS
-  <26, Android) `LegacyScheduleHeader` renders the original hand-rolled
-  header in the screen body instead: a title row with a glass bell+filter pill
-  and a separate glass search button that swaps the row for an inline text
-  field with a Cancel button. `ScheduleFilterPanel` (also in
+  <26, Android) the shared `LegacyScreenHeader` from
+  `components/native-ui.tsx` renders the original hand-rolled header in the
+  screen body instead: a title row with a glass bell+filter pill and a
+  separate glass search button that swaps the row for an inline text field
+  with a Cancel button. Activities and People Finder reuse the same component
+  so their fallback search transition and 44-point hit targets stay identical.
+  `ScheduleFilterPanel` (also in
   schedule-filter-button.tsx) is the dropdown for both paths, rendered as a
   `Modal` so it isn't clipped by either header's bounds — kind filter open to
   everyone, audience filter only to `schedule:manage` holders. The custom tab
@@ -441,14 +444,20 @@ gets a device notification. The layout is one column on phones, two from
 accreditation, badge replacement, door presence, meals, and activities),
 a dedicated primary tab for operators (see `docs/navigation.md`). Its
 person/people drill-down routes live under `app/(tabs)/scan/*`. Screen-level
-actions use `AdaptiveToolbarButton`: compact-width iPhones and Android keep
-navigation actions in the same 44-point glass row as the activity/queue
-labels. Regular-width iPad and Mac promote those actions into UIKit's top
-toolbar. Activity scanning uses a balanced second row with equal-width glass
-activity and queue-sync containers, followed by the statistics; the general
-scanner's queue-sync capsule sits directly below the adaptive tab bar.
-Scanner and activity people-directory actions use the same
-person-with-magnifier symbol. Because `react-native-screens` can attach an
+actions use `AdaptiveToolbarButton`: real Liquid Glass runtimes promote
+navigation actions into UIKit's top toolbar; iOS <26 and Android use the same
+44-point opaque glass buttons inline on the camera surface. The camera preview
+is non-interactive so it cannot steal those hit targets on older iOS. Activity
+scanning uses a balanced second row with equal-width glass and queue-sync
+containers, followed by the statistics; the general scanner's queue-sync
+capsule sits directly below the adaptive tab bar. Scanner and activity
+people-directory actions use the same person-with-magnifier symbol. On iOS
+26+, People Finder keeps the native large-title contract: its title starts
+left-aligned, collapses to the centred compact title while scrolling, and uses
+UIKit's automatic list inset with a transparent header so the title is not
+painted over by a separate opaque layer. On older iOS and Android it uses the
+shared fallback header with a custom back button, filter menu, and search
+transition. Because `react-native-screens` can attach an
 asynchronously populated iPad `FlatList` at its compact scroll edge, the two
 people directories and Queue operations render their regular-width heading
 as the list's first item while keeping back, filter, and search in native
@@ -518,10 +527,13 @@ gesture, never automatic or triggered by attempt count alone.
 
 `components/activities-screen.tsx` (`app/(tabs)/activities/index.tsx`) — the
 operator's list of scannable activities, read straight from the local
-`scanner_activities` cache. A native search field and a kind filter live in
-the nav bar (`headerSearchBarOptions` + a `MenuView` `headerRight`, same
-pattern as the people directory); both narrow the list together, and the
-pure filtering/marker helpers sit in `lib/activity-list.ts`
+`scanner_activities` cache. On iOS 26+ its native header follows Schedule: a
+compact left-aligned title, a native `Stack.Toolbar.Menu` kind filter, and
+Apple's integrated Liquid Glass search button. On iOS <26 and Android,
+`LegacyScreenHeader` in `components/native-ui.tsx` supplies the same opaque
+fallback, including the inline magnifying-glass search transition and native
+`MenuView` filter. Both controls narrow the list together, and the pure
+filtering/marker helpers sit in `lib/activity-list.ts`
 (`lib/activity-list.test.ts`). Each row shows its start time and its real
 kind pill (`scheduleTypeLabel`, so a talk no longer reads "Activity"), and
 the activity closest to the current time is outlined and labelled

@@ -228,7 +228,10 @@ export function OpaqueRouterTabs({ capabilities, hasUnreadNotifications }: Opaqu
 
 function isDarkScannerSurface(pathname: string): boolean {
   const routePath = pathname.replace(/\/\([^/]+\)/g, "");
-  return routePath === "/scan" || /^\/activities\/[^/]+$/.test(routePath);
+  // The activity scanner uses a numeric activity route. People Finder is also
+  // nested below `/activities`, but it is a light list surface and must not
+  // inherit the scanner's dark tab bar after navigation from the camera.
+  return routePath === "/scan" || /^\/activities\/\d+$/.test(routePath);
 }
 
 interface OpaqueOverflowMenuProps {

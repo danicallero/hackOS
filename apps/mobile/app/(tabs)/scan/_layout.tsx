@@ -1,9 +1,11 @@
 import { Stack } from "expo-router/stack";
 
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { useLocale } from "@/lib/i18n";
 
 export default function ScannerLayout() {
   const { t } = useLocale();
+  const glassAvailable = isRealLiquidGlassAvailable();
   return (
     <Stack screenOptions={{ headerBackButtonDisplayMode: "minimal" }}>
       <Stack.Screen
@@ -12,7 +14,7 @@ export default function ScannerLayout() {
           title: t("tabScan"),
           // Keep the camera edge-to-edge while letting iOS place its native
           // directory action alongside the regular-width navigation chrome.
-          headerShown: process.env.EXPO_OS === "ios",
+          headerShown: glassAvailable,
           headerTransparent: true,
           headerShadowVisible: false,
           headerTitle: "",
@@ -26,8 +28,11 @@ export default function ScannerLayout() {
           // Android has no large-title app bar and no `contentInset`
           // adjustment, so a transparent header there just floats over the
           // list's first rows — keep the native opaque app bar (H59).
+          headerShown: glassAvailable,
           headerLargeTitle: process.env.EXPO_OS === "ios",
-          headerTransparent: process.env.EXPO_OS === "ios",
+          // Keep the native large-title collapse (left at rest, centred when
+          // the list scrolls) while reserving the header's height for rows.
+          headerTransparent: true,
           headerShadowVisible: false,
           title: t("scannerPeople"),
           headerSearchBarOptions: {

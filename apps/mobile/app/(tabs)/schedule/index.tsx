@@ -4,20 +4,23 @@ import Stack from "expo-router/stack";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
-  type ColorValue,
   type GestureResponderEvent,
   Platform,
   Pressable,
   RefreshControl,
   SectionList,
   Text,
-  TextInput,
   useColorScheme,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
-import { EmptyState, StatusPill } from "@/components/native-ui";
+import {
+  EmptyState,
+  LegacyHeaderIconButton,
+  LegacyScreenHeader,
+  StatusPill,
+} from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { type AudienceFilterValue, ScheduleFilterPanel } from "@/components/schedule-filter-button";
 import {
@@ -414,26 +417,48 @@ export default function ScheduleScreen() {
           />
         </Stack.Toolbar>
       ) : (
-        <LegacyScheduleHeader
-          topInset={legacyTopInset}
-          title={t("tabSchedule")}
-          searchOpen={legacySearchOpen}
-          searchQuery={searchQuery}
-          onSearchQueryChange={setSearchQuery}
-          onOpenSearch={() => setLegacySearchOpen(true)}
+        <LegacyScreenHeader
+          actions={
+            <GlassView
+              colorScheme="auto"
+              glassEffectStyle="regular"
+              isInteractive
+              style={{ alignItems: "center", borderRadius: 22, flexDirection: "row", height: 44 }}
+            >
+              <LegacyHeaderIconButton
+                icon="bell.badge"
+                accessibilityLabel={t("scheduleNotificationsTitle")}
+                onPress={() => setSettingsOpen(true)}
+              />
+              <View
+                style={{ backgroundColor: colors.separator, height: 20, opacity: 0.6, width: 1 }}
+              />
+              <LegacyHeaderIconButton
+                icon={
+                  filterActive
+                    ? "line.3.horizontal.decrease.circle.fill"
+                    : "line.3.horizontal.decrease"
+                }
+                accessibilityLabel={t("scheduleFilter")}
+                accessibilityState={{ expanded: filterOpen, selected: filterActive }}
+                tintColor={filterActive ? colors.accent : colors.label}
+                onPress={() => setFilterOpen((current) => !current)}
+              />
+            </GlassView>
+          }
+          cancelLabel={t("cancel")}
           onCloseSearch={() => {
             setLegacySearchOpen(false);
             setSearchQuery("");
           }}
-          notificationsLabel={t("scheduleNotificationsTitle")}
-          onNotificationsPress={() => setSettingsOpen(true)}
-          filterLabel={t("scheduleFilter")}
-          filterOpen={filterOpen}
-          filterActive={filterActive}
-          onToggleFilter={() => setFilterOpen((current) => !current)}
+          onOpenSearch={() => setLegacySearchOpen(true)}
+          onSearchQueryChange={setSearchQuery}
           searchLabel={t("scheduleSearch")}
+          searchOpen={legacySearchOpen}
           searchPlaceholder={t("scheduleSearchPlaceholder")}
-          cancelLabel={t("cancel")}
+          searchQuery={searchQuery}
+          title={t("tabSchedule")}
+          topInset={legacyTopInset}
         />
       )}
       {canManage ? (
@@ -676,195 +701,6 @@ function AdminScheduleFormLoader({
       onSaved={onSaved}
       onSubmit={onSubmit}
     />
-  );
-}
-
-/**
- * Header for platforms without real Liquid Glass (Android, iOS <26): the
- * original hand-rolled title + bell/filter pill + search button, rendered
- * inline in the screen body with the native header hidden. `GlassView`
- * already renders these as opaque round buttons on its own on these
- * platforms — this is only about the *layout* a native header can't
- * express (a shared multi-touch-zone pill, an in-place expanding search
- * field), not about re-implementing glass styling.
- */
-function LegacyScheduleHeader({
-  topInset,
-  title,
-  searchOpen,
-  searchQuery,
-  onSearchQueryChange,
-  onOpenSearch,
-  onCloseSearch,
-  notificationsLabel,
-  onNotificationsPress,
-  filterLabel,
-  filterOpen,
-  filterActive,
-  onToggleFilter,
-  searchLabel,
-  searchPlaceholder,
-  cancelLabel,
-}: {
-  topInset: number;
-  title: string;
-  searchOpen: boolean;
-  searchQuery: string;
-  onSearchQueryChange: (text: string) => void;
-  onOpenSearch: () => void;
-  onCloseSearch: () => void;
-  notificationsLabel: string;
-  onNotificationsPress: () => void;
-  filterLabel: string;
-  filterOpen: boolean;
-  filterActive: boolean;
-  onToggleFilter: () => void;
-  searchLabel: string;
-  searchPlaceholder: string;
-  cancelLabel: string;
-}) {
-  return (
-    <View style={{ gap: 8, paddingHorizontal: 16, paddingTop: topInset, zIndex: 10 }}>
-      {searchOpen ? (
-        <View
-          style={{
-            alignItems: "center",
-            flexDirection: "row",
-            gap: 8,
-            paddingTop: 8,
-            paddingBottom: 4,
-          }}
-        >
-          <GlassView
-            colorScheme="auto"
-            glassEffectStyle="regular"
-            style={{ borderRadius: 12, flex: 1, height: 40, overflow: "hidden" }}
-          >
-            <View
-              style={{
-                alignItems: "center",
-                flex: 1,
-                flexDirection: "row",
-                gap: 6,
-                paddingHorizontal: 12,
-              }}
-            >
-              <SymbolView name="magnifyingglass" tintColor={colors.tertiaryLabel} size={16} />
-              <TextInput
-                autoFocus
-                accessibilityLabel={searchLabel}
-                onChangeText={onSearchQueryChange}
-                placeholder={searchPlaceholder}
-                placeholderTextColor={colors.tertiaryLabel}
-                returnKeyType="search"
-                style={{ color: colors.label, flex: 1, fontSize: 16 }}
-                value={searchQuery}
-              />
-            </View>
-          </GlassView>
-          <Pressable
-            accessibilityLabel={cancelLabel}
-            accessibilityRole="button"
-            onPress={onCloseSearch}
-          >
-            <Text style={{ color: colors.accent, fontSize: 16, fontWeight: "600" }}>
-              {cancelLabel}
-            </Text>
-          </Pressable>
-        </View>
-      ) : (
-        <View
-          style={{
-            alignItems: "center",
-            flexDirection: "row",
-            justifyContent: "space-between",
-            paddingTop: 8,
-            paddingBottom: 4,
-          }}
-        >
-          <Text style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}>{title}</Text>
-          <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
-            <GlassView
-              colorScheme="auto"
-              glassEffectStyle="regular"
-              isInteractive
-              style={{ alignItems: "center", borderRadius: 22, flexDirection: "row", height: 44 }}
-            >
-              <LegacyHeaderIconButton
-                icon="bell.badge"
-                accessibilityLabel={notificationsLabel}
-                onPress={onNotificationsPress}
-              />
-              <View
-                style={{ backgroundColor: colors.separator, height: 20, opacity: 0.6, width: 1 }}
-              />
-              <LegacyHeaderIconButton
-                icon={
-                  filterActive
-                    ? "line.3.horizontal.decrease.circle.fill"
-                    : "line.3.horizontal.decrease"
-                }
-                accessibilityLabel={filterLabel}
-                tintColor={filterActive ? colors.accent : colors.label}
-                accessibilityState={{ expanded: filterOpen, selected: filterActive }}
-                onPress={onToggleFilter}
-              />
-            </GlassView>
-            <GlassView
-              colorScheme="auto"
-              glassEffectStyle="regular"
-              isInteractive
-              style={{ borderRadius: 22, height: 44, width: 44 }}
-            >
-              <LegacyHeaderIconButton
-                icon="magnifyingglass"
-                accessibilityLabel={searchLabel}
-                onPress={onOpenSearch}
-              />
-            </GlassView>
-          </View>
-        </View>
-      )}
-    </View>
-  );
-}
-
-function LegacyHeaderIconButton({
-  icon,
-  accessibilityLabel,
-  accessibilityState,
-  tintColor,
-  onPress,
-}: {
-  icon:
-    | "bell.badge"
-    | "line.3.horizontal.decrease.circle.fill"
-    | "line.3.horizontal.decrease"
-    | "magnifyingglass";
-  accessibilityLabel: string;
-  accessibilityState?: { expanded?: boolean; selected?: boolean };
-  tintColor?: ColorValue;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityLabel={accessibilityLabel}
-      accessibilityRole="button"
-      accessibilityState={accessibilityState}
-      onPress={() => {
-        void haptic("light");
-        onPress();
-      }}
-      style={({ pressed }) => ({
-        alignItems: "center",
-        height: 44,
-        justifyContent: "center",
-        opacity: pressed ? 0.6 : 1,
-        width: 44,
-      })}
-    >
-      <SymbolView name={icon} tintColor={tintColor ?? colors.label} size={19} weight="semibold" />
-    </Pressable>
   );
 }
 

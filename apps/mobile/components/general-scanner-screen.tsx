@@ -4,7 +4,7 @@ import { Stack } from "expo-router/stack";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { GlassView } from "@/components/glass-view";
+import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { QrCamera } from "@/components/QrCamera";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
 import { SymbolView } from "@/components/symbol";
@@ -38,6 +38,7 @@ export function GeneralScannerScreen() {
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const tabBarBottomInset = useRouterTabBarBottomInset();
+  const glassAvailable = isRealLiquidGlassAvailable();
   const [error, setError] = useState<string | null>(null);
   const sync = useScannerSync();
   const [people, setPeople] = useState<ScannerPerson[]>([]);
@@ -148,7 +149,7 @@ export function GeneralScannerScreen() {
 
   return (
     <View style={{ backgroundColor: "black", flex: 1 }}>
-      <Stack.Screen options={{ headerTitle: "" }} />
+      <Stack.Screen options={{ headerShown: glassAvailable, headerTitle: "" }} />
       <QrCamera
         hint={null}
         onClose={pathname === "/scan" ? undefined : () => router.back()}
@@ -164,7 +165,13 @@ export function GeneralScannerScreen() {
       />
       <View
         pointerEvents="box-none"
-        style={{ left: 0, position: "absolute", right: 0, top: insets.top + 4 }}
+        style={{
+          left: 0,
+          position: "absolute",
+          right: 0,
+          top: insets.top + 4,
+          zIndex: 30,
+        }}
       >
         <ScannerQueueStatus
           queue={sync.queue}

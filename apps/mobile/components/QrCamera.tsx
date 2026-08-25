@@ -167,6 +167,10 @@ export function QrCamera({
       {isFocused ? (
         <CameraView
           active={isFocused}
+          // The preview only scans barcodes; it must never win hit-testing
+          // over the controls rendered above it (toolbar, queue, flashlight,
+          // and manual-entry buttons) on iOS 18's native camera surface.
+          pointerEvents="none"
           style={StyleSheet.absoluteFill}
           facing="back"
           enableTorch={cameraControls.showTorch && torchEnabled}
@@ -393,6 +397,7 @@ const styles = StyleSheet.create({
     height: 60,
     position: "absolute",
     right: 22,
+    zIndex: 20,
     width: 60,
   },
   cameraControlLeft: { left: 22, right: undefined },
@@ -401,6 +406,7 @@ const styles = StyleSheet.create({
     height: 44,
     left: 16,
     position: "absolute",
+    zIndex: 20,
     width: 44,
   },
   cameraControlPressable: {

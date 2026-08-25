@@ -1,12 +1,24 @@
 import { Stack } from "expo-router/stack";
 
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { useLocale } from "@/lib/i18n";
+import { colors } from "@/theme/colors";
 
 export default function ActivitiesLayout() {
   const { t } = useLocale();
+  const glassAvailable = isRealLiquidGlassAvailable();
   return (
     <Stack screenOptions={{ headerBackButtonDisplayMode: "minimal" }}>
-      <Stack.Screen name="index" options={{ title: t("tabActivities"), headerLargeTitle: true }} />
+      <Stack.Screen
+        name="index"
+        options={{
+          // Match Schedule: the real iOS 26 header owns the search button and
+          // the toolbar material; the screen supplies the fallback elsewhere.
+          headerShown: glassAvailable,
+          headerStyle: { backgroundColor: colors.background },
+          title: t("tabActivities"),
+        }}
+      />
       <Stack.Screen
         name="[id]"
         options={{
@@ -25,8 +37,12 @@ export default function ActivitiesLayout() {
           // Android has no large-title app bar and no `contentInset`
           // adjustment, so a transparent header there just floats over the
           // list's first rows — keep the native opaque app bar (H59).
+          headerShown: glassAvailable,
           headerLargeTitle: process.env.EXPO_OS === "ios",
-          headerTransparent: process.env.EXPO_OS === "ios",
+          // Large titles start left-aligned and collapse to the centred
+          // compact title as People scrolls; automatic list insets keep the
+          // first row below the title while the header remains transparent.
+          headerTransparent: true,
           headerShadowVisible: false,
           title: t("scannerPeople"),
           headerSearchBarOptions: {

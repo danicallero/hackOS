@@ -13,7 +13,7 @@ import { Stack } from "expo-router/stack";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { GlassView } from "@/components/glass-view";
+import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { AdaptiveBackButton, AdaptiveToolbarButton } from "@/components/native-ui";
 import { QrCamera } from "@/components/QrCamera";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
@@ -55,6 +55,7 @@ export function ActivityScannerScreen() {
   const { language, t } = useLocale();
   const insets = useSafeAreaInsets();
   const tabBarBottomInset = useRouterTabBarBottomInset();
+  const glassAvailable = isRealLiquidGlassAvailable();
   const { me } = useMeContext();
   const ownerUserId = me?.id;
   const syncState = useScannerSync();
@@ -190,7 +191,7 @@ export function ActivityScannerScreen() {
 
   return (
     <View style={{ backgroundColor: "black", flex: 1 }}>
-      <Stack.Screen options={{ headerTitle: "" }} />
+      <Stack.Screen options={{ headerShown: glassAvailable, headerTitle: "" }} />
       <QrCamera
         hint={null}
         onValue={(value) => void scanned(value)}

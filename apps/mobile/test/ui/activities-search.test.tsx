@@ -18,6 +18,10 @@ jest.mock("@expo/ui/community/menu", () => ({
     return ReactLib.createElement(ReactLib.Fragment, null, children);
   },
 }));
+jest.mock("@/components/glass-view", () => ({
+  GlassView: ({ children }: { children: unknown }) => children,
+  isRealLiquidGlassAvailable: () => false,
+}));
 jest.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {},
   apiFetch: jest.fn(),
