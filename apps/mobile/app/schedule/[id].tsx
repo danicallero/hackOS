@@ -104,6 +104,9 @@ export default function ScheduleDetailScreen() {
     ? { ...adminItem, ...resolveScheduleText(adminItem, language) }
     : item;
   const staffItem = adminItem ?? (item?.notes !== undefined ? item : null);
+  const staffOnly = (staffItem?.audiences ?? []).length === 0;
+  const showStaffVisibility = Boolean(staffItem && !staffOnly);
+  const showStaffPublishAt = staffItem?.visibility === "hidden" && !staffOnly;
   const startsAt = detailItem ? new Date(detailItem.startsAt) : null;
   const endsAt = detailItem ? new Date(detailItem.endsAt) : null;
   const date = startsAt?.toLocaleDateString(language, {
@@ -235,26 +238,32 @@ export default function ScheduleDetailScreen() {
                     <PlainInfoRow
                       label={t("scheduleFilterAudience")}
                       value={scheduleAudienceSummary(staffItem, t)}
+                      last={staffOnly}
                     />
-                    {adminItem ? (
+                    {!staffOnly && adminItem ? (
                       <PlainInfoRow
                         label={t("scheduleRequiresScanLabel")}
                         value={adminItem.requiresScan ? t("yesLabel") : t("noLabel")}
                       />
                     ) : null}
-                    <PlainInfoRow
-                      label={t("scheduleVisibilityLabel")}
-                      value={staffItem.visibility === "shown" ? t("yesLabel") : t("noLabel")}
-                    />
-                    <PlainInfoRow
-                      label={t("schedulePublishAtLabel")}
-                      value={
-                        staffItem.publishAt
-                          ? new Date(staffItem.publishAt).toLocaleString(language)
-                          : t("accountNotSet")
-                      }
-                      last
-                    />
+                    {showStaffVisibility ? (
+                      <PlainInfoRow
+                        label={t("scheduleVisibilityLabel")}
+                        value={staffItem.visibility === "shown" ? t("yesLabel") : t("noLabel")}
+                        last={!showStaffPublishAt}
+                      />
+                    ) : null}
+                    {showStaffPublishAt ? (
+                      <PlainInfoRow
+                        label={t("schedulePublishAtLabel")}
+                        value={
+                          staffItem.publishAt
+                            ? new Date(staffItem.publishAt).toLocaleString(language)
+                            : t("accountNotSet")
+                        }
+                        last
+                      />
+                    ) : null}
                   </View>
                   <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
                     {t("scheduleStaffSeeAllHint")}

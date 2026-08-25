@@ -357,10 +357,15 @@ route below. No migration needed.
   `Stack.Screen` in `app/_layout.tsx`, `contentInsetAdjustmentBehavior=
   "automatic"` on the `ScrollView`) replaces an earlier hand-rolled
   pinned-header overlay that had no opaque background of its own and let
-  scrolled content show through the title. The reminder bell is a proper
-  `headerRight` item; back reads "Horario" via `headerBackTitle`. Admins get
-  a floating glass pencil (bottom-right, clear of the home indicator) that
-  opens the same `ScheduleFormModal` as the list's swipe-to-edit.
+  scrolled content show through the title. The activity title stays in the
+  native bar; when the native bar truncates it, the full name remains
+  available in the originating Horario card instead of being repeated in the
+  detail body. Staff details follow the schedule rules: staff-only items omit
+  scan/visibility/publish fields, and already-visible items omit the spent
+  publish date. The reminder bell is a proper `headerRight` item; back reads
+  "Horario" via `headerBackTitle`. Admins get a floating glass pencil
+  (bottom-right, clear of the home indicator) that opens the same
+  `ScheduleFormModal` as the list's swipe-to-edit.
 
 ## Operator screens
 
