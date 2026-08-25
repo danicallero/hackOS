@@ -123,7 +123,7 @@ jest.mock("@/theme/colors", () => ({
 import ScheduleDetailScreen from "@/app/schedule/[id]";
 import { renderMobile } from "./render";
 
-describe("schedule detail title and staff fields (H47, H59)", () => {
+describe("schedule detail staff fields (H59)", () => {
   beforeEach(() => {
     mockSchedule = [mockActivity];
     mockFetchAdminSchedule.mockResolvedValue([]);
