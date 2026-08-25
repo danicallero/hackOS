@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && tsup",
     "start": "node dist/server.js",
-    "migrate": "tsx scripts/migrate.ts",
+    "migrate": "tsx scripts/migrate-entry.ts",
     "schema:dump": "tsx scripts/schema-dbml.ts",
     "seed": "tsx scripts/seed.ts",
     "seed:mock": "tsx scripts/seed-mock.ts",

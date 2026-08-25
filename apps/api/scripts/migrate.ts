@@ -213,8 +213,3 @@ export async function migrate(databaseUrl?: string): Promise<string[]> {
   }
   return applied;
 }
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const applied = await migrate();
-  console.log(applied.length ? `Applied: ${applied.join(", ")}` : "Already up to date");
-}
