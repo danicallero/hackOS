@@ -445,3 +445,51 @@ describe("H3 resend verification rate limit", () => {
     expect(Number(fourth.headers["retry-after"])).toBeGreaterThan(60);
   });
 });
+
+describe("#538 distributed rate limiting on Better Auth paths", () => {
+  it("caps /sign-in/email at 30/5min via the Valkey-backed customStorage, with retry-after", async () => {
+    const a = await getApp();
+    await signUp(a);
+
+    let last: Awaited<ReturnType<typeof signIn>> | undefined;
+    for (let i = 0; i < 31; i += 1) {
+      // Wrong password on every attempt: exercises the limiter without ever
+      // succeeding into a session, and the sign-in path throttles on IP
+      // regardless of credential validity.
+      last = await signIn(a, SIGNUP.email, "wrong-password-1");
+    }
+    expect(last?.statusCode).toBe(429);
+    const retryAfter = Number(last?.headers["retry-after"]);
+    expect(retryAfter).toBeGreaterThan(0);
+    expect(retryAfter).toBeLessThanOrEqual(300);
+  });
+
+  it("caps /request-password-reset at 10/hour, shared across two app instances via Valkey (#538 multi-replica)", async () => {
+    // Two separate Fastify instances (independent in-memory Better Auth rate
+    // limiters if it weren't for the shared Valkey customStorage) stand in
+    // for two API replicas behind a load balancer.
+    const replicaA = await buildTestApp();
+    const replicaB = await buildTestApp();
+    try {
+      await signUp(replicaA);
+
+      let last: Awaited<ReturnType<typeof replicaA.inject>> | undefined;
+      for (let i = 0; i < 11; i += 1) {
+        const target = i % 2 === 0 ? replicaA : replicaB;
+        last = await target.inject({
+          method: "POST",
+          url: "/api/auth/request-password-reset",
+          payload: { email: SIGNUP.email, redirectTo: "/reset-password" },
+        });
+      }
+      // The 11th request lands on replicaA (i=10, even) but the limit is
+      // shared across both instances, so it 429s even though replicaA alone
+      // only saw 6 of the 11 requests.
+      expect(last?.statusCode).toBe(429);
+      expect(Number(last?.headers["retry-after"])).toBeGreaterThan(0);
+    } finally {
+      await replicaA.close();
+      await replicaB.close();
+    }
+  });
+});

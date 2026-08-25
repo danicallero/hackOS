@@ -3,6 +3,7 @@ import { betterAuth } from "better-auth";
 import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
 import { enqueueAuthEmail } from "./outbox.js";
+import { valkeyRateLimitStorage } from "./rate-limit-storage.js";
 
 /**
  * Origins Better Auth accepts on state-changing auth requests. This is a
@@ -136,6 +137,33 @@ export const auth = betterAuth({
     ...(config.isProd
       ? { defaultCookieAttributes: { sameSite: "none" as const, secure: true } }
       : {}),
+    // Better Auth's rate limiter (below) keys on client IP read from this
+    // header. `betterAuthPassthrough` (index.ts) always overwrites it with
+    // Fastify's own `request.ip` — already resolved correctly per
+    // `config.trustProxy` — before forwarding the request here, so pinning
+    // to exactly this one header (instead of the library's wider
+    // multi-header default) means we're the sole source of truth for it;
+    // an untrusted client can't spoof its way past the limiter (#538).
+    ipAddress: { ipAddressHeaders: ["x-forwarded-for"] },
+  },
+  // #538: distributed (Valkey-backed) rate limiting for every /api/auth/*
+  // path. Limits are deliberately more generous than Better Auth's built-in
+  // defaults (3/10s for sign-in/sign-up) because hackathon venues commonly
+  // put many legitimate attendees behind one NAT'd IP — see
+  // docs/rate-limiting.md for the full rationale and the coarseness caveat
+  // that comes with per-IP throttling in that setting.
+  rateLimit: {
+    enabled: true,
+    customStorage: valkeyRateLimitStorage,
+    window: 60,
+    max: 60,
+    customRules: {
+      "/sign-in/email": { window: 300, max: 30 },
+      "/sign-up/email": { window: 3600, max: 30 },
+      "/request-password-reset": { window: 3600, max: 10 },
+      "/reset-password": { window: 900, max: 20 },
+      "/verify-email": { window: 3600, max: 30 },
+    },
   },
   disabledPaths: ["/update-user"],
   plugins: [expo()],

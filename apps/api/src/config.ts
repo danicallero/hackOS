@@ -154,6 +154,22 @@ const envSchema = z.object({
   NOTIFICATION_OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(500).default(100),
 
   /**
+   * Operational rate limits for scanner mutations (#538, docs/rate-limiting.md),
+   * per authenticated staff user, backed by Valkey (`lib/rate-limit.ts`) so
+   * they're shared across API replicas. Unlike the auth rate limits (fixed
+   * in code — a security-posture change belongs in a review, not a runtime
+   * toggle), these are env-configurable because event-day throughput needs
+   * may require live tuning without a redeploy.
+   */
+  RATE_LIMIT_SCAN_MAX: z.coerce.number().int().positive().default(120),
+  RATE_LIMIT_SCAN_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+  /** Applies per batch request, not per scan — each batch carries up to 100 scans. */
+  RATE_LIMIT_MEAL_BATCH_MAX: z.coerce.number().int().positive().default(60),
+  RATE_LIMIT_MEAL_BATCH_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+  RATE_LIMIT_SNAPSHOT_MAX: z.coerce.number().int().positive().default(20),
+  RATE_LIMIT_SNAPSHOT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+
+  /**
    * Apple Wallet / PassKit (H28). Neither platform is boot-mandatory — a
    * deploy without these just serves a clear 503 on the wallet endpoints
    * instead of an invalid/empty-signature pass. `*_PEM` values are

@@ -12,6 +12,7 @@ import {
   ForbiddenError,
   NotFoundError,
 } from "../../../lib/errors.js";
+import { keyByIp, rateLimitGuard } from "../../../lib/rate-limit.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { issueTicket } from "../../logistics/tickets.js";
 import { auth } from "../auth.js";
@@ -555,7 +556,12 @@ export function registerInviteRoutes(app: FastifyInstance): void {
     "/api/invites/lookup",
     {
       config: routeAccess({ kind: "token", policy: "invite-lookup" }),
+      // #538: unauthenticated, token-guarded — rate limited per IP against
+      // token-enumeration scanning.
+      preHandler: rateLimitGuard("invite-lookup", { windowSeconds: 60, max: 30 }, keyByIp),
       schema: {
+        description:
+          "Inspect an invite token before accepting it (H9/H10) — resolves an email-verification-token invite or an enterprise invite link. Public, unauthenticated; rate limited to 30/min per IP (#538).",
         querystring: z.object({ token: z.string().min(1) }),
         response: {
           200: z.object({
@@ -629,7 +635,12 @@ export function registerInviteRoutes(app: FastifyInstance): void {
     "/api/invites/accept",
     {
       config: routeAccess({ kind: "token", policy: "invite-accept" }),
+      // #538: unauthenticated, token-guarded account creation — rate limited
+      // per IP against token brute-forcing.
+      preHandler: rateLimitGuard("invite-accept", { windowSeconds: 3600, max: 20 }, keyByIp),
       schema: {
+        description:
+          "Redeem an invite token and create the invitee's account (H9/H10). Public, unauthenticated; rate limited to 20/hour per IP (#538).",
         body: z.object({
           token: z.string().min(1),
           email: z.string().email().optional(),

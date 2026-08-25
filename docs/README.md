@@ -89,6 +89,10 @@ Architecture & modules:
 - [Generated API route-policy ledger](./access-control-route-ledger.md) — the
   complete sorted runtime declaration inventory and public/token allowlist
   snapshot; regenerate it with `pnpm --filter @hackos/api route-policy:audit`.
+- [Rate limiting](./rate-limiting.md) — the Valkey-backed distributed limiter
+  shared by Better Auth's own paths and this app's routes, the endpoint-class
+  limits table, fail-open behavior and its metrics, and the trusted-proxy
+  requirement it depends on.
 
 Frontend (web & mobile):
 

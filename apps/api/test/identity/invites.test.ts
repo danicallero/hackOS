@@ -1130,3 +1130,31 @@ describe("H9 invite regeneration", () => {
     }
   });
 });
+
+describe("#538 invite/token flow rate limits", () => {
+  it("caps /api/invites/lookup at 30/min per IP", async () => {
+    const a = await getApp();
+
+    let last: Awaited<ReturnType<typeof a.inject>> | undefined;
+    for (let i = 0; i < 31; i += 1) {
+      last = await a.inject({ method: "GET", url: "/api/invites/lookup?token=nonexistent" });
+    }
+    expect(last?.statusCode).toBe(429);
+    expect(Number(last?.headers["retry-after"])).toBeGreaterThan(0);
+  });
+
+  it("caps /api/invites/accept at 20/hour per IP, independent of token validity", async () => {
+    const a = await getApp();
+
+    let last: Awaited<ReturnType<typeof a.inject>> | undefined;
+    for (let i = 0; i < 21; i += 1) {
+      last = await a.inject({
+        method: "POST",
+        url: "/api/invites/accept",
+        payload: { ...ACCEPT_BASE, token: `nonexistent-${i}` },
+      });
+    }
+    expect(last?.statusCode).toBe(429);
+    expect(Number(last?.headers["retry-after"])).toBeGreaterThan(0);
+  });
+});
