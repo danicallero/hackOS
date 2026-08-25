@@ -136,6 +136,11 @@ route below. No migration needed.
   that scan — and everything queued behind it, since
   `replayPendingScans()` replays in order and stops at the first
   unresolved error — with no way to recover short of a fresh scan.
+  A 5xx from the first execution is never persisted as the replayed
+  result either (`idempotencyOnSend` releases the record instead of
+  storing it) — a transient server failure retries and can actually
+  succeed on the next attempt, rather than replaying the same 500
+  forever (issue #534).
 
 ## Navigation & tabs
 
