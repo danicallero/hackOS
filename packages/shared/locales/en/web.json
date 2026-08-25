@@ -174,7 +174,7 @@
   "inviteUnavailable": "Invite unavailable",
   "accountCreated": "Account created",
   "verifyNow": "Verify now",
-  "emailNotVerified": "Your email isn't verified yet.",
+  "emailNotVerified": "Your email isn't verified yet. You can browse and save drafts, but event actions require verification.",
   "secondaryEmailVerified": "Secondary email verified",
   "verifyingSecondaryEmail": "Verifying your secondary email…",
   "backToProfile": "Back to profile",

@@ -174,7 +174,7 @@
   "inviteUnavailable": "Invitación no disponible",
   "accountCreated": "Cuenta creada",
   "verifyNow": "Verificar ahora",
-  "emailNotVerified": "Tu correo todavía no está verificado.",
+  "emailNotVerified": "Tu correo todavía no está verificado. Puedes consultar y guardar borradores, pero las acciones del evento requieren verificación.",
   "secondaryEmailVerified": "Correo secundario verificado",
   "verifyingSecondaryEmail": "Verificando correo secundario…",
   "backToProfile": "Volver al perfil",

@@ -67,6 +67,12 @@ to `RESERVED_FIELD_KEYS` — see the doc comment on that constant.
   account email is supplied by the invitee, while the enterprise membership is
   created automatically. These accounts keep Better Auth's verification email
   because a shared link does not prove mailbox ownership.
+- H1 keeps sign-in and read-only/preparation access available before primary
+  email verification, but the shared route-policy boundary blocks event
+  mutations. Application submission and spot confirmation also re-check
+  `users.email_verified` in their transition transaction; the route ledger
+  records explicit account/preparation exceptions and target checks for token
+  confirmation.
 
 **UI (`apps/web`).**
 - `components/common/template-field-control.tsx` — required-field `*` marker now

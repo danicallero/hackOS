@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import type { App } from "../src/app.js";
+import { emailVerificationForRoute } from "../src/lib/route-policy.js";
 import { buildTestApp } from "./helpers.js";
 
 let app: App | undefined;
@@ -64,5 +65,22 @@ describe("final route-policy ledger", () => {
       "POST /api/wallet/apple/v1/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier/:serialNumber",
       "POST /api/wallet/apple/v1/log",
     ]);
+
+    const verificationRequired = rows
+      .filter((row) => emailVerificationForRoute(row.method, row.policy) === "caller")
+      .map((row) => `${row.method} ${row.url}`);
+    expect(verificationRequired).toContain("POST /api/applications/:id/response/submit");
+    expect(verificationRequired).toContain("POST /api/me/responses/:responseId/confirm");
+    expect(verificationRequired).toContain("POST /api/queue/rooms/:roomId/call-next");
+    expect(verificationRequired).toContain("POST /api/accreditation/check-in");
+    expect(verificationRequired).not.toContain("PUT /api/applications/:id/response");
+    expect(verificationRequired).not.toContain("POST /api/applications/confirm");
+
+    expect(
+      rows.find((row) => row.method === "POST" && row.url === "/api/applications/confirm")?.policy,
+    ).toMatchObject({ emailVerification: "target" });
+    expect(
+      rows.find((row) => row.method === "POST" && row.url === "/api/applications/decline")?.policy,
+    ).toMatchObject({ emailVerification: "target" });
   });
 });

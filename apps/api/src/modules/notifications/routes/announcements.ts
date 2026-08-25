@@ -44,7 +44,10 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
     kind: "public",
     anonymousCategory: "public-announcement",
   } as const satisfies RouteAccessPolicy;
-  const authenticated = { kind: "authenticated" } as const satisfies RouteAccessPolicy;
+  const authenticated = {
+    kind: "authenticated",
+    emailVerification: "none",
+  } as const satisfies RouteAccessPolicy;
   const manage = {
     kind: "capability",
     capability: CAPABILITIES.ANNOUNCEMENTS_MANAGE,
@@ -117,7 +120,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
   typedApp.post(
     "/api/announcements/translate",
     {
-      ...routeAccess(manage),
+      ...routeAccess({ ...manage, emailVerification: "none" }),
       preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE),
       schema: {
         summary: "Auto-translate announcement content",

@@ -69,7 +69,7 @@ export function registerUploadRoutes(app: FastifyInstance): void {
     "/api/applications/:applicationId/upload/:fieldKey",
     {
       preHandler: requireAuth,
-      config: routeAccess({ kind: "authenticated" }),
+      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
       schema: {
         summary: "Upload a file for an application field",
         description:

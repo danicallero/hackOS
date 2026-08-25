@@ -1,6 +1,7 @@
 import "./env.js";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
+import { createApplication } from "../applications/fixtures.js";
 import { buildTestApp, truncateAll } from "../helpers.js";
 
 /**
@@ -51,6 +52,17 @@ async function signUp(a: App, overrides: Partial<typeof SIGNUP> & { callbackURL?
 
 async function signIn(a: App, email: string, password: string) {
   return a.inject({ method: "POST", url: "/api/auth/sign-in/email", payload: { email, password } });
+}
+
+async function latestVerificationToken(email: string): Promise<string> {
+  const { pool } = await import("../../src/db/pool.js");
+  const { rows } = await pool.query(
+    `SELECT o.payload FROM notification_outbox o JOIN users u ON u.id = o.user_id
+     WHERE u.email = $1 AND o.payload->>'template' = 'auth.verify'
+     ORDER BY o.id DESC LIMIT 1`,
+    [email],
+  );
+  return new URL(rows[0].payload.vars.verifyUrl as string).searchParams.get("token") as string;
 }
 
 function sessionCookie(res: { headers: Record<string, unknown> }): string {
@@ -167,6 +179,159 @@ describe("H4 sign-in / sign-out", () => {
     await signUp(a);
     const bad = await signIn(a, SIGNUP.email, "wrong-password-1");
     expect(bad.statusCode).toBe(401);
+  });
+});
+
+describe("H1 verified-email transaction boundary", () => {
+  it("allows unverified sign-in, reads and drafts, then unlocks submit after verification", async () => {
+    const a = await getApp();
+    const email = "unverified-boundary@example.com";
+    await signUp(a, { email });
+    const login = await signIn(a, email, SIGNUP.password);
+    expect(login.statusCode).toBe(200);
+    const cookie = sessionCookie(login);
+
+    const me = await a.inject({ method: "GET", url: "/api/me", headers: { cookie } });
+    expect(me.statusCode).toBe(200);
+    expect(me.json().emailVerified).toBe(false);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows: users } = await pool.query(`SELECT id FROM users WHERE email = $1`, [email]);
+    const blockedByRoutePolicy = await a.inject({
+      method: "POST",
+      url: "/api/public/universities/propose",
+      headers: { "x-test-user-id": String(users[0].id) },
+      payload: { name: "Route policy should block this" },
+    });
+    expect(blockedByRoutePolicy.statusCode).toBe(403);
+    expect(blockedByRoutePolicy.json().error.details.code).toBe("email_not_verified");
+
+    const applicationId = await createApplication({
+      type: "participant",
+      ask_shirt_size: false,
+      ask_food_intolerances: false,
+    });
+    const draft = await a.inject({
+      method: "PUT",
+      url: `/api/applications/${applicationId}/response`,
+      headers: { cookie },
+      payload: { responses: { motivation: "I am ready" } },
+    });
+    expect(draft.statusCode).toBe(200);
+
+    const read = await a.inject({
+      method: "GET",
+      url: `/api/applications/${applicationId}/response`,
+      headers: { cookie },
+    });
+    expect(read.statusCode).toBe(200);
+
+    const blocked = await a.inject({
+      method: "POST",
+      url: `/api/applications/${applicationId}/response/submit`,
+      headers: { cookie },
+      payload: { food_intolerances: [] },
+    });
+    expect(blocked.statusCode).toBe(403);
+    expect(blocked.json().error.details.code).toBe("email_not_verified");
+
+    const verify = await a.inject({
+      method: "GET",
+      url: `/api/auth/verify-email?token=${await latestVerificationToken(email)}`,
+    });
+    expect(verify.statusCode).toBe(200);
+
+    const afterVerification = await a.inject({
+      method: "GET",
+      url: "/api/me",
+      headers: { cookie },
+    });
+    expect(afterVerification.json().emailVerified).toBe(true);
+
+    const submitted = await a.inject({
+      method: "POST",
+      url: `/api/applications/${applicationId}/response/submit`,
+      headers: { cookie },
+      payload: { food_intolerances: [] },
+    });
+    expect(submitted.statusCode).toBe(200);
+    expect(submitted.json().response.status).toBe("review");
+  });
+
+  it("does not let an unverified account use an acceptance token as a transaction", async () => {
+    const a = await getApp();
+    const email = "unverified-token-boundary@example.com";
+    await signUp(a, { email });
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows: users } = await pool.query(`SELECT id FROM users WHERE email = $1`, [email]);
+    const userId = users[0].id as number;
+    const applicationId = await createApplication({
+      type: "participant",
+      ask_shirt_size: false,
+      ask_food_intolerances: false,
+    });
+    const applicationId2 = await createApplication({
+      name: "Second participant form",
+      type: "participant",
+      ask_shirt_size: false,
+      ask_food_intolerances: false,
+    });
+
+    async function createAcceptedToken(
+      formId: number,
+    ): Promise<{ token: string; responseId: number }> {
+      const token = `confirmation-${crypto.randomUUID()}`;
+      const { rows: tokenRows } = await pool.query(
+        `INSERT INTO email_verification_tokens (token, type, email, user_id, expires_at)
+         VALUES ($1, 'spot_confirmation', $2, $3, now() + interval '1 hour') RETURNING id`,
+        [token, email, userId],
+      );
+      const { rows: responseRows } = await pool.query(
+        `INSERT INTO application_responses
+           (user_id, application_id, status, responses, decision_sent_at, confirmation_token_id)
+         VALUES ($1, $2, 'accepted', '{}'::jsonb, now(), $3) RETURNING id`,
+        [userId, formId, tokenRows[0].id],
+      );
+      return { token, responseId: responseRows[0].id as number };
+    }
+
+    const confirmation = await createAcceptedToken(applicationId);
+    const blockedConfirm = await a.inject({
+      method: "POST",
+      url: "/api/applications/confirm",
+      payload: { token: confirmation.token },
+    });
+    expect(blockedConfirm.statusCode).toBe(403);
+    expect(blockedConfirm.json().error.details.code).toBe("email_not_verified");
+
+    const blockedDeclineToken = await createAcceptedToken(applicationId2);
+    const blockedDecline = await a.inject({
+      method: "POST",
+      url: "/api/applications/decline",
+      payload: { token: blockedDeclineToken.token },
+    });
+    expect(blockedDecline.statusCode).toBe(403);
+    expect(blockedDecline.json().error.details.code).toBe("email_not_verified");
+
+    const { rows: unchanged } = await pool.query(
+      `SELECT status FROM application_responses WHERE id = ANY($1::int[]) ORDER BY id`,
+      [[confirmation.responseId, blockedDeclineToken.responseId]],
+    );
+    expect(unchanged.map((row: { status: string }) => row.status)).toEqual([
+      "accepted",
+      "accepted",
+    ]);
+
+    await a.inject({
+      method: "GET",
+      url: `/api/auth/verify-email?token=${await latestVerificationToken(email)}`,
+    });
+    const confirmed = await a.inject({
+      method: "POST",
+      url: "/api/applications/confirm",
+      payload: { token: confirmation.token },
+    });
+    expect(confirmed.statusCode).toBe(200);
   });
 });
 

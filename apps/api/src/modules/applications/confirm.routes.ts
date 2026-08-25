@@ -34,12 +34,16 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
     "/api/applications/confirm",
     {
       preHandler: idempotencyGuard,
-      config: routeAccess({ kind: "token", policy: "application-confirmation" }),
+      config: routeAccess({
+        kind: "token",
+        policy: "application-confirmation",
+        emailVerification: "target",
+      }),
       schema: {
         body: confirmTokenSchema,
         summary: "Confirm a spot from the acceptance email",
         description:
-          "Public confirm for the token in the acceptance email (H15). The token is a single-purpose identity assertion, NOT a session: this route ignores cookies, issues no session, and grants nothing beyond this action (issue #369). Alongside the ticket it returns `wallet_token` — a scoped credential, valid for one hour, whose only power is fetching THIS user's entrance-pass from /api/wallet/scoped/apple/ticket.pkpass and /api/wallet/scoped/google/ticket — plus `user_id` and `masked_email` so the landing page can tell the visitor which account the ticket belongs to and prompt them to sign in as that person. A second confirm is idempotent (`already_confirmed`) and still mints a fresh wallet token.",
+          "Public confirm for the token in the acceptance email (H15). The token is a single-purpose identity assertion, NOT a session: this route ignores cookies, issues no session, and grants nothing beyond this action (issue #369). The target account's primary email must be verified before the accepted response can advance to confirmed. Alongside the ticket it returns `wallet_token` — a scoped credential, valid for one hour, whose only power is fetching THIS user's entrance-pass from /api/wallet/scoped/apple/ticket.pkpass and /api/wallet/scoped/google/ticket — plus `user_id` and `masked_email` so the landing page can tell the visitor which account the ticket belongs to and prompt them to sign in as that person. A second confirm is idempotent (`already_confirmed`) and still mints a fresh wallet token.",
         response: { 200: confirmByEmailResponseSchema },
       },
     },
@@ -62,12 +66,16 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
     "/api/applications/decline",
     {
       preHandler: idempotencyGuard,
-      config: routeAccess({ kind: "token", policy: "application-confirmation" }),
+      config: routeAccess({
+        kind: "token",
+        policy: "application-confirmation",
+        emailVerification: "target",
+      }),
       schema: {
         body: confirmTokenSchema,
         summary: "Decline a spot from the acceptance email",
         description:
-          "Public decline for the token in the acceptance email (H15), the counterpart to /api/applications/confirm. Moves the response to declined; a second decline is idempotent (`already_declined`).",
+          "Public decline for the token in the acceptance email (H15), the counterpart to /api/applications/confirm. The target account's primary email must be verified before the accepted response can advance to declined. Moves the response to declined; a second decline is idempotent (`already_declined`).",
       },
     },
     async (req) => {

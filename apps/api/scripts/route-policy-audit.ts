@@ -4,11 +4,11 @@ import { buildApp } from "../src/app.js";
 import { describeRoutePolicy } from "../src/lib/route-policy.js";
 
 const EXPECTED = {
-  total: 331,
+  total: 332,
   public: 17,
   token: 12,
   authenticated: 43,
-  capability: 192,
+  capability: 193,
   contextual: 67,
 };
 
@@ -16,7 +16,10 @@ function table(rows: Awaited<ReturnType<typeof buildApp>>["routePolicyLedger"]):
   return rows
     .filter((row) => row.method !== "HEAD")
     .sort((a, b) => a.url.localeCompare(b.url) || a.method.localeCompare(b.method))
-    .map((row) => `| ${row.method} | \`${row.url}\` | ${describeRoutePolicy(row.policy)} |`)
+    .map(
+      (row) =>
+        `| ${row.method} | \`${row.url}\` | ${describeRoutePolicy(row.policy, row.method)} |`,
+    )
     .join("\n");
 }
 

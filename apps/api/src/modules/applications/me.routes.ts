@@ -85,7 +85,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
     "/api/applications/:id/response",
     {
       preHandler: requireAuth,
-      config: routeAccess({ kind: "authenticated" }),
+      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
       schema: {
         summary: "Save my draft response",
         description:

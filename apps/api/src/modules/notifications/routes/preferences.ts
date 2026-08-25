@@ -31,7 +31,7 @@ export function registerPreferenceRoutes(app: FastifyInstance): void {
   typedApp.put(
     "/api/me/notification-preferences",
     {
-      ...routeAccess({ kind: "authenticated" }),
+      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
       preHandler: requireAuth,
       schema: {
         summary: "Update notification preferences",

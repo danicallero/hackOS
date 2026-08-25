@@ -115,7 +115,11 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   r.post(
     "/api/devpost/imports/preview",
     {
-      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_IMPORT }),
+      ...access({
+        kind: "capability",
+        capability: CAPABILITIES.PROJECTS_IMPORT,
+        emailVerification: "none",
+      }),
       preHandler: requireCapability(CAPABILITIES.PROJECTS_IMPORT),
       schema: {
         body: importCsvBodySchema,

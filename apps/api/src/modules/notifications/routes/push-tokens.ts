@@ -22,7 +22,7 @@ export function registerPushTokenRoutes(app: FastifyInstance): void {
   api.post(
     "/api/me/push-tokens",
     {
-      ...routeAccess({ kind: "authenticated" }),
+      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
       preHandler: requireAuth,
       schema: {
         summary: "Register an Expo push token",

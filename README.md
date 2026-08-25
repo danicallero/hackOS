@@ -18,8 +18,12 @@ tour and the quickest way to get a development environment running.
 
 Before the event, hackOS handles account verification, configurable application
 forms, review and acceptance, place confirmation, sponsor profiles, challenge
-publishing, schedules and Devpost imports. Participants can follow their own
-application and project without getting access to the staff side of the system.
+publishing, schedules and Devpost imports. An account whose primary email is
+still unverified can sign in, browse its workspace and save preparation drafts,
+but event transactions—such as submitting an application, confirming a place,
+or changing event operations—require verification. Participants can follow
+their own application and project without getting access to the staff side of
+the system.
 
 At the venue, staff can accredit arrivals, assign or replace badges, record
 entries and exits, serve meals and scan attendance at activities. The mobile
@@ -222,6 +226,9 @@ domain change.
 - Critical transitions are idempotent and lock the relevant Postgres rows, so
 concurrent requests have one winner.
 - Every queue action produces one history row and one realtime broadcast.
+- H1 email verification is the boundary for event transactions: unverified
+  users may read and prepare, but cannot advance event state; H3 resend limits
+  remain part of the account-verification flow.
 - User-facing copy is kept in Spanish, Galician and English.
 - Capability and event strings come from `@hackos/shared`; clients and the API
 do not invent their own copies.
