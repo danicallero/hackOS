@@ -17,17 +17,22 @@ import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { issueTicket } from "../../logistics/tickets.js";
 import { auth } from "../auth.js";
 import {
-  groupContainsWildcard,
+  inviteContainsWildcardGroup,
   lockPermissionGraph,
-  requireWildcardGraphAuthority,
-  userHasAnyCapability,
-} from "../permission-graph.js";
+  requireWildcardInviteAuthority,
+} from "../invite-permissions.js";
+import { userHasAnyCapability } from "../permission-graph.js";
 import {
   enterpriseInviteClaimUrl,
   enterpriseInviteLinkIsExpired,
   findEnterpriseInviteLink,
   registerEnterpriseInviteLinkRoutes,
 } from "./enterprise-invite-links.js";
+import {
+  findUserInviteLink,
+  registerUserInviteLinkRoutes,
+  userInviteLinkIsExpired,
+} from "./user-invite-links.js";
 
 /**
  * Whether an invited sponsor/staff account is asked for a shirt size and/or
@@ -73,6 +78,9 @@ async function inviteRequirements(
  * participant). The `kind` column (migration 0101) tells acceptance which
  * profile fields to demand. Expired invite -> the org regenerates
  * (POST /:id/regenerate): new token row, old one stamped used (H9).
+ * Reusable links live in enterprise_invite_links (the company-scoped H43
+ * flow) or user_invite_links (the H10 staff/sponsor/participant flow); both
+ * use the same acceptance endpoint and row-locked redemption rules.
  *
  * The invite email is queued through notification_outbox like every other
  * auth email. The invitee has no user row yet, and outbox.user_id is NOT
@@ -114,43 +122,8 @@ interface TokenRow {
   created_at: Date;
 }
 
-/**
- * Deferred group grants need a fresh closure check at every privileged token
- * operation. Missing groups intentionally mean a deleted assignment (and no
- * grant); initial creation is the one operation that rejects an unknown id.
- */
-async function inviteContainsWildcardGroup(
-  client: Parameters<typeof groupContainsWildcard>[0],
-  groupIds: readonly number[],
-  { requireExisting = false }: { requireExisting?: boolean } = {},
-): Promise<boolean> {
-  let containsWildcard = false;
-  for (const groupId of groupIds) {
-    const { rows } = await client.query(`SELECT id FROM permission_groups WHERE id = $1`, [
-      groupId,
-    ]);
-    if (!rows[0]) {
-      if (requireExisting) throw new NotFoundError("Permission group not found", { groupId });
-      continue;
-    }
-    if (await groupContainsWildcard(client, groupId)) containsWildcard = true;
-  }
-  return containsWildcard;
-}
-
-async function requireWildcardInviteAuthority(
-  client: Parameters<typeof groupContainsWildcard>[0],
-  actorId: number,
-  groupIds: readonly number[],
-  options?: { requireExisting?: boolean },
-): Promise<boolean> {
-  const containsWildcard = await inviteContainsWildcardGroup(client, groupIds, options);
-  if (containsWildcard) await requireWildcardGraphAuthority(client, actorId);
-  return containsWildcard;
-}
-
 async function loadInviteForUpdate(
-  client: Parameters<typeof groupContainsWildcard>[0],
+  client: Parameters<typeof lockPermissionGraph>[0],
   id: number,
 ): Promise<TokenRow | undefined> {
   const { rows } = await client.query(
@@ -188,6 +161,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
   const manage = requireCapability(CAPABILITIES.INVITES_MANAGE);
 
   registerEnterpriseInviteLinkRoutes(app);
+  registerUserInviteLinkRoutes(app);
 
   // ── create (H10; H9/H43 use kind=sponsor + enterpriseId) ─────────────────
 
@@ -561,7 +535,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
       preHandler: rateLimitGuard("invite-lookup", { windowSeconds: 60, max: 30 }, keyByIp),
       schema: {
         description:
-          "Inspect an invite token before accepting it (H9/H10) — resolves an email-verification-token invite or an enterprise invite link. Public, unauthenticated; rate limited to 30/min per IP (#538).",
+          "Inspect an invite token before accepting it (H9/H10) — resolves an email-bound invite or a reusable account link. Public, unauthenticated; rate limited to 30/min per IP (#538).",
         querystring: z.object({ token: z.string().min(1) }),
         response: {
           200: z.object({
@@ -609,22 +583,39 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         };
       }
 
-      const link = await findEnterpriseInviteLink(pool, req.query.token);
-      if (!link) throw new NotFoundError("Invite not found or already used");
-      const { rows: enterprises } = await pool.query(`SELECT name FROM enterprises WHERE id = $1`, [
-        link.enterprise_id,
-      ]);
+      const enterpriseLink = await findEnterpriseInviteLink(pool, req.query.token);
+      const userLink = enterpriseLink ? undefined : await findUserInviteLink(pool, req.query.token);
+      if (!enterpriseLink && !userLink) throw new NotFoundError("Invite not found or already used");
+
+      const enterpriseId = enterpriseLink?.enterprise_id ?? userLink?.enterprise_id ?? null;
+      let enterpriseName: string | null = null;
+      if (enterpriseId !== null) {
+        const { rows: enterprises } = await pool.query(
+          `SELECT name FROM enterprises WHERE id = $1`,
+          [enterpriseId],
+        );
+        enterpriseName = (enterprises[0] as { name?: string } | undefined)?.name ?? null;
+      }
+      const kind = enterpriseLink ? "sponsor" : (userLink?.kind as z.infer<typeof inviteKind>);
       return {
         email: null,
-        kind: "sponsor" as const,
-        enterpriseName: (enterprises[0] as { name?: string } | undefined)?.name ?? null,
+        kind,
+        enterpriseName,
         reusable: true,
-        maxRedeems: link.max_redeems,
-        redeemedCount: link.redeemed_count,
+        maxRedeems: enterpriseLink?.max_redeems ?? userLink?.max_redeems ?? null,
+        redeemedCount: enterpriseLink?.redeemed_count ?? userLink?.redeemed_count ?? 0,
         remainingRedeems:
-          link.max_redeems === null ? null : Math.max(0, link.max_redeems - link.redeemed_count),
-        expired: enterpriseInviteLinkIsExpired(link),
-        ...(await inviteRequirements("sponsor")),
+          enterpriseLink?.max_redeems === null || userLink?.max_redeems === null
+            ? null
+            : enterpriseLink?.max_redeems !== undefined
+              ? Math.max(0, enterpriseLink.max_redeems - enterpriseLink.redeemed_count)
+              : userLink?.max_redeems !== undefined
+                ? Math.max(0, userLink.max_redeems - userLink.redeemed_count)
+                : null,
+        expired: enterpriseLink
+          ? enterpriseInviteLinkIsExpired(enterpriseLink)
+          : userInviteLinkIsExpired(userLink as NonNullable<typeof userLink>),
+        ...(await inviteRequirements(kind)),
       };
     },
   );
@@ -667,14 +658,14 @@ export function registerInviteRoutes(app: FastifyInstance): void {
       const { token, name, surname, password } = req.body;
 
       // The whole acceptance runs in ONE transaction holding a FOR UPDATE
-      // lock on the token row, so concurrent double-submits of the same
-      // invite serialize: exactly one winner consumes the token, the loser
-      // re-reads used_at != null and gets a 409 (plan/07 §2: one winner per
-      // transition). Better Auth's own user/account writes commit on its own
-      // connections, so a rollback here after signUpEmail can leave the
-      // account created with the token unconsumed — a retry then 409s on
-      // "email already exists" and staff resolves it; the audit trail stays
-      // consistent either way.
+      // lock on the email token or reusable-link row, so concurrent submits
+      // serialize: exactly one winner consumes a one-use invite (or advances
+      // a bounded redemption count), and the loser gets a 409 (plan/07 §2:
+      // one winner per transition). Better Auth's own user/account writes
+      // commit on its own connections, so a rollback here after signUpEmail
+      // can leave the account created without consuming the invite; a retry
+      // then 409s on "email already exists" and staff resolves it. The audit
+      // trail stays consistent either way.
       const result = await withTransaction(async (client) => {
         await lockPermissionGraph(client);
         const { rows } = await client.query(
@@ -684,8 +675,12 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           [token],
         );
         const invite = rows[0] as TokenRow | undefined;
-        const link = invite ? undefined : await findEnterpriseInviteLink(client, token, true);
-        if (!invite && !link) throw new NotFoundError("Invite not found");
+        const enterpriseLink = invite
+          ? undefined
+          : await findEnterpriseInviteLink(client, token, true);
+        const userLink =
+          invite || enterpriseLink ? undefined : await findUserInviteLink(client, token, true);
+        if (!invite && !enterpriseLink && !userLink) throw new NotFoundError("Invite not found");
         if (invite && invite.used_at !== null) {
           throw new ConflictError("Invite already used", { inviteId: invite.id });
         }
@@ -694,7 +689,12 @@ export function registerInviteRoutes(app: FastifyInstance): void {
             expired: true,
           });
         }
-        if (link && enterpriseInviteLinkIsExpired(link)) {
+        if (enterpriseLink && enterpriseInviteLinkIsExpired(enterpriseLink)) {
+          throw new ConflictError("Invite expired — ask the organization to send a new one", {
+            expired: true,
+          });
+        }
+        if (userLink && userInviteLinkIsExpired(userLink)) {
           throw new ConflictError("Invite expired — ask the organization to send a new one", {
             expired: true,
           });
@@ -708,15 +708,26 @@ export function registerInviteRoutes(app: FastifyInstance): void {
             "This invitation was not authorized to grant the wildcard capability",
           );
         }
+        if (
+          userLink &&
+          (await inviteContainsWildcardGroup(client, userLink.group_ids)) &&
+          !userLink.wildcard_authorized
+        ) {
+          throw new ForbiddenError(
+            "This invitation was not authorized to grant the wildcard capability",
+          );
+        }
         const kind = invite
           ? ((invite.kind ?? (invite.type === "sponsor_invite" ? "sponsor" : "staff")) as
               | "staff"
               | "sponsor"
               | "participant")
-          : "sponsor";
+          : enterpriseLink
+            ? "sponsor"
+            : (userLink?.kind as "staff" | "sponsor" | "participant");
         const email = invite ? invite.email : req.body.email?.trim().toLowerCase();
         if (!email) {
-          throw new BadRequestError("Email is required for an enterprise invite link", {
+          throw new BadRequestError("Email is required for a reusable invite link", {
             field: "email",
           });
         }
@@ -745,8 +756,8 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         });
         const userId = Number(signup.user.id);
 
-        // The email-bound link proves mailbox ownership. A reusable enterprise
-        // link does not, so it keeps the verification email Better Auth queued.
+        // An email-bound link proves mailbox ownership. A reusable link does
+        // not, so it keeps the verification email Better Auth queued.
         await client.query(
           `UPDATE users
            SET email_verified = CASE WHEN $6 THEN true ELSE email_verified END,
@@ -782,7 +793,8 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           );
         }
 
-        const enterpriseId = invite?.enterprise_id ?? link?.enterprise_id ?? null;
+        const enterpriseId =
+          invite?.enterprise_id ?? enterpriseLink?.enterprise_id ?? userLink?.enterprise_id ?? null;
         if (kind === "sponsor" && enterpriseId !== null) {
           // H9/H43: link to the enterprise automatically.
           await client.query(
@@ -796,24 +808,37 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           await issueTicket(client, userId);
         }
 
-        if (link) {
+        if (enterpriseLink) {
           await client.query(
             `INSERT INTO enterprise_invite_link_redemptions (link_id, user_id, email, name)
              VALUES ($1, $2, $3, $4)`,
-            [link.id, userId, email, [name, surname].filter(Boolean).join(" ")],
+            [enterpriseLink.id, userId, email, [name, surname].filter(Boolean).join(" ")],
           );
           await client.query(
             `UPDATE enterprise_invite_links
                 SET redeemed_count = redeemed_count + 1
               WHERE id = $1`,
-            [link.id],
+            [enterpriseLink.id],
+          );
+        }
+        if (userLink) {
+          await client.query(
+            `INSERT INTO user_invite_link_redemptions (link_id, user_id, email, name)
+             VALUES ($1, $2, $3, $4)`,
+            [userLink.id, userId, email, [name, surname].filter(Boolean).join(" ")],
+          );
+          await client.query(
+            `UPDATE user_invite_links
+                SET redeemed_count = redeemed_count + 1
+              WHERE id = $1`,
+            [userLink.id],
           );
         }
 
         // H8/H10: pre-assigned capability groups. The invitation creator
         // validated every assignment under the same graph lock. A deleted
         // group is intentionally skipped: deletion revokes deferred grants.
-        for (const groupId of invite?.group_ids ?? []) {
+        for (const groupId of invite?.group_ids ?? userLink?.group_ids ?? []) {
           await client.query(
             `INSERT INTO permission_group_members (user_id, group_id, assigned_by)
              SELECT $1, $2, NULL
@@ -831,16 +856,20 @@ export function registerInviteRoutes(app: FastifyInstance): void {
 
         await audit(client, {
           actorId: userId,
-          entityType: link ? "enterprise_invite_link" : "invite",
-          entityId: invite?.id ?? link?.id ?? 0,
+          entityType: enterpriseLink
+            ? "enterprise_invite_link"
+            : userLink
+              ? "user_invite_link"
+              : "invite",
+          entityId: invite?.id ?? enterpriseLink?.id ?? userLink?.id ?? 0,
           action: "accept",
-          source: link ? "link" : "email",
+          source: invite ? "email" : "link",
           after: {
             userId,
             kind,
             enterpriseId,
-            groupIds: invite?.group_ids ?? [],
-            reusable: Boolean(link),
+            groupIds: invite?.group_ids ?? userLink?.group_ids ?? [],
+            reusable: Boolean(enterpriseLink || userLink),
           },
         });
 

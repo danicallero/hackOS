@@ -68,7 +68,7 @@ other module's exported function instead), and, if it does background work, a
 Better Auth session lifecycle (`/api/auth/*`, pass-through, exempt from the
 route-policy ledger by design), the caller's own profile (`GET/PATCH
 /api/me`), staff user management, secondary-email verification (H6),
-invitations including reusable enterprise links (H9/H10/H43), and the
+invitations including reusable enterprise and account links (H9/H10/H43), and the
 permission-group graph: capability groups, groups-of-groups with cycle
 rejection, and the `ADMIN_ALL` wildcard's "at least one active holder"
 invariant (`permission-graph.ts`). Account removal (H54) branches to hard

@@ -33,7 +33,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import type { EnterpriseInviteLink, EnterpriseSummary, InviteListItem } from "@/lib/types";
+import type {
+  EnterpriseInviteLink,
+  EnterpriseSummary,
+  InviteListItem,
+  UserInviteLink,
+} from "@/lib/types";
+import { UserInviteLinksSection } from "./user-invite-links-section";
 
 const dateFmt = new Intl.DateTimeFormat("en-GB", {
   day: "2-digit",
@@ -63,6 +69,7 @@ export function ActiveInvitationsModal() {
   const [open, setOpen] = useState(false);
   const [invites, setInvites] = useState<InviteListItem[]>([]);
   const [enterpriseLinks, setEnterpriseLinks] = useState<EnterpriseInviteLink[]>([]);
+  const [userLinks, setUserLinks] = useState<UserInviteLink[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState<Set<string>>(new Set());
@@ -82,12 +89,14 @@ export function ActiveInvitationsModal() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [inviteData, linkData] = await Promise.all([
+      const [inviteData, linkData, userLinkData] = await Promise.all([
         api.get<InviteListItem[]>("/api/invites"),
         api.get<EnterpriseInviteLink[]>("/api/invites/enterprise-links"),
+        api.get<UserInviteLink[]>("/api/invites/user-links"),
       ]);
       setInvites(inviteData);
       setEnterpriseLinks(linkData);
+      setUserLinks(userLinkData);
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("couldNotLoadInvitations");
       setLoadError(message);
@@ -355,6 +364,7 @@ export function ActiveInvitationsModal() {
         if (!o) {
           setInvites([]);
           setEnterpriseLinks([]);
+          setUserLinks([]);
           setCreateLinkOpen(false);
           setMobileLinkQuery("");
           resetCreateLinkForm();
@@ -718,6 +728,14 @@ export function ActiveInvitationsModal() {
           />
         </div>
       </section>
+      <UserInviteLinksSection
+        links={userLinks}
+        loading={loading}
+        error={loadError}
+        visible={open}
+        onRetry={load}
+        onChanged={load}
+      />
     </Modal>
   );
 }

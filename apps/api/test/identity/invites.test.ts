@@ -77,6 +77,21 @@ async function createEnterpriseInviteLink(
   return res.json();
 }
 
+async function createUserInviteLink(
+  a: App,
+  actor: number,
+  payload: Record<string, unknown>,
+): Promise<{ id: number; token: string; url: string }> {
+  const res = await a.inject({
+    method: "POST",
+    url: "/api/invites/user-links",
+    headers: asUser(actor),
+    payload,
+  });
+  expect(res.statusCode).toBe(201);
+  return res.json();
+}
+
 const ACCEPT_BASE = {
   name: "Marie",
   surname: "Curie",
@@ -1128,6 +1143,231 @@ describe("H9 invite regeneration", () => {
       });
       expect(accepted.statusCode).toBe(201);
     }
+  });
+});
+
+describe("H10 reusable user invite links", () => {
+  it("requires a capability-backed group for a staff link", async () => {
+    const a = await getApp();
+    const actor = await inviter();
+
+    const groupOptions = await a.inject({
+      method: "GET",
+      url: "/api/permission-groups",
+      headers: asUser(actor),
+    });
+    expect(groupOptions.statusCode).toBe(200);
+
+    const missingGroups = await a.inject({
+      method: "POST",
+      url: "/api/invites/user-links",
+      headers: asUser(actor),
+      payload: { kind: "staff" },
+    });
+    expect(missingGroups.statusCode).toBe(400);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(
+      `INSERT INTO permission_groups (name) VALUES ('empty-link-group') RETURNING id`,
+    );
+    const emptyGroup = rows[0].id as number;
+    const noCapabilities = await a.inject({
+      method: "POST",
+      url: "/api/invites/user-links",
+      headers: asUser(actor),
+      payload: { kind: "staff", groupIds: [emptyGroup] },
+    });
+    expect(noCapabilities.statusCode).toBe(400);
+  });
+
+  it("creates and redeems a reusable staff link with capability groups", async () => {
+    const a = await getApp();
+    const actor = await inviter();
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(
+      `INSERT INTO permission_groups (name) VALUES ('reusable-staff-group') RETURNING id`,
+    );
+    const groupId = rows[0].id as number;
+    await pool.query(`INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`, [
+      groupId,
+      CAPABILITIES.QUEUE_OPERATE,
+    ]);
+
+    const link = await createUserInviteLink(a, actor, {
+      kind: "staff",
+      groupIds: [groupId],
+      maxRedeems: 2,
+      expiresInMinutes: null,
+    });
+    expect(link.url).toContain(link.token);
+
+    const lookup = await a.inject({
+      method: "GET",
+      url: `/api/invites/lookup?token=${link.token}`,
+    });
+    expect(lookup.statusCode).toBe(200);
+    expect(lookup.json()).toMatchObject({
+      email: null,
+      kind: "staff",
+      enterpriseName: null,
+      reusable: true,
+      maxRedeems: 2,
+      redeemedCount: 0,
+      remainingRedeems: 2,
+      expired: false,
+    });
+
+    const missingEmail = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: { ...ACCEPT_BASE, token: link.token },
+    });
+    expect(missingEmail.statusCode).toBe(400);
+
+    const first = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: { ...ACCEPT_BASE, token: link.token, email: "link-staff-one@example.com" },
+    });
+    expect(first.statusCode).toBe(201);
+    const second = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: {
+        ...ACCEPT_BASE,
+        name: "Second",
+        token: link.token,
+        email: "link-staff-two@example.com",
+      },
+    });
+    expect(second.statusCode).toBe(201);
+
+    const exhausted = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: {
+        ...ACCEPT_BASE,
+        name: "Third",
+        token: link.token,
+        email: "link-staff-three@example.com",
+      },
+    });
+    expect(exhausted.statusCode).toBe(409);
+
+    const { userHasCapability } = await import("../../src/lib/capabilities.js");
+    expect(await userHasCapability(first.json().userId, CAPABILITIES.QUEUE_OPERATE)).toBe(true);
+    const { rows: memberships } = await pool.query(
+      `SELECT 1 FROM permission_group_members WHERE user_id = $1 AND group_id = $2`,
+      [first.json().userId, groupId],
+    );
+    expect(memberships).toHaveLength(1);
+
+    const { rows: users } = await pool.query(`SELECT email_verified FROM users WHERE id = $1`, [
+      first.json().userId,
+    ]);
+    expect(users[0].email_verified).toBe(false);
+    const { rows: redemptions } = await pool.query(
+      `SELECT email FROM user_invite_link_redemptions WHERE link_id = $1 ORDER BY email`,
+      [link.id],
+    );
+    expect(redemptions.map((row: { email: string }) => row.email)).toEqual([
+      "link-staff-one@example.com",
+      "link-staff-two@example.com",
+    ]);
+  });
+
+  it("supports participant links and preserves withdrawn-link history", async () => {
+    const a = await getApp();
+    const actor = await inviter();
+    const link = await createUserInviteLink(a, actor, {
+      kind: "participant",
+      maxRedeems: 1,
+      expiresInMinutes: null,
+    });
+
+    const accepted = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: {
+        ...ACCEPT_BASE,
+        token: link.token,
+        email: "link-participant@example.com",
+        shirtSize: "M",
+      },
+    });
+    expect(accepted.statusCode).toBe(201);
+
+    const withdrawn = await a.inject({
+      method: "POST",
+      url: `/api/invites/user-links/${link.id}/withdraw`,
+      headers: asUser(actor),
+    });
+    expect(withdrawn.statusCode).toBe(200);
+
+    const list = await a.inject({
+      method: "GET",
+      url: "/api/invites/user-links",
+      headers: asUser(actor),
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json()[0]).toMatchObject({
+      id: link.id,
+      kind: "participant",
+      status: "withdrawn",
+      redeemedCount: 1,
+    });
+    expect(list.json()[0].redemptions).toHaveLength(1);
+
+    const afterWithdraw = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: {
+        ...ACCEPT_BASE,
+        token: link.token,
+        email: "link-participant-two@example.com",
+        shirtSize: "M",
+      },
+    });
+    expect(afterWithdraw.statusCode).toBe(409);
+  });
+
+  it("serializes a one-redeem staff link so only one claimant wins", async () => {
+    const a = await getApp();
+    const actor = await inviter();
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(
+      `INSERT INTO permission_groups (name) VALUES ('race-link-group') RETURNING id`,
+    );
+    const groupId = rows[0].id as number;
+    await pool.query(`INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`, [
+      groupId,
+      CAPABILITIES.ACTIVITY_SCAN,
+    ]);
+    const link = await createUserInviteLink(a, actor, {
+      kind: "staff",
+      groupIds: [groupId],
+      maxRedeems: 1,
+      expiresInMinutes: null,
+    });
+
+    const [first, second] = await Promise.all([
+      a.inject({
+        method: "POST",
+        url: "/api/invites/accept",
+        payload: { ...ACCEPT_BASE, token: link.token, email: "race-link-one@example.com" },
+      }),
+      a.inject({
+        method: "POST",
+        url: "/api/invites/accept",
+        payload: {
+          ...ACCEPT_BASE,
+          name: "Rival",
+          token: link.token,
+          email: "race-link-two@example.com",
+        },
+      }),
+    ]);
+    expect([first.statusCode, second.statusCode].sort()).toEqual([201, 409]);
   });
 });
 

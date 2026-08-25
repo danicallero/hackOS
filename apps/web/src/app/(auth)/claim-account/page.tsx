@@ -210,11 +210,22 @@ function ClaimInner() {
     value: String(i.id),
     label: pickText(i.label, language as Language),
   }));
+  const inviteRole =
+    lookup.kind === "staff"
+      ? t("roleStaff")
+      : lookup.kind === "sponsor"
+        ? t("roleSponsor")
+        : t("roleParticipant");
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>{t("createYourAccount")}</CardTitle>
+        {lookup.reusable && (
+          <p className="text-muted-foreground text-pretty text-sm">
+            {t("reusableInviteRole", { role: inviteRole })}
+          </p>
+        )}
         {lookup.reusable && lookup.enterpriseName && (
           <p className="text-muted-foreground text-pretty text-sm">
             {t("enterpriseInviteJoin", { enterprise: lookup.enterpriseName })}
@@ -255,7 +266,7 @@ function ClaimInner() {
                   <FormItem>
                     <FormLabel>{t("name")}</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input autoComplete="given-name" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -268,7 +279,7 @@ function ClaimInner() {
                   <FormItem>
                     <FormLabel>{t("surname")}</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input autoComplete="family-name" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

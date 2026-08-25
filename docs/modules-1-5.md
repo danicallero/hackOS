@@ -12,7 +12,10 @@ File references are `path:symbol` for quick navigation.
 `name`, `surname`) and the `application_responses` status enum. Migration
 `0108_enterprise_invite_links.sql` adds reusable enterprise links with optional
 `max_redeems`, nullable `expires_at`, `revoked_at`, an atomic redemption count,
-and redemption snapshots for admin tracking (H43).
+and redemption snapshots for admin tracking (H43). `0113_user_invite_links.sql`
+adds the same reusable-link lifecycle for staff, sponsors, and participants,
+with optional enterprise membership and deferred capability-group assignments
+for staff (H10).
 
 **Reserved form-builder keys (H11/H12).** `@hackos/shared/applications`
 exports `RESERVED_FIELD_KEYS` (currently just `dni`) — the single source of
@@ -51,6 +54,11 @@ to `RESERVED_FIELD_KEYS` — see the doc comment on that constant.
 - `GET/POST /api/invites/enterprise-links` lets administrators list or create
   reusable enterprise account links with a redemption limit and minute-based
   expiry; `null` expiry means no automatic expiry.
+- `GET/POST /api/invites/user-links` lets invitation managers create reusable
+  account links for staff, sponsors, or participants. Each claimant supplies
+  their own email; staff links must carry at least one capability-backed group,
+  and all links support redemption limits, expiry, audit, and withdrawal via
+  `POST /api/invites/user-links/:id/withdraw`.
 - `GET /api/invites/enterprise-options` exposes only id/name choices to invite
   managers, without granting enterprise administration access.
 - `POST /api/invites/enterprise-links/:id/withdraw` immediately disables a
@@ -71,9 +79,10 @@ to `RESERVED_FIELD_KEYS` — see the doc comment on that constant.
 - `(app)/enterprises/[id]/invite-links-card.tsx` — creates copyable reusable
   links and shows their status, limit, expiry, and account redemption history;
   withdrawal uses an accessible destructive confirmation.
-- `(app)/users/active-invitations-modal.tsx` — unified invitation management for
-  email-bound invites and enterprise links, including link creation, usage,
-  copy, expiry status, and withdrawal.
+- `(app)/users/active-invitations-modal.tsx` and
+  `(app)/users/user-invite-links-section.tsx` — unified invitation management
+  for email-bound invites, enterprise links, and reusable account links,
+  including link creation, usage, copy, expiry status, and withdrawal.
 
 **State transitions.** Role is derived from relationships, never stored:
 new accounts are `unassigned`; submitting a participant or mentor application
@@ -124,7 +133,11 @@ as contextual policies (the former binds the upload key; the latter binds the
 data-subject request body) rather than overstating their access as merely
 authenticated or `exports:run`.
 
-**Resettable permission templates (H8, H53).** The permission-template
+**Resettable permission templates (H8, H53).** The read-only
+`GET /api/permission-groups` choice list is also available to invitation
+managers so staff-invite forms can show assignable groups; group creation,
+editing, nesting, and membership mutations remain `PERMISSIONS_MANAGE` only.
+The permission-template
 catalogue is code-owned (`identity/templates.ts`) and exposes stable keys,
 client-side i18n message keys, and capability sets — never localized interface
 copy or mutable role rows. `GET /api/permission-group-templates` lists the
