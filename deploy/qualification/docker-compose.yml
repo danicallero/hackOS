@@ -1,0 +1,173 @@
+# hackOS #544 pre-event qualification stack (H22-H42, H46, #544).
+#
+# This file is intentionally a separate, disposable stack. It has one private
+# internal network and no ports, labels, proxy network, or production env
+# interpolation. RELEASE_IMAGE must be an immutable image digest supplied by
+# the operator; every hackOS container uses that exact image.
+
+x-api-image: &api-image "${RELEASE_IMAGE:?Set RELEASE_IMAGE to the exact release image digest}"
+
+x-common-env: &common-env
+  DATABASE_URL: "postgres://hackos_qualification:qualification-only@postgres:5432/hackos_event_day_qualification"
+  VALKEY_URL: "redis://:qualification-only@valkey:6379"
+  BETTER_AUTH_URL: "http://api:3000"
+  BETTER_AUTH_SECRET: "qualification-only-secret-not-for-attendees"
+  WEB_URL: "http://qualification-web.invalid"
+  CORS_ORIGINS: ""
+  S3_ENDPOINT: "http://qualification.invalid"
+  S3_ACCESS_KEY: "qualification"
+  S3_SECRET_KEY: "qualification-only"
+  S3_BUCKET: "qualification"
+  MAIL_PROVIDER: "smtp"
+  MAIL_FROM_ADDRESS: "qualification@invalid"
+  SMTP_HOST: "qualification.invalid"
+  SMTP_PORT: "25"
+  LOG_LEVEL: "info"
+  DB_POOL_MAX: "20"
+  WORKERS_INLINE: "false"
+
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+  restart: "no"
+
+services:
+  postgres:
+    <<: *hardening
+    image: "postgres:17-alpine"
+    environment:
+      POSTGRES_USER: "hackos_qualification"
+      POSTGRES_PASSWORD: "qualification-only"
+      POSTGRES_DB: "hackos_event_day_qualification"
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - qualification-pgdata:/var/lib/postgresql/data
+    networks: [qualification]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: "2g"
+
+  valkey:
+    <<: *hardening
+    image: "valkey/valkey:8-alpine"
+    command: ["valkey-server", "--requirepass", "qualification-only", "--save", "", "--appendonly", "no"]
+    networks: [qualification]
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli -a qualification-only ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: "512m"
+
+  migrate:
+    <<: *hardening
+    image: *api-image
+    command: ["node", "dist/migrate.js"]
+    environment: *common-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [qualification]
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: "512m"
+
+  api:
+    <<: *hardening
+    image: *api-image
+    command: ["node", "dist/server.js"]
+    environment:
+      <<: *common-env
+      NODE_ENV: "test"
+      HOST: "0.0.0.0"
+      PORT: "3000"
+      SSE_MAX_CONNECTIONS_GLOBAL: "2000"
+      SSE_MAX_CONNECTIONS_PER_TOPIC: "500"
+      SSE_MAX_CONNECTIONS_PER_CLIENT: "20"
+      SSE_WRITE_TIMEOUT_MS: "5000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    networks: [qualification]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/healthz || exit 1"]
+      interval: 5s
+      timeout: 5s
+      start_period: 15s
+      retries: 12
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: "1g"
+
+  worker:
+    <<: *hardening
+    image: *api-image
+    command: ["node", "dist/worker.js"]
+    environment:
+      <<: *common-env
+      NODE_ENV: "production"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    networks: [qualification]
+    healthcheck:
+      disable: true
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: "512m"
+
+  runner:
+    <<: *hardening
+    image: *api-image
+    command: ["node", "dist/event-day-load.js", "--mode", "load"]
+    environment:
+      <<: *common-env
+      NODE_ENV: "test"
+      QUALIFICATION_STACK: "1"
+      QUALIFICATION_RELEASE_IMAGE: "${RELEASE_IMAGE}"
+    volumes:
+      - "${QUALIFICATION_ARTIFACT_DIR:?Set QUALIFICATION_ARTIFACT_DIR to a dedicated artifact directory}:/artifacts"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    networks: [qualification]
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: "1g"
+
+networks:
+  qualification:
+    driver: bridge
+    internal: true
+
+volumes:
+  qualification-pgdata:
