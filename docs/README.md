@@ -113,6 +113,10 @@ Frontend (web & mobile):
 - [Navigation: capability-based workspaces](./navigation.md) — the personal
   area + additive work-workspace model on web, and the one-action mobile scan
   entry, with the full capability-to-workspace mapping.
+- [RouterTabs component](./router-tabs.md) — the reusable Expo Router tab shell:
+  public API, Liquid Glass and opaque fallback behaviour, scrub interaction,
+  overflow-menu contract, safe-area geometry, testing, and the publishing
+  checklist for a future package.
 - [Mobile app](./mobile.md) — the Expo Router app (`apps/mobile`): Better Auth
   Expo integration, capability-driven tabs, offline scanners, and participant
   screens, with the per-story status registry.

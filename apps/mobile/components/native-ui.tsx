@@ -5,12 +5,22 @@ import {
   type ColorValue,
   Pressable,
   Text,
+  TextInput,
   type TextStyle,
-  useWindowDimensions,
   View,
   type ViewStyle,
 } from "react-native";
-import { GlassView, type GlassViewProps } from "@/components/glass-view";
+import Animated, {
+  FadeIn,
+  FadeOut,
+  LinearTransition,
+  useReducedMotion,
+} from "react-native-reanimated";
+import {
+  GlassView,
+  type GlassViewProps,
+  isRealLiquidGlassAvailable,
+} from "@/components/glass-view";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { type HapticIntent, haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -254,6 +264,184 @@ export function ActionButton({
 }
 
 /**
+ * Header used when the native Liquid Glass/search bar is unavailable.
+ *
+ * Keeping the search trigger and its expanded field in the screen tree is
+ * important on iOS 18: a transparent native header still owns that area even
+ * when its toolbar items are not rendered reliably. This is the same compact
+ * title/search behavior used by Schedule, exposed here so other list screens
+ * can share the fallback without recreating the hit targets.
+ */
+export function LegacyScreenHeader({
+  topInset,
+  title,
+  searchOpen,
+  searchQuery,
+  onSearchQueryChange,
+  onOpenSearch,
+  onCloseSearch,
+  searchLabel,
+  searchPlaceholder,
+  cancelLabel,
+  leading,
+  actions,
+}: {
+  topInset: number;
+  title: string;
+  searchOpen: boolean;
+  searchQuery: string;
+  onSearchQueryChange: (text: string) => void;
+  onOpenSearch: () => void;
+  onCloseSearch: () => void;
+  searchLabel: string;
+  searchPlaceholder: string;
+  cancelLabel: string;
+  leading?: ReactNode;
+  actions: ReactNode;
+}) {
+  const reducedMotion = useReducedMotion();
+  const headerTransition = reducedMotion ? undefined : LinearTransition.duration(180);
+
+  return (
+    <View style={{ gap: 8, paddingHorizontal: 16, paddingTop: topInset, zIndex: 10 }}>
+      <Animated.View
+        key={searchOpen ? "search" : "actions"}
+        entering={reducedMotion ? undefined : FadeIn.duration(180)}
+        exiting={reducedMotion ? undefined : FadeOut.duration(120)}
+        layout={headerTransition}
+      >
+        {searchOpen ? (
+          <View
+            style={{
+              alignItems: "center",
+              flexDirection: "row",
+              gap: 8,
+              paddingBottom: 4,
+              paddingTop: 8,
+            }}
+          >
+            <GlassView
+              colorScheme="auto"
+              glassEffectStyle="regular"
+              style={{ borderRadius: 12, flex: 1, height: 40, overflow: "hidden" }}
+            >
+              <View
+                style={{
+                  alignItems: "center",
+                  flex: 1,
+                  flexDirection: "row",
+                  gap: 6,
+                  paddingHorizontal: 12,
+                }}
+              >
+                <SymbolView
+                  accessible={false}
+                  name="magnifyingglass"
+                  tintColor={colors.tertiaryLabel}
+                  size={16}
+                />
+                <TextInput
+                  autoFocus
+                  accessibilityLabel={searchLabel}
+                  onChangeText={onSearchQueryChange}
+                  placeholder={searchPlaceholder}
+                  placeholderTextColor={colors.tertiaryLabel}
+                  returnKeyType="search"
+                  style={{ color: colors.label, flex: 1, fontSize: 16 }}
+                  value={searchQuery}
+                />
+              </View>
+            </GlassView>
+            <Pressable
+              accessibilityLabel={cancelLabel}
+              accessibilityRole="button"
+              onPress={onCloseSearch}
+              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+            >
+              <Text style={{ color: colors.accent, fontSize: 16, fontWeight: "600" }}>
+                {cancelLabel}
+              </Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View
+            style={{
+              alignItems: "center",
+              flexDirection: "row",
+              justifyContent: "space-between",
+              paddingBottom: 4,
+              paddingTop: 8,
+            }}
+          >
+            <View style={{ alignItems: "center", flex: 1, flexDirection: "row", gap: 4 }}>
+              {leading}
+              <Text style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}>{title}</Text>
+            </View>
+            <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
+              {actions}
+              <GlassView
+                colorScheme="auto"
+                glassEffectStyle="regular"
+                isInteractive
+                style={{ borderRadius: 22, height: 44, width: 44 }}
+              >
+                <LegacyHeaderIconButton
+                  icon="magnifyingglass"
+                  accessibilityLabel={searchLabel}
+                  onPress={onOpenSearch}
+                />
+              </GlassView>
+            </View>
+          </View>
+        )}
+      </Animated.View>
+    </View>
+  );
+}
+
+/** A 44pt icon hit target for {@link LegacyScreenHeader} action groups. */
+export function LegacyHeaderIconButton({
+  icon,
+  accessibilityLabel,
+  accessibilityState,
+  tintColor,
+  onPress,
+}: {
+  icon: SymbolViewProps["name"];
+  accessibilityLabel: string;
+  accessibilityState?: { expanded?: boolean; selected?: boolean };
+  tintColor?: ColorValue;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
+      accessibilityState={accessibilityState}
+      onPress={() => {
+        void haptic("light");
+        onPress();
+      }}
+      style={({ pressed }) => ({
+        alignItems: "center",
+        height: 44,
+        justifyContent: "center",
+        opacity: pressed ? 0.6 : 1,
+        width: 44,
+      })}
+    >
+      <SymbolView
+        accessible={false}
+        name={icon}
+        tintColor={tintColor ?? colors.label}
+        size={19}
+        weight="semibold"
+      />
+    </Pressable>
+  );
+}
+
+/**
  * Screen-chrome action that joins the native iOS toolbar and falls back to
  * the established floating glass control on compact widths and platforms
  * without SF toolbar icons. Use floating controls directly when the action
@@ -280,9 +468,7 @@ export function AdaptiveToolbarButton({
   disabled?: boolean;
   onPress: () => void;
 }) {
-  const { width } = useWindowDimensions();
-
-  if (process.env.EXPO_OS === "ios" && width >= 700) {
+  if (process.env.EXPO_OS === "ios" && isRealLiquidGlassAvailable()) {
     return (
       <Stack.Toolbar placement={side}>
         <Stack.Toolbar.Button
@@ -347,6 +533,7 @@ export function FloatingGlassButton({
         position: "absolute",
         top,
         width: 44,
+        zIndex: 200,
         ...(side === "left" ? { left: 16 } : { right: 16 }),
       }}
     >

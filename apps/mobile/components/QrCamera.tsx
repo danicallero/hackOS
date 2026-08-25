@@ -20,6 +20,7 @@ import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { getBarcodeFrameObservation } from "@/lib/qr-frame";
 import { advanceQrScanCandidate, type QrScanCandidate } from "@/lib/qr-scan-stability";
+import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import { scannerCameraControls } from "@/lib/scanner-camera-controls";
 import CameraCapabilities from "@/modules/camera-capabilities";
 import { colors } from "@/theme/colors";
@@ -39,6 +40,7 @@ export function QrCamera({
   const { t } = useLocale();
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
+  const tabBarBottomInset = useRouterTabBarBottomInset();
   const locked = useRef(false);
   const scanCandidate = useRef<QrScanCandidate | null>(null);
   const [{ height, width }, setViewport] = useState({ height: 0, width: 0 });
@@ -165,6 +167,10 @@ export function QrCamera({
       {isFocused ? (
         <CameraView
           active={isFocused}
+          // The preview only scans barcodes; it must never win hit-testing
+          // over the controls rendered above it (toolbar, queue, flashlight,
+          // and manual-entry buttons) on iOS 18's native camera surface.
+          pointerEvents="none"
           style={StyleSheet.absoluteFill}
           facing="back"
           enableTorch={cameraControls.showTorch && torchEnabled}
@@ -217,7 +223,7 @@ export function QrCamera({
           glassEffectStyle="regular"
           isInteractive
           colorScheme="dark"
-          style={[styles.cameraControl, { bottom: insets.bottom + 26 }]}
+          style={[styles.cameraControl, { bottom: tabBarBottomInset + 4 }]}
         >
           <Pressable
             accessibilityLabel={
@@ -247,7 +253,7 @@ export function QrCamera({
         style={[
           styles.cameraControl,
           cameraControls.manualEntrySide === "left" && styles.cameraControlLeft,
-          { bottom: insets.bottom + 26 },
+          { bottom: tabBarBottomInset + 4 },
         ]}
       >
         <Pressable
@@ -296,7 +302,9 @@ export function QrCamera({
           pointerEvents="box-none"
           style={[
             styles.manualEntryWrapper,
-            { bottom: (keyboardHeight > 0 ? keyboardHeight : insets.bottom) + 40 },
+            {
+              bottom: keyboardHeight > 0 ? keyboardHeight + 40 : tabBarBottomInset + 40,
+            },
           ]}
         >
           <GlassView colorScheme="dark" glassEffectStyle="regular" style={styles.manualEntrySheet}>
@@ -389,6 +397,7 @@ const styles = StyleSheet.create({
     height: 60,
     position: "absolute",
     right: 22,
+    zIndex: 20,
     width: 60,
   },
   cameraControlLeft: { left: 22, right: undefined },
@@ -397,6 +406,7 @@ const styles = StyleSheet.create({
     height: 44,
     left: 16,
     position: "absolute",
+    zIndex: 20,
     width: 44,
   },
   cameraControlPressable: {

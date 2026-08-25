@@ -2,6 +2,7 @@ import { EVENTS } from "@hackos/shared/events";
 import { ButtonStyle, ButtonType, RNWalletView } from "@premieroctet/react-native-wallet";
 import * as Device from "expo-device";
 import { File, Paths } from "expo-file-system";
+import { useScrollToTop } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Linking, Platform, ScrollView, Text, useColorScheme, View } from "react-native";
@@ -18,6 +19,7 @@ import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { useMeContext } from "@/lib/me-context";
+import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { subscribeToServerEvent } from "@/lib/server-events";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
@@ -34,6 +36,7 @@ export default function WalletScreen() {
   useColorScheme();
   const { language, t } = useLocale();
   const androidTopInset = useAndroidTopInset();
+  const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const { me, refetch: refetchMe } = useMeContext();
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -41,6 +44,9 @@ export default function WalletScreen() {
   const [spotConfirmed, setSpotConfirmed] = useState(false);
   const actionRetry = useRef<{ action: () => Promise<void>; key: string } | null>(null);
   const confirmationKeys = useRef(new Map<number, string>());
+  const scrollRef = useRef<ScrollView>(null);
+
+  useScrollToTop(scrollRef);
 
   const fetchTicket = useCallback(() => apiFetch<WalletTicketPayload>("/api/me/ticket"), []);
   const {
@@ -156,11 +162,12 @@ export default function WalletScreen() {
 
   return (
     <ScrollView
+      ref={scrollRef}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
         gap: 20,
         padding: 16,
-        paddingBottom: 32,
+        paddingBottom: Math.max(32, tabBarBottomInset + 16),
         paddingTop: 16 + androidTopInset,
       }}
     >

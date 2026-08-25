@@ -1,6 +1,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter, useScrollToTop } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -22,6 +22,7 @@ import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import type { PresenceDivergence } from "@/lib/presence-timeline";
+import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import {
   enqueueLocalScan,
   findPersonById,
@@ -154,6 +155,9 @@ export function PersonOperationsScreen() {
   const router = useRouter();
   const { language, t } = useLocale();
   const insets = useSafeAreaInsets();
+  const tabBarBottomInset = useRouterTabBarScrollBottomInset();
+  const scrollRef = useRef<ScrollView>(null);
+  useScrollToTop(scrollRef);
   const { me } = useMeContext();
   const ownerUserId = me?.id;
   const sync = useScannerSync();
@@ -723,23 +727,21 @@ export function PersonOperationsScreen() {
     ) : null;
 
   // The Stack.Screen this route registers in `(tabs)/activities/_layout.tsx`
-  // / `(tabs)/scan/_layout.tsx` shows a real (transparent, title-less)
-  // native nav bar on iOS, kept only so `AdaptiveBackButton` can dock into
-  // it — merging into NativeTabs' own shared row at iPad widths. It's
-  // invisible, but its frame still exists — `automatic` below lets iOS push
-  // content below its real height for free. Android has neither that native
-  // bar nor `contentInsetAdjustmentBehavior` (an iOS-only prop), so content
-  // there has to clear the floating back button row itself.
+  // / `(tabs)/scan/_layout.tsx` keeps the iOS detail chrome transparent and
+  // title-less so `AdaptiveBackButton` can dock into it. Android has no
+  // `contentInsetAdjustmentBehavior` (an iOS-only prop), so content there has
+  // to clear the floating back button row itself.
   const contentPaddingTop =
     process.env.EXPO_OS === "ios" ? CONTENT_PADDING : insets.top + ANDROID_BUTTON_ROW_HEIGHT;
 
   return (
     <>
       <ScrollView
+        ref={scrollRef}
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{
           gap: 22,
-          paddingBottom: 40,
+          paddingBottom: Math.max(40, tabBarBottomInset + 16),
           paddingHorizontal: CONTENT_PADDING,
           paddingTop: contentPaddingTop,
         }}

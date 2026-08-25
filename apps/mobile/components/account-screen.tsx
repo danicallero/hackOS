@@ -1,6 +1,6 @@
 import { type MenuAction, MenuView } from "@expo/ui/community/menu";
-import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useRouter, useScrollToTop } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, ScrollView, Text, useColorScheme, View } from "react-native";
 
 import {
@@ -17,6 +17,7 @@ import { signOut } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";
 import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
+import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { fetchMyScanStats, type MyScanStats } from "@/lib/scan-log";
 import { wipeAttendanceRoster } from "@/lib/scanner-db";
 import {
@@ -42,6 +43,9 @@ export default function AccountScreen() {
   const router = useRouter();
   const { t, language } = useLocale();
   const androidTopInset = useAndroidTopInset();
+  const tabBarBottomInset = useRouterTabBarScrollBottomInset();
+  const scrollRef = useRef<ScrollView>(null);
+  useScrollToTop(scrollRef);
   const { me, loading, error, refetch } = useMeContext();
   const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
   const [signingOut, setSigningOut] = useState(false);
@@ -173,12 +177,13 @@ export default function AccountScreen() {
   return (
     <View style={{ flex: 1 }}>
       <ScrollView
+        ref={scrollRef}
         style={{ flex: 1 }}
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{
           gap: 20,
           padding: 16,
-          paddingBottom: 36,
+          paddingBottom: Math.max(32, tabBarBottomInset + 16),
           paddingTop: 16 + androidTopInset,
         }}
       >

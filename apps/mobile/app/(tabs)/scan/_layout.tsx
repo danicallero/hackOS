@@ -1,9 +1,11 @@
 import { Stack } from "expo-router/stack";
 
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { useLocale } from "@/lib/i18n";
 
 export default function ScannerLayout() {
   const { t } = useLocale();
+  const glassAvailable = isRealLiquidGlassAvailable();
   return (
     <Stack screenOptions={{ headerBackButtonDisplayMode: "minimal" }}>
       <Stack.Screen
@@ -11,8 +13,8 @@ export default function ScannerLayout() {
         options={{
           title: t("tabScan"),
           // Keep the camera edge-to-edge while letting iOS place its native
-          // directory action alongside the adaptive iPad/macOS tab chrome.
-          headerShown: process.env.EXPO_OS === "ios",
+          // directory action alongside the regular-width navigation chrome.
+          headerShown: glassAvailable,
           headerTransparent: true,
           headerShadowVisible: false,
           headerTitle: "",
@@ -26,23 +28,25 @@ export default function ScannerLayout() {
           // Android has no large-title app bar and no `contentInset`
           // adjustment, so a transparent header there just floats over the
           // list's first rows — keep the native opaque app bar (H59).
+          headerShown: glassAvailable,
           headerLargeTitle: process.env.EXPO_OS === "ios",
-          headerTransparent: process.env.EXPO_OS === "ios",
+          // Keep the native large-title collapse (left at rest, centred when
+          // the list scrolls) while reserving the header's height for rows.
+          headerTransparent: true,
           headerShadowVisible: false,
           title: t("scannerPeople"),
           headerSearchBarOptions: {
             placeholder: t("scannerPeopleSearchPlaceholder"),
             autoCapitalize: "none",
             hideWhenScrolling: true,
+            allowToolbarIntegration: false,
             placement: "integratedButton",
           },
         }}
       />
-      {/* Kept as direct children of this Stack (not a nested one) so their
-          transparent native bar merges into NativeTabs' own shared row on
-          iPad, the same way `index` above does — see
-          `(tabs)/others/_layout.tsx` for the fuller explanation of why a
-          second Stack here would create a visible double bar. */}
+      {/* Kept as direct children of this Stack (not nested ones) so they share
+          the same navigation chrome as `index`. A second Stack would create
+          a duplicate native header. */}
       <Stack.Screen
         name="person/[id]"
         options={{

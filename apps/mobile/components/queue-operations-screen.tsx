@@ -28,6 +28,7 @@ import {
   type QueueSearchResult,
   type RoomView,
 } from "@/lib/queue-search";
+import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { startQueueEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { canOperateQueues, isPadIdiom } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
@@ -63,6 +64,7 @@ export function QueueOperationsScreen() {
   const usesOthersStack = isPadIdiom() && pathname.includes("/others/operations");
   const headerNavigation = useNavigation(usesOthersStack ? "/(tabs)/others" : undefined);
   const androidTopInset = useAndroidTopInset();
+  const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const { width } = useWindowDimensions();
   const [refreshing, setRefreshing] = useState(false);
   const [notifyingEntryId, setNotifyingEntryId] = useState<number | null>(null);
@@ -128,7 +130,7 @@ export function QueueOperationsScreen() {
         placeholder: t("queueOpsSearchPlaceholder"),
         autoCapitalize: "none",
         hideWhenScrolling: true,
-        allowToolbarIntegration: true,
+        allowToolbarIntegration: false,
         // Match the People directory: keep the inactive search control as a
         // compact native button even when regular-width iPad has room.
         placement: "integratedButton",
@@ -279,6 +281,7 @@ export function QueueOperationsScreen() {
           flexGrow: 1,
           gap: 12,
           padding: 16,
+          paddingBottom: tabBarBottomInset + 16,
           paddingTop: 16 + androidTopInset,
         }}
         ListHeaderComponent={
@@ -318,6 +321,7 @@ export function QueueOperationsScreen() {
         flexGrow: 1,
         gap: 12,
         padding: 16,
+        paddingBottom: tabBarBottomInset + 16,
         paddingTop: 16 + androidTopInset,
       }}
       columnWrapperStyle={columns > 1 ? { gap: 12 } : undefined}

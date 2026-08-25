@@ -1,7 +1,10 @@
 require("react-native-gesture-handler/jestSetup");
 
 jest.mock("react-native-worklets", () => require("react-native-worklets/src/mock"));
-jest.mock("react-native-reanimated", () => require("react-native-reanimated/mock"));
+jest.mock("react-native-reanimated", () => ({
+  ...require("react-native-reanimated/mock"),
+  useReducedMotion: () => false,
+}));
 
 // Real gesture recognition and worklet scheduling aren't meaningful under
 // jest, and reanimated's official mock doesn't implement enough of the
@@ -18,6 +21,8 @@ jest.mock("react-native-gesture-handler", () => {
     "failOffsetX",
     "failOffsetY",
     "minDistance",
+    "maxDistance",
+    "maxDuration",
     "maxPointers",
     "hitSlop",
     "shouldCancelWhenOutside",

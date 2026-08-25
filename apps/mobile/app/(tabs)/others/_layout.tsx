@@ -3,22 +3,11 @@ import { useLocale } from "@/lib/i18n";
 import { isPadIdiom } from "@/lib/tabs";
 
 /**
- * On iPhone every screen here is reached via `router.replace` from the
- * popover in app/(tabs)/_layout.tsx and stays header-less, acting like a
- * flat pseudo-tab (see that file's navigation contract). On iPad/macOS
- * these are reached by pushing from the real hub screen (index — see
- * OthersHubScreen) instead, so they get a header — `headerLargeTitle: true`
- * matters here, not just cosmetically: without it iOS renders a solid
- * compact bar as its own row underneath NativeTabs' floating top bar (a
- * visible double bar). With it, the compact chrome collapses into
- * NativeTabs' own row (back chevron at its leading edge) and the title
- * becomes a plain heading underneath, the same native pattern already used
- * by app/(tabs)/scan/people (see PeopleDirectoryScreen's
- * `navigation.setOptions({ headerLargeTitle: true, ... })`).
- * Child detail routes should stay in this Stack as well. Introducing another
- * Stack under this navigator creates a second native navigation bar below the
- * iPad tab bar, which prevents compact search controls from integrating into
- * the shared top row.
+ * The custom `Others` menu uses `router.replace` for these pseudo-tabs on
+ * every platform. Keep compact screens header-less, while regular-width
+ * iPad/macOS screens retain a native large-title header. Child detail routes
+ * stay in this Stack as well; introducing another Stack would create a second
+ * navigation header and break the existing search/header integration.
  */
 export default function OthersLayout() {
   const { t } = useLocale();
@@ -54,7 +43,7 @@ export default function OthersLayout() {
             placeholder: t("queueOpsSearchPlaceholder"),
             autoCapitalize: "none",
             hideWhenScrolling: true,
-            allowToolbarIntegration: true,
+            allowToolbarIntegration: false,
             placement: "integratedButton",
           },
         }}

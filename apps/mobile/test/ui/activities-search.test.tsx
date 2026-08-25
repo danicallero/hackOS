@@ -10,12 +10,17 @@ jest.mock("expo-router", () => ({
   useFocusEffect: () => {},
   useNavigation: () => ({ setOptions: mockSetOptions }),
   useRouter: () => ({ push: mockPush }),
+  useScrollToTop: () => {},
 }));
 jest.mock("@expo/ui/community/menu", () => ({
   MenuView: ({ children }: { children: unknown }) => {
     const ReactLib = require("react");
     return ReactLib.createElement(ReactLib.Fragment, null, children);
   },
+}));
+jest.mock("@/components/glass-view", () => ({
+  GlassView: ({ children }: { children: unknown }) => children,
+  isRealLiquidGlassAvailable: () => false,
 }));
 jest.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {},

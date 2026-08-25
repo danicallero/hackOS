@@ -17,6 +17,13 @@ describe("Android symbol aliases (H55)", () => {
     expect(androidSymbolName("clock.badge.exclamationmark.fill")).toBe("alarm");
   });
 
+  it("covers the opaque tab bar icons", () => {
+    expect(androidSymbolName("ellipsis")).toBe("more_horiz");
+    expect(androidSymbolName("person.crop.circle")).toBe("account_circle");
+    expect(androidSymbolName("rectangle.3.group")).toBe("dashboard");
+    expect(androidSymbolName("wallet.pass")).toBe("account_balance_wallet");
+  });
+
   it("leaves unknown symbols available for the native fallback prop", () => {
     expect(androidSymbolName("future.symbol")).toBeUndefined();
   });

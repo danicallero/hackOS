@@ -90,9 +90,9 @@ describe("useMe foreground revalidation (H55)", () => {
     await act(async () => emitAppState("active"));
 
     // This is the bug this test guards against: `loading` flipping back to
-    // true here previously made the tab layout unmount `NativeTabs`, which
-    // reset to its first tab (Schedule) on remount — a full navigation
-    // flicker for a transient OS overlay that never backgrounded the app.
+    // true here previously made the tab layout unmount its navigator, which
+    // reset to its first tab (Schedule) on remount — a full navigation flicker
+    // for a transient OS overlay that never backgrounded the app.
     expect(result.current.loading).toBe(false);
     expect(result.current.me).not.toBeNull();
 
