@@ -69,6 +69,33 @@ assignments; those sponsor/admin operations belong to the queue configuration
 and detail surfaces in PR #528. Queue ordering still goes through the existing
 audited position engine.
 
+## Emergency full reset
+
+Event settings → **Danger zone** contains an event-wide recovery reset. The tab
+and the API are gated by the `ADMIN_ALL` wildcard (`*`); `QUEUE_ADMIN`, project
+import, and sponsor permissions are not enough. The control has three separate
+confirmation gates: an impact review, an exact confirmation phrase plus an
+irreversible-action acknowledgement, and a final destructive confirmation.
+
+`POST /api/queue/admin/reset` runs as one transaction with exclusive locks on
+the project/import/queue/judging tables and writes one `queue_reset` audit row
+in that same transaction. It removes native and imported projects, project
+memberships, Devpost import/prize records, project-to-challenge mappings,
+queue entries and movement history, reviews and review versions, judging
+sessions, winners, judge assignments, queue routing/pools, queue preferences,
+project/queue/Devpost claim notifications, and related idempotency records.
+It then restores paused/default room and queue settings and recreates one
+empty queue group per existing challenge.
+
+The reset deliberately preserves user accounts, applications, event settings,
+challenge definitions, room definitions, unrelated notifications, and the
+audit trail. It cannot recall emails already delivered by a provider. Clients
+receive queue, project, and audit invalidations after the transaction commits;
+the request also accepts an `Idempotency-Key` so a retried browser request
+cannot repeat the reset. The reset transaction opts out of the normal
+statement timeout so large deletes can finish, but it still needs an available
+database connection and should be run during a quiet operational window.
+
 ## Integration boundary
 
 When this branch is combined with `danicallero/shared-queue-merge`, keep the

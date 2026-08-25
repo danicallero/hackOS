@@ -146,4 +146,12 @@ export const tvSlotBody = z.object({
   items: z.array(tvSlotItem).min(1).max(10),
 });
 
+/** Server-side second lock for the super-admin destructive Q reset. */
+export const judgingDataResetBody = z
+  .object({
+    confirmationPhrase: z.literal("WIPE_Q_DATA"),
+    acknowledgeIrreversible: z.literal(true),
+  })
+  .strict();
+
 export const tvSlotPatchBody = tvSlotBody.partial();
