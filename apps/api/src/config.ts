@@ -154,7 +154,7 @@ const envSchema = z.object({
   NOTIFICATION_OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(500).default(100),
 
   /**
-   * Operational rate limits for scanner mutations (H538, docs/rate-limiting.md),
+   * Operational rate limits for scanner mutations (#538, docs/rate-limiting.md),
    * per authenticated staff user, backed by Valkey (`lib/rate-limit.ts`) so
    * they're shared across API replicas. Unlike the auth rate limits (fixed
    * in code — a security-posture change belongs in a review, not a runtime

@@ -446,7 +446,7 @@ describe("H3 resend verification rate limit", () => {
   });
 });
 
-describe("H538 distributed rate limiting on Better Auth paths", () => {
+describe("#538 distributed rate limiting on Better Auth paths", () => {
   it("caps /sign-in/email at 30/5min via the Valkey-backed customStorage, with retry-after", async () => {
     const a = await getApp();
     await signUp(a);
@@ -464,7 +464,7 @@ describe("H538 distributed rate limiting on Better Auth paths", () => {
     expect(retryAfter).toBeLessThanOrEqual(300);
   });
 
-  it("caps /request-password-reset at 10/hour, shared across two app instances via Valkey (H538 multi-replica)", async () => {
+  it("caps /request-password-reset at 10/hour, shared across two app instances via Valkey (#538 multi-replica)", async () => {
     // Two separate Fastify instances (independent in-memory Better Auth rate
     // limiters if it weren't for the shared Valkey customStorage) stand in
     // for two API replicas behind a load balancer.

@@ -1131,7 +1131,7 @@ describe("H9 invite regeneration", () => {
   });
 });
 
-describe("H538 invite/token flow rate limits", () => {
+describe("#538 invite/token flow rate limits", () => {
   it("caps /api/invites/lookup at 30/min per IP", async () => {
     const a = await getApp();
 

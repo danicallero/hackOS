@@ -29,7 +29,7 @@ x-app-env: &app-env
   SSE_MAX_CONNECTIONS_PER_TOPIC: "${SSE_MAX_CONNECTIONS_PER_TOPIC:-500}"
   SSE_MAX_CONNECTIONS_PER_CLIENT: "${SSE_MAX_CONNECTIONS_PER_CLIENT:-20}"
   SSE_WRITE_TIMEOUT_MS: "${SSE_WRITE_TIMEOUT_MS:-5000}"
-  # Operational scanner rate limits (H538, per staff user) — see docs/rate-limiting.md.
+  # Operational scanner rate limits (#538, per staff user) — see docs/rate-limiting.md.
   RATE_LIMIT_SCAN_MAX: "${RATE_LIMIT_SCAN_MAX:-120}"
   RATE_LIMIT_SCAN_WINDOW_SECONDS: "${RATE_LIMIT_SCAN_WINDOW_SECONDS:-60}"
   RATE_LIMIT_MEAL_BATCH_MAX: "${RATE_LIMIT_MEAL_BATCH_MAX:-60}"

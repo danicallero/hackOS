@@ -1,4 +1,4 @@
-# Rate limiting (H538)
+# Rate limiting (#538)
 
 Distributed, Valkey-backed rate limiting across every API replica — the shared
 primitive, endpoint classes, fail-open behavior, and the trust-proxy
@@ -82,7 +82,7 @@ and the default whenever `NODE_ENV=production` even without it — see
 `config.ts`). In other words: rate limiting inherits the same trusted-proxy
 posture the rest of the app already requires — see `deploy/README.md`'s
 network/security section. **Never run the API directly internet-facing with
-`TRUST_PROXY=true`** (that already applied before H538; it now also matters
+`TRUST_PROXY=true`** (that already applied before #538; it now also matters
 for IP-keyed rate limits, not just the audit trail).
 
 The invite and scanner routes (real Fastify routes, not the Better Auth

@@ -4,7 +4,7 @@ import type { App } from "../../src/app.js";
 import { asUser, buildTestApp, createUser, truncateAll } from "../helpers.js";
 
 /**
- * H538: operational rate limits on scanner mutations, keyed per authenticated
+ * #538: operational rate limits on scanner mutations, keyed per authenticated
  * staff user (not IP — see docs/rate-limiting.md) and backed by Valkey so
  * they're shared across API replicas. The limiter runs as the FIRST
  * preHandler on every guarded route (before the capability check), so these
@@ -31,7 +31,7 @@ afterAll(async () => {
   await pool.end();
 });
 
-describe("H538 operational rate limits", () => {
+describe("#538 operational rate limits", () => {
   it("caps the shared 'scan' bucket (check-in/check-in-user/rotate/remove/presence-scan) at 120/min per staff user", async () => {
     const staff = await createUser();
 

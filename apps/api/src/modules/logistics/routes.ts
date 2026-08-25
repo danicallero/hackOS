@@ -138,7 +138,7 @@ function actor(userId: number | null): number {
  */
 export function registerLogisticsRoutes(app: FastifyInstance): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-  // H538: operational rate limits, per authenticated staff user (a shared
+  // #538: operational rate limits, per authenticated staff user (a shared
   // venue IP or multiple devices per staff member would make IP-keying
   // either too loose or wrongly collective — see docs/rate-limiting.md).
   const scanRateLimit = rateLimitGuard(
@@ -256,7 +256,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Synchronize native scanner data",
         description:
-          "Returns the lightweight people, current/revoked badge, activity, and scan-count snapshot used by offline native scanners. A successful response replaces the local snapshot; queued mutations remain separate and replay with idempotency keys. Anonymized accounts (H54) are excluded from `people`. Rate limited per staff user (H538, docs/rate-limiting.md).",
+          "Returns the lightweight people, current/revoked badge, activity, and scan-count snapshot used by offline native scanners. A successful response replaces the local snapshot; queued mutations remain separate and replay with idempotency keys. Anonymized accounts (H54) are excluded from `people`. Rate limited per staff user (#538, docs/rate-limiting.md).",
         response: { 200: scannerSnapshotResponse },
       },
     },
@@ -360,7 +360,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         body: checkInBody,
         description:
-          "Assign a badge to the ticket's owner and log the check-in (H22). Idempotency-key replays are safe; 409 if the badge belongs to someone else, the badge id is actually a ticket token, or the person is already accredited (use /api/accreditation/rotate to replace a badge); 403 if the ticket's owner no longer holds event access (H43) — the tickets row is permanent, so a stale/captured QR does not itself expire, but check-in still checks live event access. Rate limited per staff user (H538, docs/rate-limiting.md).",
+          "Assign a badge to the ticket's owner and log the check-in (H22). Idempotency-key replays are safe; 409 if the badge belongs to someone else, the badge id is actually a ticket token, or the person is already accredited (use /api/accreditation/rotate to replace a badge); 403 if the ticket's owner no longer holds event access (H43) — the tickets row is permanent, so a stale/captured QR does not itself expire, but check-in still checks live event access. Rate limited per staff user (#538, docs/rate-limiting.md).",
       },
     },
     async (req) =>
@@ -379,7 +379,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         body: checkInUserBody,
         description:
-          "Same as /api/accreditation/check-in but keyed by user id instead of ticket token (H22). For an unassigned person, attendeeRole atomically creates the participant/mentor relationship and ticket before badge assignment. 403 if the person still has no event access after that (H43). Rate limited per staff user (H538, docs/rate-limiting.md).",
+          "Same as /api/accreditation/check-in but keyed by user id instead of ticket token (H22). For an unassigned person, attendeeRole atomically creates the participant/mentor relationship and ticket before badge assignment. 403 if the person still has no event access after that (H43). Rate limited per staff user (#538, docs/rate-limiting.md).",
       },
     },
     async (req) =>
@@ -401,7 +401,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         body: rotateBody,
         description:
-          "Replace someone's badge (H23): identify the person by userId (preferred) or by their current badge id. The old badge is revoked everywhere, wallet badge passes are voided, and the change is audited with the given reason. 409 if the new badge is already assigned or is actually a ticket token. Rate limited per staff user (H538, docs/rate-limiting.md).",
+          "Replace someone's badge (H23): identify the person by userId (preferred) or by their current badge id. The old badge is revoked everywhere, wallet badge passes are voided, and the change is audited with the given reason. 409 if the new badge is already assigned or is actually a ticket token. Rate limited per staff user (#538, docs/rate-limiting.md).",
       },
     },
     async (req) =>
@@ -421,7 +421,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         body: removeBadgeBody,
         description:
-          "Remove someone's badge assignment. Rate limited per staff user (H538, docs/rate-limiting.md).",
+          "Remove someone's badge assignment. Rate limited per staff user (#538, docs/rate-limiting.md).",
       },
     },
     async (req) => removeBadge(actor(req.userId), req.body),
@@ -443,7 +443,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         body: presenceScanBody,
         description:
-          "Log a door in/out scan (H24). Rate limited per staff user (H538, docs/rate-limiting.md).",
+          "Log a door in/out scan (H24). Rate limited per staff user (#538, docs/rate-limiting.md).",
       },
     },
     async (req) =>
@@ -617,7 +617,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         params: activityIdParam,
         body: mealScanBatchBody,
         description:
-          "Enqueue an offline device's batch of meal scans (up to 100 per request) for async processing. Rate limited per staff user by request, not scan count, so a large offline-replay burst still fits within a handful of batches (H538, docs/rate-limiting.md).",
+          "Enqueue an offline device's batch of meal scans (up to 100 per request) for async processing. Rate limited per staff user by request, not scan count, so a large offline-replay burst still fits within a handful of batches (#538, docs/rate-limiting.md).",
       },
     },
     async (req) =>

@@ -23,7 +23,7 @@ export interface BetterAuthRateLimitStorage {
 }
 
 /**
- * Distributed storage for Better Auth's own rate limiter (H538), covering
+ * Distributed storage for Better Auth's own rate limiter (#538), covering
  * every /api/auth/* path (login, sign-up, password reset, email
  * verification — see auth.ts's `rateLimit` option). Delegates the atomic
  * `consume` step to the same Valkey fixed-window primitive the rest of the

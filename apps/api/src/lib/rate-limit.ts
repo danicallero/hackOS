@@ -5,11 +5,11 @@ import { register } from "./metrics.js";
 import { valkey } from "./valkey.js";
 
 /**
- * Shared distributed rate-limit primitive (H538). Fixed-window counter in
+ * Shared distributed rate-limit primitive (#538). Fixed-window counter in
  * Valkey (`INCR` + `EXPIRE` on the first hit of a window, capped at `max`),
  * shared across every API replica since the counter lives in Valkey, not
  * process memory. On any Valkey error the request is allowed through
- * (fail-open, per explicit decision on H538: a Valkey outage must not become
+ * (fail-open, per explicit decision on #538: a Valkey outage must not become
  * a full auth/scanner outage) and counted on `hackos_rate_limit_store_errors_total`
  * so ops can see rate limiting is degraded.
  */
@@ -26,14 +26,14 @@ export interface RateLimitResult {
 
 const storeErrors = new client.Counter({
   name: "hackos_rate_limit_store_errors_total",
-  help: "Valkey errors while checking a rate limit; the request was allowed through (fail-open) (H538)",
+  help: "Valkey errors while checking a rate limit; the request was allowed through (fail-open) (#538)",
   labelNames: ["bucket"],
   registers: [register],
 });
 
 const rejections = new client.Counter({
   name: "hackos_rate_limit_rejections_total",
-  help: "Requests rejected by a rate-limit policy, by bucket (H538)",
+  help: "Requests rejected by a rate-limit policy, by bucket (#538)",
   labelNames: ["bucket"],
   registers: [register],
 });

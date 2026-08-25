@@ -143,10 +143,10 @@ export const auth = betterAuth({
     // `config.trustProxy` — before forwarding the request here, so pinning
     // to exactly this one header (instead of the library's wider
     // multi-header default) means we're the sole source of truth for it;
-    // an untrusted client can't spoof its way past the limiter (H538).
+    // an untrusted client can't spoof its way past the limiter (#538).
     ipAddress: { ipAddressHeaders: ["x-forwarded-for"] },
   },
-  // H538: distributed (Valkey-backed) rate limiting for every /api/auth/*
+  // #538: distributed (Valkey-backed) rate limiting for every /api/auth/*
   // path. Limits are deliberately more generous than Better Auth's built-in
   // defaults (3/10s for sign-in/sign-up) because hackathon venues commonly
   // put many legitimate attendees behind one NAT'd IP — see
