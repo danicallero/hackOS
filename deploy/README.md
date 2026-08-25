@@ -403,6 +403,9 @@ deploy/
 ├── .env.instance.example         ← per-instance secrets (never commit filled)
 ├── scripts/
 │   └── gen-secrets.sh            ← generate a per-instance secret env file
+├── qualification/                ← disposable pre-event #544 load stack
+│   ├── docker-compose.yml        ← internal-only exact-image qualification
+│   └── run.sh                    ← preflight, run, artifact and cleanup gate
 └── services/                     ← Mode A: one compose per Dokploy service
     ├── postgres/
     │   ├── docker-compose.yml

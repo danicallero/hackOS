@@ -5,7 +5,10 @@
  * scheduler. It drives the real HTTP/SSE surface and reads the existing
  * admission, lane, SSE and participant-invalidation metrics (H22-H42, H46,
  * H540, #544). The fixture is reset only when `--mode prepare` is selected;
- * the load mode never mutates schema or deployment/resource settings.
+ * the load mode never mutates schema or deployment/resource settings. A real
+ * run is allowed only against the internal qualification API in NODE_ENV=test;
+ * this keeps x-test-user-id out of the attendee API path (H22-H42, H46, H540,
+ * #544).
  *
  * Examples:
  *   pnpm --filter @hackos/api event-day:load -- --mode prepare
@@ -27,7 +30,8 @@ import { migrate } from "./migrate.js";
 type Lane = "P0" | "P1" | "P2" | "P3";
 type Mode = "prepare" | "load" | "smoke";
 
-const DEFAULT_DATABASE_URL = "postgres://hackos:hackos@localhost:5433/hackos_test";
+export const QUALIFICATION_DATABASE_NAME = "hackos_event_day_qualification";
+const DEFAULT_DATABASE_URL = `postgres://hackos:hackos@localhost:5433/${QUALIFICATION_DATABASE_NAME}`;
 const DEFAULT_FIXTURE_PATH = "/private/tmp/hackos-event-day-fixture.json";
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const DEFAULT_OUTPUT_PATH = resolve(REPO_ROOT, "docs/big-event-readiness-results.json");
@@ -41,6 +45,11 @@ export const DEFAULT_BUDGETS = {
   P2: { p95LatencyMs: 3_000, maxErrorRate: 0.05 },
   P3: { p95LatencyMs: 5_000, maxErrorRate: 1 },
 } as const;
+
+export const RELEASE_GATING_LANES = ["P0", "P1", "P2"] as const;
+
+const SAFE_DATABASE_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "postgres"]);
+const SAFE_API_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "api", "qualification-api"]);
 
 interface Fixture {
   schemaVersion: 1;
@@ -132,7 +141,70 @@ function parseArgs(argv: string[]): Options {
 
 function databaseDescriptor(databaseUrl: string): { host: string; database: string } {
   const url = new URL(databaseUrl);
-  return { host: url.host, database: url.pathname.slice(1) };
+  return { host: url.host, database: decodeURIComponent(url.pathname.slice(1)) };
+}
+
+export function isDestructiveSafeDatabaseUrl(databaseUrl: string): boolean {
+  try {
+    const url = new URL(databaseUrl);
+    return (
+      (url.protocol === "postgres:" || url.protocol === "postgresql:") &&
+      SAFE_DATABASE_HOSTS.has(url.hostname) &&
+      databaseDescriptor(databaseUrl).database === QUALIFICATION_DATABASE_NAME
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function assertDestructiveSafeDatabaseUrl(databaseUrl: string): void {
+  if (isDestructiveSafeDatabaseUrl(databaseUrl)) return;
+  const { host, database } = (() => {
+    try {
+      return databaseDescriptor(databaseUrl);
+    } catch {
+      return { host: "invalid", database: "invalid" };
+    }
+  })();
+  throw new Error(
+    `Refusing to reset database '${database}' on '${host}'. ` +
+      `Prepare requires the isolated ${QUALIFICATION_DATABASE_NAME} database on localhost, 127.0.0.1, ::1 or the qualification compose service 'postgres'.`,
+  );
+}
+
+export function assertInternalQualificationApi(baseUrl: string): void {
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    throw new Error(`Refusing qualification target '${baseUrl}': invalid URL`);
+  }
+  if (url.protocol !== "http:" || !SAFE_API_HOSTS.has(url.hostname)) {
+    throw new Error(
+      `Refusing qualification target '${baseUrl}': use the internal HTTP API host (api or localhost), never public ingress or TLS attendee traffic.`,
+    );
+  }
+  if (url.port && url.port !== "3000") {
+    throw new Error(`Refusing qualification target '${baseUrl}': only API port 3000 is allowed.`);
+  }
+}
+
+function redactedCommand(argv: readonly string[]): string {
+  const result: string[] = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "--database-url") {
+      result.push(arg, "[redacted]");
+      index += 1;
+      continue;
+    }
+    if (arg?.startsWith("--database-url=")) {
+      result.push("--database-url=[redacted]");
+      continue;
+    }
+    result.push(arg ?? "");
+  }
+  return result.join(" ");
 }
 
 function gitCommit(): string | null {
@@ -144,12 +216,7 @@ function gitCommit(): string | null {
 }
 
 async function resetDatabase(databaseUrl: string): Promise<void> {
-  const target = databaseDescriptor(databaseUrl).database;
-  if (!target.endsWith("_test") && !target.includes("event_day")) {
-    throw new Error(
-      `Refusing to reset database '${target}'. Use a *_test or *event_day database for the load fixture.`,
-    );
-  }
+  assertDestructiveSafeDatabaseUrl(databaseUrl);
   const client = new pg.Client({ connectionString: databaseUrl });
   await client.connect();
   try {
@@ -479,7 +546,9 @@ function percentileSummary(samples: Sample[]): {
 
 function headers(userId?: number, idempotencyKey?: string): Record<string, string> {
   const result: Record<string, string> = { accept: "application/json" };
-  if (userId !== undefined) result["x-test-user-id"] = String(userId);
+  if (userId !== undefined && process.env.NODE_ENV === "test") {
+    result["x-test-user-id"] = String(userId);
+  }
   if (idempotencyKey) result["idempotency-key"] = idempotencyKey;
   return result;
 }
@@ -594,6 +663,19 @@ async function waitForApi(baseUrl: string): Promise<void> {
 }
 
 async function runLoad(options: Options, fixture: Fixture): Promise<Record<string, unknown>> {
+  if (options.mode !== "smoke") {
+    assertInternalQualificationApi(options.baseUrl);
+    if (process.env.NODE_ENV !== "test") {
+      throw new Error(
+        "Refusing qualification load: NODE_ENV=test is required so test auth is confined to the isolated stack.",
+      );
+    }
+    if (process.env.QUALIFICATION_STACK !== "1") {
+      throw new Error(
+        "Refusing qualification load: QUALIFICATION_STACK=1 is required for the isolated stack.",
+      );
+    }
+  }
   await waitForApi(options.baseUrl);
   const samples: Sample[] = [];
   const connections: SseConnection[] = [];
@@ -858,15 +940,19 @@ async function runLoad(options: Options, fixture: Fixture): Promise<Record<strin
       trigger: "sse",
     }),
   };
-  const budgetChecks = (["P0", "P1"] as Lane[]).map((lane) => {
+  const budgetChecks = RELEASE_GATING_LANES.map((lane) => {
     const budget = DEFAULT_BUDGETS[lane];
     const summary = lanes[lane];
     return {
       lane,
+      samples: summary.count,
       p95LatencyMs: summary.p95Ms,
       maxErrorRate: summary.errorRate,
       budget,
-      passed: summary.p95Ms <= budget.p95LatencyMs && summary.errorRate <= budget.maxErrorRate,
+      passed:
+        summary.count > 0 &&
+        summary.p95Ms <= budget.p95LatencyMs &&
+        summary.errorRate <= budget.maxErrorRate,
     };
   });
 
@@ -874,7 +960,8 @@ async function runLoad(options: Options, fixture: Fixture): Promise<Record<strin
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
     gitCommit: gitCommit(),
-    command: process.argv.join(" "),
+    command: redactedCommand(process.argv),
+    releaseImage: process.env.QUALIFICATION_RELEASE_IMAGE ?? null,
     environment: {
       node: process.version,
       platform: process.platform,
@@ -923,7 +1010,10 @@ async function runLoad(options: Options, fixture: Fixture): Promise<Record<strin
     },
     budgets: DEFAULT_BUDGETS,
     validation: {
-      p0p1Passed: budgetChecks.every((check) => check.passed),
+      releaseBudgetPassed: budgetChecks.every((check) => check.passed),
+      p0p1Passed: budgetChecks
+        .filter((check) => check.lane === "P0" || check.lane === "P1")
+        .every((check) => check.passed),
       budgetChecks,
       p3DegradationAllowed: true,
     },
@@ -1057,12 +1147,15 @@ async function main(): Promise<void> {
   console.log(
     JSON.stringify({
       output: options.outputPath,
-      passed: (result.validation as { p0p1Passed: boolean }).p0p1Passed,
+      passed: (result.validation as { releaseBudgetPassed: boolean }).releaseBudgetPassed,
       lanes: result.lanes,
       invalidations: (result.realtime as { invalidationOutcomes: unknown }).invalidationOutcomes,
     }),
   );
-  if (!(result.validation as { p0p1Passed: boolean }).p0p1Passed) process.exitCode = 2;
+  if (!(result.validation as { releaseBudgetPassed: boolean }).releaseBudgetPassed)
+    process.exitCode = 2;
 }
 
-await main();
+if (import.meta.url === `file://${process.argv[1]}`) {
+  await main();
+}

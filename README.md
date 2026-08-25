@@ -161,8 +161,11 @@ pnpm --filter @hackos/mobile test     # mobile Jest tests
 
 # Representative event-day load (H22-H42, H46, #544)
 pnpm --filter @hackos/api event-day:load -- --mode smoke
-pnpm --filter @hackos/api event-day:load -- --mode prepare
-pnpm --filter @hackos/api event-day:load -- --mode load
+
+# Disposable pre-event qualification on the actual host (exact release image)
+RELEASE_IMAGE=ghcr.io/example/hackos-api@sha256:<64-hex-release-digest> \
+  QUALIFICATION_ARTIFACT_DIR="$PWD/artifacts/event-day-qualification" \
+  ./deploy/qualification/run.sh
 
 pnpm test:ui                          # Playwright + fast native screen tests
 pnpm test:ui:install                  # install Playwright browsers once

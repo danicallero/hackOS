@@ -6,6 +6,7 @@ export default defineConfig({
     worker: "src/worker.ts",
     migrate: "scripts/migrate.ts",
     seed: "scripts/seed.ts",
+    "event-day-load": "scripts/event-day-load.ts",
   },
   format: ["esm"],
   target: "node22",
