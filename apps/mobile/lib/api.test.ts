@@ -42,6 +42,20 @@ describe("apiFetch", () => {
     );
   });
 
+  it("overrides the Expo plugin cookie at request time for a bound session", async () => {
+    mockFetch.mockResolvedValue({ data: { ok: true }, error: null });
+
+    await apiFetch("/api/scanner/snapshot", { sessionCookie: "session=staff-a" });
+
+    const options = mockFetch.mock.calls[0][1] as {
+      onRequest: (context: { headers: Headers }) => void;
+    };
+    const headers = new Headers({ cookie: "session=staff-b" });
+    options.onRequest({ headers });
+
+    expect(headers.get("cookie")).toBe("session=staff-a");
+  });
+
   it("rejects URLs that could send the restored session to another origin", async () => {
     await expect(apiFetch("https://attacker.invalid/api/me")).rejects.toBeInstanceOf(TypeError);
     await expect(apiFetch("//attacker.invalid/api/me")).rejects.toBeInstanceOf(TypeError);

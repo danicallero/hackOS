@@ -129,45 +129,53 @@ export async function pendingScans(
   );
 }
 
-export async function markScanAttempt(id: string, _ownerUserId: number): Promise<void> {
+export async function markScanAttempt(id: string, ownerUserId: number): Promise<void> {
   scans = scans.map((scan) =>
-    scan.id === id ? { ...scan, attempts: scan.attempts + 1, lastError: null } : scan,
+    scan.id === id && scan.ownerUserId === ownerUserId
+      ? { ...scan, attempts: scan.attempts + 1, lastError: null }
+      : scan,
   );
 }
 
 export async function acknowledgeScan(
   id: string,
   _payload: ScanPayload,
-  _ownerUserId: number,
+  ownerUserId: number,
 ): Promise<void> {
   scans = scans.map((scan) =>
-    scan.id === id
+    scan.id === id && scan.ownerUserId === ownerUserId
       ? { ...scan, status: "acknowledged", acknowledgedAt: new Date().toISOString() }
       : scan,
   );
 }
 
-export async function failScan(id: string, message: string, _ownerUserId: number): Promise<void> {
+export async function failScan(id: string, message: string, ownerUserId: number): Promise<void> {
   scans = scans.map((scan) =>
-    scan.id === id ? { ...scan, status: "failed", lastError: message } : scan,
+    scan.id === id && scan.ownerUserId === ownerUserId
+      ? { ...scan, status: "failed", lastError: message }
+      : scan,
   );
 }
 
 export async function noteRetryableError(
   id: string,
   message: string,
-  _ownerUserId: number,
+  ownerUserId: number,
 ): Promise<void> {
-  scans = scans.map((scan) => (scan.id === id ? { ...scan, lastError: message } : scan));
+  scans = scans.map((scan) =>
+    scan.id === id && scan.ownerUserId === ownerUserId ? { ...scan, lastError: message } : scan,
+  );
 }
 
 export async function correctScanTimestamp(
   id: string,
-  _ownerUserId: number,
+  ownerUserId: number,
   payload: ScanPayload,
 ): Promise<void> {
   scans = scans.map((scan) =>
-    scan.id === id ? { ...scan, payload, clockCorrected: true, lastError: null } : scan,
+    scan.id === id && scan.ownerUserId === ownerUserId
+      ? { ...scan, payload, clockCorrected: true, lastError: null }
+      : scan,
   );
 }
 

@@ -14,10 +14,15 @@ jest.mock("./api", () => ({
   },
 }));
 
+jest.mock("./auth-client", () => ({
+  authClient: { getCookie: jest.fn(() => "session=staff-a") },
+}));
+
 jest.mock("./scanner-db", () => ({
   acknowledgeScan: jest.fn(),
   applyScannerSnapshot: jest.fn(),
   correctScanTimestamp: jest.fn(),
+  deleteScan: jest.fn(),
   failScan: jest.fn(),
   markScanAttempt: jest.fn(),
   noteRetryableError: jest.fn(),
@@ -25,6 +30,7 @@ jest.mock("./scanner-db", () => ({
 }));
 
 import { ApiError, apiFetch, getClockSkewMs } from "./api";
+import { authClient } from "./auth-client";
 import {
   acknowledgeScan,
   applyScannerSnapshot,
@@ -44,6 +50,7 @@ const mockNoteRetryable = noteRetryableError as jest.Mock;
 const mockGetClockSkewMs = getClockSkewMs as jest.Mock;
 const mockCorrectScanTimestamp = correctScanTimestamp as jest.Mock;
 const mockAcknowledgeScan = acknowledgeScan as jest.Mock;
+const mockGetCookie = authClient.getCookie as jest.Mock;
 const OWNER_USER_ID = 42;
 // The mocked ApiError constructor is (status, code, message).
 const apiError = (status: number, message: string) =>
@@ -91,6 +98,53 @@ describe("synchronizeScanner", () => {
     mockGetClockSkewMs.mockReset().mockReturnValue(null);
     mockCorrectScanTimestamp.mockReset();
     mockAcknowledgeScan.mockReset();
+    mockGetCookie.mockReset().mockReturnValue("session=staff-a");
+  });
+
+  it("keeps an in-flight replay bound to the session that started it", async () => {
+    const firstScan = badgeRemoval("scan-a");
+    const requests: { path: string; sessionCookie: string | undefined }[] = [];
+    let releaseFirstReplay!: () => void;
+    const firstReplayGate = new Promise<void>((resolve) => {
+      releaseFirstReplay = resolve;
+    });
+    let firstRequestStarted!: () => void;
+    const firstRequest = new Promise<void>((resolve) => {
+      firstRequestStarted = resolve;
+    });
+
+    mockPendingScans.mockImplementation(async (ownerUserId: number) =>
+      ownerUserId === OWNER_USER_ID ? [firstScan] : [],
+    );
+    mockApiFetch.mockImplementation(async (path: string, init?: { sessionCookie?: string }) => {
+      requests.push({ path, sessionCookie: init?.sessionCookie });
+      if (requests.length === 1) {
+        firstRequestStarted();
+        await firstReplayGate;
+      }
+      return path === "/api/scanner/snapshot"
+        ? { generatedAt: "t0", people: [], activities: [], activityStates: [] }
+        : {};
+    });
+
+    const firstSync = synchronizeScanner(OWNER_USER_ID);
+    await firstRequest;
+
+    // A different staff member signs in while staff A's network request is
+    // still suspended. Their sync must use B's queue and session, while the
+    // already-started A request remains pinned to A's captured cookie.
+    mockGetCookie.mockReturnValue("session=staff-b");
+    const secondSync = synchronizeScanner(7);
+    await secondSync;
+
+    releaseFirstReplay();
+    await firstSync;
+
+    expect(requests).toEqual([
+      { path: "/api/accreditation/remove", sessionCookie: "session=staff-a" },
+      { path: "/api/scanner/snapshot", sessionCookie: "session=staff-b" },
+      { path: "/api/scanner/snapshot", sessionCookie: "session=staff-a" },
+    ]);
   });
 
   it("reruns for a caller who enqueues while a sync is already in flight", async () => {

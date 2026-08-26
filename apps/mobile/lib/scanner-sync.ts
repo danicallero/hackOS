@@ -1,4 +1,5 @@
 import { ApiError, apiFetch, CLOCK_SKEW_TOLERANCE_MS, getClockSkewMs } from "./api";
+import { authClient } from "./auth-client";
 import {
   acknowledgeScan,
   applyScannerSnapshot,
@@ -15,6 +16,7 @@ import type { PendingScan, ScannerSnapshot } from "./scanner-types";
 interface SyncState {
   active: Promise<void> | null;
   rerunRequested: boolean;
+  sessionCookie: string;
 }
 
 // A shared device can switch staff accounts while a network request is still
@@ -26,7 +28,7 @@ const syncStates = new Map<number, SyncState>();
 /** Matches apps/api/src/modules/logistics/activities.ts BadRequestError text. */
 const TIMESTAMP_FUTURE_ERROR = "Offline scan timestamp must be in the past";
 
-async function replay(scan: PendingScan): Promise<void> {
+async function replay(scan: PendingScan, sessionCookie: string): Promise<void> {
   const request = requestForPendingScan(scan);
   const isDelete = request.method === "DELETE";
   const headers = isDelete
@@ -36,6 +38,7 @@ async function replay(scan: PendingScan): Promise<void> {
     method: request.method,
     headers,
     body: isDelete ? undefined : JSON.stringify(request.body),
+    sessionCookie,
   });
 }
 
@@ -51,6 +54,7 @@ async function replay(scan: PendingScan): Promise<void> {
 async function attemptClockSkewCorrection(
   scan: PendingScan,
   ownerUserId: number,
+  sessionCookie: string,
 ): Promise<boolean> {
   if (scan.clockCorrected || !("scannedAt" in scan.payload)) return false;
   const skewMs = getClockSkewMs();
@@ -61,7 +65,7 @@ async function attemptClockSkewCorrection(
   };
   await correctScanTimestamp(scan.id, ownerUserId, corrected);
   try {
-    await replay({ ...scan, payload: corrected });
+    await replay({ ...scan, payload: corrected }, sessionCookie);
     await acknowledgeScan(scan.id, corrected, ownerUserId);
   } catch {
     // Correction didn't resolve it; fall through to normal handling on the
@@ -77,11 +81,14 @@ async function attemptClockSkewCorrection(
  * would be replayed under the wrong session's authentication if they were —
  * see scanner-db.ts's per-user queue encryption/isolation).
  */
-export async function replayPendingScans(ownerUserId: number): Promise<void> {
+export async function replayPendingScans(
+  ownerUserId: number,
+  sessionCookie = authClient.getCookie(),
+): Promise<void> {
   for (const scan of await pendingScans(ownerUserId, true)) {
     await markScanAttempt(scan.id, ownerUserId);
     try {
-      await replay(scan);
+      await replay(scan, sessionCookie);
       await acknowledgeScan(scan.id, scan.payload, ownerUserId);
     } catch (error) {
       if (error instanceof ApiError && error.message.includes("still in flight")) {
@@ -112,7 +119,7 @@ export async function replayPendingScans(ownerUserId: number): Promise<void> {
         error instanceof ApiError &&
         error.status === 400 &&
         error.message.includes(TIMESTAMP_FUTURE_ERROR) &&
-        (await attemptClockSkewCorrection(scan, ownerUserId))
+        (await attemptClockSkewCorrection(scan, ownerUserId, sessionCookie))
       ) {
         continue;
       }
@@ -130,12 +137,14 @@ export async function replayPendingScans(ownerUserId: number): Promise<void> {
   }
 }
 
-async function doSync(ownerUserId: number): Promise<void> {
+async function doSync(ownerUserId: number, sessionCookie: string): Promise<void> {
   // Mutations go first so the replace-all snapshot reflects acknowledged
   // writes and naturally rolls back any local optimistic state rejected by
   // the server.
-  await replayPendingScans(ownerUserId);
-  const snapshot = await apiFetch<ScannerSnapshot>("/api/scanner/snapshot");
+  await replayPendingScans(ownerUserId, sessionCookie);
+  const snapshot = await apiFetch<ScannerSnapshot>("/api/scanner/snapshot", {
+    sessionCookie,
+  });
   await applyScannerSnapshot(snapshot);
 }
 
@@ -149,7 +158,11 @@ async function doSync(ownerUserId: number): Promise<void> {
  * completed.
  */
 export function synchronizeScanner(ownerUserId: number): Promise<void> {
-  const state = syncStates.get(ownerUserId) ?? { active: null, rerunRequested: false };
+  const sessionCookie = authClient.getCookie();
+  const state =
+    syncStates.get(ownerUserId) ??
+    ({ active: null, rerunRequested: false, sessionCookie } satisfies SyncState);
+  state.sessionCookie = sessionCookie;
   syncStates.set(ownerUserId, state);
   if (state.active) {
     state.rerunRequested = true;
@@ -167,6 +180,6 @@ export function synchronizeScanner(ownerUserId: number): Promise<void> {
 async function runUntilSettled(ownerUserId: number, state: SyncState): Promise<void> {
   do {
     state.rerunRequested = false;
-    await doSync(ownerUserId);
+    await doSync(ownerUserId, state.sessionCookie);
   } while (state.rerunRequested);
 }

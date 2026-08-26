@@ -36,6 +36,15 @@ function recordServerDate(response: Response): void {
   clockSkewMs = serverTime - Date.now();
 }
 
+export type ApiFetchInit = RequestInit & {
+  /**
+   * Binds a request to the session captured by an operation that may outlive
+   * an account switch on a shared device. This is consumed locally and is
+   * never forwarded as an application header.
+   */
+  sessionCookie?: string;
+};
+
 /**
  * Thin wrapper around the Better Auth client's underlying fetch
  * (`authClient.$fetch`, powered by better-fetch) so every authenticated call
@@ -43,21 +52,33 @@ function recordServerDate(response: Response): void {
  * exposes — carries the session Cookie header `expoClient` restores from
  * `expo-secure-store`. Throws on non-2xx so callers can rely on try/catch.
  */
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+export async function apiFetch<T>(path: string, init?: ApiFetchInit): Promise<T> {
   if (!path.startsWith("/") || path.startsWith("//")) {
     throw new TypeError(`API path must be root-relative: ${path}`);
   }
+
+  const { sessionCookie, ...requestInit } = init ?? {};
 
   // Better Auth appends its own /api/auth base path to relative requests.
   // Our application endpoints live alongside that mount, so give $fetch an
   // absolute same-origin URL. The Expo fetch plugin still runs and attaches
   // the restored session cookie and mobile-origin headers.
   const url = `${API_URL.replace(/\/+$/, "")}${path}`;
-  const method = init?.method?.toUpperCase() ?? "GET";
+  const method = requestInit.method?.toUpperCase() ?? "GET";
   const { data, error } = await authClient.$fetch<T>(url, {
-    method: init?.method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | undefined,
-    body: init?.body,
-    headers: init?.headers as Record<string, string> | undefined,
+    method: requestInit.method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | undefined,
+    body: requestInit.body,
+    headers: requestInit.headers as Record<string, string> | undefined,
+    // The Expo plugin's init hook runs before Better Fetch's request hooks
+    // and normally reads whichever cookie is in SecureStore at that moment.
+    // Override it at the last point before transport so an in-flight scanner
+    // replay cannot switch staff identity between account sessions.
+    onRequest:
+      sessionCookie === undefined
+        ? undefined
+        : ({ headers }) => {
+            headers.set("cookie", sessionCookie);
+          },
     onResponse: (context) => recordServerDate(context.response),
     onError: (context) => recordServerDate(context.response),
     // Reads can safely ride through the short origin gap during a Dokploy

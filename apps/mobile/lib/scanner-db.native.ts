@@ -640,8 +640,10 @@ export async function pendingScans(
 
 export async function markScanAttempt(id: string, ownerUserId: number): Promise<void> {
   await (await queueDb(ownerUserId)).runAsync(
-    `UPDATE pending_scans SET attempts = attempts + 1, last_error = NULL WHERE id = ?`,
+    `UPDATE pending_scans SET attempts = attempts + 1, last_error = NULL
+      WHERE id = ? AND created_by_user_id = ?`,
     id,
+    ownerUserId,
   );
 }
 
@@ -651,14 +653,18 @@ export async function acknowledgeScan(
   ownerUserId: number,
 ): Promise<void> {
   const database = await queueDb(ownerUserId);
+  let acknowledged = false;
   await withSerializedTransaction(queueChainRef, database, async () => {
-    await database.runAsync(
+    const result = await database.runAsync(
       `UPDATE pending_scans SET status = 'acknowledged', acknowledged_at = ?, last_error = NULL
-        WHERE id = ?`,
+        WHERE id = ? AND created_by_user_id = ?`,
       new Date().toISOString(),
       id,
+      ownerUserId,
     );
+    acknowledged = result.changes > 0;
   });
+  if (!acknowledged) return;
   if (payload.kind === "accreditation") {
     await (await rosterDb()).runAsync(
       `UPDATE scanner_people SET badge_id = ? WHERE ticket_token = ?`,
@@ -676,9 +682,11 @@ export async function acknowledgeScan(
 
 export async function failScan(id: string, message: string, ownerUserId: number): Promise<void> {
   await (await queueDb(ownerUserId)).runAsync(
-    `UPDATE pending_scans SET status = 'failed', last_error = ? WHERE id = ?`,
+    `UPDATE pending_scans SET status = 'failed', last_error = ?
+      WHERE id = ? AND created_by_user_id = ?`,
     message,
     id,
+    ownerUserId,
   );
 }
 
@@ -688,9 +696,11 @@ export async function noteRetryableError(
   ownerUserId: number,
 ): Promise<void> {
   await (await queueDb(ownerUserId)).runAsync(
-    `UPDATE pending_scans SET last_error = ? WHERE id = ?`,
+    `UPDATE pending_scans SET last_error = ?
+      WHERE id = ? AND created_by_user_id = ?`,
     message,
     id,
+    ownerUserId,
   );
 }
 
@@ -709,9 +719,11 @@ export async function correctScanTimestamp(
   const key = await getQueueKey(ownerUserId);
   const encrypted = await encryptJson(payload, key);
   await (await queueDb(ownerUserId)).runAsync(
-    `UPDATE pending_scans SET encrypted_payload = ?, clock_corrected = 1, last_error = NULL WHERE id = ?`,
+    `UPDATE pending_scans SET encrypted_payload = ?, clock_corrected = 1, last_error = NULL
+      WHERE id = ? AND created_by_user_id = ?`,
     encrypted,
     id,
+    ownerUserId,
   );
 }
 
@@ -727,8 +739,9 @@ export async function retryFailedScans(ownerUserId: number): Promise<void> {
 export async function retryScan(id: string, ownerUserId: number): Promise<void> {
   await (await queueDb(ownerUserId)).runAsync(
     `UPDATE pending_scans SET status = 'pending', last_error = NULL
-      WHERE id = ? AND status = 'failed'`,
+      WHERE id = ? AND status = 'failed' AND created_by_user_id = ?`,
     id,
+    ownerUserId,
   );
 }
 
