@@ -94,8 +94,11 @@ route below. No migration needed.
   them (extends H22-H27; not a new story). Defaults to the caller's own
   scans; a scan-capable operator without `LOGISTICS_STATS` may only request
   their own `staffId`. Backs the mobile "scan history" screen
-  (`app/(tabs)/scan/scan-log.tsx`), reachable from Account and from the
-  device-queue popup.
+  (`components/scan-log-screen.tsx`), reachable through a route in the stack
+  that launched it: `app/(tabs)/others/scan-log.tsx` from Account and
+  `app/(tabs)/scan/scan-log.tsx` from the device-queue popup. Keeping both
+  thin routes prevents Account from switching to the Scanner tab and leaves
+  each history screen with a working native back action (issue #574).
 - `GET /api/me/logistics/stats` — the caller's own accreditation/presence/
   activity scan counts, shown on Account for operators. `GET
   /api/logistics/stats/by-staff` is the `LOGISTICS_STATS`-gated cross-staff
@@ -256,7 +259,7 @@ distributed to other Expo Router apps without importing hackOS code.
   provides a confirmed sign-out action for the device session. For operators
   (any scan capability, `lib/tabs.ts`'s `isOperator`) it also shows a "My
   stats" section (`/api/me/logistics/stats`) and a link to the scan-history
-  screen (`app/(tabs)/scan/scan-log.tsx`, `/api/logistics/scan-log`, grouped by
+  screen (`app/(tabs)/others/scan-log.tsx`, `/api/logistics/scan-log`, grouped by
   day into `Section`s with a native list look). It also carries a "Storage"
   section (`lib/storage-usage.ts`) showing the size of the offline API
   fallback cache (`lib/offline-cache.ts`) and of downloaded files sitting in

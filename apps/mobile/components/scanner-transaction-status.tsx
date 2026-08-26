@@ -10,6 +10,7 @@ import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { CLOCK_SKEW_TOLERANCE_MS } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
+import { SCAN_LOG_ROUTES } from "@/lib/scan-log-navigation";
 import { listScannerActivities, listScannerPeople } from "@/lib/scanner-db";
 import { scannerQueueHealth, scannerTransactionState } from "@/lib/scanner-state";
 import type { PendingScan, ScannerActivity, ScannerPerson } from "@/lib/scanner-types";
@@ -752,7 +753,7 @@ export function ScannerQueueStatus({
                 icon="clock.arrow.circlepath"
                 onPress={() => {
                   setOpen(false);
-                  router.push("/(tabs)/scan/scan-log");
+                  router.push(SCAN_LOG_ROUTES.scanner);
                 }}
               />
             </Section>
