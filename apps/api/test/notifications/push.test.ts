@@ -313,9 +313,9 @@ describe("push channel", () => {
     expect((await getOutboxRow(id)).status).toBe("sent");
     expect(warn).toHaveBeenCalledWith("Expo push ticket failed", {
       userId,
-      category: undefined,
+      category: "test",
       platform: "ios",
-      token: "…iling-token",
+      token: "…g-token]",
       error: "APNs credentials missing",
     });
   });
