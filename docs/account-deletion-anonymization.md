@@ -38,9 +38,11 @@ personal files, direct identifiers, and raw operational scan rows are deleted.
 Before those rows are destroyed, the verified attendance total is calculated
 and stored on a new `anonymous_participants.id` generated with
 `crypto.randomUUID()`; no deterministic input and no mapping table is used.
-The anonymous row contains only the seven intended audit attributes plus its
-creation timestamp.  The guarantee is scoped precisely: the retained record
-has no identity mapping in the hackOS Postgres database.  Provider copies,
+The anonymous row contains only the seven intended audit categories plus its
+creation timestamp. The values may be null and are derived from the
+event/application templates and answers available for that account; a form's
+other answers are not retained. The guarantee is scoped precisely: the
+retained record has no identity mapping in the hackOS Postgres database. Provider copies,
 browser/device caches, infrastructure logs, backups, and inference from an
 unusually small demographic cohort require the operational controls and
 confirmations listed below.
@@ -106,6 +108,7 @@ external registration / acceptance
 users <---- accounts, sessions, tokens, push, wallet, ticket
   |
   +--> application_responses --> uploaded objects / DSR exports
+                         \--> allowlisted anonymous demographic categories
   |
   +--> check_in_logs, time_logs, activity_logs --> presence calculation
   |
@@ -143,7 +146,7 @@ scan alone is therefore insufficient.
 | F07 | High | operational risk; requires legal/product confirmation | Installed Apple/Google Wallet passes and copies already delivered to a device are outside the database. The server voids rows, sends provider invalidation/update signals where configured, and revokes scanner credentials for a short window; provider/device expiry and delivery must be verified operationally. |
 | F08 | High | privacy/security risk; requires legal/product confirmation | Application logs, web-server logs, analytics, database backups, object-store versioning, and provider logs are not retention systems represented in this repository. Production operations must confirm their subject lookup, retention and purge controls before claiming system-wide erasure. |
 | F09 | High | confirmed code problem; optional hardening | The destructive routes require a current authenticated session, but no recent-reauthentication step exists. Add a recent-auth challenge if the deployment threat model requires protection against an unattended unlocked session. |
-| F10 | Medium | confirmed code problem; privacy/security risk | Demographic extraction is heuristic over application-template labels. Unknown or newly translated labels become null rather than being guessed. Product should map the seven canonical fields to stable field keys before relying on the values for grants. |
+| F10 | Medium | confirmed code problem; privacy/security risk | Demographic extraction is application-template-driven and currently falls back to label heuristics. Unknown or newly translated labels become null rather than being guessed, but a misleading custom label can still select the wrong category. Product should map the seven canonical fields to stable per-application keys before relying on the values for grants. |
 | F11 | Medium | privacy/security risk; requires legal/product confirmation | Age, gender, university, degree, graduation year and origin city can identify a person in a rare cohort. Do not publish small-cell combinations; confirm disclosure/aggregation rules with the data owner. |
 | F12 | Medium | confirmed code problem; privacy/security risk | The first H54 implementation retained raw check-in/door rows under the anonymous UUID, exceeding the approved seven-field dataset. Corrective migration `0734` deletes converted raw rows and removes the anonymous FK columns; finalization retains only the calculated guaranteed minutes. |
 | F13 | Medium | operational risk | A no-key destructive request remains backward-compatible but has no durable replay handle if its HTTP response is lost. Current mobile/web clients always send a high-entropy key; make the header mandatory once all supported clients are upgraded. |
@@ -189,6 +192,16 @@ is deleted. Raw check-in and time logs are used to calculate the aggregate,
 then deleted; the schema has no anonymous foreign key for retaining them. A
 final anonymous audit event contains the retained-field list but suppresses
 request IP, user agent, and request-supplied reason text.
+
+The demographic values are not assumed to live only on `users`: the extractor
+reads the account's application response rows together with each response's
+stored template, and the current university directory value. It copies only
+the seven canonical categories (`age`, `gender`, `university`, `degree`,
+`graduation year`, `origin city`, and verified venue time); fields present in a
+particular application but outside that allowlist are deleted with the
+response. Because application templates can differ between calls or event
+types, stable canonical field keys are the preferred mapping and label-based
+fallback remains an explicit release risk (F10/A15/A21).
 
 The guarantee is “not recoverable through normal hackOS database relationships”
 and not “impossible for every external observer to infer.” Cohort-size risk,
@@ -431,7 +444,7 @@ synthetic identity-shaped `users` row.
 | `wallet_pass_devices`: device library identifier/push token | Wallet device registration | Wallet updates | Delete with pass | No | Device/pass delivery identifiers. |
 | `wallet_access_tokens`: scoped wallet token | Acceptance/wallet retrieval | Wallet retrieval | Delete | No | Temporary credential. |
 | `applications`: template, labels, intake configuration | Shared form definition | Shared form definition | Survive | No | No subject row; may define demographic extraction. |
-| `application_responses`: user FK, answers, status, decisions, referrers | Application identity/data | Acceptance/participant logistics | Delete subject response; null subject referrers | No | Answers include free text, dietary data and identity. |
+| `application_responses`: user FK, application-specific template answers, status, decisions, referrers | Application identity/data | Acceptance/participant logistics | Read only allowlisted demographic categories for the anonymous row; delete the response, all other answers, dietary values and files; null subject referrers | Only approved demographic categories when supplied by that application | Different applications can ask different questions; no arbitrary answer is a permanent audit field. |
 | `applicant_reviews`: response/author, score, notes | Review workflow | Selection workflow | Delete subject response reviews and subject-authored reviews | No | Identity/free text; not audit requirement. |
 | Application upload objects: `responses` file keys, `uploads/<app>/<user>/...` | Personal file | Review/operations | Delete exact keys/prefixes | No | Personal files and identifying object paths. |
 | `data_subject_requests`: subject/requester, reason, key, error | DSR workflow | Export/delete workflow | Null subject/requester and clear reason/key/error; delete objects/prefix | No | Request metadata can identify the person. |
@@ -544,7 +557,7 @@ silently converted into a legal conclusion.
 | A01 | `check_in_logs` is the primary physical accreditation boundary; badge/history, door, and activity references are conservative legacy signals that also force anonymization. | Product + event-operations owner |
 | A02 | Anonymization is blocked while the latest valid door event is an open `in`; staff can record the exit before finalization. | Product + event-operations owner |
 | A03 | `event_config.event_starts_at/event_ends_at` define the live-event warning window; missing dates mean no live warning, not permission to bypass the boundary. | Product owner |
-| A04 | The seven requested demographic fields are the complete permanent anonymous audit requirement. | Grant/audit owner |
+| A04 | The seven requested demographic categories are the complete permanent anonymous audit requirement, but any category's value/availability may vary with the event application template. | Grant/audit owner |
 | A05 | The existing H24 certainty-window algorithm is the approved definition of guaranteed/verified presence, including activity signals and minute flooring. | Event/audit owner |
 | A06 | The approved permanent presence evidence is aggregate guaranteed minutes; raw check-in/time timestamps, kinds, methods, notes, and actor metadata are not retained after anonymization. | Audit/data-minimization owner |
 | A07 | Rare combinations of demographics can be identifying; reporting will use small-cell suppression/aggregation where necessary. | Privacy/product owner |
@@ -555,12 +568,13 @@ silently converted into a legal conclusion.
 | A12 | Wallet-provider invalidation and pass expiry are best-effort external controls; installed device copies are not synchronously deletable by this repository. | Mobile/release + operations owner |
 | A13 | Current authenticated session is sufficient destructive-action authentication for now; recent re-auth is optional hardening, not asserted as present. | Security/product owner |
 | A14 | Supported clients send `Idempotency-Key`; no-key requests remain compatibility behavior and may not replay after a lost response. | API/client owners |
-| A15 | Application-template label heuristics identify age/gender/university/degree/year/origin; stable canonical keys are preferred and must be mapped by the application owner. | Applications/data owner |
+| A15 | Application-template labels/keys identify age/gender/university/degree/graduation-year/origin-city; stable canonical keys are preferred, and an ambiguous or unknown field is dropped rather than retained. | Applications/data owner |
 | A16 | Meal/activity/judging/project records are operational or shared content, not permanent personal audit requirements, unless the table's row is explicitly listed above. | Domain owners |
 | A17 | “Irreversible” means no identity mapping in the hackOS database after the transaction; it does not overclaim deletion from external systems or prevent statistical inference. | Privacy/security owner |
 | A18 | No production database is in scope for this branch; H54 migrations are validated from a fresh schema. After first deployment, preserve applied checksums and use a new corrective migration for later changes. | Release/DB owner |
 | A19 | No current ECTS, certificate or named participation-proof endpoint exists in this repository; any future implementation must not use a hidden anonymous-to-user map. | Product/academic-services owner |
 | A20 | App Review can access a seeded accepted participant/staff account and reach Settings → Account & Data without external registration. | iOS release owner |
+| A21 | Application forms may vary by event/type. Only fields explicitly mapped to one of the seven canonical anonymous categories may feed the anonymous row; any additional application field requires a separate product/audit decision and code change. | Applications + grant/audit owners |
 
 ## Release recommendation
 
