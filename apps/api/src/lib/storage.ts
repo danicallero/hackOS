@@ -1,7 +1,9 @@
 import {
+  DeleteObjectsCommand,
   GetObjectCommand,
   type GetObjectCommandOutput,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -73,6 +75,78 @@ export async function putObject(
     }),
   );
   return publicUrl(key);
+}
+
+/**
+ * Delete private objects belonging to one data subject. The caller must pass
+ * a complete, server-constructed prefix (never a request-provided path).
+ * S3 has no portable recursive delete operation, so list pages are deleted in
+ * batches of at most 1,000 objects. A failure is propagated deliberately: the
+ * H54 lifecycle remains `removal_pending` until storage cleanup can be retried.
+ */
+export async function deletePrefix(prefix: string): Promise<void> {
+  let continuationToken: string | undefined;
+  do {
+    const page = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: config.S3_BUCKET,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }),
+    );
+    const keys = (page.Contents ?? [])
+      .map((object) => object.Key)
+      .filter((key): key is string => typeof key === "string" && key.length > 0);
+    await deleteKeys(keys);
+    continuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
+  } while (continuationToken);
+}
+
+async function deleteKeys(keys: string[]): Promise<void> {
+  for (let offset = 0; offset < keys.length; offset += 1_000) {
+    const batch = keys.slice(offset, offset + 1_000);
+    if (batch.length === 0) continue;
+    const result = await s3.send(
+      new DeleteObjectsCommand({
+        Bucket: config.S3_BUCKET,
+        Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: true },
+      }),
+    );
+    if ((result.Errors?.length ?? 0) > 0) {
+      throw new Error(`Object storage rejected ${result.Errors?.length} object deletions`);
+    }
+  }
+}
+
+/**
+ * Remove legacy/orphaned application uploads for one subject. Older clients
+ * could upload before a response row existed, so response-derived prefixes
+ * alone are not a complete deletion proof. The list is broad only at the
+ * object-store read boundary; deletion is restricted to the exact user-id
+ * path segment and never accepts a request-provided prefix.
+ */
+export async function deleteSubjectUploadObjects(userId: number): Promise<void> {
+  const subjectPrefix = new RegExp(`^uploads/[^/]+/${userId}/`);
+  let continuationToken: string | undefined;
+  do {
+    const page = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: config.S3_BUCKET,
+        Prefix: "uploads/",
+        ContinuationToken: continuationToken,
+      }),
+    );
+    const keys = (page.Contents ?? [])
+      .map((object) => object.Key)
+      .filter((key): key is string => typeof key === "string" && subjectPrefix.test(key));
+    await deleteKeys(keys);
+    continuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
+  } while (continuationToken);
+}
+
+/** Delete one known private object. Missing objects are already idempotent in S3. */
+export async function deleteObject(key: string): Promise<void> {
+  await deleteKeys([key]);
 }
 
 /** Public URL an object is served from once uploaded. */

@@ -89,7 +89,7 @@ Table activity_logs {
   activity_id integer [not null]
   notes text
   logged_at "timestamp with time zone" [not null, default: `now()`]
-  logged_by integer [not null]
+  logged_by integer
   source_device_id text
   source_scan_id text
 }
@@ -115,7 +115,7 @@ Table announcement_recipients {
 
 Table announcements {
   id integer [pk, increment, not null]
-  author_id integer [not null]
+  author_id integer
   title text [not null]
   body text [not null]
   publish_at "timestamp with time zone"
@@ -127,6 +127,20 @@ Table announcements {
   translations jsonb [not null, default: `'{}'::jsonb`]
   audiences "text[]" [not null, default: `'{}'::text[]`]
   channels "text[]" [not null, default: `'{in_app,email,push}'::text[]`]
+}
+
+Table anonymous_participants {
+  id uuid [pk, not null]
+  age integer
+  gender text
+  university text
+  degree text
+  graduation_year smallint
+  origin_city text
+  guaranteed_presence_minutes integer [not null, default: `0`, note: 'H24 verified/guaranteed venue time, rounded down to complete minutes at anonymization.']
+  created_at "timestamp with time zone" [not null, default: `now()`]
+
+  Note: 'H54 permanent minimum audit subject. id is random and has no relationship to users.id.'
 }
 
 Table applicant_reviews {
@@ -193,7 +207,7 @@ Table attempt_review {
 Table attempt_review_versions {
   id integer [pk, increment, not null]
   attempt_id integer [not null]
-  author_id integer [not null]
+  author_id integer
   changed_fields "text[]" [not null]
   previous jsonb
   new jsonb
@@ -238,7 +252,7 @@ Table challenge_winners {
   challenge_id integer [not null]
   rank smallint [not null]
   repo_id integer [not null]
-  set_by integer [not null]
+  set_by integer
   created_at "timestamp with time zone" [not null, default: `now()`]
   updated_at "timestamp with time zone" [not null, default: `now()`]
 
@@ -271,18 +285,19 @@ Table challenges {
 
 Table check_in_logs {
   id integer [pk, increment, not null]
-  user_id integer [not null]
+  user_id integer
   badge_id text
   checked_in_at "timestamp with time zone" [not null, default: `now()`]
   check_in_method text [not null, default: `'manual'::text`]
-  staff_id integer [not null]
+  staff_id integer
   notes text
+  anonymous_participant_id uuid
 }
 
 Table data_subject_requests {
   id integer [pk, increment, not null]
-  subject_user_id integer [not null]
-  requested_by integer [not null]
+  subject_user_id integer
+  requested_by integer
   type text [not null]
   status text [not null, default: `'pending'::text`]
   reason text
@@ -421,7 +436,7 @@ Table food_intolerances {
   id integer [pk, increment, not null]
   label jsonb [not null]
   description jsonb
-  proposed_by integer [not null]
+  proposed_by integer
   created_at "timestamp with time zone" [not null, default: `now()`]
 }
 
@@ -450,7 +465,7 @@ Table idempotency_keys {
 
 Table judging_session {
   id integer [pk, increment, not null]
-  judge_id integer [not null]
+  judge_id integer
   queue_entry_id integer [not null]
   room_id integer
   started_at "timestamp with time zone" [not null, default: `now()`]
@@ -471,7 +486,7 @@ Table meal_scan_batch_items {
   activity_id integer [not null]
   device_id text [not null]
   client_scan_id text [not null]
-  badge_id text [not null]
+  badge_id text [note: 'H54 transient retry credential; NULL after terminal processing and never part of audit history.']
   allow_repeat boolean [not null, default: `false`]
   scanned_at "timestamp with time zone"
   status text [not null, default: `'pending'::text`]
@@ -490,7 +505,7 @@ Table meal_scan_batches {
   id integer [pk, increment, not null]
   activity_id integer [not null]
   device_id text [not null]
-  submitted_by integer [not null]
+  submitted_by integer
   status text [not null, default: `'pending'::text`]
   created_at "timestamp with time zone" [not null, default: `now()`]
   updated_at "timestamp with time zone" [not null, default: `now()`]
@@ -641,6 +656,13 @@ Table repos {
   Note: 'A project/team. Deliberately independent from application_responses — registration teams and submission teams need not match.'
 }
 
+Table room_enterprises {
+  room_id integer [pk, not null]
+  enterprise_id integer [not null]
+  assigned_at "timestamp with time zone" [not null, default: `now()`]
+  assigned_by integer
+}
+
 Table room_queue_groups {
   room_id integer [unique, not null]
   assigned_at "timestamp with time zone" [not null, default: `now()`]
@@ -669,6 +691,18 @@ Table rooms {
   status text [not null, default: `'paused'::text`]
   created_at "timestamp with time zone" [not null, default: `now()`]
   updated_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table scanner_revoked_badges {
+  badge_id text [pk, not null]
+  revoked_at "timestamp with time zone" [not null, default: `now()`]
+  expires_at "timestamp with time zone" [not null]
+}
+
+Table scanner_revoked_tickets {
+  ticket_token text [pk, not null]
+  revoked_at "timestamp with time zone" [not null, default: `now()`]
+  expires_at "timestamp with time zone" [not null]
 }
 
 Table schedule {
@@ -764,11 +798,12 @@ Table tickets {
 
 Table time_logs {
   id integer [pk, increment, not null]
-  user_id integer [not null]
+  user_id integer
   kind text [not null]
   scanned_at "timestamp with time zone" [not null, default: `now()`]
   scanned_by integer
   notes text
+  anonymous_participant_id uuid
 }
 
 Table tv_slots {
@@ -784,7 +819,7 @@ Table tv_slots {
 Table universities {
   id integer [pk, increment, not null]
   name text [unique, not null]
-  proposed_by integer [not null]
+  proposed_by integer
   created_at "timestamp with time zone" [not null, default: `now()`]
 }
 
@@ -840,6 +875,9 @@ Table users {
   anonymized_at "timestamp with time zone"
   dietary_data_state text [not null, default: `'not_provided'::text`]
   ui_prefs jsonb [not null, default: `'{}'::jsonb`]
+  account_state text [not null, default: `'active'::text`, note: 'H54 lifecycle gate: active writers are rejected once removal_pending is committed.']
+  removal_action text [note: 'H54 action selected while the user row is locked; prevents a retry from changing mode.']
+  removal_started_at "timestamp with time zone"
 
   Note: 'No role column: role is derived at login from relationships (admin > staff > judge > sponsor > participant). Permissions come from capability groups only (H8).'
 }
@@ -914,6 +952,7 @@ Ref: challenge_winners.challenge_id > challenges.id
 Ref: challenge_winners.repo_id > repos.id
 Ref: challenge_winners.set_by > users.id
 Ref: challenges.author > sponsors.id
+Ref: check_in_logs.anonymous_participant_id > anonymous_participants.id
 Ref: check_in_logs.staff_id > users.id
 Ref: check_in_logs.user_id > users.id
 Ref: data_subject_requests.requested_by > users.id
@@ -962,6 +1001,9 @@ Ref: queue_history.actor_id > users.id
 Ref: queue_history.queue_entry_id > queue_entries.id
 Ref: repo_devpost_prizes.repo_id > repos.id
 Ref: repos.created_by > users.id
+Ref: room_enterprises.assigned_by > users.id
+Ref: room_enterprises.enterprise_id > enterprises.id
+Ref: room_enterprises.room_id > rooms.id
 Ref: room_queue_groups.assigned_by > users.id
 Ref: room_queue_groups.queue_group_id > queue_groups.id
 Ref: room_queue_groups.room_id > rooms.id
@@ -976,6 +1018,7 @@ Ref: submissions.invited_by > users.id
 Ref: submissions.repo_id > repos.id
 Ref: submissions.user_id > users.id
 Ref: tickets.user_id > users.id
+Ref: time_logs.anonymous_participant_id > anonymous_participants.id
 Ref: time_logs.scanned_by > users.id
 Ref: time_logs.user_id > users.id
 Ref: universities.proposed_by > users.id

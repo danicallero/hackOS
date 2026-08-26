@@ -49,7 +49,7 @@ export async function userHasWildcard(
        SELECT pgm.group_id
        FROM users u
        JOIN permission_group_members pgm ON pgm.user_id = u.id
-       WHERE u.id = $1 AND u.anonymized_at IS NULL
+       WHERE u.id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
        UNION
        SELECT pgi.child_group_id
        FROM permission_group_includes pgi
@@ -106,13 +106,17 @@ export async function requireGroupMutationAuthority(
 }
 
 /** Ensures a graph mutation leaves an active user with wildcard access. */
-export async function assertActiveWildcardHolder(client: PermissionGraphClient): Promise<void> {
+export async function assertActiveWildcardHolder(
+  client: PermissionGraphClient,
+  excludedUserId?: number,
+): Promise<void> {
   const { rows } = await client.query(
     `WITH RECURSIVE effective_groups(user_id, group_id) AS (
        SELECT pgm.user_id, pgm.group_id
        FROM permission_group_members pgm
        JOIN users u ON u.id = pgm.user_id
-       WHERE u.anonymized_at IS NULL
+       WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
+         AND ($2::integer IS NULL OR pgm.user_id <> $2)
        UNION
        SELECT eg.user_id, pgi.child_group_id
        FROM effective_groups eg
@@ -123,7 +127,7 @@ export async function assertActiveWildcardHolder(client: PermissionGraphClient):
      JOIN group_capabilities gc ON gc.group_id = eg.group_id
      WHERE gc.capability = $1
      LIMIT 1`,
-    [CAPABILITIES.ADMIN_ALL],
+    [CAPABILITIES.ADMIN_ALL, excludedUserId ?? null],
   );
   if (rows.length === 0) {
     throw new ConflictError("Permission changes must retain one active wildcard holder");

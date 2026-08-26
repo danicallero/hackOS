@@ -11,8 +11,10 @@ export interface AuditEntry {
   before?: unknown;
   after?: unknown;
   reason?: string;
-  ip?: string;
-  userAgent?: string;
+  /** Pass null for an intentionally identity-free audit event. */
+  ip?: string | null;
+  /** Pass null for an intentionally identity-free audit event. */
+  userAgent?: string | null;
 }
 
 /**
@@ -35,8 +37,8 @@ export async function audit(db: Queryable, entry: AuditEntry): Promise<void> {
       entry.before === undefined ? null : JSON.stringify(entry.before),
       entry.after === undefined ? null : JSON.stringify(entry.after),
       entry.reason ?? null,
-      entry.ip ?? requestContext?.ip ?? null,
-      entry.userAgent ?? requestContext?.userAgent ?? null,
+      entry.ip !== undefined ? entry.ip : (requestContext?.ip ?? null),
+      entry.userAgent !== undefined ? entry.userAgent : (requestContext?.userAgent ?? null),
     ],
   );
 }

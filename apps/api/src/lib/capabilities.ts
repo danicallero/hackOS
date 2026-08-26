@@ -1,6 +1,6 @@
 import { ALL_CAPABILITIES, CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
 import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
-import { pool } from "../db/pool.js";
+import { pool, type Queryable } from "../db/pool.js";
 import { BadRequestError, ForbiddenError, UnauthorizedError } from "./errors.js";
 
 /**
@@ -15,15 +15,16 @@ import { BadRequestError, ForbiddenError, UnauthorizedError } from "./errors.js"
 export async function getEffectiveCapabilities(
   userId: number,
   request?: FastifyRequest,
+  db: Queryable = pool,
 ): Promise<Set<string>> {
   if (request?.effectiveCapabilities) return request.effectiveCapabilities;
   const resolve = async (): Promise<Set<string>> => {
-    const result = await pool.query(
+    const result = await db.query(
       `WITH RECURSIVE user_groups AS (
        SELECT pgm.group_id
        FROM users u
        JOIN permission_group_members pgm ON pgm.user_id = u.id
-       WHERE u.id = $1 AND u.anonymized_at IS NULL
+       WHERE u.id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
        UNION
        SELECT gi.child_group_id
        FROM permission_group_includes gi
@@ -102,7 +103,19 @@ export function requireAnyCapability(...capabilities: Capability[]): preHandlerH
   };
 }
 
+/** Shared assertion for composed pre-handlers that cannot invoke Fastify's
+ * overloaded hook signature directly (for example, self-removal replay).
+ */
+export async function assertActiveAuthenticatedUser(req: FastifyRequest): Promise<void> {
+  if (req.userId == null) throw new UnauthorizedError();
+  const { rows } = await pool.query(
+    `SELECT 1 FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+    [req.userId],
+  );
+  if (!rows[0]) throw new UnauthorizedError("This account is closed or being removed");
+}
+
 /** Guard that only requires a logged-in user (any capabilities). */
 export const requireAuth: preHandlerHookHandler = async (req) => {
-  if (req.userId == null) throw new UnauthorizedError();
+  await assertActiveAuthenticatedUser(req);
 };

@@ -85,7 +85,8 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
 
       const { rows: selfRows } = await pool.query(
         `SELECT email, name, surname, secondary_email, secondary_email_verified_at
-           FROM users WHERE id = $1`,
+           FROM users
+          WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
         [userId],
       );
       if (!selfRows[0]) throw new NotFoundError("User not found");
@@ -256,7 +257,8 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
           // Mirrors H2's UX contract: an already-used link answers "already
           // verified", not an error.
           const { rows: current } = await client.query(
-            `SELECT secondary_email, secondary_email_verified_at FROM users WHERE id = $1`,
+            `SELECT secondary_email, secondary_email_verified_at FROM users
+              WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
             [userId],
           );
           const user = current[0] as {
@@ -317,7 +319,8 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
 
       const { rows: target } = await pool.query(
         `SELECT email, name, surname, secondary_email, secondary_email_verified_at
-           FROM users WHERE id = $1`,
+           FROM users
+          WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
         [targetId],
       );
       if (!target[0]) throw new NotFoundError("User not found", { userId: targetId });
@@ -333,6 +336,13 @@ export function registerSecondaryEmailRoutes(app: FastifyInstance): void {
       }
       const token = randomBytes(32).toString("base64url");
       await withTransaction(async (client) => {
+        const { rows: activeTarget } = await client.query(
+          `SELECT 1 FROM users
+            WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+            FOR UPDATE`,
+          [targetId],
+        );
+        if (!activeTarget[0]) throw new NotFoundError("User not found", { userId: targetId });
         await assertSecondaryEmailAvailable(email, targetId, client);
         await client.query(
           `UPDATE email_verification_tokens SET used_at = now()
@@ -398,7 +408,9 @@ async function removeSecondaryEmail(
   return withTransaction(async (client) => {
     const result = await client.query(
       `SELECT secondary_email, secondary_email_verified_at
-         FROM users WHERE id = $1 FOR UPDATE`,
+         FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
       [targetId],
     );
     const user = result.rows[0] as

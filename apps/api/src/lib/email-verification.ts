@@ -10,7 +10,8 @@ export async function assertVerifiedPrimaryEmail(
   { forUpdate = false }: { forUpdate?: boolean } = {},
 ): Promise<void> {
   const { rows } = await db.query(
-    `SELECT email_verified FROM users WHERE id = $1${forUpdate ? " FOR UPDATE" : ""}`,
+    `SELECT email_verified FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL${forUpdate ? " FOR UPDATE" : ""}`,
     [userId],
   );
   if (!rows[0]) throw new NotFoundError("User not found", { userId });

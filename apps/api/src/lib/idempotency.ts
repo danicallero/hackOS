@@ -101,6 +101,42 @@ export async function idempotencyGuard(req: FastifyRequest, reply: FastifyReply)
     .send(row.response_body);
 }
 
+/**
+ * Replays a completed, identity-free account-removal response before normal
+ * authentication runs. Removal revokes every session as part of success, so a
+ * client that lost the response cannot present the original session on a
+ * retry. The caller must still possess the high-entropy idempotency key and
+ * the exact request body; only the boolean completion response is stored in
+ * this route-scoped record.
+ */
+export async function replayCompletedIdempotency(
+  req: FastifyRequest,
+  reply: FastifyReply,
+  completionScope: string,
+): Promise<boolean> {
+  const key = req.headers["idempotency-key"];
+  if (!key || typeof key !== "string") return false;
+
+  const { rows } = await pool.query<{
+    request_hash: string;
+    response_status: number | null;
+    response_body: unknown;
+  }>(
+    `SELECT request_hash, response_status, response_body
+       FROM idempotency_keys
+      WHERE key = $1 AND scope = $2`,
+    [key, completionScope],
+  );
+  const row = rows[0];
+  if (!row) return false;
+  if (row.request_hash !== requestHash(req)) {
+    throw new ConflictError("Idempotency-Key reused with a different request body");
+  }
+  if (row.response_status === null) return false;
+  reply.code(row.response_status).header("idempotency-replayed", "true").send(row.response_body);
+  return true;
+}
+
 /** Registered globally in app.ts: persists responses for first executions. */
 export async function idempotencyOnSend(
   req: FastifyRequest,
