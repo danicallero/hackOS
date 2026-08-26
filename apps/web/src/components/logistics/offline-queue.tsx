@@ -2,11 +2,7 @@ import { AlertTriangleIcon, CloudOffIcon, HardDriveIcon, LoaderCircleIcon } from
 import { StatusBadge } from "@/components/common/status-badge";
 import { useLocale } from "@/lib/i18n";
 
-/**
- * A meal scan captured on-device and awaiting server confirmation (H25). It
- * lives in localStorage until the batch endpoint acks it, so a Wi-Fi outage or
- * a saturated server never drops or duplicates a pass.
- */
+/** A meal scan captured on-device and awaiting server confirmation (H25). */
 export type OfflineScan = {
   clientScanId: string;
   activityId: number;
@@ -19,19 +15,289 @@ export type OfflineScan = {
   error?: string;
 };
 
-const OFFLINE_KEY = "hackos:logistics:meal-scans";
+/** Server responses that prove a queued badge can never be replayed. */
+export function isStaleOfflineScanError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && ["not_found", "badge_unknown", "badge_revoked"].includes(code);
+}
 
-export function loadOfflineQueue(): OfflineScan[] {
-  if (typeof window === "undefined") return [];
+const LEGACY_OFFLINE_KEY = "hackos:logistics:meal-scans";
+const OFFLINE_KEY_PREFIX = "hackos:logistics:meal-scans:v2:";
+const KEY_DATABASE = "hackos-logistics-offline-queue";
+const KEY_STORE = "keys";
+const QUEUE_VERSION = 2;
+
+type QueueEnvelope = {
+  version: typeof QUEUE_VERSION;
+  iv: string;
+  ciphertext: string;
+};
+
+type QueuePayload = {
+  version: typeof QUEUE_VERSION;
+  ownerId: number;
+  items: OfflineScan[];
+};
+
+type StoredKey = {
+  slot: string;
+  key: CryptoKey;
+};
+
+function webCrypto(): Crypto {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error("Web Crypto is unavailable; offline queue persistence is disabled");
+  }
+  return globalThis.crypto;
+}
+
+function bytesToBase64(bytes: ArrayBuffer | ArrayBufferView): string {
+  let binary = "";
+  const view = !ArrayBuffer.isView(bytes)
+    ? new Uint8Array(bytes)
+    : new Uint8Array(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength);
+  for (const byte of view) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(value: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(value);
+  const bytes = new Uint8Array(new ArrayBuffer(binary.length));
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+async function ownerSlot(ownerId: number): Promise<string> {
+  const input = new TextEncoder().encode(`hackos-offline-meal-queue:${ownerId}`);
+  return bytesToBase64(await webCrypto().subtle.digest("SHA-256", input));
+}
+
+function openKeyDatabase(): Promise<IDBDatabase> {
+  if (typeof indexedDB === "undefined") {
+    return Promise.reject(
+      new Error("IndexedDB is unavailable; offline queue persistence is disabled"),
+    );
+  }
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(KEY_DATABASE, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(KEY_STORE)) {
+        request.result.createObjectStore(KEY_STORE, { keyPath: "slot" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () =>
+      reject(request.error ?? new Error("Could not open offline queue key store"));
+  });
+}
+
+async function readStoredKey(slot: string): Promise<CryptoKey | null> {
+  const database = await openKeyDatabase();
   try {
-    return JSON.parse(window.localStorage.getItem(OFFLINE_KEY) ?? "[]") as OfflineScan[];
+    return await new Promise((resolve, reject) => {
+      const request = database.transaction(KEY_STORE, "readonly").objectStore(KEY_STORE).get(slot);
+      request.onsuccess = () => resolve((request.result as StoredKey | undefined)?.key ?? null);
+      request.onerror = () =>
+        reject(request.error ?? new Error("Could not read offline queue key"));
+    });
+  } finally {
+    database.close();
+  }
+}
+
+async function getOrCreateKey(slot: string): Promise<CryptoKey> {
+  const existing = await readStoredKey(slot);
+  if (existing) return existing;
+
+  const key = await webCrypto().subtle.generateKey({ name: "AES-GCM", length: 256 }, false, [
+    "encrypt",
+    "decrypt",
+  ]);
+  const database = await openKeyDatabase();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction(KEY_STORE, "readwrite");
+      const request = transaction.objectStore(KEY_STORE).put({ slot, key } satisfies StoredKey);
+      request.onerror = () =>
+        reject(request.error ?? new Error("Could not save offline queue key"));
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () =>
+        reject(transaction.error ?? new Error("Could not save offline queue key"));
+    });
+  } finally {
+    database.close();
+  }
+  return key;
+}
+
+async function deleteStoredKey(slot: string): Promise<void> {
+  const database = await openKeyDatabase();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction(KEY_STORE, "readwrite");
+      const request = transaction.objectStore(KEY_STORE).delete(slot);
+      request.onerror = () =>
+        reject(request.error ?? new Error("Could not remove offline queue key"));
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () =>
+        reject(transaction.error ?? new Error("Could not remove offline queue key"));
+    });
+  } finally {
+    database.close();
+  }
+}
+
+function isOfflineScan(value: unknown): value is OfflineScan {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<OfflineScan>;
+  return (
+    typeof item.clientScanId === "string" &&
+    typeof item.activityId === "number" &&
+    typeof item.activityName === "string" &&
+    typeof item.badgeId === "string" &&
+    typeof item.allowRepeat === "boolean" &&
+    typeof item.scannedAt === "string" &&
+    (item.status === "pending" || item.status === "syncing" || item.status === "failed")
+  );
+}
+
+function queueStorageKey(slot: string): string {
+  return `${OFFLINE_KEY_PREFIX}${slot}`;
+}
+
+function removeStoredQueue(key: string): void {
+  try {
+    window.localStorage.removeItem(key);
   } catch {
+    // Storage can be unavailable in private browsing; there is no plaintext
+    // fallback, so an unreadable queue is intentionally not replayed.
+  }
+}
+
+/**
+ * Load only the queue encrypted for the currently authenticated staff owner.
+ * The old plaintext array and corrupt/encrypted-with-another-owner state are
+ * explicitly discarded instead of being retained or replayed.
+ */
+export async function loadOfflineQueue(ownerId: number | null): Promise<OfflineScan[]> {
+  if (ownerId === null) return [];
+
+  let slot: string;
+  try {
+    slot = await ownerSlot(ownerId);
+  } catch {
+    return [];
+  }
+
+  let raw: string | null = null;
+  try {
+    raw = window.localStorage.getItem(LEGACY_OFFLINE_KEY);
+    if (raw !== null) {
+      removeStoredQueue(LEGACY_OFFLINE_KEY);
+      return [];
+    }
+    raw = window.localStorage.getItem(queueStorageKey(slot));
+  } catch {
+    return [];
+  }
+  if (raw === null) return [];
+
+  try {
+    const envelope = JSON.parse(raw) as Partial<QueueEnvelope>;
+    if (
+      envelope.version !== QUEUE_VERSION ||
+      typeof envelope.iv !== "string" ||
+      typeof envelope.ciphertext !== "string"
+    ) {
+      throw new Error("invalid offline queue envelope");
+    }
+    const key = await readStoredKey(slot);
+    if (!key) throw new Error("offline queue key is missing");
+    const additionalData = new TextEncoder().encode(`hackos-offline-owner:${ownerId}`);
+    const plaintext = await webCrypto().subtle.decrypt(
+      { name: "AES-GCM", iv: base64ToBytes(envelope.iv), additionalData },
+      key,
+      base64ToBytes(envelope.ciphertext),
+    );
+    const payload = JSON.parse(new TextDecoder().decode(plaintext)) as Partial<QueuePayload>;
+    if (
+      payload.version !== QUEUE_VERSION ||
+      payload.ownerId !== ownerId ||
+      !Array.isArray(payload.items) ||
+      !payload.items.every(isOfflineScan)
+    ) {
+      throw new Error("invalid offline queue payload");
+    }
+    return payload.items;
+  } catch {
+    // A corrupt, stale, legacy, or owner-mismatched queue must not survive as
+    // an indefinitely retained identity-bearing badge credential.
+    removeStoredQueue(queueStorageKey(slot));
+    try {
+      await deleteStoredKey(slot);
+    } catch {
+      // The ciphertext has already been removed; an orphaned key contains no
+      // participant data and cannot decrypt a future owner's queue.
+    }
     return [];
   }
 }
 
-export function saveOfflineQueue(items: OfflineScan[]) {
-  window.localStorage.setItem(OFFLINE_KEY, JSON.stringify(items));
+export async function saveOfflineQueue(ownerId: number, items: OfflineScan[]): Promise<void> {
+  // Remove the pre-H54 plaintext namespace before doing any new persistence,
+  // including when encryption or browser storage later fails.
+  removeStoredQueue(LEGACY_OFFLINE_KEY);
+  const slot = await ownerSlot(ownerId);
+  const key = await getOrCreateKey(slot);
+  const payload: QueuePayload = { version: QUEUE_VERSION, ownerId, items };
+  const iv = new Uint8Array(new ArrayBuffer(12));
+  webCrypto().getRandomValues(iv);
+  const additionalData = new TextEncoder().encode(`hackos-offline-owner:${ownerId}`);
+  const ciphertext = await webCrypto().subtle.encrypt(
+    { name: "AES-GCM", iv, additionalData },
+    key,
+    new TextEncoder().encode(JSON.stringify(payload)),
+  );
+  const envelope: QueueEnvelope = {
+    version: QUEUE_VERSION,
+    iv: bytesToBase64(iv),
+    ciphertext: bytesToBase64(ciphertext),
+  };
+  window.localStorage.setItem(queueStorageKey(slot), JSON.stringify(envelope));
+}
+
+/** Remove the current owner's queue and key during account closure. */
+export async function clearOfflineQueue(ownerId: number | null): Promise<void> {
+  removeStoredQueue(LEGACY_OFFLINE_KEY);
+  if (ownerId === null) {
+    try {
+      for (const key of Object.keys(window.localStorage)) {
+        if (key.startsWith(OFFLINE_KEY_PREFIX)) removeStoredQueue(key);
+      }
+    } catch {
+      // Best effort; the encrypted payload remains unusable without its key.
+    }
+    await new Promise<void>((resolve, reject) => {
+      if (typeof indexedDB === "undefined") {
+        resolve();
+        return;
+      }
+      const request = indexedDB.deleteDatabase(KEY_DATABASE);
+      request.onsuccess = () => resolve();
+      request.onerror = () =>
+        reject(request.error ?? new Error("Could not remove offline queue keys"));
+      request.onblocked = () => reject(new Error("Offline queue key removal was blocked"));
+    });
+    return;
+  }
+  const slot = await ownerSlot(ownerId);
+  removeStoredQueue(queueStorageKey(slot));
+  await deleteStoredKey(slot);
 }
 
 /** Local, not-yet-synced meal scans queued on this device (H25). */

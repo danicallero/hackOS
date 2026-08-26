@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
 import { SectionCard } from "@/components/common/section-card";
+import { clearOfflineQueue } from "@/components/logistics/offline-queue";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ApiError, api } from "@/lib/api";
@@ -19,6 +20,7 @@ import {
   accountRemovalIdempotencyKey,
   clearWebAccountData,
 } from "@/lib/privacy-removal";
+import { useMe } from "@/lib/session";
 
 const RETAINED_FIELD_COPY: Record<string, MessageKey> = {
   age: "accountRetainedAge",
@@ -39,6 +41,7 @@ function isParticipantInside(error: unknown): boolean {
 
 export function DangerZoneCard() {
   const { t } = useLocale();
+  const me = useMe();
   const [loading, setLoading] = useState(true);
   const [eligibility, setEligibility] = useState<AccountRemovalEligibility | null>(null);
   const [open, setOpen] = useState(false);
@@ -64,6 +67,12 @@ export function DangerZoneCard() {
   }, []);
 
   async function finishLocalAccountClosure(pendingCleanup: boolean) {
+    try {
+      await clearOfflineQueue(me?.id ?? null);
+    } catch {
+      // The encrypted queue envelope is removed before key deletion. A key
+      // left by an unavailable browser database cannot decrypt queue data.
+    }
     clearWebAccountData();
     if (pendingCleanup) toast.info(t("accountRemovalPending"));
     try {

@@ -12,7 +12,7 @@ import {
   TriangleAlertIcon,
   UsersIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
 import { EntityCombobox } from "@/components/common/entity-combobox";
@@ -27,7 +27,10 @@ import { useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { type ActivityScanResult, logisticsApi, type PersonSearchResult } from "@/lib/logistics";
+import { useSessionContext } from "@/lib/session";
 import {
+  clearOfflineQueue,
+  isStaleOfflineScanError,
   loadOfflineQueue,
   OfflineQueue,
   type OfflineScan,
@@ -47,7 +50,11 @@ const SCAN_EVENTS = [EVENTS.LOGISTICS_ACTIVITY_SCAN, EVENTS.LOGISTICS_MEAL_SCAN_
  */
 export function ActivityScannerCard({ category }: { category: "meal" | "activity" }) {
   const { t } = useLocale();
+  const { me } = useSessionContext();
   const isMeal = category === "meal";
+  const ownerId = me?.id ?? null;
+  const ownerRef = useRef(ownerId);
+  ownerRef.current = ownerId;
   const activities = useLiveQuery(
     () => logisticsApi.scannableActivities(category),
     "/api/logistics/stream",
@@ -62,11 +69,37 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
   const [result, setResult] = useState<ActivityScanResult | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [offline, setOffline] = useState<OfflineScan[]>(() => (isMeal ? loadOfflineQueue() : []));
+  const [offline, setOffline] = useState<OfflineScan[]>([]);
+  const [queueReady, setQueueReady] = useState(!isMeal);
   const [transactionState, setTransactionState] = useState<
     "ready" | "saved" | "confirmed" | "attention"
   >("ready");
   const selected = items.find((a) => String(a.activityId) === activityId) ?? null;
+
+  useEffect(() => {
+    let active = true;
+    if (!isMeal || ownerId === null) {
+      setOffline([]);
+      setQueueReady(!isMeal);
+      return () => {
+        active = false;
+      };
+    }
+    setQueueReady(false);
+    void loadOfflineQueue(ownerId)
+      .then((items) => {
+        if (active) setOffline(items);
+      })
+      .catch(() => {
+        if (active) setOffline([]);
+      })
+      .finally(() => {
+        if (active) setQueueReady(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isMeal, ownerId]);
 
   const [findOpen, setFindOpen] = useState(false);
   const [findQuery, setFindQuery] = useState("");
@@ -102,9 +135,33 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
     setFindError("");
   };
 
-  const persistOffline = (next: OfflineScan[]) => {
+  const persistOffline = async (next: OfflineScan[]) => {
+    if (ownerId === null || ownerRef.current !== ownerId) {
+      throw new Error("The authenticated staff owner changed");
+    }
+    await saveOfflineQueue(ownerId, next);
     setOffline(next);
-    saveOfflineQueue(next);
+  };
+
+  const persistSyncedQueue = async (next: OfflineScan[]): Promise<boolean> => {
+    if (ownerRef.current !== ownerId) return false;
+    try {
+      await persistOffline(next);
+      return true;
+    } catch {
+      // Do not leave an old encrypted snapshot that can replay a credential
+      // after the server has already acknowledged or rejected this batch.
+      try {
+        await clearOfflineQueue(ownerId);
+      } catch {
+        // The in-memory queue is still cleared below; there is no plaintext
+        // fallback when browser storage is unavailable.
+      }
+      setOffline([]);
+      setTransactionState("attention");
+      setError(t("offlineSyncFailed"));
+      return false;
+    }
   };
 
   const scanNow = async (allowRepeat = false) => {
@@ -140,26 +197,32 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
     }
   };
 
-  const queueOffline = () => {
-    if (!selected) return;
-    persistOffline([
-      ...offline,
-      {
-        clientScanId: crypto.randomUUID(),
-        activityId: selected.activityId,
-        activityName: selected.name,
-        badgeId: badgeId.trim(),
-        allowRepeat: false,
-        scannedAt: new Date().toISOString(),
-        status: "pending",
-      },
-    ]);
-    setBadgeId("");
-    setTransactionState("saved");
-    toast.success(t("scanQueuedLocally"));
+  const queueOffline = async () => {
+    if (!selected || ownerId === null || ownerRef.current !== ownerId || !queueReady) return;
+    try {
+      await persistOffline([
+        ...offline,
+        {
+          clientScanId: crypto.randomUUID(),
+          activityId: selected.activityId,
+          activityName: selected.name,
+          badgeId: badgeId.trim(),
+          allowRepeat: false,
+          scannedAt: new Date().toISOString(),
+          status: "pending",
+        },
+      ]);
+      setBadgeId("");
+      setTransactionState("saved");
+      toast.success(t("scanQueuedLocally"));
+    } catch {
+      setTransactionState("attention");
+      setError(t("offlineSyncFailed"));
+    }
   };
 
   const syncOffline = async () => {
+    if (ownerId === null || ownerRef.current !== ownerId || !queueReady) return;
     const queued = offline.filter((scan) => scan.status !== "syncing");
     if (queued.length === 0) return;
     setBusy(true);
@@ -167,12 +230,13 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
     // Replay in capture order. A transient failure stops the queue; a server
     // business rejection is inspectable and does not block later operations.
     for (const scan of queued) {
+      if (ownerRef.current !== ownerId) break;
       next = next.map((item) =>
         item.clientScanId === scan.clientScanId
           ? { ...item, status: "syncing", error: undefined, failureKind: undefined }
           : item,
       );
-      persistOffline(next);
+      setOffline(next);
       try {
         await logisticsApi.mealBatch(scan.activityId, {
           deviceId: "web-scanner",
@@ -185,18 +249,18 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
             },
           ],
         });
+        if (ownerRef.current !== ownerId) break;
         next = next.filter((item) => item.clientScanId !== scan.clientScanId);
+        if (!(await persistSyncedQueue(next))) break;
         setTransactionState("confirmed");
       } catch (err) {
         // A participant may have been deleted/anonymized while this browser
         // was offline. Keeping the raw badge in a permanent "failed" row
         // would retain a credential the server has deliberately revoked.
-        const staleIdentityRejection =
-          err instanceof ApiError &&
-          ["not_found", "badge_unknown", "badge_revoked"].includes(err.code);
+        const staleIdentityRejection = isStaleOfflineScanError(err);
         if (staleIdentityRejection) {
           next = next.filter((item) => item.clientScanId !== scan.clientScanId);
-          persistOffline(next);
+          if (!(await persistSyncedQueue(next))) break;
           setTransactionState("attention");
           continue;
         }
@@ -216,11 +280,10 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
               }
             : item,
         );
-        persistOffline(next);
+        if (!(await persistSyncedQueue(next))) break;
         setTransactionState(businessRejection ? "attention" : "saved");
         if (!businessRejection) break;
       }
-      persistOffline(next);
     }
     setBusy(false);
     activities.refetch();
@@ -435,7 +498,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
                   <Button
                     variant="outline"
                     onClick={queueOffline}
-                    disabled={!activityId || !badgeId.trim()}
+                    disabled={!queueReady || !activityId || !badgeId.trim()}
                   >
                     {t("queueLocally")}
                   </Button>
