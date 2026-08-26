@@ -1,8 +1,8 @@
 "use client";
 
-// Self-service account deletion (H54). Collapsed by default — this is the
-// one destructive control on the personal settings page, so it stays out of
-// the way until the user deliberately opens it.
+// Self-service account deletion/anonymization (H54). The server owns the
+// eligibility decision; this component only explains and confirms that
+// decision, then clears browser-held data after the authenticated operation.
 
 import { ChevronDownIcon, TriangleAlertIcon } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -13,8 +13,29 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ApiError, api } from "@/lib/api";
 import { signOut } from "@/lib/auth-client";
-import { useLocale } from "@/lib/i18n";
-import type { AccountRemovalEligibility } from "@/lib/privacy-removal";
+import { type MessageKey, useLocale } from "@/lib/i18n";
+import {
+  type AccountRemovalEligibility,
+  accountRemovalIdempotencyKey,
+  clearWebAccountData,
+} from "@/lib/privacy-removal";
+
+const RETAINED_FIELD_COPY: Record<string, MessageKey> = {
+  age: "accountRetainedAge",
+  gender: "accountRetainedGender",
+  university: "accountRetainedUniversity",
+  degree: "accountRetainedDegree",
+  "graduation year": "accountRetainedGraduationYear",
+  "origin city": "accountRetainedOriginCity",
+  "guaranteed venue-presence time": "accountRetainedPresenceTime",
+};
+
+function isParticipantInside(error: unknown): boolean {
+  if (!(error instanceof ApiError) || !error.details || typeof error.details !== "object") {
+    return false;
+  }
+  return (error.details as { code?: unknown }).code === "participant_inside";
+}
 
 export function DangerZoneCard() {
   const { t } = useLocale();
@@ -42,25 +63,59 @@ export function DangerZoneCard() {
     };
   }, []);
 
-  async function deleteAccount() {
+  async function finishLocalAccountClosure(pendingCleanup: boolean) {
+    clearWebAccountData();
+    if (pendingCleanup) toast.info(t("accountRemovalPending"));
+    try {
+      // The API already revoked the session before external cleanup. This is
+      // still attempted so Better Auth can clear any remaining browser state.
+      await signOut();
+    } catch {
+      // A revoked/deleted account may make the Better Auth sign-out call fail.
+    }
+    window.location.assign("/login");
+  }
+
+  async function removeAccount() {
+    const action = eligibility?.action;
+    if (!action) return;
     setPending(true);
     try {
-      await api.delete("/api/me");
-      toast.success(t("accountDeleted"));
-      await signOut();
-      window.location.assign("/login");
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveAccount"));
+      const headers = { "Idempotency-Key": accountRemovalIdempotencyKey(action) };
+      if (action === "delete") {
+        await api.delete("/api/me", { headers });
+      } else {
+        await api.post("/api/me/anonymize", { confirm: true }, { headers });
+      }
+      toast.success(action === "delete" ? t("accountDeleted") : t("accountAnonymized"));
+      await finishLocalAccountClosure(false);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "removal_storage_pending") {
+        await finishLocalAccountClosure(true);
+        return;
+      }
+      if (isParticipantInside(error)) {
+        setConfirmOpen(false);
+        try {
+          setEligibility(await api.get<AccountRemovalEligibility>("/api/me/removal-eligibility"));
+        } catch {
+          // Keep the existing explanation if the refresh is unavailable.
+        }
+      }
+      toast.error(error instanceof ApiError ? error.message : t("couldNotRemoveAccount"));
       setPending(false);
     }
   }
+
+  const canConfirm =
+    eligibility !== null && !(eligibility.action === "anonymize" && eligibility.requiresVenueExit);
 
   return (
     <SectionCard icon={TriangleAlertIcon} title={t("dangerZone")}>
       <Collapsible open={open} onOpenChange={setOpen}>
         <CollapsibleTrigger asChild>
           <Button type="button" variant="ghost" size="sm" className="text-muted-foreground -ml-2">
-            <ChevronDownIcon className={open ? "size-4 rotate-180" : "size-4"} />
+            <ChevronDownIcon aria-hidden className={open ? "size-4 rotate-180" : "size-4"} />
             {open ? t("hideDangerZone") : t("showDangerZone")}
           </Button>
         </CollapsibleTrigger>
@@ -82,31 +137,109 @@ export function DangerZoneCard() {
                 {t("deleteMyAccount")}
               </Button>
             </div>
+          ) : eligibility ? (
+            <div className="space-y-3">
+              <p className="text-muted-foreground text-pretty text-sm">
+                {t("accountAnonymizeDescription")}
+              </p>
+              <div>
+                <p className="text-muted-foreground text-sm">{t("accountRetainedFieldsIntro")}</p>
+                <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-sm">
+                  {eligibility.retainedFields.map((field) => (
+                    <li key={field}>
+                      {RETAINED_FIELD_COPY[field] ? t(RETAINED_FIELD_COPY[field]) : field}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <p className="text-muted-foreground text-pretty text-sm">
+                {t("accountAnonymizeProofLoss")}
+              </p>
+              <p className="text-muted-foreground text-pretty text-sm">
+                {t("accountAnonymizeNoIdentityMapping")}
+              </p>
+              {eligibility.activeEventConsequences && (
+                <p role="alert" className="text-destructive text-pretty text-sm">
+                  {t("accountAnonymizeActiveEvent")}
+                </p>
+              )}
+              {eligibility.requiresVenueExit && (
+                <p role="alert" className="text-destructive text-pretty text-sm">
+                  {t("accountAnonymizeExitRequired")}
+                </p>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="text-destructive"
+                disabled={!canConfirm}
+                onClick={() => setConfirmOpen(true)}
+              >
+                {t("accountAnonymizeAction")}
+              </Button>
+            </div>
           ) : (
-            <p role="alert" className="text-muted-foreground text-pretty text-sm">
-              {t("cannotSelfDeleteAccount")}
+            <p role="alert" className="text-destructive text-pretty text-sm">
+              {t("removalEligibilityUnavailable")}
             </p>
           )}
         </CollapsibleContent>
       </Collapsible>
-      <AlertModal
-        open={confirmOpen}
-        onOpenChange={setConfirmOpen}
-        title={t("deleteMyAccountConfirmTitle")}
-        description={t("areYouSureCantBeUndone")}
-        cancelLabel={t("cancel")}
-        confirmLabel={t("deleteAction")}
-        pending={pending}
-        destructive
-        reverseActions
-        onConfirm={deleteAccount}
-      >
-        <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-pretty text-sm">
-          <li>{t("accountAccessRevokedConsequence")}</li>
-          <li>{t("freshAccountRemovedConsequence")}</li>
-          <li>{t("cantBeUndone")}</li>
-        </ul>
-      </AlertModal>
+      {eligibility && (
+        <AlertModal
+          open={confirmOpen}
+          onOpenChange={setConfirmOpen}
+          title={
+            eligibility.action === "delete"
+              ? t("deleteMyAccountConfirmTitle")
+              : t("accountAnonymizeConfirmTitle")
+          }
+          description={
+            eligibility.action === "delete"
+              ? t("areYouSureCantBeUndone")
+              : t("accountAnonymizeConfirmBody")
+          }
+          cancelLabel={t("cancel")}
+          confirmLabel={
+            eligibility.action === "delete" ? t("deleteAction") : t("accountAnonymizeAction")
+          }
+          pending={pending}
+          destructive
+          reverseActions
+          onConfirm={removeAccount}
+        >
+          {eligibility.action === "anonymize" ? (
+            <>
+              <p className="text-muted-foreground text-sm">{t("accountRetainedFieldsIntro")}</p>
+              <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-pretty text-sm">
+                {eligibility.retainedFields.map((field) => (
+                  <li key={field}>
+                    {RETAINED_FIELD_COPY[field] ? t(RETAINED_FIELD_COPY[field]) : field}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-muted-foreground text-pretty text-sm">
+                {t("accountAnonymizeProofLoss")}
+              </p>
+              <p className="text-muted-foreground text-pretty text-sm">
+                {t("accountAnonymizeNoIdentityMapping")}
+              </p>
+              {eligibility.activeEventConsequences && (
+                <p role="alert" className="text-destructive text-pretty text-sm">
+                  {t("accountAnonymizeActiveEvent")}
+                </p>
+              )}
+            </>
+          ) : (
+            <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-pretty text-sm">
+              <li>{t("accountAccessRevokedConsequence")}</li>
+              <li>{t("freshAccountRemovedConsequence")}</li>
+              <li>{t("cantBeUndone")}</li>
+            </ul>
+          )}
+        </AlertModal>
+      )}
     </SectionCard>
   );
 }

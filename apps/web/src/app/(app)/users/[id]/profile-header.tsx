@@ -14,11 +14,25 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ApiError, api } from "@/lib/api";
-import { useLocale } from "@/lib/i18n";
-import { type AccountRemovalEligibility, accountRemovalRequest } from "@/lib/privacy-removal";
+import { type MessageKey, useLocale } from "@/lib/i18n";
+import {
+  type AccountRemovalEligibility,
+  accountRemovalIdempotencyKey,
+  accountRemovalRequest,
+} from "@/lib/privacy-removal";
 import { useCan, useMe } from "@/lib/session";
 import type { UserDetail } from "@/lib/types";
 import { fullName, initials, ROLE_COPY, ROLE_TONE } from "./shared";
+
+const RETAINED_FIELD_COPY: Record<string, MessageKey> = {
+  age: "accountRetainedAge",
+  gender: "accountRetainedGender",
+  university: "accountRetainedUniversity",
+  degree: "accountRetainedDegree",
+  "graduation year": "accountRetainedGraduationYear",
+  "origin city": "accountRetainedOriginCity",
+  "guaranteed venue-presence time": "accountRetainedPresenceTime",
+};
 
 export function ProfileHeader({ user }: { user: UserDetail }) {
   const { t } = useLocale();
@@ -100,8 +114,11 @@ export function DeleteAccountButton({ user }: { user: UserDetail }) {
     setPending(true);
     try {
       const request = accountRemovalRequest(user.id, eligibility.action);
-      if (request.method === "DELETE") await api.delete(request.path);
-      else await api.post(request.path);
+      const headers = {
+        "Idempotency-Key": accountRemovalIdempotencyKey(eligibility.action),
+      };
+      if (request.method === "DELETE") await api.delete(request.path, { headers });
+      else await api.post(request.path, undefined, { headers });
       toast.success(eligibility.action === "delete" ? t("accountDeleted") : t("accountAnonymized"));
       router.push("/users");
     } catch (err) {
@@ -116,7 +133,7 @@ export function DeleteAccountButton({ user }: { user: UserDetail }) {
         variant="outline"
         size="sm"
         className="text-destructive"
-        disabled={loading || !eligibility}
+        disabled={loading || !eligibility || eligibility.requiresVenueExit}
         onClick={() => setOpen(true)}
       >
         {loading
@@ -144,6 +161,7 @@ export function DeleteAccountButton({ user }: { user: UserDetail }) {
           confirmLabel={eligibility.action === "delete" ? t("deleteAction") : t("anonymizeAction")}
           pending={pending}
           destructive
+          reverseActions
           onConfirm={remove}
         >
           <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-pretty text-sm">
@@ -153,6 +171,24 @@ export function DeleteAccountButton({ user }: { user: UserDetail }) {
                 ? t("operationalHistoryRetainedConsequence")
                 : t("freshAccountRemovedConsequence")}
             </li>
+            {eligibility.action === "anonymize" && (
+              <>
+                <li>{t("accountRetainedFieldsIntro")}</li>
+                {eligibility.retainedFields.map((field) => (
+                  <li key={field} className="ml-4">
+                    {RETAINED_FIELD_COPY[field] ? t(RETAINED_FIELD_COPY[field]) : field}
+                  </li>
+                ))}
+                <li>{t("accountAnonymizeProofLoss")}</li>
+                <li>{t("accountAnonymizeNoIdentityMapping")}</li>
+                {eligibility.activeEventConsequences && (
+                  <li className="text-destructive">{t("accountAnonymizeActiveEvent")}</li>
+                )}
+                {eligibility.requiresVenueExit && (
+                  <li className="text-destructive">{t("accountAnonymizeExitRequired")}</li>
+                )}
+              </>
+            )}
             <li>{t("cantBeUndone")}</li>
           </ul>
         </AlertModal>

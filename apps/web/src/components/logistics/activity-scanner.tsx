@@ -188,6 +188,18 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
         next = next.filter((item) => item.clientScanId !== scan.clientScanId);
         setTransactionState("confirmed");
       } catch (err) {
+        // A participant may have been deleted/anonymized while this browser
+        // was offline. Keeping the raw badge in a permanent "failed" row
+        // would retain a credential the server has deliberately revoked.
+        const staleIdentityRejection =
+          err instanceof ApiError &&
+          ["not_found", "badge_unknown", "badge_revoked"].includes(err.code);
+        if (staleIdentityRejection) {
+          next = next.filter((item) => item.clientScanId !== scan.clientScanId);
+          persistOffline(next);
+          setTransactionState("attention");
+          continue;
+        }
         const message = errorMessage(err, t("offlineSyncFailed"));
         const businessRejection =
           err instanceof ApiError &&
