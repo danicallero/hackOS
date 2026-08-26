@@ -617,7 +617,6 @@ export default function AccountScreen() {
                       <Text
                         key={field}
                         selectable
-                        accessibilityRole="listitem"
                         style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
                       >
                         • {RETAINED_FIELD_COPY[field] ? t(RETAINED_FIELD_COPY[field]) : field}
