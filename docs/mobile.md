@@ -348,6 +348,9 @@ distributed to other Expo Router apps without importing hackOS code.
   separate glass search button that swaps the row for an inline text field
   with a Cancel button. Activities and People Finder reuse the same component
   so their fallback search transition and 44-point hit targets stay identical.
+  On Android, their roster/activity filters use the shared `AndroidFilterMenu`
+  modal fallback so the trigger and each option remain independently tappable;
+  iOS keeps the native `MenuView` path.
   `ScheduleFilterPanel` (also in
   schedule-filter-button.tsx) is the dropdown for both paths, rendered as a
   `Modal` so it isn't clipped by either header's bounds — kind filter open to

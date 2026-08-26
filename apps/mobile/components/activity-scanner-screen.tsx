@@ -1,12 +1,3 @@
-import { Host as NativeHost } from "@expo/ui";
-import { Button as SwiftButton, Text as SwiftText } from "@expo/ui/swift-ui";
-import {
-  buttonBorderShape,
-  buttonStyle,
-  disabled as disabledModifier,
-  frame,
-  multilineTextAlignment,
-} from "@expo/ui/swift-ui/modifiers";
 import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Stack } from "expo-router/stack";
@@ -348,7 +339,6 @@ function ActivityResultPanel({
   onRegisterAnother: () => void;
 }) {
   const { t } = useLocale();
-  const [actionsRowWidth, setActionsRowWidth] = useState(0);
   const meal = isMealActivityKind(activity?.category);
   const repeatPending = result.state === "repeat_pending";
   const fullName =
@@ -535,95 +525,71 @@ function ActivityResultPanel({
           ) : null}
 
           {repeatPending ? (
-            <View
-              onLayout={(event) => setActionsRowWidth(event.nativeEvent.layout.width)}
-              style={{ flexDirection: "row", gap: 10 }}
-            >
-              {actionsRowWidth > 0
-                ? (() => {
-                    const halfWidth = (actionsRowWidth - 10) / 2;
-                    const cancelWidth = halfWidth + 2;
-                    const cancelHeight = 50;
-                    const registerWidth = halfWidth;
-                    const registerHeight = 48;
-                    return (
-                      <>
-                        <NativeHost
-                          colorScheme="dark"
-                          style={{ height: cancelHeight, width: cancelWidth }}
-                        >
-                          <SwiftButton
-                            modifiers={[
-                              disabledModifier(registering),
-                              buttonStyle("bordered"),
-                              buttonBorderShape("capsule"),
-                              frame({ height: cancelHeight, width: cancelWidth }),
-                            ]}
-                            onPress={onCancel}
-                          >
-                            <SwiftText
-                              modifiers={[
-                                frame({ maxWidth: Infinity, alignment: "center" }),
-                                multilineTextAlignment("center"),
-                              ]}
-                            >
-                              {t("cancel")}
-                            </SwiftText>
-                          </SwiftButton>
-                        </NativeHost>
-                        <NativeHost
-                          colorScheme="dark"
-                          seedColor={colors.accent}
-                          style={{ height: registerHeight, width: registerWidth }}
-                        >
-                          <SwiftButton
-                            modifiers={[
-                              disabledModifier(registering),
-                              buttonStyle("borderedProminent"),
-                              buttonBorderShape("capsule"),
-                              frame({ height: registerHeight, width: registerWidth }),
-                            ]}
-                            onPress={onRegisterAnother}
-                          >
-                            <SwiftText
-                              modifiers={[
-                                frame({ maxWidth: Infinity, alignment: "center" }),
-                                multilineTextAlignment("center"),
-                              ]}
-                            >
-                              {t("scannerRegisterAnother")}
-                            </SwiftText>
-                          </SwiftButton>
-                        </NativeHost>
-                      </>
-                    );
-                  })()
-                : null}
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <ResultActionButton
+                disabled={registering}
+                label={t("cancel")}
+                onPress={onCancel}
+                secondary
+              />
+              <ResultActionButton
+                disabled={registering}
+                label={t("scannerRegisterAnother")}
+                onPress={onRegisterAnother}
+              />
             </View>
           ) : (
-            <NativeHost colorScheme="dark" seedColor={colors.accent} style={{ height: 48 }}>
-              <SwiftButton
-                modifiers={[
-                  buttonStyle("borderedProminent"),
-                  buttonBorderShape("capsule"),
-                  frame({ height: 48 }),
-                ]}
-                onPress={onContinue}
-              >
-                <SwiftText
-                  modifiers={[
-                    frame({ maxWidth: Infinity, alignment: "center" }),
-                    multilineTextAlignment("center"),
-                  ]}
-                >
-                  {result.wasRepeat ? t("close") : t("continue")}
-                </SwiftText>
-              </SwiftButton>
-            </NativeHost>
+            <ResultActionButton
+              label={result.wasRepeat ? t("close") : t("continue")}
+              onPress={onContinue}
+            />
           )}
         </View>
       </GlassView>
     </View>
+  );
+}
+
+function ResultActionButton({
+  label,
+  onPress,
+  disabled = false,
+  secondary = false,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  secondary?: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        alignItems: "center",
+        backgroundColor: secondary ? "rgba(255,255,255,0.12)" : colors.accent,
+        borderRadius: 999,
+        flex: 1,
+        height: 50,
+        justifyContent: "center",
+        opacity: disabled ? 0.45 : pressed ? 0.72 : 1,
+        paddingHorizontal: 12,
+      })}
+    >
+      <Text
+        selectable
+        style={{
+          color: secondary ? "white" : colors.accentText,
+          fontSize: 16,
+          fontWeight: "600",
+          textAlign: "center",
+        }}
+      >
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
