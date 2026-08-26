@@ -15,18 +15,27 @@ databaseUrl.pathname = `/${databaseName}`;
 const adminUrl = new URL(TEST_DATABASE_URL);
 adminUrl.pathname = "/postgres";
 
-let adminClient: pg.Client | undefined;
-
 beforeAll(async () => {
-  adminClient = new pg.Client({ connectionString: adminUrl.toString() });
+  const adminClient = new pg.Client({ connectionString: adminUrl.toString() });
   await adminClient.connect();
-  await adminClient.query(`CREATE DATABASE "${databaseName}"`);
+  try {
+    await adminClient.query(`CREATE DATABASE "${databaseName}"`);
+  } finally {
+    await adminClient.end();
+  }
 });
 
 afterAll(async () => {
-  if (!adminClient) return;
-  await adminClient.query(`DROP DATABASE "${databaseName}" WITH (FORCE)`);
-  await adminClient.end();
+  // Do not reuse the setup connection after the migration suite has spent
+  // several minutes running alongside every other integration file. A fresh
+  // admin session avoids teardown hanging on a stale idle socket in CI (H53).
+  const adminClient = new pg.Client({ connectionString: adminUrl.toString() });
+  await adminClient.connect();
+  try {
+    await adminClient.query(`DROP DATABASE "${databaseName}" WITH (FORCE)`);
+  } finally {
+    await adminClient.end();
+  }
 });
 
 async function withMigrationClient<T>(fn: (client: pg.Client) => Promise<T>): Promise<T> {

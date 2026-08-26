@@ -1,3 +1,4 @@
+import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { type BarcodeScanningResult, CameraView, useCameraPermissions } from "expo-camera";
 import { useIsFocused } from "expo-router";
 import { useEffect, useRef, useState } from "react";
@@ -257,6 +258,7 @@ export function QrCamera({
         ]}
       >
         <Pressable
+          testID={UI_TEST_IDS.scanner.manualEntry}
           accessibilityLabel={t("scannerEnterManually")}
           accessibilityRole="button"
           onPress={() => {
@@ -312,6 +314,7 @@ export function QrCamera({
               {t("scannerManualEntryTitle")}
             </Text>
             <TextInput
+              testID={UI_TEST_IDS.scanner.manualCode}
               accessibilityLabel={t("scannerManualEntryTitle")}
               autoCapitalize="characters"
               autoCorrect={false}
@@ -325,6 +328,7 @@ export function QrCamera({
               value={manualCode}
             />
             <Pressable
+              testID={UI_TEST_IDS.scanner.manualSubmit}
               accessibilityRole="button"
               accessibilityState={{ disabled: !manualCode.trim() }}
               disabled={!manualCode.trim()}

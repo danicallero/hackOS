@@ -11,6 +11,11 @@ store assets, submission, and the release checklist, see
 The browser/native UI test framework and device prerequisites are in
 [`ui-testing.md`](./ui-testing.md).
 
+The pre-pilot Detox fixture and complete critical-flow command are documented
+there. Device coverage drives accreditation, meals, and recordable activities
+through stable IDs from `@hackos/shared/ui-test-ids`; ordinary CI remains on
+the hardware-free native screen suite.
+
 ## Contents
 
 - [Story index](#story-index)

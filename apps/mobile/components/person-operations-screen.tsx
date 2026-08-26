@@ -1,4 +1,5 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { useFocusEffect, useLocalSearchParams, useRouter, useScrollToTop } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
@@ -518,6 +519,7 @@ export function PersonOperationsScreen() {
     canAccredit && !person.badgeId ? (
       <Section title={t("scannerAccreditation")}>
         <ActionButton
+          testID={UI_TEST_IDS.scanner.linkBadge}
           icon="qrcode.viewfinder"
           label={t("personLinkBadge")}
           onPress={beginBadgeAction}
