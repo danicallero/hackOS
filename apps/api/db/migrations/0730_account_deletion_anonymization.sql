@@ -250,6 +250,13 @@ DELETE FROM activity_logs
  WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
 DELETE FROM enterprise_judges
  WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+-- A sponsor row may be the non-null author anchor of a challenge. Preserve
+-- that organisation-owned anchor while removing the person relationship; an
+-- unconditional delete would violate challenges.author's NO ACTION FK.
+UPDATE sponsors s
+   SET user_id = NULL
+ WHERE s.user_id IN (SELECT old_user_id FROM legacy_anonymized_users)
+   AND EXISTS (SELECT 1 FROM challenges c WHERE c.author = s.id);
 DELETE FROM sponsors
  WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
 DELETE FROM judging_session

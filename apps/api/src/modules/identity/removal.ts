@@ -818,6 +818,17 @@ async function scrubRelationships(
   await client.query(`UPDATE enterprise_judges SET added_by = NULL WHERE added_by = $1`, [userId]);
 
   await client.query(`DELETE FROM enterprise_judges WHERE user_id = $1`, [userId]);
+  // A sponsor row can be the required author anchor for a challenge. Keep
+  // that organisation-owned row, but sever the person relationship before
+  // deleting the account; deleting the row first would violate
+  // challenges.author's NO ACTION FK and strand removal_pending accounts.
+  await client.query(
+    `UPDATE sponsors
+        SET user_id = NULL
+      WHERE user_id = $1
+        AND EXISTS (SELECT 1 FROM challenges WHERE author = sponsors.id)`,
+    [userId],
+  );
   await client.query(`DELETE FROM sponsors WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM manual_attendee_roles WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM announcement_reads WHERE user_id = $1`, [userId]);

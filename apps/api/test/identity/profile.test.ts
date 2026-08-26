@@ -289,9 +289,17 @@ describe("self-service account removal (H54)", () => {
     expect(eligibility.statusCode).toBe(200);
     expect(eligibility.json().action).toBe("delete");
 
-    const deleted = await a.inject({ method: "DELETE", url: "/api/me", headers: asUser(user) });
+    const removalHeaders = { ...asUser(user), "idempotency-key": "accepted-delete-replay" };
+    const deleted = await a.inject({ method: "DELETE", url: "/api/me", headers: removalHeaders });
     expect(deleted.statusCode).toBe(200);
     expect(deleted.json().deleted).toBe(true);
+    const replay = await a.inject({
+      method: "DELETE",
+      url: "/api/me",
+      headers: removalHeaders,
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.headers["idempotency-replayed"]).toBe("true");
     expect(
       (await pool.query(`SELECT 1 FROM application_responses WHERE id = $1`, [responses[0].id]))
         .rowCount,
@@ -331,12 +339,11 @@ describe("self-service account removal (H54)", () => {
     expect(
       (await pool.query(`SELECT 1 FROM application_responses WHERE user_id = $1`, [user])).rowCount,
     ).toBe(0);
-    // The test-only x-test-user-id header authenticates without a real
-    // session lookup, so this 404s (row gone) rather than 401 like a real
-    // Better Auth session would once its cascade-deleted `sessions` row is gone.
+    // The test-only x-test-user-id header still passes through the account
+    // state guard; a deleted account is no longer authenticated.
     expect(
       (await a.inject({ method: "GET", url: "/api/me", headers: asUser(user) })).statusCode,
-    ).toBe(404);
+    ).toBe(401);
   });
 
   it("lets an invited-but-unassigned account delete itself, clearing its claim token, outbox rows, and self-authored audit rows", async () => {
@@ -390,8 +397,9 @@ describe("self-service account removal (H54)", () => {
     const { rows: survivingAudit } = await pool.query(
       `SELECT actor_id FROM audit_log WHERE entity_type = 'invite' AND entity_id = '999'`,
     );
-    expect(survivingAudit).toHaveLength(1);
-    expect(survivingAudit[0].actor_id).toBeNull();
+    // Actor attribution is deliberately discarded by full deletion instead
+    // of being left as a detached historical identity row.
+    expect(survivingAudit).toHaveLength(0);
   });
 
   it("lets a confirmed ticket-holder who hasn't been accredited yet delete their account", async () => {
@@ -453,6 +461,43 @@ describe("self-service account removal (H54)", () => {
     const blocked = await a.inject({ method: "DELETE", url: "/api/me", headers: asUser(user) });
     expect(blocked.statusCode).toBe(409);
     expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [user])).rowCount).toBe(1);
+  });
+
+  it("severs a sponsor identity without deleting a challenge author anchor", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const admin = await createUserWithCapabilities(["*"]);
+    const sponsorUser = await createUser({ name: "Sponsor Contact" });
+    const { rows: enterprise } = await pool.query(
+      `INSERT INTO enterprises (name) VALUES ('Removal Anchor Co') RETURNING id`,
+    );
+    const { rows: sponsor } = await pool.query(
+      `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id`,
+      [enterprise[0].id, sponsorUser],
+    );
+    const { rows: challenge } = await pool.query(
+      `INSERT INTO challenges (author, title) VALUES ($1, 'Keep this challenge') RETURNING id`,
+      [sponsor[0].id],
+    );
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, staff_id) VALUES ($1, 'B-SPONSOR', $2)`,
+      [sponsorUser, admin],
+    );
+
+    const removed = await a.inject({
+      method: "POST",
+      url: `/api/users/${sponsorUser}/anonymize`,
+      headers: asUser(admin),
+    });
+
+    expect(removed.statusCode).toBe(200);
+    expect(
+      (await pool.query(`SELECT user_id FROM sponsors WHERE id = $1`, [sponsor[0].id])).rows,
+    ).toEqual([{ user_id: null }]);
+    expect(
+      (await pool.query(`SELECT id FROM challenges WHERE id = $1`, [challenge[0].id])).rowCount,
+    ).toBe(1);
+    expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [sponsorUser])).rowCount).toBe(0);
   });
 });
 
@@ -646,11 +691,14 @@ describe("staff user routes (H7)", () => {
       headers: asUser(admin),
     });
     expect(eligibility.statusCode).toBe(200);
-    expect(eligibility.json()).toEqual({
+    expect(eligibility.json()).toMatchObject({
       action: "delete",
       reasonCode: "fresh_account",
       accessRevoked: true,
       operationalHistoryRetained: false,
+      activeEventConsequences: false,
+      requiresVenueExit: false,
+      retainedFields: [],
     });
     // Admin removes a fresh account.
     const ok = await a.inject({
@@ -698,11 +746,21 @@ describe("staff user routes (H7)", () => {
       headers: asUser(admin),
     });
     expect(eligibility.statusCode).toBe(200);
-    expect(eligibility.json()).toEqual({
+    expect(eligibility.json()).toMatchObject({
       action: "anonymize",
       reasonCode: "operational_history",
       accessRevoked: true,
       operationalHistoryRetained: true,
+      requiresVenueExit: false,
+      retainedFields: expect.arrayContaining([
+        "age",
+        "gender",
+        "university",
+        "degree",
+        "graduation year",
+        "origin city",
+        "guaranteed venue-presence time",
+      ]),
     });
 
     const rejectedDelete = await a.inject({
@@ -723,7 +781,7 @@ describe("staff user routes (H7)", () => {
     expect(
       (await pool.query(`SELECT 1 FROM application_responses WHERE user_id = $1`, [target]))
         .rowCount,
-    ).toBe(1);
+    ).toBe(0);
   });
 
   it("hard-deletes an unaccepted applicant, cascading their own application data (H54)", async () => {
@@ -1008,6 +1066,11 @@ describe("staff user routes (H7)", () => {
        WHERE id = $1`,
       [target],
     );
+    await pool.query(`UPDATE users SET badge_id = 'B-ADMIN-ANON' WHERE id = $1`, [target]);
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, staff_id) VALUES ($1, 'B-ADMIN-ANON', $2)`,
+      [target, admin],
+    );
 
     // USERS_WRITE isn't enough — needs ADMIN_ALL.
     expect(
@@ -1042,12 +1105,28 @@ describe("staff user routes (H7)", () => {
       `SELECT email, name, surname, dni, email_verified, anonymized_at FROM users WHERE id = $1`,
       [target],
     );
-    expect(rows[0].email).toBe(`anonymized+${target}@deleted.invalid`);
-    expect(rows[0].name).toBe("Anonymized");
-    expect(rows[0].surname).toBeNull();
-    expect(rows[0].dni).toBeNull();
-    expect(rows[0].email_verified).toBe(false);
-    expect(rows[0].anonymized_at).not.toBeNull();
+    expect(rows).toHaveLength(0);
+    const { rows: anonymousRows } = await pool.query(
+      `SELECT id, guaranteed_presence_minutes FROM anonymous_participants`,
+    );
+    expect(anonymousRows).toHaveLength(1);
+    expect(anonymousRows[0].id).not.toBe(String(target));
+    expect(anonymousRows[0].guaranteed_presence_minutes).toBe(0);
+    expect(
+      (
+        await pool.query(
+          `SELECT user_id, anonymous_participant_id, badge_id, staff_id
+             FROM check_in_logs WHERE anonymous_participant_id = $1`,
+          [anonymousRows[0].id],
+        )
+      ).rows,
+    ).toEqual([
+      expect.objectContaining({
+        user_id: null,
+        badge_id: null,
+        staff_id: null,
+      }),
+    ]);
 
     const { getEffectiveCapabilities, userHasCapability } = await import(
       "../../src/lib/capabilities.js"
@@ -1058,8 +1137,7 @@ describe("staff user routes (H7)", () => {
     // The audit trail for the anonymize action must not retain the very PII
     // it was supposed to scrub.
     const auditRows = await pool.query(
-      `SELECT before, after FROM audit_log WHERE entity_type = 'user' AND entity_id = $1 AND action = 'anonymized'`,
-      [String(target)],
+      `SELECT before, after FROM audit_log WHERE entity_type = 'anonymous_participant' AND action = 'anonymized'`,
     );
     expect(auditRows.rows).toHaveLength(1);
     expect(JSON.stringify(auditRows.rows[0].before ?? "")).not.toContain("person@example.test");
@@ -1068,18 +1146,29 @@ describe("staff user routes (H7)", () => {
 
   it("keeps the last active wildcard holder when an anonymization job runs", async () => {
     const soleHolder = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
-    const { withTransaction, pool } = await import("../../src/db/pool.js");
-    const { anonymizeUser } = await import("../../src/modules/identity/anonymize.js");
+    const { pool } = await import("../../src/db/pool.js");
+    const { runAccountRemoval } = await import("../../src/modules/identity/removal.js");
+    const staff = await createUser();
+    await pool.query(`UPDATE users SET badge_id = 'B-SOLE-ADMIN' WHERE id = $1`, [soleHolder]);
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, staff_id) VALUES ($1, 'B-SOLE-ADMIN', $2)`,
+      [soleHolder, staff],
+    );
 
     await expect(
-      withTransaction((client) =>
-        anonymizeUser(client, { targetId: soleHolder, actorId: null, source: "system" }),
-      ),
+      runAccountRemoval({
+        targetId: soleHolder,
+        actorId: null,
+        source: "system",
+        requestedAction: "anonymize",
+      }),
     ).rejects.toMatchObject({ statusCode: 409 });
 
-    const { rows } = await pool.query(`SELECT anonymized_at FROM users WHERE id = $1`, [
-      soleHolder,
-    ]);
-    expect(rows[0].anonymized_at).toBeNull();
+    const { rows } = await pool.query(
+      `SELECT account_state, anonymized_at FROM users WHERE id = $1`,
+      [soleHolder],
+    );
+    expect(rows[0]).toMatchObject({ account_state: "active", anonymized_at: null });
+    expect((await pool.query(`SELECT 1 FROM anonymous_participants`)).rowCount).toBe(0);
   });
 });
