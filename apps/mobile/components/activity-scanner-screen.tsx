@@ -539,10 +539,7 @@ function ActivityResultPanel({
               />
             </View>
           ) : (
-            <ResultActionButton
-              label={result.wasRepeat ? t("close") : t("continue")}
-              onPress={onContinue}
-            />
+            <ResultActionButton label={t("close")} onPress={onContinue} />
           )}
         </View>
       </GlassView>
