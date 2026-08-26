@@ -21,7 +21,10 @@ async function voidBadgePasses(client: pg.PoolClient, userId: number): Promise<v
   );
 }
 
-async function assertTicketNotRevoked(client: pg.PoolClient, token: string): Promise<void> {
+async function assertTicketNotRevoked(
+  client: pg.Pool | pg.PoolClient,
+  token: string,
+): Promise<void> {
   const revoked = await client.query(
     `SELECT 1 FROM scanner_revoked_tickets
       WHERE ticket_token = $1 AND expires_at > clock_timestamp()
