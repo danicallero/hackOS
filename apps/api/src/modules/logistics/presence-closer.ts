@@ -66,7 +66,7 @@ export async function runPresenceEventEndCloserOnce(): Promise<{ closed: number[
         [candidate.user_id],
       );
       const latest = latestRows[0];
-      if (!latest || latest.kind !== "in" || latest.scanned_at > candidate.event_ends_at) {
+      if (latest?.kind !== "in" || latest.scanned_at > candidate.event_ends_at) {
         continue;
       }
 

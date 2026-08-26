@@ -19,7 +19,6 @@ import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliati
 import { canCreateMyProject, hasMyProject, myProjects } from "../../projects/service.js";
 import { hasMyQueueItems } from "../../queue/reads.js";
 import { hasMobileAccess } from "../mobile-access.js";
-import { lockPermissionGraph } from "../permission-graph.js";
 import { getAccountRemovalEligibility, runAccountRemoval } from "../removal.js";
 import { computeDerivedRole, computeMembershipFlags, hasEventAccess } from "../role.js";
 
