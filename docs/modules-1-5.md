@@ -268,9 +268,11 @@ foreign-keys on the email string.
   worth retaining — also hard-deletes accounts whose only restrictive
   references are their own `application_responses`/`applicant_reviews`, their
   account-claim/verification `email_verification_tokens` row, queued/sent
-  `notification_outbox` messages (e.g. the invite/welcome email), and any
-  `audit_log` row where they're merely the actor (e.g. the "accept" entry from
-  claiming an invite): `removal.ts` `clearOwnUnretainedReferences` clears/nulls
+  `notification_outbox` messages (e.g. the invite/welcome email), their own
+  `notification_preferences` channel toggles (H51 UI settings, not event
+  participation), and any `audit_log` row where they're merely the actor (e.g.
+  the "accept" entry from claiming an invite): `removal.ts`
+  `clearOwnUnretainedReferences` clears/nulls
   those in the same transaction before deleting the user (nulling
   `audit_log.actor_id` rather than deleting the row keeps the audited event
   itself, mirroring the nullable-actor pattern the self-delete route's own

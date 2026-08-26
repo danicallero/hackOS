@@ -51,6 +51,9 @@ function quoteIdentifier(identifier: string): string {
 //  - notification_outbox.user_id: queued/sent comms (e.g. the invite/welcome
 //    email) — a message log, not proof of event participation, and nothing
 //    else references it.
+//  - notification_preferences.user_id: the account's own notification-channel
+//    toggles (H51) — a UI setting about how to reach them, not proof of event
+//    participation.
 // Every other restrictive reference (tickets, scans, submissions…) still
 // blocks hard delete.
 const SELF_CLEANABLE_REFERENCES: ReadonlySet<string> = new Set([
@@ -58,6 +61,7 @@ const SELF_CLEANABLE_REFERENCES: ReadonlySet<string> = new Set([
   "email_verification_tokens.user_id",
   "audit_log.actor_id",
   "notification_outbox.user_id",
+  "notification_preferences.user_id",
 ]);
 
 async function hasRetainedReference(client: Queryable, userId: number): Promise<boolean> {
@@ -128,6 +132,7 @@ export async function clearOwnUnretainedReferences(
   await client.query(`DELETE FROM email_verification_tokens WHERE user_id = $1`, [userId]);
   await client.query(`UPDATE audit_log SET actor_id = NULL WHERE actor_id = $1`, [userId]);
   await client.query(`DELETE FROM notification_outbox WHERE user_id = $1`, [userId]);
+  await client.query(`DELETE FROM notification_preferences WHERE user_id = $1`, [userId]);
 }
 
 export async function getAccountRemovalEligibility(
