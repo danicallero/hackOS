@@ -383,6 +383,14 @@ type RemovalRetryJob = Omit<RunAccountRemovalOptions, "scheduleRetry"> & {
   requestedAction: AccountRemovalAction;
 };
 
+type AnonymousDemographicField =
+  | "age"
+  | "gender"
+  | "degree"
+  | "graduationYear"
+  | "originCity"
+  | "university";
+
 async function enqueueRemovalRetry(
   options: RunAccountRemovalOptions,
   action: AccountRemovalAction,
@@ -422,17 +430,84 @@ function firstResponseValue(responses: Record<string, unknown>, key: string): un
   return found?.[1];
 }
 
-function fieldDescription(field: Record<string, unknown>): string {
+function fieldLabelText(field: Record<string, unknown>): string {
   const labels = field.label;
-  const labelText =
-    typeof labels === "string"
-      ? labels
-      : labels && typeof labels === "object"
-        ? Object.values(labels as Record<string, unknown>)
-            .filter((value): value is string => typeof value === "string")
-            .join(" ")
-        : "";
-  return `${String(field.key ?? "")} ${labelText}`.toLocaleLowerCase();
+  return typeof labels === "string"
+    ? labels
+    : labels && typeof labels === "object"
+      ? Object.values(labels as Record<string, unknown>)
+          .filter((value): value is string => typeof value === "string")
+          .join(" ")
+      : "";
+}
+
+function normalizeFieldText(value: string): string {
+  return value.normalize("NFKD").replace(/\p{M}/gu, "").toLocaleLowerCase();
+}
+
+/**
+ * Application templates vary by event and are organizer-controlled. Stable
+ * keys are the preferred contract; the label fallback is deliberately narrow
+ * so a custom question such as "year founded" cannot become a permanent
+ * graduation-year field merely because it contains the word "year" (H54).
+ */
+function anonymousFieldFor(field: Record<string, unknown>): AnonymousDemographicField | null {
+  const key = normalizeFieldText(String(field.key ?? "")).replace(/[.\s-]+/g, "_");
+  const keyAliases: Record<string, readonly string[]> = {
+    age: ["age", "edad", "dob", "birth_date", "birthdate", "birthday", "date_of_birth"],
+    gender: ["gender", "sex", "sexo", "genero", "gender_identity"],
+    degree: [
+      "degree",
+      "major",
+      "studies",
+      "field_of_study",
+      "study_field",
+      "titulacion",
+      "estudios",
+      "carreira",
+    ],
+    graduationYear: [
+      "graduation_year",
+      "graduationyear",
+      "year_of_graduation",
+      "grad_year",
+      "ano_de_graduacion",
+      "ano_graduacion",
+    ],
+    originCity: [
+      "origin_city",
+      "city_of_origin",
+      "home_city",
+      "ciudad_de_origen",
+      "cidade_de_orixe",
+    ],
+    university: ["university", "universidade", "universidad"],
+  };
+  for (const [category, aliases] of Object.entries(keyAliases)) {
+    if (aliases.includes(key)) return category as AnonymousDemographicField;
+  }
+
+  const label = normalizeFieldText(fieldLabelText(field));
+  if (
+    /\b(?:age|edad|date of birth|birth date|birthday|dob|fecha de nacimiento|data de nacemento)\b/.test(
+      label,
+    )
+  )
+    return "age";
+  if (/\b(?:gender|sex|sexo|genero|xenero)\b/.test(label)) return "gender";
+  if (/\b(?:degree|major|field of study|studies|titulacion|estudios|carreira)\b/.test(label))
+    return "degree";
+  if (/(?:graduat(?:ion|ing)|year of graduation|ano de graduacion|ano de finalizacion)/.test(label))
+    return "graduationYear";
+  if (
+    /\b(?:origin city|city of origin|home city|ciudad de origen|cidade de orixe|procedencia|orixe)\b/.test(
+      label,
+    )
+  )
+    return "originCity";
+  if (field.kind === "university" || /\b(?:university|universidade|universidad)\b/.test(label))
+    return "university";
+  return null;
 }
 
 function textValue(value: unknown, maxLength: number): string | null {
@@ -511,6 +586,30 @@ function ageFromDate(value: unknown, asOf: Date): number | null {
   return age >= 0 && age <= 150 ? age : null;
 }
 
+async function applicationUniversityValue(
+  client: pg.PoolClient,
+  value: unknown,
+  identity: Pick<UserRemovalRow, "email" | "secondary_email" | "name" | "surname" | "dni"> & {
+    historicalEmails?: readonly string[];
+  },
+  cachedNames: Map<number, string | null>,
+): Promise<string | null> {
+  const id = numericValue(value);
+  if (id != null) {
+    if (!cachedNames.has(id)) {
+      const { rows } = await client.query<{ name: string }>(
+        `SELECT name FROM universities WHERE id = $1`,
+        [id],
+      );
+      cachedNames.set(id, rows[0]?.name ?? null);
+    }
+    // Do not retain an unresolved directory key as if it were the required
+    // university value. It is an internal identifier, not an audit label.
+    return safeDemographicText(cachedNames.get(id), 200, identity);
+  }
+  return safeDemographicText(value, 200, identity);
+}
+
 async function extractAnonymousDemographics(
   client: pg.PoolClient,
   user: UserRemovalRow,
@@ -549,6 +648,7 @@ async function extractAnonymousDemographics(
     graduationYear: null as number | null,
     originCity: null as string | null,
   };
+  const universityNames = new Map<number, string | null>();
 
   const { rows } = await client.query<{
     responses: Record<string, unknown>;
@@ -569,38 +669,30 @@ async function extractAnonymousDemographics(
       const field = candidate as Record<string, unknown>;
       const key = typeof field.key === "string" ? field.key : "";
       if (!key) continue;
-      const description = fieldDescription(field);
+      const category = anonymousFieldFor(field);
+      if (!category) continue;
       const value = firstResponseValue(row.responses ?? {}, key);
       if (value === undefined || value === null) continue;
 
-      if (
-        /(^|\s)(age|edad|birth|birthday|dob|date of birth|nacimiento|nacemento)(\s|$)/i.test(
-          description,
-        ) &&
-        values.age == null
-      ) {
+      if (category === "age" && values.age == null) {
         const age = numericValue(value);
         values.age = age != null && age >= 0 && age <= 150 ? age : ageFromDate(value, asOf);
-      } else if (/gender|sexo|género/i.test(description) && values.gender == null) {
+      } else if (category === "gender" && values.gender == null) {
         values.gender = safeDemographicText(value, 100, identity);
-      } else if (
-        /degree|major|studies|field of study|titulación|estudios|carreira/i.test(description) &&
-        values.degree == null
-      ) {
+      } else if (category === "degree" && values.degree == null) {
         values.degree = safeDemographicText(value, 200, identity);
-      } else if (/graduat|year|ano|año/i.test(description) && values.graduationYear == null) {
+      } else if (category === "graduationYear" && values.graduationYear == null) {
         const year = numericValue(value);
         values.graduationYear = year != null && year >= 1900 && year <= 2200 ? year : null;
-      } else if (
-        /city|origin|location|joining us from|procedencia|orixe|localidad/i.test(description) &&
-        values.originCity == null
-      ) {
+      } else if (category === "originCity" && values.originCity == null) {
         values.originCity = safeDemographicText(value, 200, identity);
-      } else if (
-        (field.kind === "university" || /university|universidade|universidad/i.test(description)) &&
-        values.university == null
-      ) {
-        values.university = safeDemographicText(value, 200, identity);
+      } else if (category === "university" && values.university == null) {
+        values.university = await applicationUniversityValue(
+          client,
+          value,
+          identity,
+          universityNames,
+        );
       }
     }
   }

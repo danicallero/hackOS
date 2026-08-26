@@ -1476,6 +1476,9 @@ describe("staff user routes (H7)", () => {
           { key: "gender", kind: "text", label: { en: "Gender" } },
           { key: "degree", kind: "text", label: { en: "Degree" } },
           { key: "origin_city", kind: "text", label: { en: "Origin city" } },
+          // Application-specific fields must not become anonymous audit data
+          // merely because a label contains a generic word such as "year".
+          { key: "year_founded", kind: "number", label: { en: "Year founded" } },
         ]),
       ],
     );
@@ -1489,6 +1492,7 @@ describe("staff user routes (H7)", () => {
           gender: "historical-free-text@example.test",
           degree: "Free Text Participant",
           origin_city: "+34 600 123 456",
+          year_founded: 2015,
         }),
       ],
     );
@@ -1505,9 +1509,11 @@ describe("staff user routes (H7)", () => {
     });
     expect(removed.statusCode).toBe(200);
     const { rows } = await pool.query(
-      `SELECT gender, degree, origin_city FROM anonymous_participants`,
+      `SELECT gender, degree, origin_city, graduation_year FROM anonymous_participants`,
     );
-    expect(rows).toEqual([{ gender: null, degree: null, origin_city: null }]);
+    expect(rows).toEqual([
+      { gender: null, degree: null, origin_city: null, graduation_year: null },
+    ]);
   });
 
   it("keeps the last active wildcard holder when an anonymization job runs", async () => {
