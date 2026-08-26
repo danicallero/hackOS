@@ -18,6 +18,9 @@ x-app-env: &app-env
   DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
   VALKEY_URL: "redis://:${VALKEY_PASSWORD}@valkey:6379"
   BETTER_AUTH_URL: "https://${API_DOMAIN}"
+  # The worker renders transactional email HTML, including the browser-reachable
+  # brand mark. Keep this in sync with api's WEB_URL (H52).
+  WEB_URL: "https://${WEB_DOMAIN}"
   BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET}"
   LOG_LEVEL: "${LOG_LEVEL:-info}"
   # Postgres pool sizing/timeouts (H540) — must match api's values; see

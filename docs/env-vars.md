@@ -114,8 +114,10 @@ Same image as `api`, running `node dist/worker.js` instead of `dist/server.js`
 — no HTTP listener, no `edge` network membership, so it's reachable by nothing
 and reaches out to nothing except the instance network and the open internet
 (mail provider, Apple/Google push). Container env is the **api list above
-minus** `CORS_ORIGINS` and `WEB_DOMAIN`/`WEB_URL` (the worker never serves a
-browser or links back to the web app), plus:
+minus** `CORS_ORIGINS`, plus `WEB_URL` generated from the compose-level
+`WEB_DOMAIN`: the worker renders transactional email HTML, including the
+browser-reachable brand mark, before sending it. It does not serve a browser or
+generate browser links itself. It also has:
 
 | Variable | Kind | Required | What it does |
 |---|---|---|---|
