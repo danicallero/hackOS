@@ -115,6 +115,18 @@ SELECT id AS old_user_id, gen_random_uuid() AS anonymous_id, university_id,
   FROM users
  WHERE anonymized_at IS NOT NULL;
 
+-- Capture project roots before removing the old member rows. A solo project
+-- and its queue/judging history are subject data; a shared project must stay
+-- available to its remaining members, but without the departing creator.
+CREATE TEMP TABLE legacy_subject_repos ON COMMIT DROP AS
+SELECT DISTINCT r.id
+  FROM repos r
+  JOIN legacy_anonymized_users legacy ON legacy.old_user_id = r.created_by
+UNION
+SELECT DISTINCT s.repo_id
+  FROM submissions s
+  JOIN legacy_anonymized_users legacy ON legacy.old_user_id = s.user_id;
+
 INSERT INTO scanner_revoked_badges (badge_id, revoked_at, expires_at)
 SELECT DISTINCT badge_id, clock_timestamp(),
        GREATEST(
@@ -232,6 +244,45 @@ DELETE FROM submissions
  WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
 DELETE FROM devpost_participants
  WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE repos
+   SET created_by = NULL
+ WHERE created_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+
+CREATE TEMP TABLE legacy_orphan_repos ON COMMIT DROP AS
+SELECT subject.id
+  FROM legacy_subject_repos subject
+ WHERE NOT EXISTS (
+   SELECT 1 FROM submissions s WHERE s.repo_id = subject.id
+ );
+CREATE TEMP TABLE legacy_orphan_queue_entries ON COMMIT DROP AS
+SELECT qe.id
+  FROM queue_entries qe
+  JOIN legacy_orphan_repos orphan ON orphan.id = qe.repo_id;
+DELETE FROM attempt_review_versions arv
+ USING legacy_orphan_queue_entries orphan
+ WHERE arv.attempt_id = orphan.id;
+DELETE FROM attempt_review ar
+ USING legacy_orphan_queue_entries orphan
+ WHERE ar.attempt_id = orphan.id;
+DELETE FROM judging_session js
+ USING legacy_orphan_queue_entries orphan
+ WHERE js.queue_entry_id = orphan.id;
+DELETE FROM queue_history qh
+ USING legacy_orphan_queue_entries orphan
+ WHERE qh.queue_entry_id = orphan.id;
+DELETE FROM queue_entries qe
+ USING legacy_orphan_queue_entries orphan
+ WHERE qe.id = orphan.id;
+DELETE FROM challenge_winners
+ WHERE repo_id IN (SELECT id FROM legacy_orphan_repos);
+DELETE FROM repo_devpost_prizes
+ WHERE repo_id IN (SELECT id FROM legacy_orphan_repos);
+DELETE FROM devpost_participants
+ WHERE repo_id IN (SELECT id FROM legacy_orphan_repos);
+DELETE FROM submissions
+ WHERE repo_id IN (SELECT id FROM legacy_orphan_repos);
+DELETE FROM repos
+ WHERE id IN (SELECT id FROM legacy_orphan_repos);
 DELETE FROM enterprise_invite_link_redemptions
  WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users)
     OR lower(email) IN (
@@ -248,6 +299,25 @@ DELETE FROM user_invite_link_redemptions
     );
 DELETE FROM activity_logs
  WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM meal_scan_batch_items item
+ USING legacy_anonymized_users legacy
+ WHERE item.badge_id = ANY(legacy.badge_ids)
+    OR coalesce(item.result::text, '') ILIKE '%"userId":' || legacy.old_user_id::text || '%'
+    OR coalesce(item.error::text, '') ILIKE '%"userId":' || legacy.old_user_id::text || '%'
+    OR (
+      legacy.email IS NOT NULL
+      AND (
+        coalesce(item.result::text, '') ILIKE '%' || legacy.email || '%'
+        OR coalesce(item.error::text, '') ILIKE '%' || legacy.email || '%'
+      )
+    )
+    OR (
+      legacy.secondary_email IS NOT NULL
+      AND (
+        coalesce(item.result::text, '') ILIKE '%' || legacy.secondary_email || '%'
+        OR coalesce(item.error::text, '') ILIKE '%' || legacy.secondary_email || '%'
+      )
+    );
 DELETE FROM enterprise_judges
  WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
 -- A sponsor row may be the non-null author anchor of a challenge. Preserve
@@ -280,6 +350,8 @@ DELETE FROM wallet_passes
  WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
 DELETE FROM tickets
  WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM wallet_access_tokens
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
 DELETE FROM push_tokens
  WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
 DELETE FROM sessions
@@ -302,6 +374,17 @@ DELETE FROM verifications
 DELETE FROM data_subject_requests
  WHERE subject_user_id IN (SELECT old_user_id FROM legacy_anonymized_users)
     OR requested_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM idempotency_keys ik
+ USING legacy_anonymized_users legacy
+ WHERE ik.scope ~ ('(^| )u:' || legacy.old_user_id::text || '($| )')
+    OR (
+      legacy.email IS NOT NULL
+      AND coalesce(ik.response_body::text, '') ILIKE '%' || legacy.email || '%'
+    )
+    OR (
+      legacy.secondary_email IS NOT NULL
+      AND coalesce(ik.response_body::text, '') ILIKE '%' || legacy.secondary_email || '%'
+    );
 -- Old in-place anonymization rows could have left the original identifier in
 -- JSON snapshots/reasons even after their actor FK was nulled. Delete those
 -- rows rather than attempting to rewrite arbitrary historical payloads. The
@@ -332,6 +415,7 @@ DELETE FROM audit_log al
               coalesce(al.before::text, '') ILIKE '%' || legacy.email || '%'
               OR coalesce(al.after::text, '') ILIKE '%' || legacy.email || '%'
               OR coalesce(al.reason, '') ILIKE '%' || legacy.email || '%'
+              OR coalesce(al.entity_id, '') ILIKE '%' || legacy.email || '%'
             )
           )
           OR (
@@ -340,6 +424,7 @@ DELETE FROM audit_log al
               coalesce(al.before::text, '') ILIKE '%' || legacy.secondary_email || '%'
               OR coalesce(al.after::text, '') ILIKE '%' || legacy.secondary_email || '%'
               OR coalesce(al.reason, '') ILIKE '%' || legacy.secondary_email || '%'
+              OR coalesce(al.entity_id, '') ILIKE '%' || legacy.secondary_email || '%'
             )
           )
           OR (
@@ -348,6 +433,7 @@ DELETE FROM audit_log al
               coalesce(al.before::text, '') ILIKE '%' || legacy.dni || '%'
               OR coalesce(al.after::text, '') ILIKE '%' || legacy.dni || '%'
               OR coalesce(al.reason, '') ILIKE '%' || legacy.dni || '%'
+              OR coalesce(al.entity_id, '') ILIKE '%' || legacy.dni || '%'
             )
           )
     );
