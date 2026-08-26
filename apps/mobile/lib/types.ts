@@ -19,6 +19,7 @@ export interface Me {
   createdAt: string;
   role: "admin" | "staff" | "sponsor" | "mentor" | "judge" | "participant" | "unassigned";
   mobileAccess: boolean;
+  hasQueueItems: boolean;
   capabilities: string[];
 }
 

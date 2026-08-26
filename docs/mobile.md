@@ -151,15 +151,17 @@ hackOS adapter: capability policy, localized destinations, and the native
 distributed to other Expo Router apps without importing hackOS code.
 
 - `lib/tabs.ts` (`primaryTabs`/`overflowTabs`) — pure functions mapping
-  `me.capabilities` to the custom tab bar; see `docs/navigation.md` for the
+  `me.capabilities`, `me.badgeId`, and `me.hasQueueItems` to the custom tab bar;
+  see `docs/navigation.md` for the
   full model. Every platform uses `components/opaque-router-tabs.tsx` through
   the reusable `components/router-tabs.tsx` shell: iOS 26+ renders Liquid
   Glass surfaces, while earlier iOS and Android use the same geometry with
   solid surfaces. Five total destinations are shown directly on compact
   layouts; tablet-width layouts can place up to six before using `Others`,
   whose bar surface and circle become 56pt instead of 64pt. With no
-  scan capability, Schedule, Queue, Wallet, Notifications, and Account are
-  all direct. For `ACCREDIT_SCAN`/`PRESENCE_SCAN`/`ACTIVITY_SCAN` (or the
+  scan capability, Schedule, Wallet, Notifications, and Account are direct;
+  Queue joins them only after accreditation or when the account has an actual
+  queue entry. For `ACCREDIT_SCAN`/`PRESENCE_SCAN`/`ACTIVITY_SCAN` (or the
   admin `*` wildcard) holders, the daily tools take the bar — Schedule,
   Scanner, Activities (for `ACTIVITY_SCAN`), Notifications — and Queue,
   Wallet, Account, and any secondary operations stay in Others. Queue-only
@@ -181,8 +183,8 @@ distributed to other Expo Router apps without importing hackOS code.
   flashes Schedule over the selected tab.
 
   The entries inside the native `Others` dropdown (Account for participants;
-  Queue, Wallet, Account, and Queue operations when a scanner operator has
-  queue access — routes under `app/(tabs)/others/`) are intentionally
+  eligible personal Queue, Wallet, Account, and Queue operations when a scanner
+  operator has queue access — routes under `app/(tabs)/others/`) are intentionally
   pseudo-tabs (`lib/operations-navigation.ts`):
 
   - Selecting the pseudo-tab whose section is already on screen is a no-op.
@@ -253,7 +255,11 @@ distributed to other Expo Router apps without importing hackOS code.
   `account.tsx` — the five participant screens. API-backed screens expose
   loading, retryable error, and empty states without leaking rejected promises.
   The account screen displays the shared `/api/me` profile, refreshes it, and
-  provides a confirmed sign-out action for the device session. For operators
+  provides a confirmed sign-out action for the device session. Its collapsed
+  danger zone reads `GET /api/me/removal-eligibility`: eligible accounts can
+  call `DELETE /api/me` after a native destructive confirmation, while
+  accounts with retained operational history see the anonymization/retention
+  explanation and a link to the web privacy policy (H54). For operators
   (any scan capability, `lib/tabs.ts`'s `isOperator`) it also shows a "My
   stats" section (`/api/me/logistics/stats`) and a link to the scan-history
   screen (`app/(tabs)/scan/scan-log.tsx`, `/api/logistics/scan-log`, grouped by
@@ -267,7 +273,10 @@ distributed to other Expo Router apps without importing hackOS code.
   renders ticket/badge QR codes. After an eligible session is restored, a
   best-effort startup warmup stores the `/api/me/ticket` payload under an
   account-scoped cache key; the screen still refreshes online and falls back to
-  that payload with a stale-data banner when the connection fails. When an existing Apple pass is opened, the app
+  that payload with a stale-data banner when the connection fails. Accepted
+  spots also expose the existing authenticated decline endpoint after a final,
+  destructive confirmation; success refreshes both ticket and profile state
+  (H15). When an existing Apple pass is opened, the app
   passes both the shared pass type identifier and the selected account/purpose's
   serial number to PassKit, so another account's pass with the same type
   identifier cannot be selected at random. The Apple Wallet action is the system

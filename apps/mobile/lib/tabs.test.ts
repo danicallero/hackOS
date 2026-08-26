@@ -15,8 +15,13 @@ import {
 } from "./tabs";
 
 describe("visibleTabs (H55)", () => {
-  it("shows only participant tabs with no staff capabilities", () => {
-    expect(visibleTabs([])).toEqual(["schedule", "queue", "wallet", "notifications", "account"]);
+  it("hides My queue before accreditation when the user has no queue entry", () => {
+    expect(visibleTabs([])).toEqual(["schedule", "wallet", "notifications", "account"]);
+  });
+
+  it("shows My queue after accreditation or when an exceptional queue entry exists", () => {
+    expect(visibleTabs([], { accredited: true, hasQueueItems: false })).toContain("queue");
+    expect(visibleTabs([], { accredited: false, hasQueueItems: true })).toContain("queue");
   });
 
   it("adds the scan destination for any of the three scan capabilities", () => {
@@ -41,8 +46,14 @@ describe("visibleTabs (H55)", () => {
 });
 
 describe("primaryTabs (H55; the custom bar keeps five direct tabs when they fit)", () => {
-  it("keeps Account in Others once four participant tabs fill the bar", () => {
-    expect(primaryTabs([])).toEqual(["schedule", "queue", "wallet", "notifications"]);
+  it("keeps Account in Others while preserving Wallet before accreditation", () => {
+    expect(primaryTabs([])).toEqual(["schedule", "wallet", "notifications"]);
+    expect(primaryTabs([], { accredited: true, hasQueueItems: false })).toEqual([
+      "schedule",
+      "queue",
+      "wallet",
+      "notifications",
+    ]);
   });
 
   it("replaces queue and wallet with operational tools for staff", () => {
@@ -80,8 +91,8 @@ describe("overflowTabs / shouldUseOverflowMenu", () => {
   });
 
   it("moves queue, wallet, and account to overflow for operators", () => {
-    expect(overflowTabs([CAPABILITIES.ACCREDIT_SCAN])).toEqual(["queue", "wallet", "account"]);
-    expect(shouldUseOverflowMenu([CAPABILITIES.ACCREDIT_SCAN])).toBe(true);
+    expect(overflowTabs([CAPABILITIES.ACCREDIT_SCAN])).toEqual(["wallet", "account"]);
+    expect(shouldUseOverflowMenu([CAPABILITIES.ACCREDIT_SCAN])).toBe(false);
   });
 
   it("keeps Account behind Others for unrelated capabilities", () => {
@@ -95,14 +106,14 @@ describe("overflowTabs / shouldUseOverflowMenu", () => {
       "operations",
       "notifications",
     ]);
-    expect(overflowTabs([CAPABILITIES.QUEUE_OPERATE])).toEqual(["queue", "wallet", "account"]);
+    expect(overflowTabs([CAPABILITIES.QUEUE_OPERATE])).toEqual(["wallet", "account"]);
     expect(queueOperationsInPrimaryBar([CAPABILITIES.QUEUE_OPERATE])).toBe(true);
   });
 
   it("puts Queue operations in Others when scanner tools already fill the bar", () => {
     const capabilities = [CAPABILITIES.ACCREDIT_SCAN, CAPABILITIES.QUEUE_OPERATE];
     expect(primaryTabs(capabilities)).toEqual(["schedule", "scan", "notifications"]);
-    expect(overflowTabs(capabilities)).toEqual(["queue", "wallet", "account", "operations"]);
+    expect(overflowTabs(capabilities)).toEqual(["wallet", "account", "operations"]);
     expect(queueOperationsInPrimaryBar(capabilities)).toBe(false);
   });
 });
