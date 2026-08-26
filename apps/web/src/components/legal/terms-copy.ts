@@ -10,7 +10,7 @@ export const termsCopy: Record<Language, LegalDocumentCopy> = {
 
 Estos términos y condiciones regulan el acceso y uso de **hackOS**, la plataforma que GPUL utiliza para gestionar el registro, las solicitudes, las acreditaciones, las comunicaciones y otros procesos operativos de HackUDC.
 
-hackOS es una extensión del evento: es la vía oficial para inscribirte, presentar tu solicitud y participar en HackUDC, por lo que su uso es obligatorio para tomar parte en el evento. En consecuencia, aceptar estos términos y la política de privacidad es una condición necesaria para participar; si no estás de acuerdo con ellos, no podrás utilizar hackOS ni, por tanto, participar en HackUDC.
+La inscripción en HackUDC se realiza en una plataforma web externa. hackOS es el sistema oficial de operaciones que GPUL proporciona después de la aceptación para participantes y personal autorizado: permite gestionar el acceso a la aplicación, la acreditación, los servicios del evento y la participación, pero registrarse externamente no concede por sí solo acceso a hackOS. Aceptar estos términos y la política de privacidad es necesario para utilizar esta instancia; las condiciones generales del evento siguen regulando la inscripción y la participación.
 
 Estos términos son adicionales a los [términos y condiciones generales de HackUDC](https://hackudc.gpul.org/terms) y no los sustituyen: ambos aplican de forma conjunta. Las bases o normas de cualquier actividad gestionada mediante hackOS son independientes de estos términos.
 
@@ -110,7 +110,7 @@ Para consultas sobre estos términos, escribe a [hackudc@gpul.org](mailto:hackud
 
 Estes termos e condicións regulan o acceso e uso de **hackOS**, a plataforma que GPUL utiliza para xestionar o rexistro, as solicitudes, as acreditacións, as comunicacións e outros procesos operativos de HackUDC.
 
-hackOS é unha extensión do evento: é a vía oficial para inscribirte, presentar a túa solicitude e participar en HackUDC, polo que o seu uso é obrigatorio para tomar parte no evento. En consecuencia, aceptar estes termos e a política de privacidade é unha condición necesaria para participar; se non estás de acordo con eles, non poderás utilizar hackOS nin, por tanto, participar en HackUDC.
+A inscrición en HackUDC faise nunha plataforma web externa. hackOS é o sistema oficial de operacións que GPUL proporciona despois da aceptación para participantes e persoal autorizado: permite xestionar o acceso á aplicación, a acreditación, os servizos do evento e a participación, pero rexistrarse externamente non concede por si só acceso a hackOS. Aceptar estes termos e a política de privacidade é necesario para utilizar esta instancia; as condicións xerais do evento seguen regulando a inscrición e a participación.
 
 Estes termos son adicionais aos [termos e condicións xerais de HackUDC](https://hackudc.gpul.org/terms) e non os substitúen: ambos os dous aplícanse de forma conxunta. As bases ou normas de calquera actividade xestionada mediante hackOS son independentes destes termos.
 
@@ -210,7 +210,7 @@ Para consultas sobre estes termos, escribe a [hackudc@gpul.org](mailto:hackudc@g
 
 These terms and conditions govern access to and use of **hackOS**, the platform GPUL uses to manage registration, applications, accreditation, communications and other operational processes for HackUDC.
 
-hackOS is an extension of the event: it is the official channel to register, submit your application and take part in HackUDC, so using it is mandatory to participate in the event. Accepting these terms and the privacy policy is therefore a necessary condition for participation; if you do not agree to them, you cannot use hackOS or, as a result, take part in HackUDC.
+Registration for HackUDC takes place on an external web platform. hackOS is the official operations system GPUL provides after acceptance to participants and authorised staff: it manages application access, accreditation, event services and participation, but external registration does not by itself grant hackOS access. Accepting these terms and the privacy policy is necessary to use this instance; the event's general terms continue to govern registration and participation.
 
 These terms are additional to, and do not replace, [HackUDC's general terms and conditions](https://hackudc.gpul.org/terms); both apply together. The rules or conditions of any activity managed through hackOS are separate from these terms.
 
