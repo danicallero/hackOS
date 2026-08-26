@@ -504,6 +504,45 @@ describe("self-service account removal (H54)", () => {
       `UPDATE users SET surname = 'Identity', dni = '12345678Z', badge_id = 'B-SELF-ANON' WHERE id = $1`,
       [user],
     );
+    const { rows: universityRows } = await pool.query(
+      `INSERT INTO universities (name, proposed_by) VALUES ('Universidade da Coruña', NULL) RETURNING id`,
+    );
+    await pool.query(
+      `UPDATE users
+          SET university_id = $2, food_intolerances = ARRAY[7], food_intolerance_notes = 'Peanut'
+        WHERE id = $1`,
+      [user, universityRows[0].id],
+    );
+    const { rows: applicationRows } = await pool.query(
+      `INSERT INTO applications (name, type, template)
+       VALUES ('Demographic extraction', 'participant', $1::jsonb) RETURNING id`,
+      [
+        JSON.stringify([
+          { key: "dob", kind: "date", label: { en: "Date of birth" } },
+          { key: "gender", kind: "select", label: { en: "Gender" } },
+          { key: "degree", kind: "text", label: { en: "Degree" } },
+          { key: "graduation_year", kind: "select", label: { en: "Graduation year" } },
+          { key: "origin_city", kind: "text", label: { en: "Origin city" } },
+          { key: "university", kind: "university", label: { en: "University" } },
+        ]),
+      ],
+    );
+    await pool.query(
+      `INSERT INTO application_responses (user_id, application_id, status, responses)
+       VALUES ($1, $2, 'accepted', $3::jsonb)`,
+      [
+        user,
+        applicationRows[0].id,
+        JSON.stringify({
+          dob: "2000-01-01",
+          gender: "nonbinary",
+          degree: "Computer Science",
+          graduation_year: "2024",
+          origin_city: "A Coruña",
+          university: "Universidade da Coruña",
+        }),
+      ],
+    );
     await pool.query(
       `INSERT INTO check_in_logs (user_id, badge_id, check_in_method)
        VALUES ($1, 'B-SELF-ANON', 'scan')`,
@@ -574,11 +613,22 @@ describe("self-service account removal (H54)", () => {
     expect((await pool.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [user])).rowCount).toBe(0);
 
     const { rows: anonymous } = await pool.query(
-      `SELECT id, guaranteed_presence_minutes FROM anonymous_participants`,
+      `SELECT id, age, gender, university, degree, graduation_year, origin_city,
+              guaranteed_presence_minutes
+         FROM anonymous_participants`,
     );
     expect(anonymous).toHaveLength(1);
     expect(anonymous[0].id).not.toBe(String(user));
+    expect(anonymous[0]).toMatchObject({
+      age: new Date().getUTCFullYear() - 2000,
+      gender: "nonbinary",
+      university: "Universidade da Coruña",
+      degree: "Computer Science",
+      graduation_year: 2024,
+      origin_city: "A Coruña",
+    });
     expect(anonymous[0].guaranteed_presence_minutes).toBe(60);
+    expect(JSON.stringify(anonymous[0])).not.toContain("Peanut");
     expect(
       (
         await pool.query(

@@ -443,7 +443,7 @@ function textValue(value: unknown, maxLength: number): string | null {
 
 function numericValue(value: unknown): number | null {
   if (typeof value === "number" && Number.isInteger(value)) return value;
-  if (typeof value === "string" && /^\d{1,3}$/.test(value.trim())) return Number(value);
+  if (typeof value === "string" && /^\d{1,4}$/.test(value.trim())) return Number(value);
   return null;
 }
 
@@ -516,7 +516,8 @@ async function extractAnonymousDemographics(
         ) &&
         values.age == null
       ) {
-        values.age = numericValue(value) ?? ageFromDate(value, asOf);
+        const age = numericValue(value);
+        values.age = age != null && age >= 0 && age <= 150 ? age : ageFromDate(value, asOf);
       } else if (/gender|sexo|género/i.test(description) && values.gender == null) {
         values.gender = textValue(value, 100);
       } else if (
