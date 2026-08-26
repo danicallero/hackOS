@@ -455,12 +455,19 @@ function escapeRegExp(value: string): string {
 function safeDemographicText(
   value: unknown,
   maxLength: number,
-  user: Pick<UserRemovalRow, "email" | "secondary_email" | "name" | "surname" | "dni">,
+  user: Pick<UserRemovalRow, "email" | "secondary_email" | "name" | "surname" | "dni"> & {
+    historicalEmails?: readonly string[];
+  },
 ): string | null {
   const text = textValue(value, maxLength);
   if (!text) return null;
   const folded = text.normalize("NFKC").toLocaleLowerCase();
-  const directTokens = [user.email, user.secondary_email, user.dni]
+  const directTokens = [
+    user.email,
+    user.secondary_email,
+    user.dni,
+    ...(user.historicalEmails ?? []),
+  ]
     .filter((token): token is string => typeof token === "string" && token.trim().length >= 3)
     .map((token) => token.normalize("NFKC").toLocaleLowerCase());
   if (directTokens.some((token) => folded.includes(token))) return null;
@@ -522,10 +529,22 @@ async function extractAnonymousDemographics(
       WHERE u.id = $1`,
     [user.id],
   );
+  // Email changes are intentionally retained only in this transient table so
+  // cleanup can find legacy denormalized copies. They are also identity
+  // tokens: an old address must not be copied into a supposedly anonymous
+  // demographic answer after the current users.email has changed (H54).
+  const { rows: historicalEmailRows } = await client.query<{ email: string }>(
+    `SELECT email FROM user_email_history WHERE user_id = $1`,
+    [user.id],
+  );
+  const identity = {
+    ...user,
+    historicalEmails: historicalEmailRows.map((row) => row.email),
+  };
   const values = {
     age: null as number | null,
     gender: null as string | null,
-    university: safeDemographicText(current[0]?.university, 200, user),
+    university: safeDemographicText(current[0]?.university, 200, identity),
     degree: null as string | null,
     graduationYear: null as number | null,
     originCity: null as string | null,
@@ -563,12 +582,12 @@ async function extractAnonymousDemographics(
         const age = numericValue(value);
         values.age = age != null && age >= 0 && age <= 150 ? age : ageFromDate(value, asOf);
       } else if (/gender|sexo|género/i.test(description) && values.gender == null) {
-        values.gender = safeDemographicText(value, 100, user);
+        values.gender = safeDemographicText(value, 100, identity);
       } else if (
         /degree|major|studies|field of study|titulación|estudios|carreira/i.test(description) &&
         values.degree == null
       ) {
-        values.degree = safeDemographicText(value, 200, user);
+        values.degree = safeDemographicText(value, 200, identity);
       } else if (/graduat|year|ano|año/i.test(description) && values.graduationYear == null) {
         const year = numericValue(value);
         values.graduationYear = year != null && year >= 1900 && year <= 2200 ? year : null;
@@ -576,12 +595,12 @@ async function extractAnonymousDemographics(
         /city|origin|location|joining us from|procedencia|orixe|localidad/i.test(description) &&
         values.originCity == null
       ) {
-        values.originCity = safeDemographicText(value, 200, user);
+        values.originCity = safeDemographicText(value, 200, identity);
       } else if (
         (field.kind === "university" || /university|universidade|universidad/i.test(description)) &&
         values.university == null
       ) {
-        values.university = safeDemographicText(value, 200, user);
+        values.university = safeDemographicText(value, 200, identity);
       }
     }
   }

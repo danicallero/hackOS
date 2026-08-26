@@ -1464,6 +1464,10 @@ describe("staff user routes (H7)", () => {
     await pool.query(`UPDATE users SET name = 'Free Text', surname = 'Participant' WHERE id = $1`, [
       target,
     ]);
+    await pool.query(
+      `INSERT INTO user_email_history (user_id, email) VALUES ($1, 'historical-free-text@example.test')`,
+      [target],
+    );
     const { rows: applicationRows } = await pool.query(
       `INSERT INTO applications (name, type, template)
        VALUES ('Free-text minimization', 'participant', $1::jsonb) RETURNING id`,
@@ -1482,7 +1486,7 @@ describe("staff user routes (H7)", () => {
         target,
         applicationRows[0].id,
         JSON.stringify({
-          gender: "free-text@example.test",
+          gender: "historical-free-text@example.test",
           degree: "Free Text Participant",
           origin_city: "+34 600 123 456",
         }),
