@@ -146,19 +146,21 @@ export const auth = betterAuth({
     // an untrusted client can't spoof its way past the limiter (#538).
     ipAddress: { ipAddressHeaders: ["x-forwarded-for"] },
   },
-  // #538: distributed (Valkey-backed) rate limiting for every /api/auth/*
+  // #538, #559: distributed (Valkey-backed) rate limiting for every /api/auth/*
   // path. Limits are deliberately more generous than Better Auth's built-in
   // defaults (3/10s for sign-in/sign-up) because hackathon venues commonly
   // put many legitimate attendees behind one NAT'd IP — see
-  // docs/rate-limiting.md for the full rationale and the coarseness caveat
-  // that comes with per-IP throttling in that setting.
+  // docs/rate-limiting.md for the full rationale. Sign-in also has a stricter
+  // per-account layer in index.ts; this generous IP ceiling catches clients
+  // rotating through accounts without letting one attacked account consume a
+  // venue's normal shared-IP budget.
   rateLimit: {
     enabled: true,
     customStorage: valkeyRateLimitStorage,
     window: 60,
     max: 60,
     customRules: {
-      "/sign-in/email": { window: 300, max: 30 },
+      "/sign-in/email": { window: 300, max: 300 },
       "/sign-up/email": { window: 3600, max: 30 },
       "/request-password-reset": { window: 3600, max: 10 },
       "/reset-password": { window: 900, max: 20 },
