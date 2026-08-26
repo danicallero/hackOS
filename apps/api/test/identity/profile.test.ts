@@ -244,6 +244,65 @@ describe("GET /api/me (H7)", () => {
 });
 
 describe("self-service account removal (H54)", () => {
+  it("lets an accepted but unconfirmed applicant delete their account and forfeit the spot", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const user = await createUser({ name: "Accepted Self Deletable", emailVerified: true });
+    const { rows: applications } = await pool.query(
+      `INSERT INTO applications (name, type, template)
+       VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
+    );
+    const { rows: tokens } = await pool.query(
+      `INSERT INTO email_verification_tokens
+         (token, type, email, user_id, expires_at)
+       VALUES ('accepted-delete-token', 'spot_confirmation', 'accepted@example.com', $1,
+               now() + interval '7 days')
+       RETURNING id`,
+      [user],
+    );
+    const { rows: responses } = await pool.query(
+      `INSERT INTO application_responses
+         (user_id, application_id, status, responses, confirmation_token_id,
+          decision_sent_at, submitted_at)
+       VALUES ($1, $2, 'accepted', '{}'::jsonb, $3, now(), now())
+       RETURNING id`,
+      [user, applications[0].id, tokens[0].id],
+    );
+    await pool.query(
+      `INSERT INTO notification_outbox (user_id, category, channel, status)
+       VALUES ($1, 'application', 'email', 'sent')`,
+      [user],
+    );
+    // A saved notification-channel toggle (H51) is a UI preference, not
+    // operational history — it must not block self-delete either.
+    await pool.query(
+      `INSERT INTO notification_preferences (user_id, category, channel, enabled)
+       VALUES ($1, 'application', 'push', false)`,
+      [user],
+    );
+
+    const eligibility = await a.inject({
+      method: "GET",
+      url: "/api/me/removal-eligibility",
+      headers: asUser(user),
+    });
+    expect(eligibility.statusCode).toBe(200);
+    expect(eligibility.json().action).toBe("delete");
+
+    const deleted = await a.inject({ method: "DELETE", url: "/api/me", headers: asUser(user) });
+    expect(deleted.statusCode).toBe(200);
+    expect(deleted.json().deleted).toBe(true);
+    expect(
+      (await pool.query(`SELECT 1 FROM application_responses WHERE id = $1`, [responses[0].id]))
+        .rowCount,
+    ).toBe(0);
+    expect(
+      (await pool.query(`SELECT 1 FROM notification_preferences WHERE user_id = $1`, [user]))
+        .rowCount,
+    ).toBe(0);
+    expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [user])).rowCount).toBe(0);
+  });
+
   it("lets an unaccepted applicant delete their own account and its application data", async () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
@@ -335,13 +394,50 @@ describe("self-service account removal (H54)", () => {
     expect(survivingAudit[0].actor_id).toBeNull();
   });
 
-  it("blocks self-deletion for an account with retained history (must go through an admin)", async () => {
+  it("lets a confirmed ticket-holder who hasn't been accredited yet delete their account", async () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
+    const user = await createUser({ name: "Confirmed Not Accredited" });
+    await pool.query(`INSERT INTO tickets (user_id, token) VALUES ($1, 'tok-self-deletable')`, [
+      user,
+    ]);
+    await pool.query(
+      `INSERT INTO wallet_passes (user_id, purpose, platform, serial_number, authentication_token)
+       VALUES ($1, 'ticket', 'apple', 'serial-self-deletable', 'auth-self-deletable')`,
+      [user],
+    );
+
+    const eligibility = await a.inject({
+      method: "GET",
+      url: "/api/me/removal-eligibility",
+      headers: asUser(user),
+    });
+    expect(eligibility.statusCode).toBe(200);
+    expect(eligibility.json().action).toBe("delete");
+
+    const deleted = await a.inject({ method: "DELETE", url: "/api/me", headers: asUser(user) });
+    expect(deleted.statusCode).toBe(200);
+    expect(deleted.json().deleted).toBe(true);
+    expect((await pool.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [user])).rowCount).toBe(0);
+    expect(
+      (await pool.query(`SELECT 1 FROM wallet_passes WHERE user_id = $1`, [user])).rowCount,
+    ).toBe(0);
+    expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [user])).rowCount).toBe(0);
+  });
+
+  it("blocks self-deletion once accredited at check-in (must go through an admin)", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const staff = await createUser({ name: "Door Staff" });
     const user = await createUser({ name: "Accredited" });
     await pool.query(`INSERT INTO tickets (user_id, token) VALUES ($1, 'tok-self-blocked')`, [
       user,
     ]);
+    await pool.query(`UPDATE users SET badge_id = 'B-SELF-BLOCKED' WHERE id = $1`, [user]);
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, staff_id) VALUES ($1, 'B-SELF-BLOCKED', $2)`,
+      [user, staff],
+    );
 
     const eligibility = await a.inject({
       method: "GET",
@@ -584,10 +680,17 @@ describe("staff user routes (H7)", () => {
        VALUES ($1, $2, 'accepted', '{}'::jsonb)`,
       [target, applications[0].id],
     );
-    // A ticket (role/accreditation issued) is the real operational history —
-    // not the application row itself, which a never-accepted applicant can
-    // clean up on their own (H54, unaccepted participants delete cleanly).
+    // Accreditation at check-in is the real operational history — not the
+    // ticket itself (a confirmed-but-not-yet-accredited holder can still
+    // self-delete), and not the application row, which a never-accepted
+    // applicant can clean up on their own (H54, unaccepted participants
+    // delete cleanly).
     await pool.query(`INSERT INTO tickets (user_id, token) VALUES ($1, 'tok-historic')`, [target]);
+    await pool.query(`UPDATE users SET badge_id = 'B-HISTORIC' WHERE id = $1`, [target]);
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, staff_id) VALUES ($1, 'B-HISTORIC', $2)`,
+      [target, admin],
+    );
 
     const eligibility = await a.inject({
       method: "GET",

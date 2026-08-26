@@ -33,9 +33,11 @@ function quoteIdentifier(identifier: string): string {
  * keeps this preflight aligned when a new retained user reference is added.
  */
 // A handful of references are just bookkeeping about the account itself, not
-// operational history worth retaining: an applicant who was never accepted
-// (no ticket, no role) has nothing to keep, so these are cleaned up as part
-// of the delete itself (clearOwnUnretainedReferences) instead of blocking it.
+// operational history worth retaining: an applicant who hasn't been
+// accredited at check-in yet (no badge, no role) has nothing to keep — even
+// with a confirmed spot and a ticket in their wallet — so these are cleaned
+// up as part of the delete itself (clearOwnUnretainedReferences) instead of
+// blocking it.
 //  - application_responses.user_id / applicant_reviews: their own,
 //    never-accepted application.
 //  - email_verification_tokens.user_id: the claim/verification token that
@@ -43,21 +45,36 @@ function quoteIdentifier(identifier: string): string {
 //    account was created, not proof of event participation.
 //  - audit_log.actor_id: reachable here only through invite-accept ("accept"
 //    audited with actorId = the new user themselves) — since eligibility
-//    already requires no ticket/capability anywhere, this account was never
-//    able to reach a capability-gated route, so it can't hold an audit row
-//    about acting on anything BUT its own signup. actor_id is nulled, not
-//    deleted, so the audited event itself (entity_type/action/before/after)
-//    survives — same as the null actorId a self-delete's own audit row uses.
+//    already requires no capability anywhere, this account was never able to
+//    reach a capability-gated route, so it can't hold an audit row about
+//    acting on anything BUT its own signup. actor_id is nulled, not deleted,
+//    so the audited event itself (entity_type/action/before/after) survives —
+//    same as the null actorId a self-delete's own audit row uses.
 //  - notification_outbox.user_id: queued/sent comms (e.g. the invite/welcome
 //    email) — a message log, not proof of event participation, and nothing
 //    else references it.
-// Every other restrictive reference (tickets, scans, submissions…) still
-// blocks hard delete.
+//  - notification_preferences.user_id: the account's own notification-channel
+//    toggles (H51) — a UI setting about how to reach them, not proof of event
+//    participation.
+//  - tickets.user_id / wallet_passes.user_id: a confirmed spot issues a
+//    permanent `tickets` row (plan/07 invariant 10) and, once added to a
+//    device wallet, a `ticket`-purpose `wallet_passes` row — neither is
+//    presence at the event. The retention boundary is accreditation (badge
+//    assignment at check-in), which always writes a `check_in_logs` row
+//    first: that row isn't self-cleanable, so it still blocks self-delete on
+//    its own once it exists. A `badge`-purpose `wallet_passes` row can only
+//    exist after `users.badge_id` is set, which only happens alongside that
+//    same `check_in_logs` write — so it's never reachable here either.
+// Every other restrictive reference (scans, submissions…) still blocks hard
+// delete.
 const SELF_CLEANABLE_REFERENCES: ReadonlySet<string> = new Set([
   "application_responses.user_id",
   "email_verification_tokens.user_id",
   "audit_log.actor_id",
   "notification_outbox.user_id",
+  "notification_preferences.user_id",
+  "tickets.user_id",
+  "wallet_passes.user_id",
 ]);
 
 async function hasRetainedReference(client: Queryable, userId: number): Promise<boolean> {
@@ -102,10 +119,12 @@ async function hasRetainedReference(client: Queryable, userId: number): Promise<
 }
 
 /**
- * Clear a non-retained applicant's own SELF_CLEANABLE_REFERENCES (H54,
- * non-accepted participants) so the DELETE FROM users below doesn't hit an
- * FK violation. Only called on the "delete" path — an accepted/ticketed
- * applicant is never eligible here, so this never touches operational history.
+ * Clear a non-retained applicant's own SELF_CLEANABLE_REFERENCES (H54) so the
+ * DELETE FROM users below doesn't hit an FK violation. Only called on the
+ * "delete" path — an *accredited* applicant is never eligible here (their
+ * check_in_logs row already blocks), so this never touches operational
+ * history, even though a confirmed-but-not-yet-accredited holder of a ticket
+ * or wallet pass reaches this same path and forfeits their spot.
  */
 export async function clearOwnUnretainedReferences(
   client: Queryable,
@@ -128,6 +147,9 @@ export async function clearOwnUnretainedReferences(
   await client.query(`DELETE FROM email_verification_tokens WHERE user_id = $1`, [userId]);
   await client.query(`UPDATE audit_log SET actor_id = NULL WHERE actor_id = $1`, [userId]);
   await client.query(`DELETE FROM notification_outbox WHERE user_id = $1`, [userId]);
+  await client.query(`DELETE FROM notification_preferences WHERE user_id = $1`, [userId]);
+  await client.query(`DELETE FROM wallet_passes WHERE user_id = $1`, [userId]);
+  await client.query(`DELETE FROM tickets WHERE user_id = $1`, [userId]);
 }
 
 export async function getAccountRemovalEligibility(

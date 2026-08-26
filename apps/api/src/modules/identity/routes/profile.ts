@@ -438,11 +438,14 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => getAccountRemovalEligibility(pool, req.userId as number),
   );
 
-  // Self-service deletion (H54) — a participant who was never accepted/given
-  // a role has no operational history worth retaining, so they can delete
-  // their own account outright (danger-zone UI). Anyone with retained history
-  // (ticket, scans, submissions…) can't self-serve: only an admin can
-  // anonymize on request (privacy policy §6) — this route 409s for them.
+  // Self-service deletion (H54) — accreditation at check-in is the retention
+  // boundary, not acceptance or even a confirmed spot: a participant who
+  // hasn't been badged in yet (no role, or a confirmed ticket they never used)
+  // has no operational history worth retaining, so they can delete their own
+  // account outright (danger-zone UI), forfeiting the spot in the process.
+  // Anyone with retained history (accreditation, scans, submissions…) can't
+  // self-serve: only an admin can anonymize on request (privacy policy §6) —
+  // this route 409s for them.
   api.delete(
     "/api/me",
     {
