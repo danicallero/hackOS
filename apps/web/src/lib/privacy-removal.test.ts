@@ -1,10 +1,52 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   type AccountRemovalEligibility,
   accountRemovalIdempotencyKey,
   accountRemovalRequest,
   clearWebAccountData,
 } from "./privacy-removal";
+
+class MemoryStorage {
+  get length(): number {
+    return Object.keys(this).length;
+  }
+
+  key(index: number): string | null {
+    return Object.keys(this)[index] ?? null;
+  }
+
+  getItem(key: string): string | null {
+    return Object.hasOwn(this, key) ? String((this as Record<string, unknown>)[key]) : null;
+  }
+
+  setItem(key: string, value: string): void {
+    Object.defineProperty(this, key, {
+      configurable: true,
+      enumerable: true,
+      value: String(value),
+      writable: true,
+    });
+  }
+
+  removeItem(key: string): void {
+    delete (this as Record<string, unknown>)[key];
+  }
+
+  clear(): void {
+    for (const key of Object.keys(this)) delete (this as Record<string, unknown>)[key];
+  }
+}
+
+beforeEach(() => {
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: new MemoryStorage(),
+  });
+  Object.defineProperty(window, "sessionStorage", {
+    configurable: true,
+    value: new MemoryStorage(),
+  });
+});
 
 describe("account removal eligibility", () => {
   it.each([

@@ -1,5 +1,10 @@
 import { apiFetch } from "./api";
-import { declineOwnSpot, deleteOwnAccount, fetchAccountRemovalEligibility } from "./self-service";
+import {
+  anonymizeOwnAccount,
+  declineOwnSpot,
+  deleteOwnAccount,
+  fetchAccountRemovalEligibility,
+} from "./self-service";
 
 jest.mock("./api", () => ({ apiFetch: jest.fn() }));
 
@@ -28,7 +33,6 @@ describe("mobile self-service account actions (H15, H54)", () => {
   });
 
   it("confirms irreversible anonymization through the own-account endpoint", async () => {
-    const { anonymizeOwnAccount } = await import("./self-service");
     mockedApiFetch.mockResolvedValueOnce({ anonymized: true });
 
     await anonymizeOwnAccount();

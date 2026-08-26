@@ -147,7 +147,7 @@ describe("synchronizeScanner", () => {
     await synchronizeScanner(OWNER_USER_ID);
 
     expect(mockFailScan).not.toHaveBeenCalled();
-    expect(mockNoteRetryable).toHaveBeenCalledWith("scan-1", "Unauthorized");
+    expect(mockNoteRetryable).toHaveBeenCalledWith("scan-1", "Unauthorized", OWNER_USER_ID);
     // The loop breaks: scan-2 is never attempted against a broken session.
     expect(mockApiFetch).not.toHaveBeenCalledWith(
       "/api/accreditation/remove",
@@ -164,7 +164,7 @@ describe("synchronizeScanner", () => {
 
     await synchronizeScanner(OWNER_USER_ID);
 
-    expect(mockFailScan).toHaveBeenCalledWith("scan-1", "No badge to remove");
+    expect(mockFailScan).toHaveBeenCalledWith("scan-1", "No badge to remove", OWNER_USER_ID);
     expect(mockApiFetch).toHaveBeenCalledTimes(3);
   });
 
@@ -203,6 +203,7 @@ describe("synchronizeScanner", () => {
     expect(mockFailScan).toHaveBeenCalledWith(
       "scan-1",
       "Offline scan timestamp must be in the past",
+      OWNER_USER_ID,
     );
   });
 
