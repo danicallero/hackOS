@@ -99,7 +99,8 @@ export function registerReviewRoutes(app: FastifyInstance): void {
          JOIN users u ON u.id = r.user_id
          LEFT JOIN applicant_reviews ar ON ar.response_id = r.id
          LEFT JOIN email_verification_tokens t ON t.id = r.confirmation_token_id
-         WHERE ${filters.join(" AND ")}
+         WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
+           AND ${filters.join(" AND ")}
          GROUP BY r.id, u.name, u.email, u.shirt_size, u.food_intolerances,
                   u.food_intolerance_notes, u.dietary_data_state,
                   t.expires_at

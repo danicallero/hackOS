@@ -150,6 +150,24 @@ export function totalPresenceMs(
   return buildPresenceIntervals(events, cutoff, opts).reduce((s, i) => s + (i.end - i.start), 0);
 }
 
+/**
+ * Time that is safe to carry into the permanent anonymous audit record.
+ * Provisional live intervals are useful to staff but are intentionally not
+ * retained: only a door exit or an activity inside the certainty window can
+ * secure an interval. Invalid/conflicting and expired sessions contribute
+ * zero, so anonymization cannot manufacture attendance time.
+ */
+export function guaranteedPresenceMs(
+  events: PresenceEvent[],
+  cutoff: number,
+  opts: PresenceOptions = {},
+): number {
+  return buildCertaintyWindows(events, cutoff, opts).reduce((total, window) => {
+    if (window.status !== "secured" || window.securedUntil == null) return total;
+    return total + Math.max(0, window.securedUntil - window.start);
+  }, 0);
+}
+
 /** Whether the person is estimated present at instant `at` (for occupancy). */
 export function isPresentAt(
   events: PresenceEvent[],

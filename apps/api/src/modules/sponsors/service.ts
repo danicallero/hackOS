@@ -199,6 +199,7 @@ export async function listEnterpriseMembers(enterpriseId: number): Promise<Enter
        FROM sponsors s
        JOIN users u ON u.id = s.user_id
       WHERE s.enterprise_id = $1
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL
       ORDER BY u.name NULLS LAST, u.email`,
     [enterpriseId],
   );
@@ -229,20 +230,27 @@ export async function addEnterpriseMember(
   actorId: number | null,
 ): Promise<EnterpriseMember> {
   await getEnterprise(enterpriseId); // 404 if the enterprise is missing
-  const { rows: userRows } = await pool.query(`SELECT id FROM users WHERE id = $1`, [userId]);
-  if (!userRows[0]) throw new NotFoundError("User not found", { userId });
-
-  const { rows: existing } = await pool.query(
-    `SELECT id FROM sponsors WHERE enterprise_id = $1 AND user_id = $2`,
-    [enterpriseId, userId],
-  );
-  if (existing[0]) {
-    throw new ConflictError("User is already affiliated with this enterprise", {
-      enterpriseId,
-      userId,
-    });
-  }
   const { member, user } = await withTransaction(async (client) => {
+    // Serialize the target against H54 removal. A pending account must not
+    // receive a new sponsor relation, ticket, or audit row while its
+    // identity-bearing graph is being scrubbed.
+    const { rows: userRows } = await client.query(
+      `SELECT id, name, email FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!userRows[0]) throw new NotFoundError("User not found", { userId });
+    const { rows: existing } = await client.query(
+      `SELECT id FROM sponsors WHERE enterprise_id = $1 AND user_id = $2`,
+      [enterpriseId, userId],
+    );
+    if (existing[0]) {
+      throw new ConflictError("User is already affiliated with this enterprise", {
+        enterpriseId,
+        userId,
+      });
+    }
     const { rows } = await client.query(
       `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id, joined_at`,
       [enterpriseId, userId],
@@ -255,10 +263,7 @@ export async function addEnterpriseMember(
       action: "member_added",
       after: { userId },
     });
-    const { rows: users } = await client.query(`SELECT name, email FROM users WHERE id = $1`, [
-      userId,
-    ]);
-    return { member: rows[0], user: users[0] };
+    return { member: rows[0], user: userRows[0] };
   });
   return {
     sponsorId: Number(member.id),
@@ -326,6 +331,7 @@ export async function listEnterpriseJudges(enterpriseId: number): Promise<Enterp
        FROM enterprise_judges ej
        JOIN users u ON u.id = ej.user_id
       WHERE ej.enterprise_id = $1
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL
       ORDER BY u.name NULLS LAST, u.surname NULLS LAST, u.email`,
     [enterpriseId],
   );
@@ -343,10 +349,14 @@ export async function addEnterpriseJudge(
   actorId: number | null,
 ): Promise<EnterpriseJudge> {
   await getEnterprise(enterpriseId);
-  const { rows: userRows } = await pool.query(`SELECT id FROM users WHERE id = $1`, [userId]);
-  if (!userRows[0]) throw new NotFoundError("User not found", { userId });
-
   return withTransaction(async (client) => {
+    const { rows: userRows } = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!userRows[0]) throw new NotFoundError("User not found", { userId });
     const { rows } = await client.query(
       `INSERT INTO enterprise_judges (enterprise_id, user_id, added_by)
        VALUES ($1, $2, $3)
@@ -371,7 +381,8 @@ export async function addEnterpriseJudge(
       `SELECT ej.user_id, u.name, u.surname, u.email, ej.added_at, ej.added_by
          FROM enterprise_judges ej
          JOIN users u ON u.id = ej.user_id
-        WHERE ej.enterprise_id = $1 AND ej.user_id = $2`,
+        WHERE ej.enterprise_id = $1 AND ej.user_id = $2
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
       [enterpriseId, userId],
     );
     return judgeRow(judges[0]);
@@ -410,6 +421,7 @@ export async function listJudgeCandidates() {
   const { rows } = await pool.query(
     `SELECT id, email, name, surname
        FROM users
+      WHERE account_state = 'active' AND anonymized_at IS NULL
       ORDER BY name ASC NULLS LAST, surname ASC NULLS LAST, email ASC
       LIMIT 500`,
   );

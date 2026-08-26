@@ -126,6 +126,7 @@ export async function listReviews(
          SELECT array_agg(DISTINCT trim(concat(u.name, ' ', u.surname))) AS names
            FROM attempt_review_versions v
            JOIN users u ON u.id = v.author_id
+              AND u.account_state = 'active' AND u.anonymized_at IS NULL
           WHERE v.attempt_id = qe.id
        ) judges ON true
        ${where}
@@ -250,10 +251,12 @@ export async function getReviewDetail(scope: ReviewScope, entryId: number): Prom
     `SELECT u.id, trim(concat(u.name, ' ', u.surname)) AS name, u.email
        FROM submissions s JOIN users u ON u.id = s.user_id
       WHERE s.repo_id = $1
-      UNION
+        AND s.status = 'active' AND u.account_state = 'active' AND u.anonymized_at IS NULL
+       UNION
      SELECT u.id, trim(concat(u.name, ' ', u.surname)) AS name, u.email
        FROM devpost_participants dp JOIN users u ON u.id = dp.user_id
       WHERE dp.repo_id = $1
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL
       UNION
      SELECT NULL::int AS id, trim(concat(dp.name, ' ', dp.surname)) AS name, dp.email
        FROM devpost_participants dp
@@ -266,6 +269,7 @@ export async function getReviewDetail(scope: ReviewScope, entryId: number): Prom
     `SELECT v.id, v.changed_fields, v.created_at, trim(concat(u.name, ' ', u.surname)) AS author_name
        FROM attempt_review_versions v
        JOIN users u ON u.id = v.author_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
       WHERE v.attempt_id = $1
       ORDER BY v.created_at ASC`,
     [entryId],
@@ -336,7 +340,8 @@ export async function sendReviewMessage(
 
   return withTransaction(async (client) => {
     const { rows } = await client.query(
-      `SELECT trim(concat(name, ' ', surname)) AS full_name FROM users WHERE id = $1`,
+      `SELECT trim(concat(name, ' ', surname)) AS full_name
+         FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
       [actorId],
     );
     const senderName: string = rows[0]?.full_name?.trim() || "";

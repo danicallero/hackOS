@@ -55,7 +55,11 @@ async function assertEntitled(userId: number, purpose: Purpose): Promise<void> {
     // on whether the person currently holds real event access.
     if (!(await hasEventAccess(pool, userId))) throw new NotFoundError("Ticket not issued");
   } else {
-    const b = await pool.query(`SELECT badge_id FROM users WHERE id = $1`, [userId]);
+    const b = await pool.query(
+      `SELECT badge_id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+      [userId],
+    );
     if (!b.rows[0]) throw new NotFoundError("User not found");
     if (!b.rows[0].badge_id) throw new BadRequestError("Badge not assigned");
   }
@@ -76,6 +80,15 @@ export async function ensurePassRecord(
   await assertEntitled(userId, purpose);
 
   return withTransaction(async (client) => {
+    // H54: serialize pass issuance with account removal. The preflight above
+    // is only advisory; this row lock is the authoritative state check.
+    const activeUser = await client.query(
+      `SELECT 1 FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!activeUser.rows[0]) throw new NotFoundError("User not found");
     const existing = await client.query(
       `SELECT id, user_id, purpose, platform, serial_number, authentication_token,
               google_object_id, status, update_tag
@@ -86,7 +99,10 @@ export async function ensurePassRecord(
     );
     if (existing.rows[0]) return existing.rows[0];
 
-    const serial = `${purpose}-${userId}-${randomBytes(6).toString("hex")}`;
+    // The serial is copied to an installed Wallet pass and may outlive the
+    // database row. Never encode the internal user id in that external
+    // identifier (H54); the random suffix is the only account correlation.
+    const serial = `${purpose}-${randomBytes(16).toString("hex")}`;
     const auth = randomBytes(24).toString("base64url");
     const googleObjectId = opts?.googleObjectId ?? null;
     const created = await client.query(

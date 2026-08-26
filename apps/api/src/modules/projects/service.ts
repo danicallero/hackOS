@@ -258,7 +258,7 @@ export async function listProjectMemberCandidates(
   const { rows } = await pool.query(
     `SELECT id, email, name, surname
        FROM users
-      WHERE anonymized_at IS NULL
+      WHERE account_state = 'active' AND anonymized_at IS NULL
         AND (email ILIKE $1 OR name ILIKE $1 OR surname ILIKE $1)
       ORDER BY name ASC NULLS LAST, surname ASC NULLS LAST, email ASC
       LIMIT $2`,
@@ -296,7 +296,12 @@ export async function linkParticipant(
         mergeStatus: existing.rows[0].merge_status,
       });
     }
-    const user = await client.query(`SELECT id FROM users WHERE id = $1`, [userId]);
+    const user = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
     if (user.rows.length === 0) throw new NotFoundError(`User ${userId} not found`);
 
     const before = existing.rows[0];
@@ -372,7 +377,9 @@ export async function linkParticipantSecondary(
       });
     }
     const userRes = await client.query(
-      `SELECT id, email, name FROM users WHERE id = $1 FOR UPDATE`,
+      `SELECT id, email, name FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
       [userId],
     );
     const user = userRes.rows[0] as { id: number; email: string; name: string | null } | undefined;
@@ -486,8 +493,14 @@ export async function sendClaimEmail(
     }
 
     let userId: number;
-    const existingUser = await client.query(`SELECT id FROM users WHERE email = $1`, [email]);
+    const existingUser = await client.query(
+      `SELECT id, account_state FROM users WHERE email = $1 FOR UPDATE`,
+      [email],
+    );
     if (existingUser.rows[0]) {
+      if (existingUser.rows[0].account_state !== "active") {
+        throw new ConflictError("This account is already being removed", { email });
+      }
       userId = existingUser.rows[0].id;
     } else {
       const created = await client.query(
@@ -659,6 +672,7 @@ async function attachMembersAndPrizes(
        FROM devpost_participants dp
        LEFT JOIN users u ON u.id = dp.user_id
       WHERE repo_id = ANY($1::int[])
+        AND (u.id IS NULL OR (u.account_state = 'active' AND u.anonymized_at IS NULL))
       ORDER BY repo_id, name ASC NULLS LAST, surname ASC NULLS LAST, email ASC`,
     [ids],
   );
@@ -671,6 +685,7 @@ async function attachMembersAndPrizes(
         -- of the roster — it only shows up via myPendingInvites/GET
         -- /api/me/projects/invites until accepted.
         AND s.status = 'active'
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL
         AND NOT EXISTS (
           SELECT 1
             FROM devpost_participants dp
@@ -978,8 +993,16 @@ export async function isActiveProjectMember(
 ): Promise<boolean> {
   const { rows } = await db.query(
     `SELECT (
-       EXISTS (SELECT 1 FROM submissions WHERE repo_id = $1 AND user_id = $2 AND status = 'active')
-       OR EXISTS (SELECT 1 FROM devpost_participants WHERE repo_id = $1 AND user_id = $2)
+       EXISTS (
+         SELECT 1 FROM submissions s JOIN users u ON u.id = s.user_id
+          WHERE s.repo_id = $1 AND s.user_id = $2 AND s.status = 'active'
+            AND u.account_state = 'active' AND u.anonymized_at IS NULL
+       )
+       OR EXISTS (
+         SELECT 1 FROM devpost_participants dp JOIN users u ON u.id = dp.user_id
+          WHERE dp.repo_id = $1 AND dp.user_id = $2
+            AND u.account_state = 'active' AND u.anonymized_at IS NULL
+       )
      ) AS member`,
     [repoId, userId],
   );
@@ -990,9 +1013,13 @@ export async function isActiveProjectMember(
 export async function activeProjectMemberCount(db: Queryable, repoId: number): Promise<number> {
   const { rows } = await db.query(
     `SELECT count(*)::int AS n FROM (
-       SELECT user_id FROM submissions WHERE repo_id = $1 AND status = 'active'
+       SELECT s.user_id FROM submissions s JOIN users u ON u.id = s.user_id
+        WHERE s.repo_id = $1 AND s.status = 'active'
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
        UNION
-       SELECT user_id FROM devpost_participants WHERE repo_id = $1 AND user_id IS NOT NULL
+       SELECT dp.user_id FROM devpost_participants dp JOIN users u ON u.id = dp.user_id
+        WHERE dp.repo_id = $1 AND dp.user_id IS NOT NULL
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
      ) members`,
     [repoId],
   );
@@ -1003,7 +1030,12 @@ export async function addRepoMember(actorId: number, repoId: number, userId: num
   return withTransaction(async (client) => {
     const repo = await client.query(`SELECT id FROM repos WHERE id = $1 FOR UPDATE`, [repoId]);
     if (!repo.rows[0]) throw new NotFoundError(`Repo ${repoId} not found`);
-    const user = await client.query(`SELECT id FROM users WHERE id = $1`, [userId]);
+    const user = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
     if (!user.rows[0]) throw new NotFoundError(`User ${userId} not found`);
 
     const inserted = await client.query(
@@ -1491,9 +1523,14 @@ export async function createRepoNative(
   const challengeIds = [...new Set(input.challengeIds)];
   const { repo, outcomes } = await withTransaction(async (client) => {
     if (memberUserIds.length > 0) {
-      const { rows } = await client.query(`SELECT id FROM users WHERE id = ANY($1::int[])`, [
-        memberUserIds,
-      ]);
+      const { rows } = await client.query(
+        `SELECT id FROM users
+          WHERE id = ANY($1::int[])
+            AND account_state = 'active' AND anonymized_at IS NULL
+          ORDER BY id
+          FOR UPDATE`,
+        [memberUserIds],
+      );
       const found = new Set(rows.map((r: { id: number }) => r.id));
       const missing = memberUserIds.filter((id) => !found.has(id));
       if (missing.length > 0) throw new NotFoundError(`User ${missing.join(", ")} not found`);
@@ -1748,9 +1785,13 @@ export async function inviteProjectMember(
     const repo = repoRes.rows[0] as { id: number; name: string } | undefined;
     if (!repo) throw new NotFoundError(`Repo ${repoId} not found`);
 
-    const inviteeRes = await client.query(`SELECT id FROM users WHERE lower(email) = lower($1)`, [
-      email,
-    ]);
+    const inviteeRes = await client.query(
+      `SELECT id FROM users
+        WHERE lower(email) = lower($1)
+          AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [email],
+    );
     const inviteeId = inviteeRes.rows[0]?.id as number | undefined;
     if (!inviteeId) throw new NotFoundError(`No account for ${email}`);
 
@@ -1781,9 +1822,11 @@ export async function inviteProjectMember(
       source: "participant",
     });
 
-    const inviterRes = await client.query(`SELECT name, surname, email FROM users WHERE id = $1`, [
-      userId,
-    ]);
+    const inviterRes = await client.query(
+      `SELECT name, surname, email FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+      [userId],
+    );
     const inviter = inviterRes.rows[0] as
       | { name: string | null; surname: string | null; email: string }
       | undefined;
@@ -1815,6 +1858,7 @@ export async function myPendingInvites(userId: number): Promise<PendingInvite[]>
        FROM submissions s
        JOIN repos r ON r.id = s.repo_id
        LEFT JOIN users u ON u.id = s.invited_by
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
       WHERE s.user_id = $1 AND s.status = 'invited'
       ORDER BY s.created_at DESC`,
     [userId],

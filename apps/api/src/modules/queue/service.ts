@@ -273,9 +273,12 @@ export async function notifyEnter(entryId: number, actorId: number): Promise<Que
     ]);
     const teamName: string = repoRows[0]?.name ?? `#${entry.repo_id}`;
 
-    const { rows: userRows } = await client.query(`SELECT id, name FROM users WHERE id = ANY($1)`, [
-      memberIds,
-    ]);
+    const { rows: userRows } = await client.query(
+      `SELECT id, name FROM users
+        WHERE id = ANY($1)
+          AND account_state = 'active' AND anonymized_at IS NULL`,
+      [memberIds],
+    );
     const nameById = new Map<number, string | null>(
       userRows.map((u: { id: number; name: string | null }) => [u.id, u.name]),
     );
@@ -298,9 +301,11 @@ export async function notifyEnter(entryId: number, actorId: number): Promise<Que
       });
     }
     const { rows: staffRows } = await client.query(
-      `SELECT DISTINCT user_id
-         FROM notification_preferences
-        WHERE category = $1 AND channel = 'push' AND enabled = true`,
+      `SELECT DISTINCT np.user_id
+         FROM notification_preferences np
+         JOIN users u ON u.id = np.user_id
+        WHERE np.category = $1 AND np.channel = 'push' AND np.enabled = true
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
       [QUEUE_STAFF_CATEGORY],
     );
     for (const row of staffRows as { user_id: number }[]) {

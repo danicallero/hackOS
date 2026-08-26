@@ -1,5 +1,7 @@
 import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
+import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
+import { getQueue, registerWorker } from "../../lib/queues.js";
 import type { Language } from "../notifications/translate/index.js";
 
 /**
@@ -14,9 +16,14 @@ import type { Language } from "../notifications/translate/index.js";
  * missed sync harmless: every successful refresh converges to server truth.
  */
 export async function scannerSnapshot() {
-  const [peopleResult, activitiesResult, statesResult] = await Promise.all([
-    pool.query(
-      `WITH RECURSIVE effective_groups (user_id, group_id) AS (
+  // Expiry is the retention boundary for H54 scanner tombstones. This is
+  // intentionally best-effort housekeeping; an expired row never identifies
+  // a participant and a later snapshot simply omits it.
+  await purgeExpiredScannerTombstones();
+  const [peopleResult, activitiesResult, statesResult, revokedBadgeResult, revokedTicketResult] =
+    await Promise.all([
+      pool.query(
+        `WITH RECURSIVE effective_groups (user_id, group_id) AS (
          SELECT user_id, group_id FROM permission_group_members
          UNION
          SELECT eg.user_id, gi.child_group_id
@@ -81,23 +88,34 @@ export async function scannerSnapshot() {
             ORDER BY tl.scanned_at DESC, tl.id DESC
             LIMIT 1
          ) last_presence ON true
-        WHERE u.anonymized_at IS NULL
+        WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
         ORDER BY u.id`,
-    ),
-    pool.query(
-      `SELECT a.id, a.name, a.category, a.requires_scan, s.starts_at,
+      ),
+      pool.query(
+        `SELECT a.id, a.name, a.category, a.requires_scan, s.starts_at,
               a.primary_language, a.name_i18n, a.description_i18n
          FROM activities a
          LEFT JOIN schedule s ON s.id = a.schedule_id
         WHERE a.category = ANY($1::text[]) OR a.requires_scan = true
         ORDER BY s.starts_at ASC NULLS LAST, a.name ASC, a.id ASC`,
-      [[...MEAL_ACTIVITY_KINDS]],
-    ),
-    pool.query(
-      `SELECT user_id, activity_id, count(*)::int AS scan_count
-         FROM activity_logs GROUP BY user_id, activity_id`,
-    ),
-  ]);
+        [[...MEAL_ACTIVITY_KINDS]],
+      ),
+      pool.query(
+        `SELECT user_id, activity_id, count(*)::int AS scan_count
+         FROM activity_logs al
+         JOIN users u ON u.id = al.user_id
+        WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
+        GROUP BY user_id, activity_id`,
+      ),
+      pool.query(
+        `SELECT badge_id FROM scanner_revoked_badges
+        WHERE expires_at > now() ORDER BY badge_id`,
+      ),
+      pool.query(
+        `SELECT ticket_token FROM scanner_revoked_tickets
+        WHERE expires_at > now() ORDER BY ticket_token`,
+      ),
+    ]);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -143,5 +161,37 @@ export async function scannerSnapshot() {
       activityId: row.activity_id as number,
       count: row.scan_count as number,
     })),
+    revokedBadgeIds: revokedBadgeResult.rows.map((row: { badge_id: string }) => row.badge_id),
+    revokedTicketTokens: revokedTicketResult.rows.map(
+      (row: { ticket_token: string }) => row.ticket_token,
+    ),
   };
+}
+
+const TOMBSTONE_CLEANUP_QUEUE = "scanner-tombstone-cleanup";
+
+/** H54: expiry is enforced even when no scanner requests a fresh snapshot. */
+export async function purgeExpiredScannerTombstones(): Promise<void> {
+  await Promise.all([
+    pool.query(`DELETE FROM scanner_revoked_badges WHERE expires_at <= now()`),
+    pool.query(`DELETE FROM scanner_revoked_tickets WHERE expires_at <= now()`),
+  ]);
+}
+
+registerWorker(TOMBSTONE_CLEANUP_QUEUE, async () => {
+  await purgeExpiredScannerTombstones();
+});
+
+export async function scheduleScannerTombstoneCleanup(): Promise<void> {
+  if (config.isTest) return;
+  await getQueue(TOMBSTONE_CLEANUP_QUEUE).add(
+    TOMBSTONE_CLEANUP_QUEUE,
+    {},
+    {
+      repeat: { every: 60 * 60_000 },
+      jobId: TOMBSTONE_CLEANUP_QUEUE,
+      removeOnComplete: true,
+      removeOnFail: true,
+    },
+  );
 }

@@ -27,6 +27,22 @@ async function databaseNow(client: Queryable = pool): Promise<Date> {
   return rows[0].now as Date;
 }
 
+/**
+ * Presence writes must serialize with H54 account closure.  The lock is
+ * deliberately on the user row, not just on a badge or advisory key: an
+ * offline/stale scanner may have resolved the badge before anonymization
+ * started.
+ */
+async function lockActiveParticipant(client: Queryable, userId: number): Promise<void> {
+  const { rows } = await client.query(
+    `SELECT id FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+      FOR UPDATE`,
+    [userId],
+  );
+  if (!rows[0]) throw new NotFoundError("Participant is no longer active");
+}
+
 async function certaintyWindowMs(): Promise<number> {
   const { rows } = await pool.query(
     `SELECT presence_certainty_window_minutes FROM event_config WHERE id = 1`,
@@ -110,6 +126,7 @@ export async function presenceScan(
   const result = await withTransaction(async (client) => {
     // Serialize concurrent scans for the same person (H24 concurrency).
     await client.query(`SELECT pg_advisory_xact_lock($1, $2)`, [PRESENCE_LOCK_NS, userId]);
+    await lockActiveParticipant(client, userId);
 
     // Resolve live scan time after taking the lock. clock_timestamp(), unlike
     // transaction-stable now(), cannot predate a scan whose transaction just
@@ -190,7 +207,7 @@ export async function openSessions(at?: number) {
        FROM (
          SELECT DISTINCT ON (user_id) user_id, kind, scanned_at
            FROM time_logs
-          WHERE scanned_at <= now()
+      WHERE scanned_at <= now()
           ORDER BY user_id, scanned_at DESC, id DESC
        ) tl
        JOIN users u ON u.id = tl.user_id
@@ -199,6 +216,8 @@ export async function openSessions(at?: number) {
           WHERE user_id = tl.user_id AND logged_at >= tl.scanned_at
        ) la ON true
       WHERE tl.kind = 'in'
+        AND u.account_state = 'active'
+        AND u.anonymized_at IS NULL
       ORDER BY last_signal ASC`,
   );
   return (
@@ -230,13 +249,27 @@ export async function openSessions(at?: number) {
  */
 async function loadEvents(userId?: number): Promise<Map<number, PresenceEvent[]>> {
   const scoped = userId != null;
-  const filter = scoped ? "WHERE user_id = $1" : "";
+  const timeFilter = scoped
+    ? `WHERE tl.user_id = $1
+         AND EXISTS (SELECT 1 FROM users u WHERE u.id = tl.user_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL)`
+    : `WHERE tl.user_id IS NOT NULL
+         AND EXISTS (SELECT 1 FROM users u WHERE u.id = tl.user_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL)`;
+  const activityFilter = scoped
+    ? `WHERE al.user_id = $1
+         AND EXISTS (SELECT 1 FROM users u WHERE u.id = al.user_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL)`
+    : `WHERE al.user_id IS NOT NULL
+         AND EXISTS (SELECT 1 FROM users u WHERE u.id = al.user_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL)`;
   const params = scoped ? [userId] : [];
   const { rows } = await pool.query(
-    `SELECT user_id, extract(epoch from scanned_at) * 1000 AS t, kind FROM time_logs ${filter}
+    `SELECT tl.user_id, extract(epoch from tl.scanned_at) * 1000 AS t, tl.kind
+       FROM time_logs tl ${timeFilter}
      UNION ALL
-     SELECT user_id, extract(epoch from logged_at) * 1000 AS t, 'activity' AS kind
-       FROM activity_logs ${filter}`,
+     SELECT al.user_id, extract(epoch from al.logged_at) * 1000 AS t, 'activity' AS kind
+       FROM activity_logs al ${activityFilter}`,
     params,
   );
 
@@ -288,7 +321,8 @@ export async function allHours(cutoff?: number) {
   if (userIds.length === 0) return [];
 
   const { rows: people } = await pool.query(
-    `SELECT id, name, surname FROM users WHERE id = ANY($1)`,
+    `SELECT id, name, surname FROM users
+      WHERE id = ANY($1) AND account_state = 'active' AND anonymized_at IS NULL`,
     [userIds],
   );
   const nameById = new Map(
@@ -324,7 +358,12 @@ export async function listTimeLogs(userId: number) {
             u.name AS scanned_by_name, u.surname AS scanned_by_surname
        FROM time_logs tl
        LEFT JOIN users u ON u.id = tl.scanned_by
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL
       WHERE tl.user_id = $1
+        AND EXISTS (SELECT 1 FROM users subject
+                     WHERE subject.id = tl.user_id
+                       AND subject.account_state = 'active'
+                       AND subject.anonymized_at IS NULL)
       ORDER BY tl.scanned_at ASC, tl.id ASC`,
     [userId],
   );
@@ -362,6 +401,8 @@ export async function updateTimeLog(
     );
     const before = rows[0];
     if (!before) throw new NotFoundError("Time log not found");
+    if (before.user_id == null) throw new NotFoundError("Time log participant is no longer active");
+    await lockActiveParticipant(client, before.user_id as number);
 
     const kind = input.kind ?? before.kind;
     const scannedAt = input.scannedAt ?? before.scanned_at;
@@ -415,8 +456,7 @@ export async function createPresenceSignal(
     throw new BadRequestError("Presence signals cannot be in the future");
   }
   const result = await withTransaction(async (client) => {
-    const user = await client.query(`SELECT 1 FROM users WHERE id = $1`, [userId]);
-    if (!user.rows[0]) throw new NotFoundError("User not found");
+    await lockActiveParticipant(client, userId);
     if (input.kind === "activity") {
       const activity = await client.query(`SELECT id FROM activities WHERE id = $1`, [
         input.activityId,
@@ -475,6 +515,9 @@ export async function updatePresenceActivity(
     );
     const before = rows[0];
     if (!before) throw new NotFoundError("Activity log not found");
+    if (before.user_id == null)
+      throw new NotFoundError("Activity log participant is no longer active");
+    await lockActiveParticipant(client, before.user_id as number);
     const activityId = input.activityId ?? before.activity_id;
     const exists = await client.query(`SELECT 1 FROM activities WHERE id = $1`, [activityId]);
     if (!exists.rows[0]) throw new NotFoundError("Activity not found");
@@ -516,6 +559,9 @@ export async function deletePresenceActivity(actorId: number, id: number) {
     );
     const before = rows[0];
     if (!before) throw new NotFoundError("Activity log not found");
+    if (before.user_id == null)
+      throw new NotFoundError("Activity log participant is no longer active");
+    await lockActiveParticipant(client, before.user_id as number);
     await client.query(`DELETE FROM activity_logs WHERE id = $1`, [id]);
     await audit(client, {
       actorId,
@@ -544,13 +590,26 @@ export async function presenceTimeline(userId: number, cutoff?: number) {
             NULL::integer AS activity_id, NULL::text AS activity_name,
             NULL::text AS category, tl.notes, tl.scanned_by AS recorded_by,
             u.name AS recorded_by_name, u.surname AS recorded_by_surname
-       FROM time_logs tl LEFT JOIN users u ON u.id = tl.scanned_by WHERE tl.user_id = $1
+       FROM time_logs tl
+       LEFT JOIN users u ON u.id = tl.scanned_by
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL
+      WHERE tl.user_id = $1
+        AND EXISTS (SELECT 1 FROM users subject
+                     WHERE subject.id = tl.user_id
+                       AND subject.account_state = 'active'
+                       AND subject.anonymized_at IS NULL)
      UNION ALL
      SELECT al.id, 'activity', 'activity', al.logged_at, a.id, a.name, a.category,
             al.notes, al.logged_by, u.name, u.surname
        FROM activity_logs al
        JOIN activities a ON a.id = al.activity_id
-       JOIN users u ON u.id = al.logged_by WHERE al.user_id = $1
+       LEFT JOIN users u ON u.id = al.logged_by
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL
+      WHERE al.user_id = $1
+        AND EXISTS (SELECT 1 FROM users subject
+                     WHERE subject.id = al.user_id
+                       AND subject.account_state = 'active'
+                       AND subject.anonymized_at IS NULL)
      ORDER BY occurred_at ASC, id ASC`,
       [userId],
     ),
@@ -643,6 +702,8 @@ export async function deleteTimeLog(actorId: number, id: number) {
     );
     const before = rows[0];
     if (!before) throw new NotFoundError("Time log not found");
+    if (before.user_id == null) throw new NotFoundError("Time log participant is no longer active");
+    await lockActiveParticipant(client, before.user_id as number);
 
     await client.query(`DELETE FROM time_logs WHERE id = $1`, [id]);
 

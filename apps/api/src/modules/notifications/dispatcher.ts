@@ -55,55 +55,89 @@ type RowOutcome = "sent" | "failed" | "parked" | "superseded";
  */
 async function claimAndDispatchOne(): Promise<RowOutcome | null> {
   return withTransaction(async (client) => {
-    const { rows } = await client.query(
-      `SELECT id, user_id, category, channel, payload, attempts, created_at
+    // Account removal locks the user row before deleting its outbox rows. Do
+    // the same first here; claiming an outbox row and then waiting for the
+    // user lock would deadlock against removal (outbox -> user vs user ->
+    // outbox). The candidate read is deliberately unlocked, and the row is
+    // claimed only after the user lock is held.
+    const { rows: candidates } = await client.query(
+      `SELECT id, user_id
        FROM notification_outbox
        WHERE status = 'queued' AND next_attempt_at <= now()
        ORDER BY id
-       FOR UPDATE SKIP LOCKED
-       LIMIT 1`,
+       LIMIT 100`,
     );
-    const row = rows[0] as OutboxRow | undefined;
-    if (!row) return null;
-
-    try {
-      await dispatchChannel(client, row);
-      await client.query(
-        `UPDATE notification_outbox SET status = 'sent', sent_at = now() WHERE id = $1`,
-        [row.id],
+    for (const candidate of candidates as Array<{ id: number; user_id: number }>) {
+      // H54: lock the user before the outbox row. Removal takes the same
+      // user-first order, while SKIP LOCKED lets concurrent drains move on
+      // to a different person instead of selecting the same candidate and
+      // stopping after the first worker commits it.
+      const lockedUser = await client.query<{ id: number; account_state: string }>(
+        `SELECT id, account_state FROM users WHERE id = $1 FOR UPDATE SKIP LOCKED`,
+        [candidate.user_id],
       );
-      return "sent";
-    } catch (err) {
-      if (err instanceof SupersededDispatchError) {
+      if (!lockedUser.rows[0]) continue;
+
+      const { rows } = await client.query(
+        `SELECT id, user_id, category, channel, payload, attempts, created_at
+           FROM notification_outbox
+          WHERE id = $1 AND status = 'queued' AND next_attempt_at <= now()
+          FOR UPDATE SKIP LOCKED`,
+        [candidate.id],
+      );
+      const row = rows[0] as OutboxRow | undefined;
+      if (!row) continue;
+      if (lockedUser.rows[0].account_state !== "active") {
         await client.query(
           `UPDATE notification_outbox
-           SET status = 'superseded', attempts = $2, last_error = $3
-           WHERE id = $1`,
-          [row.id, row.attempts + 1, err.message],
+              SET status = 'superseded', attempts = attempts + 1,
+                  last_error = 'Account closed before notification delivery'
+            WHERE id = $1`,
+          [row.id],
         );
         return "superseded";
       }
-      const message = err instanceof Error ? err.message : String(err);
-      const attempts = row.attempts + 1;
-      const permanent = err instanceof PermanentDispatchError;
-      if (permanent || attempts >= MAX_ATTEMPTS) {
+
+      try {
+        await dispatchChannel(client, row);
+        await client.query(
+          `UPDATE notification_outbox SET status = 'sent', sent_at = now() WHERE id = $1`,
+          [row.id],
+        );
+        return "sent";
+      } catch (err) {
+        if (err instanceof SupersededDispatchError) {
+          await client.query(
+            `UPDATE notification_outbox
+             SET status = 'superseded', attempts = $2, last_error = $3
+             WHERE id = $1`,
+            [row.id, row.attempts + 1, err.message],
+          );
+          return "superseded";
+        }
+        const message = err instanceof Error ? err.message : String(err);
+        const attempts = row.attempts + 1;
+        const permanent = err instanceof PermanentDispatchError;
+        if (permanent || attempts >= MAX_ATTEMPTS) {
+          await client.query(
+            `UPDATE notification_outbox
+             SET status = 'failed', attempts = $2, last_error = $3
+             WHERE id = $1`,
+            [row.id, attempts, message],
+          );
+          return "parked";
+        }
+        const delayMs = backoffDelayMs(attempts);
         await client.query(
           `UPDATE notification_outbox
-           SET status = 'failed', attempts = $2, last_error = $3
+           SET attempts = $2, last_error = $3, next_attempt_at = now() + make_interval(secs => $4)
            WHERE id = $1`,
-          [row.id, attempts, message],
+          [row.id, attempts, message, delayMs / 1000],
         );
-        return "parked";
+        return "failed";
       }
-      const delayMs = backoffDelayMs(attempts);
-      await client.query(
-        `UPDATE notification_outbox
-         SET attempts = $2, last_error = $3, next_attempt_at = now() + make_interval(secs => $4)
-         WHERE id = $1`,
-        [row.id, attempts, message, delayMs / 1000],
-      );
-      return "failed";
     }
+    return null;
   });
 }
 

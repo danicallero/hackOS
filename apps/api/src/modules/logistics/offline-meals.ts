@@ -6,6 +6,7 @@ import { AppError, BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { broadcast } from "../../lib/sse.js";
 import { activityScan } from "./activities.js";
+import { resolveByBadge } from "./badge.js";
 
 const QUEUE_NAME = "logistics.meal-scans";
 
@@ -33,6 +34,20 @@ export async function enqueueMealScanBatch(
   }
 
   const batch = await withTransaction(async (client) => {
+    // H54: validate and share-lock every badge before persisting the offline
+    // inbox row. Removal takes the same user row lock, so a stale device
+    // cannot create a new identifying batch item after closure begins.
+    for (const badgeId of [...new Set(input.scans.map((scan) => scan.badgeId))].sort()) {
+      const userId = await resolveByBadge(client, badgeId);
+      const owner = await client.query(
+        `SELECT id FROM users
+          WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+          FOR SHARE`,
+        [userId],
+      );
+      if (!owner.rows[0]) throw new NotFoundError("Badge not recognized");
+    }
+
     const b = await client.query(
       `INSERT INTO meal_scan_batches (activity_id, device_id, submitted_by)
        VALUES ($1, $2, $3)
@@ -114,28 +129,53 @@ export async function processMealScanBatch(job: Job<MealScanJob>) {
     scanned_at: Date | null;
   }>) {
     try {
-      const result = await activityScan(Number(batch.rows[0].submitted_by), row.activity_id, {
-        badgeId: row.badge_id,
-        allowRepeat: row.allow_repeat,
-        scannedAt: row.scanned_at ?? undefined,
-        sourceDeviceId: row.device_id,
-        sourceScanId: row.client_scan_id,
-      });
+      const result = await activityScan(
+        batch.rows[0].submitted_by as number | null,
+        row.activity_id,
+        {
+          badgeId: row.badge_id,
+          allowRepeat: row.allow_repeat,
+          scannedAt: row.scanned_at ?? undefined,
+          sourceDeviceId: row.device_id,
+          sourceScanId: row.client_scan_id,
+        },
+      );
+      // The response card is useful to the live scanner but is not an audit
+      // field. Storing it here would retain the participant's name and
+      // dietary information in the offline inbox after processing.
+      const storedResult = {
+        registered: result.body.registered,
+        firstTime: result.body.firstTime,
+        repeat: result.body.repeat,
+        timesEaten: result.body.timesEaten,
+        ...(result.body.message ? { message: result.body.message } : {}),
+      };
       await pool.query(
         `UPDATE meal_scan_batch_items
-            SET status = 'processed', result = $2::jsonb, processed_at = now()
+            SET status = 'processed', badge_id = NULL, result = $2::jsonb, processed_at = now()
           WHERE id = $1`,
-        [row.id, JSON.stringify(result.body)],
+        [row.id, JSON.stringify(storedResult)],
       );
       processed += 1;
     } catch (err) {
+      // A stale offline badge must not remain in the central inbox after the
+      // account was closed. There is no audit value in keeping an unprocessed
+      // raw badge identifier once it can no longer resolve to a participant.
+      if (
+        err instanceof AppError &&
+        ["badge_revoked", "badge_unknown", "not_found"].includes(err.code)
+      ) {
+        await pool.query(`DELETE FROM meal_scan_batch_items WHERE id = $1`, [row.id]);
+        failed += 1;
+        continue;
+      }
       const error =
         err instanceof AppError
           ? { code: err.code, message: err.message, details: err.details ?? null }
           : { code: "internal", message: "Meal scan processing failed" };
       await pool.query(
         `UPDATE meal_scan_batch_items
-            SET status = 'failed', error = $2::jsonb, processed_at = now()
+            SET status = 'failed', badge_id = NULL, error = $2::jsonb, processed_at = now()
           WHERE id = $1`,
         [row.id, JSON.stringify(error)],
       );

@@ -65,7 +65,8 @@ export function registerMeRoutes(app: FastifyInstance): void {
       const enriched = await enrichTemplate({ ask_shirt_size, ask_food_intolerances }, template);
       const { rows: userRows } = await pool.query(
         `SELECT shirt_size, food_intolerances, food_intolerance_notes, dietary_data_state
-         FROM users WHERE id = $1`,
+         FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
         [req.userId],
       );
       return {

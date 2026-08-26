@@ -361,9 +361,11 @@ interface UserComms {
 }
 
 async function loadUserComms(client: pg.PoolClient, userId: number): Promise<UserComms> {
-  const { rows } = await client.query(`SELECT email, name, language FROM users WHERE id = $1`, [
-    userId,
-  ]);
+  const { rows } = await client.query(
+    `SELECT email, name, language FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+    [userId],
+  );
   if (!rows[0]) throw new NotFoundError("User not found");
   return rows[0];
 }
@@ -449,7 +451,9 @@ export async function submitResponse(
     const app = await requireApplication(client, applicationId);
 
     const { rows: userRows } = await client.query(
-      `SELECT email_verified, language FROM users WHERE id = $1 FOR UPDATE`,
+      `SELECT email_verified, language FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
       [userId],
     );
     if (!userRows[0]) throw new NotFoundError("User not found");
@@ -492,7 +496,8 @@ export async function submitResponse(
     let foodNotes: string | null;
     if (invited && input.food_intolerances.length === 0 && !merged.food_intolerances) {
       const { rows: userFood } = await client.query(
-        `SELECT food_intolerances, food_intolerance_notes FROM users WHERE id = $1`,
+        `SELECT food_intolerances, food_intolerance_notes FROM users
+          WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
         [userId],
       );
       foodIntolerances = userFood[0]?.food_intolerances ?? [];
@@ -1168,6 +1173,7 @@ async function loadDecisionPoolRows(
      JOIN users u ON u.id = r.user_id
      LEFT JOIN applicant_reviews ar ON ar.response_id = r.id
      WHERE r.application_id = $1 AND r.status = ANY($2)
+       AND u.account_state = 'active' AND u.anonymized_at IS NULL
      GROUP BY r.id, u.name, u.email
      ORDER BY r.id`,
     [applicationId, statuses],
@@ -1420,7 +1426,7 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
      FROM application_responses r
      JOIN users u ON u.id = r.user_id
      JOIN applications a ON a.id = r.application_id
-     WHERE r.id = $1`,
+     WHERE r.id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
     [responseId],
   );
   if (!rows[0]) throw new NotFoundError("Response not found");
@@ -1665,9 +1671,11 @@ export async function confirmByToken(token: string): Promise<EmailConfirmResult>
     const resp = await lockVerifiedResponseByToken(client, token, "confirmation");
     const result = await doConfirm(client, resp, "email_link", resp.user_id);
     const grant = await issueWalletAccessToken(client, resp.user_id, "ticket");
-    const { rows: userRows } = await client.query(`SELECT email FROM users WHERE id = $1`, [
-      resp.user_id,
-    ]);
+    const { rows: userRows } = await client.query(
+      `SELECT email FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+      [resp.user_id],
+    );
     return {
       ...result,
       walletToken: grant.token,

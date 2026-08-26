@@ -20,7 +20,8 @@ export interface PersonCard {
 export async function loadPersonCard(db: Queryable, userId: number): Promise<PersonCard> {
   const { rows } = await db.query(
     `SELECT id, name, surname, food_intolerances, food_intolerance_notes, notes
-       FROM users WHERE id = $1`,
+       FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
     [userId],
   );
   const u = rows[0];

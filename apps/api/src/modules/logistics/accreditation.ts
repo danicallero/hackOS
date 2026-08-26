@@ -43,7 +43,8 @@ export async function lookupByUserId(userId: number) {
   // size on top of the shared scanner card.
   const u = await pool.query(
     `SELECT badge_id, email, dni, shirt_size, secondary_email, secondary_email_verified_at
-       FROM users WHERE id = $1`,
+       FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
     [userId],
   );
   const row = u.rows[0] ?? {};
@@ -121,7 +122,10 @@ export async function checkInUser(
 ) {
   const result = await withTransaction(async (client) => {
     const u = await client.query(
-      `SELECT id, badge_id, name, surname FROM users WHERE id = $1 FOR UPDATE`,
+      `SELECT id, badge_id, name, surname
+         FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
       [input.userId],
     );
     const user = u.rows[0];
@@ -275,15 +279,20 @@ export async function rotateBadge(
   const result = await withTransaction(async (client) => {
     let userId = input.userId ?? null;
     if (userId == null) {
-      const r = await client.query(`SELECT id FROM users WHERE badge_id = $1`, [
-        input.currentBadgeId,
-      ]);
+      const r = await client.query(
+        `SELECT id FROM users
+          WHERE badge_id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+        [input.currentBadgeId],
+      );
       if (!r.rows[0]) throw new NotFoundError("No user holds that badge");
       userId = r.rows[0].id as number;
     }
 
     const u = await client.query(
-      `SELECT id, badge_id, badge_id_history FROM users WHERE id = $1 FOR UPDATE`,
+      `SELECT id, badge_id, badge_id_history
+         FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
       [userId],
     );
     if (!u.rows[0]) throw new NotFoundError("User not found");
@@ -365,7 +374,10 @@ export async function removeBadge(actorId: number, input: { userId: number; reas
   let voidedPassIds: number[] = [];
   const result = await withTransaction(async (client) => {
     const found = await client.query(
-      `SELECT badge_id, badge_id_history FROM users WHERE id = $1 FOR UPDATE`,
+      `SELECT badge_id, badge_id_history
+         FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
       [input.userId],
     );
     if (!found.rows[0]) throw new NotFoundError("User not found");

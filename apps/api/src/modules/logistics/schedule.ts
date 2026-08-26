@@ -205,9 +205,10 @@ async function loadOwnersByScheduleId(ids: number[]): Promise<Map<number, Schedu
   const { rows: ownerRows } = await pool.query(
     `SELECT so.id, so.schedule_id, so.user_id, u.name, u.surname, u.email,
             so.free_text_name, so.assigned_at
-       FROM schedule_owners so
+      FROM schedule_owners so
        LEFT JOIN users u ON u.id = so.user_id
-      WHERE so.schedule_id = ANY($1::int[])`,
+      WHERE so.schedule_id = ANY($1::int[])
+        AND (so.user_id IS NULL OR (u.account_state = 'active' AND u.anonymized_at IS NULL))`,
     [ids],
   );
   for (const row of ownerRows as Record<string, unknown>[]) {
@@ -721,7 +722,7 @@ export async function listScheduleOwnerCandidates(
   const { rows } = await pool.query(
     `SELECT id, email, name, surname
        FROM users
-      WHERE anonymized_at IS NULL
+      WHERE account_state = 'active' AND anonymized_at IS NULL
         AND (email ILIKE $1 OR name ILIKE $1 OR surname ILIKE $1)
       ORDER BY name ASC NULLS LAST, surname ASC NULLS LAST, email ASC
       LIMIT $2`,
@@ -734,9 +735,10 @@ export async function listScheduleOwners(scheduleId: number): Promise<ScheduleOw
   const { rows } = await pool.query(
     `SELECT so.id, so.schedule_id, so.user_id, u.name, u.surname, u.email,
             so.free_text_name, so.assigned_at
-       FROM schedule_owners so
+      FROM schedule_owners so
        LEFT JOIN users u ON u.id = so.user_id
       WHERE so.schedule_id = $1
+        AND (so.user_id IS NULL OR (u.account_state = 'active' AND u.anonymized_at IS NULL))
       ORDER BY COALESCE(u.name, so.free_text_name) NULLS LAST, u.email`,
     [scheduleId],
   );
@@ -761,7 +763,10 @@ export async function addScheduleOwner(
 
   if ("userId" in input) {
     const { userId } = input;
-    const { rows: userRows } = await pool.query(`SELECT id FROM users WHERE id = $1`, [userId]);
+    const { rows: userRows } = await pool.query(
+      `SELECT id FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+      [userId],
+    );
     if (!userRows[0]) throw new NotFoundError("User not found", { userId });
 
     const { rows: existing } = await pool.query(
@@ -776,6 +781,13 @@ export async function addScheduleOwner(
     }
 
     return withTransaction(async (client) => {
+      const { rows: activeUserRows } = await client.query(
+        `SELECT id FROM users
+          WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+          FOR SHARE`,
+        [userId],
+      );
+      if (!activeUserRows[0]) throw new NotFoundError("User not found", { userId });
       const { rows } = await client.query(
         `INSERT INTO schedule_owners (schedule_id, user_id, assigned_by)
          VALUES ($1, $2, $3)
@@ -783,7 +795,8 @@ export async function addScheduleOwner(
         [scheduleId, userId, actorId],
       );
       const { rows: userRow } = await client.query(
-        `SELECT name, surname, email FROM users WHERE id = $1`,
+        `SELECT name, surname, email FROM users
+          WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
         [userId],
       );
       const owner = serializeOwner({ ...rows[0], ...userRow[0] });

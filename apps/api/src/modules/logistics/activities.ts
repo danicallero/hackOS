@@ -37,7 +37,7 @@ interface ScanResult {
  * scanners so two simultaneous first-time scans produce exactly one row.
  */
 export async function activityScan(
-  actorId: number,
+  actorId: number | null,
   activityId: number,
   input: {
     badgeId: string;
@@ -64,6 +64,17 @@ export async function activityScan(
   const result = await withTransaction(async (client) => {
     // Serialize concurrent scans of the same person+activity (H25 concurrency).
     await client.query(`SELECT pg_advisory_xact_lock($1, $2)`, [userId, activityId]);
+
+    // Serialize with account removal. The badge lookup happened before the
+    // transaction, so the row lock/state check is the authoritative decision
+    // for a stale or offline scan that races anonymization.
+    const activeUser = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!activeUser.rows[0]) throw new NotFoundError("Badge not recognized");
 
     const card = await loadPersonCard(client, userId);
 

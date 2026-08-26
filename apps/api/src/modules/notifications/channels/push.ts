@@ -43,12 +43,19 @@ export async function dispatchPush(
   category?: string,
 ): Promise<void> {
   const { rows: tokenRows } = await db.query(
-    `SELECT token, platform FROM push_tokens WHERE user_id = $1`,
+    `SELECT pt.token, pt.platform
+       FROM push_tokens pt
+       JOIN users u ON u.id = pt.user_id
+      WHERE pt.user_id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
     [userId],
   );
   if (tokenRows.length === 0) return;
 
-  const { rows: userRows } = await db.query(`SELECT language FROM users WHERE id = $1`, [userId]);
+  const { rows: userRows } = await db.query(
+    `SELECT language FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+    [userId],
+  );
   const language = normalizeLanguage((userRows[0] as { language?: string } | undefined)?.language);
   const rendered = renderPushTemplate(payload, language);
 

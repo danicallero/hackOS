@@ -250,6 +250,7 @@ export async function listAttemptReviewVersions(entryId: number) {
     `SELECT v.*, u.name, u.surname
        FROM attempt_review_versions v
        JOIN users u ON u.id = v.author_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
       WHERE v.attempt_id = $1
       ORDER BY v.created_at ASC`,
     [entryId],
@@ -300,6 +301,7 @@ export async function listActiveJudgingSessions(entryId: number) {
     `SELECT js.*, u.name, u.surname
        FROM judging_session js
        JOIN users u ON u.id = js.judge_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
       WHERE js.queue_entry_id = $1 AND js.ended_at IS NULL
       ORDER BY js.started_at ASC`,
     [entryId],

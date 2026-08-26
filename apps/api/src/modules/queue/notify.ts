@@ -35,9 +35,12 @@ async function loadNotifyContext(
   const challengeName: string = ctxRows[0]?.challenge_name ?? "";
   const teamName: string = ctxRows[0]?.team_name ?? "";
 
-  const { rows: userRows } = await client.query(`SELECT id, name FROM users WHERE id = ANY($1)`, [
-    params.memberIds,
-  ]);
+  const { rows: userRows } = await client.query(
+    `SELECT id, name FROM users
+      WHERE id = ANY($1)
+        AND account_state = 'active' AND anonymized_at IS NULL`,
+    [params.memberIds],
+  );
   const nameById = new Map<number, string | null>(
     userRows.map((u: { id: number; name: string | null }) => [u.id, u.name]),
   );
@@ -109,9 +112,11 @@ export async function notifyTeamCalled(
   // operators with a backgrounded app still get a device notification the
   // moment a team is called, not just the live SSE echo above.
   const { rows: staffRows } = await client.query(
-    `SELECT DISTINCT user_id
-       FROM notification_preferences
-      WHERE category = $1 AND channel = 'push' AND enabled = true`,
+    `SELECT DISTINCT np.user_id
+       FROM notification_preferences np
+       JOIN users u ON u.id = np.user_id
+      WHERE np.category = $1 AND np.channel = 'push' AND np.enabled = true
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
     [QUEUE_STAFF_CATEGORY],
   );
   for (const row of staffRows as { user_id: number }[]) {

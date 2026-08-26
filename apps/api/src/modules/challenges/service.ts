@@ -552,6 +552,7 @@ export async function listVersions(challengeId: number) {
     `SELECT v.id, v.editor_id, v.snapshot, v.created_at, u.name, u.surname
        FROM challenge_versions v
        LEFT JOIN users u ON u.id = v.editor_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
       WHERE v.challenge_id = $1
       ORDER BY v.created_at DESC, v.id DESC`,
     [challengeId],

@@ -35,6 +35,11 @@ export async function resolveRepositoryAccessScope(
 ): Promise<RepositoryAccessScope> {
   const userId = request.userId;
   if (userId == null) throw new UnauthorizedError();
+  const { rows: activeRows } = await pool.query(
+    `SELECT 1 FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+    [userId],
+  );
+  if (!activeRows[0]) throw new UnauthorizedError("This account is closed or being removed");
   if (await userHasCapability(userId, CAPABILITIES.PROJECTS_READ, request)) {
     return { fullAccess: true, challengeIds: [] };
   }

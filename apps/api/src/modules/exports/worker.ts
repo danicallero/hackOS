@@ -3,7 +3,7 @@ import { withTransaction } from "../../db/pool.js";
 import { invalidateCapabilities } from "../../lib/capabilities.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { putObject } from "../../lib/storage.js";
-import { anonymizeUser } from "../identity/anonymize.js";
+import { runAccountRemoval } from "../identity/removal.js";
 import { buildExportBundle } from "./bundle.js";
 import { claimForProcessing, markCompleted, markFailed } from "./requests.service.js";
 
@@ -33,20 +33,33 @@ export async function processDataSubjectRequest(requestId: number): Promise<void
   if (!claimed) return; // already processed/claimed — safe on BullMQ redelivery
 
   try {
+    if (claimed.subject_user_id == null) {
+      if (claimed.type === "export") {
+        await markFailed(requestId, "The account no longer exists");
+      } else {
+        await markCompleted(requestId);
+      }
+      return;
+    }
     if (claimed.type === "export") {
-      const bundle = await buildExportBundle(claimed.subject_user_id);
       const key = `exports/${requestId}/user-${claimed.subject_user_id}-export.json`;
-      await putObject(key, Buffer.from(JSON.stringify(bundle, null, 2)), "application/json");
+      // H54: hold the active-user share lock for the complete snapshot and
+      // upload. Removal takes the same user lock before changing state.
+      await withTransaction(async (client) => {
+        const bundle = await buildExportBundle(claimed.subject_user_id as number, client);
+        await putObject(key, Buffer.from(JSON.stringify(bundle, null, 2)), "application/json");
+      });
       await markCompleted(requestId, key);
     } else {
-      await withTransaction((client) =>
-        anonymizeUser(client, {
-          targetId: claimed.subject_user_id,
-          actorId: claimed.requested_by,
-          source: "admin",
-          reason: claimed.reason ?? undefined,
-        }),
-      );
+      await runAccountRemoval({
+        targetId: claimed.subject_user_id,
+        actorId: claimed.requested_by,
+        source: "admin",
+        // H54: the same server-side boundary applies to DSRs as to the
+        // in-app action. A participant with no operational history is fully
+        // deleted; only an accredited participant is anonymized.
+        reason: claimed.reason ?? undefined,
+      });
       await invalidateCapabilities(claimed.subject_user_id);
       await markCompleted(requestId);
     }

@@ -33,6 +33,7 @@ const QUEUE_ENTRY_SELECT = `qe.*, r.name AS repo_name, r.description AS repo_des
             FROM devpost_participants dp
             LEFT JOIN users u ON u.id = dp.user_id
            WHERE dp.repo_id = qe.repo_id
+             AND (u.id IS NULL OR (u.account_state = 'active' AND u.anonymized_at IS NULL))
           UNION ALL
           -- A submission without a Devpost identity is an operator-added row.
           SELECT jsonb_build_object(
@@ -43,6 +44,7 @@ const QUEUE_ENTRY_SELECT = `qe.*, r.name AS repo_name, r.description AS repo_des
             JOIN users u ON u.id = s.user_id
            WHERE s.repo_id = qe.repo_id
              AND s.status = 'active'
+             AND u.account_state = 'active' AND u.anonymized_at IS NULL
              AND NOT EXISTS (
                SELECT 1 FROM devpost_participants dp
                 WHERE dp.repo_id = s.repo_id AND dp.user_id = s.user_id
@@ -454,6 +456,7 @@ export async function roomAssignments(roomId: number) {
        JOIN queue_groups qg ON qg.id = rqg.queue_group_id
        JOIN enterprise_judges ej ON ej.enterprise_id = qg.enterprise_id
        JOIN users u ON u.id = ej.user_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
        LEFT JOIN users a ON a.id = ej.added_by
       WHERE rqg.room_id = $1
       ORDER BY u.name ASC NULLS LAST, u.surname ASC NULLS LAST, u.email ASC`,
@@ -566,16 +569,21 @@ export async function hasMyQueueItems(userId: number): Promise<boolean> {
        SELECT 1 FROM queue_entries qe
         WHERE qe.status NOT IN ('cancelled', 'disqualified')
           AND qe.repo_id IN (
-            SELECT repo_id FROM submissions WHERE user_id = $1 AND status = 'active'
+            SELECT s.repo_id FROM submissions s JOIN users su ON su.id = s.user_id
+             WHERE s.user_id = $1 AND s.status = 'active'
+               AND su.account_state = 'active' AND su.anonymized_at IS NULL
             UNION
-            SELECT repo_id FROM devpost_participants WHERE user_id = $1
+            SELECT dp.repo_id FROM devpost_participants dp JOIN users du ON du.id = dp.user_id
+             WHERE dp.user_id = $1
+               AND du.account_state = 'active' AND du.anonymized_at IS NULL
             UNION
             SELECT dp.repo_id
               FROM devpost_participants dp
               JOIN users u ON u.id = $1
-             WHERE lower(dp.email) = lower(u.email)
+             WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
+               AND (lower(dp.email) = lower(u.email)
                 OR (u.secondary_email_verified_at IS NOT NULL
-                    AND lower(dp.email) = lower(u.secondary_email))
+                    AND lower(dp.email) = lower(u.secondary_email)))
           )
      ) AS exists`,
     [userId],
@@ -598,16 +606,21 @@ export async function myQueueStatus(userId: number) {
   // queue while preserving the historical rank of sibling entries.
   const { rows: entries } = await pool.query(
     `WITH my_repos AS (
-       SELECT repo_id FROM submissions WHERE user_id = $1 AND status = 'active'
+       SELECT s.repo_id FROM submissions s JOIN users su ON su.id = s.user_id
+        WHERE s.user_id = $1 AND s.status = 'active'
+          AND su.account_state = 'active' AND su.anonymized_at IS NULL
        UNION
-       SELECT repo_id FROM devpost_participants WHERE user_id = $1
+       SELECT dp.repo_id FROM devpost_participants dp JOIN users du ON du.id = dp.user_id
+        WHERE dp.user_id = $1
+          AND du.account_state = 'active' AND du.anonymized_at IS NULL
        UNION
        SELECT dp.repo_id
          FROM devpost_participants dp
          JOIN users u ON u.id = $1
-        WHERE lower(dp.email) = lower(u.email)
+        WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
+          AND (lower(dp.email) = lower(u.email)
            OR (u.secondary_email_verified_at IS NOT NULL
-               AND lower(dp.email) = lower(u.secondary_email))
+               AND lower(dp.email) = lower(u.secondary_email)))
      ), my_entries AS (
        SELECT qe.id, qe.challenge_id,
               COALESCE(qgc.queue_group_id, -qe.challenge_id) AS queue_key

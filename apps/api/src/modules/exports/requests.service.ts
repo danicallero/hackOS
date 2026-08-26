@@ -9,8 +9,8 @@ export type RequestStatus = "pending" | "processing" | "completed" | "failed";
 
 export interface DataSubjectRequestRow {
   id: number;
-  subject_user_id: number;
-  requested_by: number;
+  subject_user_id: number | null;
+  requested_by: number | null;
   type: RequestType;
   status: RequestStatus;
   reason: string | null;
@@ -133,7 +133,11 @@ async function finishRequest(
     const { rows } = await client.query(
       `UPDATE data_subject_requests
          SET status = $2, completed_at = now(),
-             storage_key = COALESCE($3, storage_key), error = $4
+             storage_key = CASE
+               WHEN subject_user_id IS NULL THEN NULL
+               ELSE COALESCE($3, storage_key)
+             END,
+             error = $4
        WHERE id = $1 RETURNING *`,
       [id, status, extra.storageKey ?? null, extra.error ?? null],
     );
@@ -174,6 +178,7 @@ export function serializeRequest(row: DataSubjectRequestRow) {
     requestedAt: row.requested_at.toISOString(),
     startedAt: row.started_at ? row.started_at.toISOString() : null,
     completedAt: row.completed_at ? row.completed_at.toISOString() : null,
-    downloadAvailable: row.type === "export" && row.status === "completed",
+    downloadAvailable:
+      row.type === "export" && row.status === "completed" && row.storage_key != null,
   };
 }

@@ -168,8 +168,9 @@ export async function buildImportPlan(
       `SELECT id, lower(email) AS email, name, surname,
               lower(secondary_email) AS secondary_email, secondary_email_verified_at
        FROM users
-       WHERE lower(email) = ANY($1::text[])
-          OR (secondary_email_verified_at IS NOT NULL AND lower(secondary_email) = ANY($1::text[]))`,
+       WHERE account_state = 'active' AND anonymized_at IS NULL
+         AND (lower(email) = ANY($1::text[])
+          OR (secondary_email_verified_at IS NOT NULL AND lower(secondary_email) = ANY($1::text[])))`,
       [distinctEmails],
     );
     for (const row of rows as Array<{

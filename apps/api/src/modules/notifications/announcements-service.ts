@@ -181,6 +181,8 @@ export async function getAnnouncementRecipients(
      FROM announcement_recipients ar
      JOIN users u ON u.id = ar.user_id
      WHERE ar.announcement_id = $1
+       AND u.account_state = 'active'
+       AND u.anonymized_at IS NULL
      ORDER BY u.id`,
     [announcementId],
   );
@@ -197,7 +199,7 @@ export async function listAnnouncementRecipientCandidates(
   const { rows } = await db.query(
     `SELECT id, email, name, surname
        FROM users
-      WHERE anonymized_at IS NULL
+      WHERE account_state = 'active' AND anonymized_at IS NULL
         AND (email ILIKE $1 OR name ILIKE $1 OR surname ILIKE $1)
       ORDER BY name ASC NULLS LAST, surname ASC NULLS LAST, email ASC
       LIMIT $2`,
@@ -370,14 +372,20 @@ async function resolveRecipients(
 ): Promise<Array<{ id: number; language: string | null }>> {
   const targeted = await getAnnouncementRecipientIds(db, announcement.id);
   if (targeted.length > 0) {
-    const { rows } = await db.query(`SELECT id, language FROM users WHERE id = ANY($1::int[])`, [
-      targeted,
-    ]);
+    const { rows } = await db.query(
+      `SELECT id, language FROM users
+        WHERE id = ANY($1::int[])
+          AND account_state = 'active' AND anonymized_at IS NULL`,
+      [targeted],
+    );
     return rows as Array<{ id: number; language: string | null }>;
   }
 
   if (announcement.audiences.length === 0) {
-    const { rows } = await db.query(`SELECT id, language FROM users`);
+    const { rows } = await db.query(
+      `SELECT id, language FROM users
+        WHERE account_state = 'active' AND anonymized_at IS NULL`,
+    );
     return rows as Array<{ id: number; language: string | null }>;
   }
 
@@ -418,9 +426,10 @@ async function resolveRecipients(
      LEFT JOIN attendee at ON at.user_id = u.id
      LEFT JOIN sponsor sp ON sp.user_id = u.id
      LEFT JOIN staff st ON st.user_id = u.id
-     WHERE at.type = ANY($1::text[])
+     WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
+       AND (at.type = ANY($1::text[])
         OR (sp.user_id IS NOT NULL AND ($1::text[] && ARRAY['sponsor', 'participant']::text[]))
-        OR (st.user_id IS NOT NULL AND 'staff' = ANY($1::text[]))`,
+        OR (st.user_id IS NOT NULL AND 'staff' = ANY($1::text[])))`,
     [announcement.audiences],
   );
   return rows as Array<{ id: number; language: string | null }>;

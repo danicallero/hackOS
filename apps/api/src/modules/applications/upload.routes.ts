@@ -81,6 +81,24 @@ export function registerUploadRoutes(app: FastifyInstance): void {
       const { applicationId, fieldKey } = req.params;
       const userId = req.userId as number;
 
+      // H54: keep every uploaded object reachable from an owning response.
+      // Without this check a caller could create an orphaned object under
+      // their userId before submitting a response, leaving account removal
+      // with no database path from which to discover and delete it.
+      const { rows: responseRows } = await pool.query(
+        `SELECT 1 FROM application_responses
+          WHERE user_id = $1 AND application_id = $2
+            AND EXISTS (
+              SELECT 1 FROM users
+               WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+            )
+          LIMIT 1`,
+        [userId, applicationId],
+      );
+      if (!responseRows[0]) {
+        throw new ForbiddenError("Create the application response before uploading a file");
+      }
+
       // Look up the application template to find the field definition
       const { rows: appRows } = await pool.query(
         `SELECT template, type FROM applications WHERE id = $1`,

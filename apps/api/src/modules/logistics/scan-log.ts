@@ -30,16 +30,19 @@ const SCAN_LOG_UNION = `
          u.name AS subject_name, u.surname AS subject_surname
     FROM check_in_logs cil JOIN users u ON u.id = cil.user_id
    WHERE cil.staff_id = $1
+     AND u.account_state = 'active' AND u.anonymized_at IS NULL
   UNION ALL
   SELECT tl.id, 'door', tl.scanned_at, tl.kind, u.id, u.name, u.surname
     FROM time_logs tl JOIN users u ON u.id = tl.user_id
    WHERE tl.scanned_by = $1
+     AND u.account_state = 'active' AND u.anonymized_at IS NULL
   UNION ALL
   SELECT al.id, 'activity', al.logged_at, a.name, u.id, u.name, u.surname
     FROM activity_logs al
     JOIN activities a ON a.id = al.activity_id
     JOIN users u ON u.id = al.user_id
    WHERE al.logged_by = $1
+     AND u.account_state = 'active' AND u.anonymized_at IS NULL
 `;
 
 /** Paginated scan-log feed for one staff member, most recent first. */
@@ -79,9 +82,15 @@ export interface StaffScanCounts {
 export async function staffScanCounts(staffId: number): Promise<StaffScanCounts> {
   const { rows } = await pool.query(
     `SELECT
-       (SELECT count(*)::int FROM check_in_logs WHERE staff_id = $1) AS accreditation_count,
-       (SELECT count(*)::int FROM time_logs WHERE scanned_by = $1) AS presence_count,
-       (SELECT count(*)::int FROM activity_logs WHERE logged_by = $1) AS activity_count`,
+       (SELECT count(*)::int
+          FROM check_in_logs cil JOIN users u ON u.id = cil.user_id
+         WHERE cil.staff_id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL) AS accreditation_count,
+       (SELECT count(*)::int
+          FROM time_logs tl JOIN users u ON u.id = tl.user_id
+         WHERE tl.scanned_by = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL) AS presence_count,
+       (SELECT count(*)::int
+          FROM activity_logs al JOIN users u ON u.id = al.user_id
+         WHERE al.logged_by = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL) AS activity_count`,
     [staffId],
   );
   return {
@@ -109,11 +118,18 @@ export async function staffScanRanking(): Promise<StaffScanRankingRow[]> {
        SELECT DISTINCT logged_by FROM activity_logs
      ), counted AS (
        SELECT u.id AS staff_id, u.name, u.surname,
-              (SELECT count(*)::int FROM check_in_logs WHERE staff_id = u.id) AS accreditation_count,
-              (SELECT count(*)::int FROM time_logs WHERE scanned_by = u.id) AS presence_count,
-              (SELECT count(*)::int FROM activity_logs WHERE logged_by = u.id) AS activity_count
+              (SELECT count(*)::int
+                 FROM check_in_logs cil JOIN users subject ON subject.id = cil.user_id
+                WHERE cil.staff_id = u.id AND subject.account_state = 'active' AND subject.anonymized_at IS NULL) AS accreditation_count,
+              (SELECT count(*)::int
+                 FROM time_logs tl JOIN users subject ON subject.id = tl.user_id
+                WHERE tl.scanned_by = u.id AND subject.account_state = 'active' AND subject.anonymized_at IS NULL) AS presence_count,
+              (SELECT count(*)::int
+                 FROM activity_logs al JOIN users subject ON subject.id = al.user_id
+                WHERE al.logged_by = u.id AND subject.account_state = 'active' AND subject.anonymized_at IS NULL) AS activity_count
          FROM staff_ids si
          JOIN users u ON u.id = si.id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
      )
      SELECT *
        FROM counted

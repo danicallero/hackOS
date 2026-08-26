@@ -79,7 +79,7 @@ async function passContent(
     `SELECT u.name, u.surname, u.badge_id, t.token
        FROM users u
        LEFT JOIN tickets t ON t.user_id = u.id
-      WHERE u.id = $1`,
+      WHERE u.id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
     [userId],
   );
   const u = rows[0];

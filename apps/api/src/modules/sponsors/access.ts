@@ -44,6 +44,11 @@ export async function assertCanEditEnterprise(
   enterpriseId: number,
 ): Promise<EnterpriseAccess> {
   if (userId == null) throw new UnauthorizedError();
+  const { rowCount: activeCount } = await pool.query(
+    `SELECT 1 FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+    [userId],
+  );
+  if (!activeCount) throw new UnauthorizedError("This account is closed or being removed");
   const { rowCount } = await pool.query(`SELECT 1 FROM enterprises WHERE id = $1`, [enterpriseId]);
   if (rowCount === 0) throw new NotFoundError("Enterprise not found", { enterpriseId });
 
@@ -82,6 +87,11 @@ export async function assertCanManageEnterpriseJudging(
   enterpriseId: number,
 ): Promise<void> {
   if (request.userId == null) throw new UnauthorizedError();
+  const { rowCount: activeCount } = await pool.query(
+    `SELECT 1 FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+    [request.userId],
+  );
+  if (!activeCount) throw new UnauthorizedError("This account is closed or being removed");
   if (await userHasCapability(request.userId, CAPABILITIES.QUEUE_ADMIN, request)) return;
   if (await userHasCapability(request.userId, CAPABILITIES.SPONSORS_MANAGE, request)) return;
   if (await ownsEnterprise(request.userId, enterpriseId)) return;
@@ -126,6 +136,11 @@ export function enterpriseAccessFor(request: FastifyRequest): EnterpriseAccess {
  */
 export const requireSponsorPortalAccess: preHandlerHookHandler = async (request) => {
   if (request.userId == null) throw new UnauthorizedError();
+  const { rowCount: activeCount } = await pool.query(
+    `SELECT 1 FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+    [request.userId],
+  );
+  if (!activeCount) throw new UnauthorizedError("This account is closed or being removed");
   if (await userHasCapability(request.userId, CAPABILITIES.SPONSORS_MANAGE)) return;
   const { rowCount } = await pool.query(`SELECT 1 FROM sponsors WHERE user_id = $1 LIMIT 1`, [
     request.userId,

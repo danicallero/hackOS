@@ -81,18 +81,31 @@ export const requireAppleWebServiceToken: preHandlerHookHandler = async (req) =>
   const token = appleAuthToken(req.headers.authorization);
   const { rowCount } = await pool.query(
     `SELECT 1 FROM wallet_passes
-      WHERE platform = 'apple' AND authentication_token = $1`,
+      WHERE platform = 'apple' AND authentication_token = $1
+        AND EXISTS (SELECT 1 FROM users u WHERE u.id = wallet_passes.user_id
+          AND u.anonymized_at IS NULL
+          AND (u.account_state = 'active'
+            OR (u.account_state = 'removal_pending' AND wallet_passes.status = 'voided')))`,
     [token],
   );
   if (rowCount === 0) throw new UnauthorizedError();
 };
 
-async function requirePassBySerial(serialNumber: string, authorization?: string): Promise<PassRow> {
+async function requirePassBySerial(
+  serialNumber: string,
+  authorization?: string,
+  allowPendingVoid = false,
+): Promise<PassRow> {
   const token = appleAuthToken(authorization);
+  const statePredicate = allowPendingVoid
+    ? "u.anonymized_at IS NULL AND (u.account_state = 'active' OR (u.account_state = 'removal_pending' AND wallet_passes.status = 'voided'))"
+    : "u.account_state = 'active' AND u.anonymized_at IS NULL";
   const { rows } = await pool.query(
     `SELECT id, user_id, purpose, serial_number, authentication_token, status, update_tag
        FROM wallet_passes
-      WHERE platform = 'apple' AND serial_number = $1 AND authentication_token = $2`,
+      WHERE platform = 'apple' AND serial_number = $1 AND authentication_token = $2
+        AND EXISTS (SELECT 1 FROM users u WHERE u.id = wallet_passes.user_id
+          AND ${statePredicate})`,
     [serialNumber, token],
   );
   if (!rows[0]) throw new UnauthorizedError();
@@ -105,13 +118,17 @@ async function passPayload(pass: PassRow) {
        FROM users u
        LEFT JOIN tickets t ON t.user_id = u.id
        LEFT JOIN universities un ON un.id = u.university_id
-      WHERE u.id = $1`,
+      WHERE u.id = $1 AND u.anonymized_at IS NULL
+        AND u.account_state IN ('active', 'removal_pending')`,
     [pass.user_id],
   );
   const u = rows[0];
   if (!u) throw new NotFoundError("User not found");
-  if (pass.purpose === "ticket" && !u.token) throw new NotFoundError("Ticket not issued");
-  if (pass.purpose === "badge" && !u.badge_id) throw new BadRequestError("Badge not assigned");
+  const revoked = pass.status === "voided";
+  if (!revoked && pass.purpose === "ticket" && !u.token)
+    throw new NotFoundError("Ticket not issued");
+  if (!revoked && pass.purpose === "badge" && !u.badge_id)
+    throw new BadRequestError("Badge not assigned");
 
   const { rows: eventRows } = await pool.query(
     `SELECT name, tagline, timezone, event_starts_at, event_ends_at, hacking_starts_at,
@@ -138,18 +155,29 @@ async function passPayload(pass: PassRow) {
   const labels = resolvePassFieldLabels(event?.pass_field_labels);
   const visible = resolvePassFieldVisibility(event?.pass_field_visibility);
 
-  const { fullName, barcode } = resolvePassIdentity(u, pass.user_id, pass.purpose);
-  const role = ROLE_LABELS[await computeDerivedRole(pool, pass.user_id)];
+  // A pending account is allowed to fetch one already-voided pass only so
+  // Apple Wallet can receive its revocation update. That response must not
+  // be a last copy of the person's name, email, university, badge or ticket
+  // token. The database row is still present during the external-cleanup
+  // phase, so sanitize at the payload boundary as well as deleting it later.
+  const { fullName, barcode } = revoked
+    ? { fullName: "Pass revoked", barcode: "REVOKED" }
+    : resolvePassIdentity(u, pass.user_id, pass.purpose);
+  const role = revoked ? "Closed" : ROLE_LABELS[await computeDerivedRole(pool, pass.user_id)];
   // No primaryFields: the embedded strip image already carries "hackUDC"
   // branding text, and PassKit renders primaryFields overlaid on the strip —
   // putting the name there made it visually collide with the artwork.
   // Every auto-filled field is behind an admin show/hide toggle (H28).
-  const secondaryFields = [
-    ...(visible.participant ? [{ key: "name", label: labels.participant, value: fullName }] : []),
-    ...(visible.role ? [{ key: "role", label: labels.role, value: role }] : []),
-  ];
+  const secondaryFields = revoked
+    ? []
+    : [
+        ...(visible.participant
+          ? [{ key: "name", label: labels.participant, value: fullName }]
+          : []),
+        ...(visible.role ? [{ key: "role", label: labels.role, value: role }] : []),
+      ];
   const auxiliaryFields = [
-    ...(visible.passType
+    ...(!revoked && visible.passType
       ? [
           {
             key: "purpose",
@@ -158,10 +186,12 @@ async function passPayload(pass: PassRow) {
           },
         ]
       : []),
-    ...(visible.university && u.university
+    ...(!revoked && visible.university && u.university
       ? [{ key: "university", label: labels.university, value: u.university }]
       : []),
-    ...(visible.email && u.email ? [{ key: "email", label: labels.email, value: u.email }] : []),
+    ...(!revoked && visible.email && u.email
+      ? [{ key: "email", label: labels.email, value: u.email }]
+      : []),
   ];
   const backFields = [
     { key: "event", label: labels.event, value: eventName },
@@ -178,7 +208,7 @@ async function passPayload(pass: PassRow) {
   // time + date ("6 feb 2026" — month abbreviated in the holder's language).
   // Badges are not date-bound, so they say BADGE (the admin-customizable
   // badgeValue caption, uppercased) instead of a date.
-  const locale = PASS_LOCALES[u.language] ?? "en-GB";
+  const locale = revoked ? "en-GB" : (PASS_LOCALES[u.language] ?? "en-GB");
   // Composed by hand ("20 feb, 2026") instead of toLocaleDateString: es/gl
   // locale styles insert prepositions ("6 de feb. de 2026") that overflow the
   // header field — only the month abbreviation itself is localized.
@@ -291,7 +321,10 @@ export async function buildApplePass(
   }
   let pass: PassRow;
   if (lookup) {
-    pass = await requirePassBySerial(lookup.serialNumber, lookup.authorization);
+    // A pending account's already-voided pass must remain fetchable long
+    // enough for Wallet to receive the revocation update. It cannot be used
+    // to register a new device or obtain a fresh pass.
+    pass = await requirePassBySerial(lookup.serialNumber, lookup.authorization, true);
   } else {
     if (userId == null || purpose == null) throw new UnauthorizedError();
     pass = await ensurePassRecord(userId, purpose, "apple");
@@ -401,6 +434,16 @@ export async function registerAppleDevice(input: {
 }): Promise<boolean> {
   const pass = await requirePassBySerial(input.serialNumber, input.authorization);
   return withTransaction(async (client) => {
+    // Serialize registration with removal. The pre-handler/initial lookup is
+    // only credential validation; this lock is the authoritative state check
+    // immediately before creating a device row.
+    const active = await client.query(
+      `SELECT 1 FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [pass.user_id],
+    );
+    if (active.rowCount === 0) throw new UnauthorizedError();
     const r = await client.query(
       `INSERT INTO wallet_pass_devices (pass_id, device_library_identifier, push_token)
        VALUES ($1, $2, $3)
@@ -426,7 +469,7 @@ export async function unregisterAppleDevice(input: {
   serialNumber: string;
   authorization?: string;
 }): Promise<void> {
-  const pass = await requirePassBySerial(input.serialNumber, input.authorization);
+  const pass = await requirePassBySerial(input.serialNumber, input.authorization, true);
   await withTransaction(async (client) => {
     const r = await client.query(
       `DELETE FROM wallet_pass_devices

@@ -34,7 +34,9 @@ export async function runPresenceEventEndCloserOnce(): Promise<{ closed: number[
              FROM time_logs
             ORDER BY user_id, scanned_at DESC, id DESC
          ) last ON last.kind = 'in' AND last.scanned_at <= ec.event_ends_at
+         JOIN users u ON u.id = last.user_id
         WHERE ec.id = 1 AND ec.event_ends_at IS NOT NULL AND ec.event_ends_at <= now()
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
         RETURNING user_id, scanned_at`,
     );
     for (const row of rows as { user_id: number; scanned_at: Date }[]) {

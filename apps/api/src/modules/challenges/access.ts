@@ -68,6 +68,11 @@ export async function assertCanEditChallenge(
   challengeId: number,
 ): Promise<ChallengeAccess> {
   if (userId == null) throw new UnauthorizedError();
+  const { rowCount: activeCount } = await pool.query(
+    `SELECT 1 FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+    [userId],
+  );
+  if (!activeCount) throw new UnauthorizedError("This account is closed or being removed");
   await ensureExists(challengeId);
 
   if (await isChallengeAdmin(userId)) return "admin";
@@ -85,6 +90,11 @@ export async function assertCanViewPanel(
   challengeId: number,
 ): Promise<void> {
   if (userId == null) throw new UnauthorizedError();
+  const { rowCount: activeCount } = await pool.query(
+    `SELECT 1 FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+    [userId],
+  );
+  if (!activeCount) throw new UnauthorizedError("This account is closed or being removed");
   await ensureExists(challengeId);
   if (
     (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN)) ||
@@ -153,6 +163,11 @@ export function requireChallengeAccess(locator: ContextualResourceLocator): preH
 /** Directory access is limited to global admins, a sponsor relationship, or an assigned judge. */
 export const requireChallengeListAccess: preHandlerHookHandler = async (request) => {
   if (request.userId == null) throw new UnauthorizedError();
+  const { rowCount: activeCount } = await pool.query(
+    `SELECT 1 FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+    [request.userId],
+  );
+  if (!activeCount) throw new UnauthorizedError("This account is closed or being removed");
   if (await isChallengeAdmin(request.userId)) return;
   const relationship = await pool.query(
     `SELECT 1 FROM sponsors WHERE user_id = $1

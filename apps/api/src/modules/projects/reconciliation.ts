@@ -14,7 +14,9 @@ export async function reconcileDevpostParticipantsForUser(
     `SELECT lower(email) AS primary_email,
             CASE WHEN secondary_email_verified_at IS NOT NULL
                  THEN lower(secondary_email) END AS verified_secondary_email
-       FROM users WHERE id = $1`,
+       FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+      FOR SHARE`,
     [userId],
   );
   const identity = identityRows[0] as

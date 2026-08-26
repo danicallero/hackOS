@@ -61,7 +61,11 @@ export async function sendEmail(
   payload: EmailPayload,
   mail: MailConfig = mailConfigFromEnv(),
 ): Promise<void> {
-  const { rows } = await db.query(`SELECT email, language FROM users WHERE id = $1`, [userId]);
+  const { rows } = await db.query(
+    `SELECT email, language FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+    [userId],
+  );
   const user = rows[0] as { email: string; language: string } | undefined;
   if (!user) throw new Error(`sendEmail: user ${userId} not found`);
 
