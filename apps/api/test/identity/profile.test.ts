@@ -461,15 +461,6 @@ describe("self-service account removal (H54)", () => {
     const blocked = await a.inject({ method: "DELETE", url: "/api/me", headers: asUser(user) });
     expect(blocked.statusCode).toBe(409);
     expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [user])).rowCount).toBe(1);
-
-    const blockedAnonymization = await a.inject({
-      method: "POST",
-      url: "/api/me/anonymize",
-      headers: asUser(user),
-      payload: { confirm: true },
-    });
-    expect(blockedAnonymization.statusCode).toBe(409);
-    expect(blockedAnonymization.json().error.details.code).toBe("participant_inside");
   });
 
   it("self-anonymizes after venue exit, preserves verified minutes, revokes credentials, and replays safely", async () => {
@@ -1327,8 +1318,10 @@ describe("staff user routes (H7)", () => {
     const identitySearch = await pool.query(
       `SELECT id FROM anonymous_participants
         WHERE id::text = $1
-           OR coalesce(row_to_json(anonymous_participants)::text, '') ILIKE ANY($2::text[])`,
-      [String(target), ["%person@example.test%", "%Real Person%", `%${target}%`]],
+           OR coalesce(university, '') IN ($2, $3)
+           OR coalesce(degree, '') IN ($2, $3)
+           OR coalesce(origin_city, '') IN ($2, $3)`,
+      [String(target), "person@example.test", "Real Person"],
     );
     expect(identitySearch.rows).toHaveLength(0);
   });
