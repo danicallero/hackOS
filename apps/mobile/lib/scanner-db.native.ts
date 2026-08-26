@@ -1,4 +1,4 @@
-import { Paths } from "expo-file-system";
+import { File, Paths } from "expo-file-system";
 import * as SQLite from "expo-sqlite";
 import {
   decryptJson,
@@ -136,10 +136,10 @@ async function queueDb(ownerUserId?: number): Promise<SQLite.SQLiteDatabase> {
   }
   const database = await queueDatabase;
   if (ownerUserId !== undefined && legacyQueueMigration === null) {
-    legacyQueueMigration = migrateLegacyQueue(database, ownerUserId).catch((error) => {
-      // Keep the legacy file and allow the next authenticated call to retry;
-      // deleting it before every row is encrypted would silently lose the
-      // only copy of an offline operational mutation (H25, H54).
+    legacyQueueMigration = retireLegacyScannerDatabase().catch((error) => {
+      // Keep the migration retryable if the OS refuses to remove the legacy
+      // identity-bearing file. Until it succeeds, the current queue is not
+      // used, so no stale payload can be replayed or assigned to this owner.
       legacyQueueMigration = null;
       throw error;
     });
@@ -149,67 +149,53 @@ async function queueDb(ownerUserId?: number): Promise<SQLite.SQLiteDatabase> {
 }
 
 /**
- * One-time upgrade path for devices that synced before the roster/queue
- * split and per-user queue encryption. The old combined `hackos-scanner.db`
- * kept pending_scans as plaintext JSON with no owner column; any such rows
- * are claimed by the currently authenticated operator on the first owner-
- * scoped queue call, then the legacy file is deleted. The old schema had no
- * owner column, so this is the only safe recovery available to a device that
- * was operated by one staff account before H54's per-user queue split. If a
- * row cannot be parsed or re-encrypted, the legacy file is kept for retry.
- * Devices that never had the old file (fresh installs) hit this as a harmless
- * no-op.
+ * Retire the pre-H54 combined scanner database.
+ *
+ * That file contained an identity-bearing roster and plaintext pending scan
+ * payloads without an owner column. There is no trustworthy way to determine
+ * which staff account created an old row, so importing it into the current
+ * per-owner queue would be an attribution and privacy bug. The old filename
+ * is app-owned and is no longer read by any current scanner path; delete the
+ * database and all SQLite journal sidecars before the new queue is used.
+ *
+ * This is deliberately a breaking local migration: offline scans left only
+ * in the old file must be recorded again after the app upgrade. If the OS
+ * refuses deletion, reject queue initialization and retry on the next
+ * authenticated call rather than exposing or replaying the legacy data.
  */
-async function migrateLegacyQueue(
-  target: SQLite.SQLiteDatabase,
-  ownerUserId: number,
-): Promise<void> {
+async function retireLegacyScannerDatabase(): Promise<void> {
   let legacy: SQLite.SQLiteDatabase | null = null;
-  let migrated = false;
+  let openError: unknown = null;
   try {
     legacy = await SQLite.openDatabaseAsync("hackos-scanner.db");
-    const columns = await legacy.getAllAsync<{ name: string }>(`PRAGMA table_info(pending_scans)`);
-    const hasLegacyShape = columns.some((c) => c.name === "payload_json");
-    if (!hasLegacyShape) return;
-    const rows = await legacy.getAllAsync<{
-      id: string;
-      kind: PendingScan["kind"];
-      payload_json: string;
-      status: PendingScan["status"];
-      attempts: number;
-      last_error: string | null;
-      created_at: string;
-      acknowledged_at: string | null;
-      clock_corrected: number;
-    }>(`SELECT * FROM pending_scans`);
-    if (rows.length > 0) {
-      const key = await getQueueKey(ownerUserId);
-      for (const row of rows) {
-        const encrypted = await encryptJson(JSON.parse(row.payload_json), key);
-        await target.runAsync(
-          `INSERT OR IGNORE INTO pending_scans
-            (id, kind, created_by_user_id, encrypted_payload, status, attempts, last_error, created_at, acknowledged_at, clock_corrected)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          row.id,
-          row.kind,
-          ownerUserId,
-          encrypted,
-          row.status,
-          row.attempts,
-          row.last_error,
-          row.created_at,
-          row.acknowledged_at,
-          row.clock_corrected,
-        );
-      }
-    }
-    migrated = true;
+  } catch (error) {
+    // A corrupt legacy file still contains untrusted identity-bearing data;
+    // continue to the file retirement attempt and report the open failure if
+    // cleanup itself succeeds.
+    openError = error;
   } finally {
     if (legacy) {
       await legacy.closeAsync();
-      if (migrated) await SQLite.deleteDatabaseAsync("hackos-scanner.db");
     }
   }
+
+  const databaseDirectory = SQLite.defaultDatabaseDirectory as string;
+  const sidecars = ["hackos-scanner.db-wal", "hackos-scanner.db-shm", "hackos-scanner.db-journal"];
+  for (const filename of sidecars) {
+    const sidecar = new File(databaseDirectory, filename);
+    if (sidecar.exists) sidecar.delete();
+  }
+
+  const legacyFile = new File(databaseDirectory, "hackos-scanner.db");
+  if (legacyFile.exists) await SQLite.deleteDatabaseAsync("hackos-scanner.db");
+
+  if (
+    legacyFile.exists ||
+    sidecars.some((filename) => new File(databaseDirectory, filename).exists)
+  ) {
+    throw new Error("Unable to retire the legacy scanner database");
+  }
+  if (openError) throw openError;
 }
 
 let rosterTransactionChain: Promise<unknown> = Promise.resolve();
