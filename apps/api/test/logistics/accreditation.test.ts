@@ -247,6 +247,36 @@ describe("H22 accreditation lookup + check-in", () => {
     ).toBeNull();
   });
 
+  it("rejects a revoked ticket even if its token is later assigned to another user (H54)", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const formerOwner = await createUser();
+    const staleToken = await issueTicket(formerOwner, "ticket-retired");
+    await assignBadge(formerOwner, "BADGE-TICKET-RETIRED");
+    const admin = await createUserWithCapabilities(["*"]);
+    const removed = await app.inject({
+      method: "POST",
+      url: `/api/users/${formerOwner}/anonymize`,
+      headers: asUser(admin),
+    });
+    expect(removed.statusCode).toBe(200);
+
+    const replacement = await createUser();
+    await issueTicket(replacement, staleToken);
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/accreditation/check-in",
+      headers: asUser(staff),
+      payload: { ticketToken: staleToken, badgeId: "BADGE-NEW-OWNER", method: "qr" },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("ticket_revoked");
+    expect(
+      (await pool.query(`SELECT badge_id FROM users WHERE id = $1`, [replacement])).rows[0]
+        .badge_id,
+    ).toBeNull();
+  });
+
   it("check-in succeeds for a capability holder with no confirmed application at all (H43)", async () => {
     const admin = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_DECIDE]);
     const token = await (async () => {

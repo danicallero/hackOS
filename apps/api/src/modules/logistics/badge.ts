@@ -8,6 +8,20 @@ import { AppError } from "../../lib/errors.js";
  * personal data (plan/07: rotated-away scan returns a bare "badge revoked").
  */
 export async function resolveByBadge(db: Queryable, badgeId: string): Promise<number> {
+  // A badge can be reassigned after its former owner's account is removed.
+  // Reject the short-lived tombstone before resolving the current owner so a
+  // disconnected scanner cannot replay an old identity-bearing scan against
+  // the replacement participant (H54).
+  const tombstone = await db.query(
+    `SELECT 1 FROM scanner_revoked_badges
+      WHERE badge_id = $1 AND expires_at > clock_timestamp()
+      LIMIT 1`,
+    [badgeId],
+  );
+  if (tombstone.rows[0]) {
+    throw new AppError(409, "badge_revoked", "This badge has been revoked");
+  }
+
   const current = await db.query(
     `SELECT id FROM users
       WHERE badge_id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,

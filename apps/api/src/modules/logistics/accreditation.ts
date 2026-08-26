@@ -2,7 +2,7 @@ import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type pg from "pg";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { AppError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { hasEventAccess } from "../identity/role.js";
 import { broadcastForActiveUser } from "./active-broadcast.js";
 import { loadPersonCard } from "./cards.js";
@@ -21,6 +21,18 @@ async function voidBadgePasses(client: pg.PoolClient, userId: number): Promise<v
   );
 }
 
+async function assertTicketNotRevoked(client: pg.PoolClient, token: string): Promise<void> {
+  const revoked = await client.query(
+    `SELECT 1 FROM scanner_revoked_tickets
+      WHERE ticket_token = $1 AND expires_at > clock_timestamp()
+      LIMIT 1`,
+    [token],
+  );
+  if (revoked.rows[0]) {
+    throw new AppError(409, "ticket_revoked", "This ticket has been revoked");
+  }
+}
+
 export type CheckInMethod = "qr" | "manual" | "nfc";
 
 // ── H22: lookup by ticket ─────────────────────────────────────────────────
@@ -31,6 +43,7 @@ export type CheckInMethod = "qr" | "manual" | "nfc";
  * are already accredited (with the current badge). Never a mutation.
  */
 export async function lookupByTicket(token: string) {
+  await assertTicketNotRevoked(pool, token);
   const t = await pool.query(`SELECT user_id FROM tickets WHERE token = $1`, [token]);
   if (!t.rows[0]) throw new NotFoundError("Ticket not recognized"); // names no personal data
   return lookupByUserId(t.rows[0].user_id as number);
@@ -94,6 +107,7 @@ export async function checkIn(
   actorId: number,
   input: { ticketToken: string; badgeId: string; method: CheckInMethod },
 ) {
+  await assertTicketNotRevoked(pool, input.ticketToken);
   const t = await pool.query(`SELECT user_id FROM tickets WHERE token = $1`, [input.ticketToken]);
   if (!t.rows[0]) throw new NotFoundError("Ticket not recognized");
   return checkInUser(actorId, {

@@ -133,6 +133,35 @@ describe("H22-H26 native scanner snapshot", () => {
     expect(body.people.some((p: { userId: number }) => p.userId === userId)).toBe(false);
   });
 
+  it("rejects a revoked badge even after it is reassigned to another person (H54)", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const formerOwner = await createUser();
+    await assignBadge(formerOwner, "BADGE-RETIRED");
+    const admin = await createUserWithCapabilities(["*"]);
+    const removed = await app.inject({
+      method: "POST",
+      url: `/api/users/${formerOwner}/anonymize`,
+      headers: asUser(admin),
+    });
+    expect(removed.statusCode).toBe(200);
+
+    const replacement = await createUser();
+    await assignBadge(replacement, "BADGE-RETIRED");
+    const meal = await createMeal("Stale badge fixture");
+    const staleScan = await app.inject({
+      method: "POST",
+      url: `/api/activities/${meal}/scan`,
+      headers: asUser(scanner),
+      payload: { badgeId: "BADGE-RETIRED" },
+    });
+
+    expect(staleScan.statusCode).toBe(409);
+    expect(staleScan.json().error.code).toBe("badge_revoked");
+    expect(
+      (await pool.query(`SELECT 1 FROM activity_logs WHERE user_id = $1`, [replacement])).rowCount,
+    ).toBe(0);
+  });
+
   it("requires a scanner or logistics capability", async () => {
     const participant = await createUser();
     const response = await app.inject({

@@ -35,6 +35,7 @@ import {
   acknowledgeScan,
   applyScannerSnapshot,
   correctScanTimestamp,
+  deleteScan,
   failScan,
   noteRetryableError,
   pendingScans,
@@ -50,13 +51,14 @@ const mockNoteRetryable = noteRetryableError as jest.Mock;
 const mockGetClockSkewMs = getClockSkewMs as jest.Mock;
 const mockCorrectScanTimestamp = correctScanTimestamp as jest.Mock;
 const mockAcknowledgeScan = acknowledgeScan as jest.Mock;
+const mockDeleteScan = deleteScan as jest.Mock;
 const mockGetCookie = authClient.getCookie as jest.Mock;
 const OWNER_USER_ID = 42;
 // The mocked ApiError constructor is (status, code, message).
-const apiError = (status: number, message: string) =>
+const apiError = (status: number, message: string, code = "error") =>
   new (ApiError as unknown as new (status: number, code: string, message: string) => Error)(
     status,
-    "error",
+    code,
     message,
   );
 
@@ -98,6 +100,7 @@ describe("synchronizeScanner", () => {
     mockGetClockSkewMs.mockReset().mockReturnValue(null);
     mockCorrectScanTimestamp.mockReset();
     mockAcknowledgeScan.mockReset();
+    mockDeleteScan.mockReset();
     mockGetCookie.mockReset().mockReturnValue("session=staff-a");
   });
 
@@ -220,6 +223,18 @@ describe("synchronizeScanner", () => {
 
     expect(mockFailScan).toHaveBeenCalledWith("scan-1", "No badge to remove", OWNER_USER_ID);
     expect(mockApiFetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("drops a queued scan for a credential revoked while the device was offline", async () => {
+    mockPendingScans.mockResolvedValue([badgeRemoval("scan-revoked")]);
+    mockApiFetch
+      .mockRejectedValueOnce(apiError(409, "This ticket has been revoked", "ticket_revoked"))
+      .mockResolvedValueOnce({ generatedAt: "t0", people: [], activities: [], activityStates: [] });
+
+    await synchronizeScanner(OWNER_USER_ID);
+
+    expect(mockDeleteScan).toHaveBeenCalledWith("scan-revoked", OWNER_USER_ID);
+    expect(mockFailScan).not.toHaveBeenCalled();
   });
 
   it("corrects a timestamp rejected as future by the measured clock skew and retries once", async () => {

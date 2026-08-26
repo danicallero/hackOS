@@ -110,7 +110,9 @@ export async function replayPendingScans(
       // a failed queue entry.
       if (
         error instanceof ApiError &&
-        (error.code === "not_found" || error.code === "badge_revoked")
+        (error.code === "not_found" ||
+          error.code === "badge_revoked" ||
+          error.code === "ticket_revoked")
       ) {
         await deleteScan(scan.id, ownerUserId);
         continue;
