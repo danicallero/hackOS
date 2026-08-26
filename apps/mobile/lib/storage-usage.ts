@@ -1,7 +1,7 @@
 import { File, Paths } from "expo-file-system";
 
 import { clearOfflineCache, getOfflineCacheBytes } from "./offline-cache";
-import { wipeAttendanceRoster } from "./scanner-db";
+import { wipeAttendanceRoster, wipeOfflineScanQueue } from "./scanner-db";
 
 export interface StorageUsage {
   /** Offline API fallback cache (schedule, wallet, notifications — see offline-cache.ts). */
@@ -39,6 +39,24 @@ export async function clearAllCaches(operator: boolean): Promise<void> {
   await clearOfflineCache();
   clearDownloadedFiles();
   if (operator) await wipeAttendanceRoster();
+}
+
+/**
+ * Stronger than the user-facing cache button: account closure must remove
+ * the profile cache, wallet pass files, roster, and the owner's encrypted
+ * offline queue. The ordinary cache button intentionally keeps staff work.
+ */
+export async function clearAccountData(ownerUserId: number): Promise<void> {
+  const results = await Promise.allSettled([
+    clearOfflineCache(),
+    wipeAttendanceRoster(),
+    wipeOfflineScanQueue(ownerUserId),
+  ]);
+  clearDownloadedFiles();
+  const failure = results.find(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  );
+  if (failure) throw failure.reason;
 }
 
 function clearDownloadedFiles(): void {

@@ -3,6 +3,7 @@ import {
   acknowledgeScan,
   applyScannerSnapshot,
   correctScanTimestamp,
+  deleteScan,
   failScan,
   markScanAttempt,
   noteRetryableError,
@@ -11,8 +12,16 @@ import {
 import { requestForPendingScan } from "./scanner-model";
 import type { PendingScan, ScannerSnapshot } from "./scanner-types";
 
-let activeSync: Promise<void> | null = null;
-let rerunRequested = false;
+interface SyncState {
+  active: Promise<void> | null;
+  rerunRequested: boolean;
+}
+
+// A shared device can switch staff accounts while a network request is still
+// running. Keep the coalescing state per owner so account B never receives
+// account A's promise or causes account A's queue to replay under B's session
+// (H54).
+const syncStates = new Map<number, SyncState>();
 
 /** Matches apps/api/src/modules/logistics/activities.ts BadRequestError text. */
 const TIMESTAMP_FUTURE_ERROR = "Offline scan timestamp must be in the past";
@@ -53,7 +62,7 @@ async function attemptClockSkewCorrection(
   await correctScanTimestamp(scan.id, ownerUserId, corrected);
   try {
     await replay({ ...scan, payload: corrected });
-    await acknowledgeScan(scan.id, corrected);
+    await acknowledgeScan(scan.id, corrected, ownerUserId);
   } catch {
     // Correction didn't resolve it; fall through to normal handling on the
     // next sync pass (clockCorrected is now set, so it won't loop).
@@ -70,13 +79,13 @@ async function attemptClockSkewCorrection(
  */
 export async function replayPendingScans(ownerUserId: number): Promise<void> {
   for (const scan of await pendingScans(ownerUserId, true)) {
-    await markScanAttempt(scan.id);
+    await markScanAttempt(scan.id, ownerUserId);
     try {
       await replay(scan);
-      await acknowledgeScan(scan.id, scan.payload);
+      await acknowledgeScan(scan.id, scan.payload, ownerUserId);
     } catch (error) {
       if (error instanceof ApiError && error.message.includes("still in flight")) {
-        await noteRetryableError(scan.id, error.message);
+        await noteRetryableError(scan.id, error.message, ownerUserId);
         break;
       }
       // Auth hiccups (expired session) and throttling are NOT verdicts on the
@@ -84,8 +93,20 @@ export async function replayPendingScans(ownerUserId: number): Promise<void> {
       // activity and presence log until someone finds the retry button. Only
       // genuine business rejections (400/404/409…) are final.
       if (error instanceof ApiError && [401, 403, 408, 429].includes(error.status)) {
-        await noteRetryableError(scan.id, error.message);
+        await noteRetryableError(scan.id, error.message, ownerUserId);
         break;
+      }
+      // A 404 is terminal for a queued identity-bearing scan: the participant
+      // or operation was removed before this device came back online. A
+      // revoked badge is the explicit 409 variant of the same condition.
+      // Delete the encrypted local payload instead of retaining it forever in
+      // a failed queue entry.
+      if (
+        error instanceof ApiError &&
+        (error.code === "not_found" || error.code === "badge_revoked")
+      ) {
+        await deleteScan(scan.id, ownerUserId);
+        continue;
       }
       if (
         error instanceof ApiError &&
@@ -96,10 +117,14 @@ export async function replayPendingScans(ownerUserId: number): Promise<void> {
         continue;
       }
       if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
-        await failScan(scan.id, error.message);
+        await failScan(scan.id, error.message, ownerUserId);
         continue;
       }
-      await noteRetryableError(scan.id, error instanceof Error ? error.message : "Network error");
+      await noteRetryableError(
+        scan.id,
+        error instanceof Error ? error.message : "Network error",
+        ownerUserId,
+      );
       break;
     }
   }
@@ -124,21 +149,24 @@ async function doSync(ownerUserId: number): Promise<void> {
  * completed.
  */
 export function synchronizeScanner(ownerUserId: number): Promise<void> {
-  if (activeSync) {
-    rerunRequested = true;
-    return activeSync;
+  const state = syncStates.get(ownerUserId) ?? { active: null, rerunRequested: false };
+  syncStates.set(ownerUserId, state);
+  if (state.active) {
+    state.rerunRequested = true;
+    return state.active;
   }
-  activeSync = runUntilSettled(ownerUserId);
-  return activeSync;
+  let run: Promise<void>;
+  run = runUntilSettled(ownerUserId, state).finally(() => {
+    if (state.active === run) state.active = null;
+    if (state.active === null && !state.rerunRequested) syncStates.delete(ownerUserId);
+  });
+  state.active = run;
+  return run;
 }
 
-async function runUntilSettled(ownerUserId: number): Promise<void> {
-  try {
-    do {
-      rerunRequested = false;
-      await doSync(ownerUserId);
-    } while (rerunRequested);
-  } finally {
-    activeSync = null;
-  }
+async function runUntilSettled(ownerUserId: number, state: SyncState): Promise<void> {
+  do {
+    state.rerunRequested = false;
+    await doSync(ownerUserId);
+  } while (state.rerunRequested);
 }

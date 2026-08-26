@@ -21,7 +21,26 @@ describe("mobile self-service account actions (H15, H54)", () => {
 
     await deleteOwnAccount();
 
-    expect(mockedApiFetch).toHaveBeenCalledWith("/api/me", { method: "DELETE" });
+    expect(mockedApiFetch).toHaveBeenCalledWith("/api/me", {
+      method: "DELETE",
+      headers: { "Idempotency-Key": expect.stringMatching(/^account-delete-/) },
+    });
+  });
+
+  it("confirms irreversible anonymization through the own-account endpoint", async () => {
+    const { anonymizeOwnAccount } = await import("./self-service");
+    mockedApiFetch.mockResolvedValueOnce({ anonymized: true });
+
+    await anonymizeOwnAccount();
+
+    expect(mockedApiFetch).toHaveBeenCalledWith("/api/me/anonymize", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "Idempotency-Key": expect.stringMatching(/^account-anonymize-/),
+      },
+      body: JSON.stringify({ confirm: true }),
+    });
   });
 
   it("declines the selected response with its stable idempotency key", async () => {

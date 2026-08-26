@@ -65,6 +65,16 @@ export function getQueueKey(userId: number): Promise<AESEncryptionKey> {
   return key;
 }
 
+/**
+ * Cryptographically forget one owner's queued scans after account closure.
+ * The database rows are removed by scanner-db; deleting the Keychain/Keystore
+ * material makes any abandoned encrypted copy unreadable as well.
+ */
+export async function resetQueueKey(userId: number): Promise<void> {
+  queueKeys.delete(userId);
+  await SecureStore.deleteItemAsync(queueKeyName(userId), SECURE_STORE_OPTIONS);
+}
+
 const BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 /**

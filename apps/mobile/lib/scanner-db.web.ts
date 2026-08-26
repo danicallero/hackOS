@@ -15,6 +15,8 @@ import type {
 // share callers unchanged.
 let snapshot: ScannerSnapshot = {
   generatedAt: "",
+  revokedBadgeIds: [],
+  revokedTicketTokens: [],
   people: [],
   activities: [],
   activityStates: [],
@@ -26,10 +28,18 @@ export async function applyScannerSnapshot(next: ScannerSnapshot): Promise<void>
 }
 
 export async function wipeAttendanceRoster(): Promise<void> {
-  snapshot = { generatedAt: "", people: [], activities: [], activityStates: [] };
+  snapshot = {
+    generatedAt: "",
+    revokedBadgeIds: [],
+    revokedTicketTokens: [],
+    people: [],
+    activities: [],
+    activityStates: [],
+  };
 }
 
 export async function findPersonByTicket(ticketToken: string): Promise<ScannerPerson | null> {
+  if (snapshot.revokedTicketTokens?.includes(ticketToken)) return null;
   return snapshot.people.find((person) => person.ticketToken === ticketToken) ?? null;
 }
 
@@ -57,9 +67,14 @@ export async function listScannerPeople(query = ""): Promise<ScannerPerson[]> {
 export async function findPersonByBadge(
   badgeId: string,
 ): Promise<{ person: ScannerPerson | null; revoked: boolean }> {
+  if (snapshot.revokedBadgeIds?.includes(badgeId)) {
+    return { person: null, revoked: true };
+  }
   const person = snapshot.people.find((candidate) => candidate.badgeId === badgeId) ?? null;
   if (person) return { person, revoked: false };
-  const revoked = snapshot.people.some((person) => person.revokedBadgeIds.includes(badgeId));
+  const revoked = snapshot.people.some((person) =>
+    (person.revokedBadgeIds ?? []).includes(badgeId),
+  );
   return {
     person: null,
     revoked,
@@ -114,13 +129,17 @@ export async function pendingScans(
   );
 }
 
-export async function markScanAttempt(id: string): Promise<void> {
+export async function markScanAttempt(id: string, _ownerUserId: number): Promise<void> {
   scans = scans.map((scan) =>
     scan.id === id ? { ...scan, attempts: scan.attempts + 1, lastError: null } : scan,
   );
 }
 
-export async function acknowledgeScan(id: string): Promise<void> {
+export async function acknowledgeScan(
+  id: string,
+  _payload: ScanPayload,
+  _ownerUserId: number,
+): Promise<void> {
   scans = scans.map((scan) =>
     scan.id === id
       ? { ...scan, status: "acknowledged", acknowledgedAt: new Date().toISOString() }
@@ -128,13 +147,17 @@ export async function acknowledgeScan(id: string): Promise<void> {
   );
 }
 
-export async function failScan(id: string, message: string): Promise<void> {
+export async function failScan(id: string, message: string, _ownerUserId: number): Promise<void> {
   scans = scans.map((scan) =>
     scan.id === id ? { ...scan, status: "failed", lastError: message } : scan,
   );
 }
 
-export async function noteRetryableError(id: string, message: string): Promise<void> {
+export async function noteRetryableError(
+  id: string,
+  message: string,
+  _ownerUserId: number,
+): Promise<void> {
   scans = scans.map((scan) => (scan.id === id ? { ...scan, lastError: message } : scan));
 }
 
@@ -157,16 +180,20 @@ export async function retryFailedScans(ownerUserId: number): Promise<void> {
 }
 
 /** Same as retryFailedScans, scoped to a single scan the operator picked from the queue. */
-export async function retryScan(id: string): Promise<void> {
+export async function retryScan(id: string, ownerUserId: number): Promise<void> {
   scans = scans.map((scan) =>
-    scan.id === id && scan.status === "failed"
+    scan.id === id && scan.ownerUserId === ownerUserId && scan.status === "failed"
       ? { ...scan, status: "pending", lastError: null }
       : scan,
   );
 }
 
-export async function deleteScan(id: string): Promise<void> {
-  scans = scans.filter((scan) => scan.id !== id);
+export async function deleteScan(id: string, ownerUserId: number): Promise<void> {
+  scans = scans.filter((scan) => scan.id !== id || scan.ownerUserId !== ownerUserId);
+}
+
+export async function wipeOfflineScanQueue(ownerUserId: number): Promise<void> {
+  scans = scans.filter((scan) => scan.ownerUserId !== ownerUserId);
 }
 
 export async function getScannerMeta(

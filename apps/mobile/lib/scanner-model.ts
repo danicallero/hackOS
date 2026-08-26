@@ -2,14 +2,15 @@ import type { PendingScan, ScannerPerson } from "./scanner-types";
 
 /** Complete replace-all revocation set installed by each successful sync (H23). */
 export function revokedBadgesFromSnapshot(snapshot: {
+  revokedBadgeIds?: string[];
   people: Array<Pick<ScannerPerson, "badgeId" | "revokedBadgeIds">>;
 }): string[] {
   const active = new Set(
     snapshot.people.flatMap((person) => (person.badgeId ? [person.badgeId] : [])),
   );
-  const revoked = new Set<string>();
+  const revoked = new Set(snapshot.revokedBadgeIds ?? []);
   for (const person of snapshot.people) {
-    for (const badgeId of person.revokedBadgeIds) {
+    for (const badgeId of person.revokedBadgeIds ?? []) {
       if (!active.has(badgeId)) revoked.add(badgeId);
     }
   }

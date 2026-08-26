@@ -98,10 +98,11 @@ export function useScannerSync() {
   /** Retries just the one scan the operator picked, rather than every failed entry in the queue. */
   const retryOne = useCallback(
     async (id: string) => {
-      await retryScan(id);
+      if (ownerUserId === null) return;
+      await retryScan(id, ownerUserId);
       await sync();
     },
-    [sync],
+    [ownerUserId, sync],
   );
 
   /**
@@ -113,10 +114,11 @@ export function useScannerSync() {
    */
   const discardScan = useCallback(
     async (id: string) => {
-      await deleteScan(id);
+      if (ownerUserId === null) return;
+      await deleteScan(id, ownerUserId);
       await refreshLocal();
     },
-    [refreshLocal],
+    [ownerUserId, refreshLocal],
   );
 
   useEffect(() => {

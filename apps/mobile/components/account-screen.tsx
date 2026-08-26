@@ -12,7 +12,7 @@ import {
   StatusPill,
 } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
-import { apiFetch } from "@/lib/api";
+import { ApiError, apiFetch } from "@/lib/api";
 import { signOut } from "@/lib/auth-client";
 import { EVENT_WEBSITE_URL } from "@/lib/env";
 import { haptic } from "@/lib/haptics";
@@ -24,10 +24,12 @@ import { SCAN_LOG_ROUTES } from "@/lib/scan-log-navigation";
 import { wipeAttendanceRoster } from "@/lib/scanner-db";
 import {
   type AccountRemovalEligibility,
+  anonymizeOwnAccount,
   deleteOwnAccount,
   fetchAccountRemovalEligibility,
 } from "@/lib/self-service";
 import {
+  clearAccountData,
   clearAllCaches,
   formatBytes,
   getStorageUsage,
@@ -189,15 +191,45 @@ export default function AccountScreen() {
     ]);
   }
 
+  async function finishLocalAccountClosure(userId: number): Promise<void> {
+    // The server revokes access before it touches object storage. Local
+    // cleanup is best-effort, but sign-out must still run if a SQLite/Secure
+    // Store operation fails so a closed account cannot keep an authenticated
+    // session on this device.
+    await clearAccountData(userId).catch(() => undefined);
+    await signOut().catch(() => undefined);
+  }
+
+  async function handleRemovalFailure(
+    cause: unknown,
+    userId: number,
+    fallback: string,
+  ): Promise<void> {
+    // prepareAccountRemoval revokes sessions before private-object cleanup.
+    // A 5xx can therefore mean the server has already committed closure even
+    // though the response failed; clear local identity/cache data in that case
+    // rather than leaving a closed account's PII on the device (H54).
+    const serverMayHaveRevokedAccess =
+      cause instanceof ApiError &&
+      (cause.code === "removal_storage_pending" || cause.status >= 500);
+    if (serverMayHaveRevokedAccess) {
+      await finishLocalAccountClosure(userId);
+      setRemovalError(new Error(t("accountRemovalPending")));
+      return;
+    }
+    setRemovalError(cause instanceof Error ? cause : new Error(fallback));
+  }
+
   async function deleteAccount() {
+    if (!me) return;
     setDeletingAccount(true);
     setRemovalError(null);
     try {
       await deleteOwnAccount();
-      await wipeAttendanceRoster();
-      await signOut();
+      await finishLocalAccountClosure(me.id);
     } catch (cause) {
-      setRemovalError(cause instanceof Error ? cause : new Error(t("accountDeleteError")));
+      await handleRemovalFailure(cause, me.id, t("accountDeleteError"));
+    } finally {
       setDeletingAccount(false);
     }
   }
@@ -209,6 +241,31 @@ export default function AccountScreen() {
         text: t("accountDeleteAction"),
         style: "destructive",
         onPress: () => void deleteAccount(),
+      },
+    ]);
+  }
+
+  async function anonymizeAccount() {
+    if (!me) return;
+    setDeletingAccount(true);
+    setRemovalError(null);
+    try {
+      await anonymizeOwnAccount();
+      await finishLocalAccountClosure(me.id);
+    } catch (cause) {
+      await handleRemovalFailure(cause, me.id, t("accountAnonymizeError"));
+    } finally {
+      setDeletingAccount(false);
+    }
+  }
+
+  function confirmAnonymizeAccount() {
+    Alert.alert(t("accountAnonymizeConfirmTitle"), t("accountAnonymizeConfirmBody"), [
+      { text: t("cancel"), style: "cancel" },
+      {
+        text: t("accountAnonymizeAction"),
+        style: "destructive",
+        onPress: () => void anonymizeAccount(),
       },
     ]);
   }
@@ -497,11 +554,15 @@ export default function AccountScreen() {
                 <View style={{ padding: 16 }}>
                   <RequestFeedback
                     error={removalError}
-                    message={t("accountRemovalLoadError")}
+                    message={
+                      removalEligibility?.action === "anonymize"
+                        ? t("accountAnonymizeError")
+                        : t("accountDeleteError")
+                    }
                     onRetry={() => void loadRemovalEligibility()}
                   />
                 </View>
-              ) : removalEligibility?.action === "delete" ? (
+              ) : removalEligibility === null ? null : removalEligibility.action === "delete" ? (
                 <View style={{ gap: 12, padding: 16 }}>
                   <Text
                     selectable
@@ -509,6 +570,14 @@ export default function AccountScreen() {
                   >
                     {t("accountDeleteDescription")}
                   </Text>
+                  {operator ? (
+                    <Text
+                      selectable
+                      style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
+                    >
+                      {t("accountRemovalOfflineQueue")}
+                    </Text>
+                  ) : null}
                   <ActionButton
                     label={t("accountDeleteAction")}
                     icon="trash"
@@ -524,12 +593,46 @@ export default function AccountScreen() {
                     accessibilityLiveRegion="polite"
                     style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
                   >
-                    {t("accountCannotSelfDelete")}
+                    {t("accountAnonymizeDescription")}
                   </Text>
+                  <Text
+                    selectable
+                    style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
+                  >
+                    {t("accountAnonymizeProofLoss")}
+                  </Text>
+                  {removalEligibility.activeEventConsequences ? (
+                    <Text
+                      selectable
+                      accessibilityLiveRegion="polite"
+                      style={{ color: colors.warning, fontSize: 14, lineHeight: 20 }}
+                    >
+                      {t("accountAnonymizeActiveEvent")}
+                    </Text>
+                  ) : null}
+                  {removalEligibility.requiresVenueExit ? (
+                    <Text
+                      selectable
+                      style={{ color: colors.warning, fontSize: 14, lineHeight: 20 }}
+                    >
+                      {t("accountAnonymizeExitRequired")}
+                    </Text>
+                  ) : null}
+                  {operator ? (
+                    <Text
+                      selectable
+                      style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
+                    >
+                      {t("accountRemovalOfflineQueue")}
+                    </Text>
+                  ) : null}
                   <ActionButton
-                    label={t("accountRequestAnonymization")}
-                    icon="envelope"
-                    onPress={() => void Linking.openURL(anonymizationRequestMailto(me))}
+                    label={t("accountAnonymizeAction")}
+                    icon="person.crop.circle.badge.xmark"
+                    destructive
+                    disabled={removalEligibility.requiresVenueExit}
+                    busy={deletingAccount}
+                    onPress={confirmAnonymizeAccount}
                   />
                 </View>
               )}
@@ -540,13 +643,6 @@ export default function AccountScreen() {
       <AndroidStatusBarScrim />
     </View>
   );
-}
-
-/** Pre-filled mailto for accredited accounts that can't self-delete (H54): puts the requester's email and account id straight in front of the organisers instead of making them hunt for a contact address. */
-function anonymizationRequestMailto(me: { id: number; email: string }) {
-  const subject = "Account anonymization request";
-  const body = `Account email: ${me.email}\nAccount id: ${me.id}\n`;
-  return `mailto:hackudc@gpul.org?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 function languageName(language: string) {
