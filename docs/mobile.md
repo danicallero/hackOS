@@ -618,13 +618,16 @@ physical iOS/Android and EAS verification remains a release-gate task in
   queued scans (replaying under the wrong session would also misattribute
   the action server-side). The same user signing back in later recovers
   their own queue, conflicts included, exactly as they left it — the queue
-  is keyed by owner, not by session. Devices upgrading from the pre-split
-  single-file schema have their legacy `pending_scans` rows migrated once into
-  the encrypted per-owner queue where possible; if encryption/key migration
-  cannot be completed, the legacy file is retained for a later retry rather
-  than silently dropped. Devices that remain offline can still retain a stale
-  identity until reconnect/expiry or a device wipe; central tombstones prevent
-  that stale scan from being accepted or re-uploaded.
+  is keyed by owner, not by session. The pre-split `hackos-scanner.db` cannot
+  be safely migrated: its plaintext pending rows have no owner column, and
+  assigning them to the first authenticated operator could misattribute a
+  scan. On first authenticated queue access the app retires that app-owned
+  file and its SQLite `-wal`, `-shm`, and `-journal` sidecars without importing
+  any row; staff must re-record scans that existed only in the old queue. If
+  the OS refuses deletion, queue initialization fails closed and retries on a
+  later authenticated call. Devices that remain offline can still retain a
+  stale identity until reconnect/expiry or a device wipe; central tombstones
+  prevent that stale scan from being accepted or re-uploaded.
 
 ## Realtime & notifications infrastructure
 

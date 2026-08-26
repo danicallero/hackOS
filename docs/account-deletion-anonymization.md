@@ -1,6 +1,6 @@
 # H54 — account deletion and irreversible anonymization audit
 
-**Review date:** 2026-08-26  
+**Review date:** 2026-08-27
 **Scope:** `apps/api`, `apps/mobile`, `apps/web`, Postgres migrations, object
 storage references, offline scanner paths, notification workers, audit/export
 paths, and the account/privacy copy.  This is a code and data-lifecycle audit,
@@ -142,7 +142,7 @@ scan alone is therefore insufficient.
 | F03 | High | confirmed code problem; operational risk | Removal must race check-in, presence, notification, wallet and invite writes. The pending state, user-row locks, active-state filters, and migration `0733` FK triggers reject new direct user references after pending begins. The event-end closer was additionally changed to lock and re-check each candidate so one removal cannot abort the whole worker tick. |
 | F04 | High | requires legal/product confirmation; operational risk | There is no single `checked_in` column. The code uses check-in as the primary physical boundary but conservatively includes door/activity/badge history. Confirm whether badge assignment or a non-presence activity alone should force anonymization. |
 | F05 | High | confirmed code problem; operational risk | Object deletion and final DB deletion are separate phases. A storage or final-transaction failure leaves access revoked and `removal_pending`, with bounded retry. Operators must monitor and replay pending rows if the queue is unavailable. |
-| F06 | High | confirmed code problem; privacy/security risk | Staff offline meal queues contain badge credentials and must be encrypted, owner-bound, cleared on closure, and rejected when stale. Native scanner records are encrypted and tombstoned; an offline staff device can still retain encrypted data until reconnect/expiry. |
+| F06 | High | confirmed code problem; privacy/security risk; operational risk | Staff offline meal queues contain badge credentials and must be encrypted, owner-bound, cleared on closure, and rejected when stale. Native scanner records are encrypted and tombstoned; an offline staff device can still retain encrypted data until reconnect/expiry. The pre-H54 combined native database had ownerless plaintext payloads, so it cannot be safely assigned to the first authenticated operator; the current migration retires the app-owned file and its SQLite sidecars, blocks the queue if retirement fails, and requires any lost pre-upgrade scans to be re-recorded. |
 | F07 | High | operational risk; requires legal/product confirmation | Installed Apple/Google Wallet passes and copies already delivered to a device are outside the database. The server voids rows, sends provider invalidation/update signals where configured, and revokes scanner credentials for a short window; provider/device expiry and delivery must be verified operationally. |
 | F08 | High | privacy/security risk; requires legal/product confirmation | Application logs, web-server logs, analytics, database backups, object-store versioning, and provider logs are not retention systems represented in this repository. Production operations must confirm their subject lookup, retention and purge controls before claiming system-wide erasure. |
 | F09 | High | confirmed code problem; optional hardening | The destructive routes require a current authenticated session, but no recent-reauthentication step exists. Add a recent-auth challenge if the deployment threat model requires protection against an unattended unlocked session. |
@@ -322,6 +322,14 @@ sign-out wipes the roster. Closure wipes the local account/cache. A queue item
 rejected as `not_found`, `badge_unknown`, or `badge_revoked` is deleted rather
 than retained indefinitely. An offline device that never reconnects cannot
 receive a tombstone; it must be covered by device management/expiry policy.
+The retired pre-H54 `hackos-scanner.db` is not migratable: its plaintext
+pending rows had no trustworthy owner, and its roster also contained personal
+data. On the first authenticated queue access, current code closes and
+deletes that app-owned database plus `-wal`, `-shm`, and `-journal` sidecars;
+it never imports or replays those rows. A device upgrade therefore requires
+staff to re-record any scan that existed only in the old queue. If the OS
+refuses deletion, queue initialization fails closed and retries later, so the
+old identity-bearing file is not used while it remains present.
 
 ### Web staff scanner
 
@@ -564,7 +572,7 @@ silently converted into a legal conclusion.
 | A08 | Shared public GitHub/Devpost content is external to the hackOS anonymous audit dataset; the app removes its direct participant link but does not rewrite third-party content. | Product/privacy owner |
 | A09 | Production S3 versioning, reverse-proxy logs, analytics, error telemetry, PostgreSQL backups/WAL and provider logs have separate retention/purge controls. | Operations/security owner |
 | A10 | The web `hackos*`/`queue-ops-*` namespace is the complete app-owned browser storage namespace; future features must register additional keys with `clearWebAccountData()`. | Web owner |
-| A11 | Native offline scanner data must survive an ordinary staff account switch for operational continuity: shared roster data is wiped on sign-out, while each owner's encrypted pending queue remains recoverable only by that owner; closure wipes the affected owner's queue. | Mobile/logistics owner |
+| A11 | Native offline scanner data must survive an ordinary staff account switch for operational continuity: shared roster data is wiped on sign-out, while each owner's encrypted pending queue remains recoverable only by that owner; closure wipes the affected owner's queue. The pre-H54 ownerless combined database is not safely migratable and is discarded rather than assigned to the first account. | Mobile/logistics owner |
 | A12 | Wallet-provider invalidation and pass expiry are best-effort external controls; installed device copies are not synchronously deletable by this repository. | Mobile/release + operations owner |
 | A13 | Current authenticated session is sufficient destructive-action authentication for now; recent re-auth is optional hardening, not asserted as present. | Security/product owner |
 | A14 | Supported clients send `Idempotency-Key`; no-key requests remain compatibility behavior and may not replay after a lost response. | API/client owners |
@@ -575,6 +583,7 @@ silently converted into a legal conclusion.
 | A19 | No current ECTS, certificate or named participation-proof endpoint exists in this repository; any future implementation must not use a hidden anonymous-to-user map. | Product/academic-services owner |
 | A20 | App Review can access a seeded accepted participant/staff account and reach Settings → Account & Data without external registration. | iOS release owner |
 | A21 | Application forms may vary by event/type. Only fields explicitly mapped to one of the seven canonical anonymous categories may feed the anonymous row; any additional application field requires a separate product/audit decision and code change. | Applications + grant/audit owners |
+| A22 | `hackos-scanner.db` was exclusively owned by the pre-H54 scanner implementation, no production device/database is in scope for this branch, and any pre-upgrade offline scan can be re-recorded after the local migration. | Mobile/logistics + release owners |
 
 ## Release recommendation
 
