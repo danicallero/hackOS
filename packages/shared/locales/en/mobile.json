@@ -81,7 +81,7 @@
   "accountDeleteConfirmBody": "This is final. Your event access will be revoked, any accepted spot will be forfeited, and your account and eligible application data will be deleted.",
   "accountDeleteError": "Your account couldn't be deleted. Check your connection and try again.",
   "accountCannotSelfDelete": "This account has retained event history and cannot be deleted outright. EU and Spanish grant-justification obligations require those records to be kept. You can request anonymization and processing limitation, which will take effect after the legally required retention period.",
-  "accountPrivacyPolicy": "Read the privacy policy",
+  "accountRequestAnonymization": "Request anonymization by email",
   "refreshAccount": "Refresh account",
   "sessionTitle": "Session",
   "sessionActive": "Signed in on this device as {email}.",

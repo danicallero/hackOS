@@ -14,7 +14,6 @@ import {
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { apiFetch } from "@/lib/api";
 import { signOut } from "@/lib/auth-client";
-import { EVENT_WEBSITE_URL } from "@/lib/env";
 import { haptic } from "@/lib/haptics";
 import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -513,9 +512,9 @@ export default function AccountScreen() {
                     {t("accountCannotSelfDelete")}
                   </Text>
                   <ActionButton
-                    label={t("accountPrivacyPolicy")}
-                    icon="arrow.up.right.square"
-                    onPress={() => void Linking.openURL(`${EVENT_WEBSITE_URL}/privacy`)}
+                    label={t("accountRequestAnonymization")}
+                    icon="envelope"
+                    onPress={() => void Linking.openURL(anonymizationRequestMailto(me))}
                   />
                 </View>
               )}
@@ -526,6 +525,13 @@ export default function AccountScreen() {
       <AndroidStatusBarScrim />
     </View>
   );
+}
+
+/** Pre-filled mailto for accredited accounts that can't self-delete (H54): puts the requester's email and account id straight in front of the organisers instead of making them hunt for a contact address. */
+function anonymizationRequestMailto(me: { id: number; email: string }) {
+  const subject = "Account anonymization request";
+  const body = `Account email: ${me.email}\nAccount id: ${me.id}\n`;
+  return `mailto:hackudc@gpul.org?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 function languageName(language: string) {
