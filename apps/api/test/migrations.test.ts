@@ -25,17 +25,48 @@ beforeAll(async () => {
   }
 });
 
+/** Rejects if `fn` doesn't settle within `ms` — used to bound one drop attempt
+ *  so a stuck connect()/query() can be abandoned and retried instead of
+ *  silently eating the whole hookTimeout budget on a single try. */
+function withTimeout<T>(fn: () => Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+    fn().then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 afterAll(async () => {
   // Do not reuse the setup connection after the migration suite has spent
   // several minutes running alongside every other integration file. A fresh
   // admin session avoids teardown hanging on a stale idle socket in CI (H53).
-  const adminClient = new pg.Client({ connectionString: adminUrl.toString() });
-  await adminClient.connect();
-  try {
-    await adminClient.query(`DROP DATABASE "${databaseName}" WITH (FORCE)`);
-  } finally {
-    await adminClient.end();
+  // Each attempt is time-boxed so one stuck connect()/query() gets abandoned
+  // and retried within the overall hookTimeout, instead of a single stall
+  // failing the whole suite (two observed CI timeouts here).
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const adminClient = new pg.Client({ connectionString: adminUrl.toString() });
+    try {
+      await withTimeout(async () => {
+        await adminClient.connect();
+        await adminClient.query(`DROP DATABASE "${databaseName}" WITH (FORCE)`);
+      }, 20_000);
+      return;
+    } catch (err) {
+      lastErr = err;
+    } finally {
+      void adminClient.end().catch(() => {});
+    }
   }
+  throw lastErr;
 });
 
 async function withMigrationClient<T>(fn: (client: pg.Client) => Promise<T>): Promise<T> {

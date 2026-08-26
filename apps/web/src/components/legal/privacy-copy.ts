@@ -6,12 +6,14 @@ export const privacyCopy: Record<Language, LegalDocumentCopy> = {
     title: "Política de privacidad",
     description:
       "Aquí explicamos qué datos trata GPUL a través de hackOS, para qué los utiliza y cómo puedes ejercer tus derechos.",
-    updatedAt: "10 de agosto de 2026",
+    updatedAt: "26 de agosto de 2026",
     body: `## 1. Responsable del tratamiento
 
 Esta política se aplica únicamente a la instancia de hackOS operada por GPUL. Una instalación desplegada por otra persona o entidad es una instancia independiente: su operador será responsable del tratamiento y deberá facilitar su propia política de privacidad. GPUL no controla ni trata los datos almacenados en instancias de terceros.
 
 La Asociación Universitaria Grupo de Programadores y Usuarios de Linux (**GPUL**), con NIF G15659220 y domicilio en la Facultad de Informática, Campus de Elviña S/N, 15071 A Coruña, es la responsable del tratamiento de tus datos personales.
+
+hackOS es la plataforma que GPUL utiliza para gestionar el registro, las solicitudes y la participación en HackUDC; su uso es obligatorio para participar en el evento. Esta política complementa, sin sustituir, la [política de privacidad general de HackUDC](https://hackudc.gpul.org/privacy), que describe el tratamiento de datos del evento en su conjunto.
 
 Puedes contactar con GPUL en esa dirección o mediante [hackudc@gpul.org](mailto:hackudc@gpul.org) para cualquier consulta relacionada con la privacidad.
 
@@ -88,12 +90,14 @@ Para cualquier consulta sobre privacidad, escribe a [hackudc@gpul.org](mailto:ha
     title: "Política de privacidade",
     description:
       "Aquí explicamos que datos trata GPUL a través de hackOS, para que os utiliza e como podes exercer os teus dereitos.",
-    updatedAt: "10 de agosto de 2026",
+    updatedAt: "26 de agosto de 2026",
     body: `## 1. Responsable do tratamento
 
 Esta política aplícase unicamente á instancia de hackOS operada por GPUL. Unha instalación despregada por outra persoa ou entidade é unha instancia independente: o seu operador será responsable do tratamento e deberá facilitar a súa propia política de privacidade. GPUL non controla nin trata os datos almacenados en instancias de terceiros.
 
 A Asociación Universitaria Grupo de Programadores y Usuarios de Linux (**GPUL**), con NIF G15659220 e domicilio na Facultade de Informática, Campus de Elviña S/N, 15071 A Coruña, é a responsable do tratamento dos teus datos persoais.
+
+hackOS é a plataforma que GPUL utiliza para xestionar o rexistro, as solicitudes e a participación en HackUDC; o seu uso é obrigatorio para participar no evento. Esta política complementa, sen substituír, a [política de privacidade xeral de HackUDC](https://hackudc.gpul.org/privacy), que describe o tratamento de datos do evento no seu conxunto.
 
 Podes contactar con GPUL nese enderezo ou mediante [hackudc@gpul.org](mailto:hackudc@gpul.org) para calquera consulta relacionada coa privacidade.
 
@@ -170,12 +174,14 @@ Para calquera consulta sobre privacidade, escribe a [hackudc@gpul.org](mailto:ha
     title: "Privacy policy",
     description:
       "This policy explains what data GPUL processes through hackOS, why it is used and how you can exercise your rights.",
-    updatedAt: "10 August 2026",
+    updatedAt: "26 August 2026",
     body: `## 1. Data controller
 
 This policy applies only to the hackOS instance operated by GPUL. An installation deployed by another person or organisation is an independent instance: its operator is the data controller and must provide its own privacy policy. GPUL does not control or process data stored in third-party instances.
 
 The Asociación Universitaria Grupo de Programadores y Usuarios de Linux (**GPUL**), tax ID G15659220, with its address at Facultad de Informática, Campus de Elviña S/N, 15071 A Coruña, Spain, is the controller of your personal data.
+
+hackOS is the platform GPUL uses to manage registration, applications and participation in HackUDC; using it is mandatory to take part in the event. This policy complements, and does not replace, [HackUDC's general privacy policy](https://hackudc.gpul.org/privacy), which describes data processing for the event as a whole.
 
 You may contact GPUL at that address or at [hackudc@gpul.org](mailto:hackudc@gpul.org) with any privacy-related query.
 

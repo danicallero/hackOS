@@ -77,6 +77,10 @@ to `RESERVED_FIELD_KEYS` — see the doc comment on that constant.
 **UI (`apps/web`).**
 - `components/common/template-field-control.tsx` — required-field `*` marker now
   also renders on the `checkbox` kind (it was missing there; other kinds had it).
+  Its label is also auto-linkified like `help_text`, so a required checkbox can
+  carry actionable consent links (e.g. "I agree to the Terms and Privacy
+  Policy") — configured per application/per language through the form builder,
+  no code change needed per event.
 - `(auth)/claim-account/page.tsx` — added an optional **Dietary notes** textarea;
   an invited **participant** is routed to `/login?next=/my-applications`.
 - `(auth)/login/page.tsx` — honours a **same-origin** `?next=` param

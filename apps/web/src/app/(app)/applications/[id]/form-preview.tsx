@@ -188,7 +188,7 @@ export function FieldPreviewRow({ field: f, locale }: { field: TemplateField; lo
         </p>
       ) : (
         <Label htmlFor={fieldId}>
-          {label}
+          {f.kind === "checkbox" ? <LinkifiedText text={label} /> : label}
           {f.required && <span className="text-destructive"> *</span>}
         </Label>
       )}

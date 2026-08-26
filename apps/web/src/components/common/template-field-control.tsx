@@ -172,6 +172,10 @@ export function TemplateFieldControl({
       );
       break;
     case "checkbox":
+      // Unlike other kinds, a checkbox's own label carries the consent text
+      // (e.g. "I agree to the Terms and Privacy Policy") and needs actionable
+      // links to whatever it's asking the applicant to accept, so — like
+      // help_text — bare URLs in it are auto-linked.
       control = (
         <div className="flex items-center gap-2">
           <Checkbox
@@ -186,7 +190,7 @@ export function TemplateFieldControl({
             aria-required={field.required || undefined}
           />
           <Label id={labelId} htmlFor={id} className="text-sm font-normal">
-            {label}
+            <LinkifiedText text={label} />
             {field.required && (
               <>
                 <span aria-hidden="true" className="text-destructive ml-0.5">

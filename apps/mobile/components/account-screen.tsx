@@ -466,6 +466,20 @@ export default function AccountScreen() {
           />
         </Section>
 
+        <Section title={t("accountLegalTitle")}>
+          <ActionButton
+            label={t("accountPrivacyPolicy")}
+            icon="hand.raised"
+            onPress={() => void Linking.openURL(`${EVENT_WEBSITE_URL}/privacy`)}
+          />
+          <Separator />
+          <ActionButton
+            label={t("accountTerms")}
+            icon="doc.text"
+            onPress={() => void Linking.openURL(`${EVENT_WEBSITE_URL}/terms`)}
+          />
+        </Section>
+
         <Section title={t("accountDangerZone")}>
           <ActionButton
             label={dangerZoneOpen ? t("accountHideDangerZone") : t("accountShowDangerZone")}
@@ -513,9 +527,9 @@ export default function AccountScreen() {
                     {t("accountCannotSelfDelete")}
                   </Text>
                   <ActionButton
-                    label={t("accountPrivacyPolicy")}
-                    icon="arrow.up.right.square"
-                    onPress={() => void Linking.openURL(`${EVENT_WEBSITE_URL}/privacy`)}
+                    label={t("accountRequestAnonymization")}
+                    icon="envelope"
+                    onPress={() => void Linking.openURL(anonymizationRequestMailto(me))}
                   />
                 </View>
               )}
@@ -526,6 +540,13 @@ export default function AccountScreen() {
       <AndroidStatusBarScrim />
     </View>
   );
+}
+
+/** Pre-filled mailto for accredited accounts that can't self-delete (H54): puts the requester's email and account id straight in front of the organisers instead of making them hunt for a contact address. */
+function anonymizationRequestMailto(me: { id: number; email: string }) {
+  const subject = "Account anonymization request";
+  const body = `Account email: ${me.email}\nAccount id: ${me.id}\n`;
+  return `mailto:hackudc@gpul.org?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 function languageName(language: string) {

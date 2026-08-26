@@ -1,7 +1,7 @@
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Pressable, Text, useWindowDimensions, View } from "react-native";
+import { Alert, Linking, Pressable, Text, useWindowDimensions, View } from "react-native";
 
 import {
   AuthCredentialField,
@@ -10,7 +10,7 @@ import {
 import { AuthAlert, AuthButton, AuthHeader, AuthScreen } from "@/components/auth-ui";
 import { apiFetch } from "@/lib/api";
 import { signIn, signOut } from "@/lib/auth-client";
-import { EVENT_WEBSITE_DISPLAY } from "@/lib/env";
+import { EVENT_WEBSITE_DISPLAY, EVENT_WEBSITE_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import type { Me, PublicEvent } from "@/lib/types";
 import { colors } from "@/theme/colors";
@@ -120,6 +120,38 @@ export default function SignInScreen() {
           >
             {t("eventAccessNotice", { website: EVENT_WEBSITE_DISPLAY })}
           </Text>
+          <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => void Linking.openURL(`${EVENT_WEBSITE_URL}/terms`)}
+              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+            >
+              <Text
+                style={{
+                  color: colors.secondaryLabel,
+                  fontSize: 13,
+                  textDecorationLine: "underline",
+                }}
+              >
+                {t("accountTerms")}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => void Linking.openURL(`${EVENT_WEBSITE_URL}/privacy`)}
+              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+            >
+              <Text
+                style={{
+                  color: colors.secondaryLabel,
+                  fontSize: 13,
+                  textDecorationLine: "underline",
+                }}
+              >
+                {t("accountPrivacyPolicy")}
+              </Text>
+            </Pressable>
+          </View>
         </View>
       }
     >
