@@ -51,13 +51,19 @@ describe("push channel", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, { body: string }];
     expect(url).toBe("https://exp.host/--/api/v2/push/send");
-    const messages = JSON.parse(init.body) as { to: string; title: string; body: string }[];
+    const messages = JSON.parse(init.body) as {
+      to: string;
+      title: string;
+      body: string;
+      channelId: string;
+    }[];
     expect(messages.map((m) => m.to).sort()).toEqual([
       "ExponentPushToken[aaa]",
       "ExponentPushToken[bbb]",
     ]);
     expect(messages[0]!.title).toBe("Go wait at room Sala 1");
     expect(messages[0]!.body).toBe("Wait at the door for General. We'll tell you when to enter.");
+    expect(messages[0]!.channelId).toBe("default");
     expect((await getOutboxRow(id)).status).toBe("sent");
   });
 
@@ -272,5 +278,45 @@ describe("push channel", () => {
     // that would resend the same push to the token that already got it.
     expect((await getOutboxRow(id)).status).toBe("sent");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("logs the platform and a masked token for a partial failure", async () => {
+    const userId = await createUser();
+    await pool.query(`INSERT INTO push_tokens (user_id, token, platform) VALUES ($1, $2, $3)`, [
+      userId,
+      "ExponentPushToken[working-token]",
+      "android",
+    ]);
+    await pool.query(`INSERT INTO push_tokens (user_id, token, platform) VALUES ($1, $2, $3)`, [
+      userId,
+      "ExponentPushToken[failing-token]",
+      "ios",
+    ]);
+    const id = await enqueueOutbox(userId, "push", { subject: "s", body: "b" });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              data: [{ status: "ok" }, { status: "error", message: "APNs credentials missing" }],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+      ),
+    );
+
+    await drainOutboxOnce();
+
+    expect((await getOutboxRow(id)).status).toBe("sent");
+    expect(warn).toHaveBeenCalledWith("Expo push ticket failed", {
+      userId,
+      category: "test",
+      platform: "ios",
+      token: "…g-token]",
+      error: "APNs credentials missing",
+    });
   });
 });

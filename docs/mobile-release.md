@@ -1,14 +1,12 @@
-# Mobile development, builds, and store release
+# Mobile builds and release
 
-This is the operational runbook for `apps/mobile`: local development,
-Continuous Native Generation (Expo Prebuild), local and EAS builds, signing,
-push credentials, store assets, submission, and release verification. Functional
-coverage remains in [`mobile.md`](./mobile.md).
+Runbook for `apps/mobile`: local development, Expo prebuild, EAS builds,
+signing, notifications, store assets, and submission. The app's feature
+documentation is in [`mobile.md`](./mobile.md).
 
-The commands and examples here target the versions currently pinned by the
-repository (Expo SDK 57, React Native 0.86, pnpm 10). Store rules and build
-images change independently of this repository. Re-check the linked official
-Expo, Apple, and Google documentation before each production release.
+The examples match the versions currently in the repository: Expo SDK 57,
+React Native 0.86, and pnpm 10. Check Expo, Apple, and Google requirements
+again when upgrading the SDK or preparing a store release.
 
 ## Contents
 
@@ -31,36 +29,27 @@ Expo, Apple, and Google documentation before each production release.
 - [16. Release acceptance checklist](#16-release-acceptance-checklist)
 - [17. After release](#17-after-release)
 
-## Current release readiness
+## Before release
 
-As of this document's last update, do **not** submit the app to either store
-without resolving these items:
+Resolve these items before submitting either app:
 
-- `ios.bundleIdentifier` and `android.package` are currently
-  `com.hackudc.os`. Confirm that this is the permanent, organization-owned
-  identifier before creating the store records; it cannot be renamed after
-  release without creating a different app.
-- The PNGs have technically valid dimensions, but must be reviewed as final
-  hackOS artwork, at actual launcher sizes, on light/dark device backgrounds.
-- A dedicated Android notification status icon is not configured. Create a
-  96×96 all-white transparent PNG and configure it through the
-  `expo-notifications` plugin; the full-color launcher icon is not a suitable
-  notification-tray icon.
-- Publish an organization-owned privacy-policy URL, support URL, and account
-  deletion/request page, and make privacy/support choices readily accessible
-  inside the app. The current mobile UI does not expose those links.
-- Create stable reviewer accounts with participant and staff scanner
-  capabilities, plus safe sample ticket/badge QR codes and written review
-  instructions. Keep the review backend online for the entire review window.
-- Offline queue persistence, camera permissions, APNs/FCM, authenticated SSE,
-  and Apple/Google Wallet have been verified on real iOS/Android hardware.
-  The simulator/emulator cannot substitute for this: push delivery, camera
-  capture, and Wallet integration don't function there, so any future
-  behavior change in these areas needs a real-device re-check before release.
+- Confirm that `ios.bundleIdentifier` and `android.package` remain
+  `com.hackudc.os`. Changing either after release creates a new app and breaks
+  updates.
+- Review the launcher and splash artwork at device size, on light and dark
+  backgrounds.
+- Add the Android notification icon: a 96×96 white PNG with transparency,
+  configured through `expo-notifications`.
+- Publish the privacy policy, support, and account-deletion URLs. The current
+  mobile UI still needs these links.
+- Prepare reviewer accounts, sample QR codes, and review instructions.
+- Test camera scanning, offline queues, APNs/FCM, authenticated SSE, and Apple
+  and Google Wallet on physical devices. The emulator is useful for checking
+  Android notification permission, but final push delivery still needs a real
+  device.
 
-Treat bundle identifiers, Android package names, and signing keys as durable
-production identity, not per-developer settings. Changing them creates a
-different app and breaks updates to existing installations.
+Keep package names, bundle identifiers, and signing keys under organization
+control. They are part of the app's permanent identity.
 
 ## 1. Required accounts and local tools
 
@@ -87,8 +76,8 @@ requires `eas.json` and any local `credentials.json` to live beside the mobile
 ### Android local builds
 
 - Android Studio with the SDK/platform and build tools required by Expo SDK 57.
-- An Android emulator with Google Play services for push testing, or a physical
-  device with USB debugging.
+- An Android emulator with Google Play services for permission and notification
+  testing, or a physical device with USB debugging.
 - A supported JDK. Prefer Android Studio's bundled JDK unless Expo/Gradle asks
   for another version.
 - `ANDROID_HOME`/`ANDROID_SDK_ROOT` and platform-tools on `PATH` if Android
@@ -196,8 +185,8 @@ Choose and record these values with the organization that owns the stores:
 | App Store Connect app ID | numeric value such as `1234567890` | EAS Submit `ascAppId` |
 | Google Play service account | dedicated JSON key | EAS Submit / Play Developer API |
 
-The reverse-DNS examples are placeholders. Never copy them into a production
-configuration.
+The reverse-DNS values above are examples. Replace them before using a
+production configuration.
 
 From `apps/mobile`, link or create the EAS project:
 
@@ -206,11 +195,10 @@ pnpm dlx eas-cli@latest init
 pnpm dlx eas-cli@latest project:info
 ```
 
-`eas init` should add the real EAS UUID under `expo.extra.eas.projectId`.
-Commit that UUID: it identifies the project and is not a secret. The app's
-push registration reads it through Expo Constants. Expo recommends explicitly
-using the project ID for stable
-[push-token attribution](https://docs.expo.dev/push-notifications/push-notifications-setup/).
+`eas init` adds the EAS UUID to `expo.extra.eas.projectId`. Commit this value;
+it identifies the project and is not a secret. The app uses it when registering
+push tokens. See Expo's
+[push-token setup](https://docs.expo.dev/push-notifications/push-notifications-setup/).
 
 Before generating native projects, complete `app.json` with the permanent
 identifiers:
@@ -242,34 +230,25 @@ Keep the API configuration aligned:
 MOBILE_APP_SCHEME=hackos
 ```
 
-Changing the app scheme requires changing both `app.json` and the API's
-`MOBILE_APP_SCHEME`, rebuilding the native app, and redeploying the API.
+If the scheme changes, update both `app.json` and the API's
+`MOBILE_APP_SCHEME`, then rebuild the app and redeploy the API.
 
-The event website defaults to `https://os.hackudc.com` and can be changed with
-the public build variable `EXPO_PUBLIC_EVENT_WEBSITE_URL`. The same variable
-drives the informational sign-in copy and iOS `webcredentials` entitlement.
-Keep the matching
-`apps/web/public/.well-known/apple-app-site-association` file deployed at the
-site root and update both entries together if the production web domain, Apple
-team, or bundle identifier changes. This association lets Password AutoFill
-offer the same event accounts on the website and in the installed app; changing
-it requires a new native build.
+The event website defaults to `https://os.hackudc.com`. Set
+`EXPO_PUBLIC_EVENT_WEBSITE_URL` when using another site. It controls the sign-in
+copy and the iOS `webcredentials` entitlement. Keep the matching
+`apps/web/public/.well-known/apple-app-site-association` file on that site. A
+domain, Apple team, or bundle ID change requires updating both files and a new
+native build.
 
-The sign-in footer keeps this domain visible and selectable but deliberately
-does not make it a tappable account-creation link. Apple's account-deletion
-guidance says that sending someone to the default browser to register or sign
-in is not appropriate under App Review Guideline 4; it would also require the
-app to let the person initiate full account deletion under 5.1.1(v). The app
-has no purchase flow, so the external-purchase restrictions in 3.1.1 are not
-the reason for this choice. Re-check all three rules before adding a link,
-in-app registration, or paid digital access. In App Review notes, explain that
-event applications and account creation happen on the website, while the
-native app serves accepted attendees during the physical event.
+The sign-in footer shows the website but does not link to registration. If this
+changes, review Apple's account creation and account deletion rules first. In
+App Review notes, state that applications and account creation happen on the
+website and the native app is for accepted attendees during the event.
 
 ## 4. EAS environments and API URLs
 
-Use separate EAS environments so a preview binary can never silently point at
-production. The minimum variable is public by design:
+Use separate EAS environments for development, preview, and production. Set
+the API URL in each one:
 
 ```sh
 cd apps/mobile
@@ -295,10 +274,8 @@ pnpm dlx eas-cli@latest env:create \
 pnpm dlx eas-cli@latest env:list --environment production
 ```
 
-Set `EXPO_PUBLIC_EVENT_WEBSITE_URL` the same way in every environment that uses
-a different event site. It controls both the website shown on sign-in and the
-iOS Password AutoFill associated domain, so a changed value requires a new
-native build as well as an association file on that website.
+Set `EXPO_PUBLIC_EVENT_WEBSITE_URL` in any environment that uses another event
+site. A change requires a new native build and an updated association file.
 
 Pull a readable environment for local work when useful:
 
@@ -306,10 +283,9 @@ Pull a readable environment for local work when useful:
 pnpm dlx eas-cli@latest env:pull --environment development
 ```
 
-Do not use Secret visibility for `EXPO_PUBLIC_API_URL`: Expo must read it while
-bundling, and it is visible inside the shipped app anyway. Use EAS Secret/file
-variables only for build-time material that is not embedded as a public client
-value. See Expo's current
+Keep `EXPO_PUBLIC_API_URL` as plaintext. Expo needs it while bundling and it is
+visible in the app. Use secret/file variables only for build-time credentials.
+See Expo's
 [EAS environment-variable model](https://docs.expo.dev/eas/environment-variables/).
 
 ## 5. Configure build and submission profiles
@@ -746,9 +722,61 @@ pnpm exec expo start --dev-client
 Create internally distributed release-like builds:
 
 ```sh
+cd apps/mobile
 pnpm dlx eas-cli@latest build --platform android --profile preview
 pnpm dlx eas-cli@latest build --platform ios --profile preview
 ```
+
+### Build and distribute an Android APK
+
+Use `preview` for an installable APK. Set the artifact type explicitly in
+`eas.json`:
+
+```json
+{
+  "build": {
+    "preview": {
+      "distribution": "internal",
+      "environment": "preview",
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  }
+}
+```
+
+The `preview` EAS environment must contain the `GOOGLE_SERVICES_JSON` file
+variable (see Section 10). Build with:
+
+```sh
+cd apps/mobile
+pnpm dlx eas-cli@latest build \
+  --platform android \
+  --profile preview
+```
+
+Download the APK from the EAS build page. For a local build:
+
+```sh
+cd apps/mobile
+GOOGLE_SERVICES_JSON="$(pwd)/google-services.json" \
+  pnpm dlx eas-cli@latest build \
+  --platform android \
+  --profile preview \
+  --local
+```
+
+`production` produces an AAB for Google Play.
+
+### GitHub Releases
+
+You can attach the APK to a GitHub Release for internal distribution. Use a
+private repository unless public APK downloads are intentional.
+
+Include the app version, source commit, EAS build URL, and a SHA-256 checksum
+in the release notes. Do not upload `google-services.json`, FCM service-account
+keys, keystores, or other signing credentials.
 
 Create store binaries:
 
@@ -897,6 +925,21 @@ and color rather than copying the example blindly. See Expo's SDK 57
 5. Run `eas credentials`, choose Android and the production profile, then
    upload the FCM v1 service-account key under Push Notifications.
 6. Ensure the Firebase project number/sender matches the app configuration.
+
+### Rebuilding without Firebase credentials
+
+`google-services.json` is required by the Android build and is intentionally
+not stored in Git. It is different from the Google Play service-account JSON.
+
+Anyone rebuilding the APK needs access to the organization’s Firebase
+configuration and EAS FCM credentials. Without them, the build may fail; if it
+succeeds, the rebuilt app will not receive Android push notifications.
+Existing installations are not affected, but replacing one with that APK will
+lose notification delivery.
+
+Do not use a new Firebase project or package as a workaround. Get the correct
+file or EAS environment access from the release owner, then test the APK on a
+physical Android device before sharing it.
 
 Follow Expo's current
 [FCM v1 credential procedure](https://docs.expo.dev/push-notifications/fcm-credentials/).

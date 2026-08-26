@@ -1,5 +1,4 @@
 import Constants from "expo-constants";
-import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { apiFetch } from "./api";
@@ -12,8 +11,6 @@ import { apiFetch } from "./api";
  * block sign-in on it.
  */
 export async function registerForPushNotifications(): Promise<void> {
-  if (!Device.isDevice) return;
-
   const existing = await Notifications.getPermissionsAsync();
   let status = existing.status;
   if (status !== "granted") {

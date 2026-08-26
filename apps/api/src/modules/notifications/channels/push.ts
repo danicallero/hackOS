@@ -12,6 +12,15 @@ interface ExpoTicket {
   details?: { error?: string };
 }
 
+interface PushTokenRow {
+  token: string;
+  platform: string | null;
+}
+
+function tokenLabel(token: string): string {
+  return token.length > 10 ? `…${token.slice(-8)}` : token;
+}
+
 /**
  * Expo Push adapter (H51, H55). Sends to every registered push_token of the
  * user in one batched request. A user with zero tokens is a no-op success —
@@ -33,9 +42,10 @@ export async function dispatchPush(
   payload: EmailPayload,
   category?: string,
 ): Promise<void> {
-  const { rows: tokenRows } = await db.query(`SELECT token FROM push_tokens WHERE user_id = $1`, [
-    userId,
-  ]);
+  const { rows: tokenRows } = await db.query(
+    `SELECT token, platform FROM push_tokens WHERE user_id = $1`,
+    [userId],
+  );
   if (tokenRows.length === 0) return;
 
   const { rows: userRows } = await db.query(`SELECT language FROM users WHERE id = $1`, [userId]);
@@ -55,12 +65,14 @@ export async function dispatchPush(
         }
       : {};
 
-  const tokens: string[] = tokenRows.map((r: { token: string }) => r.token);
+  const typedTokenRows = tokenRows as PushTokenRow[];
+  const tokens = typedTokenRows.map((row) => row.token);
   const messages = tokens.map((token) => ({
     to: token,
     title: rendered.title,
     body: rendered.body,
     data,
+    channelId: "default",
     ...timeSensitive,
   }));
 
@@ -95,7 +107,15 @@ export async function dispatchPush(
       await db.query(`DELETE FROM push_tokens WHERE token = $1`, [tokens[i]]);
       continue;
     }
-    firstError ??= ticket.message ?? ticket.details?.error ?? "unknown expo push error";
+    const error = ticket.message ?? ticket.details?.error ?? "unknown expo push error";
+    console.warn("Expo push ticket failed", {
+      userId,
+      category,
+      platform: typedTokenRows[i]?.platform ?? "unknown",
+      token: tokenLabel(tokens[i] ?? "unknown"),
+      error,
+    });
+    firstError ??= error;
   }
   // The outbox retries a failed row by resending to every current token
   // again (no per-token retry tracking), so a batch counts as delivered as
