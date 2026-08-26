@@ -463,6 +463,36 @@ describe("self-service account removal (H54)", () => {
     expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [user])).rowCount).toBe(1);
   });
 
+  it("blocks self-anonymization while the participant is inside the venue", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const user = await createUser({ email: "inside-at-removal@example.test" });
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, check_in_method)
+       VALUES ($1, 'B-INSIDE', 'scan')`,
+      [user],
+    );
+    await pool.query(
+      `INSERT INTO time_logs (user_id, kind, scanned_at)
+       VALUES ($1, 'in', now() - interval '15 minutes')`,
+      [user],
+    );
+
+    const removal = await a.inject({
+      method: "POST",
+      url: "/api/me/anonymize",
+      headers: asUser(user),
+      payload: { confirm: true },
+    });
+
+    expect(removal.statusCode).toBe(409);
+    expect(removal.json().error.details.code).toBe("participant_inside");
+    expect(
+      (await pool.query(`SELECT account_state FROM users WHERE id = $1`, [user])).rows,
+    ).toEqual([{ account_state: "active" }]);
+    expect((await pool.query(`SELECT 1 FROM anonymous_participants`)).rowCount).toBe(0);
+  });
+
   it("self-anonymizes after venue exit, preserves verified minutes, revokes credentials, and replays safely", async () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");

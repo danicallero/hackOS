@@ -510,7 +510,12 @@ async function extractAnonymousDemographics(
       const value = firstResponseValue(row.responses ?? {}, key);
       if (value === undefined || value === null) continue;
 
-      if (/(^|\s)(age|edad)(\s|$)/i.test(description) && values.age == null) {
+      if (
+        /(^|\s)(age|edad|birth|birthday|dob|date of birth|nacimiento|nacemento)(\s|$)/i.test(
+          description,
+        ) &&
+        values.age == null
+      ) {
         values.age = numericValue(value) ?? ageFromDate(value, asOf);
       } else if (/gender|sexo|género/i.test(description) && values.gender == null) {
         values.gender = textValue(value, 100);
