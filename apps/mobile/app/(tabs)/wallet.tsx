@@ -5,7 +5,7 @@ import { File, Paths } from "expo-file-system";
 import { useScrollToTop } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Linking, Platform, ScrollView, Text, useColorScheme, View } from "react-native";
+import { Alert, Linking, Platform, ScrollView, Text, useColorScheme, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { ActionButton, EmptyState, InfoRow, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -20,6 +20,7 @@ import { useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
+import { declineOwnSpot } from "@/lib/self-service";
 import { subscribeToServerEvent } from "@/lib/server-events";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
@@ -42,8 +43,10 @@ export default function WalletScreen() {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<Error | null>(null);
   const [spotConfirmed, setSpotConfirmed] = useState(false);
+  const [spotDeclined, setSpotDeclined] = useState(false);
   const actionRetry = useRef<{ action: () => Promise<void>; key: string } | null>(null);
   const confirmationKeys = useRef(new Map<number, string>());
+  const declineKeys = useRef(new Map<number, string>());
   const scrollRef = useRef<ScrollView>(null);
 
   useScrollToTop(scrollRef);
@@ -149,6 +152,26 @@ export default function WalletScreen() {
     await Promise.all([load(), refetchMe()]);
   }
 
+  async function declineSpot(responseId: number) {
+    const key = declineKeys.current.get(responseId) ?? createIdempotencyKey();
+    declineKeys.current.set(responseId, key);
+    await declineOwnSpot(responseId, key);
+    setSpotDeclined(true);
+    void haptic("warning");
+    await Promise.all([load(), refetchMe()]);
+  }
+
+  function confirmDeclineSpot(responseId: number) {
+    Alert.alert(t("walletDeclineSpotTitle"), t("walletDeclineSpotDescription"), [
+      { text: t("cancel"), style: "cancel" },
+      {
+        text: t("walletDeclineSpotAction"),
+        style: "destructive",
+        onPress: () => void runAction(() => declineSpot(responseId), `decline:${responseId}`),
+      },
+    ]);
+  }
+
   if (!ticket)
     return <RequestFeedback loading={loading} error={error} onRetry={() => void load()} />;
 
@@ -209,6 +232,21 @@ export default function WalletScreen() {
           </Text>
         </View>
       ) : null}
+      {spotDeclined ? (
+        <View
+          accessibilityLiveRegion="polite"
+          style={{
+            backgroundColor: colors.warningSurface,
+            borderCurve: "continuous",
+            borderRadius: 12,
+            padding: 14,
+          }}
+        >
+          <Text selectable style={{ color: colors.onWarningSurface, fontSize: 15, lineHeight: 21 }}>
+            {t("walletSpotDeclined")}
+          </Text>
+        </View>
+      ) : null}
 
       {ticket.acceptedSpots.map((spot) => (
         <Section
@@ -262,6 +300,13 @@ export default function WalletScreen() {
                 }
               />
             )}
+            <ActionButton
+              label={t("walletDeclineSpotAction")}
+              icon="xmark.circle"
+              destructive
+              busy={busyAction === `decline:${spot.responseId}`}
+              onPress={() => confirmDeclineSpot(spot.responseId)}
+            />
           </View>
         </Section>
       ))}

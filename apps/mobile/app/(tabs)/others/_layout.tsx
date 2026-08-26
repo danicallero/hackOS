@@ -23,6 +23,7 @@ export default function OthersLayout() {
         name="account"
         options={{ headerShown, headerLargeTitle: true, title: t("tabAccount") }}
       />
+      <Stack.Screen name="scan-log" />
       <Stack.Screen
         name="queue"
         options={{ headerShown, headerLargeTitle: true, title: t("tabQueue") }}

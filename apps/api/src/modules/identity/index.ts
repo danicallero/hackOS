@@ -1,5 +1,8 @@
+import { createHash } from "node:crypto";
 import { fromNodeHeaders } from "better-auth/node";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { TooManyRequestsError } from "../../lib/errors.js";
+import { consumeRateLimit } from "../../lib/rate-limit.js";
 import { setUserIdResolver } from "../../plugins/auth-context.js";
 import { auth } from "./auth.js";
 import { registerInviteRoutes } from "./routes/invites.js";
@@ -70,6 +73,27 @@ async function betterAuthPassthrough(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<FastifyReply> {
+  // #559: one attacked account must not consume the shared venue IP's whole
+  // sign-in budget. Apply a stricter distributed counter to the normalized
+  // account identifier before Better Auth applies its generous IP ceiling.
+  // Hashing keeps email addresses out of Valkey keys and operational tooling.
+  if (request.method === "POST" && request.url.split("?", 1)[0] === "/api/auth/sign-in/email") {
+    const email = signInEmail(request.body);
+    if (email) {
+      const accountKey = createHash("sha256").update(email).digest("hex");
+      const accountLimit = await consumeRateLimit("auth-sign-in-account", accountKey, {
+        windowSeconds: 300,
+        max: 10,
+      });
+      if (!accountLimit.allowed) {
+        throw new TooManyRequestsError(
+          "Too many requests — try again later.",
+          accountLimit.retryAfterSeconds,
+        );
+      }
+    }
+  }
+
   const host = request.headers.host ?? "localhost";
   const url = new URL(request.url, `http://${host}`);
 
@@ -112,4 +136,17 @@ async function betterAuthPassthrough(
   // ends, and a handler that resolves `undefined` before that makes Fastify
   // fire a second send (ERR_HTTP_HEADERS_SENT as an unhandled rejection).
   return reply.send(buf.length > 0 ? buf : null);
+}
+
+function signInEmail(body: unknown): string | null {
+  if (!Buffer.isBuffer(body)) return null;
+  try {
+    const parsed: unknown = JSON.parse(body.toString("utf8"));
+    if (typeof parsed !== "object" || parsed === null || !("email" in parsed)) return null;
+    const email = (parsed as { email?: unknown }).email;
+    return typeof email === "string" && email.trim() ? email.trim().toLowerCase() : null;
+  } catch {
+    // Better Auth owns malformed-body validation and its public error shape.
+    return null;
+  }
 }

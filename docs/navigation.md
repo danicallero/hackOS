@@ -120,26 +120,29 @@ capability mapping and pseudo-tab policy; it is not a replacement for the
 component API reference.
 
 `apps/mobile/lib/tabs.ts` computes `primaryTabs()`/`overflowTabs()` from
-effective capabilities. Every platform uses the custom Expo Router shell in
+effective capabilities plus the `/api/me` accreditation and queue-membership
+facts. Every platform uses the custom Expo Router shell in
 `components/router-tabs.tsx`, with iOS 26+ Liquid Glass surfaces and solid
 surfaces on earlier iOS and Android. Five total destinations are rendered
 directly on compact layouts; tablet-width layouts can fit up to six before the
 separate `Others` circle is needed. The full route registry remains mounted so
 hidden destinations stay routable:
 
-- **Non-operator account**: schedule, queue, wallet, notifications, and
-  **Account** are all direct because the set has five destinations.
+- **Non-operator account**: schedule, wallet, notifications, and **Account**
+  are direct. **My queue** appears only after a badge is assigned or the
+  account has an actual queue entry, including exceptional sponsor/staff/mentor
+  membership; Wallet remains unconditional for every mobile account.
 - **Operator** (any of `accredit:scan`, `presence:scan`, `activity:scan`, or
   the admin wildcard): the daily shift tools take the bar — schedule,
   **Scanner**, Activities (`activity:scan` holders only), notifications —
   scanning must never sit behind an ellipsis. The separate
-  **"Others" overflow selector** holds Queue, Wallet, Account, and any queue
-  operations destination as pseudo-tabs.
+  **"Others" overflow selector** holds eligible personal Queue, Wallet,
+  Account, and any queue operations destination as pseudo-tabs.
 - **Queue-only operator** (`queue:operate`, `queue:admin`, or `*`, without a
   scanner capability): Queue operations is a direct tab alongside Schedule and
-  Alerts; Queue, Wallet, and Account move to Others. If the person also has a
-  scanner capability, Queue operations joins Others so Scanner stays directly
-  reachable.
+  Alerts; an eligible personal Queue, Wallet, and Account move to Others. If
+  the person also has a scanner capability, Queue operations joins Others so
+  Scanner stays directly reachable.
 
 The "Others" slot is a **native dropdown selector**, not a screen. It is a
 direct custom button in its own perfect circle; it does not need fake

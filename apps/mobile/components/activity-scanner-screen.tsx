@@ -544,7 +544,7 @@ function ActivityResultPanel({
           ) : (
             <ResultActionButton
               testID={UI_TEST_IDS.scanner.continue}
-              label={result.wasRepeat ? t("close") : t("continue")}
+              label={t("close")}
               onPress={onContinue}
             />
           )}

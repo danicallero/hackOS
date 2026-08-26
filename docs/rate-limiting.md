@@ -30,7 +30,8 @@ whether the route is Better Auth's own or this app's.
 | Class | Routes | Limit | Key | Configurable? |
 |---|---|---|---|---|
 | Better Auth baseline | any `/api/auth/*` path not listed below | 60/60s | client IP | fixed |
-| sign-in | `POST /sign-in/email` | 30/5min | client IP | fixed |
+| sign-in account | `POST /sign-in/email` | 10/5min | normalized email (SHA-256 hashed in the Valkey key) | fixed |
+| sign-in IP ceiling | `POST /sign-in/email` | 300/5min | client IP | fixed |
 | sign-up | `POST /sign-up/email` | 30/hour | client IP | fixed |
 | password-reset request | `POST /request-password-reset` | 10/hour | client IP | fixed |
 | password-reset consume | `POST /reset-password` | 20/15min | client IP | fixed |
@@ -58,14 +59,19 @@ staff commonly share one venue IP, so IP-keying would be either too loose
 class is one shared budget across check-in/rotate/remove/presence-scan for a
 given staff member, not a separate budget per route.
 
-## Auth limits and shared-venue NAT
+## Auth limits and shared-venue NAT (#559)
 
-Per-IP throttling on `/api/auth/*` is coarse at a hackathon: many legitimate
-attendees on venue Wi-Fi often share one public IP behind NAT. The limits
-above are deliberately more generous than Better Auth's own built-in defaults
-(3 attempts/10s) for exactly this reason. If a shared-IP venue still trips
-these limits in practice, the fix is a follow-up (e.g. a secondary
-per-account layer) — not something this rollout attempts to solve.
+Sign-in uses two layers. A strict 10-attempt/5-minute counter follows the
+normalized account email, so repeated attacks against one account stop before
+they can consume the venue's shared IP allowance. Its Valkey key contains only
+a SHA-256 digest, never the email itself. A separate, deliberately generous
+300-attempt/5-minute IP ceiling still limits credential stuffing that rotates
+through many accounts. Both layers use the shared distributed primitive and
+therefore apply across all API replicas.
+
+Other `/api/auth/*` limits remain per IP. They are deliberately more generous
+than Better Auth's built-in defaults because hackathon venues commonly put many
+legitimate attendees behind one NAT'd public address.
 
 ## Trusted-proxy requirement
 

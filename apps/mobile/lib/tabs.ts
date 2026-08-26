@@ -4,7 +4,16 @@ import type { OverflowTabKey } from "./overflow-tabs";
 
 export type TabKey = "schedule" | "notifications" | "scan" | "activities" | OverflowTabKey;
 
-const PARTICIPANT_PRIMARY_TAB_KEYS = ["schedule", "queue", "wallet", "notifications"] as const;
+export interface PersonalTabContext {
+  accredited: boolean;
+  hasQueueItems: boolean;
+}
+
+const NO_PERSONAL_QUEUE: PersonalTabContext = { accredited: false, hasQueueItems: false };
+
+export function canSeeMyQueue(context: PersonalTabContext): boolean {
+  return context.accredited || context.hasQueueItems;
+}
 
 const STAFF_SCAN_CAPABILITIES = [
   CAPABILITIES.ACCREDIT_SCAN,
@@ -37,26 +46,38 @@ export function queueOperationsInPrimaryBar(capabilities: string[]): boolean {
 }
 
 /**
- * H55: which tabs a signed-in user sees, driven entirely by their effective
- * capabilities (never by `role`) — mirrors the server-side `hasCapability`
- * check in apps/api/src/lib/capabilities.ts (the `*` admin wildcard passes
- * every check).
+ * H22/H55: which tabs a signed-in user sees, driven by effective capabilities
+ * and concrete personal-resource facts (never by illustrative `role`).
  */
-export function visibleTabs(capabilities: string[]): TabKey[] {
-  return [...primaryTabs(capabilities), ...overflowTabs(capabilities)];
+export function visibleTabs(
+  capabilities: string[],
+  context: PersonalTabContext = NO_PERSONAL_QUEUE,
+): TabKey[] {
+  return [...primaryTabs(capabilities, context), ...overflowTabs(capabilities, context)];
 }
 
 /**
- * Tabs shown directly in the custom tab bar. The bar reserves a separate
+ * Tabs shown directly in the custom tab bar. My queue is a personal resource,
+ * so it appears only after accreditation or real queue membership. The bar reserves a separate
  * Others circle only when the complete set is crowded. Operators prioritize
  * their daily tools here; five destinations fit directly, while larger sets
  * use four direct tabs plus Others.
  */
-export function primaryTabs(capabilities: string[]): TabKey[] {
+export function primaryTabs(
+  capabilities: string[],
+  context: PersonalTabContext = NO_PERSONAL_QUEUE,
+): TabKey[] {
   if (queueOperationsInPrimaryBar(capabilities)) {
     return ["schedule", "operations", "notifications"];
   }
-  if (!isOperator(capabilities)) return [...PARTICIPANT_PRIMARY_TAB_KEYS];
+  if (!isOperator(capabilities)) {
+    return [
+      "schedule",
+      ...(canSeeMyQueue(context) ? (["queue"] as const) : []),
+      "wallet",
+      "notifications",
+    ];
+  }
 
   return [
     "schedule",
@@ -67,10 +88,13 @@ export function primaryTabs(capabilities: string[]): TabKey[] {
 }
 
 /** Tabs represented inside the Others selector rather than the main bar. */
-export function overflowTabs(capabilities: string[]): OverflowTabKey[] {
+export function overflowTabs(
+  capabilities: string[],
+  context: PersonalTabContext = NO_PERSONAL_QUEUE,
+): OverflowTabKey[] {
   if (!isOperator(capabilities) && !canOperateQueues(capabilities)) return ["account"];
   return [
-    "queue",
+    ...(canSeeMyQueue(context) ? (["queue"] as const) : []),
     "wallet",
     "account",
     ...(isOperator(capabilities) && canOperateQueues(capabilities)
@@ -80,11 +104,14 @@ export function overflowTabs(capabilities: string[]): OverflowTabKey[] {
 }
 
 /** True only when the complete tab set cannot fit as five direct destinations. */
-export function shouldUseOverflowMenu(capabilities: string[]): boolean {
+export function shouldUseOverflowMenu(
+  capabilities: string[],
+  context: PersonalTabContext = NO_PERSONAL_QUEUE,
+): boolean {
   // Five destinations still fit as ordinary direct tabs. Others is reserved
   // for a genuinely crowded navigation set, where the bar keeps four direct
   // cells and moves the remaining destinations behind the native menu.
-  return visibleTabs(capabilities).length > 5;
+  return visibleTabs(capabilities, context).length > 5;
 }
 
 /**

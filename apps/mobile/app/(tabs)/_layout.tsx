@@ -71,7 +71,9 @@ export default function TabLayout() {
   return (
     <View style={{ flex: 1 }}>
       <OpaqueRouterTabs
+        accredited={me.badgeId !== null}
         capabilities={capabilities}
+        hasQueueItems={me.hasQueueItems}
         hasUnreadNotifications={hasUnreadNotifications}
       />
     </View>

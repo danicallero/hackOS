@@ -611,22 +611,42 @@ describe("H3 resend verification rate limit", () => {
   });
 });
 
-describe("#538 distributed rate limiting on Better Auth paths", () => {
-  it("caps /sign-in/email at 30/5min via the Valkey-backed customStorage, with retry-after", async () => {
+describe("#538/#559 distributed rate limiting on Better Auth paths", () => {
+  it("limits sign-in per account without consuming another account's shared-IP budget (#559)", async () => {
     const a = await getApp();
     await signUp(a);
+    await signUp(a, { email: "grace@example.com", name: "Grace" });
 
     let last: Awaited<ReturnType<typeof signIn>> | undefined;
-    for (let i = 0; i < 31; i += 1) {
-      // Wrong password on every attempt: exercises the limiter without ever
-      // succeeding into a session, and the sign-in path throttles on IP
-      // regardless of credential validity.
+    for (let i = 0; i < 11; i += 1) {
       last = await signIn(a, SIGNUP.email, "wrong-password-1");
     }
     expect(last?.statusCode).toBe(429);
     const retryAfter = Number(last?.headers["retry-after"]);
     expect(retryAfter).toBeGreaterThan(0);
     expect(retryAfter).toBeLessThanOrEqual(300);
+
+    // Both requests have the same injected client IP. The attacked account's
+    // stricter bucket must not lock a different attendee out behind venue NAT.
+    const otherAccount = await signIn(a, "grace@example.com", SIGNUP.password);
+    expect(otherAccount.statusCode).toBe(200);
+  });
+
+  it("shares the per-account sign-in limit across API replicas (#559)", async () => {
+    const replicaA = await buildTestApp();
+    const replicaB = await buildTestApp();
+    try {
+      await signUp(replicaA);
+      let last: Awaited<ReturnType<typeof signIn>> | undefined;
+      for (let i = 0; i < 11; i += 1) {
+        last = await signIn(i % 2 === 0 ? replicaA : replicaB, SIGNUP.email, "wrong-password-1");
+      }
+      expect(last?.statusCode).toBe(429);
+      expect(Number(last?.headers["retry-after"])).toBeGreaterThan(0);
+    } finally {
+      await replicaA.close();
+      await replicaB.close();
+    }
   });
 
   it("caps /request-password-reset at 10/hour, shared across two app instances via Valkey (#538 multi-replica)", async () => {
