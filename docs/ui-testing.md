@@ -56,6 +56,12 @@ The current smoke flow deliberately exercises client-side validation, so it
 does not require a seeded account or a live API. Authenticated flows should
 use a dedicated test account and API fixture rather than production data.
 
+The Chromium project is the required pull-request smoke subset. It includes
+the judging-room transition scenario, whose API read model and SSE connection
+are deterministic in-process fixtures. Firefox, WebKit, and mobile Chromium
+remain local/release coverage; scenarios wait for observable UI state rather
+than fixed delays.
+
 ## Native mobile tests
 
 Fast native UI tests run with the existing mobile Jest command and are included
@@ -102,6 +108,39 @@ by CNG. Override the default simulator/device with `DETOX_IOS_DEVICE` or
 installs, so pass e.g. `DETOX_IOS_DEVICE="iPhone 17 Pro"`. Native-device acceptance remains separate from the
 default UI command because it needs host-specific hardware and can take much
 longer than the deterministic component suite.
+
+CI runs the hardware-free browser smoke and mobile component suite. Before a
+pilot, run the complete critical-flow gate against a disposable seeded
+environment:
+
+```sh
+export E2E_OPERATOR_EMAIL=operator@example.test
+export E2E_OPERATOR_PASSWORD='fixture password'
+export E2E_PERSON_ID=101
+export E2E_BADGE_ID=E2E-BADGE-101
+export E2E_NEW_BADGE_ID=E2E-BADGE-NEW
+export E2E_MEAL_ACTIVITY_ID=201
+export E2E_RECORDABLE_ACTIVITY_ID=202
+pnpm test:ui:native:build
+pnpm test:ui:critical
+```
+
+Seed exactly one verified operator with `accredit:scan` and `activity:scan`;
+one confirmed, unaccredited person (`E2E_PERSON_ID`); one
+separate already-accredited person with `E2E_BADGE_ID`; and two currently
+scannable activities, one meal and one non-meal recordable activity. Reset the
+four domain rows before every run so accreditation starts unassigned and both
+activity counts start at zero. These reserved values are the complete fixture
+contract; never point the suite at production. Run only the native auth smoke
+with `pnpm test:ui:native:smoke`.
+
+The meal scenario performs the same badge twice and waits for the explicit
+repeat-confirmation state. The recordable-activity scenario blocks its write,
+restarts the process, restores the network, and verifies that the encrypted
+SQLite queue replays the persisted scan exactly once: scanning the badge again
+must reach repeat confirmation. Scanner writes reuse the durable local scan ID
+as their idempotency key, so this covers transient failure, recovery, and the
+no-duplicate boundary on a device.
 
 ## Adding a flow
 

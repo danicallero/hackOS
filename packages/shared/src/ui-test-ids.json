@@ -4,5 +4,20 @@
     "password": "auth-password",
     "submit": "auth-submit",
     "error": "auth-error"
+  },
+  "queue": {
+    "room": "queue-room",
+    "state": "queue-state",
+    "manualCall": "queue-manual-call",
+    "bringIn": "queue-bring-in"
+  },
+  "scanner": {
+    "manualEntry": "scanner-manual-entry",
+    "manualCode": "scanner-manual-code",
+    "manualSubmit": "scanner-manual-submit",
+    "linkBadge": "scanner-link-badge",
+    "result": "scanner-result",
+    "continue": "scanner-continue",
+    "confirmRepeat": "scanner-confirm-repeat"
   }
 }

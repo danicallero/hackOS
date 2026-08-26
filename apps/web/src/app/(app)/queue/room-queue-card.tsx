@@ -1,5 +1,6 @@
 "use client";
 
+import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import {
   AlertTriangleIcon,
   BellRingIcon,
@@ -107,14 +108,16 @@ export function RoomQueueCard({
   };
 
   return (
-    <Surface padding="none" className="overflow-hidden">
+    <Surface padding="none" className="overflow-hidden" data-testid={UI_TEST_IDS.queue.room}>
       <div className="flex items-start justify-between gap-2 px-3.5 py-2.5">
         <div className="min-w-0 space-y-0.5">
           <div className="flex flex-wrap items-center gap-1.5">
             <h3 className="truncate text-sm font-semibold">{room.room.name}</h3>
-            <StatusBadge tone={roomState?.is_paused ? "warning" : "success"}>
-              {roomState?.is_paused ? t("paused") : t("live")}
-            </StatusBadge>
+            <span data-testid={UI_TEST_IDS.queue.state}>
+              <StatusBadge tone={roomState?.is_paused ? "warning" : "success"}>
+                {roomState?.is_paused ? t("paused") : t("live")}
+              </StatusBadge>
+            </span>
           </div>
           {/* The queue this room works, then where the room is. Two facts, not
               a badge competing with the room's own name. */}
@@ -195,6 +198,7 @@ export function RoomQueueCard({
             actions={(entry) => (
               <>
                 <Button
+                  data-testid={UI_TEST_IDS.queue.bringIn}
                   size="sm"
                   disabled={!canOperate || busy === `notify-${entry.id}`}
                   onClick={() =>
@@ -276,6 +280,7 @@ export function RoomQueueCard({
             onSelect={setSelectedEntry}
             actions={(entry) => (
               <Button
+                data-testid={UI_TEST_IDS.queue.manualCall}
                 size="sm"
                 variant="outline"
                 disabled={!canOperate || busy === `call-${entry.id}`}

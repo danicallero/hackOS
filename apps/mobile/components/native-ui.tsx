@@ -219,6 +219,7 @@ export function ActionButton({
   icon,
   haptic: hapticIntent = "light",
   style,
+  testID,
 }: {
   label: string;
   onPress: () => void;
@@ -228,10 +229,12 @@ export function ActionButton({
   icon?: SymbolViewProps["name"];
   haptic?: HapticIntent | false;
   style?: ViewStyle;
+  testID?: string;
 }) {
   const foreground = destructive ? colors.destructive : colors.accent;
   return (
     <Pressable
+      testID={testID}
       accessibilityLabel={label}
       accessibilityRole="button"
       accessibilityState={{ disabled: disabled || busy, busy }}

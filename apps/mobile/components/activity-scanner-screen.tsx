@@ -1,4 +1,5 @@
 import { isMealActivityKind } from "@hackos/shared/activity-kinds";
+import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Stack } from "expo-router/stack";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -209,6 +210,7 @@ export function ActivityScannerScreen() {
         }
       />
       <GlassView
+        testID={UI_TEST_IDS.scanner.result}
         colorScheme="dark"
         glassEffectStyle="regular"
         style={{
@@ -527,6 +529,7 @@ function ActivityResultPanel({
           {repeatPending ? (
             <View style={{ flexDirection: "row", gap: 10 }}>
               <ResultActionButton
+                testID={UI_TEST_IDS.scanner.confirmRepeat}
                 disabled={registering}
                 label={t("cancel")}
                 onPress={onCancel}
@@ -540,6 +543,7 @@ function ActivityResultPanel({
             </View>
           ) : (
             <ResultActionButton
+              testID={UI_TEST_IDS.scanner.continue}
               label={result.wasRepeat ? t("close") : t("continue")}
               onPress={onContinue}
             />
@@ -555,14 +559,17 @@ function ResultActionButton({
   onPress,
   disabled = false,
   secondary = false,
+  testID,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   secondary?: boolean;
+  testID?: string;
 }) {
   return (
     <Pressable
+      testID={testID}
       accessibilityRole="button"
       accessibilityState={{ disabled }}
       disabled={disabled}
