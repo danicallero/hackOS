@@ -2,7 +2,7 @@
 
 import { EVENTS } from "@hackos/shared/events";
 import { CalendarDaysIcon, MegaphoneIcon, UsersRoundIcon, WifiIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Spinner } from "@/components/common/spinner";
 import type {
   PublicAnnouncement,
@@ -41,10 +41,10 @@ import { WifiQr } from "./wifi-qr";
  * layout (H41: adapts to any screen size/aspect ratio). */
 const MIN_CARD_WIDTH = 320;
 const GRID_GAP = 24;
-/** A joint card's internal span never grows past however many outer grid
- * tracks actually exist, so a challenge shared by many rooms wraps
- * internally instead of forcing the grid wider than the screen. */
-const MAX_GROUP_SPAN = 4;
+/** Joint queues keep at most four room tiles on one internal row. Extra outer
+ * width still belongs to the group, but makes those tiles wider instead of
+ * squeezing a fifth room into the same line on a distant TV. */
+const MAX_JOINT_ROOM_COLUMNS = 4;
 
 /** Matches the `gap-[1.25em]` on the sponsor wall at the 1x scale it is measured against. */
 const SPONSOR_WALL_GAP_PX = 20;
@@ -52,6 +52,158 @@ const SPONSOR_WALL_GAP_PX = 20;
 function columnsForWidth(width: number) {
   if (!width) return 4;
   return Math.max(1, Math.floor((width + GRID_GAP) / (MIN_CARD_WIDTH + GRID_GAP)));
+}
+
+export type PackedGroupSegment = {
+  span: number;
+  roomOffset: number;
+  roomCount: number;
+  showSummary: boolean;
+  inlineSummary: boolean;
+};
+
+/**
+ * Packs queue groups into complete outer-grid rows (H41/H46), including real
+ * L-shaped groups. When a large shared queue reaches a partly occupied row,
+ * its summary and first room use the remaining tracks; its other rooms then
+ * continue across the next row. With five columns, [Kelea×2, Merlin×1,
+ * GPUL×5] therefore becomes [2 + 1 + (summary + room)] / [four rooms].
+ */
+export function packedGroupLayout(
+  roomCounts: number[],
+  columnCount: number,
+): PackedGroupSegment[][] {
+  const columns = Math.max(1, Math.floor(columnCount));
+  const layout = roomCounts.map(() => [] as PackedGroupSegment[]);
+  let row: PackedGroupSegment[] = [];
+  let used = 0;
+
+  const closeRow = (stretch: boolean) => {
+    if (stretch && row.length) {
+      for (let index = 0; used < columns; index = (index + 1) % row.length) {
+        row[index].span += 1;
+        used += 1;
+      }
+    }
+    row = [];
+    used = 0;
+  };
+
+  for (const [groupIndex, rawCount] of roomCounts.entries()) {
+    const roomCount = Math.max(1, Math.floor(rawCount));
+    const preferred = Math.min(
+      columns,
+      roomCount > 1 ? Math.min(roomCount, MAX_JOINT_ROOM_COLUMNS) : 1,
+    );
+    let remaining = columns - used;
+
+    if (preferred > remaining) {
+      // A large queue may consume the row's final two-or-more tracks as its
+      // upper arm: one summary tile plus one or more room tiles. The rest of
+      // its rooms form the lower arm on the following row.
+      if (roomCount > MAX_JOINT_ROOM_COLUMNS && used > 0 && remaining >= 2) {
+        const upperRoomCount = Math.min(roomCount - 1, remaining - 1);
+        layout[groupIndex].push({
+          span: remaining,
+          roomOffset: 0,
+          roomCount: upperRoomCount,
+          showSummary: true,
+          inlineSummary: true,
+        });
+        closeRow(false);
+
+        const lowerRoomCount = roomCount - upperRoomCount;
+        layout[groupIndex].push({
+          span: columns,
+          roomOffset: upperRoomCount,
+          roomCount: lowerRoomCount,
+          showSummary: false,
+          inlineSummary: false,
+        });
+        closeRow(false);
+        continue;
+      }
+      closeRow(true);
+      remaining = columns;
+    }
+
+    const segment: PackedGroupSegment = {
+      span: Math.min(preferred, remaining),
+      roomOffset: 0,
+      roomCount,
+      showSummary: roomCount > 1,
+      inlineSummary: false,
+    };
+    layout[groupIndex].push(segment);
+    row.push(segment);
+    used += segment.span;
+    if (used === columns) {
+      closeRow(false);
+    }
+  }
+  closeRow(true);
+
+  return layout;
+}
+
+type JointGroupGrid = {
+  roomColumns: number;
+  metaSpan: number;
+};
+
+/**
+ * Lets room tiles wrap around the shared queue summary. Six rooms use four
+ * internal columns: the summary spans two cells beside two rooms on the first
+ * row, then four rooms fill the second row. The queue therefore reads as one
+ * compact L-shaped group rather than a heading row above a tall rectangle.
+ */
+export function jointGroupGrid(roomCount: number, outerSpan: number): JointGroupGrid {
+  const rooms = Math.max(1, Math.floor(roomCount));
+  const roomColumns = Math.max(1, Math.min(rooms, Math.floor(outerSpan), MAX_JOINT_ROOM_COLUMNS));
+  if (rooms <= roomColumns) return { roomColumns, metaSpan: roomColumns };
+
+  const partialRoomCount = rooms % roomColumns;
+  return {
+    roomColumns,
+    metaSpan: partialRoomCount === 0 ? roomColumns : roomColumns - partialRoomCount,
+  };
+}
+
+type GroupSegmentRect = { x: number; y: number; width: number; height: number };
+
+/** Rounded outline of the union between an upper-right segment and its
+ * full-width continuation below. The vertical bridge fills the grid row gap,
+ * turning two independently laid-out segments into one responsive L-shaped
+ * group body. Coordinates come from the rendered grid, not viewport guesses. */
+export function connectedGroupPath(rects: GroupSegmentRect[]): string {
+  if (rects.length < 2) return "";
+  const ordered = [...rects].sort((a, b) => a.y - b.y);
+  const top = ordered[0];
+  const bottom = ordered[ordered.length - 1];
+  const topStart = top.x;
+  const topY = top.y;
+  const bottomStart = bottom.x;
+  const bottomY = bottom.y;
+  const right = Math.max(top.x + top.width, bottom.x + bottom.width);
+  const bottomEdge = bottom.y + bottom.height;
+  const radius = Math.min(16, top.width / 4, bottom.height / 4);
+
+  return [
+    `M ${topStart + radius} ${topY}`,
+    `H ${right - radius}`,
+    `Q ${right} ${topY} ${right} ${topY + radius}`,
+    `V ${bottomEdge - radius}`,
+    `Q ${right} ${bottomEdge} ${right - radius} ${bottomEdge}`,
+    `H ${bottomStart + radius}`,
+    `Q ${bottomStart} ${bottomEdge} ${bottomStart} ${bottomEdge - radius}`,
+    `V ${bottomY + radius}`,
+    `Q ${bottomStart} ${bottomY} ${bottomStart + radius} ${bottomY}`,
+    `H ${topStart - radius}`,
+    `Q ${topStart} ${bottomY} ${topStart} ${bottomY - radius}`,
+    `V ${topY + radius}`,
+    `Q ${topStart} ${topY} ${topStart + radius} ${topY}`,
+    "Z",
+  ].join(" ");
 }
 
 /** The waiting room can legitimately hold more than the couple of teams a
@@ -273,46 +425,152 @@ function StandaloneRoomCard({ room, t }: { room: RoomView; t: Translate }) {
 /** Multiple rooms tied to the same joint challenge, clustered into one card:
  * the challenge name and the topmost queue entry each render exactly once,
  * per-room state (name, location, current team, waiting room) repeats. */
-function JointGroupCard({
+function JointGroupSegments({
   group,
-  maxSpan,
+  segments,
   t,
 }: {
   group: RoomGroup;
-  maxSpan: number;
+  segments: PackedGroupSegment[];
   t: Translate;
 }) {
   const shared = group.rooms[0]?.next ?? [];
+  const segmentRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const [shapePath, setShapePath] = useState("");
+  const isConnected = segments.length > 1;
+
+  useLayoutEffect(() => {
+    if (!isConnected) return;
+    const nodes = segmentRefs.current.filter((node): node is HTMLDivElement => Boolean(node));
+    const parent = nodes[0]?.offsetParent;
+    if (!parent || nodes.length !== segments.length) return;
+
+    let frame = 0;
+    const measure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const upperNode = nodes[0];
+        const lowerNode = nodes[nodes.length - 1];
+        const upperEdge = upperNode.offsetTop + upperNode.offsetHeight;
+        const lowerPadding = Number.parseFloat(getComputedStyle(lowerNode).paddingTop) || 0;
+        // Keep the upper room aligned with its neighbours, then let the L's
+        // background continue through one padding gutter before it steps out.
+        // Reading the rendered padding keeps the SVG in sync with the wrapper.
+        const shoulderY = upperEdge + lowerPadding;
+        const lowerEdge = lowerNode.offsetTop + lowerNode.offsetHeight;
+        setShapePath(
+          connectedGroupPath(
+            nodes.map((node, index) => {
+              // The upper room still finishes on the shared edge with Merlin;
+              // the SVG turns after the group's padding gutter so the card
+              // does not visually touch the L's inner corner.
+              if (index === nodes.length - 1) {
+                return {
+                  x: node.offsetLeft,
+                  y: shoulderY,
+                  width: node.offsetWidth,
+                  height: lowerEdge - shoulderY,
+                };
+              }
+              return {
+                x: node.offsetLeft,
+                y: node.offsetTop,
+                width: node.offsetWidth,
+                height: node.offsetHeight,
+              };
+            }),
+          ),
+        );
+      });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(parent);
+    for (const node of nodes) observer.observe(node);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [isConnected, segments.length]);
+
   return (
-    <section
-      className="bg-card/60 flex min-w-0 flex-col rounded-2xl border p-5 shadow-sm"
-      style={{ gridColumn: `span ${Math.min(group.rooms.length, maxSpan)}` }}
-      aria-labelledby={`group-${group.id}-title`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div id={`group-${group.id}-title`}>
-          <ChallengeHeading challenge={group.challenge} />
-        </div>
-        <span className="text-muted-foreground shrink-0 text-sm">
-          {t("groupSharedQueue", { count: group.rooms.length })}
-        </span>
-      </div>
-      <div
-        className="mt-4 mb-4 grid gap-4"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}
-      >
-        {group.rooms.map((room) => (
-          <div key={room.room.id} className="bg-card min-w-0 rounded-xl border p-4">
-            <div className="flex items-start justify-between gap-3">
-              <RoomHeader room={room} />
-              <RoomStatusPill paused={Boolean(room.state?.is_paused)} t={t} />
+    <section className="contents" aria-labelledby={`group-${group.id}-title`}>
+      {isConnected && shapePath && (
+        <svg
+          className="pointer-events-none absolute inset-0 z-0 size-full overflow-visible"
+          aria-hidden="true"
+        >
+          <path d={shapePath} className="fill-card opacity-60" />
+          <path
+            d={shapePath}
+            className="fill-none stroke-border"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+      )}
+      {segments.map((segment) => {
+        const rooms = group.rooms.slice(segment.roomOffset, segment.roomOffset + segment.roomCount);
+        const regularGrid = jointGroupGrid(rooms.length, segment.span);
+        // An interlocked upper arm keeps the same vertical hierarchy as every
+        // other shared queue: queue heading first, room immediately below.
+        const roomColumns = segment.inlineSummary
+          ? Math.max(1, rooms.length)
+          : regularGrid.roomColumns;
+        const metaSpan = segment.inlineSummary ? roomColumns : regularGrid.metaSpan;
+        return (
+          <div
+            key={`${group.id}-${segment.roomOffset}`}
+            ref={(node) => {
+              segmentRefs.current[segment.roomOffset] = node;
+            }}
+            className={cn(
+              "relative z-10 min-w-0 p-4",
+              segment.inlineSummary && "pb-0",
+              !isConnected && "bg-card/60 rounded-2xl border shadow-sm",
+            )}
+            style={{ gridColumn: `span ${segment.span}` }}
+          >
+            <div
+              className="grid h-full gap-4"
+              style={{ gridTemplateColumns: `repeat(${roomColumns}, 1fr)` }}
+            >
+              {segment.showSummary && (
+                <div
+                  className="bg-card flex min-w-0 flex-col rounded-xl border p-4"
+                  style={{ gridColumn: `span ${metaSpan}` }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div id={`group-${group.id}-title`} className="min-w-0">
+                      <ChallengeHeading challenge={group.challenge} />
+                    </div>
+                    <span className="text-muted-foreground shrink-0 text-sm">
+                      {t("groupSharedQueue", { count: group.rooms.length })}
+                    </span>
+                  </div>
+                  <NextInQueueFooter entry={shared[0] ?? null} waitingCount={shared.length} t={t} />
+                </div>
+              )}
+              {rooms.map((room) => (
+                <div
+                  key={room.room.id}
+                  data-group-room
+                  className={cn(
+                    "bg-card min-w-0 rounded-xl border p-4",
+                    segment.inlineSummary && "h-full",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <RoomHeader room={room} />
+                    <RoomStatusPill paused={Boolean(room.state?.is_paused)} t={t} />
+                  </div>
+                  <PresentingBlock active={room.active} t={t} />
+                  <WaitingRoomList room={room} t={t} />
+                </div>
+              ))}
             </div>
-            <PresentingBlock active={room.active} t={t} />
-            <WaitingRoomList room={room} t={t} />
           </div>
-        ))}
-      </div>
-      <NextInQueueFooter entry={shared[0] ?? null} waitingCount={shared.length} t={t} />
+        );
+      })}
     </section>
   );
 }
@@ -388,6 +646,14 @@ function RoomsView({
   const { containerRef, contentRef, scale, containerWidth, contentWidthPercent } =
     useFitToViewport();
   const columns = columnsForWidth(containerWidth);
+  const groupLayout = useMemo(
+    () =>
+      packedGroupLayout(
+        groups.map((group) => group.rooms.length),
+        columns,
+      ),
+    [groups, columns],
+  );
   return (
     <div ref={containerRef} className="bg-background text-foreground h-dvh w-dvw overflow-hidden">
       <div
@@ -411,25 +677,35 @@ function RoomsView({
         <div className="min-h-0 flex-1 p-8">
           {groups.length ? (
             <div
-              className="grid gap-6"
+              className="relative grid gap-6"
               style={{
                 gridTemplateColumns: `repeat(${columns}, 1fr)`,
                 gridAutoFlow: "dense",
               }}
             >
-              {groups.map((group) =>
+              {groups.map((group, index) =>
                 group.rooms.length > 1 ? (
-                  <JointGroupCard
+                  <JointGroupSegments
                     key={group.id}
                     group={group}
-                    maxSpan={Math.min(MAX_GROUP_SPAN, columns)}
+                    segments={groupLayout[index]}
                     t={t}
                   />
                 ) : (
-                  <StandaloneRoomCard key={group.id} room={group.rooms[0]} t={t} />
+                  <div
+                    key={group.id}
+                    style={{ gridColumn: `span ${groupLayout[index][0].span}` }}
+                    className="relative z-10 grid"
+                  >
+                    <StandaloneRoomCard room={group.rooms[0]} t={t} />
+                  </div>
                 ),
               )}
-              {announcement && <AnnouncementRoomCard announcement={announcement} />}
+              {announcement && (
+                <div className="col-span-full grid">
+                  <AnnouncementRoomCard announcement={announcement} />
+                </div>
+              )}
             </div>
           ) : (
             <div className="grid min-h-80 grid-cols-1 gap-6">

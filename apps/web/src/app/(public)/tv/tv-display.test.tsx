@@ -3,7 +3,13 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { announcementContent } from "./announcement-content";
-import { activeAnnouncement, TvDisplay } from "./tv-display";
+import {
+  activeAnnouncement,
+  connectedGroupPath,
+  jointGroupGrid,
+  packedGroupLayout,
+  TvDisplay,
+} from "./tv-display";
 
 const { pending, useEventSource } = vi.hoisted(() => ({
   pending: new Promise<never>(() => undefined),
@@ -173,5 +179,46 @@ describe("TV announcement layers", () => {
       title: "Cena lista",
       body: "Comedor principal",
     });
+  });
+});
+
+describe("TV room-grid packing", () => {
+  it("fills every outer row instead of stranding blank columns", () => {
+    const layout = packedGroupLayout([1, 1, 1], 5);
+    expect(layout.map((segments) => segments[0].span)).toEqual([2, 2, 1]);
+  });
+
+  it("adapts the same groups to narrower screens", () => {
+    expect(packedGroupLayout([2, 1], 3).map((segments) => segments[0].span)).toEqual([2, 1]);
+  });
+
+  it("interlocks a large shared queue with the groups before it", () => {
+    const layout = packedGroupLayout([2, 1, 5], 5);
+    expect(layout[0]).toEqual([
+      { span: 2, roomOffset: 0, roomCount: 2, showSummary: true, inlineSummary: false },
+    ]);
+    expect(layout[1][0].span).toBe(1);
+    expect(layout[2]).toEqual([
+      { span: 2, roomOffset: 0, roomCount: 1, showSummary: true, inlineSummary: true },
+      { span: 5, roomOffset: 1, roomCount: 4, showSummary: false, inlineSummary: false },
+    ]);
+  });
+
+  it("wraps six shared rooms around a two-cell summary", () => {
+    expect(jointGroupGrid(6, 6)).toEqual({ roomColumns: 4, metaSpan: 2 });
+  });
+
+  it("keeps the shared summary above groups that fit on one row", () => {
+    expect(jointGroupGrid(2, 3)).toEqual({ roomColumns: 2, metaSpan: 2 });
+  });
+
+  it("builds one closed L-shaped outline across the row gap", () => {
+    const path = connectedGroupPath([
+      { x: 300, y: 100, width: 200, height: 180 },
+      { x: 0, y: 304, width: 500, height: 180 },
+    ]);
+    expect(path).toContain("M 316 100");
+    expect(path).toContain("H 284 Q 300 304 300 288");
+    expect(path.endsWith("Z")).toBe(true);
   });
 });
