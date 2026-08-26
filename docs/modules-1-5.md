@@ -264,21 +264,24 @@ foreign-keys on the email string.
   DELETE 409 already pointed to: scrubs every PII column in place (keeping the
   row + FK references intact) and revokes access (deletes `sessions` +
   `accounts`). `DELETE /api/users/:id` hard-deletes fresh accounts, and — since
-  a never-accepted applicant has no role/ticket and is not operational history
-  worth retaining — also hard-deletes accounts whose only restrictive
-  references are their own `application_responses`/`applicant_reviews`, their
-  account-claim/verification `email_verification_tokens` row, queued/sent
-  `notification_outbox` messages (e.g. the invite/welcome email), their own
-  `notification_preferences` channel toggles (H51 UI settings, not event
-  participation), and any `audit_log` row where they're merely the actor (e.g.
-  the "accept" entry from claiming an invite): `removal.ts`
-  `clearOwnUnretainedReferences` clears/nulls
-  those in the same transaction before deleting the user (nulling
-  `audit_log.actor_id` rather than deleting the row keeps the audited event
-  itself, mirroring the nullable-actor pattern the self-delete route's own
-  audit write already uses). Any account with a ticket, scan, submission, or
-  other retained reference still 409s and must go through anonymization
-  instead.
+  the retention boundary is accreditation (badge assignment at check-in), not
+  acceptance or even a confirmed spot — also hard-deletes accounts whose only
+  restrictive references are their own `application_responses`/
+  `applicant_reviews`, their account-claim/verification
+  `email_verification_tokens` row, queued/sent `notification_outbox` messages
+  (e.g. the invite/welcome email), their own `notification_preferences`
+  channel toggles (H51 UI settings, not event participation), their permanent
+  `tickets` row and any `wallet_passes` issued from it (a confirmed spot, not
+  presence at the event), and any `audit_log` row where they're merely the
+  actor (e.g. the "accept" entry from claiming an invite): `removal.ts`
+  `clearOwnUnretainedReferences` clears/nulls those in the same transaction
+  before deleting the user (nulling `audit_log.actor_id` rather than deleting
+  the row keeps the audited event itself, mirroring the nullable-actor pattern
+  the self-delete route's own audit write already uses). Any account with a
+  `check_in_logs` row (accreditation — always written alongside `badge_id`,
+  and the only way a `badge`-purpose `wallet_passes` row can exist), a scan,
+  submission, or other retained reference still 409s and must go through
+  anonymization instead.
 - `GET /api/me/removal-eligibility` / `DELETE /api/me` (authenticated, no
   extra capability) — the self-service side of the same H54 preflight/delete:
   a participant can delete their own account only when
