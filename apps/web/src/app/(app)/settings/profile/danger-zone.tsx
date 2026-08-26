@@ -70,8 +70,15 @@ export function DangerZoneCard() {
     try {
       await clearOfflineQueue(me?.id ?? null);
     } catch {
-      // The encrypted queue envelope is removed before key deletion. A key
-      // left by an unavailable browser database cannot decrypt queue data.
+      // Fall back to removing every encrypted queue envelope if deriving the
+      // current owner's slot or deleting its IndexedDB key failed. The
+      // ciphertext is removed even when the browser blocks key deletion.
+      try {
+        await clearOfflineQueue(null);
+      } catch {
+        // There is no plaintext fallback; sign-out still prevents this
+        // account from using any queue that remains in browser storage.
+      }
     }
     clearWebAccountData();
     if (pendingCleanup) toast.info(t("accountRemovalPending"));

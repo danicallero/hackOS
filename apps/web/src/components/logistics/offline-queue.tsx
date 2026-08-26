@@ -27,6 +27,7 @@ const OFFLINE_KEY_PREFIX = "hackos:logistics:meal-scans:v2:";
 const KEY_DATABASE = "hackos-logistics-offline-queue";
 const KEY_STORE = "keys";
 const QUEUE_VERSION = 2;
+let queueGeneration = 0;
 
 type QueueEnvelope = {
   version: typeof QUEUE_VERSION;
@@ -252,6 +253,7 @@ export async function saveOfflineQueue(ownerId: number, items: OfflineScan[]): P
   // Remove the pre-H54 plaintext namespace before doing any new persistence,
   // including when encryption or browser storage later fails.
   removeStoredQueue(LEGACY_OFFLINE_KEY);
+  const generation = queueGeneration;
   const slot = await ownerSlot(ownerId);
   const key = await getOrCreateKey(slot);
   const payload: QueuePayload = { version: QUEUE_VERSION, ownerId, items };
@@ -268,11 +270,15 @@ export async function saveOfflineQueue(ownerId: number, items: OfflineScan[]): P
     iv: bytesToBase64(iv),
     ciphertext: bytesToBase64(ciphertext),
   };
+  if (generation !== queueGeneration) {
+    throw new Error("Offline queue was cleared while it was being saved");
+  }
   window.localStorage.setItem(queueStorageKey(slot), JSON.stringify(envelope));
 }
 
 /** Remove the current owner's queue and key during account closure. */
 export async function clearOfflineQueue(ownerId: number | null): Promise<void> {
+  queueGeneration += 1;
   removeStoredQueue(LEGACY_OFFLINE_KEY);
   if (ownerId === null) {
     try {
