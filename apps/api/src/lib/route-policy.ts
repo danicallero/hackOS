@@ -94,7 +94,12 @@ declare module "fastify" {
 }
 
 function isApplicationRoute(route: RouteOptions): boolean {
-  return route.url === "/healthz" || route.url === "/metrics" || route.url.startsWith("/api/");
+  return (
+    route.url === "/healthz" ||
+    route.url === "/readyz" ||
+    route.url === "/metrics" ||
+    route.url.startsWith("/api/")
+  );
 }
 
 function validatePolicy(policy: RouteAccessPolicy, route: RouteOptions): void {

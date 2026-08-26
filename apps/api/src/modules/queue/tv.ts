@@ -72,7 +72,15 @@ const DEFAULT_MODE: TvMode = {
 
 /** The raw override layer, with no timetable applied. */
 export async function getTvOverride(): Promise<TvMode | null> {
-  const raw = await valkey.get(TV_MODE_KEY);
+  let raw: string | null;
+  try {
+    raw = await valkey.get(TV_MODE_KEY);
+  } catch (err) {
+    // The override is ephemeral. A broker outage must not block the public TV
+    // read; continue with the durable timetable/default projection (#535).
+    console.warn("[tv] Valkey override unavailable; using timetable/default", err);
+    return null;
+  }
   if (!raw) return null;
   // Older payloads (pre issue #193) lack expiresAt/broadcastAt — default them.
   const parsed = JSON.parse(raw) as Partial<TvMode>;

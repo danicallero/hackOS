@@ -13,8 +13,8 @@ describe("final route-policy ledger", () => {
   it("has the exact classified rows, allowlists, and sole Better Auth exemption", async () => {
     app = await buildTestApp();
     const rows = app.routePolicyLedger.filter((row) => row.method !== "HEAD");
-    expect(rows).toHaveLength(332);
-    expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(17);
+    expect(rows).toHaveLength(333);
+    expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(18);
     expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(12);
     expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(43);
     expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(193);
@@ -44,6 +44,7 @@ describe("final route-policy ledger", () => {
       "GET /api/tv/stream",
       "GET /healthz",
       "GET /metrics",
+      "GET /readyz",
       "POST /api/telemetry/refetch-storm",
     ]);
     expect(

@@ -384,14 +384,17 @@ another.
 - **Scaling**: run more `worker` replicas for notification/queue throughput
   (dispatcher uses `FOR UPDATE SKIP LOCKED`, so replicas won't double-send).
   Multiple `api` replicas are fine — SSE is stateless and fans out via Valkey.
-- **Logs/health**: every long-running HTTP service has a container healthcheck;
-  the API also configures Traefik to probe `/healthz` so an initializing or
-  unhealthy replacement does not receive requests. The `worker` check is
+- **Logs/health**: every long-running HTTP service has a container healthcheck.
+  The API container probes dependency-free `/healthz` for process liveness;
+  Traefik probes `/readyz`, which returns 503 only when required PostgreSQL is
+  unavailable. Valkey is ephemeral, so its outage is a bounded 200
+  `status: degraded`: the replica keeps serving PostgreSQL-backed reads while
+  cache, rate limiting, and SSE fail open/reconnect. The `worker` check is
   disabled (it serves no HTTP — liveness is process-based via `restart`).
 - **Zero-downtime deploys**: the health checks gate traffic, but a single
   replacement still leaves a window with no backend. Enable Dokploy's
-  zero-downtime/Swarm rollout for the API service and use `/healthz` as its
-  health route before enabling API auto-deploys.
+  zero-downtime/Swarm rollout for the API service and use `/readyz` as its
+  readiness route before enabling API auto-deploys.
 
 ---
 

@@ -17,7 +17,10 @@
 - `registerWorker(name, processor)` — a module declares its processor at import
   time. `getQueue(name)` lazily creates the BullMQ `Queue`.
 - `startWorkers()` — instantiates one BullMQ `Worker` per registered processor.
-- Connection: `ioredis` against `VALKEY_URL` with `maxRetriesPerRequest: null`.
+- Connection: dedicated `ioredis` clients against `VALKEY_URL` with
+  `maxRetriesPerRequest: null`, as BullMQ requires. These options are isolated
+  in `queues.ts`; API cache, health, and SSE clients use a finite fail-fast
+  policy and never share the BullMQ connections (#535).
 
 **Where workers run** (`config.ts:workersInline`):
 - **dev / test** (`NODE_ENV !== production`, or `WORKERS_INLINE=1`): inline in

@@ -84,7 +84,10 @@ is the source of truth for each.
   Sets HSTS / nosniff / `X-Frame-Options: DENY` / referrer policy, trusts
   `X-Forwarded-*` (`TRUST_PROXY=true`) so the audit trail logs real client IPs.
 - **State:** none. Fully horizontally scalable (§7).
-- **Health:** `/healthz` pings Postgres + Valkey; Traefik gates traffic on it.
+- **Health:** `/healthz` is dependency-free process liveness. Traefik gates
+  traffic on `/readyz`: PostgreSQL failure returns 503, while an ephemeral
+  Valkey outage returns 200 with `status: degraded` so durable reads remain
+  available and the process is not restarted or removed from ingress.
 - **Bundled one-shot:** `migrate` (`node dist/migrate.js`) runs first, guarded by
   a Postgres advisory lock so concurrent redeploys/replicas can't race schema.
 
@@ -318,7 +321,7 @@ not large. The design leans on that: scale the stateless tier, keep one
 Postgres.
 
 **api — scale freely.** Stateless; add replicas behind Traefik. SSE works across
-replicas via Valkey (§5), and `/healthz` gating keeps initializing replicas out
+replicas via Valkey (§5), and `/readyz` gating keeps initializing replicas out
 of rotation. The only shared state is Postgres/Valkey, both reached by name.
 
 **worker — scale by replica count.** The outbox claim is
