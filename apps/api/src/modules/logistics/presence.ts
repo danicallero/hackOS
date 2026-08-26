@@ -69,7 +69,7 @@ async function openSessionAsOf(
 ): Promise<{ open: boolean; since: Date | null }> {
   const { rows } = await client.query(
     `SELECT kind, scanned_at FROM time_logs
-      WHERE user_id = $1 AND scanned_at <= $2
+      WHERE user_id = $1 AND kind IN ('in', 'out') AND scanned_at <= $2
       ORDER BY scanned_at DESC, id DESC LIMIT 1`,
     [userId, asOf],
   );
@@ -207,7 +207,7 @@ export async function openSessions(at?: number) {
        FROM (
          SELECT DISTINCT ON (user_id) user_id, kind, scanned_at
            FROM time_logs
-      WHERE scanned_at <= now()
+      WHERE scanned_at <= now() AND kind IN ('in', 'out')
           ORDER BY user_id, scanned_at DESC, id DESC
        ) tl
        JOIN users u ON u.id = tl.user_id
@@ -266,7 +266,7 @@ async function loadEvents(userId?: number): Promise<Map<number, PresenceEvent[]>
   const params = scoped ? [userId] : [];
   const { rows } = await pool.query(
     `SELECT tl.user_id, extract(epoch from tl.scanned_at) * 1000 AS t, tl.kind
-       FROM time_logs tl ${timeFilter}
+       FROM time_logs tl ${timeFilter} AND tl.kind IN ('in', 'out')
      UNION ALL
      SELECT al.user_id, extract(epoch from al.logged_at) * 1000 AS t, 'activity' AS kind
        FROM activity_logs al ${activityFilter}`,

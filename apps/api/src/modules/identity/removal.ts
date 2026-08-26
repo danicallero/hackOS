@@ -52,6 +52,7 @@ interface UserRemovalRow {
   secondary_email: string | null;
   name: string | null;
   surname: string | null;
+  dni: string | null;
   badge_id: string | null;
   badge_id_history: string[];
   university_id: number | null;
@@ -112,7 +113,7 @@ async function openVenueSession(
   const { rows } = await client.query<{ kind: "in" | "out"; scanned_at: Date }>(
     `SELECT kind, scanned_at
        FROM time_logs
-      WHERE user_id = $1 AND scanned_at <= clock_timestamp()
+      WHERE user_id = $1 AND kind IN ('in', 'out') AND scanned_at <= clock_timestamp()
       ORDER BY scanned_at DESC, id DESC
       LIMIT 1`,
     [userId],
@@ -183,7 +184,7 @@ export async function getAccountRemovalEligibility(
 
 async function loadUserForRemoval(client: pg.PoolClient, userId: number): Promise<UserRemovalRow> {
   const { rows } = await client.query<UserRemovalRow>(
-    `SELECT id, email, secondary_email, name, surname, badge_id, badge_id_history,
+    `SELECT id, email, secondary_email, name, surname, dni, badge_id, badge_id_history,
             university_id, account_state, removal_action
        FROM users WHERE id = $1 FOR UPDATE`,
     [userId],
@@ -395,12 +396,16 @@ async function enqueueRemovalRetry(
         source: options.source,
         reason: options.reason,
         requestedAction: action,
+        preserveIdempotency: options.preserveIdempotency,
       } satisfies RemovalRetryJob,
       {
         attempts: 8,
         backoff: { type: "exponential", delay: 60_000 },
         removeOnComplete: true,
-        removeOnFail: false,
+        // A failed job retains no useful identity once its short retry window
+        // is over; operators can retry from the pending user row. Avoid
+        // leaving the queue itself as a long-lived identity bridge.
+        removeOnFail: { age: 24 * 60 * 60, count: 1_000 },
       },
     );
   } catch {
@@ -536,7 +541,7 @@ async function extractAnonymousDemographics(
 async function guaranteedMinutesAtRemoval(client: pg.PoolClient, userId: number): Promise<number> {
   const { rows: timeRows } = await client.query<{ t: string; kind: PresenceEvent["kind"] }>(
     `SELECT extract(epoch FROM scanned_at) * 1000 AS t, kind
-       FROM time_logs WHERE user_id = $1
+       FROM time_logs WHERE user_id = $1 AND kind IN ('in', 'out')
       UNION ALL
      SELECT extract(epoch FROM logged_at) * 1000 AS t, 'activity' AS kind
        FROM activity_logs WHERE user_id = $1`,
@@ -871,7 +876,14 @@ async function scrubRelationships(
   // challenge, repo, or queue id happens to equal this user's id.
   const idPattern = `"(userId|user_id|subjectUserId|subject_user_id|actorId|actor_id|targetId|target_id|authorId|author_id|judgeId|judge_id|staffId|staff_id|createdBy|created_by|assignedBy|assigned_by|setBy|set_by|linkedBy|linked_by|loggedBy|logged_by|scannedBy|scanned_by|requestedBy|requested_by|submittedBy|submitted_by|referrerUserId|referrer_user_id|directorId|director_id)"[[:space:]]*:[[:space:]]*("${userId}"|${userId})([,}])`;
   const memberIdsPattern = `"memberUserIds"[[:space:]]*:[^]]*(^|[,[])[[:space:]]*"?${userId}"?[[:space:]]*([,]])`;
-  const emailTokens = emails.map((email) => `%${email}%`);
+  // Some older audit producers used a composite entity id such as
+  // "repoId:email" instead of putting the email in JSON. These values are
+  // still direct identifiers, so scrub them too. DNI is included for the
+  // same reason; names are deliberately not searched globally because a
+  // common name could delete an unrelated operator's audit row.
+  const identityTokens = [...emails, user.dni]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => `%${value}%`);
   await client.query(
     `DELETE FROM audit_log
       WHERE actor_id = $1
@@ -887,12 +899,13 @@ async function scrubRelationships(
          OR coalesce(reason, '') ~ $5
          OR coalesce(before::text, '') ILIKE ANY($4::text[])
          OR coalesce(after::text, '') ILIKE ANY($4::text[])
-         OR coalesce(reason, '') ILIKE ANY($4::text[])`,
+         OR coalesce(reason, '') ILIKE ANY($4::text[])
+         OR entity_id ILIKE ANY($4::text[])`,
     [
       userId,
       userId,
       idPattern,
-      emailTokens,
+      identityTokens,
       memberIdsPattern,
       ["user", "badge", "accreditation", "presence", "meal", "activity"],
     ],
@@ -922,7 +935,7 @@ async function scrubRelationships(
       )`,
     [
       userId,
-      emailTokens,
+      identityTokens,
       idPattern,
       memberIdsPattern,
       preserveIdempotency?.key ?? null,
@@ -1024,9 +1037,20 @@ export async function runAccountRemoval(
     }
     throw error;
   }
-  return withTransaction((client) =>
-    finalizeAccountRemoval(client, { ...options, action: preparation.action }),
-  );
+  try {
+    return await withTransaction((client) =>
+      finalizeAccountRemoval(client, { ...options, action: preparation.action }),
+    );
+  } catch (error) {
+    // Storage cleanup succeeded, but a transient DB/worker failure can still
+    // roll back the final transaction. Keep the account inaccessible and make
+    // completion retriable; a known business conflict is returned to the
+    // caller for reconciliation instead of creating an unbounded retry loop.
+    if (options.scheduleRetry !== false && !(error instanceof ConflictError)) {
+      await enqueueRemovalRetry(options, preparation.action);
+    }
+    throw error;
+  }
 }
 
 export { ANONYMOUS_AUDIT_FIELDS };
