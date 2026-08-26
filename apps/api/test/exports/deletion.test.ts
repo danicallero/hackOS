@@ -11,7 +11,8 @@ import {
   truncateAll,
 } from "../helpers.js";
 
-/** H54 deletion requests: creation is ADMIN_ALL-gated, processing reuses anonymizeUser. */
+/** H54 deletion requests: creation is ADMIN_ALL-gated and uses the same
+ * server-side delete/anonymize boundary as the in-app account action. */
 
 let app: App;
 
@@ -50,6 +51,11 @@ describe("deletion requests (H54)", () => {
     const target = await createUser({ name: "Real Person", email: "person@example.test" });
     const { pool } = await import("../../src/db/pool.js");
     await pool.query(`UPDATE users SET surname = 'Doe', dni = '00000000T' WHERE id = $1`, [target]);
+    await pool.query(`UPDATE users SET badge_id = 'B-DSR-ANON' WHERE id = $1`, [target]);
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, staff_id) VALUES ($1, 'B-DSR-ANON', $2)`,
+      [target, admin],
+    );
 
     const created = await app.inject({
       method: "POST",
@@ -66,11 +72,8 @@ describe("deletion requests (H54)", () => {
       `SELECT email, name, surname, dni, email_verified FROM users WHERE id = $1`,
       [target],
     );
-    expect(rows[0].email).toBe(`anonymized+${target}@deleted.invalid`);
-    expect(rows[0].name).toBe("Anonymized");
-    expect(rows[0].surname).toBeNull();
-    expect(rows[0].dni).toBeNull();
-    expect(rows[0].email_verified).toBe(false);
+    expect(rows).toHaveLength(0);
+    expect((await pool.query(`SELECT 1 FROM anonymous_participants`)).rowCount).toBe(1);
 
     const status = await app.inject({
       method: "GET",
@@ -80,8 +83,7 @@ describe("deletion requests (H54)", () => {
     expect(status.json().status).toBe("completed");
 
     const { rows: auditRows } = await pool.query(
-      `SELECT entity_type, action FROM audit_log WHERE entity_id = $1 ORDER BY id`,
-      [String(target)],
+      `SELECT entity_type, action FROM audit_log WHERE entity_type = 'anonymous_participant' ORDER BY id`,
     );
     expect(
       auditRows.some((r: { entity_type: string; action: string }) => r.action === "anonymized"),
@@ -90,8 +92,10 @@ describe("deletion requests (H54)", () => {
       `SELECT action FROM audit_log WHERE entity_type = 'data_subject_request' AND entity_id = $1 ORDER BY id`,
       [String(requestId)],
     );
+    // The original request audit payload contains subjectUserId and is
+    // removed with the departing identity. Only the identity-free completion
+    // marker survives.
     expect(requestAuditRows.map((r: { action: string }) => r.action)).toEqual([
-      "requested",
       "deletion_completed",
     ]);
   });

@@ -208,6 +208,15 @@ describe("pre-event stats (H27)", () => {
       `UPDATE application_responses SET confirmed_at = now() WHERE user_id = $1 AND application_id = $2`,
       [anonymized, appId],
     );
+    // The anonymous-retention boundary is operational history, not merely an
+    // application row. Give this fixture an accreditation record so the
+    // endpoint exercises the real anonymization path.
+    await pool.query(`UPDATE users SET badge_id = 'B-STATS-ANON' WHERE id = $1`, [anonymized]);
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, staff_id)
+       VALUES ($1, 'B-STATS-ANON', $2)`,
+      [anonymized, admin],
+    );
 
     const anon = await a.inject({
       method: "POST",

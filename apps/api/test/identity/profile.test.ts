@@ -461,6 +461,172 @@ describe("self-service account removal (H54)", () => {
     const blocked = await a.inject({ method: "DELETE", url: "/api/me", headers: asUser(user) });
     expect(blocked.statusCode).toBe(409);
     expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [user])).rowCount).toBe(1);
+
+    const blockedAnonymization = await a.inject({
+      method: "POST",
+      url: "/api/me/anonymize",
+      headers: asUser(user),
+      payload: { confirm: true },
+    });
+    expect(blockedAnonymization.statusCode).toBe(409);
+    expect(blockedAnonymization.json().error.details.code).toBe("participant_inside");
+  });
+
+  it("self-anonymizes after venue exit, preserves verified minutes, revokes credentials, and replays safely", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const user = await createUser({
+      name: "Self Anonymized Person",
+      email: "self-anonymized@example.test",
+    });
+    await pool.query(
+      `UPDATE users SET surname = 'Identity', dni = '12345678Z', badge_id = 'B-SELF-ANON' WHERE id = $1`,
+      [user],
+    );
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, check_in_method)
+       VALUES ($1, 'B-SELF-ANON', 'scan')`,
+      [user],
+    );
+    await pool.query(
+      `INSERT INTO time_logs (user_id, kind, scanned_at)
+       VALUES ($1, 'in', now() - interval '2 hours'),
+              ($1, 'out', now() - interval '1 hour')`,
+      [user],
+    );
+    await pool.query(
+      `INSERT INTO accounts (user_id, account_id, provider_id, refresh_token)
+       VALUES ($1, 'self-account', 'credentials', 'refresh-secret')`,
+      [user],
+    );
+    await pool.query(
+      `INSERT INTO sessions (user_id, token, expires_at) VALUES ($1, 'session-secret', now() + interval '1 day')`,
+      [user],
+    );
+    await pool.query(
+      `INSERT INTO push_tokens (user_id, token, platform) VALUES ($1, 'push-secret', 'ios')`,
+      [user],
+    );
+    await pool.query(`INSERT INTO tickets (user_id, token) VALUES ($1, 'ticket-secret')`, [user]);
+
+    const eligibility = await a.inject({
+      method: "GET",
+      url: "/api/me/removal-eligibility",
+      headers: asUser(user),
+    });
+    expect(eligibility.statusCode).toBe(200);
+    expect(eligibility.json()).toMatchObject({
+      action: "anonymize",
+      operationalHistoryRetained: true,
+      requiresVenueExit: false,
+    });
+
+    const headers = { ...asUser(user), "idempotency-key": "self-anonymize-replay" };
+    const removed = await a.inject({
+      method: "POST",
+      url: "/api/me/anonymize",
+      headers,
+      payload: { confirm: true },
+    });
+    expect(removed.statusCode).toBe(200);
+    expect(removed.json().anonymized).toBe(true);
+
+    const replay = await a.inject({
+      method: "POST",
+      url: "/api/me/anonymize",
+      headers,
+      payload: { confirm: true },
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.headers["idempotency-replayed"]).toBe("true");
+
+    expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [user])).rowCount).toBe(0);
+    expect((await pool.query(`SELECT 1 FROM accounts WHERE user_id = $1`, [user])).rowCount).toBe(
+      0,
+    );
+    expect((await pool.query(`SELECT 1 FROM sessions WHERE user_id = $1`, [user])).rowCount).toBe(
+      0,
+    );
+    expect(
+      (await pool.query(`SELECT 1 FROM push_tokens WHERE user_id = $1`, [user])).rowCount,
+    ).toBe(0);
+    expect((await pool.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [user])).rowCount).toBe(0);
+
+    const { rows: anonymous } = await pool.query(
+      `SELECT id, guaranteed_presence_minutes FROM anonymous_participants`,
+    );
+    expect(anonymous).toHaveLength(1);
+    expect(anonymous[0].id).not.toBe(String(user));
+    expect(anonymous[0].guaranteed_presence_minutes).toBe(60);
+    expect(
+      (
+        await pool.query(
+          `SELECT 1 FROM check_in_logs WHERE user_id = $1 OR staff_id = $1 OR badge_id = 'B-SELF-ANON'`,
+          [user],
+        )
+      ).rowCount,
+    ).toBe(0);
+    expect(
+      (await pool.query(`SELECT 1 FROM time_logs WHERE user_id = $1 OR scanned_by = $1`, [user]))
+        .rowCount,
+    ).toBe(0);
+    expect(
+      (
+        await pool.query(`SELECT 1 FROM check_in_logs WHERE anonymous_participant_id = $1`, [
+          anonymous[0].id,
+        ])
+      ).rowCount,
+    ).toBe(1);
+    expect(
+      (
+        await pool.query(`SELECT 1 FROM time_logs WHERE anonymous_participant_id = $1`, [
+          anonymous[0].id,
+        ])
+      ).rowCount,
+    ).toBe(2);
+  });
+
+  it("serializes a deletion racing the first accreditation write (H54)", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const staff = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
+    const target = await createUser({ email: "race-before-accreditation@example.test" });
+    await pool.query(`INSERT INTO tickets (user_id, token) VALUES ($1, 'race-ticket')`, [target]);
+
+    const [removal, checkIn] = await Promise.all([
+      a.inject({
+        method: "DELETE",
+        url: "/api/me",
+        headers: { ...asUser(target), "idempotency-key": "race-delete" },
+      }),
+      a.inject({
+        method: "POST",
+        url: "/api/accreditation/check-in",
+        headers: { ...asUser(staff), "idempotency-key": "race-check-in" },
+        payload: { ticketToken: "race-ticket", badgeId: "RACE-BADGE" },
+      }),
+    ]);
+
+    // Exactly one side may win the user-row lock. A deleted account cannot
+    // receive a late check-in, and a committed check-in makes hard deletion
+    // ineligible; both outcomes remain internally coherent.
+    expect(
+      removal.statusCode === 200 || (removal.statusCode === 409 && checkIn.statusCode === 200),
+    ).toBe(true);
+    if (removal.statusCode === 200) {
+      expect(removal.json().deleted).toBe(true);
+      expect(checkIn.statusCode).not.toBe(200);
+      expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [target])).rowCount).toBe(0);
+      expect(
+        (await pool.query(`SELECT 1 FROM check_in_logs WHERE user_id = $1`, [target])).rowCount,
+      ).toBe(0);
+    } else {
+      expect(checkIn.json().badgeId).toBe("RACE-BADGE");
+      expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [target])).rowCount).toBe(1);
+      expect(
+        (await pool.query(`SELECT 1 FROM check_in_logs WHERE user_id = $1`, [target])).rowCount,
+      ).toBe(1);
+    }
   });
 
   it("severs a sponsor identity without deleting a challenge author anchor", async () => {
@@ -1071,6 +1237,14 @@ describe("staff user routes (H7)", () => {
       `INSERT INTO check_in_logs (user_id, badge_id, staff_id) VALUES ($1, 'B-ADMIN-ANON', $2)`,
       [target, admin],
     );
+    // Devpost audit producers historically encoded the participant email in
+    // a composite entity_id rather than in JSON. That indirect copy must not
+    // survive the identity break either (H54).
+    await pool.query(
+      `INSERT INTO audit_log (actor_id, entity_type, entity_id, action, source)
+       VALUES ($1, 'devpost_repo', 'repo:person@example.test', 'participant_import', 'devpost')`,
+      [admin],
+    );
 
     // USERS_WRITE isn't enough — needs ADMIN_ALL.
     expect(
@@ -1142,6 +1316,21 @@ describe("staff user routes (H7)", () => {
     expect(auditRows.rows).toHaveLength(1);
     expect(JSON.stringify(auditRows.rows[0].before ?? "")).not.toContain("person@example.test");
     expect(JSON.stringify(auditRows.rows[0].after ?? "")).not.toContain("person@example.test");
+    expect(
+      (await pool.query(`SELECT 1 FROM audit_log WHERE entity_id ILIKE '%person@example.test%'`))
+        .rowCount,
+    ).toBe(0);
+
+    // The retained anonymous row exposes only the audit fields. An original
+    // email, name, or numeric user id must not be searchable through normal
+    // database relationships after the users row is gone.
+    const identitySearch = await pool.query(
+      `SELECT id FROM anonymous_participants
+        WHERE id::text = $1
+           OR coalesce(row_to_json(anonymous_participants)::text, '') ILIKE ANY($2::text[])`,
+      [String(target), ["%person@example.test%", "%Real Person%", `%${target}%`]],
+    );
+    expect(identitySearch.rows).toHaveLength(0);
   });
 
   it("keeps the last active wildcard holder when an anonymization job runs", async () => {
