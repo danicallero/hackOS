@@ -19,6 +19,7 @@ import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { fetchMyScanStats, type MyScanStats } from "@/lib/scan-log";
+import { SCAN_LOG_ROUTES } from "@/lib/scan-log-navigation";
 import { wipeAttendanceRoster } from "@/lib/scanner-db";
 import {
   clearAllCaches,
@@ -362,7 +363,7 @@ export default function AccountScreen() {
             <ActionButton
               label={t("scannerSeeHistory")}
               icon="clock.arrow.circlepath"
-              onPress={() => router.push("/(tabs)/scan/scan-log")}
+              onPress={() => router.push(SCAN_LOG_ROUTES.account)}
             />
           </Section>
         ) : null}
