@@ -2460,6 +2460,7 @@
   "deleteMyAccountConfirmTitle": "Delete your account?",
   "areYouSureCantBeUndone": "Are you sure? This action can't be undone.",
   "accountAnonymizeDescription": "Your account has event participation history. Anonymization permanently removes your name, email, credentials, dietary information, files and other direct identifiers. Only the limited anonymous audit fields shown below may remain.",
+  "accountAnonymizeApplicationNote": "A field remains only when the relevant event application collected that category; other application answers are not copied into the permanent anonymous audit record.",
   "accountRetainedFieldsIntro": "The anonymous audit record may retain:",
   "accountRetainedAge": "Age",
   "accountRetainedGender": "Gender",

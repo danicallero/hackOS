@@ -80,7 +80,7 @@
   "accountDeleteConfirmTitle": "Delete your account?",
   "accountDeleteConfirmBody": "This is final. Your event access will be revoked, any accepted spot will be forfeited, and your account and eligible application data will be deleted.",
   "accountDeleteError": "Your account couldn't be deleted. Check your connection and try again.",
-  "accountAnonymizeDescription": "This account has event participation history. Anonymization permanently removes your name, email, credentials, dietary information, files, and other direct identifiers. An anonymous audit record may retain age, gender, university, degree, graduation year, origin city, and verified venue time.",
+  "accountAnonymizeDescription": "This account has event participation history. Anonymization permanently removes your name, email, credentials, dietary information, files, and other direct identifiers. When collected by the relevant event application, an anonymous audit record may retain age, gender, university, degree, graduation year, origin city, and verified venue time. Other application answers are not retained in that record.",
   "accountRetainedFieldsIntro": "The anonymous audit record may retain:",
   "accountRetainedAge": "Age",
   "accountRetainedGender": "Gender",

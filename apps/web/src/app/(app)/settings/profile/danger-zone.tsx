@@ -168,6 +168,9 @@ export function DangerZoneCard() {
               <p className="text-muted-foreground text-pretty text-sm">
                 {t("accountAnonymizeDescription")}
               </p>
+              <p className="text-muted-foreground text-pretty text-sm">
+                {t("accountAnonymizeApplicationNote")}
+              </p>
               <div>
                 <p className="text-muted-foreground text-sm">{t("accountRetainedFieldsIntro")}</p>
                 <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-sm">
@@ -180,6 +183,9 @@ export function DangerZoneCard() {
               </div>
               <p className="text-muted-foreground text-pretty text-sm">
                 {t("accountAnonymizeProofLoss")}
+              </p>
+              <p className="text-muted-foreground text-pretty text-sm">
+                {t("accountAnonymizeApplicationNote")}
               </p>
               <p className="text-muted-foreground text-pretty text-sm">
                 {t("accountAnonymizeNoIdentityMapping")}

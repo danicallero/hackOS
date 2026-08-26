@@ -2460,6 +2460,7 @@
   "deleteMyAccountConfirmTitle": "¿Eliminar a túa conta?",
   "areYouSureCantBeUndone": "¿Tes certeza? Esta acción non se pode desfacer.",
   "accountAnonymizeDescription": "A túa conta ten historial de participación no evento. A anonimización eliminará permanentemente o teu nome, correo, credenciais, información alimentaria, ficheiros e outros identificadores directos. Só se poderán conservar os campos de auditoría anónimos indicados abaixo.",
+  "accountAnonymizeApplicationNote": "Un campo só se conserva cando a solicitude do evento correspondente recolleu esa categoría; as demais respostas da solicitude non se copian ao rexistro de auditoría anónimo permanente.",
   "accountRetainedFieldsIntro": "O rexistro de auditoría anónimo pode conservar:",
   "accountRetainedAge": "Idade",
   "accountRetainedGender": "Xénero",

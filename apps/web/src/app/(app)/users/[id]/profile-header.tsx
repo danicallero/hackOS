@@ -144,6 +144,11 @@ export function DeleteAccountButton({ user }: { user: UserDetail }) {
               ? t("anonymizeAccount")
               : t("removalUnavailableAction")}
       </Button>
+      {eligibility?.requiresVenueExit && (
+        <p role="alert" className="text-destructive max-w-md text-pretty text-sm">
+          {t("accountAnonymizeExitRequired")}
+        </p>
+      )}
       {eligibilityError && (
         <p role="alert" className="text-destructive max-w-md text-pretty text-sm">
           {eligibilityError}

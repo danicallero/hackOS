@@ -80,7 +80,7 @@
   "accountDeleteConfirmTitle": "Eliminar a túa conta?",
   "accountDeleteConfirmBody": "Esta acción é definitiva. Revogarase o teu acceso ao evento, renunciarás a calquera praza aceptada e eliminaranse a túa conta e os datos de solicitudes que se poidan borrar.",
   "accountDeleteError": "Non se puido eliminar a túa conta. Revisa a conexión e téntao de novo.",
-  "accountAnonymizeDescription": "Esta conta ten historial de participación no evento. A anonimización eliminará permanentemente o teu nome, correo, credenciais, información alimentaria, ficheiros e outros identificadores directos. Un rexistro de auditoría anónimo pode conservar a idade, o xénero, a universidade, a titulación, o ano de graduación, a cidade de orixe e o tempo verificado no recinto.",
+  "accountAnonymizeDescription": "Esta conta ten historial de participación no evento. A anonimización eliminará permanentemente o teu nome, correo, credenciais, información alimentaria, ficheiros e outros identificadores directos. Cando a solicitude do evento correspondente os recolla, un rexistro de auditoría anónimo pode conservar a idade, o xénero, a universidade, a titulación, o ano de graduación, a cidade de orixe e o tempo verificado no recinto. As demais respostas da solicitude non se conservan nese rexistro.",
   "accountRetainedFieldsIntro": "O rexistro de auditoría anónimo pode conservar:",
   "accountRetainedAge": "Idade",
   "accountRetainedGender": "Xénero",
