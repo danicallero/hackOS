@@ -165,7 +165,19 @@ Nobody can scroll, zoom, or squint at a TV, and the same page has to work on a
   transform and pre-widens to avoid horizontal letterboxing, which is safe
   there because every label in those cards is single-line `MarqueeText`; on
   wrapping text a transform feeds back into layout width. It also needs the
-  measured width to choose a column count.
+  measured width to choose a column count. The outer grid packs complete rows
+  and distributes spare tracks between the groups already on that row, so a
+  sparse final row still fills the wall. A large shared queue may split into
+  connected visual segments to use the end of the preceding row: its summary
+  and first room sit beside the smaller groups already there, while the
+  remaining room tiles continue across the row below. A measured inline SVG
+  fills the gap and draws one rounded outline around both segments, so the
+  result is a real connected L-shaped body rather than two nearby cards or the
+  group's rectangular bounding box. The shared-queue heading remains above its
+  first room, preserving the same hierarchy used by smaller shared queues. That
+  room card stretches to the bottom of the shared outer row, aligned with its
+  neighbours; the L's inner shoulder starts after the lower segment's padding
+  gutter, so the connecting fill never visually touches the room card edge.
 
 Scaling is off the **short side** (`min(width, height) / 1080`): a portrait
 totem then matches a 1080p panel instead of rendering at 0.56x, which is what
