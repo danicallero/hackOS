@@ -3,8 +3,8 @@ import type pg from "pg";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
-import { broadcast } from "../../lib/sse.js";
 import { hasEventAccess } from "../identity/role.js";
+import { broadcastForActiveUser } from "./active-broadcast.js";
 import { loadPersonCard } from "./cards.js";
 import { issueTicket } from "./tickets.js";
 import { enqueueWalletSync } from "./wallet-sync.js";
@@ -248,11 +248,17 @@ export async function checkInUser(
       surname: user.surname,
     };
   });
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_ACCREDITED, result);
+  await broadcastForActiveUser(
+    result.userId,
+    SSE_TOPICS.LOGISTICS,
+    EVENTS.LOGISTICS_ACCREDITED,
+    result,
+  );
   // H28: the participant's own wallet screen only refetches on this event —
   // without it, a first-time badge assignment silently never reaches their
   // device until they happen to reopen the wallet tab.
-  await broadcast(
+  await broadcastForActiveUser(
+    result.userId,
     `${SSE_TOPICS.USER_PREFIX}${result.userId}`,
     EVENTS.LOGISTICS_WALLET_PASS_UPDATED,
     {
@@ -356,8 +362,14 @@ export async function rotateBadge(
       voidedPasses: voided.rowCount ?? 0,
     };
   });
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_BADGE_ROTATED, result);
-  await broadcast(
+  await broadcastForActiveUser(
+    result.userId,
+    SSE_TOPICS.LOGISTICS,
+    EVENTS.LOGISTICS_BADGE_ROTATED,
+    result,
+  );
+  await broadcastForActiveUser(
+    result.userId,
     `${SSE_TOPICS.USER_PREFIX}${result.userId}`,
     EVENTS.LOGISTICS_WALLET_PASS_UPDATED,
     {
@@ -406,8 +418,14 @@ export async function removeBadge(actorId: number, input: { userId: number; reas
     });
     return { userId: input.userId, oldBadge, voidedPasses: voidedPassIds.length };
   });
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_BADGE_ROTATED, result);
-  await broadcast(
+  await broadcastForActiveUser(
+    result.userId,
+    SSE_TOPICS.LOGISTICS,
+    EVENTS.LOGISTICS_BADGE_ROTATED,
+    result,
+  );
+  await broadcastForActiveUser(
+    result.userId,
     `${SSE_TOPICS.USER_PREFIX}${result.userId}`,
     EVENTS.LOGISTICS_WALLET_PASS_UPDATED,
     {

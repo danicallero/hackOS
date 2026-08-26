@@ -4,7 +4,7 @@ import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { isImplausiblyFuture } from "../../lib/clock.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
-import { broadcast } from "../../lib/sse.js";
+import { broadcastForActiveUser } from "./active-broadcast.js";
 import { resolveByBadge } from "./badge.js";
 import { loadPersonCard } from "./cards.js";
 import {
@@ -183,7 +183,12 @@ export async function presenceScan(
       manual,
     };
   });
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_PRESENCE_SCAN, result);
+  await broadcastForActiveUser(
+    result.userId,
+    SSE_TOPICS.LOGISTICS,
+    EVENTS.LOGISTICS_PRESENCE_SCAN,
+    result,
+  );
   return result;
 }
 
@@ -431,11 +436,16 @@ export async function updateTimeLog(
     return updated[0];
   });
 
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_PRESENCE_SCAN, {
-    edited: true,
-    timeLogId: result.id,
-    userId: result.user_id,
-  });
+  await broadcastForActiveUser(
+    result.user_id as number,
+    SSE_TOPICS.LOGISTICS,
+    EVENTS.LOGISTICS_PRESENCE_SCAN,
+    {
+      edited: true,
+      timeLogId: result.id,
+      userId: result.user_id,
+    },
+  );
   return {
     id: result.id as number,
     userId: result.user_id as number,
@@ -492,7 +502,7 @@ export async function createPresenceSignal(
     });
     return { source: "door" as const, id: rows[0].id as number };
   });
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_PRESENCE_SCAN, {
+  await broadcastForActiveUser(userId, SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_PRESENCE_SCAN, {
     created: true,
     userId,
     ...result,
@@ -543,11 +553,16 @@ export async function updatePresenceActivity(
     });
     return updated[0] as { id: number; user_id: number };
   });
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_ACTIVITY_SCAN, {
-    edited: true,
-    activityLogId: result.id,
-    userId: result.user_id,
-  });
+  await broadcastForActiveUser(
+    result.user_id,
+    SSE_TOPICS.LOGISTICS,
+    EVENTS.LOGISTICS_ACTIVITY_SCAN,
+    {
+      edited: true,
+      activityLogId: result.id,
+      userId: result.user_id,
+    },
+  );
   return { id: result.id, userId: result.user_id };
 }
 
@@ -573,11 +588,16 @@ export async function deletePresenceActivity(actorId: number, id: number) {
     });
     return { id, userId: before.user_id as number };
   });
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_ACTIVITY_SCAN, {
-    deleted: true,
-    activityLogId: id,
-    userId: result.userId,
-  });
+  await broadcastForActiveUser(
+    result.userId,
+    SSE_TOPICS.LOGISTICS,
+    EVENTS.LOGISTICS_ACTIVITY_SCAN,
+    {
+      deleted: true,
+      activityLogId: id,
+      userId: result.userId,
+    },
+  );
   return { deleted: true as const };
 }
 
@@ -723,7 +743,7 @@ export async function deleteTimeLog(actorId: number, id: number) {
     return before.user_id as number;
   });
 
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_PRESENCE_SCAN, {
+  await broadcastForActiveUser(userId, SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_PRESENCE_SCAN, {
     deleted: true,
     timeLogId: id,
     userId,

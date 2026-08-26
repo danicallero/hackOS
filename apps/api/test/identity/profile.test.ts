@@ -641,20 +641,14 @@ describe("self-service account removal (H54)", () => {
       (await pool.query(`SELECT 1 FROM time_logs WHERE user_id = $1 OR scanned_by = $1`, [user]))
         .rowCount,
     ).toBe(0);
+    // Raw presence rows are not a permanent anonymous audit dataset. The
+    // aggregate above is calculated before these rows are deleted.
     expect(
-      (
-        await pool.query(`SELECT 1 FROM check_in_logs WHERE anonymous_participant_id = $1`, [
-          anonymous[0].id,
-        ])
-      ).rowCount,
-    ).toBe(1);
-    expect(
-      (
-        await pool.query(`SELECT 1 FROM time_logs WHERE anonymous_participant_id = $1`, [
-          anonymous[0].id,
-        ])
-      ).rowCount,
-    ).toBe(2);
+      (await pool.query(`SELECT 1 FROM check_in_logs WHERE user_id = $1`, [user])).rowCount,
+    ).toBe(0);
+    expect((await pool.query(`SELECT 1 FROM time_logs WHERE user_id = $1`, [user])).rowCount).toBe(
+      0,
+    );
   });
 
   it("serializes a deletion racing the first accreditation write (H54)", async () => {
@@ -1316,6 +1310,19 @@ describe("staff user routes (H7)", () => {
        VALUES ($1, 'devpost_repo', 'repo:person@example.test', 'participant_import', 'devpost')`,
       [admin],
     );
+    const { rows: repoRows } = await pool.query(
+      `INSERT INTO repos (name) VALUES ('Anonymized member audit fixture') RETURNING id`,
+    );
+    await pool.query(
+      `INSERT INTO submissions (repo_id, user_id, imported_from)
+       VALUES ($1, $2, 'manual')`,
+      [repoRows[0].id, target],
+    );
+    await pool.query(
+      `INSERT INTO audit_log (actor_id, entity_type, entity_id, action, source)
+       VALUES ($1, 'submission', $2, 'member_added', 'admin')`,
+      [admin, `${repoRows[0].id}:${target}`],
+    );
 
     // USERS_WRITE isn't enough — needs ADMIN_ALL.
     expect(
@@ -1358,20 +1365,8 @@ describe("staff user routes (H7)", () => {
     expect(anonymousRows[0].id).not.toBe(String(target));
     expect(anonymousRows[0].guaranteed_presence_minutes).toBe(0);
     expect(
-      (
-        await pool.query(
-          `SELECT user_id, anonymous_participant_id, badge_id, staff_id
-             FROM check_in_logs WHERE anonymous_participant_id = $1`,
-          [anonymousRows[0].id],
-        )
-      ).rows,
-    ).toEqual([
-      expect.objectContaining({
-        user_id: null,
-        badge_id: null,
-        staff_id: null,
-      }),
-    ]);
+      (await pool.query(`SELECT 1 FROM check_in_logs WHERE user_id = $1`, [target])).rowCount,
+    ).toBe(0);
 
     const { getEffectiveCapabilities, userHasCapability } = await import(
       "../../src/lib/capabilities.js"
@@ -1391,6 +1386,14 @@ describe("staff user routes (H7)", () => {
       (await pool.query(`SELECT 1 FROM audit_log WHERE entity_id ILIKE '%person@example.test%'`))
         .rowCount,
     ).toBe(0);
+    expect(
+      (
+        await pool.query(
+          `SELECT 1 FROM audit_log WHERE entity_type = 'submission' AND entity_id = $1`,
+          [`${repoRows[0].id}:${target}`],
+        )
+      ).rowCount,
+    ).toBe(0);
 
     // The retained anonymous row exposes only the audit fields. An original
     // email, name, or numeric user id must not be searchable through normal
@@ -1404,6 +1407,103 @@ describe("staff user routes (H7)", () => {
       [String(target), "person@example.test", "Real Person"],
     );
     expect(identitySearch.rows).toHaveLength(0);
+  });
+
+  it("uses historical emails when scrubbing detached denormalized identities (H54)", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities(["*"]);
+    const target = await createUser({ email: "historical-old@example.test" });
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows: repoRows } = await pool.query(
+      `INSERT INTO repos (name) VALUES ('Historical email fixture') RETURNING id`,
+    );
+    await pool.query(
+      `INSERT INTO devpost_participants (repo_id, email, import_batch, merge_status)
+       VALUES ($1, 'historical-old@example.test', 'test-import', 'unmatched')`,
+      [repoRows[0].id],
+    );
+
+    const changed = await a.inject({
+      method: "PATCH",
+      url: `/api/users/${target}/email`,
+      headers: asUser(admin),
+      payload: { email: "historical-new@example.test" },
+    });
+    expect(changed.statusCode).toBe(200);
+    await pool.query(`UPDATE users SET badge_id = 'B-HISTORICAL' WHERE id = $1`, [target]);
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, staff_id) VALUES ($1, 'B-HISTORICAL', $2)`,
+      [target, admin],
+    );
+
+    const removed = await a.inject({
+      method: "POST",
+      url: `/api/users/${target}/anonymize`,
+      headers: asUser(admin),
+    });
+    expect(removed.statusCode).toBe(200);
+    expect(
+      (
+        await pool.query(
+          `SELECT 1 FROM devpost_participants
+             WHERE repo_id = $1 AND lower(email) = 'historical-old@example.test'`,
+          [repoRows[0].id],
+        )
+      ).rowCount,
+    ).toBe(0);
+    expect(
+      (await pool.query(`SELECT 1 FROM user_email_history WHERE user_id = $1`, [target])).rowCount,
+    ).toBe(0);
+  });
+
+  it("does not copy identity-shaped free text into the anonymous demographics (H54)", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities(["*"]);
+    const target = await createUser({ email: "free-text@example.test" });
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE users SET name = 'Free Text', surname = 'Participant' WHERE id = $1`, [
+      target,
+    ]);
+    const { rows: applicationRows } = await pool.query(
+      `INSERT INTO applications (name, type, template)
+       VALUES ('Free-text minimization', 'participant', $1::jsonb) RETURNING id`,
+      [
+        JSON.stringify([
+          { key: "gender", kind: "text", label: { en: "Gender" } },
+          { key: "degree", kind: "text", label: { en: "Degree" } },
+          { key: "origin_city", kind: "text", label: { en: "Origin city" } },
+        ]),
+      ],
+    );
+    await pool.query(
+      `INSERT INTO application_responses (user_id, application_id, status, responses)
+       VALUES ($1, $2, 'accepted', $3::jsonb)`,
+      [
+        target,
+        applicationRows[0].id,
+        JSON.stringify({
+          gender: "free-text@example.test",
+          degree: "Free Text Participant",
+          origin_city: "+34 600 123 456",
+        }),
+      ],
+    );
+    await pool.query(`UPDATE users SET badge_id = 'B-FREE-TEXT' WHERE id = $1`, [target]);
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, staff_id) VALUES ($1, 'B-FREE-TEXT', $2)`,
+      [target, admin],
+    );
+
+    const removed = await a.inject({
+      method: "POST",
+      url: `/api/users/${target}/anonymize`,
+      headers: asUser(admin),
+    });
+    expect(removed.statusCode).toBe(200);
+    const { rows } = await pool.query(
+      `SELECT gender, degree, origin_city FROM anonymous_participants`,
+    );
+    expect(rows).toEqual([{ gender: null, degree: null, origin_city: null }]);
   });
 
   it("keeps the last active wildcard holder when an anonymization job runs", async () => {

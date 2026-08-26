@@ -242,7 +242,9 @@ describe("HTTP provider adapters (stubbed fetch)", () => {
       sendEmail(pool, userId, { subject: "s", body: "b" }, { ...baseMail, provider: "resend" }),
     ).rejects.toThrow(/RESEND_API_KEY/);
 
-    const fetchMock = vi.fn(async () => new Response("unauthorized", { status: 401 }));
+    const fetchMock = vi.fn(
+      async () => new Response("recipient primary@test.local request=private", { status: 401 }),
+    );
     vi.stubGlobal("fetch", fetchMock);
     await expect(
       sendEmail(
@@ -252,5 +254,13 @@ describe("HTTP provider adapters (stubbed fetch)", () => {
         { ...baseMail, provider: "resend", resendApiKey: "bad" },
       ),
     ).rejects.toThrow(/401/);
+    await expect(
+      sendEmail(
+        pool,
+        userId,
+        { subject: "s", body: "b" },
+        { ...baseMail, provider: "resend", resendApiKey: "bad" },
+      ),
+    ).rejects.not.toThrow(/primary@test.local|recipient|email/i);
   });
 });

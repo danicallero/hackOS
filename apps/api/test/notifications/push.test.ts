@@ -246,7 +246,10 @@ describe("push channel", () => {
     const row = await getOutboxRow(id);
     expect(row.status).toBe("queued");
     expect(row.attempts).toBe(1);
-    expect(row.last_error).toContain("rate limited");
+    // Persist only the provider's stable error code; the human-readable body
+    // may contain token/request data.
+    expect(row.last_error).toContain("MessageRateExceeded");
+    expect(row.last_error).not.toContain("rate limited");
     // token kept — only DeviceNotRegistered removes it
     const { rows } = await pool.query(`SELECT count(*)::int AS n FROM push_tokens`);
     expect(rows[0].n).toBe(1);
@@ -280,7 +283,7 @@ describe("push channel", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("logs the platform and a masked token for a partial failure", async () => {
+  it("logs only non-identifying provider metadata for a partial failure", async () => {
     const userId = await createUser();
     await pool.query(`INSERT INTO push_tokens (user_id, token, platform) VALUES ($1, $2, $3)`, [
       userId,
@@ -312,11 +315,11 @@ describe("push channel", () => {
 
     expect((await getOutboxRow(id)).status).toBe("sent");
     expect(warn).toHaveBeenCalledWith("Expo push ticket failed", {
-      userId,
       category: "test",
       platform: "ios",
-      token: "…g-token]",
-      error: "APNs credentials missing",
+      errorCode: "provider_error",
     });
+    expect(JSON.stringify(warn.mock.calls)).not.toContain(String(userId));
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("failing-token");
   });
 });

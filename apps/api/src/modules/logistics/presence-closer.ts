@@ -3,7 +3,7 @@ import { config } from "../../config.js";
 import { withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
-import { broadcast } from "../../lib/sse.js";
+import { broadcastForActiveUsers } from "./active-broadcast.js";
 
 /**
  * Event-end automatic exit (H24, product override of the original "the
@@ -87,10 +87,15 @@ export async function runPresenceEventEndCloserOnce(): Promise<{ closed: number[
     return closedIds;
   });
   if (closed.length > 0) {
-    await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_PRESENCE_SCAN, {
-      autoEventEndExit: true,
-      userIds: closed,
-    });
+    await broadcastForActiveUsers(
+      closed,
+      SSE_TOPICS.LOGISTICS,
+      EVENTS.LOGISTICS_PRESENCE_SCAN,
+      (activeUserIds) => ({
+        autoEventEndExit: true,
+        userIds: activeUserIds,
+      }),
+    );
   }
   return { closed };
 }

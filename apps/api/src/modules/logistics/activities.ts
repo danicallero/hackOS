@@ -4,7 +4,7 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { isImplausiblyFuture } from "../../lib/clock.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
-import { broadcast } from "../../lib/sse.js";
+import { broadcastForActiveUser } from "./active-broadcast.js";
 import { resolveByBadge } from "./badge.js";
 import { loadPersonCard, type PersonCard } from "./cards.js";
 
@@ -168,7 +168,7 @@ export async function activityScan(
   });
 
   if (result.status === 200) {
-    await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_ACTIVITY_SCAN, {
+    await broadcastForActiveUser(userId, SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_ACTIVITY_SCAN, {
       activityId,
       userId,
       firstTime: result.body.firstTime,

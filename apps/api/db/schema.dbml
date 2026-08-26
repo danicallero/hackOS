@@ -137,10 +137,10 @@ Table anonymous_participants {
   degree text
   graduation_year smallint
   origin_city text
-  guaranteed_presence_minutes integer [not null, default: `0`, note: 'H24 verified/guaranteed venue time, rounded down to complete minutes at anonymization.']
+  guaranteed_presence_minutes integer [not null, default: `0`, note: 'H24 verified/guaranteed venue time, rounded down to complete minutes at anonymization. Raw presence events are not retained after anonymization.']
   created_at "timestamp with time zone" [not null, default: `now()`]
 
-  Note: 'H54 permanent minimum audit subject. id is random and has no relationship to users.id.'
+  Note: 'H54 permanent minimum audit subject: approved demographics and aggregate verified venue time only; id is random and has no relationship to users.id.'
 }
 
 Table applicant_reviews {
@@ -291,7 +291,6 @@ Table check_in_logs {
   check_in_method text [not null, default: `'manual'::text`]
   staff_id integer
   notes text
-  anonymous_participant_id uuid
 }
 
 Table data_subject_requests {
@@ -803,7 +802,6 @@ Table time_logs {
   scanned_at "timestamp with time zone" [not null, default: `now()`]
   scanned_by integer
   notes text
-  anonymous_participant_id uuid
 }
 
 Table tv_slots {
@@ -821,6 +819,18 @@ Table universities {
   name text [unique, not null]
   proposed_by integer
   created_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table user_email_history {
+  user_id integer [not null]
+  email text [not null]
+  recorded_at "timestamp with time zone" [not null, default: `clock_timestamp()`]
+
+  indexes {
+  (user_id, email) [pk]
+  }
+
+  Note: 'H54 transient cleanup aid only. Rows are deleted with the user and must never be copied to an anonymous subject.'
 }
 
 Table user_invite_link_redemptions {
@@ -952,7 +962,6 @@ Ref: challenge_winners.challenge_id > challenges.id
 Ref: challenge_winners.repo_id > repos.id
 Ref: challenge_winners.set_by > users.id
 Ref: challenges.author > sponsors.id
-Ref: check_in_logs.anonymous_participant_id > anonymous_participants.id
 Ref: check_in_logs.staff_id > users.id
 Ref: check_in_logs.user_id > users.id
 Ref: data_subject_requests.requested_by > users.id
@@ -1018,10 +1027,10 @@ Ref: submissions.invited_by > users.id
 Ref: submissions.repo_id > repos.id
 Ref: submissions.user_id > users.id
 Ref: tickets.user_id > users.id
-Ref: time_logs.anonymous_participant_id > anonymous_participants.id
 Ref: time_logs.scanned_by > users.id
 Ref: time_logs.user_id > users.id
 Ref: universities.proposed_by > users.id
+Ref: user_email_history.user_id > users.id
 Ref: user_invite_link_redemptions.link_id > user_invite_links.id
 Ref: user_invite_link_redemptions.user_id > users.id
 Ref: user_invite_links.created_by > users.id

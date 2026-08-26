@@ -441,6 +441,50 @@ function textValue(value: unknown, maxLength: number): string | null {
   return text.length > 0 ? text.slice(0, maxLength) : null;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Application answers are user-controlled free text. Only values that look
+ * like the approved demographic fields may reach the anonymous subject, and
+ * even those values must not copy a name, address, phone number, email, or
+ * URL. A false positive drops one optional demographic; a false negative would
+ * create a new identity copy in the permanent audit dataset (H54).
+ */
+function safeDemographicText(
+  value: unknown,
+  maxLength: number,
+  user: Pick<UserRemovalRow, "email" | "secondary_email" | "name" | "surname" | "dni">,
+): string | null {
+  const text = textValue(value, maxLength);
+  if (!text) return null;
+  const folded = text.normalize("NFKC").toLocaleLowerCase();
+  const directTokens = [user.email, user.secondary_email, user.dni]
+    .filter((token): token is string => typeof token === "string" && token.trim().length >= 3)
+    .map((token) => token.normalize("NFKC").toLocaleLowerCase());
+  if (directTokens.some((token) => folded.includes(token))) return null;
+
+  const nameTokens = [user.name, user.surname]
+    .filter((token): token is string => typeof token === "string" && token.trim().length >= 3)
+    .map((token) => escapeRegExp(token.normalize("NFKC").toLocaleLowerCase().trim()));
+  if (
+    nameTokens.some((token) =>
+      new RegExp(`(?:^|[^\\p{L}\\p{N}])${token}(?=$|[^\\p{L}\\p{N}])`, "u").test(folded),
+    )
+  ) {
+    return null;
+  }
+  if (
+    /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(text) ||
+    /\b(?:https?:\/\/|www\.)\S+/i.test(text) ||
+    /(?:^|[^\d])\+?\d[\d\s().-]{6,}\d(?:$|[^\d])/.test(text)
+  ) {
+    return null;
+  }
+  return text;
+}
+
 function numericValue(value: unknown): number | null {
   if (typeof value === "number" && Number.isInteger(value)) return value;
   if (typeof value === "string" && /^\d{1,4}$/.test(value.trim())) return Number(value);
@@ -481,7 +525,7 @@ async function extractAnonymousDemographics(
   const values = {
     age: null as number | null,
     gender: null as string | null,
-    university: current[0]?.university ?? null,
+    university: safeDemographicText(current[0]?.university, 200, user),
     degree: null as string | null,
     graduationYear: null as number | null,
     originCity: null as string | null,
@@ -519,12 +563,12 @@ async function extractAnonymousDemographics(
         const age = numericValue(value);
         values.age = age != null && age >= 0 && age <= 150 ? age : ageFromDate(value, asOf);
       } else if (/gender|sexo|género/i.test(description) && values.gender == null) {
-        values.gender = textValue(value, 100);
+        values.gender = safeDemographicText(value, 100, user);
       } else if (
         /degree|major|studies|field of study|titulación|estudios|carreira/i.test(description) &&
         values.degree == null
       ) {
-        values.degree = textValue(value, 200);
+        values.degree = safeDemographicText(value, 200, user);
       } else if (/graduat|year|ano|año/i.test(description) && values.graduationYear == null) {
         const year = numericValue(value);
         values.graduationYear = year != null && year >= 1900 && year <= 2200 ? year : null;
@@ -532,12 +576,12 @@ async function extractAnonymousDemographics(
         /city|origin|location|joining us from|procedencia|orixe|localidad/i.test(description) &&
         values.originCity == null
       ) {
-        values.originCity = textValue(value, 200);
+        values.originCity = safeDemographicText(value, 200, user);
       } else if (
         (field.kind === "university" || /university|universidade|universidad/i.test(description)) &&
         values.university == null
       ) {
-        values.university = textValue(value, 200);
+        values.university = safeDemographicText(value, 200, user);
       }
     }
   }
@@ -646,19 +690,27 @@ async function addScannerTombstones(
 
 /**
  * Remove every identity-bearing relationship before deleting the users row.
- * The only rows moved rather than deleted are check-in and door records, and
- * those are changed to point at the new random anonymous participant.
+ * The only permanent row created for an anonymized participant is the
+ * aggregate anonymous_participants subject. Raw presence and scan rows are
+ * deleted after their guaranteed-time aggregate is calculated.
  */
 async function scrubRelationships(
   client: pg.PoolClient,
   user: UserRemovalRow,
-  anonymousId: string | null,
   preserveIdempotency?: RunAccountRemovalOptions["preserveIdempotency"],
 ): Promise<void> {
   const userId = user.id;
-  const emails = [user.email, user.secondary_email].filter((value): value is string =>
-    Boolean(value),
+  const { rows: historicalEmailRows } = await client.query<{ email: string }>(
+    `SELECT email FROM user_email_history WHERE user_id = $1`,
+    [userId],
   );
+  const emails = [
+    ...new Set(
+      [user.email, user.secondary_email, ...historicalEmailRows.map((row) => row.email)].filter(
+        (value): value is string => Boolean(value),
+      ),
+    ),
+  ];
   const badgeIds = [user.badge_id, ...(user.badge_id_history ?? [])].filter(
     (value): value is string => Boolean(value),
   );
@@ -699,6 +751,14 @@ async function scrubRelationships(
     [userId],
   );
   const repoIds = submissionRows.map((row) => row.repo_id);
+  const submissionAuditEntityIds = repoIds.map((repoId) => `${repoId}:${userId}`);
+  const { rows: scheduleOwnerRows } = await client.query<{
+    id: number;
+    schedule_id: number;
+  }>(`SELECT id, schedule_id FROM schedule_owners WHERE user_id = $1`, [userId]);
+  const scheduleOwnerAuditEntityIds = scheduleOwnerRows.map(
+    (row) => `${row.schedule_id}:${row.id}`,
+  );
   await client.query(`DELETE FROM submissions WHERE user_id = $1`, [userId]);
   await client.query(
     `DELETE FROM devpost_participants
@@ -723,27 +783,11 @@ async function scrubRelationships(
   );
   await deleteOrphanedProjects(client, repoIds);
 
-  // Accreditation and door presence are the anonymous audit record. Notes and
-  // badge values are operational identifiers, never permanent audit fields.
-  if (anonymousId) {
-    await client.query(
-      `UPDATE check_in_logs
-          SET user_id = NULL, anonymous_participant_id = $2,
-              badge_id = NULL, notes = NULL, staff_id = NULL
-        WHERE user_id = $1`,
-      [userId, anonymousId],
-    );
-    await client.query(
-      `UPDATE time_logs
-          SET user_id = NULL, anonymous_participant_id = $2,
-              notes = NULL, scanned_by = NULL
-        WHERE user_id = $1`,
-      [userId, anonymousId],
-    );
-  } else {
-    await client.query(`DELETE FROM check_in_logs WHERE user_id = $1`, [userId]);
-    await client.query(`DELETE FROM time_logs WHERE user_id = $1`, [userId]);
-  }
+  // Raw accreditation/door rows contain timestamps, methods, notes, badge
+  // identifiers, and operator provenance. The approved permanent audit set
+  // keeps only guaranteedPresenceMs calculated before this deletion.
+  await client.query(`DELETE FROM check_in_logs WHERE user_id = $1`, [userId]);
+  await client.query(`DELETE FROM time_logs WHERE user_id = $1`, [userId]);
   // Staff provenance is not part of the retained audit subject. Detach it
   // from records belonging to everybody else before deleting this user; the
   // FK is intentionally nullable after H54 (H24, H54).
@@ -894,6 +938,18 @@ async function scrubRelationships(
     `DELETE FROM audit_log
       WHERE actor_id = $1
          OR (
+           entity_type = 'application_response'
+           AND entity_id = ANY($7::text[])
+         )
+         OR (
+           entity_type = 'submission'
+           AND entity_id = ANY($8::text[])
+         )
+         OR (
+           entity_type = 'schedule_owner'
+           AND entity_id = ANY($9::text[])
+         )
+         OR (
            entity_type = ANY($6::text[])
            AND entity_id = $2::text
          )
@@ -914,6 +970,9 @@ async function scrubRelationships(
       identityTokens,
       memberIdsPattern,
       ["user", "badge", "accreditation", "presence", "meal", "activity"],
+      responseIds.map(String),
+      submissionAuditEntityIds,
+      scheduleOwnerAuditEntityIds,
     ],
   );
   if (preserveIdempotency) {
@@ -998,7 +1057,7 @@ export async function finalizeAccountRemoval(
     );
   }
 
-  await scrubRelationships(client, user, anonymousId, options.preserveIdempotency);
+  await scrubRelationships(client, user, options.preserveIdempotency);
   const completion = anonymousId ? { anonymized: true as const } : { deleted: true as const };
   if (options.preserveIdempotency) {
     // A storage/DB failure can return after preparation has revoked access and
@@ -1022,7 +1081,9 @@ export async function finalizeAccountRemoval(
       entityId: anonymousId,
       action: "anonymized",
       source: options.source,
-      reason: options.reason,
+      // A request-supplied reason may contain the participant's name, email,
+      // or another identifier. Do not create a new identity bridge while
+      // recording the identity-free completion event; omit it entirely.
       // H54: this event must not become a new IP/user-agent bridge to the
       // anonymous participant.  The audit helper treats explicit null as a
       // deliberate suppression of request context.

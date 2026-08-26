@@ -67,7 +67,7 @@ export async function sendEmail(
     [userId],
   );
   const user = rows[0] as { email: string; language: string } | undefined;
-  if (!user) throw new Error(`sendEmail: user ${userId} not found`);
+  if (!user) throw new Error("sendEmail: recipient is no longer available");
 
   // payload.recipient / payload.language override the user row (H1/H6/H10
   // flows that mail an address or language not yet on the user record).
