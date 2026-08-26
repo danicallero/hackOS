@@ -167,4 +167,36 @@ describe("idempotencyGuard 5xx handling", () => {
     expect(replay.statusCode).toBe(409);
     expect(replay.headers["idempotency-replayed"]).toBe("true");
   });
+
+  it("keeps a self-removal marker across a 503 so a retry can replay completion (H54)", async () => {
+    const { idempotencyOnSend } = await import("../../src/lib/idempotency.js");
+    const { pool } = await import("../../src/db/pool.js");
+    const key = "self-removal-storage-failure";
+    const scope = "POST /api/me/anonymize u:42";
+    await pool.query(
+      `INSERT INTO idempotency_keys (key, scope, request_hash)
+       VALUES ($1, $2, 'request-hash')`,
+      [key, scope],
+    );
+
+    await idempotencyOnSend(
+      {
+        idempotency: {
+          key,
+          scope,
+          hash: "request-hash",
+          replayed: false,
+          preserveOnFailure: true,
+        },
+      } as never,
+      { statusCode: 503 } as never,
+      { error: { code: "removal_storage_pending" } },
+    );
+
+    const pending = await pool.query(
+      `SELECT response_status, response_body FROM idempotency_keys WHERE key = $1 AND scope = $2`,
+      [key, scope],
+    );
+    expect(pending.rows).toEqual([{ response_status: null, response_body: null }]);
+  });
 });

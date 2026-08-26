@@ -993,6 +993,19 @@ export async function finalizeAccountRemoval(
   }
 
   await scrubRelationships(client, user, anonymousId, options.preserveIdempotency);
+  const completion = anonymousId ? { anonymized: true as const } : { deleted: true as const };
+  if (options.preserveIdempotency) {
+    // A storage/DB failure can return after preparation has revoked access and
+    // the original HTTP response is lost. Complete the preserved self-service
+    // marker here so the next unauthenticated retry can replay only this
+    // boolean result, never the deleted identity (H54).
+    await client.query(
+      `UPDATE idempotency_keys
+          SET response_status = 200, response_body = $3, completed_at = clock_timestamp()
+        WHERE key = $1 AND scope = $2 AND response_status IS NULL`,
+      [options.preserveIdempotency.key, options.preserveIdempotency.completionScope, completion],
+    );
+  }
   if (anonymousId) {
     await audit(client, {
       // Self-service removal cannot leave an audit_log.actor_id FK pointing
@@ -1014,7 +1027,7 @@ export async function finalizeAccountRemoval(
   }
   await client.query(`DELETE FROM users WHERE id = $1`, [user.id]);
   if (wasWildcardHolder) await assertActiveWildcardHolder(client);
-  return anonymousId ? { anonymized: true } : { deleted: true };
+  return completion;
 }
 
 /**

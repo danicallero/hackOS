@@ -38,7 +38,14 @@ function requestHash(req: FastifyRequest): string {
 
 declare module "fastify" {
   interface FastifyRequest {
-    idempotency?: { key: string; scope: string; hash: string; replayed: boolean };
+    idempotency?: {
+      key: string;
+      scope: string;
+      hash: string;
+      replayed: boolean;
+      /** H54: keep a pending self-removal marker across a 5xx. */
+      preserveOnFailure?: boolean;
+    };
   }
 }
 
@@ -145,17 +152,31 @@ export async function idempotencyOnSend(
 ): Promise<unknown> {
   if (req.idempotency && !req.idempotency.replayed) {
     if (reply.statusCode >= 500) {
-      // A 5xx is a transient/server-side failure, not a stable client-visible
-      // outcome (issue #534) — persisting it would replay the same error
-      // forever, and mobile's offline scan queue reuses the scan id as the
-      // key, so this is exactly the H22/H25/H26 recovery path. Release the
-      // record instead so the same key/body can retry and actually
-      // re-execute; guard on response_status IS NULL keeps exactly one
-      // winner if a concurrent request is racing this same row.
-      await pool.query(
-        `DELETE FROM idempotency_keys WHERE key = $1 AND scope = $2 AND response_status IS NULL`,
-        [req.idempotency.key, req.idempotency.scope],
-      );
+      if (req.idempotency.preserveOnFailure) {
+        // H54 is different from ordinary mutations: a storage/DB failure has
+        // already committed removal_pending and revoked access. Keep a
+        // NULL-response marker so a retry cannot lose the eventual
+        // identity-free completion if the 503 response is dropped. The
+        // normal stale-in-flight reclaim still permits a later retry.
+        await pool.query(
+          `UPDATE idempotency_keys
+              SET response_body = NULL, completed_at = NULL, created_at = now()
+            WHERE key = $1 AND scope = $2 AND response_status IS NULL`,
+          [req.idempotency.key, req.idempotency.scope],
+        );
+      } else {
+        // A 5xx is a transient/server-side failure, not a stable client-visible
+        // outcome (issue #534) — persisting it would replay the same error
+        // forever, and mobile's offline scan queue reuses the scan id as the
+        // key, so this is exactly the H22/H25/H26 recovery path. Release the
+        // record instead so the same key/body can retry and actually
+        // re-execute; guard on response_status IS NULL keeps exactly one
+        // winner if a concurrent request is racing this same row.
+        await pool.query(
+          `DELETE FROM idempotency_keys WHERE key = $1 AND scope = $2 AND response_status IS NULL`,
+          [req.idempotency.key, req.idempotency.scope],
+        );
+      }
     } else {
       await pool.query(
         `UPDATE idempotency_keys SET response_status = $3, response_body = $4, completed_at = now()

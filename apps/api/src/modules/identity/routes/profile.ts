@@ -284,6 +284,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       if (await replayCompletedIdempotency(req, reply, completionScope)) return;
       await assertActiveAuthenticatedUser(req);
       await idempotencyGuard(req, reply);
+      if (req.idempotency) req.idempotency.preserveOnFailure = true;
     };
 
   api.get(
