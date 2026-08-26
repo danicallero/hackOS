@@ -14,6 +14,7 @@ import {
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { apiFetch } from "@/lib/api";
 import { signOut } from "@/lib/auth-client";
+import { EVENT_WEBSITE_URL } from "@/lib/env";
 import { haptic } from "@/lib/haptics";
 import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -462,6 +463,20 @@ export default function AccountScreen() {
             destructive
             busy={signingOut}
             onPress={confirmSignOut}
+          />
+        </Section>
+
+        <Section title={t("accountLegalTitle")}>
+          <ActionButton
+            label={t("accountPrivacyPolicy")}
+            icon="hand.raised"
+            onPress={() => void Linking.openURL(`${EVENT_WEBSITE_URL}/privacy`)}
+          />
+          <Separator />
+          <ActionButton
+            label={t("accountTerms")}
+            icon="doc.text"
+            onPress={() => void Linking.openURL(`${EVENT_WEBSITE_URL}/terms`)}
           />
         </Section>
 
