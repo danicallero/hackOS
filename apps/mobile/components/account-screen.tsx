@@ -16,7 +16,7 @@ import { ApiError, apiFetch } from "@/lib/api";
 import { signOut } from "@/lib/auth-client";
 import { EVENT_WEBSITE_URL } from "@/lib/env";
 import { haptic } from "@/lib/haptics";
-import { type Lang, useLocale } from "@/lib/i18n";
+import { type Lang, type MessageKey, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { fetchMyScanStats, type MyScanStats } from "@/lib/scan-log";
@@ -45,6 +45,16 @@ interface Intolerance {
 }
 
 const LANGUAGES: Lang[] = ["en", "es", "gl"];
+
+const RETAINED_FIELD_COPY: Record<string, MessageKey> = {
+  age: "accountRetainedAge",
+  gender: "accountRetainedGender",
+  university: "accountRetainedUniversity",
+  degree: "accountRetainedDegree",
+  "graduation year": "accountRetainedGraduationYear",
+  "origin city": "accountRetainedOriginCity",
+  "guaranteed venue-presence time": "accountRetainedPresenceTime",
+};
 
 /** Account overview with the same participant-owned profile fields exposed on web. */
 export default function AccountScreen() {
@@ -596,6 +606,24 @@ export default function AccountScreen() {
                   >
                     {t("accountAnonymizeDescription")}
                   </Text>
+                  <View accessibilityRole="list" style={{ gap: 4, paddingHorizontal: 4 }}>
+                    <Text
+                      selectable
+                      style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
+                    >
+                      {t("accountRetainedFieldsIntro")}
+                    </Text>
+                    {removalEligibility.retainedFields.map((field) => (
+                      <Text
+                        key={field}
+                        selectable
+                        accessibilityRole="listitem"
+                        style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
+                      >
+                        • {RETAINED_FIELD_COPY[field] ? t(RETAINED_FIELD_COPY[field]) : field}
+                      </Text>
+                    ))}
+                  </View>
                   <Text
                     selectable
                     style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
