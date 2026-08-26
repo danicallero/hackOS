@@ -25,30 +25,66 @@ const QUEUE_NAME = "presence-event-end-closer";
 
 export async function runPresenceEventEndCloserOnce(): Promise<{ closed: number[] }> {
   const closed = await withTransaction(async (client) => {
-    const { rows } = await client.query(
-      `INSERT INTO time_logs (user_id, kind, scanned_at, scanned_by, notes)
-       SELECT last.user_id, 'out', ec.event_ends_at, NULL, 'Automatic exit at event end'
+    // Do not keep a set-based candidate snapshot until the insert. Account
+    // removal locks the same user row and moves it to removal_pending before
+    // any identity-bearing records are scrubbed. Lock and re-check each
+    // candidate so a concurrent removal simply makes this participant a
+    // no-op, rather than aborting the entire event-end closer transaction.
+    const { rows: candidates } = await client.query<{
+      user_id: number;
+      event_ends_at: Date;
+    }>(
+      `SELECT DISTINCT ON (tl.user_id) tl.user_id, ec.event_ends_at
          FROM event_config ec
-         JOIN (
-           SELECT DISTINCT ON (user_id) user_id, kind, scanned_at
-             FROM time_logs
-            ORDER BY user_id, scanned_at DESC, id DESC
-         ) last ON last.kind = 'in' AND last.scanned_at <= ec.event_ends_at
-         JOIN users u ON u.id = last.user_id
+         JOIN time_logs tl ON tl.scanned_at <= now()
+         JOIN users u ON u.id = tl.user_id
         WHERE ec.id = 1 AND ec.event_ends_at IS NOT NULL AND ec.event_ends_at <= now()
           AND u.account_state = 'active' AND u.anonymized_at IS NULL
-        RETURNING user_id, scanned_at`,
+        ORDER BY tl.user_id, tl.scanned_at DESC, tl.id DESC`,
     );
-    for (const row of rows as { user_id: number; scanned_at: Date }[]) {
+
+    const closedIds: number[] = [];
+    for (const candidate of candidates) {
+      const active = await client.query<{ id: number }>(
+        `SELECT id
+           FROM users
+          WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+          FOR UPDATE`,
+        [candidate.user_id],
+      );
+      if (active.rowCount === 0) continue;
+
+      const { rows: latestRows } = await client.query<{
+        kind: string;
+        scanned_at: Date;
+      }>(
+        `SELECT kind, scanned_at
+           FROM time_logs
+          WHERE user_id = $1
+          ORDER BY scanned_at DESC, id DESC
+          LIMIT 1`,
+        [candidate.user_id],
+      );
+      const latest = latestRows[0];
+      if (!latest || latest.kind !== "in" || latest.scanned_at > candidate.event_ends_at) {
+        continue;
+      }
+
+      await client.query(
+        `INSERT INTO time_logs (user_id, kind, scanned_at, scanned_by, notes)
+         VALUES ($1, 'out', $2, NULL, 'Automatic exit at event end')`,
+        [candidate.user_id, candidate.event_ends_at],
+      );
+      closedIds.push(candidate.user_id);
       await audit(client, {
         actorId: null,
         entityType: "presence",
-        entityId: row.user_id,
+        entityId: candidate.user_id,
         action: "event_end_auto_exit",
-        after: { kind: "out", scannedAt: row.scanned_at },
+        after: { kind: "out", scannedAt: candidate.event_ends_at },
       });
     }
-    return (rows as { user_id: number }[]).map((row) => row.user_id);
+    return closedIds;
   });
   if (closed.length > 0) {
     await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_PRESENCE_SCAN, {
