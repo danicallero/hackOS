@@ -40,8 +40,10 @@ Resolve these items before submitting either app:
   backgrounds.
 - Add the Android notification icon: a 96×96 white PNG with transparency,
   configured through `expo-notifications`.
-- Publish the privacy policy, support, and account-deletion URLs. The current
-  mobile UI still needs these links.
+- Publish the privacy policy, support, and account-deletion URLs. The mobile
+  UI now exposes the privacy policy and the authenticated in-app Account/Data
+  removal controls; keep the public support/privacy URLs available as the
+  secondary contact and App Review reference.
 - Prepare reviewer accounts, sample QR codes, and review instructions.
 - Test camera scanning, offline queues, APNs/FCM, authenticated SSE, and Apple
   and Google Wallet on physical devices. The emulator is useful for checking

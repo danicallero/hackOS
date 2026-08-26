@@ -90,8 +90,9 @@ route below. No migration needed.
   scan counts, and last door state needed by H22-H26. A full snapshot
   is deliberate: badge-history values have no individual timestamp, and a
   complete replacement guarantees convergence after any missed refresh.
-  Anonymized accounts (H54, `users.anonymized_at`) are excluded, so an
-  erased profile never syncs to a scanner and never resolves through
+  Accounts in `removal_pending` and deleted/anonymized accounts (H54,
+  `users.account_state`) are excluded, so an erased profile never syncs to a
+  scanner and never resolves through
   `/api/logistics/people/search` — even by a still-active badge or ticket.
 - `GET /api/logistics/scan-log` (`apps/api/src/modules/logistics/scan-log.ts`)
   — paginated, most-recent-first feed unioning accreditation check-ins,
@@ -579,10 +580,10 @@ when `sameActivities` says the data is unchanged.
 
 Staff/scanner devices carry two distinct local caches, split into separate
 SQLite files with different lifetimes, encryption keys, and OS backup
-treatment (`lib/scanner-crypto.ts`, `lib/scanner-db.native.ts`). Both
-caches' actual on-device behavior (SecureStore-backed native AES,
-cache-directory backup exclusion, the legacy-file migration) has been
-verified against real iOS/Android hardware and EAS builds.
+treatment (`lib/scanner-crypto.ts`, `lib/scanner-db.native.ts`). The
+repository has focused adapter tests for the encryption/isolation paths;
+physical iOS/Android and EAS verification remains a release-gate task in
+`docs/mobile-release.md`.
 
 - **Attendance roster** (`hackos-scanner-roster.db`, `scanner_people` +
   badges/activities/scan-count tables) — every field beyond the plaintext
