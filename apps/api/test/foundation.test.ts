@@ -1,5 +1,5 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { App } from "../src/app.js";
 import {
   asUser,
@@ -40,6 +40,17 @@ describe("foundation", () => {
     expect(res.json()).toEqual({ status: "ok" });
   });
 
+  it("readyz reports Valkey degradation without rejecting the API replica", async () => {
+    app = await buildTestApp();
+    const { valkey } = await import("../src/lib/valkey.js");
+    vi.spyOn(valkey, "ping").mockRejectedValueOnce(new Error("valkey unavailable"));
+
+    const res = await app.inject({ method: "GET", url: "/readyz" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ status: "degraded", postgres: "ok", valkey: "down" });
+  });
+
   it("metrics serves the Prometheus registry, unauthenticated (H540)", async () => {
     app = await buildTestApp();
     const res = await app.inject({ method: "GET", url: "/metrics" });
@@ -66,6 +77,7 @@ describe("foundation", () => {
     expect(spec.paths["/api/auth/get-session"].get.tags).toEqual(["auth"]);
     expect(spec.paths["/api/auth/{*}"]).toBeUndefined();
     expect(spec.paths["/healthz"].get.security).toEqual([]);
+    expect(spec.paths["/readyz"].get.security).toEqual([]);
     expect(spec.paths["/api/tv/stream"].get.security).toEqual([]);
     expect(spec.paths["/api/queue/stream"].get.security).toEqual([
       { sessionToken: [] },

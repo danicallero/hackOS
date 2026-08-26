@@ -24,6 +24,7 @@ const HEARTBEAT_INTERVAL_MS = 25_000;
 const localSubscribers = new Map<string, Set<FastifyReply>>();
 const subscriberLanes = new Map<FastifyReply, RequestLane>();
 let relayStarted = false;
+let relayStarting: Promise<void> | null = null;
 
 // Connection budgets (H540): reject before hijacking the response, so a
 // rejection is a normal Fastify JSON error rather than an aborted stream.
@@ -139,17 +140,27 @@ function writeChunk(reply: FastifyReply, chunk: string): void {
 
 async function ensureRelay(): Promise<void> {
   if (relayStarted) return;
-  relayStarted = true;
-  await valkeySub.psubscribe(`${CHANNEL_PREFIX}*`);
-  valkeySub.on("pmessage", (_pattern, channel, message) => {
-    const topic = channel.slice(CHANNEL_PREFIX.length);
-    const conns = localSubscribers.get(topic);
-    if (!conns?.size) return;
-    for (const reply of conns) {
-      writeChunk(reply, message);
-    }
-  });
+  if (!relayStarting) {
+    relayStarting = valkeySub
+      .psubscribe(`${CHANNEL_PREFIX}*`)
+      .then(() => {
+        relayStarted = true;
+      })
+      .finally(() => {
+        relayStarting = null;
+      });
+  }
+  await relayStarting;
 }
+
+// Install the relay once. ioredis automatically restores subscriptions after
+// reconnect; if the initial PSUBSCRIBE fails, ensureRelay() remains retryable.
+valkeySub.on("pmessage", (_pattern, channel, message) => {
+  const topic = channel.slice(CHANNEL_PREFIX.length);
+  const conns = localSubscribers.get(topic);
+  if (!conns?.size) return;
+  for (const reply of conns) writeChunk(reply, message);
+});
 
 function formatSse(envelope: SseEnvelope): string {
   return `event: ${envelope.type}\nid: ${envelope.id}\ndata: ${JSON.stringify(envelope)}\n\n`;

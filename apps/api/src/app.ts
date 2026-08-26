@@ -55,7 +55,7 @@ function logSoftFailure(req: FastifyRequest, err: unknown, message: string): voi
 }
 
 function docsTagFor(url: string): keyof typeof TAG_DESCRIPTIONS {
-  if (url === "/healthz" || url === "/metrics") return "foundation";
+  if (url === "/healthz" || url === "/readyz" || url === "/metrics") return "foundation";
   if (url.startsWith("/api/public/")) return "public";
   if (url.startsWith("/api/auth/")) return "auth";
   if (
@@ -278,6 +278,7 @@ export async function buildApp(): Promise<App> {
     if (
       isSseRequest(req.url) ||
       req.url.split("?", 1)[0] === "/healthz" ||
+      req.url.split("?", 1)[0] === "/readyz" ||
       req.url.split("?", 1)[0] === "/metrics"
     ) {
       return;
@@ -424,15 +425,34 @@ export async function buildApp(): Promise<App> {
         routeAccessPolicy: { kind: "public", anonymousCategory: "health" },
       },
       schema: {
-        description:
-          "Liveness/readiness probe. Round-trips Postgres and Valkey; returns " +
-          "non-200 if either is unreachable. Used by container healthchecks.",
+        description: "Process liveness probe. It performs no dependency I/O.",
       },
     },
-    async () => {
-      await pool.query("SELECT 1");
-      await valkey.ping();
-      return { status: "ok" };
+    async () => ({ status: "ok" }),
+  );
+
+  app.get(
+    "/readyz",
+    {
+      config: { routeAccessPolicy: { kind: "public", anonymousCategory: "health" } },
+      schema: {
+        description:
+          "Bounded readiness probe. PostgreSQL is required; Valkey is ephemeral and reports a degraded 200 response so its outage does not remove a replica that can still serve durable reads.",
+      },
+    },
+    async (_req, reply) => {
+      const [postgres, broker] = await Promise.allSettled([pool.query("SELECT 1"), valkey.ping()]);
+      if (postgres.status === "rejected") {
+        return reply.code(503).send({
+          status: "unavailable",
+          postgres: "down",
+          valkey: broker.status === "fulfilled" ? "ok" : "down",
+        });
+      }
+      if (broker.status === "rejected") {
+        return { status: "degraded", postgres: "ok", valkey: "down" };
+      }
+      return { status: "ok", postgres: "ok", valkey: "ok" };
     },
   );
 
