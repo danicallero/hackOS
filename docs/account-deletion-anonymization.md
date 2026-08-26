@@ -288,11 +288,12 @@ correct it.
   a `NOT VALID` `time_logs` kind check. It is a corrective writer-safety
   migration and must remain separate from already-applied migration blobs.
 
-Migration policy is checksum-enforced by `apps/api/scripts/migrate.ts`. The
-branch assumes H54 migrations `0730–0733` have not been deployed to the target
-environment. If an environment has already applied an earlier `0730` or
-`0731`, do not replace the applied file; split any missing correction into a
-new migration before merge (A18).
+Migration policy is checksum-enforced by `apps/api/scripts/migrate.ts`. There
+is no production database in scope for this branch, so the H54 migrations
+`0730–0733` are validated as a fresh install and can be corrected here before
+deployment. Once any environment applies a migration, preserve its checksum
+and put later corrections in a new migration rather than rewriting that
+environment's applied file (A18).
 
 ## 11. Offline caches and external copies
 
@@ -546,7 +547,7 @@ silently converted into a legal conclusion.
 | A15 | Application-template label heuristics identify age/gender/university/degree/year/origin; stable canonical keys are preferred and must be mapped by the application owner. | Applications/data owner |
 | A16 | Meal/activity/judging/project records are operational or shared content, not permanent personal audit requirements, unless the table's row is explicitly listed above. | Domain owners |
 | A17 | “Irreversible” means no identity mapping in the hackOS database after the transaction; it does not overclaim deletion from external systems or prevent statistical inference. | Privacy/security owner |
-| A18 | H54 migrations have not been applied to production/main. If an earlier migration blob is deployed, preserve its checksum and create a corrective migration. | Release/DB owner |
+| A18 | No production database is in scope for this branch; H54 migrations are validated from a fresh schema. After first deployment, preserve applied checksums and use a new corrective migration for later changes. | Release/DB owner |
 | A19 | No current ECTS, certificate or named participation-proof endpoint exists in this repository; any future implementation must not use a hidden anonymous-to-user map. | Product/academic-services owner |
 | A20 | App Review can access a seeded accepted participant/staff account and reach Settings → Account & Data without external registration. | iOS release owner |
 
