@@ -210,8 +210,9 @@ export default function AccountScreen() {
     // though the response failed; clear local identity/cache data in that case
     // rather than leaving a closed account's PII on the device (H54).
     const serverMayHaveRevokedAccess =
-      cause instanceof ApiError &&
-      (cause.code === "removal_storage_pending" || cause.status >= 500);
+      !(cause instanceof ApiError) ||
+      cause.code === "removal_storage_pending" ||
+      cause.status >= 500;
     if (serverMayHaveRevokedAccess) {
       await finishLocalAccountClosure(userId);
       setRemovalError(new Error(t("accountRemovalPending")));

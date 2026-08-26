@@ -90,7 +90,17 @@ export function DangerZoneCard() {
       toast.success(action === "delete" ? t("accountDeleted") : t("accountAnonymized"));
       await finishLocalAccountClosure(false);
     } catch (error) {
-      if (error instanceof ApiError && error.code === "removal_storage_pending") {
+      // A network failure has an ambiguous outcome: the API may have revoked
+      // the account and the browser may simply have lost the response. Clear
+      // local identity data and sign out for ambiguous failures, just as for
+      // the explicit 503 cleanup-pending response. Business 4xx errors remain
+      // on the page so the participant can fix the stated issue (for example,
+      // recording their venue exit first).
+      const ambiguousOutcome =
+        !(error instanceof ApiError) ||
+        error.code === "removal_storage_pending" ||
+        error.status >= 500;
+      if (ambiguousOutcome) {
         await finishLocalAccountClosure(true);
         return;
       }
