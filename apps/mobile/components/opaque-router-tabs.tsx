@@ -120,6 +120,8 @@ const REGISTERED_TAB_ROUTES: RouterTabRoute[] = [
 
 export interface OpaqueRouterTabsProps {
   capabilities: string[];
+  accredited: boolean;
+  hasQueueItems: boolean;
   hasUnreadNotifications: boolean;
 }
 
@@ -128,7 +130,12 @@ export interface OpaqueRouterTabsProps {
  * the Liquid Glass/opaque geometry; this adapter owns hackOS capabilities,
  * copy, icons and the Others pseudo-tab menu.
  */
-export function OpaqueRouterTabs({ capabilities, hasUnreadNotifications }: OpaqueRouterTabsProps) {
+export function OpaqueRouterTabs({
+  capabilities,
+  accredited,
+  hasQueueItems,
+  hasUnreadNotifications,
+}: OpaqueRouterTabsProps) {
   const { t } = useLocale();
   const pathname = usePathname();
   const systemColorScheme = useColorScheme();
@@ -138,8 +145,9 @@ export function OpaqueRouterTabs({ capabilities, hasUnreadNotifications }: Opaqu
     : (systemColorScheme ?? "light");
   const tabIconColor = fallbackColorScheme === "dark" ? "#98989e" : "#6c6c70";
   const tabSelectedColor = fallbackColorScheme === "dark" ? "#0a84ff" : "#007aff";
-  const primaryTabKeys = primaryTabs(capabilities);
-  const overflowTabKeys = overflowTabs(capabilities);
+  const personalTabContext = { accredited, hasQueueItems };
+  const primaryTabKeys = primaryTabs(capabilities, personalTabContext);
+  const overflowTabKeys = overflowTabs(capabilities, personalTabContext);
   const directTabLimit = routerTabBarDirectTabsForWidth(width);
   const maxTabsWithoutOverflow = routerTabBarMaxTabsWithoutOverflowForWidth(width);
   const allTabKeys = [...primaryTabKeys, ...overflowTabKeys];

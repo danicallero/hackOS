@@ -1,7 +1,7 @@
 import { type MenuAction, MenuView } from "@expo/ui/community/menu";
 import { useRouter, useScrollToTop } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, ScrollView, Text, useColorScheme, View } from "react-native";
+import { Alert, Linking, ScrollView, Text, useColorScheme, View } from "react-native";
 
 import {
   ActionButton,
@@ -14,6 +14,7 @@ import {
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { apiFetch } from "@/lib/api";
 import { signOut } from "@/lib/auth-client";
+import { EVENT_WEBSITE_URL } from "@/lib/env";
 import { haptic } from "@/lib/haptics";
 import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -21,6 +22,11 @@ import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { fetchMyScanStats, type MyScanStats } from "@/lib/scan-log";
 import { SCAN_LOG_ROUTES } from "@/lib/scan-log-navigation";
 import { wipeAttendanceRoster } from "@/lib/scanner-db";
+import {
+  type AccountRemovalEligibility,
+  deleteOwnAccount,
+  fetchAccountRemovalEligibility,
+} from "@/lib/self-service";
 import {
   clearAllCaches,
   formatBytes,
@@ -58,6 +64,13 @@ export default function AccountScreen() {
   const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
   const [clearingCache, setClearingCache] = useState(false);
   const [storageError, setStorageError] = useState<Error | null>(null);
+  const [dangerZoneOpen, setDangerZoneOpen] = useState(false);
+  const [removalEligibility, setRemovalEligibility] = useState<AccountRemovalEligibility | null>(
+    null,
+  );
+  const [removalLoading, setRemovalLoading] = useState(true);
+  const [removalError, setRemovalError] = useState<Error | null>(null);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const loadStorageUsage = useCallback(async () => {
     setStorageUsage(await getStorageUsage());
@@ -66,6 +79,22 @@ export default function AccountScreen() {
   useEffect(() => {
     void loadStorageUsage();
   }, [loadStorageUsage]);
+
+  const loadRemovalEligibility = useCallback(async () => {
+    setRemovalLoading(true);
+    setRemovalError(null);
+    try {
+      setRemovalEligibility(await fetchAccountRemovalEligibility());
+    } catch (cause) {
+      setRemovalError(cause instanceof Error ? cause : new Error(t("accountRemovalLoadError")));
+    } finally {
+      setRemovalLoading(false);
+    }
+  }, [t]);
+
+  useEffect(() => {
+    void loadRemovalEligibility();
+  }, [loadRemovalEligibility]);
 
   const loadSupportingData = useCallback(async () => {
     if (!me) return;
@@ -157,6 +186,30 @@ export default function AccountScreen() {
     Alert.alert(t("storageClearConfirmTitle"), t("storageClearConfirmBody"), [
       { text: t("cancel"), style: "cancel" },
       { text: t("storageClearAction"), style: "destructive", onPress: () => void clearCache() },
+    ]);
+  }
+
+  async function deleteAccount() {
+    setDeletingAccount(true);
+    setRemovalError(null);
+    try {
+      await deleteOwnAccount();
+      await wipeAttendanceRoster();
+      await signOut();
+    } catch (cause) {
+      setRemovalError(cause instanceof Error ? cause : new Error(t("accountDeleteError")));
+      setDeletingAccount(false);
+    }
+  }
+
+  function confirmDeleteAccount() {
+    Alert.alert(t("accountDeleteConfirmTitle"), t("accountDeleteConfirmBody"), [
+      { text: t("cancel"), style: "cancel" },
+      {
+        text: t("accountDeleteAction"),
+        style: "destructive",
+        onPress: () => void deleteAccount(),
+      },
     ]);
   }
 
@@ -411,6 +464,63 @@ export default function AccountScreen() {
             busy={signingOut}
             onPress={confirmSignOut}
           />
+        </Section>
+
+        <Section title={t("accountDangerZone")}>
+          <ActionButton
+            label={dangerZoneOpen ? t("accountHideDangerZone") : t("accountShowDangerZone")}
+            icon={dangerZoneOpen ? "chevron.up" : "chevron.down"}
+            onPress={() => setDangerZoneOpen((open) => !open)}
+          />
+          {dangerZoneOpen ? (
+            <>
+              <Separator />
+              {removalLoading ? (
+                <View style={{ padding: 16 }}>
+                  <RequestFeedback loading />
+                </View>
+              ) : removalError ? (
+                <View style={{ padding: 16 }}>
+                  <RequestFeedback
+                    error={removalError}
+                    message={t("accountRemovalLoadError")}
+                    onRetry={() => void loadRemovalEligibility()}
+                  />
+                </View>
+              ) : removalEligibility?.action === "delete" ? (
+                <View style={{ gap: 12, padding: 16 }}>
+                  <Text
+                    selectable
+                    style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
+                  >
+                    {t("accountDeleteDescription")}
+                  </Text>
+                  <ActionButton
+                    label={t("accountDeleteAction")}
+                    icon="trash"
+                    destructive
+                    busy={deletingAccount}
+                    onPress={confirmDeleteAccount}
+                  />
+                </View>
+              ) : (
+                <View style={{ gap: 12, padding: 16 }}>
+                  <Text
+                    selectable
+                    accessibilityLiveRegion="polite"
+                    style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
+                  >
+                    {t("accountCannotSelfDelete")}
+                  </Text>
+                  <ActionButton
+                    label={t("accountPrivacyPolicy")}
+                    icon="arrow.up.right.square"
+                    onPress={() => void Linking.openURL(`${EVENT_WEBSITE_URL}/privacy`)}
+                  />
+                </View>
+              )}
+            </>
+          ) : null}
         </Section>
       </ScrollView>
       <AndroidStatusBarScrim />
