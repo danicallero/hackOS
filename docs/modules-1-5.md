@@ -243,10 +243,15 @@ H23/H24), and a badge/"Batch" assignment control on profile details
 
 ## Module 5 — Critical bug fixes & admin utilities
 
-**Schema.** None new. Key fact: `users.id` is the PK; `email` is a plain
-`UNIQUE` column; Better Auth's `accounts.account_id` for credential login is the
-**user id as text**, and `sessions`/`accounts` FK on `user_id` — so nothing
-foreign-keys on the email string.
+**Schema.** H54 adds `users.account_state` (`active` → `removal_pending`),
+`removal_action` and `removal_started_at`, plus the separate
+`anonymous_participants` audit subject. `check_in_logs` and `time_logs` can
+point to either an active user or an anonymous participant, never both; all
+direct user foreign-key writers are guarded by the 0733 active-reference
+triggers. `users.id` remains the authenticated identity PK and is never used
+as the anonymous identifier. Better Auth's `accounts.account_id` for
+credential login is the user id as text, while `sessions`/`accounts` FK on
+`user_id`.
 
 **Endpoints / hooks.**
 - `identity/outbox.ts:enqueueAuthEmail` — gained an optional
@@ -264,39 +269,29 @@ foreign-keys on the email string.
 - `profile.ts` `PATCH /api/users/:id/email` (`USERS_WRITE`) — safe primary-email
   change: uniqueness check vs any primary / verified-secondary, single-column
   update, marks verified (admin-vouched), audited.
-- `profile.ts` `POST /api/users/:id/anonymize` (`ADMIN_ALL`) — H54 erasure the
-  DELETE 409 already pointed to: scrubs every PII column in place (keeping the
-  row + FK references intact) and revokes access (deletes `sessions` +
-  `accounts`). `DELETE /api/users/:id` hard-deletes fresh accounts, and — since
-  the retention boundary is accreditation (badge assignment at check-in), not
-  acceptance or even a confirmed spot — also hard-deletes accounts whose only
-  restrictive references are their own `application_responses`/
-  `applicant_reviews`, their account-claim/verification
-  `email_verification_tokens` row, queued/sent `notification_outbox` messages
-  (e.g. the invite/welcome email), their own `notification_preferences`
-  channel toggles (H51 UI settings, not event participation), their permanent
-  `tickets` row and any `wallet_passes` issued from it (a confirmed spot, not
-  presence at the event), and any `audit_log` row where they're merely the
-  actor (e.g. the "accept" entry from claiming an invite): `removal.ts`
-  `clearOwnUnretainedReferences` clears/nulls those in the same transaction
-  before deleting the user (nulling `audit_log.actor_id` rather than deleting
-  the row keeps the audited event itself, mirroring the nullable-actor pattern
-  the self-delete route's own audit write already uses). Any account with a
-  `check_in_logs` row (accreditation — always written alongside `badge_id`,
-  and the only way a `badge`-purpose `wallet_passes` row can exist), a scan,
-  submission, or other retained reference still 409s and must go through
-  anonymization instead.
-- `GET /api/me/removal-eligibility` / `DELETE /api/me` (authenticated, no
-  extra capability) — the self-service side of the same H54 preflight/delete:
-  a participant can delete their own account only when
-  `getAccountRemovalEligibility` says `"delete"`; otherwise 409, and the
-  account settings page points them at requesting anonymization from an
-  administrator instead (privacy policy §6). Unlike the admin route, the
-  audit write for a self-delete uses `actorId: null` — actor and target are
-  the same row being deleted in that transaction, and a non-null self-FK would
-  block the `DELETE FROM users` it's part of.
+- `profile.ts` exposes the H54 self-service preflight and actions, while the
+  admin routes use the same locked boundary. A fresh account is fully deleted;
+  an account with check-in, door/activity history or badge history is
+  irreversibly anonymized after an open venue session is closed. The final
+  transaction creates a random UUID anonymous subject, moves only
+  accreditation/door rows to it, deletes application/project/meal/notification
+  and other identity-bearing relationships, revokes sessions/tokens/push and
+  deletes the original `users` row. No mapping table or in-place anonymized
+  user remains.
+- `GET /api/me/removal-eligibility`, `DELETE /api/me` and
+  `POST /api/me/anonymize` are authenticated and capability-free. The web and
+  mobile settings pages call the preflight and present the corresponding
+  destructive action directly. A self-service completion audit is actor-free
+  because the actor row is deleted in the same transaction.
+- `identity/removal.ts` performs two phases: commit `removal_pending` and
+  revoke local access, remove provider/storage artifacts with bounded retry,
+  then finalize the database transaction. `0733` adds a database-level active
+  user-reference guard so stale notification, token, project, logistics or
+  audit writers cannot create new FK rows after pending begins.
 
-**State transitions.** None (identity/account lifecycle only).
+**State transitions.** `active → removal_pending → users row deleted`, with an
+anonymous participant created only for the anonymization branch. A pending
+account is not eligible for authentication or event operations.
 
 ---
 

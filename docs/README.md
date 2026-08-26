@@ -93,6 +93,11 @@ Architecture & modules:
   shared by Better Auth's own paths and this app's routes, the endpoint-class
   limits table, fail-open behavior and its metrics, and the trusted-proxy
   requirement it depends on.
+- [Account deletion and irreversible anonymization audit](./account-deletion-anonymization.md) —
+  the H54 data-flow inventory, authoritative retention boundary, anonymous
+  audit-subject design, operational/dietary retention, venue-presence
+  calculation, mobile/web flows, offline-cache behavior, concurrency controls,
+  App Store review risks, assumptions, and test matrix.
 
 Frontend (web & mobile):
 

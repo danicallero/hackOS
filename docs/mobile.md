@@ -267,7 +267,7 @@ distributed to other Expo Router apps without importing hackOS code.
   danger zone reads `GET /api/me/removal-eligibility`: eligible accounts can
   call `DELETE /api/me` after a native destructive confirmation, while
   accounts with retained operational history see the anonymization/retention
-  explanation and a link to the web privacy policy (H54). For operators
+  explanation and a direct irreversible anonymization action (H54). For operators
   (any scan capability, `lib/tabs.ts`'s `isOperator`) it also shows a "My
   stats" section (`/api/me/logistics/stats`) and a link to the scan-history
   screen (`app/(tabs)/others/scan-log.tsx`, `/api/logistics/scan-log`, grouped by
@@ -604,8 +604,9 @@ verified against real iOS/Android hardware and EAS builds.
   filters/sorts in JS instead.
 - **Offline scan queue** (`hackos-scanner-queue.db`, `pending_scans`) — the
   only record of a not-yet-synced transaction, so it stays in the default
-  (non-cache, backed-up) document directory and is **never** wiped on
-  sign-out or by the account screen's "Clear cache" action. Every row is
+  (non-cache, backed-up) document directory and is not wiped on ordinary
+  sign-out or by the account screen's "Clear cache" action. It is wiped for
+  the signed-in account during account closure. Every row is
   encrypted with its own `created_by_user_id`'s key
   (a distinct `expo-crypto` key per staff member, also in `expo-secure-store`,
   marked `WHEN_UNLOCKED_THIS_DEVICE_ONLY` on iOS so a restored backup can't
@@ -617,9 +618,12 @@ verified against real iOS/Android hardware and EAS builds.
   the action server-side). The same user signing back in later recovers
   their own queue, conflicts included, exactly as they left it — the queue
   is keyed by owner, not by session. Devices upgrading from the pre-split
-  single-file schema have their legacy `pending_scans` rows migrated once
-  (attributed to a sentinel "unknown owner", `userId 0`) rather than
-  silently dropped; the old file is then deleted.
+  single-file schema have their legacy `pending_scans` rows migrated once into
+  the encrypted per-owner queue where possible; if encryption/key migration
+  cannot be completed, the legacy file is retained for a later retry rather
+  than silently dropped. Devices that remain offline can still retain a stale
+  identity until reconnect/expiry or a device wipe; central tombstones prevent
+  that stale scan from being accepted or re-uploaded.
 
 ## Realtime & notifications infrastructure
 

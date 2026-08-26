@@ -129,7 +129,8 @@ controllers. This is the honest map:
 | **M2 batch decisions** (`batchDecide`, `batchReAccept`, `batchRevokeSpots`, …) | **Synchronous** in the request (`runBatch`) | Per-row failures collected as `skipped[]`; not queued |
 | **M1 DNI sync** (`extractDni` → `users.dni`) | **Synchronous** in the submit transaction | Same tx as the response write |
 | **M1 name-lock check** | **Synchronous** in `PATCH /api/me` | A read-guard, no job |
-| **M5 primary-email change / anonymize / delete** | **Synchronous** in the request | Single transaction; no cascade jobs |
+| **M5 primary-email change** | **Synchronous** in the request | One audited transaction |
+| **H54 account anonymize / delete** | **Two-phase request + retry worker** | Commits `removal_pending` and revokes access first; provider/object cleanup is retried, then the final user deletion or anonymous-subject migration is one transaction. Failed jobs expire from the queue after 24 hours and remain operator-retriable from the pending row. |
 | **M5 secondary-email verification email** | **Async** | Enqueued to `notification_outbox`; delivered by the `notifications-outbox` dispatcher |
 | **Decision / invite / reset emails** | **Async** | Same outbox → dispatcher path |
 | **Spot-confirmation expiry** (H15) | **Async** | `spot-confirmation expirer` tick every 60 s |

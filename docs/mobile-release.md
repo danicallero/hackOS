@@ -1064,9 +1064,16 @@ decide the final declarations. At minimum:
   event-end wipe procedures. Expo SQLite is not automatically an encrypted
   database; assess whether platform file protection is sufficient for the
   organization's risk model.
-- Provide an external account-deletion/request URL. Even though mobile account
-  creation is intentionally absent, the service has user accounts created via
-  web onboarding, so deletion and retention behavior must be clear.
+- Provide a privacy/support URL as a secondary contact. Even though mobile
+  account creation is intentionally absent, the service has user accounts
+  created via web onboarding; the primary deletion mechanism remains the
+  visible in-app Account/Data action below.
+- Keep a visible in-app Account/Data or Danger zone action in the reviewer
+  account. It must call the authenticated backend removal flow, explain the
+  difference between full deletion and irreversible anonymisation, disclose
+  active-event/venue-exit and named-proof consequences, and sign out/clear
+  local app data after success or an ambiguous network result. Do not make an
+  email request the primary path.
 - Complete Apple age rating, export-compliance encryption questions, content
   rights, and regional trader/compliance fields where applicable.
 - Complete Google ads declaration, app access instructions, target audience,
