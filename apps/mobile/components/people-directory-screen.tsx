@@ -11,6 +11,7 @@ import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import {
+  AndroidFilterMenu,
   EmptyState,
   LegacyHeaderIconButton,
   LegacyScreenHeader,
@@ -184,36 +185,55 @@ export function PeopleDirectoryScreen() {
   const legacyHeader = !glassAvailable ? (
     <LegacyScreenHeader
       actions={
-        <GlassView
-          colorScheme="auto"
-          glassEffectStyle="regular"
-          isInteractive
-          style={{ borderRadius: 22, height: 44, width: 44 }}
-        >
-          <MenuView
-            actions={ROLE_FILTERS.map((filter) => ({
-              id: filter.value,
-              title: t(filter.labelKey),
-              image: filter.icon,
-              state: (roleFilter === filter.value ? "on" : "off") as "on" | "off",
-            }))}
-            onPressAction={({ nativeEvent }) =>
-              setRoleFilter(nativeEvent.event as typeof roleFilter)
-            }
+        process.env.EXPO_OS === "android" ? (
+          <GlassView
+            colorScheme="auto"
+            glassEffectStyle="regular"
+            isInteractive
+            style={{ borderRadius: 22, height: 44, width: 44 }}
           >
-            <LegacyHeaderIconButton
-              icon={
-                roleFilter === "all"
-                  ? "line.3.horizontal.decrease"
-                  : "line.3.horizontal.decrease.circle.fill"
-              }
+            <AndroidFilterMenu
               accessibilityLabel={t("scannerFilterGroups")}
-              accessibilityState={{ selected: roleFilter !== "all" }}
-              tintColor={roleFilter === "all" ? colors.label : colors.accent}
-              onPress={() => undefined}
+              items={ROLE_FILTERS.map((filter) => ({
+                id: filter.value,
+                label: t(filter.labelKey),
+                selected: roleFilter === filter.value,
+              }))}
+              onSelect={(id) => setRoleFilter(id as typeof roleFilter)}
             />
-          </MenuView>
-        </GlassView>
+          </GlassView>
+        ) : (
+          <GlassView
+            colorScheme="auto"
+            glassEffectStyle="regular"
+            isInteractive
+            style={{ borderRadius: 22, height: 44, width: 44 }}
+          >
+            <MenuView
+              actions={ROLE_FILTERS.map((filter) => ({
+                id: filter.value,
+                title: t(filter.labelKey),
+                image: filter.icon,
+                state: (roleFilter === filter.value ? "on" : "off") as "on" | "off",
+              }))}
+              onPressAction={({ nativeEvent }) =>
+                setRoleFilter(nativeEvent.event as typeof roleFilter)
+              }
+            >
+              <LegacyHeaderIconButton
+                icon={
+                  roleFilter === "all"
+                    ? "line.3.horizontal.decrease"
+                    : "line.3.horizontal.decrease.circle.fill"
+                }
+                accessibilityLabel={t("scannerFilterGroups")}
+                accessibilityState={{ selected: roleFilter !== "all" }}
+                tintColor={roleFilter === "all" ? colors.label : colors.accent}
+                onPress={() => undefined}
+              />
+            </MenuView>
+          </GlassView>
+        )
       }
       cancelLabel={t("cancel")}
       leading={

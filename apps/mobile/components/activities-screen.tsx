@@ -7,6 +7,7 @@ import { FlatList, Pressable, RefreshControl, Text, useColorScheme, View } from 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import {
+  AndroidFilterMenu,
   EmptyState,
   LegacyHeaderIconButton,
   LegacyScreenHeader,
@@ -244,43 +245,65 @@ export function ActivitiesScreen() {
       ) : (
         <LegacyScreenHeader
           actions={
-            <GlassView
-              colorScheme="auto"
-              glassEffectStyle="regular"
-              isInteractive
-              style={{ borderRadius: 22, height: 44, width: 44 }}
-            >
-              <MenuView
-                actions={[
-                  {
-                    id: "all",
-                    title: t("scheduleFilterAll"),
-                    state: (kind === null ? "on" : "off") as "on" | "off",
-                  },
-                  ...kinds.map((value) => ({
-                    id: value,
-                    title: scheduleTypeLabel(value, t),
-                    image: activityKindSymbol(value) as ActivityKindSymbolName,
-                    state: (kind === value ? "on" : "off") as "on" | "off",
-                  })),
-                ]}
-                onPressAction={({ nativeEvent }) =>
-                  setKind(nativeEvent.event === "all" ? null : nativeEvent.event)
-                }
+            process.env.EXPO_OS === "android" ? (
+              <GlassView
+                colorScheme="auto"
+                glassEffectStyle="regular"
+                isInteractive
+                style={{ borderRadius: 22, height: 44, width: 44 }}
               >
-                <LegacyHeaderIconButton
-                  icon={
-                    kind === null
-                      ? "line.3.horizontal.decrease"
-                      : "line.3.horizontal.decrease.circle.fill"
-                  }
+                <AndroidFilterMenu
                   accessibilityLabel={t("scheduleFilter")}
-                  accessibilityState={{ selected: kind !== null }}
-                  tintColor={kind === null ? colors.label : colors.accent}
-                  onPress={() => undefined}
+                  items={[
+                    { id: "all", label: t("scheduleFilterAll"), selected: kind === null },
+                    ...kinds.map((value) => ({
+                      id: value,
+                      label: scheduleTypeLabel(value, t),
+                      selected: kind === value,
+                    })),
+                  ]}
+                  onSelect={(id) => setKind(id === "all" ? null : id)}
                 />
-              </MenuView>
-            </GlassView>
+              </GlassView>
+            ) : (
+              <GlassView
+                colorScheme="auto"
+                glassEffectStyle="regular"
+                isInteractive
+                style={{ borderRadius: 22, height: 44, width: 44 }}
+              >
+                <MenuView
+                  actions={[
+                    {
+                      id: "all",
+                      title: t("scheduleFilterAll"),
+                      state: (kind === null ? "on" : "off") as "on" | "off",
+                    },
+                    ...kinds.map((value) => ({
+                      id: value,
+                      title: scheduleTypeLabel(value, t),
+                      image: activityKindSymbol(value) as ActivityKindSymbolName,
+                      state: (kind === value ? "on" : "off") as "on" | "off",
+                    })),
+                  ]}
+                  onPressAction={({ nativeEvent }) =>
+                    setKind(nativeEvent.event === "all" ? null : nativeEvent.event)
+                  }
+                >
+                  <LegacyHeaderIconButton
+                    icon={
+                      kind === null
+                        ? "line.3.horizontal.decrease"
+                        : "line.3.horizontal.decrease.circle.fill"
+                    }
+                    accessibilityLabel={t("scheduleFilter")}
+                    accessibilityState={{ selected: kind !== null }}
+                    tintColor={kind === null ? colors.label : colors.accent}
+                    onPress={() => undefined}
+                  />
+                </MenuView>
+              </GlassView>
+            )
           }
           cancelLabel={t("cancel")}
           onCloseSearch={() => {

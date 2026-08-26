@@ -1,8 +1,9 @@
 import Stack from "expo-router/stack";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import {
   ActivityIndicator,
   type ColorValue,
+  Modal,
   Pressable,
   Text,
   TextInput,
@@ -438,6 +439,99 @@ export function LegacyHeaderIconButton({
         weight="semibold"
       />
     </Pressable>
+  );
+}
+
+/** Android fallback for H25/H26 roster filtering: native menu triggers are not
+ * consistently clickable inside the legacy header's composed glass surface. */
+export function AndroidFilterMenu({
+  accessibilityLabel,
+  items,
+  onSelect,
+}: {
+  accessibilityLabel: string;
+  items: Array<{ id: string; label: string; selected: boolean }>;
+  onSelect: (id: string) => void;
+}) {
+  const { t } = useLocale();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <Pressable
+        accessibilityLabel={accessibilityLabel}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        onPress={() => setOpen(true)}
+        style={({ pressed }) => ({
+          alignItems: "center",
+          flex: 1,
+          justifyContent: "center",
+          opacity: pressed ? 0.65 : 1,
+        })}
+      >
+        <SymbolView
+          name={
+            items.some((item) => item.selected) && !items[0]?.selected
+              ? "line.3.horizontal.decrease.circle.fill"
+              : "line.3.horizontal.decrease"
+          }
+          tintColor={
+            items.some((item) => item.selected) && !items[0]?.selected
+              ? colors.accent
+              : colors.label
+          }
+          size={19}
+          weight="semibold"
+        />
+      </Pressable>
+      <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable
+          accessibilityLabel={t("close")}
+          accessibilityRole="button"
+          onPress={() => setOpen(false)}
+          style={{ flex: 1 }}
+        />
+        <View
+          style={{
+            backgroundColor: colors.elevatedSurface,
+            borderColor: colors.separator,
+            borderRadius: 14,
+            borderWidth: 1,
+            elevation: 12,
+            overflow: "hidden",
+            position: "absolute",
+            right: 16,
+            top: useAndroidTopInset() + 58,
+            width: 240,
+          }}
+        >
+          {items.map((item) => (
+            <Pressable
+              accessibilityRole="menuitem"
+              accessibilityState={{ selected: item.selected }}
+              key={item.id}
+              onPress={() => {
+                onSelect(item.id);
+                setOpen(false);
+              }}
+              style={({ pressed }) => ({
+                alignItems: "center",
+                backgroundColor: pressed ? colors.surface : "transparent",
+                flexDirection: "row",
+                minHeight: 48,
+                paddingHorizontal: 16,
+              })}
+            >
+              <Text style={{ color: colors.label, flex: 1, fontSize: 16 }}>{item.label}</Text>
+              {item.selected ? (
+                <SymbolView name="checkmark" tintColor={colors.accent} size={16} />
+              ) : null}
+            </Pressable>
+          ))}
+        </View>
+      </Modal>
+    </>
   );
 }
 
