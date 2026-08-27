@@ -18,8 +18,13 @@ active --(check_in_logs accreditation)--> removal_pending
                                       | +-- outside venue --> anonymous participant
                                       |\
                                       +---- inside venue --> pending exit
+                                                          --> staff/system exit or
+                                                              recovery expiry
                                                           --> anonymous participant
-                                      sessions/accounts revoked immediately
+                                      pending exit keeps only transient
+                                      recovery/exit identity; finalization
+                                      revokes sessions/accounts/push and
+                                      removes the remaining profile data
                                       no anonymous-to-user mapping
 ```
 
@@ -82,14 +87,19 @@ moves the implementation to `removal.ts`.
    re-evaluates the boundary, and commits `account_state = 'removal_pending'`
    with the selected action. A live open session produces `pending_exit`, not
    a rejected privacy request.
-3. Sessions, Better Auth accounts, and push tokens are removed in that
-   transaction. Wallet rows are marked voided while external invalidation is
-   attempted.
+3. For a finalizable request, sessions, Better Auth accounts, push tokens and
+   dietary values are removed in preparation. For `pending_exit`, those
+   identity and catering rows remain only for the fixed recovery window so the
+   participant can cancel or staff can record the exit; `account_state` blocks
+   normal participant activity. Wallet rows are marked voided on finalizable
+   paths while external invalidation is attempted.
 4. S3/MinIO uploads, DSR exports, and provider wallet artifacts are cleaned
    outside the database transaction. A failure returns `503
    removal_storage_pending`, keeps the account inaccessible, and queues a
    bounded retry.
-5. `finalizeAccountRemoval()` takes a new transaction, computes the verified
+5. Once a valid staff/system exit or the fixed recovery deadline makes a
+   pending request finalizable, `finalizeAccountRemoval()` takes a new
+   transaction, computes the verified
    attendance total before destroying activity rows, creates the random
    anonymous subject where required, scrubs relationships, and deletes the
    `users` row. The final operation is idempotent through the pending state and
@@ -108,7 +118,10 @@ moves the implementation to `removal.ts`.
   preflight, warning and confirmation flow, requests the same verified-email
   PIN through a native modal, sends the authenticated API request, clears
   native app data and scanner cache, signs out, and explains that a
-  storage/network error may still have completed server-side.
+  storage/network error may still have completed server-side. A pending-exit
+  response leaves the authenticated recovery surface available: after sign-in
+  it shows the expiry countdown, tells the participant to ask staff to record
+  the exit, and offers cancellation or sign-out until the exit/deadline wins.
 - Email is a secondary support/privacy link only; the security PIN email is
   issued by the authenticated in-app flow. Email is not the mechanism that
   starts deletion or anonymization.
@@ -243,10 +256,12 @@ An anonymization request while the participant is inside is accepted as a
 pending-exit transition. Access and participant services are revoked, meal and
 other new activity writes are blocked, and only an exit lookup/scan may use the
 temporary operational identity. Staff must record the exit; the valid exit
-then triggers finalization. Dietary values are cleared when the pending state
-is committed because food service ends with participation; the remaining
-temporary identity is used only to identify and record the exit. Both clients
-state this consequence before confirmation.
+then triggers finalization. Dietary values remain available only during this
+reversible transition so staff can safely complete any already-in-flight
+catering operation; they are cleared during irreversible finalization and are
+never copied to the anonymous record. Cancellation restores the active account
+before the exit/deadline race is won. Both clients state that the request ends
+participation before confirmation.
 Dietary data is not copied into `anonymous_participants`, audit snapshots,
 exports, notification history, or the permanent anonymous dataset by the H54
 code. The remaining check is operational: purge provider/email/server logs and
@@ -297,7 +312,7 @@ Both clients use an Account/Data danger zone and server preflight:
 | --- | --- | --- |
 | Fresh account | “Delete account” | Permanent deletion of the account, credentials, tokens, profile, files and related non-operational data; event spot/services end. |
 | Operational history | “Anonymize my data and close account” | Identity is destroyed; verified attendance and explicitly configured anonymous application values remain under a random subject without a link to the person. |
-| Live open venue session | Same action remains visible; request returns `pending_exit` | The request ends participation, revokes access, permits only the exit process, and completes irreversible closure after staff records the exit. |
+| Live open venue session | Same action remains visible; request returns `pending_exit` | The request ends participation, permits only the recovery/exit process, and completes irreversible closure after staff records a valid exit or the fixed recovery deadline expires. |
 | Any anonymization | Concise confirmation warning + Privacy Policy link | Identity is removed; explicitly retained anonymous audit data may remain without a link; named certificates, ECTS evidence and identity-linked participation proof cannot be issued later. |
 
 The modal is keyboard/screen-reader reachable on web, uses native confirmation
@@ -318,7 +333,7 @@ correct it.
 | Full delete | Authenticated `DELETE /api/me`; admin `DELETE /api/users/:id`; both re-evaluate and select full deletion only without canonical accreditation. Verified-primary-email self-service calls include the one-time PIN. An inconsistent open session may return `pending_exit` before deletion. |
 | Anonymize | Authenticated `POST /api/me/anonymize` with `{confirm:true}`; admin `POST /api/users/:id/anonymize`; admin requires `ADMIN_ALL` and cannot target self. Verified-primary-email self-service calls include the one-time PIN. An open session returns `202 pending_exit`, not an error. |
 | Security PIN | Authenticated `POST /api/me/removal-pin`; the server locks the active account, invalidates older challenges, stores only an HMAC digest/nonce, and queues the six-digit code through `notification_outbox`. |
-| Authentication | Active-user guard rejects `removal_pending`/deleted users; verified-primary-email self-service requests also require a short-lived one-time PIN sent by `/api/me/removal-pin`. Sessions, Better Auth accounts and push tokens are removed during preparation. |
+| Authentication | Active-user guard rejects `removal_pending`/deleted users from ordinary participant services; the profile guard allows only pending recovery/status/cancel. Verified-primary-email self-service requests also require a short-lived one-time PIN. Sessions, Better Auth accounts and push tokens are removed during preparation for finalizable paths and during pending-exit finalization. |
 | Authorization | `/me` avoids caller-supplied target IDs; admin routes use capability guards and self-protection. |
 | Idempotency | Clients send keys; self completion is moved to an identity-free scope before deleting `users`; pending-exit scanner responses omit target identity; completion writes cannot be regressed by a late `202`; stale in-flight records can be reclaimed. |
 | Storage | Exact subject upload path, response-derived upload prefixes, DSR export prefixes and known storage keys are deleted; S3 deletion errors are surfaced and retried. |
@@ -517,24 +532,24 @@ synthetic identity-shaped `users` row.
 | --- | --- | --- | --- | --- | --- |
 | `users`: id, email, verification, image, name, surname, DNI, secondary email, language, UI prefs, timestamps | Full account data | Active profile/service identity | Delete | No | Direct identity/auth profile. |
 | `users`: badge_id, badge_id_history | Credential before use | Active badge operations | Delete; permanent unlinked keyed-digest non-reuse tombstone | No | Credential is not audit data; the digest tombstone exists only to reject arbitrarily late offline replay. |
-| `users`: food_intolerances, food_intolerance_notes, dietary_data_state, shirt_size | May be edited | Operational catering/badge data | Clear dietary values when removal is accepted; delete the remaining user row at finalization | No | Dietary data is live operational data only and is not needed for exit-only closure. |
+| `users`: food_intolerances, food_intolerance_notes, dietary_data_state, shirt_size | May be edited | Operational catering/badge data | Keep dietary values only during reversible `pending_exit`; clear them during finalization, then delete the remaining user row | No | Dietary data supports active/in-flight catering only and is never part of the permanent anonymous audit dataset. |
 | `users.university_id` / `universities.name` | Profile dimension | May support services | Detach/delete the subject link; catalog survives | Only an application field explicitly configured for anonymous audit may retain a university value | Profile data is not copied merely because the shared university catalog exists. |
 | `accounts`: provider/account IDs, access/refresh/ID tokens, password | Auth credential | Auth credential | Delete | No | Credentials and provider identifiers must not survive. |
-| `sessions`: token, IP, user agent, expiry | Login session | Login/session | Delete immediately in preparation | No | Session and associated metadata are direct access data. |
+| `sessions`: token, IP, user agent, expiry | Login session | Login/session | Delete during preparation for finalizable paths; keep only the initiating/recovery session window for reversible `pending_exit`, then delete at finalization | No | Pending recovery needs authenticated status/cancel/exit guidance; session metadata is never anonymous audit data. |
 | `account_removal_pin_challenges`: verified email, HMAC digest, nonce, attempts, expiry | None | Short-lived self-service proof | Expire/consume and cascade-delete with the account; raw PIN is never stored | No | Transient authentication metadata is not participant audit data. |
 | `verifications`: identifier/value | Temporary email/reset state | Temporary auth state | Delete by email/ID match | No | No user FK; identifier is a hidden identity copy. |
 | `email_verification_tokens`: token, email, user_id, groups | Claim/confirmation | Acceptance/account claim | Delete | No | Token and email are direct credentials/identity. |
-| `push_tokens`: token, platform, user_id | Device delivery | Push delivery | Delete in preparation | No | Delivery credential/device identifier. |
+| `push_tokens`: token, platform, user_id | Device delivery | Push delivery | Delete during preparation for finalizable paths; delete at pending-exit finalization | No | Delivery credential/device identifier; no new participant notifications are permitted after pending begins. |
 | `notification_preferences`: category/channel/enabled | Personal preference | Service preference | Delete | No | Not required for audit. |
 | `notification_outbox`: payload, recipient FK, status/errors | Pending welcome/service message | Operational delivery | Delete subject rows; active filters prevent new rows | No | Payload may contain identifying notification data. |
 | `announcement_reads` / `announcement_recipients`: user FK, timestamps | Personal delivery/read state | Personal delivery/read state | Delete | No | Not an audit requirement. |
 | `tickets`: user FK, token | Unused ticket | QR/ticket credential | Delete; permanent unlinked non-reuse ticket tombstone | No | Credential must not regain access or resolve to a replacement account. |
-| `wallet_passes`: user FK, serial/auth token/provider object ID | Wallet credential | Venue ticket/pass | Delete after void/provider notification | No | Apple/Google copies are external residuals. |
+| `wallet_passes`: user FK, serial/auth token/provider object ID | Wallet credential | Venue ticket/pass | Void/delete during finalization; pending-exit may retain the row transiently for recovery/void processing | No | Apple/Google copies are external residuals and the credential is not anonymous audit data. |
 | `wallet_pass_devices`: device library identifier/push token | Wallet device registration | Wallet updates | Delete with pass | No | Device/pass delivery identifiers. |
 | `wallet_access_tokens`: scoped wallet token | Acceptance/wallet retrieval | Wallet retrieval | Delete | No | Temporary credential. |
 | `applications`: template, labels, intake configuration | Shared form definition | Shared form definition | Survive | No | No subject row; the mutable form is not used to decide historical retention. |
 | `application_form_versions`: immutable template/retention metadata and creator | Shared form definition | Schema used by submitted responses | Survive; creator FK may be nulled | No | The response's version is the source of its retention purpose; it contains no response values. |
-| `application_responses`: user FK, application-specific template answers, status, decisions, referrers | Application identity/data | Acceptance/participant logistics | Copy only fields explicitly marked `ANONYMOUS_AUDIT` in the response's immutable form version; delete the response, all other answers, dietary values and files; null subject referrers | Dynamic rows in `anonymous_participant_fields` for supplied retained values | Different applications/versions can ask different questions; labels and later edits do not change historical purpose. |
+| `application_responses`: user FK, application-specific template answers, status, decisions, referrers | Application identity/data | Acceptance/participant logistics | Copy only fields explicitly marked `ANONYMOUS_AUDIT` in the response's immutable form version; delete the response, all other answers, dietary values and files; null subject referrers | Dynamic rows in `anonymous_participant_fields` for supplied retained values | Different applications/versions can ask different questions; labels and later edits do not change historical purpose. During `pending_exit`, the identifiable response remains transiently available for cancellation/exit and is destroyed at finalization. |
 | `anonymous_participants`: random UUID, guaranteed minutes, created timestamp | None | None until finalization | Created only for an accredited anonymization; no user FK or mapping | Random anonymous subject + system-generated verified minutes | Stable anonymous grouping without an identity bridge. |
 | `anonymous_participant_fields`: anonymous subject, form/application context, field key, open dimension, field kind, typed value | None | None until finalization | Survives only for explicitly retained, sanitized answers; no user/response FK | Dynamic retained application values; missing answers create no row | Normalized/queryable schema avoids fixed demographic columns and supports future dimensions. |
 | `applicant_reviews`: response/author, score, notes | Review workflow | Selection workflow | Delete subject response reviews and subject-authored reviews | No | Identity/free text; not audit requirement. |
@@ -676,14 +691,17 @@ silently converted into a legal conclusion.
 | A24 | Form administrators may explicitly mark arbitrary fields, including potentially sensitive ones; the builder warning is the current safeguard. A future product/privacy policy may add prohibited categories or small-cohort publication controls without changing the anonymous subject identity model. | Product/privacy + applications owners |
 | A25 | A pending-exit removal may complete after a valid current staff exit, the exact system-generated event-closing `out` at `event_config.event_ends_at`, or expiry of the latest H24 certainty window that invalidates the last provisional presence sum. Missing event dates remove only the live warning; they do not bypass the lifecycle boundary. | Event-operations owner |
 | A26 | Migration `0735` snapshots the best available pre-migration form configuration as version 1. The repository cannot reconstruct form edits that occurred before versioning existed; the initial HackUDC six-field retention configuration is therefore an explicit migration decision, applied only to participant forms, while other fields/forms receive the minimizing `NONE` default. | Applications + data owner |
-| A27 | Clearing dietary values when removal is accepted is safe because the request terminates participation immediately; the participant receives no further meal service while waiting for exit. If operations require food service during this transition, the pending-state policy must be revised before rollout. | Event-operations + privacy owner |
+| A27 | A pending-exit request ends new participation but retains the existing profile, authentication, wallet and dietary artifacts only for the reversible recovery/exit window. This temporary retention lets staff complete already-started operational work safely; dietary data is cleared at irreversible finalization and is never copied to anonymous audit data. | Event-operations + privacy owner |
 | A28 | The restart marker is best-effort, device-local, and contains only the action and `pending_exit`/`processing`/`device_cleanup_pending` status. It is not an account lookup or a guarantee that an offline device has received a remote wipe. | Mobile/web + release owners |
 | A29 | Admin removal idempotency rows are deleted with the target during finalization. An admin retry after finalization receives the normal not-found result rather than a replayable completion response; this avoids retaining a target-bearing audit/replay record. | Security + operations owner |
 | A30 | Badge and ticket credentials are retired in an unlinked global denylist whose central values are stable HMAC digests, not raw credentials. This prevents central raw-token retention, but global badge tombstones still conflict with physical badge rotation/reassignment, and a keyed digest alone cannot distinguish stale scans from a new owner. Before production, use a per-assignment random binding/nonce or explicitly prohibit reuse; no raw-credential exception is claimed after `0741`. | Security + privacy + operations owners |
 | A31 | Only non-draft responses with a non-null, same-application form-version pointer are eligible for anonymous application retention. A legacy submitted response without a trustworthy version is excluded rather than evaluated against the later mutable form; any recovery requires an explicit data decision. | Applications/data owner |
-| A32 | A data-subject deletion request remains `processing` while a pending-exit transition waits for a valid exit; the worker must not report completion before irreversible finalization. | Privacy + operations owners |
+| A32 | The API distinguishes an accepted, cancellable `pending_exit` request from `processing`. `pending_exit` lasts until a valid current staff exit, exact event-end system `out`, or fixed recovery-deadline expiry wins; only then may irreversible finalization report completion. | Privacy + operations owners |
 | A33 | A verified-primary-email self-service request must enter the six-digit PIN delivered to that email. The PIN is one-time, short-lived, attempt-limited, stored only as an HMAC digest/nonce, and is not required for unverified accounts. | Security/product owner |
 | A34 | Guaranteed/verified venue time is system-generated from accrued `time_logs` and `activity_logs`; application retention is independently selected by each submitted form version. A missing retained application answer stays missing and is never inferred. | Grant/audit + applications owners |
+| A35 | The participant cannot self-record the exit from the recovery screen. “Log your exit” instructs them to show the badge to staff; the backend accepts only the validated staff door `out`, the exact system-generated event-end `out`, or an expired H24 certainty window as a completion signal. | Event-operations + security owners |
+| A36 | The pending-exit recovery deadline is captured once from the initiating authenticated session when available, or a bounded fallback for legacy/admin initiation. Signing in again does not extend it; expiry lets the worker finalize even if a raw door session remains open, because the latest accrued presence window no longer proves current presence. | Security + event-operations owners |
+| A37 | During pending exit, ordinary participant, meal, judging, badge and notification writes are blocked. Only authenticated recovery/status/cancel and the operational exit path may use the transient identity; offline synchronization must be rejected or tombstoned after finalization. | Operations + mobile/security owners |
 
 ## Release recommendation
 
