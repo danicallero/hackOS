@@ -13,6 +13,7 @@ import { getQueue, registerWorker } from "../../lib/queues.js";
 import { deleteObject, deletePrefix, deleteSubjectUploadObjects } from "../../lib/storage.js";
 import type { TemplateField } from "../applications/schemas.js";
 import { ApplePushUnregisteredError, sendApplePush } from "../logistics/apple-push.js";
+import { scannerCredentialDigest } from "../logistics/credential-tombstones.js";
 import {
   buildCertaintyWindows,
   DEFAULT_SUSPICIOUS_GAP_MS,
@@ -891,24 +892,24 @@ async function addScannerTombstones(
 ): Promise<void> {
   if (badgeIds.length > 0) {
     await client.query(
-      `INSERT INTO scanner_revoked_badges (badge_id, revoked_at, expires_at)
+      `INSERT INTO scanner_revoked_badges (credential_digest, revoked_at, expires_at)
        SELECT value, clock_timestamp(), NULL::timestamptz
          FROM unnest($1::text[]) AS badge_values(value)
-       ON CONFLICT (badge_id) DO UPDATE
+       ON CONFLICT (credential_digest) DO UPDATE
          SET revoked_at = EXCLUDED.revoked_at,
              expires_at = NULL`,
-      [badgeIds],
+      [badgeIds.map((badgeId) => scannerCredentialDigest("badge", badgeId))],
     );
   }
   if (ticketTokens.length > 0) {
     await client.query(
-      `INSERT INTO scanner_revoked_tickets (ticket_token, revoked_at, expires_at)
+      `INSERT INTO scanner_revoked_tickets (credential_digest, revoked_at, expires_at)
        SELECT value, clock_timestamp(), NULL::timestamptz
          FROM unnest($1::text[]) AS ticket_values(value)
-       ON CONFLICT (ticket_token) DO UPDATE
+       ON CONFLICT (credential_digest) DO UPDATE
          SET revoked_at = EXCLUDED.revoked_at,
              expires_at = NULL`,
-      [ticketTokens],
+      [ticketTokens.map((token) => scannerCredentialDigest("ticket", token))],
     );
   }
 }

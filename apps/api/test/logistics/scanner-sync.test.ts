@@ -152,6 +152,15 @@ describe("H22-H26 native scanner snapshot", () => {
     });
     expect(removed.statusCode).toBe(200);
 
+    const retired = await pool.query<{ credential_digest: string }>(
+      `SELECT credential_digest FROM scanner_revoked_badges`,
+    );
+    expect(retired.rows).toHaveLength(1);
+    const retiredRow = retired.rows[0];
+    if (!retiredRow) throw new Error("Expected one retired badge digest");
+    expect(retiredRow.credential_digest).toMatch(/^[0-9a-f]{64}$/);
+    expect(retiredRow.credential_digest).not.toContain("BADGE-RETIRED");
+
     const replacement = await createUser();
     await assignBadge(replacement, "BADGE-RETIRED");
     const meal = await createMeal("Stale badge fixture");

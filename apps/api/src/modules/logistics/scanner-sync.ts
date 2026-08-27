@@ -7,7 +7,7 @@ import type { Language } from "../notifications/translate/index.js";
 /**
  * H22-H26 scanner seed/sync payload. Native scanners keep this deliberately
  * small dataset in SQLite: identity/card data needed at the point of scan,
- * current and revoked badge mappings, scannable activities and per-person
+ * current and historical badge mappings, scannable activities and per-person
  * scan counts. Mutations still go through the existing server
  * endpoints and are replayed with Idempotency-Key headers.
  *
@@ -16,14 +16,15 @@ import type { Language } from "../notifications/translate/index.js";
  * missed sync harmless: every successful refresh converges to server truth.
  */
 export async function scannerSnapshot() {
-  // The snapshot is replace-all. Permanent retired-credential tombstones are
-  // included so a device can reject stale scans locally; finite expiry is
-  // retained only for legacy housekeeping rows.
+  // The snapshot is replace-all. Retired credentials are represented by
+  // keyed digests centrally and are intentionally not sent back to every
+  // scanner as raw bearer values. A stale queued mutation is rejected by the
+  // server; the local roster still includes per-person historical badge ids
+  // for immediate operator feedback.
   await purgeExpiredScannerTombstones();
-  const [peopleResult, activitiesResult, statesResult, revokedBadgeResult, revokedTicketResult] =
-    await Promise.all([
-      pool.query(
-        `WITH RECURSIVE effective_groups (user_id, group_id) AS (
+  const [peopleResult, activitiesResult, statesResult] = await Promise.all([
+    pool.query(
+      `WITH RECURSIVE effective_groups (user_id, group_id) AS (
          SELECT user_id, group_id FROM permission_group_members
          UNION
          SELECT eg.user_id, gi.child_group_id
@@ -90,32 +91,24 @@ export async function scannerSnapshot() {
          ) last_presence ON true
         WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
         ORDER BY u.id`,
-      ),
-      pool.query(
-        `SELECT a.id, a.name, a.category, a.requires_scan, s.starts_at,
+    ),
+    pool.query(
+      `SELECT a.id, a.name, a.category, a.requires_scan, s.starts_at,
               a.primary_language, a.name_i18n, a.description_i18n
          FROM activities a
          LEFT JOIN schedule s ON s.id = a.schedule_id
         WHERE a.category = ANY($1::text[]) OR a.requires_scan = true
         ORDER BY s.starts_at ASC NULLS LAST, a.name ASC, a.id ASC`,
-        [[...MEAL_ACTIVITY_KINDS]],
-      ),
-      pool.query(
-        `SELECT user_id, activity_id, count(*)::int AS scan_count
+      [[...MEAL_ACTIVITY_KINDS]],
+    ),
+    pool.query(
+      `SELECT user_id, activity_id, count(*)::int AS scan_count
          FROM activity_logs al
          JOIN users u ON u.id = al.user_id
         WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
         GROUP BY user_id, activity_id`,
-      ),
-      pool.query(
-        `SELECT badge_id FROM scanner_revoked_badges
-        WHERE expires_at IS NULL OR expires_at > now() ORDER BY badge_id`,
-      ),
-      pool.query(
-        `SELECT ticket_token FROM scanner_revoked_tickets
-        WHERE expires_at IS NULL OR expires_at > now() ORDER BY ticket_token`,
-      ),
-    ]);
+    ),
+  ]);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -161,10 +154,10 @@ export async function scannerSnapshot() {
       activityId: row.activity_id as number,
       count: row.scan_count as number,
     })),
-    revokedBadgeIds: revokedBadgeResult.rows.map((row: { badge_id: string }) => row.badge_id),
-    revokedTicketTokens: revokedTicketResult.rows.map(
-      (row: { ticket_token: string }) => row.ticket_token,
-    ),
+    // Kept as empty compatibility fields for older clients. Raw global
+    // retired credentials are never distributed by the central snapshot.
+    revokedBadgeIds: [],
+    revokedTicketTokens: [],
   };
 }
 

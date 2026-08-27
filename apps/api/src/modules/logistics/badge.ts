@@ -1,5 +1,6 @@
 import type { Queryable } from "../../db/pool.js";
 import { AppError } from "../../lib/errors.js";
+import { scannerCredentialDigest } from "./credential-tombstones.js";
 
 /**
  * Resolve a scanned badge to its CURRENT owner (H23). Only `users.badge_id`
@@ -12,16 +13,17 @@ export async function resolveByBadge(
   badgeId: string,
   options: { allowPendingExit?: boolean } = {},
 ): Promise<number> {
-  // A badge can be reassigned after its former owner's account is removed.
   // Reject the permanent, unlinked retirement tombstone before resolving the
   // current owner so a disconnected scanner cannot replay an old
-  // identity-bearing scan against the replacement participant (H54).
+  // identity-bearing scan against the replacement participant (H54). The
+  // central table stores only a keyed digest; physical badge reuse still
+  // requires assignment binding and is a separate release decision.
   const tombstone = await db.query(
     `SELECT 1 FROM scanner_revoked_badges
-      WHERE badge_id = $1
-        AND (expires_at IS NULL OR expires_at > clock_timestamp())
+      WHERE credential_digest = $1
+      AND (expires_at IS NULL OR expires_at > clock_timestamp())
       LIMIT 1`,
-    [badgeId],
+    [scannerCredentialDigest("badge", badgeId)],
   );
   if (tombstone.rows[0]) {
     throw new AppError(409, "badge_revoked", "This badge has been revoked");

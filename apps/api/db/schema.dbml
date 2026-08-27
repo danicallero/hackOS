@@ -738,15 +738,15 @@ Table rooms {
 }
 
 Table scanner_revoked_badges {
-  badge_id text [pk, not null]
+  credential_digest text [pk, not null, note: 'HMAC-SHA256 of retired badge credential; no raw value or participant relationship.']
   revoked_at "timestamp with time zone" [not null, default: `now()`]
-  expires_at "timestamp with time zone" [note: 'NULL = permanently retired, unlinked scanner credential denylist entry.']
+  expires_at "timestamp with time zone" [note: 'NULL = permanently retired, unlinked keyed-digest scanner credential entry.']
 }
 
 Table scanner_revoked_tickets {
-  ticket_token text [pk, not null]
+  credential_digest text [pk, not null, note: 'HMAC-SHA256 of retired ticket credential; no raw value or participant relationship.']
   revoked_at "timestamp with time zone" [not null, default: `now()`]
-  expires_at "timestamp with time zone" [note: 'NULL = permanently retired, unlinked scanner credential denylist entry.']
+  expires_at "timestamp with time zone" [note: 'NULL = permanently retired, unlinked keyed-digest scanner credential entry.']
 }
 
 Table schedule {

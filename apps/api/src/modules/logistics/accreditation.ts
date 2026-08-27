@@ -6,6 +6,7 @@ import { AppError, ConflictError, ForbiddenError, NotFoundError } from "../../li
 import { hasEventAccess } from "../identity/role.js";
 import { broadcastForActiveUser } from "./active-broadcast.js";
 import { loadPersonCard } from "./cards.js";
+import { scannerCredentialDigest } from "./credential-tombstones.js";
 import { issueTicket } from "./tickets.js";
 import { enqueueWalletSync } from "./wallet-sync.js";
 
@@ -27,10 +28,10 @@ async function assertTicketNotRevoked(
 ): Promise<void> {
   const revoked = await client.query(
     `SELECT 1 FROM scanner_revoked_tickets
-      WHERE ticket_token = $1
+      WHERE credential_digest = $1
         AND (expires_at IS NULL OR expires_at > clock_timestamp())
       LIMIT 1`,
-    [token],
+    [scannerCredentialDigest("ticket", token)],
   );
   if (revoked.rows[0]) {
     throw new AppError(409, "ticket_revoked", "This ticket has been revoked");
@@ -123,9 +124,36 @@ export async function checkIn(
 
 /** A ticket QR must never become a badge id — they identify different physical items (H22/H23). */
 async function assertNotTicketToken(client: pg.PoolClient, badgeId: string): Promise<void> {
-  const ticket = await client.query(`SELECT 1 FROM tickets WHERE token = $1`, [badgeId]);
+  const ticket = await client.query(
+    `SELECT 1
+       FROM tickets
+      WHERE token = $1
+     UNION ALL
+     SELECT 1
+       FROM scanner_revoked_tickets
+      WHERE credential_digest = $2
+        AND (expires_at IS NULL OR expires_at > clock_timestamp())
+      LIMIT 1`,
+    [badgeId, scannerCredentialDigest("ticket", badgeId)],
+  );
   if (ticket.rows.length > 0) {
     throw new ConflictError("A ticket cannot be used as a badge", { badgeId });
+  }
+}
+
+/** A retired badge credential must not be assigned again under the current
+ * fail-closed policy. Assignment-scoped binding is the future path if
+ * physical badge reuse is approved (H54/F07). */
+async function assertBadgeNotRevoked(client: pg.PoolClient, badgeId: string): Promise<void> {
+  const revoked = await client.query(
+    `SELECT 1 FROM scanner_revoked_badges
+      WHERE credential_digest = $1
+        AND (expires_at IS NULL OR expires_at > clock_timestamp())
+      LIMIT 1`,
+    [scannerCredentialDigest("badge", badgeId)],
+  );
+  if (revoked.rows.length > 0) {
+    throw new AppError(409, "badge_revoked", "This badge has been revoked");
   }
 }
 
@@ -206,6 +234,7 @@ export async function checkInUser(
     }
 
     await assertNotTicketToken(client, input.badgeId);
+    await assertBadgeNotRevoked(client, input.badgeId);
 
     const owner = await client.query(`SELECT id FROM users WHERE badge_id = $1`, [input.badgeId]);
     if (owner.rows[0] && owner.rows[0].id !== input.userId) {
@@ -324,6 +353,7 @@ export async function rotateBadge(
     const oldBadge = user.badge_id as string | null;
 
     await assertNotTicketToken(client, input.newBadgeId);
+    await assertBadgeNotRevoked(client, input.newBadgeId);
 
     const owner = await client.query(`SELECT id FROM users WHERE badge_id = $1`, [
       input.newBadgeId,
