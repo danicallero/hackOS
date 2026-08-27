@@ -15,6 +15,7 @@ import { assignBadge, createMeal } from "./fixtures.js";
 
 let app: App;
 let doorStaff: number;
+let accreditStaff: number;
 let statsStaff: number;
 const PRESENCE_REMOVAL_PASSWORD = "presence-removal-password";
 
@@ -31,6 +32,7 @@ beforeEach(async () => {
   const { valkey } = await import("../../src/lib/valkey.js");
   await valkey.flushdb();
   doorStaff = await createUserWithCapabilities([CAPABILITIES.PRESENCE_SCAN]);
+  accreditStaff = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
   statsStaff = await createUserWithCapabilities([CAPABILITIES.LOGISTICS_STATS]);
   app ??= await buildTestApp();
 });
@@ -85,7 +87,7 @@ describe("H24 presence scan + estimation", () => {
     const rotated = await app.inject({
       method: "POST",
       url: "/api/accreditation/rotate",
-      headers: asUser(doorStaff),
+      headers: asUser(accreditStaff),
       payload: { userId: uid, newBadgeId: "P-REPLACED-NEW", reason: "lost" },
     });
     expect(rotated.statusCode).toBe(200);
@@ -119,7 +121,18 @@ describe("H24 presence scan + estimation", () => {
   it("accepts a backdated manual entry and audits it; rejects a future one", async () => {
     const uid = await createUser();
     await assignBadge(uid, "P-2");
-    const past = new Date(Date.now() - 3_600_000).toISOString();
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows: assignmentRows } = await pool.query<{ badge_assigned_at: Date }>(
+      `SELECT badge_assigned_at FROM users WHERE id = $1`,
+      [uid],
+    );
+    const assignment = assignmentRows[0]?.badge_assigned_at;
+    expect(assignment).toBeInstanceOf(Date);
+    if (!assignment) throw new Error("Expected a badge assignment timestamp");
+    // F06 rejects timestamps before the current badge assignment. This is a
+    // valid delayed/manual signal that occurred after the current badge was
+    // issued, unlike the stale credential test above.
+    const past = new Date(assignment.getTime() + 1_000).toISOString();
 
     const ok = await app.inject({
       method: "POST",
@@ -130,7 +143,6 @@ describe("H24 presence scan + estimation", () => {
     expect(ok.statusCode).toBe(200);
     expect(ok.json().manual).toBe(true);
 
-    const { pool } = await import("../../src/db/pool.js");
     const audits = await pool.query(
       `SELECT * FROM audit_log WHERE entity_type = 'presence' AND action = 'manual_time_log' AND entity_id = $1`,
       [String(uid)],
@@ -284,12 +296,14 @@ describe("H24 presence scan + estimation", () => {
     const stale = await createUser();
     await assignBadge(stale, "P-7");
     const longAgo = new Date(Date.now() - 20 * 3_600_000).toISOString();
-    await app.inject({
-      method: "POST",
-      url: "/api/presence/scan",
-      headers: asUser(doorStaff),
-      payload: { badgeId: "P-7", kind: "in", scannedAt: longAgo },
-    });
+    // F06 correctly rejects a scan timestamp before the current badge was
+    // assigned. Seed this reconciliation fixture directly so the test covers
+    // the stale-session read without pretending the current credential made
+    // that historical scan.
+    await pool.query(`INSERT INTO time_logs (user_id, kind, scanned_at) VALUES ($1, 'in', $2)`, [
+      stale,
+      longAgo,
+    ]);
 
     const closed = await createUser();
     await assignBadge(closed, "P-8");
