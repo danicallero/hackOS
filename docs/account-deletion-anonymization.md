@@ -31,7 +31,8 @@ active --(check_in_logs accreditation)--> removal_pending
 The mobile and web clients call `GET /api/me/removal-eligibility` and do not
 infer the mode from a badge, cached profile, or client boolean.  `DELETE
 /api/me` is selected only when the server sees no canonical accreditation;
-legacy inconsistencies may briefly use its pending-exit path.  `POST
+an inconsistent open door session may briefly use its pending-exit path while
+it is reconciled.  `POST
 /api/me/anonymize` is explicit and requires `{ "confirm": true }`.  Admin
 equivalents are capability-gated under `/api/users/:id`.
 
@@ -348,8 +349,7 @@ correct it.
 ## 10. Database and migration changes
 
 - `0730_account_deletion_anonymization.sql` adds lifecycle columns, the
-  anonymous table, nullable subject/actor references, legacy conversion and
-  identity cleanup.
+  anonymous table, nullable subject/actor references and identity cleanup.
 - `0731_account_removal_scanner_tombstones.sql` adds the detached badge/ticket
   revocation set used by disconnected scanners.
 - `0732_account_removal_meal_inbox.sql` makes meal inbox `badge_id` nullable so
@@ -390,17 +390,16 @@ correct it.
   its cleanup pointers. Fixture projects/challenges/queue rows are isolated
   from ordinary operations and are purged on regeneration or fixture closure;
   they are not anonymous-audit data.
-- `0745_badge_assignment_timestamp.sql` adds the server-owned assignment
-  boundary used to reject stale offline scan timestamps after badge rotation.
 - `0746_permanent_scanner_tombstones.sql` removes the old expiring-tombstone
   compatibility column. Account-retired credentials are permanently denied;
   ordinary badge rotation uses the assignment timestamp fence.
 Migration policy is checksum-enforced by `apps/api/scripts/migrate.ts`. There
 is no production database in scope for this branch, so the H54 migrations
-`0730–0745` are validated as a fresh install. The raw-presence correction is
+`0730–0746` are validated as a fresh install. The raw-presence correction is
 explicitly represented by `0734`; the keyed-tombstone migration deliberately
 clears only pre-production development rows that cannot be converted without
-the deployment secret. There is no production database in scope.
+the deployment secret. Runtime code does not read the removed expiry or
+unversioned-form compatibility shapes.
 Before the first production deployment, the release owner may publish a
 single flattened baseline from this complete chain; after that point, applied
 checksums are preserved and every correction uses a new migration (A18).
@@ -738,7 +737,7 @@ silently converted into a legal conclusion.
 | A33 | A verified-primary-email self-service request must enter the six-digit PIN delivered to that email. The PIN is one-time, short-lived, attempt-limited, stored only as an HMAC digest/nonce. If a real account has no usable email code because its primary email is unverified, the request must re-enter the current credential password instead; synthetic fixtures remain eligible for the fixture-only PIN path. | Security/product owner |
 | A34 | Guaranteed/verified venue time is system-generated from accrued `time_logs` and `activity_logs`; application retention is independently selected by each submitted form version. A missing retained application answer stays missing and is never inferred. | Grant/audit + applications owners |
 | A35 | The participant cannot self-record the exit from the recovery screen. The recovery copy instructs them to ask staff to show/scan their badge; the backend accepts only the validated staff door `out`, the exact system-generated event-end `out`, or an expired H24 certainty window as a completion signal. | Event-operations + security owners |
-| A36 | The pending-exit recovery deadline is captured once from the initiating authenticated session when available, or a bounded fallback for legacy/admin initiation. Signing in again does not extend it; expiry lets the worker finalize even if a raw door session remains open, because the latest accrued presence window no longer proves current presence. | Security + event-operations owners |
+| A36 | The pending-exit recovery deadline is captured once from the initiating authenticated session when available, or a bounded fallback for an admin/no-session initiation. Signing in again does not extend it; expiry lets the worker finalize even if a raw door session remains open, because the latest accrued presence window no longer proves current presence. | Security + event-operations owners |
 | A37 | During pending exit, ordinary participant, meal, judging, badge and notification writes are blocked. Only authenticated recovery/status/cancel and the operational exit path may use the transient identity; offline synchronization must be rejected or tombstoned after finalization. | Operations + mobile/security owners |
 | A38 | GPUL is the responsible organisation/data controller for the GPUL-operated hackOS instance; “HackUDC” names the event, not the operator. The participant-facing Privacy Policy and Terms therefore identify GPUL and link to event policies published by GPUL. | GPUL/privacy owner |
 | A39 | Synthetic reviewer accounts, their marked projects/challenges/queues and synthetic anonymous rows are isolated QA fixtures within the same deployed API and primary database. The API uses persisted marker/pointer predicates to exclude them from ordinary admin/staff reads, day-to-day scanner rosters, statistics, exports, grant/audit data and the permanent anonymous dataset; a separate fixture database is not part of this change. | Release + operations owners |
@@ -751,6 +750,7 @@ silently converted into a legal conclusion.
 | A46 | Legal copy may describe synthetic accounts as authorised testing/quality-assurance fixtures, but it must not name a specific review channel. The detailed fixture procedure belongs in the private/operational runbook. | GPUL/privacy + release owners |
 | A47 | The schema is authoritative for presence-event shape: only `time_logs.kind IN ('in', 'out')` is valid. Migration `0733` installs the strict check on the fresh schema; no reader-side exception or legacy repair path is retained for this branch. | Event-operations + release/DB owners |
 | A48 | The server-side `users.badge_assigned_at` timestamp is the authoritative boundary for offline badge-event replay. Presence, activity and meal paths reject timestamps before the current assignment both at enqueue/lookup and under the locked owner row; the timestamp is not exposed to clients. | Logistics + security owners |
+| A49 | The fresh-schema final state is authoritative. Runtime paths do not preserve malformed presence kinds, expired scanner tombstones, or mutable-form fallbacks for historical responses. Earlier migration steps remain only as the development migration chain; with no production database in scope, the release owner may publish a flattened baseline before first deployment. | Release/DB + domain owners |
 
 ## Release recommendation
 
