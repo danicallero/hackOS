@@ -172,7 +172,10 @@ describe("idempotencyGuard 5xx handling", () => {
     const { idempotencyOnSend } = await import("../../src/lib/idempotency.js");
     const { pool } = await import("../../src/db/pool.js");
     const key = "self-removal-storage-failure";
-    const scope = "POST /api/me/anonymize u:42";
+    // Self-service routes insert directly into this identity-free scope before
+    // they can revoke the session. A 503 therefore leaves a retryable NULL
+    // response here rather than an orphaned user-scoped marker.
+    const scope = "POST /api/me/anonymize removal-complete";
     await pool.query(
       `INSERT INTO idempotency_keys (key, scope, request_hash)
        VALUES ($1, $2, 'request-hash')`,
