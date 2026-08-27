@@ -8,6 +8,7 @@ import { View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 
+import { PendingRemovalScreen } from "@/components/pending-removal-screen";
 import { SessionState } from "@/components/session-state";
 import { useColorScheme } from "@/components/useColorScheme";
 import { authClient, signOut } from "@/lib/auth-client";
@@ -182,7 +183,14 @@ function MobileAccessGate({ authenticated }: { authenticated: boolean }) {
   const { me, loading } = useMeContext();
   const router = useRouter();
   useEffect(() => {
-    if (!authenticated || loading || !me || me.mobileAccess) return;
+    if (
+      !authenticated ||
+      loading ||
+      !me ||
+      me.mobileAccess ||
+      me.accountState === "removal_pending"
+    )
+      return;
     void signOut().finally(() => {
       router.replace({
         pathname: "/(auth)/sign-in",
@@ -218,6 +226,10 @@ function RootLayoutNav({ authenticated, pending }: { authenticated: boolean; pen
       return <View style={{ backgroundColor: colors.background, flex: 1 }} />;
     }
     return <SessionState loading={meLoading} onRetry={() => void refetch()} />;
+  }
+
+  if (me?.accountState === "removal_pending" && me.removal) {
+    return <PendingRemovalScreen removal={me.removal} onRefresh={refetch} />;
   }
 
   // Access is part of the navigation guard, not just an asynchronous sign-out

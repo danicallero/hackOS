@@ -58,6 +58,14 @@ export function anonymizeOwnAccount(securityPin?: string): Promise<AccountRemova
   });
 }
 
+export function cancelPendingAnonymization(): Promise<{ status: "cancelled" }> {
+  return apiFetch<{ status: "cancelled" }>("/api/me/anonymize/cancel", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({}),
+  });
+}
+
 export function declineOwnSpot(responseId: number, idempotencyKey: string): Promise<unknown> {
   return apiFetch(`/api/me/responses/${responseId}/decline`, {
     method: "POST",

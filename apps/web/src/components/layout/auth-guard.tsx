@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Spinner } from "@/components/common/spinner";
+import { PendingRemovalScreen } from "@/components/layout/pending-removal-screen";
 import { useTrackNavigation } from "@/hooks/use-track-navigation";
 import { withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
@@ -21,7 +22,7 @@ import { useSessionContext } from "@/lib/session";
  * doesn't force every authenticated page into a Suspense boundary.
  */
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { status } = useSessionContext();
+  const { me, refresh, status } = useSessionContext();
   const router = useRouter();
   useTrackNavigation();
 
@@ -38,6 +39,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         <Spinner className="size-6" />
       </div>
     );
+  }
+  if (me?.accountState === "removal_pending" && me.removal) {
+    return <PendingRemovalScreen removal={me.removal} onRefresh={refresh} />;
   }
   return <>{children}</>;
 }

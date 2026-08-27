@@ -102,7 +102,7 @@ export default function SignInScreen() {
         return;
       }
       const me = await apiFetch<Me>("/api/me");
-      if (!me.mobileAccess) {
+      if (!me.mobileAccess && me.accountState !== "removal_pending") {
         await signOut();
         router.replace({ pathname: "/(auth)/sign-in", params: { accessDenied: "1" } });
         return;
