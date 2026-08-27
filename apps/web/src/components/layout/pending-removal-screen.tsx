@@ -22,7 +22,6 @@ export function PendingRemovalScreen({
   const { t } = useLocale();
   const [now, setNow] = useState(Date.now());
   const [cancelOpen, setCancelOpen] = useState(false);
-  const [exitHelpOpen, setExitHelpOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -136,9 +135,6 @@ export function PendingRemovalScreen({
 
         {!processing && (
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Button type="button" onClick={() => setExitHelpOpen(true)}>
-              {t("accountRemovalLogExit")}
-            </Button>
             <Button
               type="button"
               variant="outline"
@@ -165,16 +161,6 @@ export function PendingRemovalScreen({
         </div>
       </section>
 
-      <AlertModal
-        open={exitHelpOpen}
-        onOpenChange={setExitHelpOpen}
-        title={t("accountRemovalLogExitTitle")}
-        description={t("accountRemovalLogExitBody")}
-        cancelLabel={t("close")}
-        confirmLabel={t("close")}
-        autoClose
-        onConfirm={() => setExitHelpOpen(false)}
-      />
       <AlertModal
         open={cancelOpen}
         onOpenChange={setCancelOpen}

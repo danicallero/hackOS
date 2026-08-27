@@ -48,12 +48,6 @@ export function PendingRemovalScreen({
     void onRefresh();
   }, [onRefresh, secondsRemaining]);
 
-  function showExitInstructions() {
-    Alert.alert(t("accountRemovalLogExitTitle"), t("accountRemovalLogExitBody"), [
-      { text: t("close") },
-    ]);
-  }
-
   function confirmCancel() {
     Alert.alert(t("accountRemovalCancelTitle"), t("accountRemovalCancelBody"), [
       { text: t("keepAnonymization"), style: "cancel" },
@@ -142,9 +136,6 @@ export function PendingRemovalScreen({
           </View>
         ) : null}
         {error ? <AuthAlert message={error} /> : null}
-        {!processing ? (
-          <AuthButton label={t("accountRemovalLogExit")} onPress={showExitInstructions} />
-        ) : null}
         {!processing ? (
           <AuthButton
             label={t("accountRemovalCancel")}

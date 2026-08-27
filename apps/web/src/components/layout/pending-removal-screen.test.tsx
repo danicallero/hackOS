@@ -47,9 +47,6 @@ vi.mock("@/lib/i18n", () => ({
         accountRemovalExpiryHint: "You can cancel before the timer expires.",
         accountRemovalExpiryLabel: "Recovery window",
         accountRemovalExpiryUnknown: "Checking expiry…",
-        accountRemovalLogExit: "Log your exit",
-        accountRemovalLogExitBody: "Ask staff to record your exit.",
-        accountRemovalLogExitTitle: "Ask staff to log your exit",
         accountRemovalPendingBody: "Your participation has ended.",
         accountRemovalPendingDescription: "Ask event staff to record your exit.",
         accountRemovalPendingTitle: "Exit needed to finish anonymization",
@@ -92,13 +89,13 @@ describe("PendingRemovalScreen", () => {
     container.remove();
   });
 
-  it("keeps the action available while the pending exit is recoverable", () => {
+  it("keeps cancellation, expiry and sign-out available while the pending exit is recoverable", () => {
     act(() => {
       root.render(<PendingRemovalScreen removal={removal} onRefresh={vi.fn()} />);
     });
 
     expect(container.textContent).toContain("Exit needed to finish anonymization");
-    expect(container.textContent).toContain("Log your exit");
+    expect(container.textContent).not.toContain("Log your exit");
     expect(container.textContent).toContain("Cancel anonymization");
     expect(container.textContent).toContain("Recovery window");
     expect(container.textContent).toContain("Sign out");

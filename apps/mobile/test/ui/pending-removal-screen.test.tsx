@@ -64,9 +64,6 @@ jest.mock("@/lib/i18n", () => ({
         accountRemovalExpiry: `Recovery window: ${values?.time ?? "unknown"}`,
         accountRemovalExpiryHint: "You can cancel before the timer expires.",
         accountRemovalExpiryLabel: "Recovery window",
-        accountRemovalLogExit: "Log your exit",
-        accountRemovalLogExitBody: "Ask staff to record your exit.",
-        accountRemovalLogExitTitle: "Ask staff to log your exit",
         accountRemovalPendingBody: "Your participation has ended.",
         accountRemovalPendingDescription: "Ask staff to record your exit.",
         accountRemovalPendingTitle: "Exit needed to finish anonymization",
@@ -122,12 +119,12 @@ describe("pending account-removal screen", () => {
     (signOut as jest.Mock).mockResolvedValue({ error: null });
   });
 
-  it("keeps exit instructions, cancellation, expiry and sign-out visible", async () => {
+  it("keeps cancellation, expiry and sign-out visible while staff complete the exit", async () => {
     const refresh = jest.fn().mockResolvedValue(undefined);
     await renderMobile(<PendingRemovalScreen removal={removal} onRefresh={refresh} />);
 
     expect(screen.getByText("Exit needed to finish anonymization")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Log your exit" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Log your exit" })).toBeNull();
     expect(screen.getByRole("button", { name: "Cancel anonymization" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Sign out" })).toBeEnabled();
     expect(screen.getByText("Recovery window")).toBeTruthy();
