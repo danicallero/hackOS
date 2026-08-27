@@ -395,6 +395,11 @@ export function registerProfileRoutes(app: FastifyInstance): void {
   const selfRemovalPreHandler =
     (completionScope: string) =>
     async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+      // Use the identity-free completion scope from the first insert. The
+      // request may revoke the session before Fastify's onSend hook runs; a
+      // later storage failure must therefore be retryable under the same
+      // scope, without leaving a stale user-scoped row behind.
+      req.idempotencyScope = completionScope;
       if (await replayCompletedIdempotency(req, reply, completionScope)) return;
       await assertActiveAuthenticatedUser(req);
       await idempotencyGuard(req, reply);

@@ -90,7 +90,7 @@ export interface RunAccountRemovalOptions {
   requestedAction?: AccountRemovalAction;
   /** Internal queue jobs already have BullMQ retry semantics. */
   scheduleRetry?: boolean;
-  /** The self-service idempotency row is renamed before the user row vanishes. */
+  /** The self-service idempotency row remains in an identity-free scope. */
   preserveIdempotency?: {
     key: string;
     scope: string;
@@ -621,26 +621,19 @@ async function prepareAccountRemoval(
         );
       }
       if (options.preserveIdempotency) {
-        // Move the marker out of the identity-bearing `u:<id>` scope before
-        // access is revoked.  A pending 202 can then be replayed without
-        // authenticating the now-closed session; finalization upgrades this
-        // same row to the identity-free 200 response.
+        // Keep the marker in the identity-free completion scope selected by
+        // the route pre-handler. A pending 202 is written by Fastify's
+        // onSend hook only after the request has returned. If private-object
+        // cleanup fails before then, the NULL response remains retryable
+        // instead of being mistaken for a completed processing response.
         await client.query(
           `UPDATE idempotency_keys
-              SET scope = $3,
-                  response_status = 202,
-                  response_body = $4::jsonb,
-                  completed_at = clock_timestamp()
+              SET scope = $3
             WHERE key = $1 AND scope = $2`,
           [
             options.preserveIdempotency.key,
             options.preserveIdempotency.scope,
             options.preserveIdempotency.completionScope,
-            JSON.stringify(
-              requiresVenueExit
-                ? { status: "pending_exit", pendingExit: true, accessRevoked: true }
-                : { status: "processing", accessRevoked: true },
-            ),
           ],
         );
       }
@@ -1405,9 +1398,10 @@ async function scrubRelationships(
     ],
   );
   if (preserveIdempotency) {
-    // Move the current self-service key away from the identity-bearing
-    // `u:<id>` scope before the users row is deleted. The response is only a
-    // boolean, so the completion record has no identity bridge (H54).
+    // Keep compatibility with callers that supplied the former user-scoped
+    // marker. Current self-service routes insert directly into this
+    // identity-free completion scope; either way, the response is only a
+    // boolean and has no identity bridge (H54).
     await client.query(
       `UPDATE idempotency_keys SET scope = $3
         WHERE key = $1 AND scope = $2`,
@@ -1573,7 +1567,8 @@ export async function finalizeAccountRemoval(
     await client.query(
       `UPDATE idempotency_keys
           SET response_status = 200, response_body = $2::jsonb, completed_at = clock_timestamp()
-        WHERE key = $1 AND scope = $3 AND response_status = 202`,
+        WHERE key = $1 AND scope = $3
+          AND (response_status IS NULL OR response_status = 202)`,
       [user.removal_idempotency_key, JSON.stringify(completion), completionScope],
     );
   }
