@@ -75,9 +75,9 @@ x-app-env: &app-env
   LIBRETRANSLATE_URL: "${LIBRETRANSLATE_URL:-}"
   LIBRETRANSLATE_API_KEY: "${LIBRETRANSLATE_API_KEY:-}"
 
-# App Store/QA fixture secrets are intentionally API-only. The migration
-# container does not need them, and keeping them out of the shared anchor makes
-# accidental use outside an isolated reviewer deployment less likely.
+# Synthetic fixture secrets are intentionally API-only. The migration
+# container does not need them; the API uses them for the marked fixture
+# workspace in this same deployment/database.
 x-review-fixture-env: &review-fixture-env
   REVIEW_FIXTURE_PASSWORD: "${REVIEW_FIXTURE_PASSWORD:-}"
   REVIEW_FIXTURE_DELETION_PIN: "${REVIEW_FIXTURE_DELETION_PIN:-}"

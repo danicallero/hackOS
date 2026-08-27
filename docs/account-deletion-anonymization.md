@@ -532,9 +532,10 @@ retention model.
 The repeatable accepted accounts and the synthetic participant judging queue
 used to exercise these states are documented separately in
 [Synthetic reviewer fixtures](./reviewer-fixtures.md). That fixture system is
-isolated from real participant operations, statistics, exports and the
-permanent anonymous audit dataset; its admin-only usage signal records only a
-last successful sign-in timestamp.
+isolated by persisted markers from real participant operations, statistics,
+exports and the permanent anonymous audit dataset while running in the same
+deployed API/database; its admin-only usage signal records only a last
+successful sign-in timestamp.
 
 ## 14. Required data-lifecycle analysis
 
@@ -729,7 +730,7 @@ silently converted into a legal conclusion.
 | A36 | The pending-exit recovery deadline is captured once from the initiating authenticated session when available, or a bounded fallback for legacy/admin initiation. Signing in again does not extend it; expiry lets the worker finalize even if a raw door session remains open, because the latest accrued presence window no longer proves current presence. | Security + event-operations owners |
 | A37 | During pending exit, ordinary participant, meal, judging, badge and notification writes are blocked. Only authenticated recovery/status/cancel and the operational exit path may use the transient identity; offline synchronization must be rejected or tombstoned after finalization. | Operations + mobile/security owners |
 | A38 | GPUL is the responsible organisation/data controller for the GPUL-operated hackOS instance; “HackUDC” names the event, not the operator. The participant-facing Privacy Policy and Terms therefore identify GPUL and link to event policies published by GPUL. | GPUL/privacy owner |
-| A39 | Synthetic reviewer accounts, their marked projects/challenges/queues and synthetic anonymous rows are isolated QA fixtures. They are excluded from ordinary admin/staff reads, day-to-day scanner rosters, statistics, exports, grant/audit data and the permanent anonymous dataset. | Release + operations owners |
+| A39 | Synthetic reviewer accounts, their marked projects/challenges/queues and synthetic anonymous rows are isolated QA fixtures within the same deployed API and primary database. The API uses persisted marker/pointer predicates to exclude them from ordinary admin/staff reads, day-to-day scanner rosters, statistics, exports, grant/audit data and the permanent anonymous dataset; a separate fixture database is not part of this change. | Release + operations owners |
 | A40 | The current fixture generation contains four scenarios: full deletion before accreditation, anonymization outside the venue, anonymization pending exit inside the venue, and a synthetic exit-capable operator. The outside fixture owns the participant-facing judging queue; future scenarios must create and clean up their own marked graph. | Release + product owners |
 | A41 | A synthetic operator has ordinary capability checks plus a marked-subject boundary and may act only on synthetic accounts. Real administrators and staff cannot discover or mutate those subjects by changing an ID in a normal endpoint. | Security + operations owners |
 | A42 | The configured static deletion PIN is accepted only for marked synthetic accounts. Verified real accounts require an emailed one-time PIN; no universal real-user bypass is implemented. | Security/product owner |

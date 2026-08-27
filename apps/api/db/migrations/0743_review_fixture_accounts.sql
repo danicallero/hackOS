@@ -1,4 +1,4 @@
--- 0743_review_fixture_accounts.sql — H54 App Store review fixtures.
+-- 0743_review_fixture_accounts.sql — H54 synthetic reviewer fixtures.
 --
 -- Test accounts are synthetic operational fixtures, not a second participant
 -- lifecycle.  The marker is used only by aggregate/statistics queries and by
@@ -9,7 +9,7 @@ ALTER TABLE users
   ADD COLUMN is_test_account boolean NOT NULL DEFAULT false;
 
 COMMENT ON COLUMN users.is_test_account IS
-  'Synthetic App Store/QA fixture marker. Excluded from participant statistics, but not from authorized operational lookups or actions.';
+  'Synthetic reviewer/QA fixture marker. Excluded from participant statistics and ordinary operations; dedicated fixture operators may use marked subjects.';
 
 ALTER TABLE anonymous_participants
   ADD COLUMN is_test_account boolean NOT NULL DEFAULT false;
@@ -42,7 +42,7 @@ CREATE TRIGGER review_fixture_accounts_updated_at
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 COMMENT ON TABLE review_fixture_accounts IS
-  'Current synthetic App Store/QA account pointers. Never use this table for real participants or as an anonymous identity lookup.';
+  'Current synthetic reviewer/QA account pointers. Never use this table for real participants or as an anonymous identity lookup.';
 COMMENT ON COLUMN review_fixture_accounts.fixture_key IS
   'Stable scenario key, such as participant-delete or participant-anonymize-inside.';
 COMMENT ON COLUMN review_fixture_accounts.user_id IS

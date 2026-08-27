@@ -62,8 +62,9 @@ x-app-env: &app-env
   GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL: "${GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL:-}"
   GOOGLE_WALLET_PRIVATE_KEY_PEM: "${GOOGLE_WALLET_PRIVATE_KEY_PEM:-}"
 
-# App Store/QA fixture secrets are API-only. Do not pass them to migrate or
-# worker, and configure them only for an isolated reviewer deployment.
+# Synthetic fixture secrets are API-only. Do not pass them to migrate or
+# worker; the API uses them for the marked fixture workspace in this same
+# deployment/database.
 x-review-fixture-env: &review-fixture-env
   REVIEW_FIXTURE_PASSWORD: "${REVIEW_FIXTURE_PASSWORD:-}"
   REVIEW_FIXTURE_DELETION_PIN: "${REVIEW_FIXTURE_DELETION_PIN:-}"

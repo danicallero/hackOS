@@ -1,7 +1,7 @@
 # Synthetic reviewer fixtures
 
-This runbook describes the synthetic accounts that can be regenerated for an
-isolated QA or external-review environment. It is intentionally separate from
+This runbook describes the synthetic accounts that can be regenerated inside
+the same deployed hackOS instance. It is intentionally separate from
 the participant Privacy Policy and Terms: those legal documents describe the
 GPUL-operated hackOS service and do not mention a particular review channel.
 
@@ -14,9 +14,10 @@ scanner data, project graph, queue graph and synthetic anonymous rows. The
 operation is transactional and audited; failed provisioning attempts clean up
 the exact accounts created by that attempt.
 
-The feature is for an isolated deployment. Set these variables only in a
-deployment that is safe to reset and whose credentials are distributed out of
-band:
+The feature uses the same API deployment and primary PostgreSQL database as
+the event. Set these API-only variables only when the deployment owner wants
+the synthetic fixture workspace enabled, and distribute the resulting
+credentials out of band:
 
 - `REVIEW_FIXTURE_PASSWORD` — password assigned to every generated account.
 - `REVIEW_FIXTURE_DELETION_PIN` — six-digit PIN accepted only by marked
@@ -28,9 +29,15 @@ universal static bypass for real participants. The fixture PIN is scoped to
 synthetic accounts so a leaked review credential cannot delete or anonymize a
 real attendee.
 
-Do not enable these variables on a deployment containing real event data
-unless the product and security owners have explicitly approved the reset and
-isolation boundary.
+Synthetic rows are isolated by an explicit marker and a dedicated fixture
+registry; normal admin/staff read paths, statistics, exports and audit
+retention paths exclude them. A second database/container is deliberately not
+used here: Better Auth sessions, permission capabilities, event configuration
+and the operational foreign-key graph are single-database concerns. Splitting
+fixtures into another database would require a new cross-database auth and
+routing model, which would be a larger security boundary than this feature
+needs. Enabling the fixture variables on a live event therefore still requires
+explicit release/security approval for the reset operation.
 
 ## Generated scenarios
 
@@ -88,8 +95,13 @@ These are implementation assumptions, not legal conclusions:
 - GPUL is the responsible organisation/data controller for the GPUL-operated
   hackOS instance; “HackUDC” names the event, not the operator.
 - Synthetic accounts, marked projects/challenges and their queues are isolated
-  test fixtures. They must not affect day-to-day participant/staff operations,
-  statistics, exports, grant/audit records or the permanent anonymous dataset.
+  test fixtures within the same deployment/database. They must not affect
+  day-to-day participant/staff operations, statistics, exports, grant/audit
+  records or the permanent anonymous dataset.
+- The API selects the fixture boundary from the persisted synthetic marker and
+  fixture pointers, not from an email suffix, role, deployment name or a
+  client-provided flag. A future separate fixture database would require an
+  explicit architecture/security decision and is not implied by this marker.
 - A synthetic operator is constrained by the same capability checks as normal
   staff and has an additional marked-subject boundary. A normal administrator
   cannot use an ID change to discover or mutate a synthetic subject through

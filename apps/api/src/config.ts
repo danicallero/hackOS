@@ -33,11 +33,11 @@ const envSchema = z.object({
   BETTER_AUTH_SECRET: z.string().default("dev-only-secret-change-me"),
 
   /**
-   * App Store/QA fixture credentials (H54). These are deliberately unset by
-   * default: a deployment must opt into a synthetic reviewer environment and
-   * supply both secrets out of band. The deletion PIN is accepted only for
-   * users marked is_test_account=true; real verified accounts always use the
-   * one-time PIN delivered to their primary email.
+   * Synthetic reviewer/QA fixture credentials (H54). These are deliberately
+   * unset by default: the same deployed instance must explicitly opt into the
+   * fixture workspace and receive both secrets out of band. The deletion PIN
+   * is accepted only for users marked is_test_account=true; real verified
+   * accounts always use the one-time PIN delivered to their primary email.
    */
   REVIEW_FIXTURE_PASSWORD: z.string().min(8).optional(),
   REVIEW_FIXTURE_DELETION_PIN: z.preprocess(

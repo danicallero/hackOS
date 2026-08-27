@@ -16,10 +16,10 @@ import { purgeReviewFixtureAccount } from "../removal.js";
 import { purgeReviewFixtureQueue } from "../review-fixture-queues.js";
 
 /**
- * Synthetic accounts used in the isolated App Store/QA environment. The
- * scenario keys are stable, while the generation suffix makes every account
- * replacement a fresh credential set and prevents old review notes from
- * accidentally pointing at a newly-created person.
+ * Synthetic accounts used in the same deployed hackOS instance. The scenario
+ * keys are stable, while the generation suffix makes every account replacement
+ * a fresh credential set and prevents old handoff notes from accidentally
+ * pointing at a newly-created person.
  */
 const FIXTURE_DEFINITIONS = [
   {
@@ -115,7 +115,7 @@ async function createFixtureUser(
     throw new Error("Review fixture user was not created");
   }
 
-  // The reviewer deployment has no mailbox requirement. Mark the synthetic
+  // The fixture workspace has no mailbox requirement. Mark the synthetic
   // account verified and remove Better Auth's queued verification email; the
   // configured static removal PIN is handled separately by removal-pin.ts.
   await client.query(
