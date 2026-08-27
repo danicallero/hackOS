@@ -10,12 +10,12 @@ export async function exportAttendanceCsv(): Promise<string> {
             'check_in' AS event, cil.checked_in_at AS occurred_at,
             cil.check_in_method AS method, cil.staff_id AS logged_by
        FROM check_in_logs cil JOIN users u ON u.id = cil.user_id
-      WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
+      WHERE u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
       UNION ALL
      SELECT u.id, u.name, u.surname, u.email,
             tl.kind, tl.scanned_at, NULL::text, tl.scanned_by
        FROM time_logs tl JOIN users u ON u.id = tl.user_id
-      WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
+      WHERE u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
       ORDER BY occurred_at`,
   );
   const header = [
@@ -39,7 +39,7 @@ export async function exportMealsCsv(): Promise<string> {
        JOIN activities a ON a.id = al.activity_id
        JOIN users u ON u.id = al.user_id
       WHERE a.category = 'meal'
-        AND u.account_state = 'active' AND u.anonymized_at IS NULL
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
       ORDER BY al.logged_at`,
   );
   const header = [
@@ -91,7 +91,7 @@ export async function exportApplicationsCsv(applicationId?: number): Promise<str
        JOIN applications app ON app.id = ar.application_id
        JOIN users u ON u.id = ar.user_id
       WHERE ($1::int IS NULL OR ar.application_id = $1)
-        AND u.account_state = 'active' AND u.anonymized_at IS NULL
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
       ORDER BY ar.id`,
     [applicationId ?? null],
   );

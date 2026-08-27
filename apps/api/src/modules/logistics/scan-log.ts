@@ -84,13 +84,16 @@ export async function staffScanCounts(staffId: number): Promise<StaffScanCounts>
     `SELECT
        (SELECT count(*)::int
           FROM check_in_logs cil JOIN users u ON u.id = cil.user_id
-         WHERE cil.staff_id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL) AS accreditation_count,
+         WHERE cil.staff_id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
+           AND u.is_test_account = false) AS accreditation_count,
        (SELECT count(*)::int
           FROM time_logs tl JOIN users u ON u.id = tl.user_id
-         WHERE tl.scanned_by = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL) AS presence_count,
+         WHERE tl.scanned_by = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
+           AND u.is_test_account = false) AS presence_count,
        (SELECT count(*)::int
           FROM activity_logs al JOIN users u ON u.id = al.user_id
-         WHERE al.logged_by = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL) AS activity_count`,
+         WHERE al.logged_by = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
+           AND u.is_test_account = false) AS activity_count`,
     [staffId],
   );
   return {
@@ -120,16 +123,19 @@ export async function staffScanRanking(): Promise<StaffScanRankingRow[]> {
        SELECT u.id AS staff_id, u.name, u.surname,
               (SELECT count(*)::int
                  FROM check_in_logs cil JOIN users subject ON subject.id = cil.user_id
-                WHERE cil.staff_id = u.id AND subject.account_state = 'active' AND subject.anonymized_at IS NULL) AS accreditation_count,
+                WHERE cil.staff_id = u.id AND subject.account_state = 'active' AND subject.anonymized_at IS NULL
+                  AND subject.is_test_account = false) AS accreditation_count,
               (SELECT count(*)::int
                  FROM time_logs tl JOIN users subject ON subject.id = tl.user_id
-                WHERE tl.scanned_by = u.id AND subject.account_state = 'active' AND subject.anonymized_at IS NULL) AS presence_count,
+                WHERE tl.scanned_by = u.id AND subject.account_state = 'active' AND subject.anonymized_at IS NULL
+                  AND subject.is_test_account = false) AS presence_count,
               (SELECT count(*)::int
                  FROM activity_logs al JOIN users subject ON subject.id = al.user_id
-                WHERE al.logged_by = u.id AND subject.account_state = 'active' AND subject.anonymized_at IS NULL) AS activity_count
+                WHERE al.logged_by = u.id AND subject.account_state = 'active' AND subject.anonymized_at IS NULL
+                  AND subject.is_test_account = false) AS activity_count
          FROM staff_ids si
          JOIN users u ON u.id = si.id
-          AND u.account_state = 'active' AND u.anonymized_at IS NULL
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
      )
      SELECT *
        FROM counted

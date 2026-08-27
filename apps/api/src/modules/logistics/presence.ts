@@ -351,22 +351,27 @@ export async function openSessions(at?: number) {
  * Load raw presence signals (door in/out + activity scans) grouped per user.
  * Passing a userId scopes to that user.
  */
-async function loadEvents(userId?: number): Promise<Map<number, PresenceEvent[]>> {
+async function loadEvents(
+  userId?: number,
+  options: { includeTestAccounts?: boolean } = {},
+): Promise<Map<number, PresenceEvent[]>> {
   const scoped = userId != null;
+  const testAccountFilter =
+    options.includeTestAccounts === false ? " AND u.is_test_account = false" : "";
   const timeFilter = scoped
     ? `WHERE tl.user_id = $1
          AND EXISTS (SELECT 1 FROM users u WHERE u.id = tl.user_id
-          AND u.account_state = 'active' AND u.anonymized_at IS NULL)`
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL${testAccountFilter})`
     : `WHERE tl.user_id IS NOT NULL
          AND EXISTS (SELECT 1 FROM users u WHERE u.id = tl.user_id
-          AND u.account_state = 'active' AND u.anonymized_at IS NULL)`;
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL${testAccountFilter})`;
   const activityFilter = scoped
     ? `WHERE al.user_id = $1
          AND EXISTS (SELECT 1 FROM users u WHERE u.id = al.user_id
-          AND u.account_state = 'active' AND u.anonymized_at IS NULL)`
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL${testAccountFilter})`
     : `WHERE al.user_id IS NOT NULL
          AND EXISTS (SELECT 1 FROM users u WHERE u.id = al.user_id
-          AND u.account_state = 'active' AND u.anonymized_at IS NULL)`;
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL${testAccountFilter})`;
   const params = scoped ? [userId] : [];
   const { rows } = await pool.query(
     `SELECT tl.user_id, extract(epoch from tl.scanned_at) * 1000 AS t, tl.kind
@@ -389,7 +394,7 @@ async function loadEvents(userId?: number): Promise<Map<number, PresenceEvent[]>
 /** H24/H27: how many people are estimated to be in the venue right now. */
 export async function occupancyEstimate(cutoff?: number) {
   const at = cutoff ?? (await databaseNow()).getTime();
-  const map = await loadEvents();
+  const map = await loadEvents(undefined, { includeTestAccounts: false });
   const suspiciousGapMs = await certaintyWindowMs();
   const present: number[] = [];
   for (const [userId, events] of map) {
@@ -419,14 +424,15 @@ export async function userHours(userId: number, cutoff?: number) {
 /** H24: estimated hours for every user with presence signals (bulk, admin display). */
 export async function allHours(cutoff?: number) {
   const now = cutoff ?? (await databaseNow()).getTime();
-  const map = await loadEvents();
+  const map = await loadEvents(undefined, { includeTestAccounts: false });
   const suspiciousGapMs = await certaintyWindowMs();
   const userIds = [...map.keys()];
   if (userIds.length === 0) return [];
 
   const { rows: people } = await pool.query(
     `SELECT id, name, surname FROM users
-      WHERE id = ANY($1) AND account_state = 'active' AND anonymized_at IS NULL`,
+      WHERE id = ANY($1) AND account_state = 'active' AND anonymized_at IS NULL
+        AND is_test_account = false`,
     [userIds],
   );
   const nameById = new Map(

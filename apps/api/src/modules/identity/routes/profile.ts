@@ -171,6 +171,7 @@ const userResponseSchema = z.object({
   universityId: z.number().nullable(),
   notes: z.string().nullable(),
   accountState: z.enum(["active", "removal_pending"]),
+  isTestAccount: z.boolean(),
   removal: accountRemovalProfileStateSchema.nullable(),
   createdAt: z.string(),
 });
@@ -210,6 +211,7 @@ interface UserRow {
   university_id: number | null;
   notes: string | null;
   account_state: "active" | "removal_pending";
+  is_test_account: boolean;
   removal_action: "delete" | "anonymize" | null;
   removal_requires_exit: boolean;
   removal_expires_at: Date | null;
@@ -254,6 +256,7 @@ function serializeUser(row: UserRow, removalStatus?: PendingAccountRemovalStatus
     universityId: row.university_id,
     notes: row.notes,
     accountState: row.account_state,
+    isTestAccount: row.is_test_account,
     removal,
     createdAt: row.created_at.toISOString(),
   };
@@ -751,6 +754,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                 shirtSize: z.string().nullable(),
                 applicationStatus: z.string().nullable(),
                 confirmedSpot: z.boolean(),
+                isTestAccount: z.boolean(),
                 createdAt: z.string(),
               }),
             ),
@@ -769,7 +773,8 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       const args = filter ? [filter, limit, offset] : [limit, offset];
       const p = filter ? 2 : 1;
       const { rows } = await pool.query(
-        `SELECT id, email, email_verified, name, surname, badge_id, language, shirt_size, created_at
+        `SELECT id, email, email_verified, name, surname, badge_id, language, shirt_size,
+                is_test_account, created_at
            FROM users ${where}
            ORDER BY created_at DESC LIMIT $${p} OFFSET $${p + 1}`,
         args,
@@ -819,6 +824,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           shirtSize: r.shirt_size,
           applicationStatus: statusByUser.get(r.id) ?? null,
           confirmedSpot: statusByUser.get(r.id) === "confirmed",
+          isTestAccount: r.is_test_account,
           createdAt: r.created_at.toISOString(),
         })),
       );

@@ -36,7 +36,7 @@ async function aggregateActivities(
        FROM activities a
        LEFT JOIN activity_logs al ON al.activity_id = a.id
        LEFT JOIN users u ON u.id = al.user_id
-        AND u.account_state = 'active' AND u.anonymized_at IS NULL
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
        LEFT JOIN schedule s ON s.id = a.schedule_id
       WHERE ${where}
       GROUP BY a.id, a.name, a.category, a.primary_language, a.name_i18n, a.description_i18n, s.starts_at
@@ -124,6 +124,7 @@ export async function accreditationCountsByRole() {
               END AS role
          FROM users u
         WHERE u.badge_id IS NOT NULL AND u.account_state = 'active' AND u.anonymized_at IS NULL
+          AND u.is_test_account = false
      )
      SELECT role, count(*)::int AS count
        FROM classified GROUP BY role ORDER BY role`,
@@ -139,7 +140,9 @@ export async function accreditationCountsByRole() {
  */
 export async function logisticsStats() {
   const accredited = await pool.query(
-    `SELECT count(*)::int AS n FROM users WHERE badge_id IS NOT NULL AND account_state = 'active' AND anonymized_at IS NULL`,
+    `SELECT count(*)::int AS n FROM users
+      WHERE badge_id IS NOT NULL AND account_state = 'active' AND anonymized_at IS NULL
+        AND is_test_account = false`,
   );
   const occ = await occupancyEstimate();
   const meals = await scannableActivities("meal");
@@ -233,7 +236,7 @@ export async function scannerRoleStats(): Promise<
               ) AS confirmed
          FROM users u
          LEFT JOIN user_caps uc ON uc.user_id = u.id
-        WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
+        WHERE u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
      )
      SELECT role,
             count(*) FILTER (WHERE role IN ('staff', 'admin', 'sponsor') OR confirmed)::int AS eligible,
