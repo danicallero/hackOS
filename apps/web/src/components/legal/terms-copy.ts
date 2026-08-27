@@ -5,14 +5,14 @@ export const termsCopy: Record<Language, LegalDocumentCopy> = {
   es: {
     title: "Términos y condiciones",
     description: "Estos términos regulan exclusivamente el acceso y uso de la plataforma hackOS.",
-    updatedAt: "26 de agosto de 2026",
+    updatedAt: "27 de agosto de 2026",
     body: `## 1. Objeto y aceptación
 
 Estos términos y condiciones regulan el acceso y uso de **hackOS**, la plataforma que GPUL utiliza para gestionar el registro, las solicitudes, las acreditaciones, las comunicaciones y otros procesos operativos de HackUDC.
 
 La inscripción en HackUDC se realiza en una plataforma web externa. hackOS es el sistema oficial de operaciones que GPUL proporciona después de la aceptación para participantes y personal autorizado: permite gestionar el acceso a la aplicación, la acreditación, los servicios del evento y la participación, pero registrarse externamente no concede por sí solo acceso a hackOS. Aceptar estos términos y la política de privacidad es necesario para utilizar esta instancia; las condiciones generales del evento siguen regulando la inscripción y la participación.
 
-Estos términos son adicionales a los [términos y condiciones generales de HackUDC](https://hackudc.gpul.org/terms) y no los sustituyen: ambos aplican de forma conjunta. Las bases o normas de cualquier actividad gestionada mediante hackOS son independientes de estos términos.
+Estos términos son adicionales a los [términos y condiciones generales del evento HackUDC, publicados por GPUL](https://hackudc.gpul.org/terms) y no los sustituyen: ambos aplican de forma conjunta. Las bases o normas de cualquier actividad gestionada mediante hackOS son independientes de estos términos.
 
 ## 2. Software open source e instancias independientes
 
@@ -36,6 +36,8 @@ Esta instancia concreta de hackOS está operada por la siguiente entidad (en ade
 - No puedes suplantar a otra persona, crear cuentas fraudulentas ni ceder tu cuenta.
 - Eres responsable de las acciones realizadas desde tu cuenta, salvo que se deban a una incidencia imputable al Operador.
 - Algunas funciones requieren que verifiques tu correo o que una persona administradora te asigne permisos específicos.
+
+El Operador puede mantener cuentas sintéticas reservadas para pruebas autorizadas y control de calidad. No son inscripciones reales, pueden restablecerse o eliminarse y se excluyen de las estadísticas de participantes; las pruebas operativas autorizadas pueden utilizarlas.
 
 ## 5. Funciones y permisos
 
@@ -105,14 +107,14 @@ Para consultas sobre estos términos, escribe a [hackudc@gpul.org](mailto:hackud
   gl: {
     title: "Termos e condicións",
     description: "Estes termos regulan exclusivamente o acceso e uso da plataforma hackOS.",
-    updatedAt: "26 de agosto de 2026",
+    updatedAt: "27 de agosto de 2026",
     body: `## 1. Obxecto e aceptación
 
 Estes termos e condicións regulan o acceso e uso de **hackOS**, a plataforma que GPUL utiliza para xestionar o rexistro, as solicitudes, as acreditacións, as comunicacións e outros procesos operativos de HackUDC.
 
 A inscrición en HackUDC faise nunha plataforma web externa. hackOS é o sistema oficial de operacións que GPUL proporciona despois da aceptación para participantes e persoal autorizado: permite xestionar o acceso á aplicación, a acreditación, os servizos do evento e a participación, pero rexistrarse externamente non concede por si só acceso a hackOS. Aceptar estes termos e a política de privacidade é necesario para utilizar esta instancia; as condicións xerais do evento seguen regulando a inscrición e a participación.
 
-Estes termos son adicionais aos [termos e condicións xerais de HackUDC](https://hackudc.gpul.org/terms) e non os substitúen: ambos os dous aplícanse de forma conxunta. As bases ou normas de calquera actividade xestionada mediante hackOS son independentes destes termos.
+Estes termos son adicionais aos [termos e condicións xerais do evento HackUDC, publicados por GPUL](https://hackudc.gpul.org/terms) e non os substitúen: ambos os dous aplícanse de forma conxunta. As bases ou normas de calquera actividade xestionada mediante hackOS son independentes destes termos.
 
 ## 2. Software open source e instancias independentes
 
@@ -136,6 +138,8 @@ Esta instancia concreta de hackOS está operada pola seguinte entidade (en diant
 - Non podes suplantar outra persoa, crear contas fraudulentas nin ceder a túa conta.
 - Es responsable das accións realizadas desde a túa conta, agás que se deban a unha incidencia imputable ao Operador.
 - Algunhas funcións requiren que verifiques o teu correo ou que unha persoa administradora che asigne permisos específicos.
+
+O Operador pode manter contas sintéticas reservadas para probas autorizadas e control de calidade. Non son inscricións reais, poden restablecerse ou eliminarse e exclúense das estatísticas de participantes; as probas operativas autorizadas poden utilizalas.
 
 ## 5. Funcións e permisos
 
@@ -205,14 +209,14 @@ Para consultas sobre estes termos, escribe a [hackudc@gpul.org](mailto:hackudc@g
   en: {
     title: "Terms and conditions",
     description: "These terms exclusively govern access to and use of the hackOS platform.",
-    updatedAt: "26 August 2026",
+    updatedAt: "27 August 2026",
     body: `## 1. Purpose and acceptance
 
 These terms and conditions govern access to and use of **hackOS**, the platform GPUL uses to manage registration, applications, accreditation, communications and other operational processes for HackUDC.
 
 Registration for HackUDC takes place on an external web platform. hackOS is the official operations system GPUL provides after acceptance to participants and authorised staff: it manages application access, accreditation, event services and participation, but external registration does not by itself grant hackOS access. Accepting these terms and the privacy policy is necessary to use this instance; the event's general terms continue to govern registration and participation.
 
-These terms are additional to, and do not replace, [HackUDC's general terms and conditions](https://hackudc.gpul.org/terms); both apply together. The rules or conditions of any activity managed through hackOS are separate from these terms.
+These terms are additional to, and do not replace, [the general terms for the HackUDC event, published by GPUL](https://hackudc.gpul.org/terms); both apply together. The rules or conditions of any activity managed through hackOS are separate from these terms.
 
 ## 2. Open-source software and independent instances
 
@@ -236,6 +240,8 @@ This hackOS instance is operated by the following organisation (the “Operator�
 - You may not impersonate another person, create fraudulent accounts or transfer your account.
 - You are responsible for actions performed through your account unless they result from an incident attributable to the Operator.
 - Some features require email verification or specific permissions assigned by an administrator.
+
+The Operator may maintain reserved synthetic accounts for authorised testing and quality assurance. They are not real event registrations, may be reset or removed, and are excluded from participant statistics; authorised operational tests may still use them.
 
 ## 5. Features and permissions
 
