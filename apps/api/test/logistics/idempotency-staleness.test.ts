@@ -12,8 +12,17 @@ import {
 } from "../helpers.js";
 import { issueTicket } from "./fixtures.js";
 
-function hashBody(body: unknown): string {
-  return createHash("sha256").update(JSON.stringify(body)).digest("hex");
+function hashRequest(body: unknown): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        method: "POST",
+        url: "/api/accreditation/check-in",
+        params: {},
+        body,
+      }),
+    )
+    .digest("hex");
 }
 
 /**
@@ -58,7 +67,7 @@ describe("idempotencyGuard staleness reclaim", () => {
       [
         "fresh-in-flight",
         `POST /api/accreditation/check-in u:${staff}`,
-        hashBody({ ticketToken: token, badgeId: "B-STALE", method: "qr" }),
+        hashRequest({ ticketToken: token, badgeId: "B-STALE", method: "qr" }),
       ],
     );
 
@@ -77,7 +86,7 @@ describe("idempotencyGuard staleness reclaim", () => {
     const key = "abandoned-in-flight";
     const scope = `POST /api/accreditation/check-in u:${staff}`;
     const body = { ticketToken: token, badgeId: "B-RECLAIM", method: "qr" };
-    const hash = hashBody(body);
+    const hash = hashRequest(body);
 
     const { pool } = await import("../../src/db/pool.js");
     // Simulate a first attempt that started 31s ago and never completed.
