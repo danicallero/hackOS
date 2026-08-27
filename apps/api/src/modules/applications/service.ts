@@ -47,7 +47,7 @@ export interface ResponseRow {
   id: number;
   user_id: number;
   application_id: number;
-  application_form_version_id: number | string | null;
+  application_form_version_id: number | string;
   status: string;
   responses: Record<string, unknown>;
   staff_notes: string | null;
@@ -93,11 +93,10 @@ export interface ApplicationFormVersion {
   sections: FormSection[];
 }
 
-/**
- * Test fixtures and very old imports may predate the version snapshot.  The
- * migration backfills normal rows; this idempotent helper only creates the
- * missing version for such a legacy row and never changes an existing one.
- */
+/** Return the current immutable form version, creating it only for a newly
+ * created form whose initial snapshot has not been inserted yet. Responses
+ * must always point at their own version; callers never repair an existing
+ * response against the mutable form. */
 export async function ensureApplicationFormVersion(
   client: pg.PoolClient,
   app: Pick<ApplicationRow, "id" | "template" | "sections" | "current_form_version">,
@@ -504,12 +503,16 @@ export async function saveDraft(
         status: existing.status,
       });
     }
+    if (existing.application_form_version_id == null) {
+      throw new ConflictError("This draft has no immutable form version and must be restarted", {
+        code: "form_version_required",
+      });
+    }
     const updated = await client.query(
       `UPDATE application_responses
-          SET responses = $3::jsonb,
-              application_form_version_id = COALESCE(application_form_version_id, $4)
+          SET responses = $3::jsonb
         WHERE id = $1 AND user_id = $2 RETURNING *`,
-      [existing.id, userId, JSON.stringify(responses), currentForm.id],
+      [existing.id, userId, JSON.stringify(responses)],
     );
     return updated.rows[0];
   });
@@ -558,30 +561,17 @@ export async function submitResponse(
       });
     }
 
-    // A draft is bound to the form definition that collected it.  Normal
-    // rows are backfilled by the migration; the fallback keeps imported/test
-    // rows safe without silently switching them to a later mutable template.
-    let formVersion: ApplicationFormVersion;
-    if (existing.application_form_version_id != null) {
-      const versionRows = await client.query<ApplicationFormVersion>(
-        `SELECT id, application_id, version, template, sections
-           FROM application_form_versions
-          WHERE id = $1 AND application_id = $2`,
-        [existing.application_form_version_id, applicationId],
-      );
-      formVersion = versionRows.rows[0] ?? (await ensureApplicationFormVersion(client, app));
-      if (!versionRows.rows[0]) {
-        await client.query(
-          `UPDATE application_responses SET application_form_version_id = $2 WHERE id = $1`,
-          [existing.id, formVersion.id],
-        );
-      }
-    } else {
-      formVersion = await ensureApplicationFormVersion(client, app);
-      await client.query(
-        `UPDATE application_responses SET application_form_version_id = $2 WHERE id = $1`,
-        [existing.id, formVersion.id],
-      );
+    const versionRows = await client.query<ApplicationFormVersion>(
+      `SELECT id, application_id, version, template, sections
+         FROM application_form_versions
+        WHERE id = $1 AND application_id = $2`,
+      [existing.application_form_version_id, applicationId],
+    );
+    const formVersion = versionRows.rows[0];
+    if (!formVersion) {
+      throw new ConflictError("This response is missing its immutable form version", {
+        code: "form_version_required",
+      });
     }
 
     const merged = { ...existing.responses, ...(input.responses ?? {}) };
@@ -1549,13 +1539,13 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
     `SELECT r.*, u.name, u.email, u.shirt_size,
             u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
             a.id AS app_id, a.name AS app_name, a.type AS app_type,
-            COALESCE(fv.template, a.template) AS template,
-            COALESCE(fv.sections, a.sections) AS sections,
+            fv.template,
+            fv.sections,
             a.ask_shirt_size, a.ask_food_intolerances
      FROM application_responses r
      JOIN users u ON u.id = r.user_id
      JOIN applications a ON a.id = r.application_id
-     LEFT JOIN application_form_versions fv
+     JOIN application_form_versions fv
        ON fv.id = r.application_form_version_id
       AND fv.application_id = r.application_id
      WHERE r.id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
@@ -1619,11 +1609,11 @@ export async function editResponse(
   responses: Record<string, unknown>,
 ): Promise<ResponseRow> {
   const { rows } = await pool.query(
-    `SELECT COALESCE(fv.template, a.template) AS template, r.user_id
+    `SELECT fv.template, r.user_id
      FROM application_responses r
      JOIN applications a ON a.id = r.application_id
      JOIN users u ON u.id = r.user_id AND u.is_test_account = false
-     LEFT JOIN application_form_versions fv
+     JOIN application_form_versions fv
        ON fv.id = r.application_form_version_id
       AND fv.application_id = r.application_id
      WHERE r.id = $1`,
