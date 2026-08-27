@@ -30,6 +30,8 @@ Según cómo utilices hackOS, podremos tratar las siguientes categorías:
 
 Los datos proceden directamente de ti, de personas autorizadas de tu equipo o entidad y de la actividad generada al utilizar hackOS.
 
+Algunos formularios o registros de proyectos pueden pedirte que proporciones enlaces a sitios web externos, como repositorios, demostraciones o portafolios. Esos sitios son independientes de hackOS y GPUL, tienen sus propias políticas de privacidad y no están operados, vinculados ni afiliados con GPUL. Cuando visites esos sitios o les envíes datos, se aplicarán sus propias políticas y condiciones.
+
 ## 3. Finalidades y bases jurídicas
 
 - **Gestionar tu cuenta, solicitud y participación:** ejecución de la relación precontractual o contractual derivada de tu inscripción y aceptación de estos términos.
@@ -114,6 +116,8 @@ Segundo como utilices hackOS, poderemos tratar as seguintes categorías:
 
 Os datos proceden directamente de ti, de persoas autorizadas do teu equipo ou entidade e da actividade xerada ao utilizar hackOS.
 
+Algúns formularios ou rexistros de proxectos poden pedirche que proporciones ligazóns a sitios web externos, como repositorios, demostracións ou portafolios. Eses sitios son independentes de hackOS e GPUL, teñen as súas propias políticas de privacidade e non están operados, vinculados nin afiliados con GPUL. Cando visites eses sitios ou lles envíes datos, aplicaranse as súas propias políticas e condicións.
+
 ## 3. Finalidades e bases xurídicas
 
 - **Xestionar a túa conta, solicitude e participación:** execución da relación precontractual ou contractual derivada da túa inscrición e aceptación destes termos.
@@ -197,6 +201,8 @@ Depending on how you use hackOS, we may process the following categories:
 - **Communications:** messages, support requests and notification preferences.
 
 The data comes directly from you, authorised members of your team or organisation, and activity generated when you use hackOS.
+
+Some forms or project records may ask you to provide links to external websites, such as repositories, demos or portfolios. Those sites are independent of hackOS and GPUL, have their own privacy policies, and are not operated by, connected to or affiliated with GPUL. Their own policies and terms apply when you visit them or send them data.
 
 ## 3. Purposes and legal bases
 
