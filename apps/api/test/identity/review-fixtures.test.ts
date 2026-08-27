@@ -351,8 +351,8 @@ describe("review fixture regeneration", () => {
     // synthetic subject must not become visible through a guessed request id,
     // and a new request must fail at the subject-scope boundary.
     const { rows: requestRows } = await pool.query<{ id: number }>(
-      `INSERT INTO data_subject_requests (subject_user_id, requested_by, type)
-       VALUES ($1, $2, 'export')
+      `INSERT INTO data_subject_requests (subject_user_id, requested_by, type, status)
+       VALUES ($1, $2, 'export', 'completed')
        RETURNING id`,
       [outsideId, admin],
     );

@@ -65,7 +65,7 @@ export async function searchPeople(
   }
 
   const badge = await pool.query(
-    `SELECT id FROM users WHERE upper(badge_id) = upper($1) AND account_state = 'active' AND anonymized_at IS NULL${fixtureFilter}`,
+    `SELECT u.id FROM users u WHERE upper(u.badge_id) = upper($1) AND u.account_state = 'active' AND u.anonymized_at IS NULL${fixtureFilter}`,
     [needle],
   );
   if (badge.rows[0]) {
