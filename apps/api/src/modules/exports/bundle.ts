@@ -19,6 +19,7 @@ export async function buildExportBundle(
   const { rows: userRows } = await db.query(
     `SELECT * FROM users
       WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        AND is_test_account = false
       FOR SHARE`,
     [subjectUserId],
   );

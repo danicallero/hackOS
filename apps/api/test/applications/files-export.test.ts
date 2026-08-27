@@ -183,6 +183,28 @@ describe("bulk file export (H56)", () => {
     });
   });
 
+  it("never includes synthetic fixture uploads in a global export", async () => {
+    const a = await getApp();
+    const staff = await createUserWithCapabilities([CAPABILITIES.EXPORTS_RUN]);
+    const appId = await createApplication({ template: shareableCvField() });
+    const fixture = await createUser({ email: "synthetic-upload@test.local" });
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [fixture]);
+    const fixtureKey = await putUpload(appId, fixture, "resume.pdf");
+    await createResponse(fixture, appId, {
+      status: "submitted",
+      responses: { cv: fixtureKey, [sponsorShareKey("cv")]: true },
+    });
+
+    const res = await a.inject({
+      method: "GET",
+      url: `/api/applications/${appId}/fields/cv/files.zip?scope=all`,
+      headers: asUser(staff),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(Object.keys(await readZipEntries(res.rawPayload))).toEqual([]);
+  });
+
   it("skips a file that's missing from storage instead of crashing the whole export", async () => {
     // Regression: a 502 was reported in production for scope=all — one row's
     // file_key pointed at an object storage never actually has (deleted,

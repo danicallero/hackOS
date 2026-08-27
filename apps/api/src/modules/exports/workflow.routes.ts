@@ -3,12 +3,14 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { SSE_TOPICS } from "@hackos/shared/events";
 import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
+import { pool } from "../../db/pool.js";
 import { requireCapability, userHasCapability } from "../../lib/capabilities.js";
 import { ConflictError, ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { subscribe } from "../../lib/sse.js";
 import { getObject } from "../../lib/storage.js";
+import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
 import { createRequest, getRequest, listRequests, serializeRequest } from "./requests.service.js";
 import {
   createRequestBody,
@@ -33,6 +35,12 @@ export function registerWorkflowRoutes(app: FastifyInstance): void {
       throw new ForbiddenError(`Missing capability: ${CAPABILITIES.EXPORTS_RUN}`, {
         capability: CAPABILITIES.EXPORTS_RUN,
       });
+    }
+    const subjectUserId = (req.body as { subjectUserId?: number } | undefined)?.subjectUserId;
+    if (subjectUserId !== undefined) {
+      // H54: DSR/export targets are subject data, so the synthetic fixture
+      // boundary applies before the request row is created.
+      await assertFixtureSubjectScope(pool, req.userId, subjectUserId);
     }
     if (
       (req.body as { type?: string } | undefined)?.type === "deletion" &&
@@ -77,7 +85,10 @@ export function registerWorkflowRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const { limit, offset, ...filter } = req.query;
-      const { items, total } = await listRequests({ ...filter, limit, offset });
+      const { items, total } = await listRequests(
+        { ...filter, limit, offset },
+        { includeSynthetic: false },
+      );
       return { items: items.map(serializeRequest), total };
     },
   );
@@ -89,7 +100,7 @@ export function registerWorkflowRoutes(app: FastifyInstance): void {
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.EXPORTS_RUN }),
       schema: { params: requestIdParam, response: { 200: requestResponseSchema } },
     },
-    async (req) => serializeRequest(await getRequest(req.params.id)),
+    async (req) => serializeRequest(await getRequest(req.params.id, { includeSynthetic: false })),
   );
 
   // Proxied bundle download (not a presigned URL) — the EXPORTS_RUN check
@@ -102,7 +113,7 @@ export function registerWorkflowRoutes(app: FastifyInstance): void {
       schema: { params: requestIdParam },
     },
     async (req, reply) => {
-      const row = await getRequest(req.params.id);
+      const row = await getRequest(req.params.id, { includeSynthetic: false });
       if (row.type !== "export" || row.status !== "completed" || !row.storage_key) {
         throw new ConflictError("Request is not a completed export", {
           status: row.status,

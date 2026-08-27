@@ -95,6 +95,7 @@ export function registerFilesExportRoutes(app: FastifyInstance): void {
            JOIN users u ON u.id = r.user_id
           WHERE r.application_id = $1
             AND u.account_state = 'active' AND u.anonymized_at IS NULL
+            AND u.is_test_account = false
             AND r.responses ? $2
             AND ($3::text <> 'shared' OR (r.responses->>$4)::boolean IS TRUE)
           ORDER BY u.email`,

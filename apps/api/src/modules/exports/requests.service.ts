@@ -36,6 +36,20 @@ export interface ListRequestsFilter {
   offset: number;
 }
 
+export interface RequestVisibility {
+  /** Internal workers may process a legacy fixture request; staff views may not expose it. */
+  includeSynthetic?: boolean;
+}
+
+function syntheticVisibilityCondition(includeSynthetic: boolean, alias = "r"): string {
+  if (includeSynthetic) return "";
+  return ` AND (${alias}.subject_user_id IS NULL OR NOT EXISTS (
+    SELECT 1 FROM users synthetic_subject
+     WHERE synthetic_subject.id = ${alias}.subject_user_id
+       AND synthetic_subject.is_test_account = true
+  ))`;
+}
+
 function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: string }).code === "23505";
 }
@@ -77,6 +91,7 @@ export async function createRequest(input: CreateRequestInput): Promise<DataSubj
 
 export async function listRequests(
   filter: ListRequestsFilter,
+  visibility: RequestVisibility = {},
 ): Promise<{ items: DataSubjectRequestRow[]; total: number }> {
   const conditions: string[] = [];
   const params: unknown[] = [];
@@ -86,27 +101,37 @@ export async function listRequests(
     conditions.push(sqlFragment.replace("?", `$${params.length}`));
   }
 
-  if (filter.status) addCondition("status = ?", filter.status);
-  if (filter.type) addCondition("type = ?", filter.type);
-  if (filter.subjectUserId !== undefined) addCondition("subject_user_id = ?", filter.subjectUserId);
+  if (filter.status) addCondition("r.status = ?", filter.status);
+  if (filter.type) addCondition("r.type = ?", filter.type);
+  if (filter.subjectUserId !== undefined)
+    addCondition("r.subject_user_id = ?", filter.subjectUserId);
 
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const visibilityCondition = syntheticVisibilityCondition(visibility.includeSynthetic !== false);
+  const where = `${conditions.length ? `WHERE ${conditions.join(" AND ")}` : "WHERE TRUE"}${visibilityCondition}`;
   const limitIdx = params.length + 1;
   const offsetIdx = params.length + 2;
 
   const { rows } = await pool.query(
-    `SELECT * FROM data_subject_requests ${where} ORDER BY id DESC LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+    `SELECT r.* FROM data_subject_requests r ${where} ORDER BY r.id DESC LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
     [...params, filter.limit, filter.offset],
   );
   const { rows: countRows } = await pool.query(
-    `SELECT count(*)::int AS count FROM data_subject_requests ${where}`,
+    `SELECT count(*)::int AS count FROM data_subject_requests r ${where}`,
     params,
   );
   return { items: rows as DataSubjectRequestRow[], total: countRows[0].count as number };
 }
 
-export async function getRequest(id: number): Promise<DataSubjectRequestRow> {
-  const { rows } = await pool.query(`SELECT * FROM data_subject_requests WHERE id = $1`, [id]);
+export async function getRequest(
+  id: number,
+  visibility: RequestVisibility = {},
+): Promise<DataSubjectRequestRow> {
+  const visibilityCondition = syntheticVisibilityCondition(visibility.includeSynthetic !== false);
+  const { rows } = await pool.query(
+    `SELECT r.* FROM data_subject_requests r
+      WHERE r.id = $1${visibilityCondition}`,
+    [id],
+  );
   if (!rows[0]) throw new NotFoundError("Data subject request not found", { id });
   return rows[0] as DataSubjectRequestRow;
 }

@@ -37,6 +37,7 @@ export async function assertFixtureSubjectScope(
     [actorId, subjectUserId],
   );
   const row = rows[0];
+  if (!row) throw new NotFoundError("User not found");
   if (row?.actor_is_test_account && !row.subject_is_test_account) {
     throw new ForbiddenError("Review fixture operators may only act on test accounts", {
       code: "review_fixture_scope",

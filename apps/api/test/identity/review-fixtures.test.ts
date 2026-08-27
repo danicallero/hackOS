@@ -346,6 +346,41 @@ describe("review fixture regeneration", () => {
       payload: { decision: "accepted" },
     });
     expect(hiddenDecision.statusCode).toBe(404);
+
+    // DSR/export rows are also participant data. A legacy row aimed at a
+    // synthetic subject must not become visible through a guessed request id,
+    // and a new request must fail at the subject-scope boundary.
+    const { rows: requestRows } = await pool.query<{ id: number }>(
+      `INSERT INTO data_subject_requests (subject_user_id, requested_by, type)
+       VALUES ($1, $2, 'export')
+       RETURNING id`,
+      [outsideId, admin],
+    );
+    const requestId = requestRows[0]?.id;
+    if (!requestId) throw new Error("Expected synthetic data-subject request");
+
+    const hiddenRequests = await a.inject({
+      method: "GET",
+      url: "/api/exports/requests",
+      headers: asUser(admin),
+    });
+    expect(hiddenRequests.statusCode).toBe(200);
+    expect(hiddenRequests.json().items).toEqual([]);
+
+    const hiddenRequest = await a.inject({
+      method: "GET",
+      url: `/api/exports/requests/${requestId}`,
+      headers: asUser(admin),
+    });
+    expect(hiddenRequest.statusCode).toBe(404);
+
+    const refusedRequest = await a.inject({
+      method: "POST",
+      url: "/api/exports/requests",
+      headers: { ...asUser(admin), "idempotency-key": "synthetic-export" },
+      payload: { subjectUserId: outsideId, type: "export" },
+    });
+    expect(refusedRequest.statusCode).toBe(404);
   });
 
   it("uses the static PIN only for a marked fixture and deletes the fresh fixture account", async () => {

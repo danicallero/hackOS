@@ -3,7 +3,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { withTransaction } from "../../db/pool.js";
+import { pool, withTransaction } from "../../db/pool.js";
 import { requireAuth, userHasCapability } from "../../lib/capabilities.js";
 import {
   BadRequestError,
@@ -13,6 +13,7 @@ import {
 } from "../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { getObject, putObject } from "../../lib/storage.js";
+import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
 import type { TemplateField } from "./schemas.js";
 
 const uploadParamsSchema = z.object({
@@ -37,6 +38,11 @@ const requireApplicationUploadAccess: preHandlerHookHandler = async (req) => {
   if (!Number.isInteger(ownerId)) throw new BadRequestError("Malformed file key");
 
   const userId = req.userId as number;
+  // H54: a stale or guessed upload key must not let ordinary reviewers read
+  // synthetic fixture files, and synthetic operators must not cross into real
+  // participant data. This check also fails closed if the encoded owner no
+  // longer exists.
+  await assertFixtureSubjectScope(pool, userId, ownerId);
   if (
     userId === ownerId ||
     (await userHasCapability(userId, CAPABILITIES.APPLICATIONS_REVIEW, req))
