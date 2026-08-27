@@ -522,6 +522,13 @@ certificate endpoint was found in the repository; product must not promise a
 later named proof after anonymization unless it deliberately changes the
 retention model.
 
+The repeatable accepted accounts and the synthetic participant judging queue
+used to exercise these states are documented separately in
+[Synthetic reviewer fixtures](./reviewer-fixtures.md). That fixture system is
+isolated from real participant operations, statistics, exports and the
+permanent anonymous audit dataset; its admin-only usage signal records only a
+last successful sign-in timestamp.
+
 ## 14. Required data-lifecycle analysis
 
 “Delete” below means remove the subject's rows/values or detach the subject's
@@ -671,7 +678,7 @@ silently converted into a legal conclusion.
 | A04 | Guaranteed/verified venue time is system-generated retained audit data. Application audit values vary by application and form version; only fields explicitly configured as `ANONYMOUS_AUDIT` survive, and missing answers remain missing. The current HackUDC configuration starts with age, gender, university, degree, graduation year, and origin city. | Grant/audit owner |
 | A05 | The existing H24 certainty-window algorithm is the approved definition of guaranteed/verified presence, including activity signals and minute flooring. | Event/audit owner |
 | A06 | The approved permanent presence evidence is aggregate guaranteed minutes; raw check-in/time timestamps, kinds, methods, notes, and actor metadata are not retained after anonymization. | Audit/data-minimization owner |
-| A07 | Rare combinations of demographics can be identifying. Small-cell suppression/aggregation is intentionally outside this implementation; no reporting protection is claimed here. | Privacy/product owner |
+| A07 | Rare combinations of demographics can be identifying. Reporting is expected to apply small-cell suppression/aggregation; the reporting layer is outside this implementation and must not publish raw unusual combinations. | Privacy/product owner |
 | A08 | Shared public GitHub/Devpost content is external to the hackOS anonymous audit dataset; the app removes its direct participant link but does not rewrite third-party content. | Product/privacy owner |
 | A09 | Production S3 versioning, reverse-proxy logs, analytics, error telemetry, PostgreSQL backups/WAL and provider logs have separate retention/purge controls. | Operations/security owner |
 | A10 | The web `hackos*`/`queue-ops-*` namespace is the complete app-owned browser storage namespace; future features must register additional keys with `clearWebAccountData()`. | Web owner |
@@ -702,6 +709,15 @@ silently converted into a legal conclusion.
 | A35 | The participant cannot self-record the exit from the recovery screen. The recovery copy instructs them to ask staff to show/scan their badge; the backend accepts only the validated staff door `out`, the exact system-generated event-end `out`, or an expired H24 certainty window as a completion signal. | Event-operations + security owners |
 | A36 | The pending-exit recovery deadline is captured once from the initiating authenticated session when available, or a bounded fallback for legacy/admin initiation. Signing in again does not extend it; expiry lets the worker finalize even if a raw door session remains open, because the latest accrued presence window no longer proves current presence. | Security + event-operations owners |
 | A37 | During pending exit, ordinary participant, meal, judging, badge and notification writes are blocked. Only authenticated recovery/status/cancel and the operational exit path may use the transient identity; offline synchronization must be rejected or tombstoned after finalization. | Operations + mobile/security owners |
+| A38 | GPUL is the responsible organisation/data controller for the GPUL-operated hackOS instance; “HackUDC” names the event, not the operator. The participant-facing Privacy Policy and Terms therefore identify GPUL and link to event policies published by GPUL. | GPUL/privacy owner |
+| A39 | Synthetic reviewer accounts, their marked projects/challenges/queues and synthetic anonymous rows are isolated QA fixtures. They are excluded from ordinary admin/staff reads, day-to-day scanner rosters, statistics, exports, grant/audit data and the permanent anonymous dataset. | Release + operations owners |
+| A40 | The current fixture generation contains four scenarios: full deletion before accreditation, anonymization outside the venue, anonymization pending exit inside the venue, and a synthetic exit-capable operator. The outside fixture owns the participant-facing judging queue; future scenarios must create and clean up their own marked graph. | Release + product owners |
+| A41 | A synthetic operator has ordinary capability checks plus a marked-subject boundary and may act only on synthetic accounts. Real administrators and staff cannot discover or mutate those subjects by changing an ID in a normal endpoint. | Security + operations owners |
+| A42 | The configured static deletion PIN is accepted only for marked synthetic accounts. Verified real accounts require an emailed one-time PIN; no universal real-user bypass is implemented. | Security/product owner |
+| A43 | The admin fixture status signal records only the current generation, synthetic email and last successful sign-in time. It is not proof of scenario completion and does not retain secrets, failed-attempt details, IPs, user agents or participant answers. | Security + release owners |
+| A44 | No production database is in scope for this branch. Migration `0744` is validated from a fresh schema; applied migration checksums remain immutable after deployment and later corrections use a new migration. | Release/DB owner |
+| A45 | The current credential-retirement denylist stores stable keyed HMAC digests, not raw badge/ticket values. It prevents late offline credential replay, while physical badge reuse requires a separate assignment-binding or no-reuse decision before production. | Security + event-operations owners |
+| A46 | Legal copy may describe synthetic accounts as authorised testing/quality-assurance fixtures, but it must not name a specific review channel. The detailed fixture procedure belongs in the private/operational runbook. | GPUL/privacy + release owners |
 
 ## Release recommendation
 

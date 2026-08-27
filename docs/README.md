@@ -98,6 +98,9 @@ Architecture & modules:
   audit-subject design, operational/dietary retention, venue-presence
   calculation, mobile/web flows, offline-cache behavior, concurrency controls,
   App Store review risks, assumptions, and test matrix.
+- [Synthetic reviewer fixtures](./reviewer-fixtures.md) — the isolated account
+  generation workflow, marked participant queue, synthetic-operator scope,
+  credential-use signal, and deployment assumptions.
 
 Frontend (web & mobile):
 
