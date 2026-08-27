@@ -47,7 +47,53 @@ export async function purgeReviewFixtureQueue(
     }
   }
 
+  // Creating a challenge automatically creates its default 1:1 queue group.
+  // Capture that group before deleting the challenge so the synthetic graph
+  // can be removed completely.  Only remove it when it contains this fixture
+  // challenge alone and is not serving a room; a shared or operationally
+  // assigned group is an integrity failure, not fixture-owned data.
+  let fixtureQueueGroupId: number | null = null;
   if (fixture.challenge_id !== null) {
+    const { rows: groupRows } = await client.query<{ queue_group_id: number }>(
+      `SELECT queue_group_id
+         FROM queue_group_challenges
+        WHERE challenge_id = $1
+        FOR UPDATE`,
+      [fixture.challenge_id],
+    );
+    if (groupRows.length > 1) {
+      throw new ConflictError("Review fixture challenge belongs to multiple queue groups.", {
+        code: "review_fixture_queue_integrity",
+        fixtureKey,
+      });
+    }
+    fixtureQueueGroupId = groupRows[0]?.queue_group_id ?? null;
+    if (fixtureQueueGroupId !== null) {
+      const { rows: siblingChallenges } = await client.query(
+        `SELECT 1
+           FROM queue_group_challenges
+          WHERE queue_group_id = $1 AND challenge_id <> $2
+          LIMIT 1`,
+        [fixtureQueueGroupId, fixture.challenge_id],
+      );
+      if (siblingChallenges.length > 0) {
+        throw new ConflictError("Review fixture challenge was merged with another challenge.", {
+          code: "review_fixture_queue_integrity",
+          fixtureKey,
+        });
+      }
+      const { rows: roomRefs } = await client.query(
+        `SELECT 1 FROM room_queue_groups WHERE queue_group_id = $1 LIMIT 1`,
+        [fixtureQueueGroupId],
+      );
+      if (roomRefs.length > 0) {
+        throw new ConflictError("Review fixture queue group is assigned to a room.", {
+          code: "review_fixture_queue_integrity",
+          fixtureKey,
+        });
+      }
+    }
+
     const { rows: otherEntries } = await client.query(
       `SELECT 1
          FROM queue_entries
@@ -97,6 +143,14 @@ export async function purgeReviewFixtureQueue(
     await client.query(`DELETE FROM challenges WHERE id = $1 AND is_test_account = true`, [
       fixture.challenge_id,
     ]);
+  }
+
+  if (fixtureQueueGroupId !== null) {
+    await client.query(
+      `DELETE FROM queue_groups
+        WHERE id = $1 AND enterprise_id = $2`,
+      [fixtureQueueGroupId, fixture.enterprise_id],
+    );
   }
 
   if (fixture.sponsor_id !== null) {
