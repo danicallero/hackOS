@@ -32,12 +32,14 @@ export const ROOM_CHALLENGE_IDS_SQL = `
   SELECT qgc.challenge_id
     FROM room_queue_groups rqg
     JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
+    JOIN challenges c ON c.id = qgc.challenge_id AND c.is_test_account = false
    WHERE rqg.room_id = $1`;
 
 /** Every room currently serving the queue_group that `$1` belongs to. */
 export const CHALLENGE_ROOM_IDS_SQL = `
   SELECT rqg.room_id
     FROM queue_group_challenges self
+    JOIN challenges c ON c.id = self.challenge_id AND c.is_test_account = false
     JOIN room_queue_groups rqg ON rqg.queue_group_id = self.queue_group_id
    WHERE self.challenge_id = $1`;
 

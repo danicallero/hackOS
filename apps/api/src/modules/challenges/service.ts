@@ -109,7 +109,7 @@ export async function listDevpostPrizes() {
             MIN(c.title) FILTER (WHERE c.id IS NOT NULL) AS mapped_challenge_title
        FROM devpost_prizes dp
        LEFT JOIN repo_devpost_prizes rdp ON rdp.prize = dp.name
-       LEFT JOIN challenges c ON c.devpost_tags ? dp.name
+       LEFT JOIN challenges c ON c.devpost_tags ? dp.name AND c.is_test_account = false
       GROUP BY dp.name, dp.last_batch
       ORDER BY dp.name ASC`,
   );
@@ -138,7 +138,7 @@ export async function listOwnedChallenges(userId: number) {
        JOIN sponsors author ON author.id = c.author
        JOIN enterprises ent ON ent.id = author.enterprise_id
        JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
-      WHERE mine.user_id = $1
+      WHERE mine.user_id = $1 AND c.is_test_account = false
       ORDER BY c.id`,
     [userId],
   );
@@ -153,7 +153,7 @@ export async function listAssignedJudgeChallenges(userId: number) {
        JOIN sponsors author ON author.enterprise_id = ej.enterprise_id
        JOIN challenges c ON c.author = author.id
        JOIN enterprises ent ON ent.id = author.enterprise_id
-      WHERE ej.user_id = $1
+      WHERE ej.user_id = $1 AND c.is_test_account = false
       ORDER BY c.id`,
     [userId],
   );
@@ -166,6 +166,7 @@ export async function listAllChallenges() {
        FROM challenges c
        JOIN sponsors author ON author.id = c.author
        JOIN enterprises ent ON ent.id = author.enterprise_id
+      WHERE c.is_test_account = false
       ORDER BY c.id`,
   );
   return rows.map(challengeReadModel);

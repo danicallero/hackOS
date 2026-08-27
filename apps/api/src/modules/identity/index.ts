@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
 import { fromNodeHeaders } from "better-auth/node";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { pool } from "../../db/pool.js";
 import { TooManyRequestsError } from "../../lib/errors.js";
 import { consumeRateLimit } from "../../lib/rate-limit.js";
 import { setUserIdResolver } from "../../plugins/auth-context.js";
 import { auth } from "./auth.js";
+import { recordReviewFixtureAuthentication } from "./review-fixture-usage.js";
 import { registerInviteRoutes } from "./routes/invites.js";
 import { registerPermissionGroupRoutes } from "./routes/permissions.js";
 import { registerProfileRoutes } from "./routes/profile.js";
@@ -116,6 +118,16 @@ async function betterAuthPassthrough(
 
   const webRequest = new Request(url, init);
   const response = await auth.handler(webRequest);
+
+  // Keep a non-sensitive operational signal for the admin fixture dashboard.
+  // This records only successful sign-ins for the current synthetic account;
+  // a telemetry failure must never turn a successful login into a 500.
+  if (request.method === "POST" && request.url.split("?", 1)[0] === "/api/auth/sign-in/email") {
+    const email = signInEmail(request.body);
+    if (email && response.ok) {
+      await recordReviewFixtureAuthentication(pool, email).catch(() => undefined);
+    }
+  }
 
   reply.status(response.status);
   response.headers.forEach((value, key) => {

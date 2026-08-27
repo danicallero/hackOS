@@ -235,7 +235,7 @@ export async function listUnmatchedParticipants(): Promise<UnmatchedParticipant[
     `SELECT dp.repo_id, r.name AS repo_name, dp.email, dp.name, dp.surname, dp.devpost_username,
             dp.import_batch, dp.claim_email_sent_at, dp.created_at
      FROM devpost_participants dp
-     JOIN repos r ON r.id = dp.repo_id
+     JOIN repos r ON r.id = dp.repo_id AND r.is_test_account = false
      WHERE dp.merge_status = 'unmatched'
      ORDER BY r.name, dp.email`,
   );
@@ -259,6 +259,7 @@ export async function listProjectMemberCandidates(
     `SELECT id, email, name, surname
        FROM users
       WHERE account_state = 'active' AND anonymized_at IS NULL
+        AND is_test_account = false
         AND (email ILIKE $1 OR name ILIKE $1 OR surname ILIKE $1)
       ORDER BY name ASC NULLS LAST, surname ASC NULLS LAST, email ASC
       LIMIT $2`,
@@ -672,7 +673,7 @@ async function attachMembersAndPrizes(
        FROM devpost_participants dp
        LEFT JOIN users u ON u.id = dp.user_id
       WHERE repo_id = ANY($1::int[])
-        AND (u.id IS NULL OR (u.account_state = 'active' AND u.anonymized_at IS NULL))
+        AND (u.id IS NULL OR (u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false))
       ORDER BY repo_id, name ASC NULLS LAST, surname ASC NULLS LAST, email ASC`,
     [ids],
   );
@@ -686,6 +687,7 @@ async function attachMembersAndPrizes(
         -- /api/me/projects/invites until accepted.
         AND s.status = 'active'
         AND u.account_state = 'active' AND u.anonymized_at IS NULL
+        AND u.is_test_account = false
         AND NOT EXISTS (
           SELECT 1
             FROM devpost_participants dp
@@ -702,7 +704,8 @@ async function attachMembersAndPrizes(
   const prizeNames = [...new Set(prizesRes.rows.map((r: { prize: string }) => r.prize))];
   const challengesRes = prizeNames.length
     ? await pool.query(
-        `SELECT id, title, devpost_tags FROM challenges WHERE devpost_tags ?| $1::text[]`,
+        `SELECT id, title, devpost_tags FROM challenges
+          WHERE devpost_tags ?| $1::text[] AND is_test_account = false`,
         [prizeNames],
       )
     : { rows: [] as Array<{ id: number; title: string; devpost_tags: string[] }> };
@@ -728,7 +731,8 @@ async function attachMembersAndPrizes(
             qe.assigned_room_id, r.name AS assigned_room_name,
             c.judging_panel_criteria, ar.status AS review_status, ar.scores AS review_scores
        FROM queue_entries qe
-       JOIN challenges c ON c.id = qe.challenge_id
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
+       JOIN repos repo ON repo.id = qe.repo_id AND repo.is_test_account = false
        LEFT JOIN rooms r ON r.id = qe.assigned_room_id
        LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
       WHERE qe.repo_id = ANY($1::int[])
@@ -878,12 +882,14 @@ const REPO_SELECT = `SELECT id, name, description, github_url, devpost_url, demo
 
 /** PROJECTS_READ: repos with members, prizes, and mapped challenges. */
 export async function listRepos(): Promise<RepoWithExtras[]> {
-  const { rows } = await pool.query(`${REPO_SELECT} ORDER BY name`);
+  const { rows } = await pool.query(`${REPO_SELECT} WHERE is_test_account = false ORDER BY name`);
   return attachMembersAndPrizes(rows);
 }
 
 export async function getRepo(id: number): Promise<RepoWithExtras> {
-  const { rows } = await pool.query(`${REPO_SELECT} WHERE id = $1`, [id]);
+  const { rows } = await pool.query(`${REPO_SELECT} WHERE is_test_account = false AND id = $1`, [
+    id,
+  ]);
   if (rows.length === 0) throw new NotFoundError(`Repo ${id} not found`);
   const [withExtras] = await attachMembersAndPrizes(rows);
   if (!withExtras) throw new NotFoundError(`Repo ${id} not found`);
@@ -895,9 +901,10 @@ export async function listReposForScope(scope: RepositoryAccessScope): Promise<R
   if (scope.fullAccess) return listRepos();
   const repoIds = await repositoryIdsForScope(scope);
   if (repoIds.length === 0) return [];
-  const { rows } = await pool.query(`${REPO_SELECT} WHERE id = ANY($1::int[]) ORDER BY name`, [
-    repoIds,
-  ]);
+  const { rows } = await pool.query(
+    `${REPO_SELECT} WHERE is_test_account = false AND id = ANY($1::int[]) ORDER BY name`,
+    [repoIds],
+  );
   // Evaluation visibility is capped to this caller's own challenges (their
   // sponsor enterprise's, or the ones they judge) — never another sponsor's.
   return attachMembersAndPrizes(rows, scope.challengeIds);
@@ -909,7 +916,9 @@ export async function getRepoForScope(
   scope: RepositoryAccessScope,
 ): Promise<RepoWithExtras> {
   if (scope.fullAccess) return getRepo(id);
-  const { rows } = await pool.query(`${REPO_SELECT} WHERE id = $1`, [id]);
+  const { rows } = await pool.query(`${REPO_SELECT} WHERE is_test_account = false AND id = $1`, [
+    id,
+  ]);
   if (!rows[0]) throw new NotFoundError(`Repo ${id} not found`);
   const [repo] = await attachMembersAndPrizes(rows, scope.challengeIds);
   if (!repo) throw new NotFoundError(`Repo ${id} not found`);
@@ -1364,7 +1373,9 @@ export async function bulkAddRepoChallenge(
     const challenge = await client.query(`SELECT id FROM challenges WHERE id = $1`, [challengeId]);
     if (!challenge.rows[0]) throw new NotFoundError(`Challenge ${challengeId} not found`);
 
-    const repos = await client.query(`SELECT id FROM repos ORDER BY id`);
+    const repos = await client.query(
+      `SELECT id FROM repos WHERE is_test_account = false ORDER BY id`,
+    );
     const repoIds = repos.rows.map((r: { id: number }) => r.id);
 
     const outcomes: EnqueueOutcome[] = [];
@@ -1486,7 +1497,7 @@ async function assertChallengesExist(
 ): Promise<void> {
   if (challengeIds.length === 0) return;
   const { rows } = await client.query(
-    `SELECT id FROM challenges WHERE id = ANY($1::int[])
+    `SELECT id FROM challenges WHERE id = ANY($1::int[]) AND is_test_account = false
       ${visibleOnly ? `AND visibility = 'visible'` : ""}`,
     [challengeIds],
   );
@@ -2093,7 +2104,7 @@ export async function listPublicChallenges(): Promise<PublicChallenge[]> {
        FROM challenges c
        JOIN sponsors s ON s.id = c.author
        JOIN enterprises e ON e.id = s.enterprise_id
-      WHERE c.visibility = 'visible'
+      WHERE c.visibility = 'visible' AND c.is_test_account = false
       ORDER BY c.available_from NULLS FIRST, c.id ASC`,
   );
 

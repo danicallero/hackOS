@@ -132,6 +132,7 @@ Table announcements {
 Table anonymous_participants {
   id uuid [pk, not null]
   guaranteed_presence_minutes integer [not null, default: `0`, note: 'H24 verified/guaranteed venue time, rounded down to complete minutes at anonymization. Raw presence events are not retained after anonymization.']
+  is_test_account boolean [not null, default: `false`, note: 'Synthetic reviewer/QA audit subject; excluded from normal statistics and removed with its fixture generation.']
   created_at "timestamp with time zone" [not null, default: `now()`]
 
   Note: 'H54 permanent minimum audit subject: random id and aggregate verified venue time; explicitly retained application values live in anonymous_participant_fields and have no relationship to users.id.'
@@ -149,6 +150,31 @@ Table anonymous_participant_fields {
   created_at "timestamp with time zone" [not null, default: `now()`]
 
   Note: 'H54 dynamic anonymous application answers. Rows are copied only from fields explicitly marked ANONYMOUS_AUDIT in the immutable submitted form version; no user or response foreign key is retained.'
+}
+
+Table review_fixture_accounts {
+  fixture_key text [pk]
+  user_id integer [unique]
+  generation integer [not null, default: `0`]
+  last_authenticated_at "timestamp with time zone"
+  created_at "timestamp with time zone" [not null, default: `clock_timestamp()`]
+  updated_at "timestamp with time zone" [not null, default: `clock_timestamp()`]
+
+  Note: 'Current synthetic reviewer fixture pointers only. user_id is set NULL on account removal; this is not an anonymous identity mapping.'
+}
+
+Table review_fixture_queues {
+  fixture_key text [pk]
+  enterprise_id integer [unique]
+  sponsor_id integer [unique]
+  challenge_id integer [unique]
+  repo_id integer [unique]
+  queue_entry_id integer [unique]
+  generation integer [not null]
+  created_at "timestamp with time zone" [not null, default: `clock_timestamp()`]
+  updated_at "timestamp with time zone" [not null, default: `clock_timestamp()`]
+
+  Note: 'Current synthetic queue/project pointers for isolated reviewer fixtures; never an identity bridge.'
 }
 
 Table account_removal_pin_challenges {
@@ -326,6 +352,7 @@ Table challenges {
   criteria_i18n jsonb
   description_i18n jsonb
   max_in_waiting_area integer [not null, default: `2`]
+  is_test_account boolean [not null, default: `false`, note: 'Synthetic reviewer queue marker; excluded from ordinary operations and statistics.']
 }
 
 Table check_in_logs {
@@ -696,6 +723,7 @@ Table repos {
   updated_at "timestamp with time zone" [not null, default: `now()`]
   source text [not null, default: `'devpost'::text`]
   created_by integer
+  is_test_account boolean [not null, default: `false`, note: 'Synthetic reviewer project marker; excluded from ordinary operations and statistics.']
 
   Note: 'A project/team. Deliberately independent from application_responses — registration teams and submission teams need not match.'
 }
@@ -931,6 +959,7 @@ Table users {
   dietary_data_state text [not null, default: `'not_provided'::text`]
   ui_prefs jsonb [not null, default: `'{}'::jsonb`]
   account_state text [not null, default: `'active'::text`, note: 'H54 lifecycle gate: active writers are rejected once removal_pending is committed.']
+  is_test_account boolean [not null, default: `false`, note: 'Synthetic reviewer/QA account marker; ordinary event operations exclude it.']
   removal_action text [note: 'H54 action selected while the user row is locked; prevents a retry from changing mode.']
   removal_started_at "timestamp with time zone"
   removal_requires_exit boolean [not null, default: `false`, note: 'H54 transient gate: only a valid door exit may be written before final removal.']
@@ -1062,6 +1091,13 @@ Ref: queue_history.actor_id > users.id
 Ref: queue_history.queue_entry_id > queue_entries.id
 Ref: repo_devpost_prizes.repo_id > repos.id
 Ref: repos.created_by > users.id
+Ref: review_fixture_accounts.user_id > users.id
+Ref: review_fixture_queues.fixture_key > review_fixture_accounts.fixture_key
+Ref: review_fixture_queues.enterprise_id > enterprises.id
+Ref: review_fixture_queues.sponsor_id > sponsors.id
+Ref: review_fixture_queues.challenge_id > challenges.id
+Ref: review_fixture_queues.repo_id > repos.id
+Ref: review_fixture_queues.queue_entry_id > queue_entries.id
 Ref: room_enterprises.assigned_by > users.id
 Ref: room_enterprises.enterprise_id > enterprises.id
 Ref: room_enterprises.room_id > rooms.id

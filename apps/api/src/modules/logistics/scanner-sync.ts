@@ -29,8 +29,19 @@ export async function scannerSnapshot(actorId?: number) {
                   WHERE ar.user_id = u.id AND a.type = 'participant' AND ar.status <> 'draft'
                 )
               )`
-    : "";
-  const stateScope = fixtureOnly ? " AND u.is_test_account = true" : "";
+    : ` AND u.is_test_account = false
+              AND (
+                EXISTS (SELECT 1 FROM manual_attendee_roles mar
+                        WHERE mar.user_id = u.id AND mar.role = 'participant')
+                OR EXISTS (
+                  SELECT 1 FROM application_responses ar
+                  JOIN applications a ON a.id = ar.application_id
+                  WHERE ar.user_id = u.id AND a.type = 'participant' AND ar.status <> 'draft'
+                )
+              )`;
+  const stateScope = fixtureOnly
+    ? " AND u.is_test_account = true"
+    : " AND u.is_test_account = false";
   // The snapshot is replace-all. Retired credentials are represented by
   // keyed digests centrally and are intentionally not sent back to every
   // scanner as raw bearer values. A stale queued mutation is rejected by the

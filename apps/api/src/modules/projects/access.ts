@@ -89,12 +89,15 @@ export async function repositoryIdsForScope(scope: RepositoryAccessScope): Promi
   if (scope.fullAccess || scope.challengeIds.length === 0) return [];
   const { rows } = await pool.query(
     `SELECT DISTINCT repo_id FROM (
-        SELECT repo_id FROM queue_entries WHERE challenge_id = ANY($1::int[])
+        SELECT qe.repo_id
+          FROM queue_entries qe
+          JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
+         WHERE qe.challenge_id = ANY($1::int[])
         UNION
         SELECT rdp.repo_id
           FROM repo_devpost_prizes rdp
           JOIN challenges c ON c.devpost_tags ? rdp.prize
-         WHERE c.id = ANY($1::int[])
+         WHERE c.id = ANY($1::int[]) AND c.is_test_account = false
      ) visible_repos`,
     [scope.challengeIds],
   );
@@ -105,7 +108,10 @@ export const repositoryAccessPolicy: ContextualPolicyResolver<RepositoryResource
   name: "repository-access",
   async resolve(request, locator) {
     const id = repoIdFrom(request, locator);
-    const { rows } = await pool.query(`SELECT id FROM repos WHERE id = $1`, [id]);
+    const { rows } = await pool.query(
+      `SELECT id FROM repos WHERE id = $1 AND is_test_account = false`,
+      [id],
+    );
     if (!rows[0]) throw new NotFoundError(`Repo ${id} not found`);
     return { id: Number(rows[0].id) };
   },

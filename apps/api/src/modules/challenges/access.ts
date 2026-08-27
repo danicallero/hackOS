@@ -42,7 +42,10 @@ export async function ownsChallenge(userId: number, challengeId: number): Promis
 }
 
 async function ensureExists(challengeId: number): Promise<void> {
-  const { rowCount } = await pool.query(`SELECT 1 FROM challenges WHERE id = $1`, [challengeId]);
+  const { rowCount } = await pool.query(
+    `SELECT 1 FROM challenges WHERE id = $1 AND is_test_account = false`,
+    [challengeId],
+  );
   if (rowCount === 0) throw new NotFoundError("Challenge not found", { challengeId });
 }
 

@@ -117,9 +117,9 @@ export async function listReviews(
             ar.status, ar.scores, ar.updated_at,
             COALESCE(judges.names, '{}') AS judges
        FROM queue_entries qe
-       JOIN challenges c ON c.id = qe.challenge_id
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
        ${QUEUE_GROUP_LABEL_JOIN}
-       JOIN repos r ON r.id = qe.repo_id
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
        LEFT JOIN rooms room ON room.id = qe.assigned_room_id
        LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
        LEFT JOIN LATERAL (
@@ -181,7 +181,11 @@ export async function assertEntryInScope(
   entryId: number,
 ): Promise<{ challengeId: number; repoId: number }> {
   const { rows } = await pool.query(
-    `SELECT challenge_id, repo_id FROM queue_entries WHERE id = $1`,
+    `SELECT qe.challenge_id, qe.repo_id
+       FROM queue_entries qe
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
+      WHERE qe.id = $1`,
     [entryId],
   );
   if (rows.length === 0) throw new NotFoundError("Queue entry not found", { entryId });
@@ -235,9 +239,9 @@ export async function getReviewDetail(scope: ReviewScope, entryId: number): Prom
             room.id AS room_id, room.name AS room_name, room.location AS room_location,
             ar.status AS review_status, ar.scores, ar.notes, ar.updated_at
        FROM queue_entries qe
-       JOIN challenges c ON c.id = qe.challenge_id
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
        ${QUEUE_GROUP_LABEL_JOIN}
-       JOIN repos r ON r.id = qe.repo_id
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
        LEFT JOIN rooms room ON room.id = qe.assigned_room_id
        LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
       WHERE qe.id = $1`,

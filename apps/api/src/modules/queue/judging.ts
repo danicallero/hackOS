@@ -63,7 +63,14 @@ export interface AttemptReviewPatch {
 }
 
 export async function getAttemptReview(entryId: number) {
-  const entryRes = await pool.query(`SELECT id FROM queue_entries WHERE id = $1`, [entryId]);
+  const entryRes = await pool.query(
+    `SELECT qe.id
+       FROM queue_entries qe
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
+      WHERE qe.id = $1`,
+    [entryId],
+  );
   if (entryRes.rowCount === 0) throw new NotFoundError("Queue entry not found", { entryId });
   const { rows } = await pool.query(`SELECT * FROM attempt_review WHERE attempt_id = $1`, [
     entryId,
@@ -93,7 +100,12 @@ export async function upsertAttemptReview(
     // Lock the entry row: a submit may complete the presentation (below), so
     // its status must be stable for the duration of the transaction.
     const entryRes = await client.query(
-      `SELECT id, challenge_id, status FROM queue_entries WHERE id = $1 FOR UPDATE`,
+      `SELECT qe.id, qe.challenge_id, qe.status
+         FROM queue_entries qe
+         JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
+         JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
+        WHERE qe.id = $1
+        FOR UPDATE OF qe`,
       [entryId],
     );
     if (entryRes.rowCount === 0) throw new NotFoundError("Queue entry not found", { entryId });
@@ -249,6 +261,8 @@ export async function listAttemptReviewVersions(entryId: number) {
   const { rows } = await pool.query(
     `SELECT v.*, u.name, u.surname
        FROM attempt_review_versions v
+       JOIN queue_entries qe ON qe.id = v.attempt_id
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
        JOIN users u ON u.id = v.author_id
           AND u.account_state = 'active' AND u.anonymized_at IS NULL
       WHERE v.attempt_id = $1
@@ -300,6 +314,8 @@ export async function listActiveJudgingSessions(entryId: number) {
   const { rows } = await pool.query(
     `SELECT js.*, u.name, u.surname
        FROM judging_session js
+       JOIN queue_entries qe ON qe.id = js.queue_entry_id
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
        JOIN users u ON u.id = js.judge_id
           AND u.account_state = 'active' AND u.anonymized_at IS NULL
       WHERE js.queue_entry_id = $1 AND js.ended_at IS NULL
@@ -321,7 +337,8 @@ export async function searchChallengeQueue(challengeId: number, q: string) {
             busy.team_name AS blocked_by_team_name,
             busy.status AS blocked_by_status
        FROM queue_entries qe
-       JOIN repos r ON r.id = qe.repo_id
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
        LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
        LEFT JOIN LATERAL (
          SELECT br.id AS room_id, br.name AS room_name, brepo.name AS team_name, bqe.status
@@ -331,7 +348,7 @@ export async function searchChallengeQueue(challengeId: number, q: string) {
                                   AND bqe.status IN ('called', 'in_room', 'presenting')
                                   AND bqe.id <> qe.id
            JOIN rooms br ON br.id = bqe.assigned_room_id
-           JOIN repos brepo ON brepo.id = bqe.repo_id
+           JOIN repos brepo ON brepo.id = bqe.repo_id AND brepo.is_test_account = false
           WHERE s1.repo_id = qe.repo_id
           ORDER BY bqe.id
           LIMIT 1

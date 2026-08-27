@@ -15,6 +15,7 @@ import {
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
 import { idempotencyGuard, replayCompletedIdempotency } from "../../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
+import { assertFixtureSubjectScope } from "../../logistics/review-fixture-scope.js";
 import { issueTicket } from "../../logistics/tickets.js";
 import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliation.js";
 import { canCreateMyProject, hasMyProject, myProjects } from "../../projects/service.js";
@@ -272,6 +273,11 @@ async function fetchUser(userId: number, allowPending = false): Promise<UserRow>
   );
   if (!rows[0]) throw new NotFoundError("User not found", { userId });
   return rows[0] as UserRow;
+}
+
+/** Ordinary staff surfaces must not discover synthetic reviewer subjects. */
+async function assertProfileSubjectScope(actorId: number, subjectId: number): Promise<void> {
+  await assertFixtureSubjectScope(pool, actorId, subjectId);
 }
 
 /** Read the Better Auth session credential without logging or persisting it. */
@@ -768,8 +774,10 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       const filter = q?.trim() ? `%${q.trim()}%` : null;
       const where = filter
         ? `WHERE account_state = 'active' AND anonymized_at IS NULL
+             AND is_test_account = false
              AND (name ILIKE $1 OR surname ILIKE $1 OR email ILIKE $1)`
-        : `WHERE account_state = 'active' AND anonymized_at IS NULL`;
+        : `WHERE account_state = 'active' AND anonymized_at IS NULL
+             AND is_test_account = false`;
       const args = filter ? [filter, limit, offset] : [limit, offset];
       const p = filter ? 2 : 1;
       const { rows } = await pool.query(
@@ -853,6 +861,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
+      await assertProfileSubjectScope(req.userId as number, req.params.id);
       const row = await fetchUser(req.params.id);
       const [role, capabilities, groups] = await Promise.all([
         computeDerivedRole(pool, req.params.id),
@@ -881,6 +890,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
+      await assertProfileSubjectScope(req.userId as number, req.params.id);
       await fetchUser(req.params.id);
       return { projects: await myProjects(req.params.id) };
     },
@@ -898,6 +908,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
+      await assertProfileSubjectScope(req.userId as number, req.params.id);
       const after = await applyUserPatch(req.params.id, req.userId as number, req.body, "admin");
       return serializeUser(after);
     },
@@ -919,8 +930,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         },
       },
     },
-    async (req) =>
-      withTransaction(async (client) => {
+    async (req) => {
+      await assertProfileSubjectScope(req.userId as number, req.params.id);
+      return withTransaction(async (client) => {
         const { rows } = await client.query(
           `SELECT id FROM users
             WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
@@ -945,7 +957,8 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           after: { role: req.body.role },
         });
         return { role: req.body.role, ticketIssued: true as const };
-      }),
+      });
+    },
   );
 
   api.get(
@@ -963,6 +976,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const targetId = req.params.id;
+      await assertProfileSubjectScope(req.userId as number, targetId);
       if (targetId === req.userId) {
         throw new BadRequestError("You can't remove your own account");
       }
@@ -986,6 +1000,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req, reply) => {
       const targetId = req.params.id;
+      await assertProfileSubjectScope(req.userId as number, targetId);
       if (targetId === req.userId) {
         throw new BadRequestError("You can't delete your own account");
       }
@@ -1027,6 +1042,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const targetId = req.params.id;
+      await assertProfileSubjectScope(req.userId as number, targetId);
       const email = req.body.email.trim().toLowerCase();
       const after = await withTransaction(async (client) => {
         const { rows: beforeRows } = await client.query(
@@ -1094,6 +1110,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req, reply) => {
       const targetId = req.params.id;
+      await assertProfileSubjectScope(req.userId as number, targetId);
       if (targetId === req.userId) {
         throw new BadRequestError("Use the self-service account action for your own account");
       }
@@ -1158,6 +1175,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const id = req.params.id;
+      await assertProfileSubjectScope(req.userId as number, id);
       await fetchUser(id); // 404 if the user doesn't exist
       const [passes, checkIns, doorScans] = await Promise.all([
         pool
@@ -1263,6 +1281,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const userId = req.params.id;
+      await assertProfileSubjectScope(req.userId as number, userId);
       // Verify user exists
       await fetchUser(userId);
 

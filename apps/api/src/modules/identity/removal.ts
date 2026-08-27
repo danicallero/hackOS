@@ -24,6 +24,7 @@ import { expireGoogleObject } from "../logistics/google-wallet.js";
 import { PASS_TYPE_IDENTIFIER } from "../logistics/wallet.js";
 import { assertActiveWildcardHolder, lockPermissionGraph } from "./permission-graph.js";
 import { consumeRemovalPin } from "./removal-pin.js";
+import { purgeReviewFixtureQueuesForUser } from "./review-fixture-queues.js";
 
 export type AccountRemovalAction = "delete" | "anonymize";
 const REMOVAL_RETRY_QUEUE = "account-removal-retries";
@@ -1462,6 +1463,8 @@ export async function purgeReviewFixtureAccount(
     });
   }
 
+  await purgeReviewFixtureQueuesForUser(client, user.id);
+
   // Run external cleanup before the database scrub commits. If storage is
   // unavailable, the transaction remains intact and the old fixture pointer
   // is still available for a safe retry.
@@ -1504,6 +1507,11 @@ export async function finalizeAccountRemoval(
       },
     );
   }
+
+  // Synthetic queue/project data is a reviewer fixture, never anonymous audit
+  // data. Remove it before the identity scrub so no generated challenge or
+  // project can outlive the fixture account.
+  await purgeReviewFixtureQueuesForUser(client, user.id);
 
   const wasWildcardHolder = await userHasWildcardRegardlessOfState(client, user.id);
   let anonymousId: string | null = null;

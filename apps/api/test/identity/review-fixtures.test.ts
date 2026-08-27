@@ -3,6 +3,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { config } from "../../src/config.js";
+import { recordReviewFixtureAuthentication } from "../../src/modules/identity/review-fixture-usage.js";
 import { logisticsStats } from "../../src/modules/logistics/stats.js";
 import {
   asUser,
@@ -197,6 +198,104 @@ describe("review fixture regeneration", () => {
     });
     expect(response.statusCode).toBe(503);
     expect(response.json().error.details.code).toBe("review_fixtures_not_configured");
+  });
+
+  it("keeps fixture subjects and queues out of ordinary admin reads and reports safe usage telemetry", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    const result = await regenerate(a, admin);
+    const outside = result.accounts.find(
+      (account) => account.fixtureKey === "participant-anonymize-outside",
+    );
+    if (!outside) throw new Error("Expected outside fixture");
+    const outsideId = await fixtureUserId(outside.email);
+
+    const statusBefore = await a.inject({
+      method: "GET",
+      url: "/api/admin/review-fixtures",
+      headers: asUser(admin),
+    });
+    expect(statusBefore.statusCode).toBe(200);
+    expect(statusBefore.json().accounts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fixtureKey: "participant-anonymize-outside",
+          email: outside.email,
+          active: true,
+          lastAuthenticatedAt: null,
+        }),
+      ]),
+    );
+
+    const { pool } = await import("../../src/db/pool.js");
+    await recordReviewFixtureAuthentication(pool, outside.email);
+    const statusAfter = await a.inject({
+      method: "GET",
+      url: "/api/admin/review-fixtures",
+      headers: asUser(admin),
+    });
+    expect(statusAfter.statusCode).toBe(200);
+    const used = statusAfter
+      .json()
+      .accounts.find(
+        (account: { fixtureKey: string }) => account.fixtureKey === outside.fixtureKey,
+      );
+    expect(used.lastAuthenticatedAt).toEqual(expect.any(String));
+
+    const ordinaryList = await a.inject({
+      method: "GET",
+      url: `/api/users?q=${encodeURIComponent(outside.email)}`,
+      headers: asUser(admin),
+    });
+    expect(ordinaryList.statusCode).toBe(200);
+    expect(ordinaryList.json()).toMatchObject({ users: [], total: 0 });
+
+    const directProfile = await a.inject({
+      method: "GET",
+      url: `/api/users/${outsideId}`,
+      headers: asUser(admin),
+    });
+    expect(directProfile.statusCode).toBe(404);
+
+    const { rows: queueRows } = await pool.query<{
+      challenge_id: number;
+      repo_id: number;
+      queue_entry_id: number;
+    }>(
+      `SELECT challenge_id, repo_id, queue_entry_id
+         FROM review_fixture_queues
+        WHERE fixture_key = 'participant-anonymize-outside'`,
+    );
+    expect(queueRows).toHaveLength(1);
+    const queue = queueRows[0];
+    if (!queue) throw new Error("Expected fixture queue");
+    const { rows: groupRows } = await pool.query<{ queue_group_id: number }>(
+      `SELECT queue_group_id FROM queue_group_challenges WHERE challenge_id = $1`,
+      [queue.challenge_id],
+    );
+    expect(groupRows).toHaveLength(1);
+    const queueGroupId = groupRows[0]?.queue_group_id;
+    if (!queueGroupId) throw new Error("Expected fixture queue group");
+
+    const hiddenQueue = await a.inject({
+      method: "GET",
+      url: `/api/queue/groups/${queueGroupId}/queue`,
+      headers: asUser(admin),
+    });
+    expect(hiddenQueue.statusCode).toBe(404);
+
+    const participantQueue = await a.inject({
+      method: "GET",
+      url: "/api/queue/me",
+      headers: asUser(outsideId),
+    });
+    expect(participantQueue.statusCode).toBe(200);
+    expect(participantQueue.json()).toHaveLength(1);
+    expect(participantQueue.json()[0]).toMatchObject({
+      challengeId: queue.challenge_id,
+      repoId: queue.repo_id,
+      entryId: queue.queue_entry_id,
+    });
   });
 
   it("uses the static PIN only for a marked fixture and deletes the fresh fixture account", async () => {

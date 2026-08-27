@@ -1,4 +1,5 @@
 import { pool } from "../../db/pool.js";
+import { fixtureReadFilter } from "./review-fixture-scope.js";
 
 /**
  * Team-wide scan history and per-staff counts (extends H22-H27): every scan
@@ -24,26 +25,28 @@ export interface ScanLogPage {
   total: number;
 }
 
-const SCAN_LOG_UNION = `
+function scanLogUnion(subjectFilter: string): string {
+  return `
   SELECT cil.id, 'accreditation' AS source, cil.checked_in_at AS occurred_at,
          cil.check_in_method AS detail, u.id AS subject_user_id,
          u.name AS subject_name, u.surname AS subject_surname
     FROM check_in_logs cil JOIN users u ON u.id = cil.user_id
    WHERE cil.staff_id = $1
-     AND u.account_state = 'active' AND u.anonymized_at IS NULL
+     AND u.account_state = 'active' AND u.anonymized_at IS NULL${subjectFilter}
   UNION ALL
   SELECT tl.id, 'door', tl.scanned_at, tl.kind, u.id, u.name, u.surname
     FROM time_logs tl JOIN users u ON u.id = tl.user_id
    WHERE tl.scanned_by = $1
-     AND u.account_state = 'active' AND u.anonymized_at IS NULL
+     AND u.account_state = 'active' AND u.anonymized_at IS NULL${subjectFilter}
   UNION ALL
   SELECT al.id, 'activity', al.logged_at, a.name, u.id, u.name, u.surname
     FROM activity_logs al
     JOIN activities a ON a.id = al.activity_id
     JOIN users u ON u.id = al.user_id
    WHERE al.logged_by = $1
-     AND u.account_state = 'active' AND u.anonymized_at IS NULL
+     AND u.account_state = 'active' AND u.anonymized_at IS NULL${subjectFilter}
 `;
+}
 
 /** Paginated scan-log feed for one staff member, most recent first. */
 export async function queryScanLog(
@@ -51,12 +54,14 @@ export async function queryScanLog(
   limit: number,
   offset: number,
 ): Promise<ScanLogPage> {
+  const subjectFilter = await fixtureReadFilter(pool, staffId, "u");
+  const union = scanLogUnion(subjectFilter);
   const [{ rows }, { rows: countRows }] = await Promise.all([
     pool.query(
-      `SELECT * FROM (${SCAN_LOG_UNION}) log ORDER BY occurred_at DESC, id DESC LIMIT $2 OFFSET $3`,
+      `SELECT * FROM (${union}) log ORDER BY occurred_at DESC, id DESC LIMIT $2 OFFSET $3`,
       [staffId, limit, offset],
     ),
-    pool.query(`SELECT count(*)::int AS count FROM (${SCAN_LOG_UNION}) log`, [staffId]),
+    pool.query(`SELECT count(*)::int AS count FROM (${union}) log`, [staffId]),
   ]);
   return {
     items: rows.map((r) => ({
@@ -80,20 +85,21 @@ export interface StaffScanCounts {
 
 /** Counts of scans a single staff member performed, by domain. */
 export async function staffScanCounts(staffId: number): Promise<StaffScanCounts> {
+  const subjectFilter = await fixtureReadFilter(pool, staffId, "u");
   const { rows } = await pool.query(
     `SELECT
        (SELECT count(*)::int
-          FROM check_in_logs cil JOIN users u ON u.id = cil.user_id
+         FROM check_in_logs cil JOIN users u ON u.id = cil.user_id
          WHERE cil.staff_id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
-           AND u.is_test_account = false) AS accreditation_count,
+           ${subjectFilter || "AND u.is_test_account = false"}) AS accreditation_count,
        (SELECT count(*)::int
-          FROM time_logs tl JOIN users u ON u.id = tl.user_id
+         FROM time_logs tl JOIN users u ON u.id = tl.user_id
          WHERE tl.scanned_by = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
-           AND u.is_test_account = false) AS presence_count,
+           ${subjectFilter || "AND u.is_test_account = false"}) AS presence_count,
        (SELECT count(*)::int
-          FROM activity_logs al JOIN users u ON u.id = al.user_id
+         FROM activity_logs al JOIN users u ON u.id = al.user_id
          WHERE al.logged_by = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
-           AND u.is_test_account = false) AS activity_count`,
+           ${subjectFilter || "AND u.is_test_account = false"}) AS activity_count`,
     [staffId],
   );
   return {

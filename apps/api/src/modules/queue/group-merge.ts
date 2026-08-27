@@ -77,16 +77,25 @@ const GROUP_SUMMARY_SQL = `
          (SELECT count(DISTINCT qe.repo_id)::int
             FROM queue_group_challenges qgc
             JOIN queue_entries qe ON qe.challenge_id = qgc.challenge_id
+            JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
            WHERE qgc.queue_group_id = qg.id
              AND qe.status NOT IN ('cancelled', 'disqualified')) AS teams,
          EXISTS (SELECT 1
                    FROM queue_group_challenges qgc
                    JOIN queue_entries qe ON qe.challenge_id = qgc.challenge_id
+                   JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
                    LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
                   WHERE qgc.queue_group_id = qg.id
                     AND (qe.status = 'completed' OR ar.status = 'submitted')) AS evaluation_started
     FROM queue_groups qg
-    JOIN enterprises e ON e.id = qg.enterprise_id`;
+    JOIN enterprises e ON e.id = qg.enterprise_id
+   WHERE NOT EXISTS (
+     SELECT 1
+       FROM queue_group_challenges hidden_qgc
+       JOIN challenges hidden_c ON hidden_c.id = hidden_qgc.challenge_id
+      WHERE hidden_qgc.queue_group_id = qg.id
+        AND hidden_c.is_test_account = true
+   )`;
 
 function toSummary(row: {
   id: number;
@@ -124,7 +133,7 @@ export async function listEnterpriseQueueGroups(
   enterpriseId: number,
 ): Promise<QueueGroupSummary[]> {
   const { rows } = await pool.query(
-    `${GROUP_SUMMARY_SQL} WHERE qg.enterprise_id = $1 ORDER BY qg.display_name ASC, qg.id ASC`,
+    `${GROUP_SUMMARY_SQL} AND qg.enterprise_id = $1 ORDER BY qg.display_name ASC, qg.id ASC`,
     [enterpriseId],
   );
   return rows.map(toSummary);
@@ -142,9 +151,10 @@ export async function listManageableQueueGroups(
 ): Promise<QueueGroupSummary[]> {
   const { rows } = await pool.query(
     `${GROUP_SUMMARY_SQL}
-      WHERE $1::boolean
+      AND ($1::boolean
          OR EXISTS (SELECT 1 FROM sponsors s
                      WHERE s.enterprise_id = qg.enterprise_id AND s.user_id = $2)
+      )
       ORDER BY e.name ASC, qg.display_name ASC, qg.id ASC`,
     [isAdmin, userId],
   );
@@ -152,7 +162,7 @@ export async function listManageableQueueGroups(
 }
 
 export async function getQueueGroup(queueGroupId: number): Promise<QueueGroupSummary> {
-  const { rows } = await pool.query(`${GROUP_SUMMARY_SQL} WHERE qg.id = $1`, [queueGroupId]);
+  const { rows } = await pool.query(`${GROUP_SUMMARY_SQL} AND qg.id = $1`, [queueGroupId]);
   if (!rows[0]) throw new NotFoundError("Queue group not found", { queueGroupId });
   return toSummary(rows[0]);
 }
@@ -186,6 +196,7 @@ async function assertEnterpriseChallenges(
        JOIN sponsors s ON s.id = c.author
        LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = c.id
       WHERE c.id = ANY($1::int[])
+        AND c.is_test_account = false
       FOR SHARE OF c, s`,
     [challengeIds],
   );
@@ -261,7 +272,7 @@ export async function mergeQueueGroups(
       ),
     ];
 
-    const before = (await client.query(`${GROUP_SUMMARY_SQL} WHERE qg.id = $1`, [targetGroupId]))
+    const before = (await client.query(`${GROUP_SUMMARY_SQL} AND qg.id = $1`, [targetGroupId]))
       .rows[0];
 
     await client.query(
@@ -310,7 +321,7 @@ export async function mergeQueueGroups(
       [displayName, JSON.stringify(merged.questions), targetGroupId],
     );
 
-    const after = (await client.query(`${GROUP_SUMMARY_SQL} WHERE qg.id = $1`, [targetGroupId]))
+    const after = (await client.query(`${GROUP_SUMMARY_SQL} AND qg.id = $1`, [targetGroupId]))
       .rows[0];
 
     await audit(client, {
@@ -347,7 +358,7 @@ export async function splitQueueGroup(input: {
 
   const groups = await withTransaction(async (client) => {
     await lockEnterpriseGroups(client, enterpriseId);
-    const before = (await client.query(`${GROUP_SUMMARY_SQL} WHERE qg.id = $1`, [queueGroupId]))
+    const before = (await client.query(`${GROUP_SUMMARY_SQL} AND qg.id = $1`, [queueGroupId]))
       .rows[0];
     if (!before) throw new NotFoundError("Queue group not found", { queueGroupId });
     if (Number(before.enterprise_id) !== enterpriseId) {
@@ -407,7 +418,7 @@ export async function splitQueueGroup(input: {
 
     const { rows: after } = await client.query(
       `${GROUP_SUMMARY_SQL}
-        WHERE qg.id IN (SELECT queue_group_id FROM queue_group_challenges
+        AND qg.id IN (SELECT queue_group_id FROM queue_group_challenges
                          WHERE challenge_id = ANY($1::int[]))
         ORDER BY qg.display_name ASC, qg.id ASC`,
       [memberIds],
@@ -440,7 +451,7 @@ export async function updateQueueGroup(input: {
     if (!locked.rowCount) throw new NotFoundError("Queue group not found", { queueGroupId });
     if (criteria !== undefined) await lockEvaluationEntriesForGroup(client, queueGroupId);
 
-    const before = (await client.query(`${GROUP_SUMMARY_SQL} WHERE qg.id = $1`, [queueGroupId]))
+    const before = (await client.query(`${GROUP_SUMMARY_SQL} AND qg.id = $1`, [queueGroupId]))
       .rows[0];
     if (!before) throw new NotFoundError("Queue group not found", { queueGroupId });
     const shared = (before.challenges as unknown[]).length > 1;
@@ -464,7 +475,7 @@ export async function updateQueueGroup(input: {
       [displayName ?? null, criteria ? JSON.stringify(criteria) : null, queueGroupId],
     );
 
-    const after = (await client.query(`${GROUP_SUMMARY_SQL} WHERE qg.id = $1`, [queueGroupId]))
+    const after = (await client.query(`${GROUP_SUMMARY_SQL} AND qg.id = $1`, [queueGroupId]))
       .rows[0];
     await audit(client, {
       actorId,
@@ -507,7 +518,7 @@ export async function setQueueGroupRooms(input: {
   const roomIds = [...new Set(input.roomIds)];
 
   const summary = await withTransaction(async (client) => {
-    const before = (await client.query(`${GROUP_SUMMARY_SQL} WHERE qg.id = $1`, [queueGroupId]))
+    const before = (await client.query(`${GROUP_SUMMARY_SQL} AND qg.id = $1`, [queueGroupId]))
       .rows[0];
     if (!before) throw new NotFoundError("Queue group not found", { queueGroupId });
     const enterpriseId = Number(before.enterprise_id);
@@ -563,7 +574,7 @@ export async function setQueueGroupRooms(input: {
       );
     }
 
-    const after = (await client.query(`${GROUP_SUMMARY_SQL} WHERE qg.id = $1`, [queueGroupId]))
+    const after = (await client.query(`${GROUP_SUMMARY_SQL} AND qg.id = $1`, [queueGroupId]))
       .rows[0];
     await audit(client, {
       actorId,

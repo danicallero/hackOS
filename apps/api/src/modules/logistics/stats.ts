@@ -145,7 +145,7 @@ export async function logisticsStats() {
       WHERE badge_id IS NOT NULL AND account_state = 'active' AND anonymized_at IS NULL
         AND is_test_account = false`,
   );
-  const occ = await occupancyEstimate();
+  const occ = await occupancyEstimate(undefined, undefined);
   const meals = await scannableActivities("meal");
   const activities = await scannableActivities("activity");
   const accreditedByRole = await accreditationCountsByRole();
