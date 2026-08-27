@@ -81,8 +81,9 @@ moves the implementation to `removal.ts`.
 
 1. The authenticated client reads the server preflight. If the primary email
    is verified, the client requests a short-lived one-time security PIN and
-   submits it with the destructive request; an unverified account does not
-   require that additional proof.
+   submits it with the destructive request. A real account with no usable
+   email code must instead re-enter its current credential password; synthetic
+   fixture accounts use the fixture-only PIN path.
 2. `prepareAccountRemoval()` locks the permission graph and target user,
    re-evaluates the boundary, and commits `account_state = 'removal_pending'`
    with the selected action. A live open session produces `pending_exit`, not
@@ -169,17 +170,17 @@ scan alone is therefore insufficient.
 | F03 | High | confirmed code problem; privacy/security risk; operational risk | Removal must race check-in, presence, notification, wallet and invite writes. The pending state, user-row locks, active-state filters, and migrations `0733`/`0736` reject new direct user references after pending begins. The event-end closer was additionally changed to lock and re-check each candidate so one removal cannot abort the whole worker tick. |
 | F04 | High | requires legal/product confirmation; operational risk | `check_in_logs` is the canonical accreditation boundary. Door/activity/badge history without accreditation is reported as an inconsistency and follows full deletion with a warning; confirm the reconciliation procedure for legacy records rather than turning artifacts into permanent retention. |
 | F05 | High | confirmed code problem; operational risk | Object deletion and final DB deletion are separate phases. A storage or final-transaction failure leaves access revoked and `removal_pending`, with bounded retry. Operators must monitor and replay pending rows if the queue is unavailable. |
-| F06 | High | confirmed code problem; privacy/security risk; operational risk | Staff offline meal queues contain badge credentials and must be encrypted, owner-bound, cleared on closure, and rejected when stale. Native scanner records are encrypted and tombstoned; an offline staff device can still retain encrypted data until it reconnects and is wiped or retired. The central permanent denylist prevents a stale credential from resolving to a replacement participant, but it cannot remotely erase an unreachable device. The pre-H54 combined native database had ownerless plaintext payloads, so it cannot be safely assigned to the first authenticated operator; the current migration retires the app-owned file and its SQLite sidecars, blocks the queue if retirement fails, and requires any lost pre-upgrade scans to be re-recorded. |
-| F07 | High | confirmed code problem; privacy/security risk; operational risk; requires legal/product confirmation | Installed Apple/Google Wallet passes and copies already delivered to a device are outside the database. The server voids rows, sends provider invalidation/update signals where configured, and retires scanned badge/ticket credentials in an unlinked keyed-digest denylist. Because physical badge IDs may be rotated to another participant, the current global tombstone still makes a legitimately reassigned historical badge unusable, and a keyed digest alone does not distinguish a stale offline scan from a new assignment. Before production, add a per-assignment random binding/nonce to scanner payloads or explicitly prohibit badge reuse. The branch now avoids retaining/distributing raw central tombstone values and rejects retired ticket tokens when used as badges. |
+| F06 | High | confirmed code problem fixed in this follow-up; privacy/security risk; operational risk | Staff offline meal queues contain badge credentials and must be encrypted, owner-bound, cleared on closure, and rejected when stale. Native scanner records are encrypted and tombstoned; an offline staff device can still retain encrypted data until it reconnects and is wiped or retired. The central permanent denylist prevents a stale credential from resolving to a replacement participant, but it cannot remotely erase an unreachable device. The pre-H54 combined native database had ownerless plaintext payloads, so it cannot be safely assigned to the first authenticated operator; the current migration retires the app-owned file and its SQLite sidecars, blocks the queue if retirement fails, and requires any lost pre-upgrade scans to be re-recorded. Presence/activity/meal replay now also rejects an event timestamp earlier than the current badge assignment boundary, so a late scan cannot be accepted under a replacement owner. |
+| F07 | High | confirmed code problem fixed in this follow-up; privacy/security risk; operational risk | Installed Apple/Google Wallet passes and copies already delivered to a device are outside the database. The server voids rows, sends provider invalidation/update signals where configured, and retires scanned badge/ticket credentials in an unlinked keyed-digest denylist. Physical badge IDs may be rotated to another participant: the current assignment timestamp is recorded server-side and stale pre-replacement event timestamps are rejected at enqueue and locked processing, while a permanently tombstoned credential remains unusable by design. The branch avoids retaining/distributing raw central tombstone values and rejects retired ticket tokens when used as badges. |
 | F08 | High | privacy/security risk; requires legal/product confirmation | Application logs, web-server logs, analytics, database backups, object-store versioning, and provider logs are not retention systems represented in this repository. Production operations must confirm their subject lookup, retention and purge controls before claiming system-wide erasure. |
-| F09 | High | confirmed code improvement; privacy/security risk; optional hardening | Self-service destructive routes require the current authenticated session and, for a verified primary email, a short-lived one-time PIN sent to that address. Unverified accounts remain compatible without the extra PIN. Recent reauthentication is still optional hardening if the deployment threat model requires protection against an unattended unlocked session. |
+| F09 | High | confirmed code problem fixed in this follow-up; privacy/security risk; operational risk | Self-service destructive routes require the current authenticated session. A verified primary email requires a short-lived one-time PIN sent to that address; an unverified real account that cannot receive that code must re-enter its current password. Synthetic fixtures may use the configured fixture PIN. The password is verified against the credential account and is never placed in retry jobs, audit rows, or responses. |
 | F10 | Medium | confirmed code improvement; privacy/security risk | Anonymous application retention is now driven by each submitted response's immutable form-version fields (`retention_mode = anonymous_audit`) and optional open semantic dimension. Labels, translations, and the mutable current form do not grant retention. |
 | F11 | Medium | privacy/security risk; requires legal/product confirmation | Age, gender, university, degree, graduation year and origin city can identify a person in a rare cohort. Small-cell suppression/aggregation is intentionally outside this implementation; the audit owner must make any reporting decision before publishing combinations. |
 | F12 | Medium | confirmed code problem; privacy/security risk | The first H54 implementation retained raw check-in/door rows under the anonymous UUID, exceeding the approved minimum. Corrective migration `0734` deletes converted raw rows and removes the anonymous FK columns; finalization retains only the calculated guaranteed minutes plus explicitly retained application values. |
-| F13 | Medium | operational risk | A no-key destructive request remains backward-compatible but has no durable replay handle if its HTTP response is lost. Current mobile/web clients always send a high-entropy key; make the header mandatory once all supported clients are upgraded. |
+| F13 | Medium | confirmed code problem fixed in this follow-up; operational risk; privacy/security risk | Self-service destructive requests now require a non-empty `Idempotency-Key`; a missing key is rejected instead of entering a path that cannot safely replay a lost response. Supported mobile/web clients already send a high-entropy key, and the no-production-database assumption allows the old no-key compatibility path to be removed. |
 | F14 | Medium | confirmed code problem; operational risk | Offline stale submissions can reach the server after anonymization. Permanent unlinked keyed-digest badge/ticket tombstones and active lookups reject them, and clients remove terminal stale queue items. Devices that never reconnect cannot be remotely wiped; device management/reinstall remains the operational control for the residual local copy. |
 | F15 | Medium | confirmed code improvement; privacy/security risk; requires legal/product confirmation | Shared public repositories, Devpost content and external documents can contain a person's identity independently of hackOS rows. The service removes the subject's personal submission/member link and deletes solo projects, but preserves a shared project for remaining members. The participant Privacy Policy now explains that forms/project records may request links to independent external sites with their own policies and no GPUL affiliation; confirm that this wording matches the event's external-content policy. |
-| F16 | Low | confirmed code problem; optional hardening | `time_logs_kind_check` is `NOT VALID` so malformed legacy rows remain reviewable; all new/edited rows are constrained and calculators ignore malformed kinds. Schedule a one-time legacy repair or explicitly accept the zero-credit behavior. |
+| F16 | Medium | confirmed code problem fixed in this follow-up; privacy/security risk; operational risk | Migration `0746` deletes malformed historical `time_logs` rows and validates `time_logs_kind_check`. The fresh-schema branch does not preserve invalid presence events or carry reader-side legacy exceptions indefinitely; every retained presence calculation now relies on the database domain (`in`/`out`). |
 | F17 | Medium | App Store review risk; confirmed code improvement | The prior mobile flow did not expose a direct, truthful account action. The current Account/Data control is visible in-app, remains available while inside, distinguishes full deletion from irreversible anonymization/pending exit, links the Privacy Policy, and explains the consequences. Reviewer access instructions must provide an accepted test account that can reach it. |
 | F18 | Medium | App Store review risk; requires legal/product confirmation | “Delete” is reserved for full deletion; “anonymize” names the irreversible alternative. Privacy policy and App Store privacy disclosures must match actual operational retention and external-cache limitations. |
 | F19 | Low | optional hardening | The branch has focused regression tests and a documented matrix, but provider deletion, lost-response, offline-device, backup and rare-cohort tests require deployment fixtures outside this repository. |
@@ -279,8 +280,9 @@ offline copies according to the controls in F06/F08.
 It uses the PostgreSQL clock as cutoff and
 `event_config.presence_certainty_window_minutes` (default 720 minutes). An
 interval receives permanent credit only when an exit or an in-window activity
-secures it. Expired provisional intervals, malformed kinds, and conflicts
-receive zero credit. The total is floored to complete minutes and stored in
+secures it. Expired provisional intervals and conflicts receive zero credit;
+invalid `time_logs.kind` values cannot survive the validated database
+constraint. The total is floored to complete minutes and stored in
 `anonymous_participants.guaranteed_presence_minutes` before raw activity rows
 are deleted.
 
@@ -289,7 +291,7 @@ Edge behavior:
 | Case | Behavior |
 | --- | --- |
 | Missing door-out | Provisional interval expires and contributes zero unless an in-window activity secured it; an open current session leaves an accepted removal request pending until exit. |
-| Duplicate rapid `in` | Live scanner rejects it; legacy/manual `in → in` is marked conflicting and credits zero for the affected window. |
+| Duplicate rapid `in` | Live scanner rejects it; a manually corrected `in → in` sequence is marked conflicting and credits zero for the affected window. Invalid `kind` values cannot survive the validated database constraint. |
 | Manual correction | Manual rows use the same calculator; invalid ordering is visible to staff and cannot manufacture guaranteed time. |
 | Accreditation before first door scan | Check-in crosses the removal boundary, but it contributes no presence minutes until an interval is secured. |
 | Participant still inside | The request returns `pending_exit`; no anonymous row is created yet. Only a valid exit path is allowed, and its completion triggers finalization. |
@@ -352,8 +354,13 @@ correct it.
 - `0732_account_removal_meal_inbox.sql` makes meal inbox `badge_id` nullable so
   terminal results can be minimized.
 - `0733_account_removal_reference_guards.sql` adds active-user FK triggers and
-  a `NOT VALID` `time_logs` kind check. It is a corrective writer-safety
-  migration and must remain separate from already-applied migration blobs.
+  the initial `time_logs` kind check. `0746_validate_time_logs_kind.sql`
+  removes invalid historical rows and validates that check; this branch has no
+  production database and does not preserve malformed presence data for
+  compatibility.
+- `0745_badge_assignment_timestamp.sql` records the server-side current badge
+  assignment boundary. Stale offline presence/activity/meal timestamps before
+  a replacement are rejected without exposing that boundary to clients.
 - `0735_schema_driven_anonymous_retention.sql` snapshots each application
   schema, adds the extensible `retention_mode`/dimension metadata, creates the
   normalized anonymous field table, migrates the initial HackUDC configured
@@ -375,19 +382,24 @@ correct it.
   and never enter the database.
 - `0741_keyed_scanner_credential_tombstones.sql` replaces the raw central
   scanner tombstone columns with stable HMAC-SHA256 digests and clears the
-  pre-digest development rows. The digest is security metadata only; it does
-  not solve physical badge reuse, which still needs assignment binding or a
-  documented no-reuse policy.
+  pre-digest development rows. The digest is security metadata only; ordinary
+  badge reuse is protected by the current-assignment timestamp fence from
+  `0745`, while credentials retired with an account remain non-reusable.
 - `0743_review_fixture_accounts.sql` marks synthetic QA identities and stores
   only the replaceable fixture registry pointer/generation.
 - `0744_review_fixture_queues.sql` marks the synthetic queue graph and stores
   its cleanup pointers. Fixture projects/challenges/queue rows are isolated
   from ordinary operations and are purged on regeneration or fixture closure;
   they are not anonymous-audit data.
+- `0745_badge_assignment_timestamp.sql` adds the server-owned assignment
+  boundary used to reject stale offline scan timestamps after badge rotation.
+- `0746_validate_time_logs_kind.sql` deletes invalid development `time_logs`
+  rows and validates the `in`/`out` constraint; no harmful legacy presence
+  compatibility is retained.
 
 Migration policy is checksum-enforced by `apps/api/scripts/migrate.ts`. There
 is no production database in scope for this branch, so the H54 migrations
-`0730–0741` are validated as a fresh install. The raw-presence correction is
+`0730–0746` are validated as a fresh install. The raw-presence correction is
 explicitly represented by `0734`; the keyed-tombstone migration deliberately
 clears only pre-production development rows that cannot be converted without
 the deployment secret. There is no production database in scope.
@@ -408,15 +420,14 @@ than retained indefinitely. An offline device that never reconnects cannot
 receive a tombstone or a remote wipe; it must be covered by device management
 and the release/reinstall procedure.
 
-The current permanent denylist is deliberately unlinked and now stores only a
+The current permanent denylist is deliberately unlinked and stores only a
 stable HMAC digest of the raw badge/ticket credential. That is not an anonymous
-audit record, yet physical badges may be rotated and later assigned to another
-participant: a global tombstone still blocks the legitimate new assignment,
-while a digest alone would not separate a stale offline scan from a fresh
-assignment. This branch keeps the fail-closed behavior for safety; before
-production, scanner payloads must carry a per-assignment random binding/nonce
-(or operations must prohibit credential reuse). The server also rejects a
-retired ticket token when it is presented as a badge.
+audit record. Ordinary badge rotation may assign the old physical badge to a
+different participant; the server records the new assignment boundary and
+rejects offline events timestamped before that replacement. A credential
+retired with an account remains globally tombstoned, because an arbitrarily
+late offline scan must not resolve to a replacement participant. The server
+also rejects a retired ticket token when it is presented as a badge.
 The retired pre-H54 `hackos-scanner.db` is not migratable: its plaintext
 pending rows had no trustworthy owner, and its roster also contained personal
 data. On the first authenticated queue access, current code closes and
@@ -575,7 +586,7 @@ synthetic identity-shaped `users` row.
 | `data_subject_requests`: subject/requester, reason, key, error | DSR workflow | Export/delete workflow | Null subject/requester and clear reason/key/error; delete objects/prefix | No | Request metadata can identify the person. |
 | `user_email_history`: user FK, historical/current email | Transient cleanup aid | Profile email changes | Delete by `users` cascade before identity finalization; never copy to anonymous subject | No | Finds old denormalized email copies without becoming a permanent identity bridge. |
 | `check_in_logs`: user/staff/badge/notes/time/method | Empty | Accreditation record | Calculate any required aggregate, then delete subject rows | None; represented by aggregate verified minutes | Physical participation evidence without retaining raw identifiers/timestamps. |
-| `time_logs`: user/scanned_by/kind/time/notes | Empty | Door presence and corrections | Calculate guaranteed minutes, then delete subject rows | `guaranteed_presence_minutes` only | Verify guaranteed venue time; malformed legacy kinds ignored. |
+| `time_logs`: user/scanned_by/kind/time/notes | Empty | Door presence and corrections | Calculate guaranteed minutes, then delete subject rows | `guaranteed_presence_minutes` only | Verify guaranteed venue time; the validated database constraint permits only `in`/`out`. |
 | `activity_logs`: user/logged_by/activity/time/device/scan ID/notes | Empty | Activity/meal/presence confirmation | Delete subject rows; detach subject actor | Only derived minutes | Raw activity can contain device/scan identity and is not needed long-term. |
 | `activities` / `schedule`: names, categories, times, locations | Shared config | Event service definition | Survive | No | Shared operational catalog. |
 | `meal_scan_batches`: activity/device/submitter/status | Empty | Meal ingestion metadata | Null subject submitter; terminal counts/status only | No | Device/submitter history is operational, not permanent audit. |
@@ -607,7 +618,7 @@ synthetic identity-shaped `users` row.
 | `judging_session`: judge/queue/room/times | No row | Judging operation | Null/delete subject judge relationship; shared session may survive | No | Judge identity not participant audit field. |
 | `queue_groups` / `queue_group_challenges`: creator/enterprise/challenges | Shared config | Judging | Null subject creator | No | Shared queue configuration. |
 | `rooms`, `room_*`, `queue_settings`: assignments/actors/config | Shared config | Venue/judging | Null subject assigner; shared config survives | No | No subject audit fields. |
-| `scanner_revoked_badges` / `_tickets`: keyed credential digest, expiry | Empty | Offline safety | Survives as an unlinked global keyed-digest security denylist entry | No | This is not participant audit data or a mapping, but global tombstones conflict with legitimate badge reuse; assignment binding or an explicit no-reuse policy is required before production (F07/A30). |
+| `scanner_revoked_badges` / `_tickets`: keyed credential digest, expiry | Empty | Offline safety | Survives as an unlinked global keyed-digest security denylist entry | No | This is security metadata, not participant audit data or a mapping. Normal badge rotation may reuse an old physical badge after the assignment boundary; credentials retired with an account remain tombstoned so late offline scans cannot resolve to a replacement participant (F07/A30). |
 | `wallet/provider payloads`, provider logs | External credential | Wallet/notification | Provider-specific revocation/expiry | No | Outside Postgres; operations confirmation required. |
 | Browser/native/offline queues | Empty | Offline logistics | Encrypt and owner-scope web/native queues; wipe on closure; stale items reject/delete; unreachable devices retain until reconnect/device retirement | No | Device copies need an operational control; ciphertext at rest is not a remote wipe. |
 | Reverse-proxy/app logs, analytics, error logs, DB backups/WAL, S3 versions | Infrastructure | All operations | Repository has no purge implementation; apply retention/purge policy | No | Not silently claimed deleted. |
@@ -631,7 +642,7 @@ Implemented or updated in this branch:
 | Meal and dietary data | Meal inbox minimization tests; dietary fields are excluded from anonymous row. |
 | Judging and team relationships | Project/queue cleanup tests and shared sponsor-anchor regression. |
 | Synthetic fixture read/write isolation | `apps/api/test/identity/review-fixtures.test.ts`, `apps/api/test/applications/files-export.test.ts` and `apps/api/test/exports/bundle-leakage.test.ts` cover ordinary-admin visibility, response/DSR target isolation, synthetic global-export exclusion, and refusal to build a personal export bundle. |
-| Venue presence calculations | `apps/api/test/logistics/estimate.test.ts` and presence tests cover secured, duplicate, expired and malformed paths. |
+| Venue presence calculations | `apps/api/test/logistics/estimate.test.ts` and presence tests cover secured, duplicate, expired and inconsistent paths; migration `0746` removes invalid kinds and validates the database constraint. |
 | Anonymous record generation | Profile tests assert random UUID differs from original ID and verified minutes survive without raw subject rows. |
 | Inability to recover identity | Profile regression inserts an email-bearing audit `entity_id`, verifies it is removed, and searches anonymous JSON for original email/name/ID. |
 | ECTS/participation-document request after anonymization | No ECTS/certificate endpoint or identity bridge exists in the repository; release test must assert any future named-proof endpoint returns no subject after anonymization. |
@@ -704,8 +715,8 @@ silently converted into a legal conclusion.
 | A10 | The web `hackos*`/`queue-ops-*` namespace is the complete app-owned browser storage namespace; future features must register additional keys with `clearWebAccountData()`. | Web owner |
 | A11 | Native offline scanner data must survive an ordinary staff account switch for operational continuity: shared roster data is wiped on sign-out, while each owner's encrypted pending queue remains recoverable only by that owner; closure wipes the affected owner's queue. The pre-H54 ownerless combined database is not safely migratable and is discarded rather than assigned to the first account. | Mobile/logistics owner |
 | A12 | Wallet-provider invalidation and pass expiry are best-effort external controls; installed device copies are not synchronously deletable by this repository. | Mobile/release + operations owner |
-| A13 | Self-service removal requires the current authenticated session. A verified primary email additionally requires a short-lived one-time security PIN sent through the in-app flow; unverified accounts do not require that PIN. Recent re-auth is optional hardening, not asserted as present. | Security/product owner |
-| A14 | Supported clients send `Idempotency-Key`; no-key requests remain compatibility behavior and may not replay after a lost response. | API/client owners |
+| A13 | Self-service removal requires the current authenticated session. A verified primary email additionally requires a short-lived one-time security PIN sent through the in-app flow. A real account that cannot receive that email code must re-enter its current credential password; this password is verified only in the request transaction and is never persisted or queued. Synthetic fixtures may use the configured fixture PIN. Recent re-authentication beyond these checks is optional hardening, not asserted as present. | Security/product owner |
+| A14 | Supported clients send a non-empty `Idempotency-Key`, and self-service destructive routes reject requests without one. There is no production database or supported legacy client to justify a weaker no-key path. | API/client owners |
 | A15 | Anonymous application-data retention is schema-driven and version-aware. Authorized form administrators explicitly configure `retention_mode = ANONYMOUS_AUDIT` and an optional open semantic dimension through the Form Builder Advanced settings. Unmarked fields default to `NONE`; labels and translations do not control retention. | Applications/data owner |
 | A16 | Meal/activity/judging/project records are operational or shared content, not permanent personal audit requirements, unless the table's row is explicitly listed above. | Domain owners |
 | A17 | “Irreversible” means no identity mapping in the hackOS database after the transaction; it does not overclaim deletion from external systems or prevent statistical inference. | Privacy/security owner |
@@ -713,7 +724,7 @@ silently converted into a legal conclusion.
 | A19 | No current ECTS, certificate or named participation-proof endpoint exists in this repository; any future implementation must not use a hidden anonymous-to-user map. | Product/academic-services owner |
 | A20 | App Review can access a seeded accepted participant/staff account and reach Settings → Account & Data without external registration. | iOS release owner |
 | A21 | The anonymizer uses the retention configuration attached to the submitted application/form version, not the later mutable form. New audit dimensions and custom retained fields work without anonymization-service code changes. A `NONE` → `ANONYMOUS_AUDIT` edit is not retroactive; any retroactive expansion requires a separate explicit product/privacy decision. | Applications + grant/audit owners |
-| A22 | `hackos-scanner.db` was exclusively owned by the pre-H54 scanner implementation, no production device/database is in scope for this branch, and any pre-upgrade offline scan can be re-recorded after the local migration. | Mobile/logistics + release owners |
+| A22 | `hackos-scanner.db` was exclusively owned by the pre-H54 scanner implementation, no production device/database is in scope for this branch, and any pre-upgrade offline scan is intentionally discarded rather than migrated or replayed; staff can re-record it after the local migration. | Mobile/logistics + release owners |
 | A23 | An `ANONYMOUS_AUDIT` → `NONE` edit affects future submissions/form versions only. Existing anonymous field rows remain until a separately approved minimization migration defines whether and how they should be removed. | Product/privacy + grant/audit owners |
 | A24 | Form administrators may explicitly mark arbitrary fields, including potentially sensitive ones; the builder warning is the current safeguard. A future product/privacy policy may add prohibited categories or small-cohort publication controls without changing the anonymous subject identity model. | Product/privacy + applications owners |
 | A25 | A pending-exit removal may complete after a valid current staff exit, the exact system-generated event-closing `out` at `event_config.event_ends_at`, or expiry of the latest H24 certainty window that invalidates the last provisional presence sum. Missing event dates remove only the live warning; they do not bypass the lifecycle boundary. | Event-operations owner |
@@ -721,10 +732,10 @@ silently converted into a legal conclusion.
 | A27 | A pending-exit request ends new participation but retains the existing profile, authentication, wallet and dietary artifacts only for the reversible recovery/exit window. This temporary retention lets staff complete already-started operational work safely; dietary data is cleared at irreversible finalization and is never copied to anonymous audit data. | Event-operations + privacy owner |
 | A28 | The restart marker is best-effort, device-local, and contains only the action and `pending_exit`/`processing`/`device_cleanup_pending` status. It is not an account lookup or a guarantee that an offline device has received a remote wipe. | Mobile/web + release owners |
 | A29 | Admin removal idempotency rows are deleted with the target during finalization. An admin retry after finalization receives the normal not-found result rather than a replayable completion response; this avoids retaining a target-bearing audit/replay record. | Security + operations owner |
-| A30 | Badge and ticket credentials are retired in an unlinked global denylist whose central values are stable HMAC digests, not raw credentials. This prevents central raw-token retention, but global badge tombstones still conflict with physical badge rotation/reassignment, and a keyed digest alone cannot distinguish stale scans from a new owner. Before production, use a per-assignment random binding/nonce or explicitly prohibit reuse; no raw-credential exception is claimed after `0741`. | Security + privacy + operations owners |
+| A30 | Badge and ticket credentials permanently retired with an account are recorded in an unlinked global denylist whose central values are stable HMAC digests, not raw credentials; these rows are security metadata, not anonymous audit data. Ordinary physical badge rotation may reuse the old badge for another participant because each current assignment has a server-side timestamp boundary; offline events before that replacement are rejected. Permanently retired credentials remain non-reusable so late offline scans cannot resolve to a replacement participant. | Security + privacy + operations owners |
 | A31 | Only non-draft responses with a non-null, same-application form-version pointer are eligible for anonymous application retention. A legacy submitted response without a trustworthy version is excluded rather than evaluated against the later mutable form; any recovery requires an explicit data decision. | Applications/data owner |
 | A32 | The API distinguishes an accepted, cancellable `pending_exit` request from `processing`. `pending_exit` lasts until a valid current staff exit, exact event-end system `out`, or fixed recovery-deadline expiry wins; only then may irreversible finalization report completion. | Privacy + operations owners |
-| A33 | A verified-primary-email self-service request must enter the six-digit PIN delivered to that email. The PIN is one-time, short-lived, attempt-limited, stored only as an HMAC digest/nonce, and is not required for unverified accounts. | Security/product owner |
+| A33 | A verified-primary-email self-service request must enter the six-digit PIN delivered to that email. The PIN is one-time, short-lived, attempt-limited, stored only as an HMAC digest/nonce. If a real account has no usable email code because its primary email is unverified, the request must re-enter the current credential password instead; synthetic fixtures remain eligible for the fixture-only PIN path. | Security/product owner |
 | A34 | Guaranteed/verified venue time is system-generated from accrued `time_logs` and `activity_logs`; application retention is independently selected by each submitted form version. A missing retained application answer stays missing and is never inferred. | Grant/audit + applications owners |
 | A35 | The participant cannot self-record the exit from the recovery screen. The recovery copy instructs them to ask staff to show/scan their badge; the backend accepts only the validated staff door `out`, the exact system-generated event-end `out`, or an expired H24 certainty window as a completion signal. | Event-operations + security owners |
 | A36 | The pending-exit recovery deadline is captured once from the initiating authenticated session when available, or a bounded fallback for legacy/admin initiation. Signing in again does not extend it; expiry lets the worker finalize even if a raw door session remains open, because the latest accrued presence window no longer proves current presence. | Security + event-operations owners |
@@ -735,9 +746,11 @@ silently converted into a legal conclusion.
 | A41 | A synthetic operator has ordinary capability checks plus a marked-subject boundary and may act only on synthetic accounts. Real administrators and staff cannot discover or mutate those subjects by changing an ID in a normal endpoint. | Security + operations owners |
 | A42 | The configured static deletion PIN is accepted only for marked synthetic accounts. Verified real accounts require an emailed one-time PIN; no universal real-user bypass is implemented. | Security/product owner |
 | A43 | The admin fixture status signal records only the current generation, synthetic email and last successful sign-in time. It is not proof of scenario completion and does not retain secrets, failed-attempt details, IPs, user agents or participant answers. | Security + release owners |
-| A44 | No production database is in scope for this branch. Migration `0744` is validated from a fresh schema; applied migration checksums remain immutable after deployment and later corrections use a new migration. | Release/DB owner |
+| A44 | No production database is in scope for this branch. Migrations are validated from a fresh schema; applied migration checksums remain immutable after first deployment and later corrections use a new migration. During development, a fresh flat schema may be rebuilt rather than preserving harmful legacy adaptations. | Release/DB owner |
 | A45 | The current credential-retirement denylist stores stable keyed HMAC digests, not raw badge/ticket values. It prevents late offline credential replay, while physical badge reuse requires a separate assignment-binding or no-reuse decision before production. | Security + event-operations owners |
 | A46 | Legal copy may describe synthetic accounts as authorised testing/quality-assurance fixtures, but it must not name a specific review channel. The detailed fixture procedure belongs in the private/operational runbook. | GPUL/privacy + release owners |
+| A47 | The schema is authoritative for presence-event shape: only `time_logs.kind IN ('in', 'out')` is valid. Migration `0746` deletes malformed historical rows and validates the check; no reader-side exception or legacy repair path is retained for this branch. | Event-operations + release/DB owners |
+| A48 | The server-side `users.badge_assigned_at` timestamp is the authoritative boundary for offline badge-event replay. Presence, activity and meal paths reject timestamps before the current assignment both at enqueue/lookup and under the locked owner row; the timestamp is not exposed to clients. | Logistics + security owners |
 
 ## Release recommendation
 

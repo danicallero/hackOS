@@ -3,6 +3,26 @@ import { AppError } from "../../lib/errors.js";
 import { scannerCredentialDigest } from "./credential-tombstones.js";
 
 /**
+ * H23/H54: an offline scan is evidence from the physical credential that was
+ * current when it was recorded. Once that credential is replaced, an event
+ * timestamp before the replacement cannot be accepted under the new badge's
+ * identity. The assignment timestamp is intentionally not exposed to clients.
+ */
+export function assertBadgeScanTimestamp(
+  scannedAt: Date | undefined,
+  badgeAssignedAt: Date | null | undefined,
+): void {
+  if (scannedAt == null || badgeAssignedAt == null) return;
+  if (scannedAt.getTime() < badgeAssignedAt.getTime()) {
+    throw new AppError(
+      409,
+      "badge_scan_before_assignment",
+      "Offline scan predates the current badge assignment",
+    );
+  }
+}
+
+/**
  * Resolve a scanned badge to its CURRENT owner (H23). Only `users.badge_id`
  * matches — a badge that was rotated away lives in `badge_id_history` and is
  * explicitly revoked; an unknown badge is unknown. Neither error names any

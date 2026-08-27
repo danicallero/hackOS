@@ -249,6 +249,24 @@ describe("synchronizeScanner", () => {
     expect(mockFailScan).not.toHaveBeenCalled();
   });
 
+  it("drops a queued scan recorded before a badge replacement", async () => {
+    mockPendingScans.mockResolvedValue([presenceScan("scan-before-replacement")]);
+    mockApiFetch
+      .mockRejectedValueOnce(
+        apiError(
+          409,
+          "Offline scan predates the current badge assignment",
+          "badge_scan_before_assignment",
+        ),
+      )
+      .mockResolvedValueOnce({ generatedAt: "t0", people: [], activities: [], activityStates: [] });
+
+    await synchronizeScanner(OWNER_USER_ID);
+
+    expect(mockDeleteScan).toHaveBeenCalledWith("scan-before-replacement", OWNER_USER_ID);
+    expect(mockFailScan).not.toHaveBeenCalled();
+  });
+
   it("corrects a timestamp rejected as future by the measured clock skew and retries once", async () => {
     // Device clock is 5 minutes ahead of the server's.
     mockGetClockSkewMs.mockReturnValue(-5 * 60_000);

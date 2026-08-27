@@ -3,9 +3,9 @@ import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { isImplausiblyFuture } from "../../lib/clock.js";
-import { BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { AppError, BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { broadcastForActiveUser } from "./active-broadcast.js";
-import { resolveByBadge } from "./badge.js";
+import { assertBadgeScanTimestamp, resolveByBadge } from "./badge.js";
 import { loadPersonCard, type PersonCard } from "./cards.js";
 import { assertFixtureSubjectScope } from "./review-fixture-scope.js";
 
@@ -69,13 +69,25 @@ export async function activityScan(
     // Serialize with account removal. The badge lookup happened before the
     // transaction, so the row lock/state check is the authoritative decision
     // for a stale or offline scan that races anonymization.
-    const activeUser = await client.query(
-      `SELECT id FROM users
+    const activeUser = await client.query<{
+      id: number;
+      badge_id: string | null;
+      badge_assigned_at: Date | null;
+    }>(
+      `SELECT id, badge_id, badge_assigned_at FROM users
         WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
         FOR UPDATE`,
       [userId],
     );
-    if (!activeUser.rows[0]) throw new NotFoundError("Badge not recognized");
+    const lockedUser = activeUser.rows[0];
+    if (!lockedUser) throw new NotFoundError("Badge not recognized");
+    // resolveByBadge ran before this transaction and can race a staff badge
+    // rotation. Re-check the current assignment while the user row is locked
+    // so an already-resolved old badge cannot write a post-rotation activity.
+    if (lockedUser.badge_id !== input.badgeId) {
+      throw new AppError(409, "badge_revoked", "This badge has been revoked");
+    }
+    assertBadgeScanTimestamp(input.scannedAt, lockedUser.badge_assigned_at);
     if (actorId != null) await assertFixtureSubjectScope(client, actorId, userId);
 
     const card = await loadPersonCard(client, userId);

@@ -114,7 +114,8 @@ export async function replayPendingScans(
         (error.code === "not_found" ||
           error.code === "badge_revoked" ||
           error.code === "badge_unknown" ||
-          error.code === "ticket_revoked")
+          error.code === "ticket_revoked" ||
+          error.code === "badge_scan_before_assignment")
       ) {
         await deleteScan(scan.id, ownerUserId);
         continue;

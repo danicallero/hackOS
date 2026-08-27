@@ -628,9 +628,13 @@ physical iOS/Android and EAS verification remains a release-gate task in
   file and its SQLite `-wal`, `-shm`, and `-journal` sidecars without importing
   any row; staff must re-record scans that existed only in the old queue. If
   the OS refuses deletion, queue initialization fails closed and retries on a
-  later authenticated call. Devices that remain offline can still retain a
-  stale identity until reconnect/expiry or a device wipe; central tombstones
-  prevent that stale scan from being accepted or re-uploaded.
+  later authenticated call. A scan recorded before the server's current badge
+  assignment boundary is a terminal stale-credential result: API enqueue and
+  locked processing reject it, and the mobile queue deletes the encrypted
+  payload rather than retrying it under the replacement participant. Devices
+  that remain offline can still retain a stale identity until reconnect/expiry
+  or a device wipe; central tombstones prevent permanently retired credentials
+  from being accepted or re-uploaded.
 
 ## Realtime & notifications infrastructure
 

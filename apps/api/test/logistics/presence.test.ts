@@ -68,6 +68,43 @@ describe("H24 presence scan + estimation", () => {
     expect(res.json().error.code).toBe("badge_unknown");
   });
 
+  it("rejects a backdated scan recorded before the current badge assignment", async () => {
+    const uid = await createUser();
+    await assignBadge(uid, "P-REPLACED-OLD");
+    const rotated = await app.inject({
+      method: "POST",
+      url: "/api/accreditation/rotate",
+      headers: asUser(doorStaff),
+      payload: { userId: uid, newBadgeId: "P-REPLACED-NEW", reason: "lost" },
+    });
+    expect(rotated.statusCode).toBe(200);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query<{ badge_assigned_at: Date }>(
+      `SELECT badge_assigned_at FROM users WHERE id = $1`,
+      [uid],
+    );
+    const assignment = rows[0]?.badge_assigned_at;
+    expect(assignment).toBeInstanceOf(Date);
+    if (!assignment) throw new Error("Expected a badge assignment timestamp");
+
+    const stale = await app.inject({
+      method: "POST",
+      url: "/api/presence/scan",
+      headers: asUser(doorStaff),
+      payload: {
+        badgeId: "P-REPLACED-NEW",
+        kind: "in",
+        scannedAt: new Date(assignment.getTime() - 1_000).toISOString(),
+      },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().error.code).toBe("badge_scan_before_assignment");
+    expect((await pool.query(`SELECT 1 FROM time_logs WHERE user_id = $1`, [uid])).rowCount).toBe(
+      0,
+    );
+  });
+
   it("accepts a backdated manual entry and audits it; rejects a future one", async () => {
     const uid = await createUser();
     await assignBadge(uid, "P-2");

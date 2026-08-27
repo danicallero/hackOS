@@ -78,6 +78,43 @@ describe("H25 offline meal scan queue", () => {
     expect(after.rows[0].n).toBe(1);
   });
 
+  it("rejects a queued meal scan recorded before a badge replacement", async () => {
+    const meal = await createMeal();
+    const uid = await createUser();
+    await assignBadge(uid, "OFF-REPLACED-OLD");
+    const { rotateBadge } = await import("../../src/modules/logistics/accreditation.js");
+    await rotateBadge(scanner, { userId: uid, newBadgeId: "OFF-REPLACED-NEW", reason: "lost" });
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query<{ badge_assigned_at: Date }>(
+      `SELECT badge_assigned_at FROM users WHERE id = $1`,
+      [uid],
+    );
+    const assignment = rows[0]?.badge_assigned_at;
+    expect(assignment).toBeInstanceOf(Date);
+    if (!assignment) throw new Error("Expected a badge assignment timestamp");
+
+    const stale = await app.inject({
+      method: "POST",
+      url: `/api/activities/${meal}/meal-scans/batch`,
+      headers: asUser(scanner),
+      payload: {
+        deviceId: "scanner-replaced",
+        scans: [
+          {
+            clientScanId: "stale-replacement-scan",
+            badgeId: "OFF-REPLACED-NEW",
+            allowRepeat: false,
+            scannedAt: new Date(assignment.getTime() - 1_000).toISOString(),
+          },
+        ],
+      },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().error.code).toBe("badge_scan_before_assignment");
+    expect((await pool.query(`SELECT 1 FROM meal_scan_batches`)).rowCount).toBe(0);
+  });
+
   it("processes a queued batch after its submitting staff account is gone", async () => {
     const meal = await createMeal();
     const uid = await createUser();

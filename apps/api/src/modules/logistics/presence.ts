@@ -3,10 +3,10 @@ import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { isImplausiblyFuture } from "../../lib/clock.js";
-import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
+import { AppError, BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { type AccountRemovalAction, runAccountRemoval } from "../identity/removal.js";
 import { broadcastForActiveUser } from "./active-broadcast.js";
-import { resolveByBadge } from "./badge.js";
+import { assertBadgeScanTimestamp, resolveByBadge } from "./badge.js";
 import { loadPersonCard } from "./cards.js";
 import {
   buildCertaintyWindows,
@@ -30,6 +30,12 @@ const PRESENCE_LOCK_NS = -1;
 type PendingDoorRemoval = {
   action: AccountRemovalAction;
   startedAt: Date;
+};
+
+type LockedDoorParticipant = {
+  badgeId: string | null;
+  badgeAssignedAt: Date | null;
+  pendingRemoval: PendingDoorRemoval | null;
 };
 
 /** PostgreSQL timestamps presence signals, so live cutoffs must use its clock too. */
@@ -58,15 +64,18 @@ async function lockDoorParticipant(
   client: Queryable,
   userId: number,
   kind: "in" | "out",
-): Promise<PendingDoorRemoval | null> {
+): Promise<LockedDoorParticipant> {
   const { rows } = await client.query<{
     id: number;
+    badge_id: string | null;
+    badge_assigned_at: Date | null;
     account_state: "active" | "removal_pending";
     removal_action: string | null;
     removal_requires_exit: boolean;
     removal_started_at: Date | null;
   }>(
-    `SELECT id, account_state, removal_action, removal_requires_exit, removal_started_at
+    `SELECT id, badge_id, badge_assigned_at, account_state, removal_action,
+            removal_requires_exit, removal_started_at
        FROM users
       WHERE id = $1 AND anonymized_at IS NULL
         AND (
@@ -80,14 +89,24 @@ async function lockDoorParticipant(
   );
   const user = rows[0];
   if (!user) throw new NotFoundError("Participant is no longer active");
-  if (user.account_state !== "removal_pending") return null;
+  if (user.account_state !== "removal_pending") {
+    return {
+      badgeId: user.badge_id,
+      badgeAssignedAt: user.badge_assigned_at,
+      pendingRemoval: null,
+    };
+  }
   if (user.removal_action !== "delete" && user.removal_action !== "anonymize") {
     throw new ConflictError("This account-removal request is missing its action.");
   }
   if (!user.removal_started_at) {
     throw new ConflictError("This account-removal request is missing its start time.");
   }
-  return { action: user.removal_action, startedAt: user.removal_started_at };
+  return {
+    badgeId: user.badge_id,
+    badgeAssignedAt: user.badge_assigned_at,
+    pendingRemoval: { action: user.removal_action, startedAt: user.removal_started_at },
+  };
 }
 
 function assertPendingExitTimestamp(scannedAt: Date, startedAt: Date): void {
@@ -202,7 +221,12 @@ export async function presenceScan(
   const result = await withTransaction(async (client) => {
     // Serialize concurrent scans for the same person (H24 concurrency).
     await client.query(`SELECT pg_advisory_xact_lock($1, $2)`, [PRESENCE_LOCK_NS, userId]);
-    const pendingDoorRemoval = await lockDoorParticipant(client, userId, input.kind);
+    const lockedParticipant = await lockDoorParticipant(client, userId, input.kind);
+    if (lockedParticipant.badgeId !== input.badgeId) {
+      throw new AppError(409, "badge_revoked", "This badge has been revoked");
+    }
+    assertBadgeScanTimestamp(input.scannedAt, lockedParticipant.badgeAssignedAt);
+    const pendingDoorRemoval = lockedParticipant.pendingRemoval;
     await assertFixtureSubjectScope(client, actorId, userId);
     const pendingRemovalAction = pendingDoorRemoval?.action ?? null;
 
@@ -530,7 +554,8 @@ export async function updateTimeLog(
     const kind = input.kind ?? before.kind;
     let pendingDoorRemoval: PendingDoorRemoval | null = null;
     if (kind === "out") {
-      pendingDoorRemoval = await lockDoorParticipant(client, before.user_id as number, "out");
+      pendingDoorRemoval = (await lockDoorParticipant(client, before.user_id as number, "out"))
+        .pendingRemoval;
     } else {
       await lockActiveParticipant(client, before.user_id as number);
     }
@@ -629,7 +654,7 @@ export async function createPresenceSignal(
     if (input.kind === "activity") {
       await lockActiveParticipant(client, userId);
     } else {
-      pendingDoorRemoval = await lockDoorParticipant(client, userId, input.kind);
+      pendingDoorRemoval = (await lockDoorParticipant(client, userId, input.kind)).pendingRemoval;
     }
     const pendingRemovalAction = pendingDoorRemoval?.action ?? null;
     if (pendingDoorRemoval && input.kind === "out") {

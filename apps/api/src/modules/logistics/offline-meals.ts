@@ -6,7 +6,7 @@ import { AppError, BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { broadcast } from "../../lib/sse.js";
 import { activityScan } from "./activities.js";
-import { resolveByBadge } from "./badge.js";
+import { assertBadgeScanTimestamp, resolveByBadge } from "./badge.js";
 import { assertFixtureSubjectScope } from "./review-fixture-scope.js";
 
 const QUEUE_NAME = "logistics.meal-scans";
@@ -38,16 +38,33 @@ export async function enqueueMealScanBatch(
     // H54: validate and share-lock every badge before persisting the offline
     // inbox row. Removal takes the same user row lock, so a stale device
     // cannot create a new identifying batch item after closure begins.
+    const owners = new Map<string, { userId: number; badgeAssignedAt: Date | null }>();
     for (const badgeId of [...new Set(input.scans.map((scan) => scan.badgeId))].sort()) {
       const userId = await resolveByBadge(client, badgeId);
-      const owner = await client.query(
-        `SELECT id FROM users
+      const owner = await client.query<{
+        id: number;
+        badge_id: string | null;
+        badge_assigned_at: Date | null;
+      }>(
+        `SELECT id, badge_id, badge_assigned_at FROM users
           WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
           FOR SHARE`,
         [userId],
       );
-      if (!owner.rows[0]) throw new NotFoundError("Badge not recognized");
+      const lockedOwner = owner.rows[0];
+      if (!lockedOwner || lockedOwner.badge_id !== badgeId) {
+        throw new AppError(409, "badge_revoked", "This badge has been revoked");
+      }
       await assertFixtureSubjectScope(client, actorId, userId);
+      owners.set(badgeId, {
+        userId,
+        badgeAssignedAt: lockedOwner.badge_assigned_at,
+      });
+    }
+    for (const scan of input.scans) {
+      const owner = owners.get(scan.badgeId);
+      if (!owner) throw new NotFoundError("Badge not recognized");
+      assertBadgeScanTimestamp(scan.scannedAt, owner.badgeAssignedAt);
     }
 
     const b = await client.query(
@@ -165,7 +182,9 @@ export async function processMealScanBatch(job: Job<MealScanJob>) {
       // raw badge identifier once it can no longer resolve to a participant.
       if (
         err instanceof AppError &&
-        ["badge_revoked", "badge_unknown", "not_found"].includes(err.code)
+        ["badge_revoked", "badge_unknown", "badge_scan_before_assignment", "not_found"].includes(
+          err.code,
+        )
       ) {
         await pool.query(`DELETE FROM meal_scan_batch_items WHERE id = $1`, [row.id]);
         failed += 1;
