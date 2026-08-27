@@ -260,7 +260,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         response: { 200: scannerSnapshotResponse },
       },
     },
-    scannerSnapshot,
+    async (req) => scannerSnapshot(actor(req.userId)),
   );
 
   // Lightweight per-role counts for the scanner home screen's stats tiles
@@ -278,7 +278,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         response: { 200: scannerRoleStatsResponse },
       },
     },
-    async () => ({ byRole: await scannerRoleStats() }),
+    async (req) => ({ byRole: await scannerRoleStats(actor(req.userId)) }),
   );
 
   typed.get(
@@ -319,7 +319,9 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
           "Unified person lookup for logistics stations (H22-H27). Every comparison is case-insensitive, and the fuzzy tier is also accent-insensitive ('perez' finds 'Pérez'). `q` is resolved as: an exact ticket token, then someone's CURRENT badge id (a rotated-away badge never shadows the current holder), then a rotated-away badge (matchedBy `badge_history`), then a name / surname / 'name surname' / 'surname name' / email substring. Exact identifier hits return exactly one person; the fuzzy fallback returns up to 10. `fields` whitelists which extra user fields come back (email, badgeId, dni, shirtSize, notes, confirmed); defaults to email + badgeId + confirmed. Anonymized accounts (H54) never match, on any tier. Read-only; any logistics capability grants access.",
       },
     },
-    async (req) => ({ results: await searchPeople(req.body.q, req.body.fields) }),
+    async (req) => ({
+      results: await searchPeople(req.body.q, req.body.fields, actor(req.userId)),
+    }),
   );
 
   // ── H22 accreditation ────────────────────────────────────────────────────
@@ -335,7 +337,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
           "Resolve an entrance-ticket QR token to the full person card staff needs to accredit (H22): identity fields (name, DNI, email, shirt size), intolerances, notes, confirmed-spot flag, current badge if already accredited, and hasEventAccess (H43) — whether this ticket's owner currently holds real event access; false means the ticket token still exists (permanent, plan/07 invariant 10) but check-in will be refused. Read-only.",
       },
     },
-    async (req) => lookupByTicket(req.body.ticketToken),
+    async (req) => lookupByTicket(req.body.ticketToken, actor(req.userId)),
   );
 
   typed.post(
@@ -349,7 +351,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
           "Same person card as /api/accreditation/lookup but keyed by user id — used after a search hit or a deep link from the user profile (H22). Read-only.",
       },
     },
-    async (req) => lookupByUserId(req.body.userId),
+    async (req) => lookupByUserId(req.body.userId, actor(req.userId)),
   );
 
   typed.post(
@@ -436,7 +438,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       preHandler: presence,
       schema: { body: presenceLookupBody },
     },
-    async (req) => presenceLookup(req.body.badgeId),
+    async (req) => presenceLookup(req.body.badgeId, actor(req.userId)),
   );
 
   typed.post(
@@ -461,21 +463,21 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/presence/estimate",
     { ...routeAccess(access.presenceRead), preHandler: presenceRead },
-    async () => occupancyEstimate(),
+    async (req) => occupancyEstimate(undefined, actor(req.userId)),
   );
 
   typed.get(
     "/api/presence/hours",
     { ...routeAccess(access.presenceRead), preHandler: presenceRead },
-    async () => allHours(),
+    async (req) => allHours(undefined, actor(req.userId)),
   );
 
   // Staff reconciliation queue: open sessions, stale ones flagged (H24).
   typed.get(
     "/api/presence/open",
     { ...routeAccess(access.presenceRead), preHandler: presenceRead },
-    async () => ({
-      items: await openSessions(),
+    async (req) => ({
+      items: await openSessions(undefined, actor(req.userId)),
     }),
   );
 
@@ -486,7 +488,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       preHandler: presenceRead,
       schema: { params: userIdParam },
     },
-    async (req) => userHours(req.params.userId),
+    async (req) => userHours(req.params.userId, undefined, actor(req.userId)),
   );
 
   // Raw scan admin — view/correct individual door scans (H24 usability).
@@ -497,7 +499,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       preHandler: presenceRead,
       schema: { params: userIdParam },
     },
-    async (req) => ({ items: await listTimeLogs(req.params.userId) }),
+    async (req) => ({ items: await listTimeLogs(req.params.userId, actor(req.userId)) }),
   );
 
   typed.get(
@@ -519,7 +521,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
           "has a log against so an existing signal stays editable.",
       },
     },
-    async (req) => presenceTimeline(req.params.userId),
+    async (req) => presenceTimeline(req.params.userId, undefined, actor(req.userId)),
   );
 
   typed.post(

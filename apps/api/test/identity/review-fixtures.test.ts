@@ -135,6 +135,54 @@ describe("review fixture regeneration", () => {
       payload: { badgeId: badge.badge_id },
     });
     expect(lookup.statusCode).toBe(200);
+
+    const realUser = await createUser({
+      email: "real-attendee@example.test",
+      name: "Real Attendee",
+    });
+    await pool.query(
+      `UPDATE users SET surname = 'Not Fixture', badge_id = 'real-badge' WHERE id = $1`,
+      [realUser],
+    );
+    const hiddenSearch = await a.inject({
+      method: "POST",
+      url: "/api/logistics/people/search",
+      headers: asUser(staffId),
+      payload: { q: "real-attendee@example.test" },
+    });
+    expect(hiddenSearch.statusCode).toBe(200);
+    expect(hiddenSearch.json().results).toEqual([]);
+
+    const hiddenLookup = await a.inject({
+      method: "POST",
+      url: "/api/presence/lookup",
+      headers: asUser(staffId),
+      payload: { badgeId: "real-badge" },
+    });
+    expect(hiddenLookup.statusCode).toBe(403);
+    expect(hiddenLookup.json().error.details.code).toBe("review_fixture_scope");
+
+    const snapshot = await a.inject({
+      method: "GET",
+      url: "/api/scanner/snapshot",
+      headers: asUser(staffId),
+    });
+    expect(snapshot.statusCode).toBe(200);
+    expect(snapshot.json().people).toHaveLength(3);
+    expect(
+      snapshot
+        .json()
+        .people.every((person: { email: string }) => person.email.includes("@hackos.test")),
+    ).toBe(true);
+
+    const adminSearch = await a.inject({
+      method: "POST",
+      url: "/api/logistics/people/search",
+      headers: asUser(admin),
+      payload: { q: "real-attendee@example.test" },
+    });
+    expect(adminSearch.statusCode).toBe(200);
+    expect(adminSearch.json().results).toHaveLength(1);
   });
 
   it("fails closed when fixture secrets are not configured", async () => {

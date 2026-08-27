@@ -7,6 +7,7 @@ import { getQueue, registerWorker } from "../../lib/queues.js";
 import { broadcast } from "../../lib/sse.js";
 import { activityScan } from "./activities.js";
 import { resolveByBadge } from "./badge.js";
+import { assertFixtureSubjectScope } from "./review-fixture-scope.js";
 
 const QUEUE_NAME = "logistics.meal-scans";
 
@@ -46,6 +47,7 @@ export async function enqueueMealScanBatch(
         [userId],
       );
       if (!owner.rows[0]) throw new NotFoundError("Badge not recognized");
+      await assertFixtureSubjectScope(client, actorId, userId);
     }
 
     const b = await client.query(

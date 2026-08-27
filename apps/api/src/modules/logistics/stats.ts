@@ -1,6 +1,7 @@
 import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { pool } from "../../db/pool.js";
 import { occupancyEstimate } from "./presence.js";
+import { isSyntheticOperator } from "./review-fixture-scope.js";
 
 export interface ActivityAggregate {
   activityId: number;
@@ -189,9 +190,22 @@ export type ScannerRole =
   | "participant"
   | "unassigned";
 
-export async function scannerRoleStats(): Promise<
-  Array<{ role: ScannerRole; eligible: number; accredited: number; inside: number }>
-> {
+export async function scannerRoleStats(
+  actorId?: number,
+): Promise<Array<{ role: ScannerRole; eligible: number; accredited: number; inside: number }>> {
+  const fixtureOnly = actorId != null && (await isSyntheticOperator(pool, actorId));
+  const subjectScope = fixtureOnly
+    ? `AND u.is_test_account = true
+          AND (
+            EXISTS (SELECT 1 FROM manual_attendee_roles mar
+                    WHERE mar.user_id = u.id AND mar.role = 'participant')
+            OR EXISTS (
+              SELECT 1 FROM application_responses ar
+              JOIN applications a ON a.id = ar.application_id
+              WHERE ar.user_id = u.id AND a.type = 'participant' AND ar.status <> 'draft'
+            )
+          )`
+    : "AND u.is_test_account = false";
   const { rows } = await pool.query<{
     role: ScannerRole;
     eligible: number;
@@ -236,7 +250,7 @@ export async function scannerRoleStats(): Promise<
               ) AS confirmed
          FROM users u
          LEFT JOIN user_caps uc ON uc.user_id = u.id
-        WHERE u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
+        WHERE u.account_state = 'active' AND u.anonymized_at IS NULL ${subjectScope}
      )
      SELECT role,
             count(*) FILTER (WHERE role IN ('staff', 'admin', 'sponsor') OR confirmed)::int AS eligible,
@@ -247,7 +261,7 @@ export async function scannerRoleStats(): Promise<
       ORDER BY role`,
   );
 
-  const occ = await occupancyEstimate();
+  const occ = await occupancyEstimate(undefined, actorId);
   const present = new Set(occ.present);
 
   return rows.map((row) => ({

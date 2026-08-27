@@ -16,6 +16,11 @@ import {
   type PresenceEvent,
   totalPresenceMs,
 } from "./estimate.js";
+import {
+  assertFixtureSubjectScope,
+  fixtureReadFilter,
+  isSyntheticOperator,
+} from "./review-fixture-scope.js";
 
 const MS_PER_HOUR = 3_600_000;
 // Advisory-lock namespace for presence writes; -1 can't collide with a real
@@ -151,8 +156,9 @@ async function openSessionAsOf(
  * accepted or needs reconciliation first — mirrors the accreditation lookup
  * UX. Never a mutation.
  */
-export async function presenceLookup(badgeId: string) {
+export async function presenceLookup(badgeId: string, actorId?: number) {
   const userId = await resolveByBadge(pool, badgeId, { allowPendingExit: true });
+  if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
   const card = await loadPersonCard(pool, userId, { allowPendingExit: true });
   const events = (await loadEvents(userId)).get(userId) ?? [];
   const now = await databaseNow();
@@ -197,6 +203,7 @@ export async function presenceScan(
     // Serialize concurrent scans for the same person (H24 concurrency).
     await client.query(`SELECT pg_advisory_xact_lock($1, $2)`, [PRESENCE_LOCK_NS, userId]);
     const pendingDoorRemoval = await lockDoorParticipant(client, userId, input.kind);
+    await assertFixtureSubjectScope(client, actorId, userId);
     const pendingRemovalAction = pendingDoorRemoval?.action ?? null;
 
     // Resolve live scan time after taking the lock. clock_timestamp(), unlike
@@ -299,9 +306,10 @@ export async function presenceScan(
  * genuinely open until staff record a real `out`, or until the event-end
  * closer force-closes it at event_ends_at (presence-closer.ts).
  */
-export async function openSessions(at?: number) {
+export async function openSessions(at?: number, actorId?: number) {
   const now = at ?? (await databaseNow()).getTime();
   const windowMs = await certaintyWindowMs();
+  const fixtureFilter = await fixtureReadFilter(pool, actorId, "u");
   const { rows } = await pool.query(
     `SELECT tl.user_id, tl.scanned_at AS since, u.name, u.surname,
             GREATEST(tl.scanned_at, COALESCE(la.last_activity, tl.scanned_at)) AS last_signal
@@ -321,7 +329,7 @@ export async function openSessions(at?: number) {
           u.account_state = 'active'
           OR (u.account_state = 'removal_pending' AND u.removal_requires_exit = true)
         )
-        AND u.anonymized_at IS NULL
+        AND u.anonymized_at IS NULL${fixtureFilter}
       ORDER BY last_signal ASC`,
   );
   return (
@@ -392,9 +400,11 @@ async function loadEvents(
 }
 
 /** H24/H27: how many people are estimated to be in the venue right now. */
-export async function occupancyEstimate(cutoff?: number) {
+export async function occupancyEstimate(cutoff?: number, actorId?: number) {
   const at = cutoff ?? (await databaseNow()).getTime();
-  const map = await loadEvents(undefined, { includeTestAccounts: false });
+  const map = await loadEvents(undefined, {
+    includeTestAccounts: actorId != null && (await isSyntheticOperator(pool, actorId)),
+  });
   const suspiciousGapMs = await certaintyWindowMs();
   const present: number[] = [];
   for (const [userId, events] of map) {
@@ -405,7 +415,8 @@ export async function occupancyEstimate(cutoff?: number) {
 }
 
 /** H24: estimated attendance hours for one user (e.g. university-credit minimum). */
-export async function userHours(userId: number, cutoff?: number) {
+export async function userHours(userId: number, cutoff?: number, actorId?: number) {
+  if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
   const now = cutoff ?? (await databaseNow()).getTime();
   const events = (await loadEvents(userId)).get(userId) ?? [];
   const suspiciousGapMs = await certaintyWindowMs();
@@ -422,17 +433,19 @@ export async function userHours(userId: number, cutoff?: number) {
 }
 
 /** H24: estimated hours for every user with presence signals (bulk, admin display). */
-export async function allHours(cutoff?: number) {
+export async function allHours(cutoff?: number, actorId?: number) {
   const now = cutoff ?? (await databaseNow()).getTime();
-  const map = await loadEvents(undefined, { includeTestAccounts: false });
+  const includeTestAccounts = actorId != null && (await isSyntheticOperator(pool, actorId));
+  const map = await loadEvents(undefined, { includeTestAccounts });
   const suspiciousGapMs = await certaintyWindowMs();
   const userIds = [...map.keys()];
   if (userIds.length === 0) return [];
 
+  const fixtureFilter = await fixtureReadFilter(pool, actorId, "u");
   const { rows: people } = await pool.query(
-    `SELECT id, name, surname FROM users
-      WHERE id = ANY($1) AND account_state = 'active' AND anonymized_at IS NULL
-        AND is_test_account = false`,
+    `SELECT u.id, u.name, u.surname FROM users u
+      WHERE u.id = ANY($1) AND u.account_state = 'active' AND u.anonymized_at IS NULL
+        ${actorId == null || !includeTestAccounts ? "AND u.is_test_account = false" : fixtureFilter}`,
     [userIds],
   );
   const nameById = new Map(
@@ -462,7 +475,8 @@ function round2(n: number): number {
 // ── raw scan admin — view/correct individual time_logs (H24 usability) ─────
 
 /** List every raw door scan for a user, oldest first, for admin review/edit. */
-export async function listTimeLogs(userId: number) {
+export async function listTimeLogs(userId: number, actorId?: number) {
+  if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
   const { rows } = await pool.query(
     `SELECT tl.id, tl.kind, tl.scanned_at, tl.scanned_by, tl.notes,
             u.name AS scanned_by_name, u.surname AS scanned_by_surname
@@ -512,6 +526,7 @@ export async function updateTimeLog(
     const before = rows[0];
     if (!before) throw new NotFoundError("Time log not found");
     if (before.user_id == null) throw new NotFoundError("Time log participant is no longer active");
+    await assertFixtureSubjectScope(client, actorId, before.user_id as number);
     const kind = input.kind ?? before.kind;
     let pendingDoorRemoval: PendingDoorRemoval | null = null;
     if (kind === "out") {
@@ -609,6 +624,7 @@ export async function createPresenceSignal(
     throw new BadRequestError("Presence signals cannot be in the future");
   }
   const result = await withTransaction(async (client) => {
+    await assertFixtureSubjectScope(client, actorId, userId);
     let pendingDoorRemoval: PendingDoorRemoval | null = null;
     if (input.kind === "activity") {
       await lockActiveParticipant(client, userId);
@@ -706,6 +722,7 @@ export async function updatePresenceActivity(
     if (!before) throw new NotFoundError("Activity log not found");
     if (before.user_id == null)
       throw new NotFoundError("Activity log participant is no longer active");
+    await assertFixtureSubjectScope(client, actorId, before.user_id as number);
     await lockActiveParticipant(client, before.user_id as number);
     const activityId = input.activityId ?? before.activity_id;
     const exists = await client.query(`SELECT 1 FROM activities WHERE id = $1`, [activityId]);
@@ -755,6 +772,7 @@ export async function deletePresenceActivity(actorId: number, id: number) {
     if (!before) throw new NotFoundError("Activity log not found");
     if (before.user_id == null)
       throw new NotFoundError("Activity log participant is no longer active");
+    await assertFixtureSubjectScope(client, actorId, before.user_id as number);
     await lockActiveParticipant(client, before.user_id as number);
     await client.query(`DELETE FROM activity_logs WHERE id = $1`, [id]);
     await audit(client, {
@@ -780,7 +798,8 @@ export async function deletePresenceActivity(actorId: number, id: number) {
   return { deleted: true as const };
 }
 
-export async function presenceTimeline(userId: number, cutoff?: number) {
+export async function presenceTimeline(userId: number, cutoff?: number, actorId?: number) {
+  if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
   const now = cutoff ?? (await databaseNow()).getTime();
   const suspiciousGapMs = await certaintyWindowMs();
   const [{ rows }, { rows: activityRows }] = await Promise.all([
@@ -902,6 +921,7 @@ export async function deleteTimeLog(actorId: number, id: number) {
     const before = rows[0];
     if (!before) throw new NotFoundError("Time log not found");
     if (before.user_id == null) throw new NotFoundError("Time log participant is no longer active");
+    await assertFixtureSubjectScope(client, actorId, before.user_id as number);
     await lockActiveParticipant(client, before.user_id as number);
 
     await client.query(`DELETE FROM time_logs WHERE id = $1`, [id]);

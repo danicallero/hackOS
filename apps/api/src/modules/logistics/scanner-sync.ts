@@ -3,6 +3,7 @@ import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import type { Language } from "../notifications/translate/index.js";
+import { isSyntheticOperator } from "./review-fixture-scope.js";
 
 /**
  * H22-H26 scanner seed/sync payload. Native scanners keep this deliberately
@@ -15,7 +16,21 @@ import type { Language } from "../notifications/translate/index.js";
  * no per-value timestamp, and treating the response as replace-all makes a
  * missed sync harmless: every successful refresh converges to server truth.
  */
-export async function scannerSnapshot() {
+export async function scannerSnapshot(actorId?: number) {
+  const fixtureOnly = actorId != null && (await isSyntheticOperator(pool, actorId));
+  const participantScope = fixtureOnly
+    ? ` AND u.is_test_account = true
+              AND (
+                EXISTS (SELECT 1 FROM manual_attendee_roles mar
+                        WHERE mar.user_id = u.id AND mar.role = 'participant')
+                OR EXISTS (
+                  SELECT 1 FROM application_responses ar
+                  JOIN applications a ON a.id = ar.application_id
+                  WHERE ar.user_id = u.id AND a.type = 'participant' AND ar.status <> 'draft'
+                )
+              )`
+    : "";
+  const stateScope = fixtureOnly ? " AND u.is_test_account = true" : "";
   // The snapshot is replace-all. Retired credentials are represented by
   // keyed digests centrally and are intentionally not sent back to every
   // scanner as raw bearer values. A stale queued mutation is rejected by the
@@ -89,7 +104,7 @@ export async function scannerSnapshot() {
             ORDER BY tl.scanned_at DESC, tl.id DESC
             LIMIT 1
          ) last_presence ON true
-        WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
+        WHERE u.account_state = 'active' AND u.anonymized_at IS NULL${participantScope}
         ORDER BY u.id`,
     ),
     pool.query(
@@ -106,6 +121,7 @@ export async function scannerSnapshot() {
          FROM activity_logs al
          JOIN users u ON u.id = al.user_id
         WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
+          ${stateScope}
         GROUP BY user_id, activity_id`,
     ),
   ]);

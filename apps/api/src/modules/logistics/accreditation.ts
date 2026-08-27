@@ -7,6 +7,7 @@ import { hasEventAccess } from "../identity/role.js";
 import { broadcastForActiveUser } from "./active-broadcast.js";
 import { loadPersonCard } from "./cards.js";
 import { scannerCredentialDigest } from "./credential-tombstones.js";
+import { assertFixtureSubjectScope } from "./review-fixture-scope.js";
 import { issueTicket } from "./tickets.js";
 import { enqueueWalletSync } from "./wallet-sync.js";
 
@@ -47,14 +48,15 @@ export type CheckInMethod = "qr" | "manual" | "nfc";
  * accredit: name, confirmed-spot flag, intolerances, notes, and whether they
  * are already accredited (with the current badge). Never a mutation.
  */
-export async function lookupByTicket(token: string) {
+export async function lookupByTicket(token: string, actorId?: number) {
   await assertTicketNotRevoked(pool, token);
   const t = await pool.query(`SELECT user_id FROM tickets WHERE token = $1`, [token]);
   if (!t.rows[0]) throw new NotFoundError("Ticket not recognized"); // names no personal data
-  return lookupByUserId(t.rows[0].user_id as number);
+  return lookupByUserId(t.rows[0].user_id as number, actorId);
 }
 
-export async function lookupByUserId(userId: number) {
+export async function lookupByUserId(userId: number, actorId?: number) {
+  if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
   const card = await loadPersonCard(pool, userId);
   // Identity-verification fields staff needs at the door (H22): the badge is
   // handed to a physical person, so the card carries DNI, email and shirt
@@ -176,6 +178,7 @@ export async function checkInUser(
     );
     const user = u.rows[0];
     if (!user) throw new NotFoundError("User not found");
+    await assertFixtureSubjectScope(client, actorId, input.userId);
     if (input.attendeeRole) {
       const { rows: existingRole } = await client.query(
         `WITH RECURSIVE effective_groups(group_id) AS (
@@ -351,6 +354,7 @@ export async function rotateBadge(
     if (!u.rows[0]) throw new NotFoundError("User not found");
     const user = u.rows[0];
     const oldBadge = user.badge_id as string | null;
+    await assertFixtureSubjectScope(client, actorId, userId);
 
     await assertNotTicketToken(client, input.newBadgeId);
     await assertBadgeNotRevoked(client, input.newBadgeId);
@@ -441,6 +445,7 @@ export async function removeBadge(actorId: number, input: { userId: number; reas
       [input.userId],
     );
     if (!found.rows[0]) throw new NotFoundError("User not found");
+    await assertFixtureSubjectScope(client, actorId, input.userId);
     const oldBadge = (found.rows[0].badge_id ?? null) as string | null;
     if (!oldBadge) throw new ConflictError("User has no active badge", { userId: input.userId });
     const history = [...(found.rows[0].badge_id_history ?? []), oldBadge];

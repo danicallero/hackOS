@@ -7,6 +7,7 @@ import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { broadcastForActiveUser } from "./active-broadcast.js";
 import { resolveByBadge } from "./badge.js";
 import { loadPersonCard, type PersonCard } from "./cards.js";
+import { assertFixtureSubjectScope } from "./review-fixture-scope.js";
 
 interface ScanResult {
   status: number;
@@ -75,6 +76,7 @@ export async function activityScan(
       [userId],
     );
     if (!activeUser.rows[0]) throw new NotFoundError("Badge not recognized");
+    if (actorId != null) await assertFixtureSubjectScope(client, actorId, userId);
 
     const card = await loadPersonCard(client, userId);
 

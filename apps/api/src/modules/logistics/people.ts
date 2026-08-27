@@ -1,4 +1,5 @@
 import { pool } from "../../db/pool.js";
+import { fixtureReadFilter } from "./review-fixture-scope.js";
 
 // ── H22/H23: unified person lookup ─────────────────────────────────────────
 
@@ -47,32 +48,34 @@ export interface PersonSearchResult {
 export async function searchPeople(
   q: string,
   fields: PersonField[] = DEFAULT_PERSON_FIELDS,
+  actorId?: number,
 ): Promise<PersonSearchResult[]> {
   const needle = q.trim();
   if (!needle) return [];
+  const fixtureFilter = await fixtureReadFilter(pool, actorId, "u");
 
   const ticket = await pool.query(
     `SELECT t.user_id FROM tickets t
       JOIN users u ON u.id = t.user_id
-     WHERE upper(t.token) = upper($1) AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
+     WHERE upper(t.token) = upper($1) AND u.account_state = 'active' AND u.anonymized_at IS NULL${fixtureFilter}`,
     [needle],
   );
   if (ticket.rows[0]) {
-    return loadResults([ticket.rows[0].user_id as number], "ticket", fields);
+    return loadResults([ticket.rows[0].user_id as number], "ticket", fields, actorId);
   }
 
   const badge = await pool.query(
-    `SELECT id FROM users WHERE upper(badge_id) = upper($1) AND account_state = 'active' AND anonymized_at IS NULL`,
+    `SELECT id FROM users WHERE upper(badge_id) = upper($1) AND account_state = 'active' AND anonymized_at IS NULL${fixtureFilter}`,
     [needle],
   );
   if (badge.rows[0]) {
-    return loadResults([badge.rows[0].id as number], "badge", fields);
+    return loadResults([badge.rows[0].id as number], "badge", fields, actorId);
   }
 
   const history = await pool.query(
-    `SELECT id FROM users
-      WHERE EXISTS (SELECT 1 FROM unnest(badge_id_history) b WHERE upper(b) = upper($1))
-        AND account_state = 'active' AND anonymized_at IS NULL`,
+    `SELECT u.id FROM users u
+      WHERE EXISTS (SELECT 1 FROM unnest(u.badge_id_history) b WHERE upper(b) = upper($1))
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL${fixtureFilter}`,
     [needle],
   );
   if (history.rows.length > 0) {
@@ -80,6 +83,7 @@ export async function searchPeople(
       history.rows.map((r: { id: number }) => r.id),
       "badge_history",
       fields,
+      actorId,
     );
   }
 
@@ -87,14 +91,15 @@ export async function searchPeople(
   // the stored names keep their accents: "ana per" finds "Ana Pérez".
   const like = `%${needle}%`;
   const fuzzy = await pool.query(
-    `SELECT id FROM users
-      WHERE account_state = 'active' AND anonymized_at IS NULL
-        AND (unaccent(name) ILIKE unaccent($1)
-         OR unaccent(surname) ILIKE unaccent($1)
-         OR unaccent(email) ILIKE unaccent($1)
-         OR unaccent(name || ' ' || surname) ILIKE unaccent($1)
-         OR unaccent(surname || ' ' || name) ILIKE unaccent($1))
-      ORDER BY surname NULLS LAST, name NULLS LAST, id
+    `SELECT u.id FROM users u
+      WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
+        ${fixtureFilter}
+        AND (unaccent(u.name) ILIKE unaccent($1)
+         OR unaccent(u.surname) ILIKE unaccent($1)
+         OR unaccent(u.email) ILIKE unaccent($1)
+         OR unaccent(u.name || ' ' || u.surname) ILIKE unaccent($1)
+         OR unaccent(u.surname || ' ' || u.name) ILIKE unaccent($1))
+      ORDER BY u.surname NULLS LAST, u.name NULLS LAST, u.id
       LIMIT 10`,
     [like],
   );
@@ -102,6 +107,7 @@ export async function searchPeople(
     fuzzy.rows.map((r: { id: number }) => r.id),
     "profile",
     fields,
+    actorId,
   );
 }
 
@@ -109,17 +115,19 @@ async function loadResults(
   userIds: number[],
   matchedBy: PersonMatch,
   fields: PersonField[],
+  actorId?: number,
 ): Promise<PersonSearchResult[]> {
   if (userIds.length === 0) return [];
   const wanted = [...new Set(fields)];
   const extras = wanted.map((f) => `${PERSON_FIELD_SQL[f]} AS "${f}"`);
   const select = ["u.id", "u.name", "u.surname", ...extras].join(", ");
+  const fixtureFilter = await fixtureReadFilter(pool, actorId, "u");
   const { rows } = await pool.query(
     `SELECT ${select}
        FROM users u
       WHERE u.id = ANY($1::int[])
         AND u.account_state = 'active'
-        AND u.anonymized_at IS NULL
+        AND u.anonymized_at IS NULL${fixtureFilter}
       ORDER BY array_position($1::int[], u.id)`,
     [userIds],
   );
