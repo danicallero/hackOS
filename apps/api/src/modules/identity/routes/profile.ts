@@ -24,6 +24,7 @@ import {
   cancelPendingAccountRemoval,
   getAccountRemovalEligibility,
   getPendingAccountRemovalStatus,
+  type PendingAccountRemovalStatus,
   runAccountRemoval,
 } from "../removal.js";
 import { issueRemovalPin } from "../removal-pin.js";
@@ -214,7 +215,25 @@ interface UserRow {
   created_at: Date;
 }
 
-function serializeUser(row: UserRow) {
+function serializeUser(row: UserRow, removalStatus?: PendingAccountRemovalStatus) {
+  const removal =
+    removalStatus && removalStatus.status !== "active"
+      ? removalStatus
+      : row.account_state === "removal_pending"
+        ? row.removal_action === "anonymize" && row.removal_requires_exit
+          ? {
+              status: "pending_exit" as const,
+              action: "anonymize" as const,
+              expiresAt: row.removal_expires_at?.toISOString() ?? new Date(0).toISOString(),
+              canCancel: true as const,
+            }
+          : {
+              status: "processing" as const,
+              action: row.removal_action ?? "anonymize",
+              expiresAt: row.removal_expires_at?.toISOString() ?? null,
+              canCancel: false as const,
+            }
+        : null;
   return {
     id: row.id,
     email: row.email,
@@ -234,22 +253,7 @@ function serializeUser(row: UserRow) {
     universityId: row.university_id,
     notes: row.notes,
     accountState: row.account_state,
-    removal:
-      row.account_state === "removal_pending"
-        ? row.removal_action === "anonymize" && row.removal_requires_exit
-          ? {
-              status: "pending_exit" as const,
-              action: "anonymize" as const,
-              expiresAt: row.removal_expires_at?.toISOString() ?? new Date(0).toISOString(),
-              canCancel: true as const,
-            }
-          : {
-              status: "processing" as const,
-              action: row.removal_action ?? "anonymize",
-              expiresAt: row.removal_expires_at?.toISOString() ?? null,
-              canCancel: false as const,
-            }
-        : null,
+    removal,
     createdAt: row.created_at.toISOString(),
   };
 }
@@ -459,6 +463,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         hasQueueItems,
         canCreateProject,
         profileLocked,
+        removalStatus,
       ] = await Promise.all([
         computeDerivedRole(pool, userId),
         getEffectiveCapabilities(userId),
@@ -468,11 +473,12 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         hasMyQueueItems(userId),
         canCreateMyProject(userId),
         hasAcceptedApplication(userId),
+        getPendingAccountRemovalStatus(pool, userId),
       ]);
       const mobileAccess =
         row.account_state === "active" && (await hasMobileAccess(pool, userId, role));
       return {
-        ...serializeUser(row),
+        ...serializeUser(row, removalStatus),
         role,
         mobileAccess,
         capabilities: [...capabilities],

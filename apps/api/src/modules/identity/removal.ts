@@ -364,18 +364,20 @@ export async function getPendingAccountRemovalStatus(
   const user = rows[0];
   if (!user) throw new NotFoundError("User not found", { userId });
   if (user.account_state === "active") return { status: "active" };
-  if (
-    user.removal_action === "anonymize" &&
-    user.removal_requires_exit &&
-    user.removal_expires_at &&
-    !(await removalDeadlineExpired(client, user.removal_expires_at))
-  ) {
-    return {
-      status: "pending_exit",
-      action: "anonymize",
-      expiresAt: user.removal_expires_at.toISOString(),
-      canCancel: true,
-    };
+  if (user.removal_action === "anonymize" && user.removal_requires_exit) {
+    const venue = await removalVenueState(client, userId);
+    if (
+      venue.requiresExit &&
+      user.removal_expires_at &&
+      !(await removalDeadlineExpired(client, user.removal_expires_at))
+    ) {
+      return {
+        status: "pending_exit",
+        action: "anonymize",
+        expiresAt: user.removal_expires_at.toISOString(),
+        canCancel: true,
+      };
+    }
   }
   return {
     status: "processing",

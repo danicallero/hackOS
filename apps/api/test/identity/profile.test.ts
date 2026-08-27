@@ -710,6 +710,10 @@ describe("self-service account removal (H54)", () => {
         ])
       ).rows,
     ).toEqual([{ account_state: "removal_pending", removal_requires_exit: true }]);
+    // The pending-exit state is reversible until staff record the exit. Keep
+    // dietary data available for safe event operations during that short
+    // transition; finalization deletes it after the operational relationship
+    // ends.
     expect(
       (
         await pool.query(
@@ -719,7 +723,7 @@ describe("self-service account removal (H54)", () => {
         )
       ).rows,
     ).toEqual([
-      { food_intolerances: [], food_intolerance_notes: null, dietary_data_state: "not_provided" },
+      { food_intolerances: [7], food_intolerance_notes: "Peanut", dietary_data_state: "present" },
     ]);
     expect((await pool.query(`SELECT 1 FROM anonymous_participants`)).rowCount).toBe(0);
 
@@ -791,6 +795,88 @@ describe("self-service account removal (H54)", () => {
     });
     expect(replay.statusCode).toBe(200);
     expect(replay.headers["idempotency-replayed"]).toBe("true");
+  });
+
+  it("allows a pending-exit request to be cancelled before staff record the exit", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const user = await createUser({ email: "cancel-pending@example.test", emailVerified: false });
+    await pool.query(
+      `UPDATE users
+          SET badge_id = 'B-CANCEL-PENDING',
+              food_intolerances = ARRAY[7],
+              food_intolerance_notes = 'Peanut',
+              dietary_data_state = 'present'
+        WHERE id = $1`,
+      [user],
+    );
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, check_in_method)
+       VALUES ($1, 'B-CANCEL-PENDING', 'scan')`,
+      [user],
+    );
+    await pool.query(
+      `INSERT INTO time_logs (user_id, kind, scanned_at)
+       VALUES ($1, 'in', now() - interval '5 minutes')`,
+      [user],
+    );
+
+    const requested = await a.inject({
+      method: "POST",
+      url: "/api/me/anonymize",
+      headers: { ...asUser(user), "idempotency-key": "cancel-pending-request" },
+      payload: { confirm: true },
+    });
+    expect(requested.statusCode).toBe(202);
+
+    const profile = await a.inject({ method: "GET", url: "/api/me", headers: asUser(user) });
+    expect(profile.statusCode).toBe(200);
+    expect(profile.json()).toMatchObject({
+      accountState: "removal_pending",
+      mobileAccess: false,
+      removal: { status: "pending_exit", action: "anonymize", canCancel: true },
+    });
+
+    const status = await a.inject({
+      method: "GET",
+      url: "/api/me/removal-status",
+      headers: asUser(user),
+    });
+    expect(status.statusCode).toBe(200);
+    expect(status.json()).toMatchObject({ status: "pending_exit", canCancel: true });
+
+    const cancelled = await a.inject({
+      method: "POST",
+      url: "/api/me/anonymize/cancel",
+      headers: asUser(user),
+      payload: {},
+    });
+    expect(cancelled.statusCode).toBe(200);
+    expect(cancelled.json()).toEqual({ status: "cancelled" });
+    expect(
+      (
+        await pool.query(
+          `SELECT account_state, removal_action, removal_requires_exit, removal_expires_at,
+                  food_intolerances, food_intolerance_notes
+             FROM users WHERE id = $1`,
+          [user],
+        )
+      ).rows,
+    ).toEqual([
+      {
+        account_state: "active",
+        removal_action: null,
+        removal_requires_exit: false,
+        removal_expires_at: null,
+        food_intolerances: [7],
+        food_intolerance_notes: "Peanut",
+      },
+    ]);
+    expect(
+      (
+        await a.inject({ method: "GET", url: "/api/me/removal-status", headers: asUser(user) })
+      ).json(),
+    ).toEqual({ status: "active" });
   });
 
   it("self-anonymizes after venue exit, preserves verified minutes, revokes credentials, and replays safely", async () => {
