@@ -296,6 +296,56 @@ describe("review fixture regeneration", () => {
       repoId: queue.repo_id,
       entryId: queue.queue_entry_id,
     });
+
+    // Application responses are another participant-data edge: a guessed
+    // response id must not bypass the synthetic visibility boundary even when
+    // the caller has the broad admin capability.
+    const { rows: applicationRows } = await pool.query<{ id: number }>(
+      `INSERT INTO applications (name, type, template)
+       VALUES ('Synthetic response form', 'participant', '[]'::jsonb)
+       RETURNING id`,
+    );
+    const applicationId = applicationRows[0]?.id;
+    if (!applicationId) throw new Error("Expected synthetic response form");
+    const { rows: responseRows } = await pool.query<{ id: number }>(
+      `INSERT INTO application_responses (user_id, application_id, status, responses)
+       VALUES ($1, $2, 'review', '{}'::jsonb)
+       RETURNING id`,
+      [outsideId, applicationId],
+    );
+    const responseId = responseRows[0]?.id;
+    if (!responseId) throw new Error("Expected synthetic application response");
+
+    const hiddenUserApplications = await a.inject({
+      method: "GET",
+      url: `/api/users/${outsideId}/applications`,
+      headers: asUser(admin),
+    });
+    expect(hiddenUserApplications.statusCode).toBe(200);
+    expect(hiddenUserApplications.json()).toEqual({ responses: [] });
+
+    const hiddenApplicationResponses = await a.inject({
+      method: "GET",
+      url: `/api/applications/${applicationId}/responses`,
+      headers: asUser(admin),
+    });
+    expect(hiddenApplicationResponses.statusCode).toBe(200);
+    expect(hiddenApplicationResponses.json()).toEqual({ responses: [] });
+
+    const hiddenResponseDetail = await a.inject({
+      method: "GET",
+      url: `/api/responses/${responseId}`,
+      headers: asUser(admin),
+    });
+    expect(hiddenResponseDetail.statusCode).toBe(404);
+
+    const hiddenDecision = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/decide`,
+      headers: asUser(admin),
+      payload: { decision: "accepted" },
+    });
+    expect(hiddenDecision.statusCode).toBe(404);
   });
 
   it("uses the static PIN only for a marked fixture and deletes the fresh fixture account", async () => {

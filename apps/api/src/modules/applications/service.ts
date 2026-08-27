@@ -10,6 +10,7 @@ import { assertVerifiedPrimaryEmail } from "../../lib/email-verification.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { hasEventAccess } from "../identity/role.js";
+import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
 import { issueTicket } from "../logistics/tickets.js";
 import { issueWalletAccessToken } from "../logistics/wallet-access.js";
 import { voidTicketPasses } from "../logistics/wallet-passes.js";
@@ -698,7 +699,7 @@ export async function upsertReview(
   notes: string | null | undefined,
 ): Promise<void> {
   await withTransaction(async (client) => {
-    await lockResponse(client, responseId); // ensures the response exists
+    await lockResponse(client, responseId, authorId); // ensures the response exists and is in scope
     await client.query(
       `INSERT INTO applicant_reviews (response_id, author_id, score, notes)
        VALUES ($1, $2, $3, $4)
@@ -722,7 +723,7 @@ export async function setStaffNotes(
   staffNotes: string | null,
 ): Promise<void> {
   await withTransaction(async (client) => {
-    await lockResponse(client, responseId);
+    await lockResponse(client, responseId, actorId);
     await client.query(`UPDATE application_responses SET staff_notes = $2 WHERE id = $1`, [
       responseId,
       staffNotes,
@@ -736,12 +737,19 @@ export async function setStaffNotes(
   });
 }
 
-async function lockResponse(client: pg.PoolClient, responseId: number): Promise<ResponseRow> {
+async function lockResponse(
+  client: pg.PoolClient,
+  responseId: number,
+  actorId?: number,
+): Promise<ResponseRow> {
   const { rows } = await client.query(
     `SELECT * FROM application_responses WHERE id = $1 FOR UPDATE`,
     [responseId],
   );
   if (!rows[0]) throw new NotFoundError("Response not found");
+  if (actorId != null) {
+    await assertFixtureSubjectScope(client, actorId, Number(rows[0].user_id));
+  }
   return rows[0];
 }
 
@@ -803,10 +811,14 @@ async function assertCapacityAvailable(
   const { rows: countRows } = await client.query(
     excludeResponseId === undefined
       ? `SELECT count(*)::int AS n FROM application_responses
-         WHERE application_id = $1 AND status IN ('accepted_internal', 'accepted', 'confirmed')`
+         JOIN users u ON u.id = application_responses.user_id
+         WHERE application_responses.application_id = $1 AND u.is_test_account = false
+           AND application_responses.status IN ('accepted_internal', 'accepted', 'confirmed')`
       : `SELECT count(*)::int AS n FROM application_responses
-         WHERE application_id = $1 AND id <> $2
-           AND status IN ('accepted_internal', 'accepted', 'confirmed')`,
+         JOIN users u ON u.id = application_responses.user_id
+         WHERE application_responses.application_id = $1 AND u.is_test_account = false
+           AND application_responses.id <> $2
+           AND application_responses.status IN ('accepted_internal', 'accepted', 'confirmed')`,
     excludeResponseId === undefined ? [applicationId] : [applicationId, excludeResponseId],
   );
   if (countRows[0].n >= capacity) {
@@ -825,7 +837,7 @@ export async function decide(
   decision: "accepted" | "rejected",
 ): Promise<ResponseRow> {
   return withTransaction(async (client) => {
-    const resp = await lockResponse(client, responseId);
+    const resp = await lockResponse(client, responseId, actorId);
     // Serialize capacity checks across parallel accepts on the same form.
     const { rows: appRows } = await client.query(
       `SELECT * FROM applications WHERE id = $1 FOR UPDATE`,
@@ -875,7 +887,7 @@ export async function revertDecision(
   newDecision: "accepted" | "rejected" | "review",
 ): Promise<ResponseRow> {
   return withTransaction(async (client) => {
-    const resp = await lockResponse(client, responseId);
+    const resp = await lockResponse(client, responseId, actorId);
 
     if (newDecision === "review") {
       if (
@@ -1007,7 +1019,7 @@ export async function sendDecision(
   responseId: number,
 ): Promise<{ response: ResponseRow; confirmationToken: string | null }> {
   return withTransaction(async (client) => {
-    const resp = await lockResponse(client, responseId);
+    const resp = await lockResponse(client, responseId, actorId);
     if (resp.status !== "accepted_internal" && resp.status !== "rejected_internal") {
       throw new ConflictError("Only internal decisions can be sent", {
         status: resp.status,
@@ -1036,9 +1048,12 @@ export async function sendDecisionsBatch(
       ? ["accepted_internal", "rejected_internal"]
       : ["accepted_internal"];
     const { rows } = await client.query(
-      `SELECT * FROM application_responses
-       WHERE application_id = $1 AND status = ANY($2) AND decision_sent_at IS NULL
-       ORDER BY id FOR UPDATE`,
+      `SELECT application_responses.* FROM application_responses
+       JOIN users u ON u.id = application_responses.user_id
+       WHERE application_responses.application_id = $1 AND u.is_test_account = false
+         AND application_responses.status = ANY($2)
+         AND application_responses.decision_sent_at IS NULL
+       ORDER BY application_responses.id FOR UPDATE OF application_responses`,
       [applicationId, statuses],
     );
     const tokens: Array<{ responseId: number; token: string | null }> = [];
@@ -1063,7 +1078,7 @@ export async function resendDecision(
   responseId: number,
 ): Promise<{ response: ResponseRow; confirmationToken: string | null }> {
   return withTransaction(async (client) => {
-    const resp = await lockResponse(client, responseId);
+    const resp = await lockResponse(client, responseId, actorId);
 
     if (resp.status === "rejected") {
       const app = await requireApplication(client, resp.application_id);
@@ -1123,7 +1138,7 @@ export async function reAccept(
   responseId: number,
 ): Promise<{ response: ResponseRow; confirmationToken: string | null }> {
   return withTransaction(async (client) => {
-    const resp = await lockResponse(client, responseId);
+    const resp = await lockResponse(client, responseId, actorId);
     if (resp.status !== "declined" && resp.status !== "rejected" && resp.status !== "expired") {
       throw new ConflictError("Only declined, rejected, or expired responses can be re-accepted", {
         status: resp.status,
@@ -1203,7 +1218,7 @@ async function pushTicketVoid(userId: number, voidedPassIds: number[]): Promise<
 export async function revokeSpot(actorId: number, responseId: number): Promise<ResponseRow> {
   let voidedPassIds: number[] = [];
   const result = await withTransaction(async (client) => {
-    const resp = await lockResponse(client, responseId);
+    const resp = await lockResponse(client, responseId, actorId);
     if (resp.status !== "accepted" && resp.status !== "confirmed") {
       throw new ConflictError("Only accepted or confirmed spots can be revoked", {
         status: resp.status,
@@ -1281,6 +1296,7 @@ async function loadDecisionPoolRows(
      LEFT JOIN applicant_reviews ar ON ar.response_id = r.id
      WHERE r.application_id = $1 AND r.status = ANY($2)
        AND u.account_state = 'active' AND u.anonymized_at IS NULL
+       AND u.is_test_account = false
      GROUP BY r.id, u.name, u.email
      ORDER BY r.id`,
     [applicationId, statuses],
@@ -1429,6 +1445,10 @@ export async function getConfirmLink(
      FROM application_responses r
      JOIN email_verification_tokens t ON t.id = r.confirmation_token_id
      WHERE r.id = $1 AND r.status = 'accepted' AND t.type = 'spot_confirmation'
+       AND EXISTS (
+         SELECT 1 FROM users u
+          WHERE u.id = r.user_id AND u.is_test_account = false
+       )
      ORDER BY t.id DESC LIMIT 1`,
     [responseId],
   );
@@ -1538,7 +1558,8 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
      LEFT JOIN application_form_versions fv
        ON fv.id = r.application_form_version_id
       AND fv.application_id = r.application_id
-     WHERE r.id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
+     WHERE r.id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
+       AND u.is_test_account = false`,
     [responseId],
   );
   if (!rows[0]) throw new NotFoundError("Response not found");
@@ -1598,9 +1619,10 @@ export async function editResponse(
   responses: Record<string, unknown>,
 ): Promise<ResponseRow> {
   const { rows } = await pool.query(
-    `SELECT COALESCE(fv.template, a.template) AS template
+    `SELECT COALESCE(fv.template, a.template) AS template, r.user_id
      FROM application_responses r
      JOIN applications a ON a.id = r.application_id
+     JOIN users u ON u.id = r.user_id AND u.is_test_account = false
      LEFT JOIN application_form_versions fv
        ON fv.id = r.application_form_version_id
       AND fv.application_id = r.application_id
@@ -1608,6 +1630,7 @@ export async function editResponse(
     [responseId],
   );
   if (!rows[0]) throw new NotFoundError("Response not found");
+  await assertFixtureSubjectScope(pool, actorId, Number(rows[0].user_id));
   const { template } = rows[0];
   // Validate ONLY against the form template the staff answer-edit form actually
   // renders. Shirt size and dietary data live on the user row (managed from the
@@ -1618,11 +1641,7 @@ export async function editResponse(
   const storedResponses = stripDietaryResponses(responses);
 
   return withTransaction(async (client) => {
-    const { rows: locked } = await client.query(
-      `SELECT id FROM application_responses WHERE id = $1 FOR UPDATE`,
-      [responseId],
-    );
-    if (!locked[0]) throw new NotFoundError("Response not found");
+    await lockResponse(client, responseId, actorId);
 
     const updated = await client.query(
       `UPDATE application_responses SET responses = $2::jsonb WHERE id = $1 RETURNING *`,
@@ -1925,6 +1944,7 @@ export async function listUserResponsesForStaff(userId: number): Promise<
             r.status, r.decision_sent_at, r.submitted_at
      FROM application_responses r
      JOIN applications a ON a.id = r.application_id
+     JOIN users u ON u.id = r.user_id AND u.is_test_account = false
      WHERE r.user_id = $1 ORDER BY r.id DESC`,
     [userId],
   );
