@@ -60,6 +60,7 @@ interface UserRemovalRow {
   account_state: "active" | "removal_pending";
   removal_action: AccountRemovalAction | null;
   removal_requires_exit: boolean;
+  removal_expires_at: Date | null;
   removal_idempotency_key: string | null;
 }
 
@@ -81,6 +82,8 @@ export interface RunAccountRemovalOptions {
   reason?: string;
   /** One-time email PIN required for verified-primary-email self-service. */
   securityPin?: string;
+  /** The authenticated session that initiated self-service removal, if known. */
+  sessionToken?: string | null;
   /** Admin routes can force the action only after the locked preflight agrees. */
   requestedAction?: AccountRemovalAction;
   /** Internal queue jobs already have BullMQ retry semantics. */
@@ -279,13 +282,165 @@ async function loadUserForRemoval(client: pg.PoolClient, userId: number): Promis
   const { rows } = await client.query<UserRemovalRow>(
     `SELECT id, email, email_verified, secondary_email, name, surname, dni, badge_id, badge_id_history,
             university_id, account_state, removal_action,
-            removal_requires_exit, removal_idempotency_key
+            removal_requires_exit, removal_expires_at, removal_idempotency_key
        FROM users WHERE id = $1 FOR UPDATE`,
     [userId],
   );
   const user = rows[0];
   if (!user) throw new NotFoundError("User not found", { userId });
   return user;
+}
+
+/**
+ * A pending-exit request is cancellable only until the initiating recovery
+ * window ends. Capture the session expiry once; later sign-ins must not
+ * extend it. The fallback is only for admin/legacy calls that have no session
+ * token to identify and is deliberately bounded.
+ */
+async function pendingRecoveryExpiry(
+  client: pg.PoolClient,
+  userId: number,
+  sessionToken?: string | null,
+): Promise<Date> {
+  const { rows } = await client.query<{ expires_at: Date }>(
+    `SELECT COALESCE(
+       (
+         SELECT expires_at
+           FROM sessions
+          WHERE user_id = $1 AND token = $2 AND expires_at > clock_timestamp()
+       ),
+       (
+         SELECT min(expires_at)
+           FROM sessions
+          WHERE user_id = $1 AND expires_at > clock_timestamp()
+       ),
+       clock_timestamp() + interval '1 hour'
+     ) AS expires_at`,
+    [userId, sessionToken ?? null],
+  );
+  return rows[0]?.expires_at ?? new Date(Date.now() + 60 * 60 * 1000);
+}
+
+async function removalDeadlineExpired(client: Queryable, expiresAt: Date | null): Promise<boolean> {
+  if (!expiresAt) return false;
+  const { rows } = await client.query<{ expired: boolean }>(
+    `SELECT clock_timestamp() >= $1::timestamptz AS expired`,
+    [expiresAt],
+  );
+  return Boolean(rows[0]?.expired);
+}
+
+export type PendingAccountRemovalStatus =
+  | { status: "active" }
+  | {
+      status: "pending_exit";
+      action: "anonymize";
+      expiresAt: string;
+      canCancel: true;
+    }
+  | {
+      status: "processing";
+      action: AccountRemovalAction;
+      expiresAt: string | null;
+      canCancel: false;
+    };
+
+/** Read the minimal recovery state available to a signed-in pending account. */
+export async function getPendingAccountRemovalStatus(
+  client: Queryable,
+  userId: number,
+): Promise<PendingAccountRemovalStatus> {
+  const { rows } = await client.query<{
+    account_state: "active" | "removal_pending";
+    removal_action: AccountRemovalAction | null;
+    removal_requires_exit: boolean;
+    removal_expires_at: Date | null;
+  }>(
+    `SELECT account_state, removal_action, removal_requires_exit, removal_expires_at
+       FROM users
+      WHERE id = $1 AND anonymized_at IS NULL`,
+    [userId],
+  );
+  const user = rows[0];
+  if (!user) throw new NotFoundError("User not found", { userId });
+  if (user.account_state === "active") return { status: "active" };
+  if (
+    user.removal_action === "anonymize" &&
+    user.removal_requires_exit &&
+    user.removal_expires_at &&
+    !(await removalDeadlineExpired(client, user.removal_expires_at))
+  ) {
+    return {
+      status: "pending_exit",
+      action: "anonymize",
+      expiresAt: user.removal_expires_at.toISOString(),
+      canCancel: true,
+    };
+  }
+  return {
+    status: "processing",
+    action: user.removal_action ?? "anonymize",
+    expiresAt: user.removal_expires_at?.toISOString() ?? null,
+    canCancel: false,
+  };
+}
+
+/**
+ * Restore a pending in-venue anonymization request before the exit or its
+ * fixed recovery deadline wins. The same user-row lock used by scans and
+ * finalization makes cancellation/exit races deterministic.
+ */
+export async function cancelPendingAccountRemoval(
+  client: pg.PoolClient,
+  userId: number,
+  actorId: number,
+): Promise<{ status: "cancelled" }> {
+  const user = await loadUserForRemoval(client, userId);
+  if (
+    user.account_state !== "removal_pending" ||
+    user.removal_action !== "anonymize" ||
+    !user.removal_requires_exit
+  ) {
+    throw new ConflictError("This account-removal request can no longer be cancelled.", {
+      code: "removal_not_cancellable",
+    });
+  }
+  if (await removalDeadlineExpired(client, user.removal_expires_at)) {
+    throw new ConflictError("The account-removal recovery window has expired.", {
+      code: "removal_expired",
+    });
+  }
+  const venue = await removalVenueState(client, userId);
+  if (!venue.requiresExit) {
+    throw new ConflictError("The venue exit has already been recorded.", {
+      code: "removal_exit_recorded",
+    });
+  }
+
+  await client.query(
+    `UPDATE users
+        SET account_state = 'active',
+            removal_action = NULL,
+            removal_requires_exit = false,
+            removal_expires_at = NULL,
+            removal_started_at = NULL,
+            removal_idempotency_key = NULL
+      WHERE id = $1`,
+    [userId],
+  );
+  if (user.removal_idempotency_key) {
+    await client.query(`DELETE FROM idempotency_keys WHERE key = $1`, [
+      user.removal_idempotency_key,
+    ]);
+  }
+  await audit(client, {
+    actorId,
+    entityType: "user",
+    entityId: userId,
+    action: "account_removal_cancelled",
+    source: "self_service",
+  });
+  return { status: "cancelled" };
 }
 
 async function userHasWildcardRegardlessOfState(
@@ -383,6 +538,7 @@ async function prepareAccountRemoval(
     }
     let action = user.removal_action;
     let requiresVenueExit = user.removal_requires_exit;
+    let removalExpiresAt = user.removal_expires_at;
 
     if (user.account_state === "active") {
       const eligibility = await getAccountRemovalEligibility(client, options.targetId);
@@ -399,6 +555,9 @@ async function prepareAccountRemoval(
       // identity remains only long enough to record a valid exit, after which
       // the normal irreversible finalization runs.
       requiresVenueExit = eligibility.requiresVenueExit;
+      removalExpiresAt = requiresVenueExit
+        ? await pendingRecoveryExpiry(client, options.targetId, options.sessionToken)
+        : null;
 
       // A verified primary address is an additional proof of intent for
       // self-service deletion/anonymization. Verify it while this transaction
@@ -409,46 +568,48 @@ async function prepareAccountRemoval(
         await consumeRemovalPin(client, user, options.securityPin);
       }
 
-      // This mutation still has to happen while the user is active: the H54
-      // full-row FK guard intentionally rejects updates to a pending user's
-      // wallet records. The transaction rolls back both this voiding and the
-      // lifecycle transition together if anything fails.
-      await client.query(
-        `UPDATE wallet_passes
-            SET status = 'voided', last_updated_at = clock_timestamp(),
-                update_tag = ((extract(epoch FROM clock_timestamp()) * 1000)::bigint)::text
-          WHERE user_id = $1 AND status <> 'voided'`,
-        [options.targetId],
-      );
-
       await client.query(
         `UPDATE users
             SET account_state = 'removal_pending',
                 removal_action = $2,
                 removal_requires_exit = $3,
-                removal_idempotency_key = COALESCE(removal_idempotency_key, $4),
+                removal_expires_at = $4,
+                removal_idempotency_key = COALESCE(removal_idempotency_key, $5),
                 removal_started_at = clock_timestamp()
           WHERE id = $1`,
-        [options.targetId, action, requiresVenueExit, options.preserveIdempotency?.key ?? null],
+        [
+          options.targetId,
+          action,
+          requiresVenueExit,
+          removalExpiresAt,
+          options.preserveIdempotency?.key ?? null,
+        ],
       );
-      // Stop authentication and delivery as soon as the pending state is
-      // committed. The remaining cleanup is retriable and writers are blocked
-      // by account_state, so a storage outage cannot restore access.
-      await client.query(`DELETE FROM sessions WHERE user_id = $1`, [options.targetId]);
-      await client.query(`DELETE FROM accounts WHERE user_id = $1`, [options.targetId]);
-      await client.query(`DELETE FROM push_tokens WHERE user_id = $1`, [options.targetId]);
-      // Participation ends when removal is accepted. Dietary data is needed
-      // while serving an active participant, but it is not needed to identify
-      // an exit-only person; clear it at the transition instead of keeping it
-      // until the asynchronous finalizer runs.
-      await client.query(
-        `UPDATE users
-            SET food_intolerances = ARRAY[]::integer[],
-                food_intolerance_notes = NULL,
-                dietary_data_state = 'not_provided'
-          WHERE id = $1`,
-        [options.targetId],
-      );
+      // Pending in-venue anonymization is intentionally reversible. Keep the
+      // authentication/profile/operational rows until staff record the exit
+      // or the fixed recovery deadline expires; account_state blocks every
+      // ordinary event writer and the recovery surface is the only allowed
+      // participant action. Full cleanup remains below for non-pending paths.
+      if (!(action === "anonymize" && requiresVenueExit)) {
+        await client.query(
+          `UPDATE wallet_passes
+              SET status = 'voided', last_updated_at = clock_timestamp(),
+                  update_tag = ((extract(epoch FROM clock_timestamp()) * 1000)::bigint)::text
+            WHERE user_id = $1 AND status <> 'voided'`,
+          [options.targetId],
+        );
+        await client.query(`DELETE FROM sessions WHERE user_id = $1`, [options.targetId]);
+        await client.query(`DELETE FROM accounts WHERE user_id = $1`, [options.targetId]);
+        await client.query(`DELETE FROM push_tokens WHERE user_id = $1`, [options.targetId]);
+        await client.query(
+          `UPDATE users
+              SET food_intolerances = ARRAY[]::integer[],
+                  food_intolerance_notes = NULL,
+                  dietary_data_state = 'not_provided'
+            WHERE id = $1`,
+          [options.targetId],
+        );
+      }
       if (options.preserveIdempotency) {
         // Move the marker out of the identity-bearing `u:<id>` scope before
         // access is revoked.  A pending 202 can then be replayed without
@@ -482,13 +643,18 @@ async function prepareAccountRemoval(
       // authoritative door state rather than allowing finalization to delete
       // an identity that is still needed to record its exit.
       const venue = await removalVenueState(client, options.targetId);
-      requiresVenueExit = venue.requiresExit;
+      const deadlineExpired = await removalDeadlineExpired(client, user.removal_expires_at);
+      requiresVenueExit = venue.requiresExit && !deadlineExpired;
       if (user.removal_requires_exit !== requiresVenueExit) {
         await client.query(`UPDATE users SET removal_requires_exit = $2 WHERE id = $1`, [
           options.targetId,
           requiresVenueExit,
         ]);
       }
+      // A pending request that has now reached a valid exit/deadline may have
+      // been accepted by the old implementation without cleanup. Finalization
+      // will delete its wallet/auth/push/dietary rows; do not try to mutate
+      // them here while the pending-row FK guards are active.
     }
 
     const walletArtifacts = await collectWalletArtifacts(client, options.targetId);
@@ -1281,7 +1447,8 @@ export async function finalizeAccountRemoval(
     });
   }
   const venue = await removalVenueState(client, user.id);
-  if (venue.requiresExit) {
+  const recoveryExpired = await removalDeadlineExpired(client, user.removal_expires_at);
+  if (venue.requiresExit && !recoveryExpired) {
     throw new ConflictError(
       "Close the participant's venue session before finalizing account removal.",
       {
@@ -1396,13 +1563,16 @@ async function removalLiveState(
   targetId: number,
 ): Promise<{ gone: boolean; requiresExit: boolean }> {
   return withTransaction(async (client) => {
-    const { rows } = await client.query<{ removal_requires_exit: boolean }>(
-      `SELECT removal_requires_exit FROM users WHERE id = $1 FOR UPDATE`,
-      [targetId],
-    );
+    const { rows } = await client.query<{
+      removal_requires_exit: boolean;
+      removal_expires_at: Date | null;
+    }>(`SELECT removal_requires_exit, removal_expires_at FROM users WHERE id = $1 FOR UPDATE`, [
+      targetId,
+    ]);
     if (!rows[0]) return { gone: true, requiresExit: false };
     const venue = await removalVenueState(client, targetId);
-    if (venue.requiresExit) {
+    const recoveryExpired = await removalDeadlineExpired(client, rows[0].removal_expires_at);
+    if (venue.requiresExit && !recoveryExpired) {
       if (!rows[0].removal_requires_exit) {
         await client.query(`UPDATE users SET removal_requires_exit = true WHERE id = $1`, [
           targetId,
@@ -1432,6 +1602,9 @@ export async function runAccountRemoval(
   }
   const preparation = await prepareAccountRemoval(options);
   try {
+    if (preparation.requiresVenueExit) {
+      return { status: "pending_exit", pendingExit: true, accessRevoked: true };
+    }
     await deleteExternalArtifacts(preparation);
   } catch (error) {
     if (options.scheduleRetry !== false && error instanceof ServiceUnavailableError) {

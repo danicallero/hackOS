@@ -6,6 +6,7 @@ import { pool, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
 import {
   assertActiveAuthenticatedUser,
+  assertAuthenticatedProfileUser,
   getEffectiveCapabilities,
   invalidateCapabilities,
   requireAuth,
@@ -19,7 +20,12 @@ import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliati
 import { canCreateMyProject, hasMyProject, myProjects } from "../../projects/service.js";
 import { hasMyQueueItems } from "../../queue/reads.js";
 import { hasMobileAccess } from "../mobile-access.js";
-import { getAccountRemovalEligibility, runAccountRemoval } from "../removal.js";
+import {
+  cancelPendingAccountRemoval,
+  getAccountRemovalEligibility,
+  getPendingAccountRemovalStatus,
+  runAccountRemoval,
+} from "../removal.js";
 import { issueRemovalPin } from "../removal-pin.js";
 import { computeDerivedRole, computeMembershipFlags, hasEventAccess } from "../role.js";
 
@@ -111,6 +117,24 @@ const removalPendingResponseSchema = z.union([
   }),
   z.object({ status: z.literal("processing"), accessRevoked: z.literal(true) }),
 ]);
+const accountRemovalProfileStateSchema = z.union([
+  z.object({
+    status: z.literal("pending_exit"),
+    action: z.literal("anonymize"),
+    expiresAt: z.string(),
+    canCancel: z.literal(true),
+  }),
+  z.object({
+    status: z.literal("processing"),
+    action: z.enum(["delete", "anonymize"]),
+    expiresAt: z.string().nullable(),
+    canCancel: z.literal(false),
+  }),
+]);
+const accountRemovalStatusResponseSchema = z.union([
+  z.object({ status: z.literal("active") }),
+  accountRemovalProfileStateSchema,
+]);
 const removalPinResponseSchema = z.union([
   z.object({ status: z.literal("sent"), expiresAt: z.string() }),
   z.object({ status: z.literal("not_required") }),
@@ -144,6 +168,8 @@ const userResponseSchema = z.object({
   shirtSize: z.string().nullable(),
   universityId: z.number().nullable(),
   notes: z.string().nullable(),
+  accountState: z.enum(["active", "removal_pending"]),
+  removal: accountRemovalProfileStateSchema.nullable(),
   createdAt: z.string(),
 });
 
@@ -181,6 +207,10 @@ interface UserRow {
   shirt_size: string | null;
   university_id: number | null;
   notes: string | null;
+  account_state: "active" | "removal_pending";
+  removal_action: "delete" | "anonymize" | null;
+  removal_requires_exit: boolean;
+  removal_expires_at: Date | null;
   created_at: Date;
 }
 
@@ -203,18 +233,56 @@ function serializeUser(row: UserRow) {
     shirtSize: row.shirt_size,
     universityId: row.university_id,
     notes: row.notes,
+    accountState: row.account_state,
+    removal:
+      row.account_state === "removal_pending"
+        ? row.removal_action === "anonymize" && row.removal_requires_exit
+          ? {
+              status: "pending_exit" as const,
+              action: "anonymize" as const,
+              expiresAt: row.removal_expires_at?.toISOString() ?? new Date(0).toISOString(),
+              canCancel: true as const,
+            }
+          : {
+              status: "processing" as const,
+              action: row.removal_action ?? "anonymize",
+              expiresAt: row.removal_expires_at?.toISOString() ?? null,
+              canCancel: false as const,
+            }
+        : null,
     createdAt: row.created_at.toISOString(),
   };
 }
 
-async function fetchUser(userId: number): Promise<UserRow> {
+async function fetchUser(userId: number, allowPending = false): Promise<UserRow> {
   const { rows } = await pool.query(
     `SELECT * FROM users
-      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+      WHERE id = $1
+        AND ${allowPending ? "account_state IN ('active', 'removal_pending')" : "account_state = 'active'"}
+        AND anonymized_at IS NULL`,
     [userId],
   );
   if (!rows[0]) throw new NotFoundError("User not found", { userId });
   return rows[0] as UserRow;
+}
+
+/** Read the Better Auth session credential without logging or persisting it. */
+function sessionTokenFromRequest(req: FastifyRequest): string | null {
+  const authorization = req.headers.authorization;
+  if (authorization?.startsWith("Bearer ")) return authorization.slice("Bearer ".length);
+  const cookie = req.headers.cookie;
+  if (!cookie) return null;
+  const match = cookie.match(/(?:^|;\s*)(?:__Secure-)?session_token=([^;]+)/);
+  const token = match?.[1];
+  if (!token) return null;
+  try {
+    return decodeURIComponent(token);
+  } catch {
+    // A malformed cookie must not make an otherwise valid destructive request
+    // fail with a 500; the session lookup simply falls back to the user's
+    // shortest active session deadline.
+    return token;
+  }
 }
 
 // H7: once any application has been accepted, a participant can no longer
@@ -332,7 +400,10 @@ export function registerProfileRoutes(app: FastifyInstance): void {
   api.get(
     "/api/me",
     {
-      preHandler: requireAuth,
+      // A pending-exit account can sign in only to recover/cancel the
+      // request or sign out. All event operations still require an active
+      // account/capability; this route exposes the recovery state itself.
+      preHandler: assertAuthenticatedProfileUser,
       config: routeAccess({ kind: "authenticated" }),
       schema: {
         description:
@@ -378,7 +449,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const userId = req.userId as number;
-      const row = await fetchUser(userId);
+      const row = await fetchUser(userId, true);
       const [
         role,
         capabilities,
@@ -398,7 +469,8 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         canCreateMyProject(userId),
         hasAcceptedApplication(userId),
       ]);
-      const mobileAccess = await hasMobileAccess(pool, userId, role);
+      const mobileAccess =
+        row.account_state === "active" && (await hasMobileAccess(pool, userId, role));
       return {
         ...serializeUser(row),
         role,
@@ -494,6 +566,39 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => getAccountRemovalEligibility(pool, req.userId as number),
   );
 
+  api.get(
+    "/api/me/removal-status",
+    {
+      preHandler: assertAuthenticatedProfileUser,
+      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      schema: {
+        summary: "Get my account-removal recovery status",
+        description:
+          "Returns the server-authoritative pending-exit state used by the login recovery surface. A pending request can be cancelled only before the exit or fixed recovery deadline.",
+        response: { 200: accountRemovalStatusResponseSchema },
+      },
+    },
+    async (req) => getPendingAccountRemovalStatus(pool, req.userId as number),
+  );
+
+  api.post(
+    "/api/me/anonymize/cancel",
+    {
+      preHandler: assertAuthenticatedProfileUser,
+      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      schema: {
+        summary: "Cancel my pending account anonymization",
+        description:
+          "Restores an in-venue anonymization request while its participant has not exited and its fixed recovery deadline has not passed.",
+        response: { 200: z.object({ status: z.literal("cancelled") }) },
+      },
+    },
+    async (req) =>
+      withTransaction((client) =>
+        cancelPendingAccountRemoval(client, req.userId as number, req.userId as number),
+      ),
+  );
+
   api.post(
     "/api/me/removal-pin",
     {
@@ -535,6 +640,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         source: "self_service",
         requestedAction: "delete",
         securityPin: req.body?.securityPin,
+        sessionToken: sessionTokenFromRequest(req),
         preserveIdempotency: req.idempotency
           ? {
               key: req.idempotency.key,
@@ -590,6 +696,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         source: "self_service",
         requestedAction: "anonymize",
         securityPin: req.body.securityPin,
+        sessionToken: sessionTokenFromRequest(req),
         preserveIdempotency: req.idempotency
           ? {
               key: req.idempotency.key,

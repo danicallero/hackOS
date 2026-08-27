@@ -158,6 +158,28 @@ export async function runPresenceEventEndCloserOnce(): Promise<{
         }
       }
     }
+
+    // The participant may cancel only until the fixed recovery deadline that
+    // was captured with the initiating session. Once it expires, finalize the
+    // accepted anonymization even if an open raw door session was never
+    // reconciled; no later sign-in may extend this deadline.
+    const { rows: expiredRemovalRows } = await client.query<{
+      id: number;
+      removal_action: AccountRemovalAction;
+    }>(
+      `SELECT id, removal_action
+         FROM users
+        WHERE account_state = 'removal_pending'
+          AND removal_expires_at IS NOT NULL
+          AND removal_expires_at <= clock_timestamp()
+          AND anonymized_at IS NULL
+        FOR UPDATE`,
+    );
+    for (const row of expiredRemovalRows) {
+      if (!pendingIds.some((pendingRow) => pendingRow.userId === row.id)) {
+        pendingIds.push({ userId: row.id, action: row.removal_action });
+      }
+    }
     return { closed: closedIds, pending: pendingIds };
   });
   const finalized: number[] = [];

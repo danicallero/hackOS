@@ -115,6 +115,25 @@ export async function assertActiveAuthenticatedUser(req: FastifyRequest): Promis
   if (!rows[0]) throw new UnauthorizedError("This account is closed or being removed");
 }
 
+/**
+ * Profile recovery guard: the pending-exit screen is the only authenticated
+ * surface a removal-pending account can use before the finalizer deletes it.
+ * Every event operation continues to use assertActiveAuthenticatedUser or a
+ * capability guard, so this intentionally does not grant event access.
+ */
+export async function assertAuthenticatedProfileUser(req: FastifyRequest): Promise<void> {
+  if (req.userId == null) throw new UnauthorizedError();
+  const { rows } = await pool.query(
+    `SELECT 1
+       FROM users
+      WHERE id = $1
+        AND account_state IN ('active', 'removal_pending')
+        AND anonymized_at IS NULL`,
+    [req.userId],
+  );
+  if (!rows[0]) throw new UnauthorizedError("This account is closed or being removed");
+}
+
 /** Guard that only requires a logged-in user (any capabilities). */
 export const requireAuth: preHandlerHookHandler = async (req) => {
   await assertActiveAuthenticatedUser(req);
