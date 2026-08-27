@@ -73,9 +73,11 @@ permission-group graph: capability groups, groups-of-groups with cycle
 rejection, and the `ADMIN_ALL` wildcard's "at least one active holder"
   invariant (`permission-graph.ts`). Account removal (H54) branches to hard
   delete or irreversible migration to a random `anonymous_participants` subject
-  depending on whether the account has operational history. The original user
-  row and identity bridge are removed; only the documented anonymous
-  demographic/presence fields survive. A generic per-account UI-preference store (`GET/PATCH
+  depending on canonical accreditation. Legacy door/activity/badge references
+  without accreditation are integrity warnings, not an automatic retention
+  rule. The original user row and identity bridge are removed; only application
+  answers explicitly retained by the submitted form version and the
+  system-generated verified presence total survive. A generic per-account UI-preference store (`GET/PATCH
 /api/me/ui-prefs`, H59) namespaces one jsonb column by view (e.g.
 `scheduleTable` holds the Manage Schedule table's column visibility/order) —
 a thin merge-patch, not a table per view; the browser also keeps a

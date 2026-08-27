@@ -271,11 +271,15 @@ credential login is the user id as text, while `sessions`/`accounts` FK on
   update, marks verified (admin-vouched), audited.
 - `profile.ts` exposes the H54 self-service preflight and actions, while the
   admin routes use the same locked boundary. A fresh account is fully deleted;
-  an account with check-in, door/activity history or badge history is
-  irreversibly anonymized after an open venue session is closed. The final
-  transaction creates a random UUID anonymous subject, moves only
-  accreditation/door rows to it, deletes application/project/meal/notification
-  and other identity-bearing relationships, revokes sessions/tokens/push and
+  an account with canonical `check_in_logs` accreditation is irreversibly
+  anonymized. Door/activity/badge history without canonical accreditation is
+  reported as an integrity warning and does not silently become permanent
+  retention. An open venue session is accepted as a pending-exit request;
+  staff can record only the required exit before finalization. The final
+  transaction creates a random UUID anonymous subject, stores verified minutes
+  and application answers explicitly retained by the submitted form version,
+  deletes raw accreditation/door/application/project/meal/notification and
+  other identity-bearing relationships, revokes sessions/tokens/push and
   deletes the original `users` row. No mapping table or in-place anonymized
   user remains.
 - `GET /api/me/removal-eligibility`, `DELETE /api/me` and
@@ -285,13 +289,19 @@ credential login is the user id as text, while `sessions`/`accounts` FK on
   because the actor row is deleted in the same transaction.
 - `identity/removal.ts` performs two phases: commit `removal_pending` and
   revoke local access, remove provider/storage artifacts with bounded retry,
-  then finalize the database transaction. `0733` adds a database-level active
-  user-reference guard so stale notification, token, project, logistics or
-  audit writers cannot create new FK rows after pending begins.
+  then finalize the database transaction. `0733`/`0736` add a database-level
+  active-user reference guard so stale notification, token, project, logistics
+  or audit writers cannot create new FK rows after pending begins; only the
+  already-open participant exit is allowed through the transition. `0737`
+  permanently retires disconnected scanner credentials without a participant
+  foreign key, and `0738` prevents a response from selecting another form's
+  retention snapshot.
 
 **State transitions.** `active → removal_pending → users row deleted`, with an
 anonymous participant created only for the anonymization branch. A pending
-account is not eligible for authentication or event operations.
+account is not eligible for authentication or event operations except that a
+validated `out` scan may close its already-open venue session; finalization
+then removes the identity.
 
 ---
 

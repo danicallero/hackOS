@@ -267,8 +267,11 @@ distributed to other Expo Router apps without importing hackOS code.
   provides a confirmed sign-out action for the device session. Its collapsed
   danger zone reads `GET /api/me/removal-eligibility`: eligible accounts can
   call `DELETE /api/me` after a native destructive confirmation, while
-  accounts with retained operational history see the anonymization/retention
-  explanation and a direct irreversible anonymization action (H54). For operators
+  accounts with canonical accreditation see the concise irreversible
+  anonymization explanation and direct action (H54). The action remains
+  available while the participant is inside; the API returns a pending-exit
+  state, revokes access, and allows only the validated staff exit before
+  finalization. For operators
   (any scan capability, `lib/tabs.ts`'s `isOperator`) it also shows a "My
   stats" section (`/api/me/logistics/stats`) and a link to the scan-history
   screen (`app/(tabs)/others/scan-log.tsx`, `/api/logistics/scan-log`, grouped by
