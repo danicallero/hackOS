@@ -52,12 +52,12 @@ export function registerMeRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const { rows } = await pool.query(
-        `SELECT COALESCE(fv.template, a.template) AS template,
+        `SELECT fv.template,
                 a.type, a.ask_shirt_size, a.ask_food_intolerances,
                 r.*, t.expires_at AS confirmation_expires_at
          FROM application_responses r
          JOIN applications a ON a.id = r.application_id
-         LEFT JOIN application_form_versions fv
+         JOIN application_form_versions fv
            ON fv.id = r.application_form_version_id
           AND fv.application_id = r.application_id
          LEFT JOIN email_verification_tokens t ON t.id = r.confirmation_token_id

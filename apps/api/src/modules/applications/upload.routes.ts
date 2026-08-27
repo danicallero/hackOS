@@ -101,16 +101,15 @@ export function registerUploadRoutes(app: FastifyInstance): void {
       await withTransaction(async (client) => {
         // H54: lock the active user while validating and storing the object.
         // Removal takes the same user's row lock, so it cannot delete the
-        // account between this check and putObject. The field definition comes
-        // from the response's pinned form version, never from a later mutable
-        // application template. The COALESCE fallback is only for legacy rows
-        // that predate version snapshots; normal migrated responses are pinned.
+        // account between this check and putObject. The field definition must
+        // come from the response's pinned form version; an unversioned response
+        // fails closed instead of consulting a later mutable template.
         const { rows: responseRows } = await client.query<{ template: unknown }>(
-          `SELECT COALESCE(fv.template, a.template) AS template
+          `SELECT fv.template
              FROM application_responses r
              JOIN applications a ON a.id = r.application_id
              JOIN users u ON u.id = r.user_id
-             LEFT JOIN application_form_versions fv
+             JOIN application_form_versions fv
                ON fv.id = r.application_form_version_id
               AND fv.application_id = r.application_id
             WHERE r.user_id = $1 AND r.application_id = $2
