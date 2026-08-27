@@ -728,14 +728,6 @@ export default function AccountScreen() {
                       {t("accountRemovalIntegrityWarning")}
                     </Text>
                   ) : null}
-                  {operator ? (
-                    <Text
-                      selectable
-                      style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
-                    >
-                      {t("accountRemovalOfflineQueue")}
-                    </Text>
-                  ) : null}
                   <ActionButton
                     label={t("accountDeleteAction")}
                     icon="trash"
@@ -795,14 +787,6 @@ export default function AccountScreen() {
                       style={{ color: colors.warning, fontSize: 14, lineHeight: 20 }}
                     >
                       {t("accountRemovalIntegrityWarning")}
-                    </Text>
-                  ) : null}
-                  {operator ? (
-                    <Text
-                      selectable
-                      style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
-                    >
-                      {t("accountRemovalOfflineQueue")}
                     </Text>
                   ) : null}
                   <ActionButton

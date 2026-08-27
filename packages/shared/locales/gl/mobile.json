@@ -110,7 +110,6 @@
   "accountAnonymizeError": "Non se puideron anonimizar os teus datos. Revisa a conexión e téntao de novo.",
   "accountRemovalPending": "O teu acceso foi revogado. O servidor está rematando a limpeza de datos privados; pechouse a sesión neste dispositivo.",
   "accountRemovalDeviceCleanupPending": "A túa conta está pechada, pero non se puideron borrar algúns datos locais. Borra os datos da aplicación ou reinstálaa antes de compartir este dispositivo.",
-  "accountRemovalOfflineQueue": "As operacións de persoal pendentes sen conexión deste dispositivo eliminaranse e non se subirán ao pechar a conta.",
   "accountLegalTitle": "Legal",
   "accountPrivacyPolicy": "Política de privacidade",
   "accountTerms": "Termos e condicións",

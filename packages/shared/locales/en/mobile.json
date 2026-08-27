@@ -110,7 +110,6 @@
   "accountAnonymizeError": "Your data couldn't be anonymized. Check your connection and try again.",
   "accountRemovalPending": "Your access has been revoked. The server is finishing private-data cleanup; this device has been signed out.",
   "accountRemovalDeviceCleanupPending": "Your account is closed, but some local data could not be cleared. Clear the app data or reinstall the app before sharing this device.",
-  "accountRemovalOfflineQueue": "Pending offline staff scans on this device will be removed and will not be uploaded after account closure.",
   "accountLegalTitle": "Legal",
   "accountPrivacyPolicy": "Privacy policy",
   "accountTerms": "Terms and conditions",

@@ -110,7 +110,6 @@
   "accountAnonymizeError": "No se pudieron anonimizar tus datos. Revisa la conexión e inténtalo de nuevo.",
   "accountRemovalPending": "Tu acceso ha sido revocado. El servidor está terminando la limpieza de datos privados; se ha cerrado la sesión en este dispositivo.",
   "accountRemovalDeviceCleanupPending": "Tu cuenta está cerrada, pero no se han podido borrar algunos datos locales. Borra los datos de la aplicación o reinstálala antes de compartir este dispositivo.",
-  "accountRemovalOfflineQueue": "Las operaciones de personal pendientes sin conexión de este dispositivo se eliminarán y no se subirán al cerrar la cuenta.",
   "accountLegalTitle": "Legal",
   "accountPrivacyPolicy": "Política de privacidad",
   "accountTerms": "Términos y condiciones",
