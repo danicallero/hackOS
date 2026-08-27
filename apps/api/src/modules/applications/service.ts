@@ -29,6 +29,8 @@ export interface ApplicationRow {
   name: string;
   type: ApplicationType;
   template: TemplateField[];
+  sections: FormSection[];
+  current_form_version: number;
   description: string | null;
   active: boolean;
   open_at: Date | null;
@@ -44,6 +46,7 @@ export interface ResponseRow {
   id: number;
   user_id: number;
   application_id: number;
+  application_form_version_id: number | string | null;
   status: string;
   responses: Record<string, unknown>;
   staff_notes: string | null;
@@ -57,6 +60,79 @@ export interface ResponseRow {
 }
 
 export type ConfirmVia = "email_link" | "web" | "admin_override";
+
+/**
+ * Persist an explicit minimising policy for every field.  The field schema is
+ * intentionally open to future retention modes, but this service only copies
+ * values whose submitted definition says `anonymous_audit`.
+ */
+export function normalizeTemplateForStorage(template: TemplateField[]): TemplateField[] {
+  return template.map((field) => ({
+    ...field,
+    retention_mode: field.retention_mode ?? "none",
+  }));
+}
+
+/** Configuration-only summary for audit history; never includes response values. */
+export function anonymousRetentionConfiguration(template: TemplateField[]) {
+  return normalizeTemplateForStorage(template)
+    .filter((field) => field.retention_mode === "anonymous_audit")
+    .map((field) => ({
+      key: field.key,
+      kind: field.kind,
+      dimension: field.anonymous_audit_dimension ?? null,
+    }));
+}
+
+export interface ApplicationFormVersion {
+  id: number | string;
+  application_id: number;
+  version: number;
+  template: TemplateField[];
+  sections: FormSection[];
+}
+
+/**
+ * Test fixtures and very old imports may predate the version snapshot.  The
+ * migration backfills normal rows; this idempotent helper only creates the
+ * missing version for such a legacy row and never changes an existing one.
+ */
+export async function ensureApplicationFormVersion(
+  client: pg.PoolClient,
+  app: Pick<ApplicationRow, "id" | "template" | "sections" | "current_form_version">,
+  createdBy: number | null = null,
+): Promise<ApplicationFormVersion> {
+  const version = Number(app.current_form_version ?? 1);
+  const existing = await client.query<ApplicationFormVersion>(
+    `SELECT id, application_id, version, template, sections
+       FROM application_form_versions
+      WHERE application_id = $1 AND version = $2`,
+    [app.id, version],
+  );
+  if (existing.rows[0]) return existing.rows[0];
+
+  await client.query(
+    `INSERT INTO application_form_versions
+       (application_id, version, template, sections, created_by)
+     VALUES ($1, $2, $3::jsonb, $4::jsonb, $5)
+     ON CONFLICT (application_id, version) DO NOTHING`,
+    [
+      app.id,
+      version,
+      JSON.stringify(normalizeTemplateForStorage(app.template ?? [])),
+      JSON.stringify(app.sections ?? []),
+      createdBy,
+    ],
+  );
+  const { rows } = await client.query<ApplicationFormVersion>(
+    `SELECT id, application_id, version, template, sections
+       FROM application_form_versions
+      WHERE application_id = $1 AND version = $2`,
+    [app.id, version],
+  );
+  if (!rows[0]) throw new Error("Application form version could not be created");
+  return rows[0];
+}
 
 // ── loaders ──────────────────────────────────────────────────────────────────
 
@@ -397,6 +473,7 @@ export async function saveDraft(
 ): Promise<ResponseRow> {
   return withTransaction(async (client) => {
     const app = await requireApplication(client, applicationId);
+    const currentForm = await ensureApplicationFormVersion(client, app);
     const invited = await isInvitedParticipant(client, userId);
 
     const { rows } = await client.query(
@@ -412,9 +489,10 @@ export async function saveDraft(
         throw new ConflictError("Applications are closed for this form", { applicationId });
       }
       const inserted = await client.query(
-        `INSERT INTO application_responses (user_id, application_id, responses, status)
-         VALUES ($1, $2, $3::jsonb, 'draft') RETURNING *`,
-        [userId, applicationId, JSON.stringify(responses)],
+        `INSERT INTO application_responses
+           (user_id, application_id, application_form_version_id, responses, status)
+         VALUES ($1, $2, $3, $4::jsonb, 'draft') RETURNING *`,
+        [userId, applicationId, currentForm.id, JSON.stringify(responses)],
       );
       return inserted.rows[0];
     }
@@ -426,8 +504,11 @@ export async function saveDraft(
       });
     }
     const updated = await client.query(
-      `UPDATE application_responses SET responses = $3::jsonb WHERE id = $1 AND user_id = $2 RETURNING *`,
-      [existing.id, userId, JSON.stringify(responses)],
+      `UPDATE application_responses
+          SET responses = $3::jsonb,
+              application_form_version_id = COALESCE(application_form_version_id, $4)
+        WHERE id = $1 AND user_id = $2 RETURNING *`,
+      [existing.id, userId, JSON.stringify(responses), currentForm.id],
     );
     return updated.rows[0];
   });
@@ -476,6 +557,26 @@ export async function submitResponse(
       });
     }
 
+    // A draft is bound to the form definition that collected it.  Normal
+    // rows are backfilled by the migration; the fallback keeps imported/test
+    // rows safe without silently switching them to a later mutable template.
+    let formVersion: ApplicationFormVersion;
+    if (existing.application_form_version_id != null) {
+      const versionRows = await client.query<ApplicationFormVersion>(
+        `SELECT id, application_id, version, template, sections
+           FROM application_form_versions
+          WHERE id = $1`,
+        [existing.application_form_version_id],
+      );
+      formVersion = versionRows.rows[0] ?? (await ensureApplicationFormVersion(client, app));
+    } else {
+      formVersion = await ensureApplicationFormVersion(client, app);
+      await client.query(
+        `UPDATE application_responses SET application_form_version_id = $2 WHERE id = $1`,
+        [existing.id, formVersion.id],
+      );
+    }
+
     const merged = { ...existing.responses, ...(input.responses ?? {}) };
     const shirtSize = input.shirt_size ?? (merged.shirt_size as string | undefined);
     if (input.shirt_size) merged.shirt_size = input.shirt_size;
@@ -520,7 +621,7 @@ export async function submitResponse(
     // typo for DNI). Only non-empty string answers overwrite an existing value.
     const dni = extractDni(merged);
 
-    const enrichedTemplate = await enrichTemplate(app, app.template);
+    const enrichedTemplate = await enrichTemplate(app, formVersion.template);
     validateResponses(enrichedTemplate, merged);
     const storedResponses = stripDietaryResponses(merged);
 
@@ -1421,11 +1522,14 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
   const { rows } = await pool.query(
     `SELECT r.*, u.name, u.email, u.shirt_size,
             u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
-            a.id AS app_id, a.name AS app_name, a.type AS app_type, a.template, a.sections,
+            a.id AS app_id, a.name AS app_name, a.type AS app_type,
+            COALESCE(fv.template, a.template) AS template,
+            COALESCE(fv.sections, a.sections) AS sections,
             a.ask_shirt_size, a.ask_food_intolerances
      FROM application_responses r
      JOIN users u ON u.id = r.user_id
      JOIN applications a ON a.id = r.application_id
+     LEFT JOIN application_form_versions fv ON fv.id = r.application_form_version_id
      WHERE r.id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
     [responseId],
   );
@@ -1486,9 +1590,10 @@ export async function editResponse(
   responses: Record<string, unknown>,
 ): Promise<ResponseRow> {
   const { rows } = await pool.query(
-    `SELECT a.template
+    `SELECT COALESCE(fv.template, a.template) AS template
      FROM application_responses r
      JOIN applications a ON a.id = r.application_id
+     LEFT JOIN application_form_versions fv ON fv.id = r.application_form_version_id
      WHERE r.id = $1`,
     [responseId],
   );
