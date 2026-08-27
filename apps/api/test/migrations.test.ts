@@ -57,7 +57,9 @@ afterAll(async () => {
     try {
       await withTimeout(async () => {
         await adminClient.connect();
-        await adminClient.query(`DROP DATABASE "${databaseName}" WITH (FORCE)`);
+        // The server may commit the drop while the client loses the response;
+        // retries must therefore tolerate a database that is already gone.
+        await adminClient.query(`DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`);
       }, 20_000);
       return;
     } catch (err) {
