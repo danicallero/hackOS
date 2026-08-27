@@ -67,7 +67,7 @@ export async function issueRemovalPin(
     [userId],
   );
   const user = rows[0];
-  if (!user || user.account_state !== "active" || user.anonymized_at != null) {
+  if (user?.account_state !== "active" || user?.anonymized_at != null) {
     throw new NotFoundError("User not found");
   }
   if (!user.email_verified) return { status: "not_required" };
