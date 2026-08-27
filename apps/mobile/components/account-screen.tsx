@@ -16,8 +16,13 @@ import { ApiError, apiFetch } from "@/lib/api";
 import { signOut } from "@/lib/auth-client";
 import { EVENT_WEBSITE_URL } from "@/lib/env";
 import { haptic } from "@/lib/haptics";
-import { type Lang, type MessageKey, useLocale } from "@/lib/i18n";
+import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
+import {
+  type AccountRemovalProgress,
+  clearAccountRemovalProgress,
+  saveAccountRemovalProgress,
+} from "@/lib/removal-progress";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { fetchMyScanStats, type MyScanStats } from "@/lib/scan-log";
 import { SCAN_LOG_ROUTES } from "@/lib/scan-log-navigation";
@@ -45,16 +50,6 @@ interface Intolerance {
 }
 
 const LANGUAGES: Lang[] = ["en", "es", "gl"];
-
-const RETAINED_FIELD_COPY: Record<string, MessageKey> = {
-  age: "accountRetainedAge",
-  gender: "accountRetainedGender",
-  university: "accountRetainedUniversity",
-  degree: "accountRetainedDegree",
-  "graduation year": "accountRetainedGraduationYear",
-  "origin city": "accountRetainedOriginCity",
-  "guaranteed venue-presence time": "accountRetainedPresenceTime",
-};
 
 /** Account overview with the same participant-owned profile fields exposed on web. */
 export default function AccountScreen() {
@@ -201,12 +196,37 @@ export default function AccountScreen() {
     ]);
   }
 
-  async function finishLocalAccountClosure(userId: number): Promise<void> {
+  async function finishLocalAccountClosure(
+    userId: number,
+    action: AccountRemovalProgress["action"],
+    pendingMessage?: string,
+    progress?: Parameters<typeof saveAccountRemovalProgress>[0],
+  ): Promise<void> {
+    if (pendingMessage) {
+      await new Promise<void>((resolve) => {
+        Alert.alert(t("accountAnonymizePendingTitle"), pendingMessage, [
+          { text: t("confirm"), onPress: () => resolve() },
+        ]);
+      });
+    }
     // The server revokes access before it touches object storage. Local
     // cleanup is best-effort, but sign-out must still run if a SQLite/Secure
     // Store operation fails so a closed account cannot keep an authenticated
     // session on this device.
-    await clearAccountData(userId).catch(() => undefined);
+    let localCleanupFailed = false;
+    try {
+      await clearAccountData(userId);
+    } catch {
+      localCleanupFailed = true;
+    }
+    const savedProgress =
+      progress ??
+      (localCleanupFailed ? { action, status: "device_cleanup_pending" as const } : null);
+    if (savedProgress) await saveAccountRemovalProgress(savedProgress);
+    else await clearAccountRemovalProgress();
+    if (localCleanupFailed && !pendingMessage) {
+      Alert.alert(t("accountRemovalDeviceCleanupPending"));
+    }
     await signOut().catch(() => undefined);
   }
 
@@ -214,6 +234,7 @@ export default function AccountScreen() {
     cause: unknown,
     userId: number,
     fallback: string,
+    action: AccountRemovalProgress["action"],
   ): Promise<void> {
     // prepareAccountRemoval revokes sessions before private-object cleanup.
     // A 5xx can therefore mean the server has already committed closure even
@@ -224,7 +245,7 @@ export default function AccountScreen() {
       cause.code === "removal_storage_pending" ||
       cause.status >= 500;
     if (serverMayHaveRevokedAccess) {
-      await finishLocalAccountClosure(userId);
+      await finishLocalAccountClosure(userId, action, undefined, { action, status: "processing" });
       setRemovalError(new Error(t("accountRemovalPending")));
       return;
     }
@@ -236,17 +257,30 @@ export default function AccountScreen() {
     setDeletingAccount(true);
     setRemovalError(null);
     try {
-      await deleteOwnAccount();
-      await finishLocalAccountClosure(me.id);
+      const result = await deleteOwnAccount();
+      const progress =
+        result.status === "completed"
+          ? undefined
+          : { action: "delete" as const, status: result.status };
+      await finishLocalAccountClosure(
+        me.id,
+        "delete",
+        result.status === "pending_exit" ? t("accountRemovalPendingExit") : undefined,
+        progress,
+      );
     } catch (cause) {
-      await handleRemovalFailure(cause, me.id, t("accountDeleteError"));
+      await handleRemovalFailure(cause, me.id, t("accountDeleteError"), "delete");
     } finally {
       setDeletingAccount(false);
     }
   }
 
   function confirmDeleteAccount() {
-    Alert.alert(t("accountDeleteConfirmTitle"), t("accountDeleteConfirmBody"), [
+    const body = [
+      t("accountDeleteConfirmBody"),
+      ...(removalEligibility?.requiresVenueExit ? [t("accountRemovalExitRequired")] : []),
+    ].join("\n\n");
+    Alert.alert(t("accountDeleteConfirmTitle"), body, [
       { text: t("cancel"), style: "cancel" },
       {
         text: t("accountDeleteAction"),
@@ -261,10 +295,19 @@ export default function AccountScreen() {
     setDeletingAccount(true);
     setRemovalError(null);
     try {
-      await anonymizeOwnAccount();
-      await finishLocalAccountClosure(me.id);
+      const result = await anonymizeOwnAccount();
+      const progress =
+        result.status === "completed"
+          ? undefined
+          : { action: "anonymize" as const, status: result.status };
+      await finishLocalAccountClosure(
+        me.id,
+        "anonymize",
+        result.status === "pending_exit" ? t("accountAnonymizePendingExit") : undefined,
+        progress,
+      );
     } catch (cause) {
-      await handleRemovalFailure(cause, me.id, t("accountAnonymizeError"));
+      await handleRemovalFailure(cause, me.id, t("accountAnonymizeError"), "anonymize");
     } finally {
       setDeletingAccount(false);
     }
@@ -273,6 +316,10 @@ export default function AccountScreen() {
   function confirmAnonymizeAccount() {
     Alert.alert(t("accountAnonymizeConfirmTitle"), t("accountAnonymizeConfirmBody"), [
       { text: t("cancel"), style: "cancel" },
+      {
+        text: t("accountPrivacyPolicy"),
+        onPress: () => void Linking.openURL(`${EVENT_WEBSITE_URL}/privacy`),
+      },
       {
         text: t("accountAnonymizeAction"),
         style: "destructive",
@@ -581,6 +628,24 @@ export default function AccountScreen() {
                   >
                     {t("accountDeleteDescription")}
                   </Text>
+                  {removalEligibility.requiresVenueExit ? (
+                    <Text
+                      selectable
+                      accessibilityLiveRegion="polite"
+                      style={{ color: colors.warning, fontSize: 14, lineHeight: 20 }}
+                    >
+                      {t("accountRemovalExitRequired")}
+                    </Text>
+                  ) : null}
+                  {removalEligibility.integrityWarning ? (
+                    <Text
+                      selectable
+                      accessibilityLiveRegion="polite"
+                      style={{ color: colors.warning, fontSize: 14, lineHeight: 20 }}
+                    >
+                      {t("accountRemovalIntegrityWarning")}
+                    </Text>
+                  ) : null}
                   {operator ? (
                     <Text
                       selectable
@@ -606,23 +671,6 @@ export default function AccountScreen() {
                   >
                     {t("accountAnonymizeDescription")}
                   </Text>
-                  <View accessibilityRole="list" style={{ gap: 4, paddingHorizontal: 4 }}>
-                    <Text
-                      selectable
-                      style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
-                    >
-                      {t("accountRetainedFieldsIntro")}
-                    </Text>
-                    {removalEligibility.retainedFields.map((field) => (
-                      <Text
-                        key={field}
-                        selectable
-                        style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
-                      >
-                        • {RETAINED_FIELD_COPY[field] ? t(RETAINED_FIELD_COPY[field]) : field}
-                      </Text>
-                    ))}
-                  </View>
                   <Text
                     selectable
                     style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
@@ -646,6 +694,15 @@ export default function AccountScreen() {
                       {t("accountAnonymizeExitRequired")}
                     </Text>
                   ) : null}
+                  {removalEligibility.integrityWarning ? (
+                    <Text
+                      selectable
+                      accessibilityLiveRegion="polite"
+                      style={{ color: colors.warning, fontSize: 14, lineHeight: 20 }}
+                    >
+                      {t("accountRemovalIntegrityWarning")}
+                    </Text>
+                  ) : null}
                   {operator ? (
                     <Text
                       selectable
@@ -655,10 +712,14 @@ export default function AccountScreen() {
                     </Text>
                   ) : null}
                   <ActionButton
+                    label={t("accountPrivacyPolicy")}
+                    icon="hand.raised"
+                    onPress={() => void Linking.openURL(`${EVENT_WEBSITE_URL}/privacy`)}
+                  />
+                  <ActionButton
                     label={t("accountAnonymizeAction")}
                     icon="person.crop.circle.badge.xmark"
                     destructive
-                    disabled={removalEligibility.requiresVenueExit}
                     busy={deletingAccount}
                     onPress={confirmAnonymizeAccount}
                   />

@@ -14,7 +14,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ApiError, api } from "@/lib/api";
-import { type MessageKey, useLocale } from "@/lib/i18n";
+import { useLocale } from "@/lib/i18n";
 import {
   type AccountRemovalEligibility,
   accountRemovalIdempotencyKey,
@@ -23,16 +23,6 @@ import {
 import { useCan, useMe } from "@/lib/session";
 import type { UserDetail } from "@/lib/types";
 import { fullName, initials, ROLE_COPY, ROLE_TONE } from "./shared";
-
-const RETAINED_FIELD_COPY: Record<string, MessageKey> = {
-  age: "accountRetainedAge",
-  gender: "accountRetainedGender",
-  university: "accountRetainedUniversity",
-  degree: "accountRetainedDegree",
-  "graduation year": "accountRetainedGraduationYear",
-  "origin city": "accountRetainedOriginCity",
-  "guaranteed venue-presence time": "accountRetainedPresenceTime",
-};
 
 export function ProfileHeader({ user }: { user: UserDetail }) {
   const { t } = useLocale();
@@ -117,9 +107,22 @@ export function DeleteAccountButton({ user }: { user: UserDetail }) {
       const headers = {
         "Idempotency-Key": accountRemovalIdempotencyKey(eligibility.action),
       };
-      if (request.method === "DELETE") await api.delete(request.path, { headers });
-      else await api.post(request.path, undefined, { headers });
-      toast.success(eligibility.action === "delete" ? t("accountDeleted") : t("accountAnonymized"));
+      const result =
+        request.method === "DELETE"
+          ? await api.delete<{ status: string }>(request.path, { headers })
+          : await api.post<{ status: string }>(request.path, undefined, { headers });
+      const message =
+        result.status === "pending_exit"
+          ? eligibility.action === "anonymize"
+            ? t("accountAnonymizePendingExit")
+            : t("accountRemovalPendingExit")
+          : result.status !== "completed"
+            ? t("accountRemovalPending")
+            : eligibility.action === "delete"
+              ? t("accountDeleted")
+              : t("accountAnonymized");
+      if (result.status !== "completed") toast.info(message);
+      else toast.success(message);
       router.push("/users");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveAccount"));
@@ -133,7 +136,7 @@ export function DeleteAccountButton({ user }: { user: UserDetail }) {
         variant="outline"
         size="sm"
         className="text-destructive"
-        disabled={loading || !eligibility || eligibility.requiresVenueExit}
+        disabled={loading || !eligibility}
         onClick={() => setOpen(true)}
       >
         {loading
@@ -161,7 +164,11 @@ export function DeleteAccountButton({ user }: { user: UserDetail }) {
           title={
             eligibility.action === "delete" ? t("deleteThisAccount") : t("anonymizeThisAccount")
           }
-          description={t("removeAccountDesc", { name: fullName(user), email: user.email })}
+          description={
+            eligibility.action === "delete"
+              ? t("removeAccountDesc", { name: fullName(user), email: user.email })
+              : t("accountAnonymizeDescription")
+          }
           cancelLabel={t("cancel")}
           confirmLabel={eligibility.action === "delete" ? t("deleteAction") : t("anonymizeAction")}
           pending={pending}
@@ -169,33 +176,37 @@ export function DeleteAccountButton({ user }: { user: UserDetail }) {
           reverseActions
           onConfirm={remove}
         >
-          <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-pretty text-sm">
-            <li>{t("accountAccessRevokedConsequence")}</li>
-            <li>
-              {eligibility.operationalHistoryRetained
-                ? t("operationalHistoryRetainedConsequence")
-                : t("freshAccountRemovedConsequence")}
-            </li>
-            {eligibility.action === "anonymize" && (
-              <>
-                <li>{t("accountRetainedFieldsIntro")}</li>
-                {eligibility.retainedFields.map((field) => (
-                  <li key={field} className="ml-4">
-                    {RETAINED_FIELD_COPY[field] ? t(RETAINED_FIELD_COPY[field]) : field}
-                  </li>
-                ))}
-                <li>{t("accountAnonymizeProofLoss")}</li>
-                <li>{t("accountAnonymizeNoIdentityMapping")}</li>
-                {eligibility.activeEventConsequences && (
-                  <li className="text-destructive">{t("accountAnonymizeActiveEvent")}</li>
-                )}
-                {eligibility.requiresVenueExit && (
-                  <li className="text-destructive">{t("accountAnonymizeExitRequired")}</li>
-                )}
-              </>
-            )}
-            <li>{t("cantBeUndone")}</li>
-          </ul>
+          {eligibility.action === "anonymize" ? (
+            <div className="text-muted-foreground space-y-2 text-pretty text-sm">
+              <p>{t("accountAnonymizeConfirmBody")}</p>
+              {eligibility.activeEventConsequences && (
+                <p role="alert" className="text-destructive">
+                  {t("accountAnonymizeActiveEvent")}
+                </p>
+              )}
+              {eligibility.requiresVenueExit && (
+                <p role="alert" className="text-destructive">
+                  {t("accountAnonymizeExitRequired")}
+                </p>
+              )}
+              <p>
+                <Link href="/privacy" className="underline underline-offset-2">
+                  {t("privacyPolicy")}
+                </Link>
+              </p>
+            </div>
+          ) : (
+            <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-pretty text-sm">
+              <li>{t("accountAccessRevokedConsequence")}</li>
+              <li>
+                {eligibility.operationalHistoryRetained
+                  ? t("operationalHistoryRetainedConsequence")
+                  : t("freshAccountRemovedConsequence")}
+              </li>
+              {eligibility.integrityWarning && <li>{t("accountRemovalIntegrityWarning")}</li>}
+              <li>{t("cantBeUndone")}</li>
+            </ul>
+          )}
         </AlertModal>
       )}
     </div>

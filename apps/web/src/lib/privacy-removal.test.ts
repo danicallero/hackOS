@@ -3,7 +3,10 @@ import {
   type AccountRemovalEligibility,
   accountRemovalIdempotencyKey,
   accountRemovalRequest,
+  clearAccountRemovalProgress,
   clearWebAccountData,
+  readAccountRemovalProgress,
+  saveAccountRemovalProgress,
 } from "./privacy-removal";
 
 class MemoryStorage {
@@ -60,7 +63,7 @@ describe("account removal eligibility", () => {
       operationalHistoryRetained: action === "anonymize",
       activeEventConsequences: action === "anonymize",
       requiresVenueExit: false,
-      retainedFields: action === "anonymize" ? ["age"] : [],
+      integrityWarning: false,
     };
     expect(accountRemovalRequest(42, eligibility.action)).toEqual({ method, path });
   });
@@ -84,5 +87,19 @@ describe("account removal eligibility", () => {
     expect(window.localStorage.getItem("queue-ops-arrival-hints")).toBeNull();
     expect(window.localStorage.getItem("unrelated-app")).toBe("keep");
     expect(window.sessionStorage.length).toBe(0);
+  });
+
+  it.each([
+    "pending_exit",
+    "processing",
+    "device_cleanup_pending",
+  ] as const)("stores restart-safe %s progress without an identity", (status) => {
+    saveAccountRemovalProgress({ action: "anonymize", status });
+
+    expect(readAccountRemovalProgress()).toEqual({ action: "anonymize", status });
+    expect(window.localStorage.getItem("hackos:account-removal-progress")).not.toContain("email");
+
+    clearAccountRemovalProgress();
+    expect(readAccountRemovalProgress()).toBeNull();
   });
 });

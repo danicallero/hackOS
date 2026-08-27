@@ -82,7 +82,7 @@ Cuando un cambio afecte de forma relevante al uso ordinario de hackOS, intentare
 
 El Operador puede limitar o suspender una cuenta cuando exista un incumplimiento de estos términos, un riesgo para la seguridad, una obligación legal o un uso que perjudique a la plataforma o a otras personas. Siempre que sea posible, se informará del motivo y de las medidas para resolver la situación.
 
-Puedes iniciar el cierre de tu cuenta desde «Ajustes → Zona de peligro»; el servidor explicará si corresponde la eliminación completa o la anonimización irreversible según tu historial operativo. También puedes ejercer tus derechos sobre los datos personales mediante los canales indicados en la política de privacidad. Determinada información podrá conservarse de forma anónima cuando sea necesaria para la auditoría de participación.
+Puedes iniciar el cierre de tu cuenta desde «Ajustes → Zona de peligro»; el servidor explicará si corresponde la eliminación completa o la anonimización irreversible según la acreditación canónica del evento. Si todavía constas dentro del recinto, una solicitud aceptada se completará cuando el personal registre tu salida. También puedes ejercer tus derechos sobre los datos personales mediante los canales indicados en la política de privacidad. Determinada información podrá conservarse de forma anónima cuando sea necesaria para la auditoría de participación.
 
 ## 12. Responsabilidad
 
@@ -182,7 +182,7 @@ Cando un cambio afecte de forma relevante o uso ordinario de hackOS, tentaremos 
 
 O Operador pode limitar ou suspender unha conta cando exista un incumprimento destes termos, un risco para a seguridade, unha obriga legal ou un uso que prexudique a plataforma ou outras persoas. Sempre que sexa posible, informarase do motivo e das medidas para resolver a situación.
 
-Podes iniciar o peche da túa conta desde «Axustes → Zona de perigo»; o servidor explicará se corresponde a eliminación completa ou a anonimización irreversible segundo o teu historial operativo. Tamén podes exercer os teus dereitos sobre os datos persoais mediante as canles indicadas na política de privacidade. Determinada información poderá conservarse de forma anónima cando sexa necesaria para a auditoría da participación.
+Podes iniciar o peche da túa conta desde «Axustes → Zona de perigo»; o servidor explicará se corresponde a eliminación completa ou a anonimización irreversible segundo a acreditación canónica do evento. Se aínda constas dentro do recinto, unha solicitude aceptada completarase cando o persoal rexistre a túa saída. Tamén podes exercer os teus dereitos sobre os datos persoais mediante as canles indicadas na política de privacidade. Determinada información poderá conservarse de forma anónima cando sexa necesaria para a auditoría da participación.
 
 ## 12. Responsabilidade
 
@@ -282,7 +282,7 @@ Where a change materially affects ordinary use of hackOS, we will try to give re
 
 The Operator may restrict or suspend an account where these terms have been breached, a security risk or legal obligation exists, or use of the account harms the platform or others. Where possible, the reason and steps needed to resolve the situation will be provided.
 
-You can start account closure from "Settings → Danger zone"; the server will explain whether full deletion or irreversible anonymisation applies based on your operational history. You may also exercise your personal-data rights through the channels described in the privacy policy. Some information may be retained anonymously where needed for participation auditing.
+You can start account closure from "Settings → Danger zone"; the server will explain whether full deletion or irreversible anonymisation applies based on canonical event accreditation. If you are still recorded inside the venue, an accepted request completes after staff record your exit. You may also exercise your personal-data rights through the channels described in the privacy policy. Some information may be retained anonymously where needed for participation auditing.
 
 ## 12. Liability
 

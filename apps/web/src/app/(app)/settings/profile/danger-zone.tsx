@@ -5,6 +5,7 @@
 // decision, then clears browser-held data after the authenticated operation.
 
 import { ChevronDownIcon, TriangleAlertIcon } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -14,30 +15,15 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ApiError, api } from "@/lib/api";
 import { signOut } from "@/lib/auth-client";
-import { type MessageKey, useLocale } from "@/lib/i18n";
+import { useLocale } from "@/lib/i18n";
 import {
   type AccountRemovalEligibility,
+  type AccountRemovalProgress,
   accountRemovalIdempotencyKey,
   clearWebAccountData,
+  saveAccountRemovalProgress,
 } from "@/lib/privacy-removal";
 import { useMe } from "@/lib/session";
-
-const RETAINED_FIELD_COPY: Record<string, MessageKey> = {
-  age: "accountRetainedAge",
-  gender: "accountRetainedGender",
-  university: "accountRetainedUniversity",
-  degree: "accountRetainedDegree",
-  "graduation year": "accountRetainedGraduationYear",
-  "origin city": "accountRetainedOriginCity",
-  "guaranteed venue-presence time": "accountRetainedPresenceTime",
-};
-
-function isParticipantInside(error: unknown): boolean {
-  if (!(error instanceof ApiError) || !error.details || typeof error.details !== "object") {
-    return false;
-  }
-  return (error.details as { code?: unknown }).code === "participant_inside";
-}
 
 export function DangerZoneCard() {
   const { t } = useLocale();
@@ -66,7 +52,13 @@ export function DangerZoneCard() {
     };
   }, []);
 
-  async function finishLocalAccountClosure(pendingCleanup: boolean) {
+  async function finishLocalAccountClosure(
+    action: AccountRemovalProgress["action"],
+    pendingCleanup: boolean,
+    message?: string,
+    progress?: AccountRemovalProgress,
+  ) {
+    let localCleanupFailed = false;
     try {
       await clearOfflineQueue(me?.id ?? null);
     } catch {
@@ -76,12 +68,20 @@ export function DangerZoneCard() {
       try {
         await clearOfflineQueue(null);
       } catch {
-        // There is no plaintext fallback; sign-out still prevents this
-        // account from using any queue that remains in browser storage.
+        localCleanupFailed = true;
       }
     }
     clearWebAccountData();
-    if (pendingCleanup) toast.info(t("accountRemovalPending"));
+    const savedProgress =
+      progress ??
+      (localCleanupFailed ? { action, status: "device_cleanup_pending" as const } : null);
+    if (savedProgress) saveAccountRemovalProgress(savedProgress);
+    if (pendingCleanup || message || localCleanupFailed) {
+      toast.info(
+        message ??
+          t(localCleanupFailed ? "accountRemovalDeviceCleanupPending" : "accountRemovalPending"),
+      );
+    }
     try {
       // The API already revoked the session before external cleanup. This is
       // still attempted so Better Auth can clear any remaining browser state.
@@ -98,13 +98,29 @@ export function DangerZoneCard() {
     setPending(true);
     try {
       const headers = { "Idempotency-Key": accountRemovalIdempotencyKey(action) };
+      let result: { status: "completed" | "pending_exit" | "processing" };
       if (action === "delete") {
-        await api.delete("/api/me", { headers });
+        result = await api.delete<typeof result>("/api/me", { headers });
       } else {
-        await api.post("/api/me/anonymize", { confirm: true }, { headers });
+        result = await api.post<typeof result>("/api/me/anonymize", { confirm: true }, { headers });
       }
-      toast.success(action === "delete" ? t("accountDeleted") : t("accountAnonymized"));
-      await finishLocalAccountClosure(false);
+      const progress =
+        result.status === "completed" ? undefined : { action, status: result.status };
+      if (result.status === "completed") {
+        toast.success(action === "delete" ? t("accountDeleted") : t("accountAnonymized"));
+      }
+      await finishLocalAccountClosure(
+        action,
+        progress !== undefined,
+        progress?.status === "pending_exit"
+          ? action === "anonymize"
+            ? t("accountAnonymizePendingExit")
+            : t("accountRemovalPendingExit")
+          : progress
+            ? t("accountRemovalPending")
+            : undefined,
+        progress,
+      );
     } catch (error) {
       // A network failure has an ambiguous outcome: the API may have revoked
       // the account and the browser may simply have lost the response. Clear
@@ -117,24 +133,15 @@ export function DangerZoneCard() {
         error.code === "removal_storage_pending" ||
         error.status >= 500;
       if (ambiguousOutcome) {
-        await finishLocalAccountClosure(true);
+        await finishLocalAccountClosure(action, true, undefined, { action, status: "processing" });
         return;
-      }
-      if (isParticipantInside(error)) {
-        setConfirmOpen(false);
-        try {
-          setEligibility(await api.get<AccountRemovalEligibility>("/api/me/removal-eligibility"));
-        } catch {
-          // Keep the existing explanation if the refresh is unavailable.
-        }
       }
       toast.error(error instanceof ApiError ? error.message : t("couldNotRemoveAccount"));
       setPending(false);
     }
   }
 
-  const canConfirm =
-    eligibility !== null && !(eligibility.action === "anonymize" && eligibility.requiresVenueExit);
+  const canConfirm = eligibility !== null;
 
   return (
     <SectionCard icon={TriangleAlertIcon} title={t("dangerZone")}>
@@ -153,6 +160,21 @@ export function DangerZoneCard() {
               <p className="text-muted-foreground text-pretty text-sm">
                 {t("deleteMyAccountDesc")}
               </p>
+              {eligibility.requiresVenueExit && (
+                <p role="alert" className="text-destructive text-pretty text-sm">
+                  {t("accountRemovalExitRequired")}
+                </p>
+              )}
+              {eligibility.integrityWarning && (
+                <p role="alert" className="text-destructive text-pretty text-sm">
+                  {t("accountRemovalIntegrityWarning")}
+                </p>
+              )}
+              <p className="text-muted-foreground text-sm">
+                <Link href="/privacy" className="underline underline-offset-2">
+                  {t("privacyPolicy")}
+                </Link>
+              </p>
               <Button
                 type="button"
                 variant="outline"
@@ -168,28 +190,6 @@ export function DangerZoneCard() {
               <p className="text-muted-foreground text-pretty text-sm">
                 {t("accountAnonymizeDescription")}
               </p>
-              <p className="text-muted-foreground text-pretty text-sm">
-                {t("accountAnonymizeApplicationNote")}
-              </p>
-              <div>
-                <p className="text-muted-foreground text-sm">{t("accountRetainedFieldsIntro")}</p>
-                <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-sm">
-                  {eligibility.retainedFields.map((field) => (
-                    <li key={field}>
-                      {RETAINED_FIELD_COPY[field] ? t(RETAINED_FIELD_COPY[field]) : field}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <p className="text-muted-foreground text-pretty text-sm">
-                {t("accountAnonymizeProofLoss")}
-              </p>
-              <p className="text-muted-foreground text-pretty text-sm">
-                {t("accountAnonymizeApplicationNote")}
-              </p>
-              <p className="text-muted-foreground text-pretty text-sm">
-                {t("accountAnonymizeNoIdentityMapping")}
-              </p>
               {eligibility.activeEventConsequences && (
                 <p role="alert" className="text-destructive text-pretty text-sm">
                   {t("accountAnonymizeActiveEvent")}
@@ -200,6 +200,16 @@ export function DangerZoneCard() {
                   {t("accountAnonymizeExitRequired")}
                 </p>
               )}
+              {eligibility.integrityWarning && (
+                <p role="alert" className="text-destructive text-pretty text-sm">
+                  {t("accountRemovalIntegrityWarning")}
+                </p>
+              )}
+              <p className="text-muted-foreground text-sm">
+                <Link href="/privacy" className="underline underline-offset-2">
+                  {t("privacyPolicy")}
+                </Link>
+              </p>
               <Button
                 type="button"
                 variant="outline"
@@ -242,33 +252,25 @@ export function DangerZoneCard() {
           onConfirm={removeAccount}
         >
           {eligibility.action === "anonymize" ? (
-            <>
-              <p className="text-muted-foreground text-sm">{t("accountRetainedFieldsIntro")}</p>
-              <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-pretty text-sm">
-                {eligibility.retainedFields.map((field) => (
-                  <li key={field}>
-                    {RETAINED_FIELD_COPY[field] ? t(RETAINED_FIELD_COPY[field]) : field}
-                  </li>
-                ))}
-              </ul>
-              <p className="text-muted-foreground text-pretty text-sm">
-                {t("accountAnonymizeProofLoss")}
-              </p>
-              <p className="text-muted-foreground text-pretty text-sm">
-                {t("accountAnonymizeNoIdentityMapping")}
-              </p>
-              {eligibility.activeEventConsequences && (
-                <p role="alert" className="text-destructive text-pretty text-sm">
-                  {t("accountAnonymizeActiveEvent")}
-                </p>
-              )}
-            </>
+            <p className="text-muted-foreground text-sm">
+              <Link href="/privacy" className="underline underline-offset-2">
+                {t("privacyPolicy")}
+              </Link>
+            </p>
           ) : (
-            <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-pretty text-sm">
-              <li>{t("accountAccessRevokedConsequence")}</li>
-              <li>{t("freshAccountRemovedConsequence")}</li>
-              <li>{t("cantBeUndone")}</li>
-            </ul>
+            <>
+              <p className="text-muted-foreground mb-2 text-sm">
+                <Link href="/privacy" className="underline underline-offset-2">
+                  {t("privacyPolicy")}
+                </Link>
+              </p>
+              <ul className="text-muted-foreground list-disc space-y-1 pl-5 text-pretty text-sm">
+                <li>{t("accountAccessRevokedConsequence")}</li>
+                <li>{t("freshAccountRemovedConsequence")}</li>
+                {eligibility.requiresVenueExit && <li>{t("accountRemovalExitRequired")}</li>}
+                <li>{t("cantBeUndone")}</li>
+              </ul>
+            </>
           )}
         </AlertModal>
       )}

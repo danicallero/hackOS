@@ -69,6 +69,10 @@ export interface TemplateField {
    *  into (text/textarea/number). Falls back to a generic string. */
   placeholder?: I18nText;
   validation?: FieldValidation;
+  /** Explicit permanent-retention policy; missing means no retention. */
+  retention_mode?: "none" | "anonymous_audit";
+  /** Optional open semantic slug for anonymous-audit reporting. */
+  anonymous_audit_dimension?: string | null;
 }
 
 /** Response-validation rules (H11) — which sub-fields apply depends on the
@@ -107,6 +111,8 @@ export interface ApplicationForm {
   type: ApplicationType;
   template: TemplateField[];
   sections: FormSection[];
+  /** Immutable snapshot used by newly-created drafts/submissions. */
+  current_form_version: number;
   description: string | null;
   active: boolean;
   open_at: string | null;
