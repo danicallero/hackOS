@@ -777,7 +777,7 @@ describe("self-service account removal (H54)", () => {
       method: "POST",
       url: "/api/me/anonymize",
       headers: { ...asUser(user), "idempotency-key": "inside-anonymize" },
-      payload: { confirm: true },
+      payload: { confirm: true, reauthenticationPassword: UNVERIFIED_TEST_PASSWORD },
     });
 
     expect(removal.statusCode).toBe(202);
@@ -922,7 +922,7 @@ describe("self-service account removal (H54)", () => {
       method: "POST",
       url: "/api/me/anonymize",
       headers: { ...asUser(user), "idempotency-key": "cancel-pending-request" },
-      payload: { confirm: true },
+      payload: { confirm: true, reauthenticationPassword: UNVERIFIED_TEST_PASSWORD },
     });
     expect(requested.statusCode).toBe(202);
 
@@ -1109,7 +1109,7 @@ describe("self-service account removal (H54)", () => {
       method: "POST",
       url: "/api/me/anonymize",
       headers,
-      payload: { confirm: true },
+      payload: { confirm: true, reauthenticationPassword: UNVERIFIED_TEST_PASSWORD },
     });
     expect(removed.statusCode).toBe(200);
     expect(removed.json().anonymized).toBe(true);

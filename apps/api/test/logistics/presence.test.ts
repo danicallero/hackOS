@@ -16,12 +16,13 @@ import { assignBadge, createMeal } from "./fixtures.js";
 let app: App;
 let doorStaff: number;
 let statsStaff: number;
+const PRESENCE_REMOVAL_PASSWORD = "presence-removal-password";
 
 async function addUnverifiedCredential(userId: number): Promise<void> {
   await pool.query(
     `INSERT INTO accounts (user_id, account_id, provider_id, password)
      VALUES ($1, $2, 'credential', $3)`,
-    [userId, String(userId), await hashPassword("presence-removal-password")],
+    [userId, String(userId), await hashPassword(PRESENCE_REMOVAL_PASSWORD)],
   );
 }
 
@@ -710,7 +711,7 @@ describe("H24 event-end automatic exit (product override: the one system-closed 
       method: "POST",
       url: "/api/me/anonymize",
       headers: { ...asUser(uid), "idempotency-key": "event-end-removal" },
-      payload: { confirm: true },
+      payload: { confirm: true, reauthenticationPassword: PRESENCE_REMOVAL_PASSWORD },
     });
     expect(removal.statusCode).toBe(202);
     expect(removal.json().status).toBe("pending_exit");
@@ -761,7 +762,7 @@ describe("H24 event-end automatic exit (product override: the one system-closed 
       method: "POST",
       url: "/api/me/anonymize",
       headers: { ...asUser(uid), "idempotency-key": "expired-removal" },
-      payload: { confirm: true },
+      payload: { confirm: true, reauthenticationPassword: PRESENCE_REMOVAL_PASSWORD },
     });
     expect(removal.statusCode).toBe(200);
     expect(removal.json().anonymized).toBe(true);
