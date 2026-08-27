@@ -105,13 +105,15 @@ export async function replayPendingScans(
       }
       // A 404 is terminal for a queued identity-bearing scan: the participant
       // or operation was removed before this device came back online. A
-      // revoked badge is the explicit 409 variant of the same condition.
+      // revoked/unknown badge is the explicit 409 variant of the same
+      // condition, including the tombstone response after anonymization.
       // Delete the encrypted local payload instead of retaining it forever in
       // a failed queue entry.
       if (
         error instanceof ApiError &&
         (error.code === "not_found" ||
           error.code === "badge_revoked" ||
+          error.code === "badge_unknown" ||
           error.code === "ticket_revoked")
       ) {
         await deleteScan(scan.id, ownerUserId);

@@ -237,6 +237,18 @@ describe("synchronizeScanner", () => {
     expect(mockFailScan).not.toHaveBeenCalled();
   });
 
+  it("drops a queued scan when anonymization makes its badge unknown", async () => {
+    mockPendingScans.mockResolvedValue([presenceScan("scan-anonymized")]);
+    mockApiFetch
+      .mockRejectedValueOnce(apiError(409, "Badge not found", "badge_unknown"))
+      .mockResolvedValueOnce({ generatedAt: "t0", people: [], activities: [], activityStates: [] });
+
+    await synchronizeScanner(OWNER_USER_ID);
+
+    expect(mockDeleteScan).toHaveBeenCalledWith("scan-anonymized", OWNER_USER_ID);
+    expect(mockFailScan).not.toHaveBeenCalled();
+  });
+
   it("corrects a timestamp rejected as future by the measured clock skew and retries once", async () => {
     // Device clock is 5 minutes ahead of the server's.
     mockGetClockSkewMs.mockReturnValue(-5 * 60_000);
