@@ -13,6 +13,8 @@ import { SectionCard } from "@/components/common/section-card";
 import { clearOfflineQueue } from "@/components/logistics/offline-queue";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ApiError, api } from "@/lib/api";
 import { signOut } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
@@ -33,6 +35,9 @@ export function DangerZoneCard() {
   const [open, setOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, setPending] = useState(false);
+  const [pinSent, setPinSent] = useState(false);
+  const [securityPin, setSecurityPin] = useState("");
+  const [pinError, setPinError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -92,17 +97,55 @@ export function DangerZoneCard() {
     window.location.assign("/login");
   }
 
+  function resetPinFlow() {
+    setPinSent(false);
+    setSecurityPin("");
+    setPinError(null);
+  }
+
+  function handleConfirmOpenChange(nextOpen: boolean) {
+    setConfirmOpen(nextOpen);
+    if (!nextOpen) {
+      setPending(false);
+      resetPinFlow();
+    }
+  }
+
   async function removeAccount() {
     const action = eligibility?.action;
     if (!action) return;
     setPending(true);
+    setPinError(null);
     try {
+      if (eligibility.securityPinRequired && !pinSent) {
+        const pinResult = await api.post<{ status: "sent" | "not_required" }>(
+          "/api/me/removal-pin",
+        );
+        if (pinResult.status === "sent") {
+          setPinSent(true);
+          toast.info(t("accountRemovalPinSent"));
+          setPending(false);
+          return;
+        }
+      }
+      if (eligibility.securityPinRequired && pinSent && !/^\d{6}$/.test(securityPin)) {
+        setPinError(t("accountRemovalPinInvalid"));
+        setPending(false);
+        return;
+      }
       const headers = { "Idempotency-Key": accountRemovalIdempotencyKey(action) };
       let result: { status: "completed" | "pending_exit" | "processing" };
       if (action === "delete") {
-        result = await api.delete<typeof result>("/api/me", { headers });
+        result = await api.delete<typeof result>("/api/me", {
+          headers,
+          body: securityPin ? { securityPin } : undefined,
+        });
       } else {
-        result = await api.post<typeof result>("/api/me/anonymize", { confirm: true }, { headers });
+        result = await api.post<typeof result>(
+          "/api/me/anonymize",
+          { confirm: true, ...(securityPin ? { securityPin } : {}) },
+          { headers },
+        );
       }
       const progress =
         result.status === "completed" ? undefined : { action, status: result.status };
@@ -136,7 +179,18 @@ export function DangerZoneCard() {
         await finishLocalAccountClosure(action, true, undefined, { action, status: "processing" });
         return;
       }
-      toast.error(error instanceof ApiError ? error.message : t("couldNotRemoveAccount"));
+      if (error instanceof ApiError && error.code === "removal_pin_expired") {
+        setPinSent(false);
+        setSecurityPin("");
+        setPinError(t("accountRemovalPinExpired"));
+      } else if (
+        error instanceof ApiError &&
+        ["removal_pin_invalid", "removal_pin_required"].includes(error.code)
+      ) {
+        setPinError(t("accountRemovalPinInvalid"));
+      } else {
+        toast.error(error instanceof ApiError ? error.message : t("couldNotRemoveAccount"));
+      }
       setPending(false);
     }
   }
@@ -231,7 +285,7 @@ export function DangerZoneCard() {
       {eligibility && (
         <AlertModal
           open={confirmOpen}
-          onOpenChange={setConfirmOpen}
+          onOpenChange={handleConfirmOpenChange}
           title={
             eligibility.action === "delete"
               ? t("deleteMyAccountConfirmTitle")
@@ -244,14 +298,55 @@ export function DangerZoneCard() {
           }
           cancelLabel={t("cancel")}
           confirmLabel={
-            eligibility.action === "delete" ? t("deleteAction") : t("accountAnonymizeAction")
+            eligibility.securityPinRequired && !pinSent
+              ? t("accountRemovalSendPin")
+              : eligibility.action === "delete"
+                ? t("deleteAction")
+                : t("accountAnonymizeAction")
           }
           pending={pending}
           destructive
           reverseActions
           onConfirm={removeAccount}
         >
-          {eligibility.action === "anonymize" ? (
+          {eligibility.securityPinRequired ? (
+            <div className="space-y-3">
+              <p className="text-muted-foreground text-sm">
+                {pinSent ? t("accountRemovalPinDescription") : t("accountRemovalPinPrompt")}
+              </p>
+              {pinSent ? (
+                <div className="space-y-2">
+                  <Label htmlFor="account-removal-security-pin">
+                    {t("accountRemovalPinLabel")}
+                  </Label>
+                  <Input
+                    id="account-removal-security-pin"
+                    aria-describedby={pinError ? "account-removal-security-pin-error" : undefined}
+                    aria-invalid={pinError ? true : undefined}
+                    autoComplete="one-time-code"
+                    autoFocus
+                    inputMode="numeric"
+                    maxLength={6}
+                    onChange={(event) => {
+                      setSecurityPin(event.target.value.replace(/\D/g, "").slice(0, 6));
+                      setPinError(null);
+                    }}
+                    placeholder="000000"
+                    value={securityPin}
+                  />
+                  {pinError ? (
+                    <p
+                      id="account-removal-security-pin-error"
+                      role="alert"
+                      className="text-destructive text-sm"
+                    >
+                      {pinError}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : eligibility.action === "anonymize" ? (
             <p className="text-muted-foreground text-sm">
               <Link href="/privacy" className="underline underline-offset-2">
                 {t("privacyPolicy")}

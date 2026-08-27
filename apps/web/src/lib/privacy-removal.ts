@@ -17,6 +17,7 @@ export interface AccountRemovalEligibility {
   activeEventConsequences: boolean;
   requiresVenueExit: boolean;
   integrityWarning: boolean;
+  securityPinRequired: boolean;
 }
 
 export function accountRemovalRequest(userId: number, action: AccountRemovalAction) {

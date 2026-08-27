@@ -64,6 +64,7 @@ describe("account removal eligibility", () => {
       activeEventConsequences: action === "anonymize",
       requiresVenueExit: false,
       integrityWarning: false,
+      securityPinRequired: false,
     };
     expect(accountRemovalRequest(42, eligibility.action)).toEqual({ method, path });
   });
