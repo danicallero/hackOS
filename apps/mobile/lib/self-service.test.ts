@@ -4,6 +4,7 @@ import {
   declineOwnSpot,
   deleteOwnAccount,
   fetchAccountRemovalEligibility,
+  requestAccountRemovalPin,
 } from "./self-service";
 
 jest.mock("./api", () => ({ apiFetch: jest.fn() }));
@@ -32,6 +33,29 @@ describe("mobile self-service account actions (H15, H54)", () => {
     });
   });
 
+  it("sends the removal PIN request through the authenticated endpoint", async () => {
+    mockedApiFetch.mockResolvedValueOnce({ status: "sent", expiresAt: "2026-08-27T12:00:00.000Z" });
+
+    await requestAccountRemovalPin();
+
+    expect(mockedApiFetch).toHaveBeenCalledWith("/api/me/removal-pin", { method: "POST" });
+  });
+
+  it("sends a security PIN when deleting a verified account", async () => {
+    mockedApiFetch.mockResolvedValueOnce({ deleted: true });
+
+    await deleteOwnAccount("123456");
+
+    expect(mockedApiFetch).toHaveBeenCalledWith("/api/me", {
+      method: "DELETE",
+      headers: {
+        "content-type": "application/json",
+        "Idempotency-Key": expect.stringMatching(/^account-delete-/),
+      },
+      body: JSON.stringify({ securityPin: "123456" }),
+    });
+  });
+
   it("confirms irreversible anonymization through the own-account endpoint", async () => {
     mockedApiFetch.mockResolvedValueOnce({ anonymized: true });
 
@@ -44,6 +68,21 @@ describe("mobile self-service account actions (H15, H54)", () => {
         "Idempotency-Key": expect.stringMatching(/^account-anonymize-/),
       },
       body: JSON.stringify({ confirm: true }),
+    });
+  });
+
+  it("sends a security PIN when anonymizing a verified account", async () => {
+    mockedApiFetch.mockResolvedValueOnce({ anonymized: true });
+
+    await anonymizeOwnAccount("123456");
+
+    expect(mockedApiFetch).toHaveBeenCalledWith("/api/me/anonymize", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "Idempotency-Key": expect.stringMatching(/^account-anonymize-/),
+      },
+      body: JSON.stringify({ confirm: true, securityPin: "123456" }),
     });
   });
 
