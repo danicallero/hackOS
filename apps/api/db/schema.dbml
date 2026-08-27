@@ -131,16 +131,24 @@ Table announcements {
 
 Table anonymous_participants {
   id uuid [pk, not null]
-  age integer
-  gender text
-  university text
-  degree text
-  graduation_year smallint
-  origin_city text
   guaranteed_presence_minutes integer [not null, default: `0`, note: 'H24 verified/guaranteed venue time, rounded down to complete minutes at anonymization. Raw presence events are not retained after anonymization.']
   created_at "timestamp with time zone" [not null, default: `now()`]
 
-  Note: 'H54 permanent minimum audit subject: approved demographics and aggregate verified venue time only; id is random and has no relationship to users.id.'
+  Note: 'H54 permanent minimum audit subject: random id and aggregate verified venue time; explicitly retained application values live in anonymous_participant_fields and have no relationship to users.id.'
+}
+
+Table anonymous_participant_fields {
+  id bigint [pk, increment, not null]
+  anonymous_participant_id uuid [not null]
+  application_id integer
+  application_form_version integer
+  field_key text [not null]
+  anonymous_audit_dimension text
+  field_kind text [not null]
+  value jsonb [not null]
+  created_at "timestamp with time zone" [not null, default: `now()`]
+
+  Note: 'H54 dynamic anonymous application answers. Rows are copied only from fields explicitly marked ANONYMOUS_AUDIT in the immutable submitted form version; no user or response foreign key is retained.'
 }
 
 Table applicant_reviews {
@@ -160,6 +168,7 @@ Table application_responses {
   id integer [pk, increment, not null]
   user_id integer [not null]
   application_id integer [not null]
+  application_form_version_id bigint
   referrer_user_id integer
   referrer_application_id integer
   status app_response_status [not null, default: `'draft'::app_response_status`]
@@ -193,6 +202,24 @@ Table applications {
   ask_shirt_size boolean [not null, default: `false`]
   ask_food_intolerances boolean [not null, default: `false`]
   sections jsonb [not null, default: `'[]'::jsonb`]
+  current_form_version integer [not null, default: `1`]
+}
+
+Table application_form_versions {
+  id bigint [pk, increment, not null]
+  application_id integer [not null]
+  version integer [not null]
+  template jsonb [not null]
+  sections jsonb [not null, default: `'[]'::jsonb`]
+  created_by integer
+  created_at "timestamp with time zone" [not null, default: `now()`]
+
+  indexes {
+  (application_id, version) [unique]
+  (application_id, id) [unique]
+  }
+
+  Note: 'H54 immutable application schema snapshot. Retention policy is evaluated from the version used by a response, never from the later mutable form.'
 }
 
 Table attempt_review {
@@ -695,13 +722,13 @@ Table rooms {
 Table scanner_revoked_badges {
   badge_id text [pk, not null]
   revoked_at "timestamp with time zone" [not null, default: `now()`]
-  expires_at "timestamp with time zone" [not null]
+  expires_at "timestamp with time zone" [note: 'NULL = permanently retired, unlinked scanner credential denylist entry.']
 }
 
 Table scanner_revoked_tickets {
   ticket_token text [pk, not null]
   revoked_at "timestamp with time zone" [not null, default: `now()`]
-  expires_at "timestamp with time zone" [not null]
+  expires_at "timestamp with time zone" [note: 'NULL = permanently retired, unlinked scanner credential denylist entry.']
 }
 
 Table schedule {
@@ -888,6 +915,8 @@ Table users {
   account_state text [not null, default: `'active'::text`, note: 'H54 lifecycle gate: active writers are rejected once removal_pending is committed.']
   removal_action text [note: 'H54 action selected while the user row is locked; prevents a retry from changing mode.']
   removal_started_at "timestamp with time zone"
+  removal_requires_exit boolean [not null, default: `false`, note: 'H54 transient gate: only a valid door exit may be written before final removal.']
+  removal_idempotency_key text [note: 'H54 transient self-service replay key; deleted with the user and never mapped to an anonymous participant.']
 
   Note: 'No role column: role is derived at login from relationships (admin > staff > judge > sponsor > participant). Permissions come from capability groups only (H8).'
 }
@@ -940,6 +969,8 @@ Ref: activities.schedule_id > schedule.id
 Ref: activity_logs.activity_id > activities.id
 Ref: activity_logs.logged_by > users.id
 Ref: activity_logs.user_id > users.id
+Ref: anonymous_participant_fields.anonymous_participant_id > anonymous_participants.id
+Ref: anonymous_participant_fields.application_id > applications.id
 Ref: announcement_reads.announcement_id > announcements.id
 Ref: announcement_reads.user_id > users.id
 Ref: announcement_recipients.announcement_id > announcements.id
@@ -948,6 +979,7 @@ Ref: announcements.author_id > users.id
 Ref: applicant_reviews.author_id > users.id
 Ref: applicant_reviews.response_id > application_responses.id
 Ref: application_responses.application_id > applications.id
+Ref: application_responses.application_form_version_id > application_form_versions.id
 Ref: application_responses.confirmation_token_id > email_verification_tokens.id
 Ref: application_responses.referrer_application_id > application_responses.id
 Ref: application_responses.referrer_user_id > users.id
@@ -955,6 +987,8 @@ Ref: application_responses.user_id > users.id
 Ref: attempt_review.attempt_id > queue_entries.id
 Ref: attempt_review_versions.attempt_id > queue_entries.id
 Ref: attempt_review_versions.author_id > users.id
+Ref: application_form_versions.application_id > applications.id
+Ref: application_form_versions.created_by > users.id
 Ref: audit_log.actor_id > users.id
 Ref: challenge_versions.challenge_id > challenges.id
 Ref: challenge_versions.editor_id > users.id
