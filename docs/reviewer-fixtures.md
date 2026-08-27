@@ -44,7 +44,9 @@ isolation boundary.
 The queue fixture is deliberately marked on its challenge and repository. It
 is visible to the corresponding synthetic participant through the participant
 queue endpoint. Ordinary admin/staff project, challenge, queue, roster,
-scanner, presence and statistics reads exclude it. A synthetic operator sees
+scanner, presence, statistics, application-file exports and data-subject
+request views exclude it. A guessed private-upload key and personal export
+bundle cannot cross that marked-subject boundary. A synthetic operator sees
 only marked subjects and marked queue resources; a guessed real or synthetic
 resource outside that boundary is rejected. Synthetic rows are excluded from
 statistics and exports and are not permanent anonymous audit data.
@@ -108,4 +110,3 @@ These are implementation assumptions, not legal conclusions:
   digest in an unlinked global denylist. It does not retain the raw badge or
   ticket value; legitimate physical badge reuse still needs a separate
   assignment-binding/product decision before production.
-

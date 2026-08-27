@@ -185,6 +185,7 @@ scan alone is therefore insufficient.
 | F19 | Low | optional hardening | The branch has focused regression tests and a documented matrix, but provider deletion, lost-response, offline-device, backup and rare-cohort tests require deployment fixtures outside this repository. |
 | F20 | High | confirmed code problem fixed in this follow-up; privacy/security risk | A completed pending-exit scan could have persisted `userId` in the scanner idempotency response, and a late HTTP `202` could have overwritten a finalized `200`. Pending-exit responses are now identity-free and idempotency completion writes are monotonic. |
 | F21 | High | confirmed code problem fixed in this follow-up; privacy/security risk; operational risk | A retired ticket token could previously be assigned as a badge because the badge guard checked only live `tickets` rows. The guard now checks the detached ticket digest denylist too; regression coverage proves a retired ticket cannot become a replacement badge. |
+| F22 | Medium | confirmed code problem fixed in this follow-up; privacy/security risk; operational risk | Synthetic participant rows could otherwise leak through generic application-file exports, personal export bundles, DSR request views, or a guessed private-upload key. Global export/read paths now exclude marked subjects, DSR target creation is scope-checked, and upload downloads fail closed for missing or out-of-scope owners. |
 
 ## 4. Authoritative deletion boundary
 
@@ -377,6 +378,12 @@ correct it.
   pre-digest development rows. The digest is security metadata only; it does
   not solve physical badge reuse, which still needs assignment binding or a
   documented no-reuse policy.
+- `0743_review_fixture_accounts.sql` marks synthetic QA identities and stores
+  only the replaceable fixture registry pointer/generation.
+- `0744_review_fixture_queues.sql` marks the synthetic queue graph and stores
+  its cleanup pointers. Fixture projects/challenges/queue rows are isolated
+  from ordinary operations and are purged on regeneration or fixture closure;
+  they are not anonymous-audit data.
 
 Migration policy is checksum-enforced by `apps/api/scripts/migrate.ts`. There
 is no production database in scope for this branch, so the H54 migrations
@@ -559,6 +566,9 @@ synthetic identity-shaped `users` row.
 | `application_responses`: user FK, application-specific template answers, status, decisions, referrers | Application identity/data | Acceptance/participant logistics | Copy only fields explicitly marked `ANONYMOUS_AUDIT` in the response's immutable form version; delete the response, all other answers, dietary values and files; null subject referrers | Dynamic rows in `anonymous_participant_fields` for supplied retained values | Different applications/versions can ask different questions; labels and later edits do not change historical purpose. During `pending_exit`, the identifiable response remains transiently available for cancellation/exit and is destroyed at finalization. |
 | `anonymous_participants`: random UUID, guaranteed minutes, created timestamp | None | None until finalization | Created only for an accredited anonymization; no user FK or mapping | Random anonymous subject + system-generated verified minutes | Stable anonymous grouping without an identity bridge. |
 | `anonymous_participant_fields`: anonymous subject, form/application context, field key, open dimension, field kind, typed value | None | None until finalization | Survives only for explicitly retained, sanitized answers; no user/response FK | Dynamic retained application values; missing answers create no row | Normalized/queryable schema avoids fixed demographic columns and supports future dimensions. |
+| `users.is_test_account`, `anonymous_participants.is_test_account`: synthetic marker | QA marker | Isolated review fixture marker | Purge with the fixture; never convert a marker into a real participant attribute | No | The marker scopes synthetic data and keeps it out of ordinary operations, statistics and the permanent audit dataset. |
+| `review_fixture_accounts`: fixture key, replaceable user FK, generation, last successful sign-in | QA registry | Admin fixture provisioning/usage signal | Null or replace the user pointer during purge/regeneration; retain only the bounded registry metadata needed to operate fixtures | No | This is deployment/QA control data, not a participant or audit record; it contains no password, PIN, response, IP or user-agent history. |
+| `review_fixture_queues`: fixture key and synthetic enterprise/sponsor/challenge/repo/queue pointers | None | Participant-facing synthetic judging queue | Purge the marked queue/project graph before fixture regeneration or closure | No | Synthetic judging state exists only to exercise the participant flow and must not affect ordinary queues, statistics or audit counts. |
 | `applicant_reviews`: response/author, score, notes | Review workflow | Selection workflow | Delete subject response reviews and subject-authored reviews | No | Identity/free text; not audit requirement. |
 | Application upload objects: `responses` file keys, `uploads/<app>/<user>/...` | Personal file | Review/operations | Delete exact keys/prefixes | No | Personal files and identifying object paths. |
 | `data_subject_requests`: subject/requester, reason, key, error | DSR workflow | Export/delete workflow | Null subject/requester and clear reason/key/error; delete objects/prefix | No | Request metadata can identify the person. |
@@ -619,6 +629,7 @@ Implemented or updated in this branch:
 | Stale offline staff cache / sync after anonymization | Native scanner sync tests and web stale badge rejection path; device-never-reconnects is an operational test. |
 | Meal and dietary data | Meal inbox minimization tests; dietary fields are excluded from anonymous row. |
 | Judging and team relationships | Project/queue cleanup tests and shared sponsor-anchor regression. |
+| Synthetic fixture read/write isolation | `apps/api/test/identity/review-fixtures.test.ts`, `apps/api/test/applications/files-export.test.ts` and `apps/api/test/exports/bundle-leakage.test.ts` cover ordinary-admin visibility, response/DSR target isolation, synthetic global-export exclusion, and refusal to build a personal export bundle. |
 | Venue presence calculations | `apps/api/test/logistics/estimate.test.ts` and presence tests cover secured, duplicate, expired and malformed paths. |
 | Anonymous record generation | Profile tests assert random UUID differs from original ID and verified minutes survive without raw subject rows. |
 | Inability to recover identity | Profile regression inserts an email-bearing audit `entity_id`, verifies it is removed, and searches anonymous JSON for original email/name/ID. |
@@ -647,11 +658,16 @@ suite alone.
 - `apps/api/src/modules/{applications,exports,notifications,projects,queue,sponsors}/`:
   active readers/writers, upload/DSR cleanup, notification dispatch and
   project/team relation cleanup.
+- `apps/api/src/modules/identity/routes/review-fixtures.ts`,
+  `review-fixture-queues.ts`, and `review-fixture-usage.ts`: admin-only
+  synthetic account regeneration, queue-graph cleanup, marked-subject
+  isolation and non-sensitive successful-sign-in telemetry.
 - `apps/api/db/migrations/0730_account_deletion_anonymization.sql`, `0731`,
-  `0732`, `0733`, `0734`, `0735`, `0736`, `0737`, `0738`, `0739`, `0740`, `0741`: lifecycle, tombstones, meal
+  `0732`, `0733`, `0734`, `0735`, `0736`, `0737`, `0738`, `0739`, `0740`,
+  `0741`, `0743`, `0744`: lifecycle, tombstones, meal
   minimization, FK race/pending-exit guards, raw-presence minimization,
   transient email history, immutable form versions, dynamic anonymous fields,
-  and application/version integrity.
+  application/version integrity, and synthetic fixture isolation.
 
 ### Clients and copy
 
@@ -663,6 +679,9 @@ suite alone.
   offline scanner components.
 - `packages/shared/locales/{en,es,gl}/{mobile,web}.json` plus legal copy in
   `apps/web/src/components/legal/{privacy-copy,terms-copy}.ts`.
+- `apps/web/src/app/(app)/users/review-fixtures-dialog.tsx`: admin-only
+  generation and safe usage-status control; operating instructions are in
+  `docs/reviewer-fixtures.md`.
 - `docs/{modules-1-5,mobile,mobile-release,background-workers,api-reference,README}.md`.
 
 ## Assumptions ledger
