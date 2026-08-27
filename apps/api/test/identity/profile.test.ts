@@ -887,7 +887,7 @@ describe("self-service account removal (H54)", () => {
       method: "POST",
       url: "/api/me/anonymize",
       headers: { ...asUser(user), "idempotency-key": "inside-anonymize" },
-      payload: { confirm: true },
+      payload: { confirm: true, reauthenticationPassword: UNVERIFIED_TEST_PASSWORD },
     });
     expect(replay.statusCode).toBe(200);
     expect(replay.headers["idempotency-replayed"]).toBe("true");
@@ -1118,7 +1118,7 @@ describe("self-service account removal (H54)", () => {
       method: "POST",
       url: "/api/me/anonymize",
       headers,
-      payload: { confirm: true },
+      payload: { confirm: true, reauthenticationPassword: UNVERIFIED_TEST_PASSWORD },
     });
     expect(replay.statusCode).toBe(200);
     expect(replay.headers["idempotency-replayed"]).toBe("true");
@@ -1436,6 +1436,7 @@ describe("self-service account removal (H54)", () => {
         method: "DELETE",
         url: "/api/me",
         headers: { ...asUser(target), "idempotency-key": "race-delete" },
+        payload: { reauthenticationPassword: UNVERIFIED_TEST_PASSWORD },
       }),
       a.inject({
         method: "POST",
