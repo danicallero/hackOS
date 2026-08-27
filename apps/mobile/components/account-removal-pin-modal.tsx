@@ -11,6 +11,7 @@ export function AccountRemovalPinModal({
   action,
   busy = false,
   error,
+  staticPin = false,
   onCancel,
   onConfirm,
   visible,
@@ -18,6 +19,7 @@ export function AccountRemovalPinModal({
   action: AccountRemovalPinAction | null;
   busy?: boolean;
   error?: string | null;
+  staticPin?: boolean;
   onCancel: () => void;
   onConfirm: (pin: string) => void;
   visible: boolean;
@@ -77,7 +79,9 @@ export function AccountRemovalPinModal({
               {t("accountRemovalPinLabel")}
             </Text>
             <Text style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 21 }}>
-              {t("accountRemovalPinDescription")}
+              {staticPin
+                ? t("accountRemovalPinStaticDescription")
+                : t("accountRemovalPinDescription")}
             </Text>
           </View>
 

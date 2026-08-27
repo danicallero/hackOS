@@ -20,6 +20,7 @@ export interface Me {
   universityId: number | null;
   notes: string | null;
   accountState: "active" | "removal_pending";
+  isTestAccount: boolean;
   removal:
     | {
         status: "pending_exit";
@@ -74,6 +75,7 @@ export interface UserListItem {
   shirtSize: string | null;
   applicationStatus: string | null;
   confirmedSpot: boolean;
+  isTestAccount: boolean;
   createdAt: string;
 }
 export interface UserList {

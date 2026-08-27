@@ -36,6 +36,7 @@ export function DangerZoneCard() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [pinSent, setPinSent] = useState(false);
+  const [pinMode, setPinMode] = useState<"email" | "static" | null>(null);
   const [securityPin, setSecurityPin] = useState("");
   const [pinError, setPinError] = useState<string | null>(null);
 
@@ -99,6 +100,7 @@ export function DangerZoneCard() {
 
   function resetPinFlow() {
     setPinSent(false);
+    setPinMode(null);
     setSecurityPin("");
     setPinError(null);
   }
@@ -118,11 +120,19 @@ export function DangerZoneCard() {
     setPinError(null);
     try {
       if (eligibility.securityPinRequired && !pinSent) {
-        const pinResult = await api.post<{ status: "sent" | "not_required" }>(
+        const pinResult = await api.post<{ status: "sent" | "static" | "not_required" }>(
           "/api/me/removal-pin",
         );
+        if (pinResult.status === "static") {
+          setPinSent(true);
+          setPinMode("static");
+          toast.info(t("accountRemovalPinStaticSent"));
+          setPending(false);
+          return;
+        }
         if (pinResult.status === "sent") {
           setPinSent(true);
+          setPinMode("email");
           toast.info(t("accountRemovalPinSent"));
           setPending(false);
           return;
@@ -181,6 +191,7 @@ export function DangerZoneCard() {
       }
       if (error instanceof ApiError && error.code === "removal_pin_expired") {
         setPinSent(false);
+        setPinMode(null);
         setSecurityPin("");
         setPinError(t("accountRemovalPinExpired"));
       } else if (
@@ -312,7 +323,11 @@ export function DangerZoneCard() {
           {eligibility.securityPinRequired ? (
             <div className="space-y-3">
               <p className="text-muted-foreground text-sm">
-                {pinSent ? t("accountRemovalPinDescription") : t("accountRemovalPinPrompt")}
+                {pinSent
+                  ? pinMode === "static"
+                    ? t("accountRemovalPinStaticDescription")
+                    : t("accountRemovalPinDescription")
+                  : t("accountRemovalPinPrompt")}
               </p>
               {pinSent ? (
                 <div className="space-y-2">

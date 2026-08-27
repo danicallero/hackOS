@@ -83,6 +83,7 @@ export default function AccountScreen() {
   const [removalError, setRemovalError] = useState<Error | null>(null);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [removalPinAction, setRemovalPinAction] = useState<AccountRemovalPinAction | null>(null);
+  const [removalPinStatic, setRemovalPinStatic] = useState(false);
   const [removalPinError, setRemovalPinError] = useState<string | null>(null);
   const [removalPinRequestAction, setRemovalPinRequestAction] =
     useState<AccountRemovalPinAction | null>(null);
@@ -361,6 +362,7 @@ export default function AccountScreen() {
     setRemovalPinRequestError(null);
     if (!removalEligibility?.securityPinRequired) {
       setRemovalPinRequestAction(null);
+      setRemovalPinStatic(false);
       if (action === "delete") await deleteAccount();
       else await anonymizeAccount();
       return;
@@ -371,12 +373,14 @@ export default function AccountScreen() {
       const result = await requestAccountRemovalPin();
       if (result.status === "not_required") {
         setRemovalPinRequestAction(null);
+        setRemovalPinStatic(false);
         if (action === "delete") await deleteAccount();
         else await anonymizeAccount();
         return;
       }
       setRemovalPinRequestAction(null);
       setRemovalPinError(null);
+      setRemovalPinStatic(result.status === "static");
       setRemovalPinAction(action);
     } catch (cause) {
       setRemovalPinRequestError(
@@ -395,6 +399,7 @@ export default function AccountScreen() {
   function cancelRemovalPin() {
     if (deletingAccount) return;
     setRemovalPinAction(null);
+    setRemovalPinStatic(false);
     setRemovalPinError(null);
   }
 
@@ -811,6 +816,7 @@ export default function AccountScreen() {
         action={removalPinAction}
         busy={deletingAccount}
         error={removalPinError}
+        staticPin={removalPinStatic}
         onCancel={cancelRemovalPin}
         onConfirm={(pin) => void submitRemovalPin(pin)}
         visible={removalPinAction !== null}

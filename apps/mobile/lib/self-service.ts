@@ -12,7 +12,7 @@ export interface AccountRemovalEligibility {
 }
 
 export interface AccountRemovalPinResponse {
-  status: "sent" | "not_required";
+  status: "sent" | "static" | "not_required";
   expiresAt?: string;
 }
 
