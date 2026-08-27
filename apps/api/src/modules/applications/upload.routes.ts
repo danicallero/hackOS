@@ -3,7 +3,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { pool, withTransaction } from "../../db/pool.js";
+import { withTransaction } from "../../db/pool.js";
 import { requireAuth, userHasCapability } from "../../lib/capabilities.js";
 import {
   BadRequestError,
