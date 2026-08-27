@@ -65,6 +65,7 @@ describe("account removal eligibility", () => {
       requiresVenueExit: false,
       integrityWarning: false,
       securityPinRequired: false,
+      reauthenticationRequired: false,
     };
     expect(accountRemovalRequest(42, eligibility.action)).toEqual({ method, path });
   });

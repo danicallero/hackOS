@@ -9,6 +9,7 @@ export interface AccountRemovalEligibility {
   requiresVenueExit: boolean;
   integrityWarning: boolean;
   securityPinRequired: boolean;
+  reauthenticationRequired: boolean;
 }
 
 export interface AccountRemovalPinResponse {
@@ -36,25 +37,40 @@ function makeIdempotencyKey(prefix: string): string {
   return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`;
 }
 
-export function deleteOwnAccount(securityPin?: string): Promise<AccountRemovalResponse> {
+export function deleteOwnAccount(
+  securityPin?: string,
+  reauthenticationPassword?: string,
+): Promise<AccountRemovalResponse> {
+  const body = {
+    ...(securityPin ? { securityPin } : {}),
+    ...(reauthenticationPassword ? { reauthenticationPassword } : {}),
+  };
   return apiFetch<AccountRemovalResponse>("/api/me", {
     method: "DELETE",
     headers: {
-      ...(securityPin ? { "content-type": "application/json" } : {}),
+      ...(Object.keys(body).length > 0 ? { "content-type": "application/json" } : {}),
       "Idempotency-Key": makeIdempotencyKey("account-delete"),
     },
-    ...(securityPin ? { body: JSON.stringify({ securityPin }) } : {}),
+    ...(Object.keys(body).length > 0 ? { body: JSON.stringify(body) } : {}),
   });
 }
 
-export function anonymizeOwnAccount(securityPin?: string): Promise<AccountRemovalResponse> {
+export function anonymizeOwnAccount(
+  securityPin?: string,
+  reauthenticationPassword?: string,
+): Promise<AccountRemovalResponse> {
+  const body = {
+    confirm: true,
+    ...(securityPin ? { securityPin } : {}),
+    ...(reauthenticationPassword ? { reauthenticationPassword } : {}),
+  };
   return apiFetch<AccountRemovalResponse>("/api/me/anonymize", {
     method: "POST",
     headers: {
       "content-type": "application/json",
       "Idempotency-Key": makeIdempotencyKey("account-anonymize"),
     },
-    body: JSON.stringify({ confirm: true, ...(securityPin ? { securityPin } : {}) }),
+    body: JSON.stringify(body),
   });
 }
 

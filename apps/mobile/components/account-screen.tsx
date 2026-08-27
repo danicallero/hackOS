@@ -54,6 +54,7 @@ interface Intolerance {
 }
 
 const LANGUAGES: Lang[] = ["en", "es", "gl"];
+type AccountRemovalCredentialMode = "pin" | "password";
 
 /** Account overview with the same participant-owned profile fields exposed on web. */
 export default function AccountScreen() {
@@ -83,6 +84,8 @@ export default function AccountScreen() {
   const [removalError, setRemovalError] = useState<Error | null>(null);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [removalPinAction, setRemovalPinAction] = useState<AccountRemovalPinAction | null>(null);
+  const [removalCredentialMode, setRemovalCredentialMode] =
+    useState<AccountRemovalCredentialMode>("pin");
   const [removalPinStatic, setRemovalPinStatic] = useState(false);
   const [removalPinError, setRemovalPinError] = useState<string | null>(null);
   const [removalPinRequestAction, setRemovalPinRequestAction] =
@@ -265,6 +268,20 @@ export default function AccountScreen() {
 
   function handleRemovalPinFailure(cause: unknown, action: AccountRemovalPinAction): boolean {
     if (!(cause instanceof ApiError)) return false;
+    if (cause.code === "removal_reauthentication_required") {
+      setRemovalCredentialMode("password");
+      setRemovalPinStatic(false);
+      setRemovalPinAction(action);
+      setRemovalPinError(t("accountRemovalPasswordRequired"));
+      return true;
+    }
+    if (cause.code === "removal_reauthentication_invalid") {
+      setRemovalCredentialMode("password");
+      setRemovalPinStatic(false);
+      setRemovalPinAction(action);
+      setRemovalPinError(t("accountRemovalPasswordInvalid"));
+      return true;
+    }
     if (cause.code === "removal_pin_invalid") {
       setRemovalPinError(t("accountRemovalPinInvalid"));
       return true;
@@ -279,12 +296,12 @@ export default function AccountScreen() {
     return false;
   }
 
-  async function deleteAccount(securityPin?: string) {
+  async function deleteAccount(securityPin?: string, reauthenticationPassword?: string) {
     if (!me) return;
     setDeletingAccount(true);
     setRemovalError(null);
     try {
-      const result = await deleteOwnAccount(securityPin);
+      const result = await deleteOwnAccount(securityPin, reauthenticationPassword);
       const progress =
         result.status === "completed"
           ? undefined
@@ -318,12 +335,12 @@ export default function AccountScreen() {
     ]);
   }
 
-  async function anonymizeAccount(securityPin?: string) {
+  async function anonymizeAccount(securityPin?: string, reauthenticationPassword?: string) {
     if (!me) return;
     setDeletingAccount(true);
     setRemovalError(null);
     try {
-      const result = await anonymizeOwnAccount(securityPin);
+      const result = await anonymizeOwnAccount(securityPin, reauthenticationPassword);
       const progress =
         result.status === "completed"
           ? undefined
@@ -358,11 +375,19 @@ export default function AccountScreen() {
   }
 
   async function beginRemoval(action: AccountRemovalPinAction): Promise<void> {
+    if (!removalEligibility) return;
     setRemovalPinRequestAction(action);
     setRemovalPinRequestError(null);
-    if (!removalEligibility?.securityPinRequired) {
+    setRemovalPinError(null);
+    if (!removalEligibility.securityPinRequired) {
       setRemovalPinRequestAction(null);
       setRemovalPinStatic(false);
+      if (removalEligibility.reauthenticationRequired) {
+        setRemovalCredentialMode("password");
+        setRemovalPinAction(action);
+        return;
+      }
+      setRemovalCredentialMode("pin");
       if (action === "delete") await deleteAccount();
       else await anonymizeAccount();
       return;
@@ -374,12 +399,19 @@ export default function AccountScreen() {
       if (result.status === "not_required") {
         setRemovalPinRequestAction(null);
         setRemovalPinStatic(false);
-        if (action === "delete") await deleteAccount();
-        else await anonymizeAccount();
+        if (removalEligibility.reauthenticationRequired) {
+          setRemovalCredentialMode("password");
+          setRemovalPinAction(action);
+        } else {
+          setRemovalCredentialMode("pin");
+          if (action === "delete") await deleteAccount();
+          else await anonymizeAccount();
+        }
         return;
       }
       setRemovalPinRequestAction(null);
       setRemovalPinError(null);
+      setRemovalCredentialMode("pin");
       setRemovalPinStatic(result.status === "static");
       setRemovalPinAction(action);
     } catch (cause) {
@@ -391,14 +423,20 @@ export default function AccountScreen() {
     }
   }
 
-  async function submitRemovalPin(pin: string): Promise<void> {
-    if (removalPinAction === "delete") await deleteAccount(pin);
-    else if (removalPinAction === "anonymize") await anonymizeAccount(pin);
+  async function submitRemovalCredential(credential: string): Promise<void> {
+    if (removalPinAction === "delete") {
+      if (removalCredentialMode === "password") await deleteAccount(undefined, credential);
+      else await deleteAccount(credential);
+    } else if (removalPinAction === "anonymize") {
+      if (removalCredentialMode === "password") await anonymizeAccount(undefined, credential);
+      else await anonymizeAccount(credential);
+    }
   }
 
   function cancelRemovalPin() {
     if (deletingAccount) return;
     setRemovalPinAction(null);
+    setRemovalCredentialMode("pin");
     setRemovalPinStatic(false);
     setRemovalPinError(null);
   }
@@ -816,9 +854,10 @@ export default function AccountScreen() {
         action={removalPinAction}
         busy={deletingAccount}
         error={removalPinError}
+        passwordMode={removalCredentialMode === "password"}
         staticPin={removalPinStatic}
         onCancel={cancelRemovalPin}
-        onConfirm={(pin) => void submitRemovalPin(pin)}
+        onConfirm={(credential) => void submitRemovalCredential(credential)}
         visible={removalPinAction !== null}
       />
       <AndroidStatusBarScrim />

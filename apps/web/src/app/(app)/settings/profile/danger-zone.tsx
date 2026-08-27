@@ -39,6 +39,8 @@ export function DangerZoneCard() {
   const [pinMode, setPinMode] = useState<"email" | "static" | null>(null);
   const [securityPin, setSecurityPin] = useState("");
   const [pinError, setPinError] = useState<string | null>(null);
+  const [reauthenticationPassword, setReauthenticationPassword] = useState("");
+  const [reauthenticationError, setReauthenticationError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -103,6 +105,8 @@ export function DangerZoneCard() {
     setPinMode(null);
     setSecurityPin("");
     setPinError(null);
+    setReauthenticationPassword("");
+    setReauthenticationError(null);
   }
 
   function handleConfirmOpenChange(nextOpen: boolean) {
@@ -118,6 +122,7 @@ export function DangerZoneCard() {
     if (!action) return;
     setPending(true);
     setPinError(null);
+    setReauthenticationError(null);
     try {
       if (eligibility.securityPinRequired && !pinSent) {
         const pinResult = await api.post<{ status: "sent" | "static" | "not_required" }>(
@@ -143,17 +148,26 @@ export function DangerZoneCard() {
         setPending(false);
         return;
       }
+      if (eligibility.reauthenticationRequired && !reauthenticationPassword) {
+        setReauthenticationError(t("accountRemovalPasswordRequired"));
+        setPending(false);
+        return;
+      }
       const headers = { "Idempotency-Key": accountRemovalIdempotencyKey(action) };
       let result: { status: "completed" | "pending_exit" | "processing" };
+      const body = {
+        ...(securityPin ? { securityPin } : {}),
+        ...(reauthenticationPassword ? { reauthenticationPassword } : {}),
+      };
       if (action === "delete") {
         result = await api.delete<typeof result>("/api/me", {
           headers,
-          body: securityPin ? { securityPin } : undefined,
+          body: Object.keys(body).length > 0 ? body : undefined,
         });
       } else {
         result = await api.post<typeof result>(
           "/api/me/anonymize",
-          { confirm: true, ...(securityPin ? { securityPin } : {}) },
+          { confirm: true, ...body },
           { headers },
         );
       }
@@ -199,6 +213,10 @@ export function DangerZoneCard() {
         ["removal_pin_invalid", "removal_pin_required"].includes(error.code)
       ) {
         setPinError(t("accountRemovalPinInvalid"));
+      } else if (error instanceof ApiError && error.code === "removal_reauthentication_required") {
+        setReauthenticationError(t("accountRemovalPasswordRequired"));
+      } else if (error instanceof ApiError && error.code === "removal_reauthentication_invalid") {
+        setReauthenticationError(t("accountRemovalPasswordInvalid"));
       } else {
         toast.error(error instanceof ApiError ? error.message : t("couldNotRemoveAccount"));
       }
@@ -320,48 +338,89 @@ export function DangerZoneCard() {
           reverseActions
           onConfirm={removeAccount}
         >
-          {eligibility.securityPinRequired ? (
+          {eligibility.securityPinRequired || eligibility.reauthenticationRequired ? (
             <div className="space-y-3">
-              <p className="text-muted-foreground text-sm">
-                {pinSent
-                  ? pinMode === "static"
-                    ? t("accountRemovalPinStaticDescription")
-                    : t("accountRemovalPinDescription")
-                  : t("accountRemovalPinPrompt")}
-              </p>
-              {pinSent ? (
+              {eligibility.reauthenticationRequired ? (
                 <div className="space-y-2">
-                  <Label htmlFor="account-removal-security-pin">
-                    {t("accountRemovalPinLabel")}
+                  <p className="text-muted-foreground text-sm">
+                    {t("accountRemovalPasswordDescription")}
+                  </p>
+                  <Label htmlFor="account-removal-current-password">
+                    {t("accountRemovalPasswordLabel")}
                   </Label>
                   <Input
-                    id="account-removal-security-pin"
-                    aria-describedby={pinError ? "account-removal-security-pin-error" : undefined}
-                    aria-invalid={pinError ? true : undefined}
-                    autoComplete="one-time-code"
+                    id="account-removal-current-password"
+                    aria-describedby={
+                      reauthenticationError ? "account-removal-current-password-error" : undefined
+                    }
+                    aria-invalid={reauthenticationError ? true : undefined}
+                    autoComplete="current-password"
                     autoFocus
-                    inputMode="numeric"
-                    maxLength={6}
+                    maxLength={128}
                     onChange={(event) => {
-                      setSecurityPin(event.target.value.replace(/\D/g, "").slice(0, 6));
-                      setPinError(null);
+                      setReauthenticationPassword(event.target.value);
+                      setReauthenticationError(null);
                     }}
-                    placeholder="000000"
-                    value={securityPin}
+                    type="password"
+                    value={reauthenticationPassword}
                   />
-                  {pinError ? (
+                  {reauthenticationError ? (
                     <p
-                      id="account-removal-security-pin-error"
+                      id="account-removal-current-password-error"
                       role="alert"
                       className="text-destructive text-sm"
                     >
-                      {pinError}
+                      {reauthenticationError}
                     </p>
                   ) : null}
                 </div>
-              ) : null}
+              ) : (
+                <>
+                  <p className="text-muted-foreground text-sm">
+                    {pinSent
+                      ? pinMode === "static"
+                        ? t("accountRemovalPinStaticDescription")
+                        : t("accountRemovalPinDescription")
+                      : t("accountRemovalPinPrompt")}
+                  </p>
+                  {pinSent ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="account-removal-security-pin">
+                        {t("accountRemovalPinLabel")}
+                      </Label>
+                      <Input
+                        id="account-removal-security-pin"
+                        aria-describedby={
+                          pinError ? "account-removal-security-pin-error" : undefined
+                        }
+                        aria-invalid={pinError ? true : undefined}
+                        autoComplete="one-time-code"
+                        autoFocus
+                        inputMode="numeric"
+                        maxLength={6}
+                        onChange={(event) => {
+                          setSecurityPin(event.target.value.replace(/\D/g, "").slice(0, 6));
+                          setPinError(null);
+                        }}
+                        placeholder="000000"
+                        value={securityPin}
+                      />
+                      {pinError ? (
+                        <p
+                          id="account-removal-security-pin-error"
+                          role="alert"
+                          className="text-destructive text-sm"
+                        >
+                          {pinError}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </>
+              )}
             </div>
-          ) : eligibility.action === "anonymize" ? (
+          ) : null}
+          {eligibility.action === "anonymize" ? (
             <p className="text-muted-foreground text-sm">
               <Link href="/privacy" className="underline underline-offset-2">
                 {t("privacyPolicy")}

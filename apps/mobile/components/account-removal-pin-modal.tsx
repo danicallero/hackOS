@@ -11,6 +11,7 @@ export function AccountRemovalPinModal({
   action,
   busy = false,
   error,
+  passwordMode = false,
   staticPin = false,
   onCancel,
   onConfirm,
@@ -19,25 +20,39 @@ export function AccountRemovalPinModal({
   action: AccountRemovalPinAction | null;
   busy?: boolean;
   error?: string | null;
+  passwordMode?: boolean;
   staticPin?: boolean;
   onCancel: () => void;
-  onConfirm: (pin: string) => void;
+  onConfirm: (credential: string) => void;
   visible: boolean;
 }) {
   const { t } = useLocale();
-  const [pin, setPin] = useState("");
+  const [credential, setCredential] = useState("");
+  const [localError, setLocalError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!visible) setPin("");
+    if (!visible) {
+      setCredential("");
+      setLocalError(null);
+    }
   }, [visible]);
 
-  function updatePin(value: string) {
-    setPin(value.replace(/\D/g, "").slice(0, 6));
+  function updateCredential(value: string) {
+    setCredential(passwordMode ? value.slice(0, 128) : value.replace(/\D/g, "").slice(0, 6));
+    setLocalError(null);
   }
 
   function confirm() {
-    if (pin.length === 6 && !busy) onConfirm(pin);
+    if (busy) return;
+    if (passwordMode && credential.length === 0) {
+      setLocalError(t("accountRemovalPasswordRequired"));
+      return;
+    }
+    if (!passwordMode && credential.length !== 6) return;
+    onConfirm(credential);
   }
+
+  const displayedError = error ?? localError;
 
   return (
     <Modal
@@ -76,12 +91,14 @@ export function AccountRemovalPinModal({
               accessibilityRole="header"
               style={{ color: colors.label, fontSize: 20, fontWeight: "700" }}
             >
-              {t("accountRemovalPinLabel")}
+              {passwordMode ? t("accountRemovalPasswordTitle") : t("accountRemovalPinLabel")}
             </Text>
             <Text style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 21 }}>
-              {staticPin
-                ? t("accountRemovalPinStaticDescription")
-                : t("accountRemovalPinDescription")}
+              {passwordMode
+                ? t("accountRemovalPasswordDescription")
+                : staticPin
+                  ? t("accountRemovalPinStaticDescription")
+                  : t("accountRemovalPinDescription")}
             </Text>
           </View>
 
@@ -90,43 +107,49 @@ export function AccountRemovalPinModal({
               nativeID="account-removal-pin-label"
               style={{ color: colors.label, fontSize: 14, fontWeight: "600" }}
             >
-              {t("accountRemovalPinLabel")}
+              {passwordMode ? t("accountRemovalPasswordLabel") : t("accountRemovalPinLabel")}
             </Text>
             <TextInput
-              accessibilityLabel={t("accountRemovalPinLabel")}
+              accessibilityLabel={
+                passwordMode ? t("accountRemovalPasswordLabel") : t("accountRemovalPinLabel")
+              }
+              accessibilityHint={displayedError ?? undefined}
               accessibilityState={{ busy, disabled: busy }}
-              autoComplete="sms-otp"
+              autoCapitalize={passwordMode ? "none" : undefined}
+              autoComplete={passwordMode ? "password" : "sms-otp"}
               autoFocus
+              autoCorrect={passwordMode ? false : undefined}
               editable={!busy}
-              keyboardType="number-pad"
-              maxLength={6}
-              onChangeText={updatePin}
+              keyboardType={passwordMode ? "default" : "number-pad"}
+              maxLength={passwordMode ? 128 : 6}
+              onChangeText={updateCredential}
               onSubmitEditing={confirm}
-              placeholder="000000"
+              placeholder={passwordMode ? undefined : "000000"}
               placeholderTextColor={colors.tertiaryLabel}
               returnKeyType="done"
               selectionColor={colors.accent}
               style={{
-                borderColor: error ? colors.destructive : colors.separator,
+                borderColor: displayedError ? colors.destructive : colors.separator,
                 borderRadius: 10,
                 borderWidth: 1,
                 color: colors.label,
-                fontSize: 24,
-                letterSpacing: 8,
+                fontSize: passwordMode ? 17 : 24,
+                letterSpacing: passwordMode ? 0 : 8,
                 minHeight: 52,
                 paddingHorizontal: 16,
-                textAlign: "center",
+                textAlign: passwordMode ? "left" : "center",
               }}
-              textContentType="oneTimeCode"
-              value={pin}
+              secureTextEntry={passwordMode}
+              textContentType={passwordMode ? "password" : "oneTimeCode"}
+              value={credential}
             />
-            {error ? (
+            {displayedError ? (
               <Text
                 accessibilityLiveRegion="assertive"
                 accessibilityRole="alert"
                 style={{ color: colors.destructive, fontSize: 14, lineHeight: 19 }}
               >
-                {error}
+                {displayedError}
               </Text>
             ) : null}
           </View>
@@ -135,7 +158,7 @@ export function AccountRemovalPinModal({
             <ActionButton disabled={busy} label={t("cancel")} onPress={onCancel} />
             <ActionButton
               busy={busy}
-              disabled={pin.length !== 6}
+              disabled={!passwordMode && credential.length !== 6}
               destructive
               label={action === "delete" ? t("accountDeleteAction") : t("accountAnonymizeAction")}
               onPress={confirm}
