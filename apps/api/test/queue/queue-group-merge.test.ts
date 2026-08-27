@@ -639,7 +639,7 @@ describe("concurrency and idempotency", () => {
       scores: { innovation: 8, demo: 7 },
       submit: true,
     });
-    await waitForBlockedQuery("SELECT id, challenge_id, status FROM queue_entries");
+    await waitForBlockedQuery("SELECT qe.id, qe.challenge_id, qe.status");
 
     const editing = updateQueueGroup({
       queueGroupId: groupId,
