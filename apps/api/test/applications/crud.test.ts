@@ -87,6 +87,83 @@ describe("applications CRUD (H11)", () => {
     expect(list.json().applications).toHaveLength(1);
   });
 
+  it("stores explicit anonymous retention in immutable form versions and protects it by capability", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    const operator = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
+    const template = sampleTemplate();
+
+    const create = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: { name: "Retention form", type: "participant", template },
+    });
+    expect(create.statusCode).toBe(201);
+    const id = create.json().id as number;
+    expect(
+      create.json().template.map((field: { retention_mode: string }) => field.retention_mode),
+    ).toEqual(["none", "none"]);
+
+    const unauthorized = await a.inject({
+      method: "PATCH",
+      url: `/api/applications/${id}`,
+      headers: asUser(operator),
+      payload: {
+        template: template.map((field) => ({ ...field, retention_mode: "anonymous_audit" })),
+      },
+    });
+    expect(unauthorized.statusCode).toBe(403);
+
+    const retainedTemplate = template.map((field) =>
+      field.key === "motivation"
+        ? {
+            ...field,
+            retention_mode: "anonymous_audit" as const,
+            anonymous_audit_dimension: "custom.motivation",
+          }
+        : field,
+    );
+    const update = await a.inject({
+      method: "PATCH",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+      payload: { template: retainedTemplate },
+    });
+    expect(update.statusCode).toBe(200);
+    expect(update.json().current_form_version).toBe(2);
+    expect(update.json().template[0]).toMatchObject({
+      retention_mode: "anonymous_audit",
+      anonymous_audit_dimension: "custom.motivation",
+    });
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows: versions } = await pool.query(
+      `SELECT version, template FROM application_form_versions
+        WHERE application_id = $1 ORDER BY version`,
+      [id],
+    );
+    expect(versions).toHaveLength(2);
+    expect(versions[0].template[0].retention_mode).toBe("none");
+    expect(versions[1].template[0].retention_mode).toBe("anonymous_audit");
+
+    const { rows: audits } = await pool.query(
+      `SELECT before, after FROM audit_log
+        WHERE entity_type = 'application' AND entity_id = $1 AND action = 'updated'
+        ORDER BY id DESC LIMIT 1`,
+      [id],
+    );
+    expect(audits[0].before).toMatchObject({
+      formVersion: 1,
+      anonymousRetention: [],
+    });
+    expect(audits[0].after).toMatchObject({
+      formVersion: 2,
+      anonymousRetention: [{ key: "motivation", kind: "text", dimension: "custom.motivation" }],
+    });
+    expect(JSON.stringify(audits[0].after)).not.toContain("response");
+  });
+
   it("APPLICATIONS_REVIEW can read forms but not write", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);

@@ -57,7 +57,9 @@ export function registerMeRoutes(app: FastifyInstance): void {
                 r.*, t.expires_at AS confirmation_expires_at
          FROM application_responses r
          JOIN applications a ON a.id = r.application_id
-         LEFT JOIN application_form_versions fv ON fv.id = r.application_form_version_id
+         LEFT JOIN application_form_versions fv
+           ON fv.id = r.application_form_version_id
+          AND fv.application_id = r.application_id
          LEFT JOIN email_verification_tokens t ON t.id = r.confirmation_token_id
          WHERE r.user_id = $1 AND r.application_id = $2`,
         [req.userId, req.params.id],

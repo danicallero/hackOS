@@ -52,32 +52,32 @@ SET template = COALESCE(
     SELECT jsonb_agg(
       CASE
         WHEN field->>'retention_mode' IS NOT NULL THEN field
-        WHEN field->>'key' = 'age' THEN
+        WHEN a.type = 'participant' AND field->>'key' = 'age' THEN
           field || jsonb_build_object(
             'retention_mode', 'anonymous_audit',
             'anonymous_audit_dimension', 'age'
           )
-        WHEN field->>'key' = 'gender' THEN
+        WHEN a.type = 'participant' AND field->>'key' = 'gender' THEN
           field || jsonb_build_object(
             'retention_mode', 'anonymous_audit',
             'anonymous_audit_dimension', 'gender'
           )
-        WHEN field->>'key' = 'university' THEN
+        WHEN a.type = 'participant' AND field->>'key' = 'university' THEN
           field || jsonb_build_object(
             'retention_mode', 'anonymous_audit',
             'anonymous_audit_dimension', 'university'
           )
-        WHEN field->>'key' = 'degree' THEN
+        WHEN a.type = 'participant' AND field->>'key' = 'degree' THEN
           field || jsonb_build_object(
             'retention_mode', 'anonymous_audit',
             'anonymous_audit_dimension', 'degree'
           )
-        WHEN field->>'key' IN ('graduation_year', 'graduationYear') THEN
+        WHEN a.type = 'participant' AND field->>'key' IN ('graduation_year', 'graduationYear') THEN
           field || jsonb_build_object(
             'retention_mode', 'anonymous_audit',
             'anonymous_audit_dimension', 'graduation_year'
           )
-        WHEN field->>'key' IN ('origin_city', 'originCity') THEN
+        WHEN a.type = 'participant' AND field->>'key' IN ('origin_city', 'originCity') THEN
           field || jsonb_build_object(
             'retention_mode', 'anonymous_audit',
             'anonymous_audit_dimension', 'origin_city'

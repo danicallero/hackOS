@@ -565,10 +565,16 @@ export async function submitResponse(
       const versionRows = await client.query<ApplicationFormVersion>(
         `SELECT id, application_id, version, template, sections
            FROM application_form_versions
-          WHERE id = $1`,
-        [existing.application_form_version_id],
+          WHERE id = $1 AND application_id = $2`,
+        [existing.application_form_version_id, applicationId],
       );
       formVersion = versionRows.rows[0] ?? (await ensureApplicationFormVersion(client, app));
+      if (!versionRows.rows[0]) {
+        await client.query(
+          `UPDATE application_responses SET application_form_version_id = $2 WHERE id = $1`,
+          [existing.id, formVersion.id],
+        );
+      }
     } else {
       formVersion = await ensureApplicationFormVersion(client, app);
       await client.query(
@@ -1529,7 +1535,9 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
      FROM application_responses r
      JOIN users u ON u.id = r.user_id
      JOIN applications a ON a.id = r.application_id
-     LEFT JOIN application_form_versions fv ON fv.id = r.application_form_version_id
+     LEFT JOIN application_form_versions fv
+       ON fv.id = r.application_form_version_id
+      AND fv.application_id = r.application_id
      WHERE r.id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
     [responseId],
   );
@@ -1593,7 +1601,9 @@ export async function editResponse(
     `SELECT COALESCE(fv.template, a.template) AS template
      FROM application_responses r
      JOIN applications a ON a.id = r.application_id
-     LEFT JOIN application_form_versions fv ON fv.id = r.application_form_version_id
+     LEFT JOIN application_form_versions fv
+       ON fv.id = r.application_form_version_id
+      AND fv.application_id = r.application_id
      WHERE r.id = $1`,
     [responseId],
   );

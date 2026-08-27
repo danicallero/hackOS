@@ -38,6 +38,10 @@ export async function createApplication(
   }> = {},
 ): Promise<number> {
   const type = overrides.type ?? "participant";
+  const template = (overrides.template ?? sampleTemplate()).map((field) => ({
+    ...field,
+    retention_mode: field.retention_mode ?? "none",
+  }));
   // Mirrors the old hardcoded SHIRT_TYPES default, now admin-configurable —
   // keeps every existing test's implicit "participant/mentor asks" assumption.
   const asksByDefault = type === "participant" || type === "mentor";
@@ -49,7 +53,7 @@ export async function createApplication(
     [
       overrides.name ?? "Participant form",
       type,
-      JSON.stringify(overrides.template ?? sampleTemplate()),
+      JSON.stringify(template),
       overrides.active ?? true,
       overrides.open_at ?? null,
       overrides.close_at ?? null,
@@ -58,6 +62,11 @@ export async function createApplication(
       overrides.ask_shirt_size ?? asksByDefault,
       overrides.ask_food_intolerances ?? asksByDefault,
     ],
+  );
+  await pool.query(
+    `INSERT INTO application_form_versions (application_id, version, template, sections)
+     VALUES ($1, 1, $2::jsonb, '[]'::jsonb)`,
+    [rows[0].id, JSON.stringify(template)],
   );
   return rows[0].id;
 }
@@ -72,12 +81,19 @@ export async function createResponse(
     decision_sent_at: string | null;
   }> = {},
 ): Promise<number> {
+  const { rows: versionRows } = await pool.query(
+    `SELECT id FROM application_form_versions
+      WHERE application_id = $1 ORDER BY version DESC LIMIT 1`,
+    [applicationId],
+  );
   const { rows } = await pool.query(
-    `INSERT INTO application_responses (user_id, application_id, status, responses, decision_sent_at)
-     VALUES ($1, $2, $3, $4::jsonb, $5) RETURNING id`,
+    `INSERT INTO application_responses
+       (user_id, application_id, application_form_version_id, status, responses, decision_sent_at)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6) RETURNING id`,
     [
       userId,
       applicationId,
+      versionRows[0]?.id ?? null,
       overrides.status ?? "draft",
       JSON.stringify(overrides.responses ?? {}),
       overrides.decision_sent_at ?? null,

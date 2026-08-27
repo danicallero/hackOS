@@ -268,6 +268,12 @@ export function registerAdminRoutes(app: FastifyInstance): void {
           entityType: "application",
           entityId: req.params.id,
           action: "updated",
+          before: schemaChanged
+            ? {
+                formVersion: Number(current.current_form_version ?? 1),
+                anonymousRetention: anonymousRetentionConfiguration(current.template ?? []),
+              }
+            : undefined,
           after: schemaChanged
             ? {
                 formVersion: nextVersion,
@@ -293,6 +299,16 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       },
     },
     async (req, reply) => {
+      const { rows: anonymousRefs } = await pool.query(
+        `SELECT 1 FROM anonymous_participant_fields WHERE application_id = $1 LIMIT 1`,
+        [req.params.id],
+      );
+      if (anonymousRefs.length > 0) {
+        throw new ConflictError(
+          "Cannot delete a form referenced by an anonymous audit record; deactivate it instead",
+          { code: "anonymous_audit_references" },
+        );
+      }
       const { rows: refs } = await pool.query(
         `SELECT 1 FROM application_responses WHERE application_id = $1 LIMIT 1`,
         [req.params.id],
