@@ -180,7 +180,7 @@ scan alone is therefore insufficient.
 | F13 | Medium | confirmed code problem fixed in this follow-up; operational risk; privacy/security risk | Self-service destructive requests now require a non-empty `Idempotency-Key`; a missing key is rejected instead of entering a path that cannot safely replay a lost response. Supported mobile/web clients already send a high-entropy key, and the no-production-database assumption allows the old no-key compatibility path to be removed. |
 | F14 | Medium | confirmed code problem; operational risk | Offline stale submissions can reach the server after anonymization. Permanent unlinked keyed-digest badge/ticket tombstones and active lookups reject them, and clients remove terminal stale queue items. Devices that never reconnect cannot be remotely wiped; device management/reinstall remains the operational control for the residual local copy. |
 | F15 | Medium | confirmed code improvement; privacy/security risk; requires legal/product confirmation | Shared public repositories, Devpost content and external documents can contain a person's identity independently of hackOS rows. The service removes the subject's personal submission/member link and deletes solo projects, but preserves a shared project for remaining members. The participant Privacy Policy now explains that forms/project records may request links to independent external sites with their own policies and no GPUL affiliation; confirm that this wording matches the event's external-content policy. |
-| F16 | Medium | confirmed code problem fixed in this follow-up; privacy/security risk; operational risk | Migration `0746` deletes malformed historical `time_logs` rows and validates `time_logs_kind_check`. The fresh-schema branch does not preserve invalid presence events or carry reader-side legacy exceptions indefinitely; every retained presence calculation now relies on the database domain (`in`/`out`). |
+| F16 | Medium | confirmed code problem fixed in this follow-up; privacy/security risk; operational risk | The fresh-schema migration `0733` installs `time_logs_kind_check` as a strict domain from the start. Invalid presence events are not a supported compatibility state, and retained calculations rely on the database domain (`in`/`out`) without a legacy repair/filter path. |
 | F17 | Medium | App Store review risk; confirmed code improvement | The prior mobile flow did not expose a direct, truthful account action. The current Account/Data control is visible in-app, remains available while inside, distinguishes full deletion from irreversible anonymization/pending exit, links the Privacy Policy, and explains the consequences. Reviewer access instructions must provide an accepted test account that can reach it. |
 | F18 | Medium | App Store review risk; requires legal/product confirmation | “Delete” is reserved for full deletion; “anonymize” names the irreversible alternative. Privacy policy and App Store privacy disclosures must match actual operational retention and external-cache limitations. |
 | F19 | Low | optional hardening | The branch has focused regression tests and a documented matrix, but provider deletion, lost-response, offline-device, backup and rare-cohort tests require deployment fixtures outside this repository. |
@@ -355,10 +355,8 @@ correct it.
 - `0732_account_removal_meal_inbox.sql` makes meal inbox `badge_id` nullable so
   terminal results can be minimized.
 - `0733_account_removal_reference_guards.sql` adds active-user FK triggers and
-  the initial `time_logs` kind check. `0746_validate_time_logs_kind.sql`
-  removes invalid historical rows and validates that check; this branch has no
-  production database and does not preserve malformed presence data for
-  compatibility.
+  installs the strict `time_logs` kind check. This branch has no production
+  database and does not preserve malformed presence data for compatibility.
 - `0745_badge_assignment_timestamp.sql` records the server-side current badge
   assignment boundary. Stale offline presence/activity/meal timestamps before
   a replacement are rejected without exposing that boundary to clients.
@@ -394,13 +392,9 @@ correct it.
   they are not anonymous-audit data.
 - `0745_badge_assignment_timestamp.sql` adds the server-owned assignment
   boundary used to reject stale offline scan timestamps after badge rotation.
-- `0746_validate_time_logs_kind.sql` deletes invalid development `time_logs`
-  rows and validates the `in`/`out` constraint; no harmful legacy presence
-  compatibility is retained.
-
 Migration policy is checksum-enforced by `apps/api/scripts/migrate.ts`. There
 is no production database in scope for this branch, so the H54 migrations
-`0730–0746` are validated as a fresh install. The raw-presence correction is
+`0730–0745` are validated as a fresh install. The raw-presence correction is
 explicitly represented by `0734`; the keyed-tombstone migration deliberately
 clears only pre-production development rows that cannot be converted without
 the deployment secret. There is no production database in scope.
@@ -643,7 +637,7 @@ Implemented or updated in this branch:
 | Meal and dietary data | Meal inbox minimization tests; dietary fields are excluded from anonymous row. |
 | Judging and team relationships | Project/queue cleanup tests and shared sponsor-anchor regression. |
 | Synthetic fixture read/write isolation | `apps/api/test/identity/review-fixtures.test.ts`, `apps/api/test/applications/files-export.test.ts` and `apps/api/test/exports/bundle-leakage.test.ts` cover ordinary-admin visibility, response/DSR target isolation, synthetic global-export exclusion, and refusal to build a personal export bundle. |
-| Venue presence calculations | `apps/api/test/logistics/estimate.test.ts` and presence tests cover secured, duplicate, expired and inconsistent paths; migration `0746` removes invalid kinds and validates the database constraint. |
+| Venue presence calculations | `apps/api/test/logistics/estimate.test.ts` and presence tests cover secured, duplicate, expired and inconsistent paths; the strict `0733` schema constraint rejects invalid kinds before calculation. |
 | Anonymous record generation | Profile tests assert random UUID differs from original ID and verified minutes survive without raw subject rows. |
 | Inability to recover identity | Profile regression inserts an email-bearing audit `entity_id`, verifies it is removed, and searches anonymous JSON for original email/name/ID. |
 | ECTS/participation-document request after anonymization | No ECTS/certificate endpoint or identity bridge exists in the repository; release test must assert any future named-proof endpoint returns no subject after anonymization. |
@@ -677,7 +671,7 @@ suite alone.
   isolation and non-sensitive successful-sign-in telemetry.
 - `apps/api/db/migrations/0730_account_deletion_anonymization.sql`, `0731`,
   `0732`, `0733`, `0734`, `0735`, `0736`, `0737`, `0738`, `0739`, `0740`,
-  `0741`, `0743`, `0744`, `0745`, `0746`: lifecycle, tombstones, meal
+  `0741`, `0743`, `0744`, `0745`: lifecycle, tombstones, meal
   minimization, FK race/pending-exit guards, raw-presence minimization,
   transient email history, immutable form versions, dynamic anonymous fields,
   application/version integrity, synthetic fixture isolation, badge-assignment
@@ -751,7 +745,7 @@ silently converted into a legal conclusion.
 | A44 | No production database is in scope for this branch. Migrations are validated from a fresh schema; applied migration checksums remain immutable after first deployment and later corrections use a new migration. During development, a fresh flat schema may be rebuilt rather than preserving harmful legacy adaptations. | Release/DB owner |
 | A45 | The current credential-retirement denylist stores stable keyed HMAC digests, not raw badge/ticket values. It prevents late offline credential replay, while physical badge reuse requires a separate assignment-binding or no-reuse decision before production. | Security + event-operations owners |
 | A46 | Legal copy may describe synthetic accounts as authorised testing/quality-assurance fixtures, but it must not name a specific review channel. The detailed fixture procedure belongs in the private/operational runbook. | GPUL/privacy + release owners |
-| A47 | The schema is authoritative for presence-event shape: only `time_logs.kind IN ('in', 'out')` is valid. Migration `0746` deletes malformed historical rows and validates the check; no reader-side exception or legacy repair path is retained for this branch. | Event-operations + release/DB owners |
+| A47 | The schema is authoritative for presence-event shape: only `time_logs.kind IN ('in', 'out')` is valid. Migration `0733` installs the strict check on the fresh schema; no reader-side exception or legacy repair path is retained for this branch. | Event-operations + release/DB owners |
 | A48 | The server-side `users.badge_assigned_at` timestamp is the authoritative boundary for offline badge-event replay. Presence, activity and meal paths reject timestamps before the current assignment both at enqueue/lookup and under the locked owner row; the timestamp is not exposed to clients. | Logistics + security owners |
 
 ## Release recommendation

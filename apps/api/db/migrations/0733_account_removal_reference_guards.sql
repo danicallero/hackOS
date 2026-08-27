@@ -37,12 +37,11 @@ $$;
 COMMENT ON FUNCTION h54_require_active_user_reference() IS
   'H54: prevent new identity-bearing FK rows after account removal begins.';
 
--- Existing databases may contain a malformed legacy value. NOT VALID preserves
--- that history for staff review while enforcing the domain on every new or
--- edited row, and the presence readers explicitly ignore anything outside the
--- two door kinds.
+-- This branch is installed from a fresh schema. Keep the presence domain
+-- strict from its first definition; malformed values are not a supported
+-- compatibility state and readers do not need a legacy exception.
 ALTER TABLE time_logs
-  ADD CONSTRAINT time_logs_kind_check CHECK (kind IN ('in', 'out')) NOT VALID;
+  ADD CONSTRAINT time_logs_kind_check CHECK (kind IN ('in', 'out'));
 
 DO $$
 DECLARE
