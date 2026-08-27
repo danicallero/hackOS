@@ -9,6 +9,7 @@ import { registerInviteRoutes } from "./routes/invites.js";
 import { registerPermissionGroupRoutes } from "./routes/permissions.js";
 import { registerProfileRoutes } from "./routes/profile.js";
 import { registerResendVerificationRoutes } from "./routes/resend-verification.js";
+import { registerReviewFixtureRoutes } from "./routes/review-fixtures.js";
 import { registerSecondaryEmailRoutes } from "./routes/secondary-email.js";
 import { registerUiPrefsRoutes } from "./routes/ui-prefs.js";
 
@@ -63,6 +64,7 @@ export async function registerIdentityModule(app: FastifyInstance): Promise<void
 
   registerResendVerificationRoutes(app);
   registerProfileRoutes(app);
+  registerReviewFixtureRoutes(app);
   registerSecondaryEmailRoutes(app);
   registerPermissionGroupRoutes(app);
   registerInviteRoutes(app);

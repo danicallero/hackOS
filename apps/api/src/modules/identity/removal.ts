@@ -1443,6 +1443,45 @@ async function scrubRelationships(
   await client.query(`DELETE FROM push_tokens WHERE user_id = $1`, [userId]);
 }
 
+/**
+ * Remove one synthetic reviewer account before replacing a fixture generation.
+ * This deliberately reuses the same relationship scrub as self-service
+ * removal, including credential tombstones and private-object cleanup. It is
+ * admin-only at the route boundary and refuses a real account even if a caller
+ * supplies its numeric id. No anonymous id is read or written here.
+ */
+export async function purgeReviewFixtureAccount(
+  client: pg.PoolClient,
+  userId: number,
+): Promise<void> {
+  await lockPermissionGraph(client);
+  const user = await loadUserForRemoval(client, userId);
+  if (!user.is_test_account) {
+    throw new ConflictError("Only synthetic review fixture accounts can be regenerated.", {
+      code: "review_fixture_required",
+    });
+  }
+
+  // Run external cleanup before the database scrub commits. If storage is
+  // unavailable, the transaction remains intact and the old fixture pointer
+  // is still available for a safe retry.
+  await deleteExternalArtifacts({
+    targetId: user.id,
+    action: "delete",
+    uploadPrefixes: await collectUploadPrefixes(client, user.id),
+    exportPrefixes: await collectExportPrefixes(client, user.id),
+    storageKeys: await collectStorageKeys(client, user.id),
+    ...(await collectWalletArtifacts(client, user.id)),
+    requiresVenueExit: false,
+  });
+
+  const wasWildcardHolder = await userHasWildcardRegardlessOfState(client, user.id);
+  if (wasWildcardHolder) await assertActiveWildcardHolder(client, user.id);
+  await scrubRelationships(client, user);
+  await client.query(`DELETE FROM users WHERE id = $1`, [user.id]);
+  if (wasWildcardHolder) await assertActiveWildcardHolder(client);
+}
+
 export async function finalizeAccountRemoval(
   client: pg.PoolClient,
   options: RunAccountRemovalOptions & { action: AccountRemovalAction },
