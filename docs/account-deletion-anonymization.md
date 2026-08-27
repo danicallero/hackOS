@@ -70,12 +70,12 @@ sessions in `sessions`, and the identity/profile in `users`.  Role is derived
 from capability groups and event relationships in `apps/api/src/modules/identity/role.ts`;
 there is no role column to preserve or anonymize.
 
-The old implementation on `origin/main` (`anonymizeUser()` in
+The old implementation on `origin/main` (`anonymizeUser()` in the former
 `apps/api/src/modules/identity/anonymize.ts`) changed a user in place to an
 `anonymized+<id>@deleted.invalid` row.  That left the original numeric row and
 all its foreign-key relationships available as an identity-shaped audit
-subject.  This branch keeps `anonymize.ts` only as a compatibility export and
-moves the implementation to `removal.ts`.
+subject.  The obsolete compatibility module has been removed; the only
+implementation is now the shared lifecycle in `removal.ts`.
 
 ### Removal request
 
@@ -677,10 +677,11 @@ suite alone.
   isolation and non-sensitive successful-sign-in telemetry.
 - `apps/api/db/migrations/0730_account_deletion_anonymization.sql`, `0731`,
   `0732`, `0733`, `0734`, `0735`, `0736`, `0737`, `0738`, `0739`, `0740`,
-  `0741`, `0743`, `0744`: lifecycle, tombstones, meal
+  `0741`, `0743`, `0744`, `0745`, `0746`: lifecycle, tombstones, meal
   minimization, FK race/pending-exit guards, raw-presence minimization,
   transient email history, immutable form versions, dynamic anonymous fields,
-  application/version integrity, and synthetic fixture isolation.
+  application/version integrity, synthetic fixture isolation, badge-assignment
+  timestamp fencing, and strict presence-event validation.
 
 ### Clients and copy
 
