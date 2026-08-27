@@ -138,6 +138,7 @@ const accountRemovalStatusResponseSchema = z.union([
 ]);
 const removalPinResponseSchema = z.union([
   z.object({ status: z.literal("sent"), expiresAt: z.string() }),
+  z.object({ status: z.literal("static") }),
   z.object({ status: z.literal("not_required") }),
 ]);
 const optionalRemovalPinBodySchema = z
@@ -613,7 +614,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Send my account-removal security PIN",
         description:
-          "H54 sends a short-lived one-time PIN to the caller's verified primary email. Unverified accounts do not need this additional step.",
+          "H54 sends a short-lived one-time PIN to a real verified primary email. Synthetic review fixtures may use the deployment's configured static review PIN; unverified accounts do not need this additional step.",
         response: { 200: removalPinResponseSchema },
       },
     },

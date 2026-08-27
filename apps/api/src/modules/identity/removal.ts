@@ -54,6 +54,7 @@ interface UserRemovalRow {
   name: string | null;
   surname: string | null;
   dni: string | null;
+  is_test_account: boolean;
   badge_id: string | null;
   badge_id_history: string[];
   university_id: number | null;
@@ -280,7 +281,8 @@ export async function getAccountRemovalEligibility(
 
 async function loadUserForRemoval(client: pg.PoolClient, userId: number): Promise<UserRemovalRow> {
   const { rows } = await client.query<UserRemovalRow>(
-    `SELECT id, email, email_verified, secondary_email, name, surname, dni, badge_id, badge_id_history,
+    `SELECT id, email, email_verified, secondary_email, name, surname, dni, is_test_account,
+            badge_id, badge_id_history,
             university_id, account_state, removal_action,
             removal_requires_exit, removal_expires_at, removal_idempotency_key
        FROM users WHERE id = $1 FOR UPDATE`,
@@ -1473,9 +1475,9 @@ export async function finalizeAccountRemoval(
     const guaranteedMinutes = await guaranteedMinutesAtRemoval(client, user.id);
     await client.query(
       `INSERT INTO anonymous_participants
-         (id, guaranteed_presence_minutes)
-       VALUES ($1, $2)`,
-      [anonymousId, guaranteedMinutes],
+         (id, guaranteed_presence_minutes, is_test_account)
+       VALUES ($1, $2, $3)`,
+      [anonymousId, guaranteedMinutes, user.is_test_account],
     );
     for (const field of retainedApplicationFields) {
       await client.query(

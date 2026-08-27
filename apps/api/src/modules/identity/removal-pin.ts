@@ -18,6 +18,7 @@ type RemovalPinUser = {
   id: number;
   email: string;
   email_verified: boolean;
+  is_test_account: boolean;
   name: string | null;
   language: string;
   account_state: "active" | "removal_pending";
@@ -52,6 +53,7 @@ function invalidateChallengeSql(): string {
 
 export type RemovalPinIssueResult =
   | { status: "sent"; expiresAt: string }
+  | { status: "static" }
   | { status: "not_required" };
 
 /** Issue a one-time PIN to the currently verified primary address. */
@@ -60,7 +62,7 @@ export async function issueRemovalPin(
   userId: number,
 ): Promise<RemovalPinIssueResult> {
   const { rows } = await client.query<RemovalPinUser>(
-    `SELECT id, email, email_verified, name, language, account_state, anonymized_at
+    `SELECT id, email, email_verified, is_test_account, name, language, account_state, anonymized_at
        FROM users
       WHERE id = $1
       FOR UPDATE`,
@@ -71,6 +73,22 @@ export async function issueRemovalPin(
     throw new NotFoundError("User not found");
   }
   if (!user.email_verified) return { status: "not_required" };
+
+  // A static PIN is an App Store/QA convenience only. Scope it to synthetic
+  // fixture users so the reviewer can exercise destructive flows without a
+  // working mailbox while a real verified participant still receives a
+  // short-lived, one-time email PIN.
+  if (user.is_test_account && config.REVIEW_FIXTURE_DELETION_PIN) {
+    await audit(client, {
+      actorId: user.id,
+      entityType: "user",
+      entityId: user.id,
+      action: "removal_pin_static_available",
+      source: "self_service",
+      after: { testAccount: true },
+    });
+    return { status: "static" };
+  }
 
   const { rows: previous } = await client.query<{ created_at: Date }>(
     `SELECT created_at
@@ -141,7 +159,7 @@ export async function issueRemovalPin(
 /** Consume and verify the PIN while the account-removal transaction owns the user lock. */
 export async function consumeRemovalPin(
   client: pg.PoolClient,
-  user: Pick<RemovalPinUser, "id" | "email" | "email_verified">,
+  user: Pick<RemovalPinUser, "id" | "email" | "email_verified" | "is_test_account">,
   pin: string | undefined,
 ): Promise<void> {
   if (!user.email_verified) return;
@@ -149,6 +167,17 @@ export async function consumeRemovalPin(
     throw new BadRequestError("Enter the security PIN sent to your verified email.", {
       code: "removal_pin_required",
     });
+  }
+
+  if (user.is_test_account && config.REVIEW_FIXTURE_DELETION_PIN) {
+    const actual = Buffer.from(pin, "utf8");
+    const expected = Buffer.from(config.REVIEW_FIXTURE_DELETION_PIN, "utf8");
+    if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
+      throw new BadRequestError("The security PIN is incorrect.", {
+        code: "removal_pin_invalid",
+      });
+    }
+    return;
   }
 
   const { rows } = await client.query<{
