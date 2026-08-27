@@ -47,9 +47,14 @@ async function search(q: string) {
 
 describe("unified person lookup excludes anonymized profiles (H54)", () => {
   it("never matches an anonymized user by ticket, badge, badge history, or fuzzy name", async () => {
+    const { pool } = await import("../../src/db/pool.js");
     const userId = await createUser({ name: "Ada Lovelace", email: "ada@example.test" });
     const ticketToken = await issueTicket(userId, "ticket-anon");
     await assignBadge(userId, "BADGE-ANON-CURRENT");
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id) VALUES ($1, 'BADGE-ANON-CURRENT')`,
+      [userId],
+    );
 
     // Rotate once so a badge_history entry exists too.
     const rotate = await app.inject({

@@ -35,6 +35,17 @@ async function getApp(): Promise<App> {
   return app;
 }
 
+async function snapshotFormVersion(applicationId: number, template: unknown): Promise<number> {
+  const { pool } = await import("../../src/db/pool.js");
+  const { rows } = await pool.query(
+    `INSERT INTO application_form_versions (application_id, version, template, sections)
+     VALUES ($1, 1, $2::jsonb, '[]'::jsonb)
+     RETURNING id`,
+    [applicationId, JSON.stringify(template)],
+  );
+  return rows[0].id;
+}
+
 describe("GET /api/me (H7)", () => {
   it("lets staff manually classify a user as participant or mentor and issues a ticket", async () => {
     const a = await getApp();
@@ -463,10 +474,48 @@ describe("self-service account removal (H54)", () => {
     expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [user])).rowCount).toBe(1);
   });
 
-  it("blocks self-anonymization while the participant is inside the venue", async () => {
+  it("treats door history without canonical accreditation as an integrity warning, not permanent retention", async () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
+    const user = await createUser({ email: "inconsistent-presence@example.test" });
+    await pool.query(
+      `INSERT INTO time_logs (user_id, kind, scanned_at)
+       VALUES ($1, 'in', now() - interval '10 minutes')`,
+      [user],
+    );
+
+    const eligibility = await a.inject({
+      method: "GET",
+      url: "/api/me/removal-eligibility",
+      headers: asUser(user),
+    });
+    expect(eligibility.statusCode).toBe(200);
+    expect(eligibility.json()).toMatchObject({
+      action: "delete",
+      reasonCode: "inconsistent_operational_reference",
+      operationalHistoryRetained: false,
+      integrityWarning: true,
+      requiresVenueExit: true,
+    });
+  });
+
+  it("accepts self-anonymization inside and completes it after a valid exit", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const presenceStaff = await createUserWithCapabilities([
+      CAPABILITIES.PRESENCE_SCAN,
+      CAPABILITIES.ACTIVITY_SCAN,
+    ]);
     const user = await createUser({ email: "inside-at-removal@example.test" });
+    await pool.query(
+      `UPDATE users
+          SET badge_id = 'B-INSIDE',
+              food_intolerances = ARRAY[7],
+              food_intolerance_notes = 'Peanut',
+              dietary_data_state = 'present'
+        WHERE id = $1`,
+      [user],
+    );
     await pool.query(
       `INSERT INTO check_in_logs (user_id, badge_id, check_in_method)
        VALUES ($1, 'B-INSIDE', 'scan')`,
@@ -481,16 +530,104 @@ describe("self-service account removal (H54)", () => {
     const removal = await a.inject({
       method: "POST",
       url: "/api/me/anonymize",
-      headers: asUser(user),
+      headers: { ...asUser(user), "idempotency-key": "inside-anonymize" },
       payload: { confirm: true },
     });
 
-    expect(removal.statusCode).toBe(409);
-    expect(removal.json().error.details.code).toBe("participant_inside");
+    expect(removal.statusCode).toBe(202);
+    expect(removal.json()).toEqual({
+      status: "pending_exit",
+      pendingExit: true,
+      accessRevoked: true,
+    });
     expect(
-      (await pool.query(`SELECT account_state FROM users WHERE id = $1`, [user])).rows,
-    ).toEqual([{ account_state: "active" }]);
+      (
+        await pool.query(`SELECT account_state, removal_requires_exit FROM users WHERE id = $1`, [
+          user,
+        ])
+      ).rows,
+    ).toEqual([{ account_state: "removal_pending", removal_requires_exit: true }]);
+    expect(
+      (
+        await pool.query(
+          `SELECT food_intolerances, food_intolerance_notes, dietary_data_state
+             FROM users WHERE id = $1`,
+          [user],
+        )
+      ).rows,
+    ).toEqual([
+      { food_intolerances: [], food_intolerance_notes: null, dietary_data_state: "not_provided" },
+    ]);
     expect((await pool.query(`SELECT 1 FROM anonymous_participants`)).rowCount).toBe(0);
+
+    const { rows: removalRows } = await pool.query(
+      `SELECT removal_started_at FROM users WHERE id = $1`,
+      [user],
+    );
+    const staleExit = await a.inject({
+      method: "POST",
+      url: "/api/presence/scan",
+      headers: { ...asUser(presenceStaff), "idempotency-key": "inside-stale-exit" },
+      payload: {
+        badgeId: "B-INSIDE",
+        kind: "out",
+        scannedAt: new Date(removalRows[0].removal_started_at).getTime() - 1,
+      },
+    });
+    expect(staleExit.statusCode).toBe(409);
+    expect(staleExit.json().error.details.code).toBe("pending_exit_before_removal");
+
+    const blockedEntry = await a.inject({
+      method: "POST",
+      url: "/api/presence/scan",
+      headers: { ...asUser(presenceStaff), "idempotency-key": "inside-entry-after-request" },
+      payload: { badgeId: "B-INSIDE", kind: "in" },
+    });
+    expect(blockedEntry.statusCode).toBe(409);
+    expect(blockedEntry.json().error.code).toBe("badge_revoked");
+    const { rows: activities } = await pool.query(
+      `INSERT INTO activities (name, category, requires_scan)
+       VALUES ('Meal after removal request', 'meal', true) RETURNING id`,
+    );
+    const blockedMeal = await a.inject({
+      method: "POST",
+      url: `/api/activities/${activities[0].id}/scan`,
+      headers: { ...asUser(presenceStaff), "idempotency-key": "inside-meal-after-request" },
+      payload: { badgeId: "B-INSIDE" },
+    });
+    expect(blockedMeal.statusCode).toBe(409);
+    expect(blockedMeal.json().error.code).toBe("badge_revoked");
+
+    const exit = await a.inject({
+      method: "POST",
+      url: "/api/presence/scan",
+      headers: { ...asUser(presenceStaff), "idempotency-key": "inside-exit" },
+      payload: { badgeId: "B-INSIDE", kind: "out" },
+    });
+    expect(exit.statusCode).toBe(200);
+    expect(exit.json()).toMatchObject({ kind: "out" });
+    const { rows: exitIdempotency } = await pool.query(
+      `SELECT response_body
+         FROM idempotency_keys
+        WHERE key = 'inside-exit' AND scope = $1`,
+      [`POST /api/presence/scan u:${presenceStaff}`],
+    );
+    expect(exitIdempotency).toHaveLength(1);
+    expect(exitIdempotency[0].response_body).not.toHaveProperty("userId");
+    expect(JSON.stringify(exitIdempotency[0].response_body)).not.toContain(
+      "inside-at-removal@example.test",
+    );
+    expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [user])).rowCount).toBe(0);
+    expect((await pool.query(`SELECT 1 FROM anonymous_participants`)).rowCount).toBe(1);
+
+    const replay = await a.inject({
+      method: "POST",
+      url: "/api/me/anonymize",
+      headers: { ...asUser(user), "idempotency-key": "inside-anonymize" },
+      payload: { confirm: true },
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.headers["idempotency-replayed"]).toBe("true");
   });
 
   it("self-anonymizes after venue exit, preserves verified minutes, revokes credentials, and replays safely", async () => {
@@ -513,33 +650,71 @@ describe("self-service account removal (H54)", () => {
         WHERE id = $1`,
       [user, universityRows[0].id],
     );
+    const demographicTemplate = [
+      {
+        key: "dob",
+        kind: "date",
+        label: { en: "Date of birth" },
+        retention_mode: "anonymous_audit",
+        anonymous_audit_dimension: "age",
+      },
+      {
+        key: "gender",
+        kind: "select",
+        label: { en: "Gender" },
+        retention_mode: "anonymous_audit",
+        anonymous_audit_dimension: "gender",
+      },
+      {
+        key: "degree",
+        kind: "text",
+        label: { en: "Degree" },
+        retention_mode: "anonymous_audit",
+        anonymous_audit_dimension: "degree",
+      },
+      {
+        key: "graduation_year",
+        kind: "number",
+        label: { en: "Graduation year" },
+        retention_mode: "anonymous_audit",
+        anonymous_audit_dimension: "graduation_year",
+      },
+      {
+        key: "origin_city",
+        kind: "text",
+        label: { en: "Origin city" },
+        retention_mode: "anonymous_audit",
+        anonymous_audit_dimension: "origin_city",
+      },
+      {
+        key: "university",
+        kind: "university",
+        label: { en: "University" },
+        retention_mode: "anonymous_audit",
+        anonymous_audit_dimension: "university",
+      },
+    ];
     const { rows: applicationRows } = await pool.query(
       `INSERT INTO applications (name, type, template)
        VALUES ('Demographic extraction', 'participant', $1::jsonb) RETURNING id`,
-      [
-        JSON.stringify([
-          { key: "dob", kind: "date", label: { en: "Date of birth" } },
-          { key: "gender", kind: "select", label: { en: "Gender" } },
-          { key: "degree", kind: "text", label: { en: "Degree" } },
-          { key: "graduation_year", kind: "select", label: { en: "Graduation year" } },
-          { key: "origin_city", kind: "text", label: { en: "Origin city" } },
-          { key: "university", kind: "university", label: { en: "University" } },
-        ]),
-      ],
+      [JSON.stringify(demographicTemplate)],
     );
+    const formVersionId = await snapshotFormVersion(applicationRows[0].id, demographicTemplate);
     await pool.query(
-      `INSERT INTO application_responses (user_id, application_id, status, responses)
-       VALUES ($1, $2, 'accepted', $3::jsonb)`,
+      `INSERT INTO application_responses
+         (user_id, application_id, application_form_version_id, status, responses)
+       VALUES ($1, $2, $3, 'accepted', $4::jsonb)`,
       [
         user,
         applicationRows[0].id,
+        formVersionId,
         JSON.stringify({
           dob: "2000-01-01",
           gender: "nonbinary",
           degree: "Computer Science",
-          graduation_year: "2024",
+          graduation_year: 2024,
           origin_city: "A Coruña",
-          university: "Universidade da Coruña",
+          university: universityRows[0].id,
         }),
       ],
     );
@@ -613,20 +788,55 @@ describe("self-service account removal (H54)", () => {
     expect((await pool.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [user])).rowCount).toBe(0);
 
     const { rows: anonymous } = await pool.query(
-      `SELECT id, age, gender, university, degree, graduation_year, origin_city,
-              guaranteed_presence_minutes
-         FROM anonymous_participants`,
+      `SELECT id, guaranteed_presence_minutes FROM anonymous_participants`,
     );
     expect(anonymous).toHaveLength(1);
     expect(anonymous[0].id).not.toBe(String(user));
-    expect(anonymous[0]).toMatchObject({
-      age: new Date().getUTCFullYear() - 2000,
-      gender: "nonbinary",
-      university: "Universidade da Coruña",
-      degree: "Computer Science",
-      graduation_year: 2024,
-      origin_city: "A Coruña",
-    });
+    const { rows: anonymousFields } = await pool.query(
+      `SELECT field_key, anonymous_audit_dimension, field_kind, value
+         FROM anonymous_participant_fields
+        WHERE anonymous_participant_id = $1
+        ORDER BY field_key`,
+      [anonymous[0].id],
+    );
+    expect(anonymousFields).toEqual([
+      {
+        field_key: "degree",
+        anonymous_audit_dimension: "degree",
+        field_kind: "text",
+        value: "Computer Science",
+      },
+      {
+        field_key: "dob",
+        anonymous_audit_dimension: "age",
+        field_kind: "date",
+        value: new Date().getUTCFullYear() - 2000,
+      },
+      {
+        field_key: "gender",
+        anonymous_audit_dimension: "gender",
+        field_kind: "select",
+        value: "nonbinary",
+      },
+      {
+        field_key: "graduation_year",
+        anonymous_audit_dimension: "graduation_year",
+        field_kind: "number",
+        value: 2024,
+      },
+      {
+        field_key: "origin_city",
+        anonymous_audit_dimension: "origin_city",
+        field_kind: "text",
+        value: "A Coruña",
+      },
+      {
+        field_key: "university",
+        anonymous_audit_dimension: "university",
+        field_kind: "university",
+        value: "Universidade da Coruña",
+      },
+    ]);
     expect(anonymous[0].guaranteed_presence_minutes).toBe(60);
     expect(JSON.stringify(anonymous[0])).not.toContain("Peanut");
     expect(
@@ -649,6 +859,217 @@ describe("self-service account removal (H54)", () => {
     expect((await pool.query(`SELECT 1 FROM time_logs WHERE user_id = $1`, [user])).rowCount).toBe(
       0,
     );
+  });
+
+  it("uses the submitted form version for arbitrary anonymous retention and never expands it retroactively", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const admin = await createUserWithCapabilities(["*"]);
+    const target = await createUser({
+      name: "Versioned Participant",
+      email: "versioned-participant@example.test",
+    });
+    const templateV1 = [
+      {
+        key: "cohort_answer",
+        kind: "text",
+        label: { en: "Old cohort label", es: "Etiqueta antiga", gl: "Etiqueta antiga" },
+        retention_mode: "none",
+      },
+      {
+        key: "custom_audit_answer",
+        kind: "text",
+        label: { en: "Old custom label", es: "Etiqueta", gl: "Etiqueta" },
+        retention_mode: "anonymous_audit",
+        anonymous_audit_dimension: "custom.cohort",
+      },
+      {
+        key: "missing_audit_answer",
+        kind: "number",
+        label: { en: "Missing", es: "Falta", gl: "Falta" },
+        retention_mode: "anonymous_audit",
+        anonymous_audit_dimension: "custom.missing",
+      },
+    ];
+    const { rows: applications } = await pool.query(
+      `INSERT INTO applications (name, type, template)
+       VALUES ('Versioned retention form', 'participant', $1::jsonb) RETURNING id`,
+      [JSON.stringify(templateV1)],
+    );
+    const applicationId = applications[0].id as number;
+    const formVersionId = await snapshotFormVersion(applicationId, templateV1);
+    await pool.query(
+      `INSERT INTO application_responses
+         (user_id, application_id, application_form_version_id, status, responses)
+       VALUES ($1, $2, $3, 'accepted', $4::jsonb)`,
+      [
+        target,
+        applicationId,
+        formVersionId,
+        JSON.stringify({
+          cohort_answer: "identity-shaped@example.test",
+          custom_audit_answer: "blue",
+        }),
+      ],
+    );
+    const draftTemplate = [
+      {
+        key: "draft_only_audit",
+        kind: "text",
+        label: { en: "Draft only", es: "Borrador", gl: "Borrador" },
+        retention_mode: "anonymous_audit",
+        anonymous_audit_dimension: "draft.only",
+      },
+    ];
+    const { rows: draftApplications } = await pool.query(
+      `INSERT INTO applications (name, type, template)
+       VALUES ('Draft retention form', 'participant', $1::jsonb) RETURNING id`,
+      [JSON.stringify(draftTemplate)],
+    );
+    const draftVersionId = await snapshotFormVersion(draftApplications[0].id, draftTemplate);
+    await pool.query(
+      `INSERT INTO application_responses
+         (user_id, application_id, application_form_version_id, status, responses)
+       VALUES ($1, $2, $3, 'draft', $4::jsonb)`,
+      [
+        target,
+        draftApplications[0].id,
+        draftVersionId,
+        JSON.stringify({ draft_only_audit: "must-not-survive" }),
+      ],
+    );
+    await pool.query(`INSERT INTO check_in_logs (user_id, badge_id) VALUES ($1, 'B-VERSIONED')`, [
+      target,
+    ]);
+
+    const templateV2 = templateV1.map((field) =>
+      field.key === "cohort_answer"
+        ? {
+            ...field,
+            label: { en: "Renamed cohort label", es: "Renombrada", gl: "Renomeada" },
+            retention_mode: "anonymous_audit" as const,
+            anonymous_audit_dimension: "custom.new-purpose",
+          }
+        : field,
+    );
+    const changed = await a.inject({
+      method: "PATCH",
+      url: `/api/applications/${applicationId}`,
+      headers: asUser(admin),
+      payload: { template: templateV2 },
+    });
+    expect(changed.statusCode).toBe(200);
+    expect(changed.json().current_form_version).toBe(2);
+
+    const removed = await a.inject({
+      method: "POST",
+      url: `/api/users/${target}/anonymize`,
+      headers: asUser(admin),
+    });
+    expect(removed.statusCode).toBe(200);
+    expect(removed.json().anonymized).toBe(true);
+
+    const { rows: fields } = await pool.query(
+      `SELECT application_id, application_form_version, field_key,
+              anonymous_audit_dimension, field_kind, value
+         FROM anonymous_participant_fields`,
+    );
+    expect(fields).toEqual([
+      {
+        application_id: applicationId,
+        application_form_version: 1,
+        field_key: "custom_audit_answer",
+        anonymous_audit_dimension: "custom.cohort",
+        field_kind: "text",
+        value: "blue",
+      },
+    ]);
+    expect(
+      (await pool.query(`SELECT 1 FROM application_responses WHERE user_id = $1`, [target]))
+        .rowCount,
+    ).toBe(0);
+    expect(JSON.stringify(fields)).not.toContain("identity-shaped@example.test");
+    expect(JSON.stringify(fields)).not.toContain(String(target));
+  });
+
+  it("keeps explicit retention independent between application forms", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const admin = await createUserWithCapabilities(["*"]);
+    const target = await createUser({ email: "multi-form-participant@example.test" });
+    const templateA = [
+      {
+        key: "track",
+        kind: "text",
+        label: { en: "Track", es: "Track", gl: "Track" },
+        retention_mode: "anonymous_audit",
+        anonymous_audit_dimension: "event.track",
+      },
+    ];
+    const templateB = [
+      {
+        key: "cohort",
+        kind: "text",
+        label: { en: "Cohort", es: "Cohorte", gl: "Cohorte" },
+        retention_mode: "anonymous_audit",
+        anonymous_audit_dimension: "event.cohort",
+      },
+    ];
+    const { rows: formA } = await pool.query(
+      `INSERT INTO applications (name, type, template)
+       VALUES ('Form A', 'participant', $1::jsonb) RETURNING id`,
+      [JSON.stringify(templateA)],
+    );
+    const { rows: formB } = await pool.query(
+      `INSERT INTO applications (name, type, template)
+       VALUES ('Form B', 'participant', $1::jsonb) RETURNING id`,
+      [JSON.stringify(templateB)],
+    );
+    const versionA = await snapshotFormVersion(formA[0].id, templateA);
+    const versionB = await snapshotFormVersion(formB[0].id, templateB);
+    await pool.query(
+      `INSERT INTO application_responses
+         (user_id, application_id, application_form_version_id, status, responses)
+       VALUES ($1, $2, $3, 'accepted', $4::jsonb),
+              ($1, $5, $6, 'accepted', $7::jsonb)`,
+      [
+        target,
+        formA[0].id,
+        versionA,
+        JSON.stringify({ track: "red" }),
+        formB[0].id,
+        versionB,
+        JSON.stringify({ cohort: "late" }),
+      ],
+    );
+    await pool.query(`INSERT INTO check_in_logs (user_id, badge_id) VALUES ($1, 'B-MULTI-FORM')`, [
+      target,
+    ]);
+
+    const removed = await a.inject({
+      method: "POST",
+      url: `/api/users/${target}/anonymize`,
+      headers: asUser(admin),
+    });
+    expect(removed.statusCode).toBe(200);
+    const { rows: fields } = await pool.query(
+      `SELECT application_id, field_key, anonymous_audit_dimension, value
+         FROM anonymous_participant_fields ORDER BY application_id`,
+    );
+    expect(fields).toEqual([
+      {
+        application_id: formA[0].id,
+        field_key: "track",
+        anonymous_audit_dimension: "event.track",
+        value: "red",
+      },
+      {
+        application_id: formB[0].id,
+        field_key: "cohort",
+        anonymous_audit_dimension: "event.cohort",
+        value: "late",
+      },
+    ]);
   });
 
   it("serializes a deletion racing the first accreditation write (H54)", async () => {
@@ -929,7 +1350,6 @@ describe("staff user routes (H7)", () => {
       operationalHistoryRetained: false,
       activeEventConsequences: false,
       requiresVenueExit: false,
-      retainedFields: [],
     });
     // Admin removes a fresh account.
     const ok = await a.inject({
@@ -983,15 +1403,6 @@ describe("staff user routes (H7)", () => {
       accessRevoked: true,
       operationalHistoryRetained: true,
       requiresVenueExit: false,
-      retainedFields: expect.arrayContaining([
-        "age",
-        "gender",
-        "university",
-        "degree",
-        "graduation year",
-        "origin city",
-        "guaranteed venue-presence time",
-      ]),
     });
 
     const rejectedDelete = await a.inject({
@@ -1348,7 +1759,7 @@ describe("staff user routes (H7)", () => {
     const ok = await a.inject({
       method: "POST",
       url: `/api/users/${target}/anonymize`,
-      headers: asUser(admin),
+      headers: { ...asUser(admin), "idempotency-key": "admin-anonymize-scrub" },
     });
     expect(ok.statusCode).toBe(200);
     expect(ok.json().anonymized).toBe(true);
@@ -1394,17 +1805,29 @@ describe("staff user routes (H7)", () => {
         )
       ).rowCount,
     ).toBe(0);
+    expect(
+      (
+        await pool.query(
+          `SELECT 1 FROM idempotency_keys
+             WHERE key = 'admin-anonymize-scrub'
+                OR scope LIKE $1
+                OR scope LIKE $2`,
+          [`%/api/users/${target} %`, `%/api/users/${target}/anonymize %`],
+        )
+      ).rowCount,
+    ).toBe(0);
 
     // The retained anonymous row exposes only the audit fields. An original
     // email, name, or numeric user id must not be searchable through normal
     // database relationships after the users row is gone.
     const identitySearch = await pool.query(
-      `SELECT id FROM anonymous_participants
-        WHERE id::text = $1
-           OR coalesce(university, '') IN ($2, $3)
-           OR coalesce(degree, '') IN ($2, $3)
-           OR coalesce(origin_city, '') IN ($2, $3)`,
-      [String(target), "person@example.test", "Real Person"],
+      `SELECT ap.id
+         FROM anonymous_participants ap
+         LEFT JOIN anonymous_participant_fields apf
+           ON apf.anonymous_participant_id = ap.id
+        WHERE ap.id::text = $1
+           OR coalesce(apf.value::text, '') ILIKE ANY($2::text[])`,
+      [String(target), ["%person@example.test%", "%Real Person%", `%${target}%`]],
     );
     expect(identitySearch.rows).toHaveLength(0);
   });
@@ -1468,26 +1891,44 @@ describe("staff user routes (H7)", () => {
       `INSERT INTO user_email_history (user_id, email) VALUES ($1, 'historical-free-text@example.test')`,
       [target],
     );
+    const freeTextTemplate = [
+      {
+        key: "gender",
+        kind: "text",
+        label: { en: "Gender" },
+        retention_mode: "anonymous_audit",
+        anonymous_audit_dimension: "gender",
+      },
+      {
+        key: "degree",
+        kind: "text",
+        label: { en: "Degree" },
+        retention_mode: "anonymous_audit",
+        anonymous_audit_dimension: "degree",
+      },
+      {
+        key: "origin_city",
+        kind: "text",
+        label: { en: "Origin city" },
+        retention_mode: "anonymous_audit",
+        anonymous_audit_dimension: "origin_city",
+      },
+      { key: "year_founded", kind: "number", label: { en: "Year founded" } },
+    ];
     const { rows: applicationRows } = await pool.query(
       `INSERT INTO applications (name, type, template)
        VALUES ('Free-text minimization', 'participant', $1::jsonb) RETURNING id`,
-      [
-        JSON.stringify([
-          { key: "gender", kind: "text", label: { en: "Gender" } },
-          { key: "degree", kind: "text", label: { en: "Degree" } },
-          { key: "origin_city", kind: "text", label: { en: "Origin city" } },
-          // Application-specific fields must not become anonymous audit data
-          // merely because a label contains a generic word such as "year".
-          { key: "year_founded", kind: "number", label: { en: "Year founded" } },
-        ]),
-      ],
+      [JSON.stringify(freeTextTemplate)],
     );
+    const formVersionId = await snapshotFormVersion(applicationRows[0].id, freeTextTemplate);
     await pool.query(
-      `INSERT INTO application_responses (user_id, application_id, status, responses)
-       VALUES ($1, $2, 'accepted', $3::jsonb)`,
+      `INSERT INTO application_responses
+         (user_id, application_id, application_form_version_id, status, responses)
+       VALUES ($1, $2, $3, 'accepted', $4::jsonb)`,
       [
         target,
         applicationRows[0].id,
+        formVersionId,
         JSON.stringify({
           gender: "historical-free-text@example.test",
           degree: "Free Text Participant",
@@ -1509,11 +1950,9 @@ describe("staff user routes (H7)", () => {
     });
     expect(removed.statusCode).toBe(200);
     const { rows } = await pool.query(
-      `SELECT gender, degree, origin_city, graduation_year FROM anonymous_participants`,
+      `SELECT field_key, value FROM anonymous_participant_fields ORDER BY field_key`,
     );
-    expect(rows).toEqual([
-      { gender: null, degree: null, origin_city: null, graduation_year: null },
-    ]);
+    expect(rows).toEqual([]);
   });
 
   it("keeps the last active wildcard holder when an anonymization job runs", async () => {

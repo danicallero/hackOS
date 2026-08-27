@@ -85,13 +85,30 @@ const COLUMN_BY_FIELD: Record<string, string> = {
 
 const removalEligibilityResponseSchema = z.object({
   action: z.enum(["delete", "anonymize"]),
-  reasonCode: z.enum(["fresh_account", "operational_history"]),
+  reasonCode: z.enum([
+    "fresh_account",
+    "operational_history",
+    "inconsistent_operational_reference",
+  ]),
   accessRevoked: z.literal(true),
   operationalHistoryRetained: z.boolean(),
   activeEventConsequences: z.boolean(),
   requiresVenueExit: z.boolean(),
-  retainedFields: z.array(z.string()),
+  integrityWarning: z.boolean(),
 });
+
+const removalCompletedResponseSchema = z.union([
+  z.object({ status: z.literal("completed"), deleted: z.literal(true) }),
+  z.object({ status: z.literal("completed"), anonymized: z.literal(true) }),
+]);
+const removalPendingResponseSchema = z.union([
+  z.object({
+    status: z.literal("pending_exit"),
+    pendingExit: z.literal(true),
+    accessRevoked: z.literal(true),
+  }),
+  z.object({ status: z.literal("processing"), accessRevoked: z.literal(true) }),
+]);
 
 const userResponseSchema = z.object({
   id: z.number(),
@@ -285,6 +302,16 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       await idempotencyGuard(req, reply);
       if (req.idempotency) req.idempotency.preserveOnFailure = true;
     };
+  const adminRemovalIdempotency = async (
+    req: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    // Keep target-bearing admin idempotency rows addressable for scrubbing.
+    // The normal guard uses the route template for compatibility with other
+    // mutations; these account-removal rows are deleted with the target.
+    req.idempotencyScope = `${req.method} ${req.url} u:${req.userId ?? "anon"}`;
+    await idempotencyGuard(req, reply);
+  };
 
   api.get(
     "/api/me",
@@ -463,13 +490,12 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
       schema: {
         description:
-          "H54 self-service full deletion. The server rejects this action when venue or other " +
-          "operational history requires anonymous retention; use the anonymization action then.",
+          "H54 self-service full deletion. The server chooses this only before canonical accreditation; an inconsistent open door record may wait for a valid exit.",
         summary: "Delete my account",
-        response: { 200: z.object({ deleted: z.literal(true) }) },
+        response: { 200: removalCompletedResponseSchema, 202: removalPendingResponseSchema },
       },
     },
-    async (req) => {
+    async (req, reply) => {
       const userId = req.userId as number;
       const result = await runAccountRemoval({
         targetId: userId,
@@ -486,12 +512,16 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       });
       if (req.idempotency) req.idempotency.scope = "DELETE /api/me removal-complete";
       await invalidateCapabilities(userId);
+      if (result.status !== "completed") {
+        reply.code(202);
+        return result;
+      }
       if (!result.deleted) {
         throw new ConflictError(
           "This account must be anonymized because it has operational history.",
         );
       }
-      return { deleted: true as const };
+      return result;
     },
   );
 
@@ -506,12 +536,12 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Anonymize my data and close my account",
         description:
-          "H54 irreversible self-service anonymization. Operational attendance is retained only under a new anonymous participant record; identity, access, tickets, dietary data and personal files are removed.",
+          "H54 irreversible self-service anonymization. The request is accepted immediately; when the participant is inside, finalization waits for a valid exit.",
         body: z.object({ confirm: z.literal(true) }).strict(),
-        response: { 200: z.object({ anonymized: z.literal(true) }) },
+        response: { 200: removalCompletedResponseSchema, 202: removalPendingResponseSchema },
       },
     },
-    async (req) => {
+    async (req, reply) => {
       const userId = req.userId as number;
       const result = await runAccountRemoval({
         targetId: userId,
@@ -528,10 +558,14 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       });
       if (req.idempotency) req.idempotency.scope = "POST /api/me/anonymize removal-complete";
       await invalidateCapabilities(userId);
+      if (result.status !== "completed") {
+        reply.code(202);
+        return result;
+      }
       if (!result.anonymized) {
         throw new ConflictError("This account has no operational history to anonymize.");
       }
-      return { anonymized: true as const };
+      return result;
     },
   );
 
@@ -781,14 +815,14 @@ export function registerProfileRoutes(app: FastifyInstance): void {
   api.delete(
     "/api/users/:id",
     {
-      preHandler: [requireCapability(CAPABILITIES.ADMIN_ALL), idempotencyGuard],
+      preHandler: [requireCapability(CAPABILITIES.ADMIN_ALL), adminRemovalIdempotency],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.ADMIN_ALL }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
-        response: { 200: z.object({ deleted: z.literal(true) }) },
+        response: { 200: removalCompletedResponseSchema, 202: removalPendingResponseSchema },
       },
     },
-    async (req) => {
+    async (req, reply) => {
       const targetId = req.params.id;
       if (targetId === req.userId) {
         throw new BadRequestError("You can't delete your own account");
@@ -800,10 +834,14 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         requestedAction: "delete",
       });
       await invalidateCapabilities(targetId);
+      if (result.status !== "completed") {
+        reply.code(202);
+        return result;
+      }
       if (!result.deleted) {
         throw new ConflictError("This account has operational history; anonymize it instead.");
       }
-      return { deleted: true as const };
+      return result;
     },
   );
 
@@ -885,14 +923,14 @@ export function registerProfileRoutes(app: FastifyInstance): void {
   api.post(
     "/api/users/:id/anonymize",
     {
-      preHandler: [requireCapability(CAPABILITIES.ADMIN_ALL), idempotencyGuard],
+      preHandler: [requireCapability(CAPABILITIES.ADMIN_ALL), adminRemovalIdempotency],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.ADMIN_ALL }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
-        response: { 200: z.object({ anonymized: z.literal(true) }) },
+        response: { 200: removalCompletedResponseSchema, 202: removalPendingResponseSchema },
       },
     },
-    async (req) => {
+    async (req, reply) => {
       const targetId = req.params.id;
       if (targetId === req.userId) {
         throw new BadRequestError("Use the self-service account action for your own account");
@@ -904,10 +942,14 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         requestedAction: "anonymize",
       });
       await invalidateCapabilities(targetId);
+      if (result.status !== "completed") {
+        reply.code(202);
+        return result;
+      }
       if (!result.anonymized) {
         throw new ConflictError("This account has no operational history to anonymize.");
       }
-      return { anonymized: true as const };
+      return result;
     },
   );
 

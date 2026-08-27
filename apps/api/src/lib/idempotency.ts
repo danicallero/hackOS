@@ -6,7 +6,7 @@ import { ConflictError } from "./errors.js";
 /**
  * Idempotency contract (plan/03 Fase 0; plan/07 §2). Critical mutations —
  * scanner flows (H22, H25, H26), queue transitions, spot confirmation —
- * accept an `Idempotency-Key` header. Same key + same request body replays
+ * accept an `Idempotency-Key` header. Same key + same request target/body replays
  * the stored response instead of re-executing; same key with a DIFFERENT
  * body is a 409; a concurrent in-flight duplicate is a 409 with retry hint.
  * A 5xx response is never replayed — it is a transient/server-side failure,
@@ -15,7 +15,8 @@ import { ConflictError } from "./errors.js";
  *
  * Usage: add `preHandler: idempotencyGuard` to the route and wrap the
  * handler result normally — the onSend hook persists the response.
- * Keys are scoped per (key, method+url, user).
+ * Keys are scoped per (key, method+url, user); the request hash also includes
+ * route parameters so target-bearing admin routes cannot cross-replay.
  */
 
 /**
@@ -31,13 +32,28 @@ import { ConflictError } from "./errors.js";
 const STALE_IN_FLIGHT_MS = 30_000;
 
 function requestHash(req: FastifyRequest): string {
-  return createHash("sha256")
-    .update(JSON.stringify(req.body ?? null))
-    .digest("hex");
+  return (
+    createHash("sha256")
+      // Include the route parameters as well as the body.  An admin mutation
+      // such as `/api/users/:id/anonymize` has an empty body, so hashing only the
+      // body would allow the same key to be replayed for a different target.
+      .update(
+        JSON.stringify({
+          method: req.method,
+          url: req.routeOptions.url ?? req.url,
+          params: req.params ?? null,
+          body: req.body ?? null,
+        }),
+      )
+      .digest("hex")
+  );
 }
 
 declare module "fastify" {
   interface FastifyRequest {
+    /** Optional route-specific scope for mutations whose target must be
+     * scrubbed from the idempotency table after account removal. */
+    idempotencyScope?: string;
     idempotency?: {
       key: string;
       scope: string;
@@ -53,7 +69,9 @@ export async function idempotencyGuard(req: FastifyRequest, reply: FastifyReply)
   const key = req.headers["idempotency-key"];
   if (!key || typeof key !== "string") return; // header optional; without it the route runs normally
 
-  const scope = `${req.method} ${req.routeOptions.url ?? req.url} u:${req.userId ?? "anon"}`;
+  const scope =
+    req.idempotencyScope ??
+    `${req.method} ${req.routeOptions.url ?? req.url} u:${req.userId ?? "anon"}`;
   const hash = requestHash(req);
 
   const inserted = await pool.query(
@@ -77,7 +95,7 @@ export async function idempotencyGuard(req: FastifyRequest, reply: FastifyReply)
   const row = existing.rows[0];
   if (!row) throw new ConflictError("Idempotency record vanished; retry");
   if (row.request_hash !== hash) {
-    throw new ConflictError("Idempotency-Key reused with a different request body");
+    throw new ConflictError("Idempotency-Key reused with a different request target or body");
   }
   if (row.response_status === null) {
     const ageMs = Date.now() - new Date(row.created_at).getTime();
@@ -137,7 +155,7 @@ export async function replayCompletedIdempotency(
   const row = rows[0];
   if (!row) return false;
   if (row.request_hash !== requestHash(req)) {
-    throw new ConflictError("Idempotency-Key reused with a different request body");
+    throw new ConflictError("Idempotency-Key reused with a different request target or body");
   }
   if (row.response_status === null) return false;
   reply.code(row.response_status).header("idempotency-replayed", "true").send(row.response_body);
@@ -180,7 +198,7 @@ export async function idempotencyOnSend(
     } else {
       await pool.query(
         `UPDATE idempotency_keys SET response_status = $3, response_body = $4, completed_at = now()
-         WHERE key = $1 AND scope = $2`,
+         WHERE key = $1 AND scope = $2 AND response_status IS NULL`,
         [req.idempotency.key, req.idempotency.scope, reply.statusCode, payload ?? null],
       );
     }

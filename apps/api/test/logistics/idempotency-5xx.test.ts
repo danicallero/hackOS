@@ -199,4 +199,39 @@ describe("idempotencyGuard 5xx handling", () => {
     );
     expect(pending.rows).toEqual([{ response_status: null, response_body: null }]);
   });
+
+  it("does not let a late response overwrite a finalized removal result", async () => {
+    const { idempotencyOnSend } = await import("../../src/lib/idempotency.js");
+    const { pool } = await import("../../src/db/pool.js");
+    const key = "self-removal-late-response";
+    const scope = "POST /api/me/anonymize removal-complete";
+    await pool.query(
+      `INSERT INTO idempotency_keys
+         (key, scope, request_hash, response_status, response_body, completed_at)
+       VALUES ($1, $2, 'request-hash', 200, '{"status":"completed","anonymized":true}', now())`,
+      [key, scope],
+    );
+
+    await idempotencyOnSend(
+      {
+        idempotency: {
+          key,
+          scope,
+          hash: "request-hash",
+          replayed: false,
+        },
+      } as never,
+      { statusCode: 202 } as never,
+      { status: "pending_exit", pendingExit: true, accessRevoked: true },
+    );
+
+    const finalized = await pool.query(
+      `SELECT response_status, response_body
+         FROM idempotency_keys WHERE key = $1 AND scope = $2`,
+      [key, scope],
+    );
+    expect(finalized.rows).toEqual([
+      { response_status: 200, response_body: { status: "completed", anonymized: true } },
+    ]);
+  });
 });

@@ -5,7 +5,7 @@ import { getQueue, registerWorker } from "../../lib/queues.js";
 import { putObject } from "../../lib/storage.js";
 import { runAccountRemoval } from "../identity/removal.js";
 import { buildExportBundle } from "./bundle.js";
-import { claimForProcessing, markCompleted, markFailed } from "./requests.service.js";
+import { claimForProcessing, getRequest, markCompleted, markFailed } from "./requests.service.js";
 
 /**
  * H54 background processor for the data-subject request workflow. Delegates
@@ -51,7 +51,7 @@ export async function processDataSubjectRequest(requestId: number): Promise<void
       });
       await markCompleted(requestId, key);
     } else {
-      await runAccountRemoval({
+      const result = await runAccountRemoval({
         targetId: claimed.subject_user_id,
         actorId: claimed.requested_by,
         source: "admin",
@@ -61,7 +61,14 @@ export async function processDataSubjectRequest(requestId: number): Promise<void
         reason: claimed.reason ?? undefined,
       });
       await invalidateCapabilities(claimed.subject_user_id);
-      await markCompleted(requestId);
+      if (result.status === "completed") {
+        // finalizeAccountRemoval marks the linked deletion request complete in
+        // the same transaction that removes/anonymizes the subject. A request
+        // that is still inside the venue is intentionally left `processing`
+        // until its valid exit finalizes that transaction.
+        const current = await getRequest(requestId);
+        if (current.status !== "completed") await markCompleted(requestId);
+      }
     }
   } catch (err) {
     await markFailed(requestId, err instanceof Error ? err.message : String(err));

@@ -252,6 +252,10 @@ describe("H22 accreditation lookup + check-in", () => {
     const formerOwner = await createUser();
     const staleToken = await issueTicket(formerOwner, "ticket-retired");
     await assignBadge(formerOwner, "BADGE-TICKET-RETIRED");
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id) VALUES ($1, 'BADGE-TICKET-RETIRED')`,
+      [formerOwner],
+    );
     const admin = await createUserWithCapabilities(["*"]);
     const removed = await app.inject({
       method: "POST",

@@ -11,6 +11,7 @@ import {
 } from "../../lib/errors.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { deleteObject, deletePrefix, deleteSubjectUploadObjects } from "../../lib/storage.js";
+import type { TemplateField } from "../applications/schemas.js";
 import { ApplePushUnregisteredError, sendApplePush } from "../logistics/apple-push.js";
 import {
   DEFAULT_SUSPICIOUS_GAP_MS,
@@ -24,26 +25,20 @@ import { assertActiveWildcardHolder, lockPermissionGraph } from "./permission-gr
 export type AccountRemovalAction = "delete" | "anonymize";
 const REMOVAL_RETRY_QUEUE = "account-removal-retries";
 
-const ANONYMOUS_AUDIT_FIELDS = [
-  "age",
-  "gender",
-  "university",
-  "degree",
-  "graduation year",
-  "origin city",
-  "guaranteed venue-presence time",
-] as const;
+/** The only non-form value that is always retained: system-generated time. */
+export const VERIFIED_PRESENCE_AUDIT_FIELD = "guaranteed venue-presence time";
 
 export type AccountRemovalEligibility = {
   action: AccountRemovalAction;
-  reasonCode: "fresh_account" | "operational_history";
+  reasonCode: "fresh_account" | "operational_history" | "inconsistent_operational_reference";
   accessRevoked: true;
   operationalHistoryRetained: boolean;
   /** True while the configured event is live and the account has event history. */
   activeEventConsequences: boolean;
-  /** A live open door session must be closed before irreversible anonymization. */
+  /** A live open door session must be closed before irreversible account closure. */
   requiresVenueExit: boolean;
-  retainedFields: string[];
+  /** Non-canonical operational rows exist without accreditation; reconcile safely. */
+  integrityWarning: boolean;
 };
 
 interface UserRemovalRow {
@@ -58,6 +53,8 @@ interface UserRemovalRow {
   university_id: number | null;
   account_state: "active" | "removal_pending";
   removal_action: AccountRemovalAction | null;
+  removal_requires_exit: boolean;
+  removal_idempotency_key: string | null;
 }
 
 interface RemovalPreparation {
@@ -68,6 +65,7 @@ interface RemovalPreparation {
   storageKeys: string[];
   googleWalletObjectIds: string[];
   appleWalletPushTokens: string[];
+  requiresVenueExit: boolean;
 }
 
 export interface RunAccountRemovalOptions {
@@ -87,23 +85,44 @@ export interface RunAccountRemovalOptions {
   };
 }
 
-export interface AccountRemovalResult {
-  deleted?: true;
-  anonymized?: true;
-}
+export type AccountRemovalResult =
+  | { status: "completed"; deleted: true; anonymized?: never }
+  | { status: "completed"; anonymized: true; deleted?: never }
+  | { status: "pending_exit"; pendingExit: true; accessRevoked: true }
+  | { status: "processing"; accessRevoked: true };
 
-async function userHasOperationalHistory(client: Queryable, userId: number): Promise<boolean> {
-  const { rows } = await client.query<{ has_history: boolean }>(
-    `SELECT (
-       EXISTS (SELECT 1 FROM check_in_logs WHERE user_id = $1)
-       OR EXISTS (SELECT 1 FROM time_logs WHERE user_id = $1)
-       OR EXISTS (SELECT 1 FROM activity_logs WHERE user_id = $1)
-       OR EXISTS (SELECT 1 FROM users WHERE id = $1 AND badge_id IS NOT NULL)
-       OR EXISTS (SELECT 1 FROM users WHERE id = $1 AND cardinality(badge_id_history) > 0)
-     ) AS has_history`,
+type OperationalSignals = {
+  accredited: boolean;
+  hasIntegritySignals: boolean;
+};
+
+/**
+ * `check_in_logs` is the canonical accreditation boundary.  Door/activity/
+ * badge rows are integrity signals only: they can require reconciliation, but
+ * cannot silently turn a non-accredited account into a permanent audit case.
+ */
+async function readOperationalSignals(
+  client: Queryable,
+  userId: number,
+): Promise<OperationalSignals> {
+  const { rows } = await client.query<{
+    accredited: boolean;
+    has_integrity_signals: boolean;
+  }>(
+    `SELECT
+       EXISTS (SELECT 1 FROM check_in_logs WHERE user_id = $1) AS accredited,
+       (
+         EXISTS (SELECT 1 FROM time_logs WHERE user_id = $1)
+         OR EXISTS (SELECT 1 FROM activity_logs WHERE user_id = $1)
+         OR EXISTS (SELECT 1 FROM users WHERE id = $1 AND badge_id IS NOT NULL)
+         OR EXISTS (SELECT 1 FROM users WHERE id = $1 AND cardinality(badge_id_history) > 0)
+       ) AS has_integrity_signals`,
     [userId],
   );
-  return Boolean(rows[0]?.has_history);
+  return {
+    accredited: Boolean(rows[0]?.accredited),
+    hasIntegritySignals: Boolean(rows[0]?.has_integrity_signals),
+  };
 }
 
 async function openVenueSession(
@@ -145,10 +164,9 @@ async function eventIsActive(client: Queryable): Promise<boolean> {
 
 /**
  * The retention boundary is a domain fact, not a foreign-key side effect.
- * Accreditation writes check_in_logs first; old/manual data that has only a
- * badge, door signal, or activity is treated conservatively as operational
- * history too. Applications, tickets, wallet passes, teams, and permissions
- * alone do not cross this boundary.
+ * Accreditation writes check_in_logs first. Old/manual data that has only a
+ * badge, door signal, or activity is reported as an integrity inconsistency,
+ * but does not become a permanent audit case by accident.
  */
 export async function getAccountRemovalEligibility(
   client: Queryable,
@@ -157,35 +175,41 @@ export async function getAccountRemovalEligibility(
   const { rows: users } = await client.query(`SELECT id FROM users WHERE id = $1`, [userId]);
   if (!users[0]) throw new NotFoundError("User not found", { userId });
 
-  const hasHistory = await userHasOperationalHistory(client, userId);
-  const session = hasHistory
+  const signals = await readOperationalSignals(client, userId);
+  const hasOperationalRows = signals.accredited || signals.hasIntegritySignals;
+  const session = hasOperationalRows
     ? await openVenueSession(client, userId)
     : { open: false, since: null };
-  return hasHistory
-    ? {
-        action: "anonymize",
-        reasonCode: "operational_history",
-        accessRevoked: true,
-        operationalHistoryRetained: true,
-        activeEventConsequences: await eventIsActive(client),
-        requiresVenueExit: session.open,
-        retainedFields: [...ANONYMOUS_AUDIT_FIELDS],
-      }
-    : {
-        action: "delete",
-        reasonCode: "fresh_account",
-        accessRevoked: true,
-        operationalHistoryRetained: false,
-        activeEventConsequences: false,
-        requiresVenueExit: false,
-        retainedFields: [],
-      };
+  const eventActive = hasOperationalRows ? await eventIsActive(client) : false;
+  if (signals.accredited) {
+    return {
+      action: "anonymize",
+      reasonCode: "operational_history",
+      accessRevoked: true,
+      operationalHistoryRetained: true,
+      activeEventConsequences: eventActive,
+      requiresVenueExit: session.open,
+      integrityWarning: false,
+    };
+  }
+  return {
+    action: "delete",
+    reasonCode: signals.hasIntegritySignals
+      ? "inconsistent_operational_reference"
+      : "fresh_account",
+    accessRevoked: true,
+    operationalHistoryRetained: false,
+    activeEventConsequences: eventActive,
+    requiresVenueExit: session.open,
+    integrityWarning: signals.hasIntegritySignals,
+  };
 }
 
 async function loadUserForRemoval(client: pg.PoolClient, userId: number): Promise<UserRemovalRow> {
   const { rows } = await client.query<UserRemovalRow>(
     `SELECT id, email, secondary_email, name, surname, dni, badge_id, badge_id_history,
-            university_id, account_state, removal_action
+            university_id, account_state, removal_action,
+            removal_requires_exit, removal_idempotency_key
        FROM users WHERE id = $1 FOR UPDATE`,
     [userId],
   );
@@ -288,6 +312,7 @@ async function prepareAccountRemoval(
       await assertActiveWildcardHolder(client, user.id);
     }
     let action = user.removal_action;
+    let requiresVenueExit = user.removal_requires_exit;
 
     if (user.account_state === "active") {
       const eligibility = await getAccountRemovalEligibility(client, options.targetId);
@@ -300,28 +325,15 @@ async function prepareAccountRemoval(
         );
       }
       action = options.requestedAction ?? eligibility.action;
-      if (action === "anonymize" && eligibility.requiresVenueExit) {
-        throw new ConflictError(
-          "Close the participant's venue session before anonymizing their account.",
-          { code: "participant_inside" },
-        );
-      }
+      // A request made while the participant is inside is accepted.  The
+      // identity remains only long enough to record a valid exit, after which
+      // the normal irreversible finalization runs.
+      requiresVenueExit = eligibility.requiresVenueExit;
 
-      await client.query(
-        `UPDATE users
-            SET account_state = 'removal_pending', removal_action = $2, removal_started_at = clock_timestamp()
-          WHERE id = $1`,
-        [options.targetId, action],
-      );
-      // Stop authentication and delivery as soon as the pending state is
-      // committed. The remaining cleanup is retriable and writers are blocked
-      // by account_state, so a storage outage cannot restore access.
-      await client.query(`DELETE FROM sessions WHERE user_id = $1`, [options.targetId]);
-      await client.query(`DELETE FROM accounts WHERE user_id = $1`, [options.targetId]);
-      await client.query(`DELETE FROM push_tokens WHERE user_id = $1`, [options.targetId]);
-      // Mark external wallet copies void before notifying their providers.
-      // The rows remain only while removal_pending so a retry can repeat the
-      // notification; finalizeAccountRemoval deletes them.
+      // This mutation still has to happen while the user is active: the H54
+      // full-row FK guard intentionally rejects updates to a pending user's
+      // wallet records. The transaction rolls back both this voiding and the
+      // lifecycle transition together if anything fails.
       await client.query(
         `UPDATE wallet_passes
             SET status = 'voided', last_updated_at = clock_timestamp(),
@@ -329,17 +341,69 @@ async function prepareAccountRemoval(
           WHERE user_id = $1 AND status <> 'voided'`,
         [options.targetId],
       );
+
+      await client.query(
+        `UPDATE users
+            SET account_state = 'removal_pending',
+                removal_action = $2,
+                removal_requires_exit = $3,
+                removal_idempotency_key = COALESCE(removal_idempotency_key, $4),
+                removal_started_at = clock_timestamp()
+          WHERE id = $1`,
+        [options.targetId, action, requiresVenueExit, options.preserveIdempotency?.key ?? null],
+      );
+      // Stop authentication and delivery as soon as the pending state is
+      // committed. The remaining cleanup is retriable and writers are blocked
+      // by account_state, so a storage outage cannot restore access.
+      await client.query(`DELETE FROM sessions WHERE user_id = $1`, [options.targetId]);
+      await client.query(`DELETE FROM accounts WHERE user_id = $1`, [options.targetId]);
+      await client.query(`DELETE FROM push_tokens WHERE user_id = $1`, [options.targetId]);
+      // Participation ends when removal is accepted. Dietary data is needed
+      // while serving an active participant, but it is not needed to identify
+      // an exit-only person; clear it at the transition instead of keeping it
+      // until the asynchronous finalizer runs.
+      await client.query(
+        `UPDATE users
+            SET food_intolerances = ARRAY[]::integer[],
+                food_intolerance_notes = NULL,
+                dietary_data_state = 'not_provided'
+          WHERE id = $1`,
+        [options.targetId],
+      );
+      if (options.preserveIdempotency) {
+        // Move the marker out of the identity-bearing `u:<id>` scope before
+        // access is revoked.  A pending 202 can then be replayed without
+        // authenticating the now-closed session; finalization upgrades this
+        // same row to the identity-free 200 response.
+        await client.query(
+          `UPDATE idempotency_keys
+              SET scope = $3,
+                  response_status = 202,
+                  response_body = $4::jsonb,
+                  completed_at = clock_timestamp()
+            WHERE key = $1 AND scope = $2`,
+          [
+            options.preserveIdempotency.key,
+            options.preserveIdempotency.scope,
+            options.preserveIdempotency.completionScope,
+            JSON.stringify(
+              requiresVenueExit
+                ? { status: "pending_exit", pendingExit: true, accessRevoked: true }
+                : { status: "processing", accessRevoked: true },
+            ),
+          ],
+        );
+      }
     } else {
       action = action ?? (await getAccountRemovalEligibility(client, options.targetId)).action;
       if (options.requestedAction && options.requestedAction !== action) {
         throw new ConflictError("This account-removal request is already in progress.", { action });
       }
-      if (action === "anonymize" && (await openVenueSession(client, options.targetId)).open) {
-        throw new ConflictError(
-          "Close the participant's venue session before anonymizing their account.",
-          { code: "participant_inside" },
-        );
-      }
+      // Legacy pending rows may predate removal_requires_exit.  Re-check the
+      // authoritative door state rather than allowing finalization to delete
+      // an identity that is still needed to record its exit.
+      requiresVenueExit =
+        requiresVenueExit || (await openVenueSession(client, options.targetId)).open;
     }
 
     const walletArtifacts = await collectWalletArtifacts(client, options.targetId);
@@ -350,6 +414,7 @@ async function prepareAccountRemoval(
       exportPrefixes: await collectExportPrefixes(client, options.targetId),
       storageKeys: await collectStorageKeys(client, options.targetId),
       ...walletArtifacts,
+      requiresVenueExit,
     };
   });
 }
@@ -382,14 +447,6 @@ async function deleteExternalArtifacts(preparation: RemovalPreparation): Promise
 type RemovalRetryJob = Omit<RunAccountRemovalOptions, "scheduleRetry"> & {
   requestedAction: AccountRemovalAction;
 };
-
-type AnonymousDemographicField =
-  | "age"
-  | "gender"
-  | "degree"
-  | "graduationYear"
-  | "originCity"
-  | "university";
 
 async function enqueueRemovalRetry(
   options: RunAccountRemovalOptions,
@@ -430,86 +487,6 @@ function firstResponseValue(responses: Record<string, unknown>, key: string): un
   return found?.[1];
 }
 
-function fieldLabelText(field: Record<string, unknown>): string {
-  const labels = field.label;
-  return typeof labels === "string"
-    ? labels
-    : labels && typeof labels === "object"
-      ? Object.values(labels as Record<string, unknown>)
-          .filter((value): value is string => typeof value === "string")
-          .join(" ")
-      : "";
-}
-
-function normalizeFieldText(value: string): string {
-  return value.normalize("NFKD").replace(/\p{M}/gu, "").toLocaleLowerCase();
-}
-
-/**
- * Application templates vary by event and are organizer-controlled. Stable
- * keys are the preferred contract; the label fallback is deliberately narrow
- * so a custom question such as "year founded" cannot become a permanent
- * graduation-year field merely because it contains the word "year" (H54).
- */
-function anonymousFieldFor(field: Record<string, unknown>): AnonymousDemographicField | null {
-  const key = normalizeFieldText(String(field.key ?? "")).replace(/[.\s-]+/g, "_");
-  const keyAliases: Record<string, readonly string[]> = {
-    age: ["age", "edad", "dob", "birth_date", "birthdate", "birthday", "date_of_birth"],
-    gender: ["gender", "sex", "sexo", "genero", "gender_identity"],
-    degree: [
-      "degree",
-      "major",
-      "studies",
-      "field_of_study",
-      "study_field",
-      "titulacion",
-      "estudios",
-      "carreira",
-    ],
-    graduationYear: [
-      "graduation_year",
-      "graduationyear",
-      "year_of_graduation",
-      "grad_year",
-      "ano_de_graduacion",
-      "ano_graduacion",
-    ],
-    originCity: [
-      "origin_city",
-      "city_of_origin",
-      "home_city",
-      "ciudad_de_origen",
-      "cidade_de_orixe",
-    ],
-    university: ["university", "universidade", "universidad"],
-  };
-  for (const [category, aliases] of Object.entries(keyAliases)) {
-    if (aliases.includes(key)) return category as AnonymousDemographicField;
-  }
-
-  const label = normalizeFieldText(fieldLabelText(field));
-  if (
-    /\b(?:age|edad|date of birth|birth date|birthday|dob|fecha de nacimiento|data de nacemento)\b/.test(
-      label,
-    )
-  )
-    return "age";
-  if (/\b(?:gender|sex|sexo|genero|xenero)\b/.test(label)) return "gender";
-  if (/\b(?:degree|major|field of study|studies|titulacion|estudios|carreira)\b/.test(label))
-    return "degree";
-  if (/(?:graduat(?:ion|ing)|year of graduation|ano de graduacion|ano de finalizacion)/.test(label))
-    return "graduationYear";
-  if (
-    /\b(?:origin city|city of origin|home city|ciudad de origen|cidade de orixe|procedencia|orixe)\b/.test(
-      label,
-    )
-  )
-    return "originCity";
-  if (field.kind === "university" || /\b(?:university|universidade|universidad)\b/.test(label))
-    return "university";
-  return null;
-}
-
 function textValue(value: unknown, maxLength: number): string | null {
   if (typeof value !== "string" && typeof value !== "number") return null;
   const text = String(value).trim();
@@ -521,11 +498,10 @@ function escapeRegExp(value: string): string {
 }
 
 /**
- * Application answers are user-controlled free text. Only values that look
- * like the approved demographic fields may reach the anonymous subject, and
- * even those values must not copy a name, address, phone number, email, or
- * URL. A false positive drops one optional demographic; a false negative would
- * create a new identity copy in the permanent audit dataset (H54).
+ * Application answers are user-controlled. Even when an administrator has
+ * explicitly opted a field into anonymous audit retention, direct identity
+ * tokens are rejected from string values. A false positive drops one optional
+ * audit value; a false negative would create a new identity copy (H54).
  */
 function safeDemographicText(
   value: unknown,
@@ -610,24 +586,89 @@ async function applicationUniversityValue(
   return safeDemographicText(value, 200, identity);
 }
 
-async function extractAnonymousDemographics(
+type AnonymousAuditValue = string | number | boolean | Array<string | number | boolean>;
+
+type AnonymousAuditField = {
+  applicationId: number;
+  applicationFormVersion: number;
+  fieldKey: string;
+  dimension: string | null;
+  fieldKind: string;
+  value: AnonymousAuditValue;
+};
+
+async function sanitizeAnonymousAuditValue(
+  client: pg.PoolClient,
+  field: TemplateField,
+  value: unknown,
+  identity: Pick<UserRemovalRow, "email" | "secondary_email" | "name" | "surname" | "dni"> & {
+    historicalEmails?: readonly string[];
+  },
+  universityNames: Map<number, string | null>,
+  asOf: Date,
+): Promise<AnonymousAuditValue | null> {
+  // Personal files are never copied into the permanent anonymous dataset,
+  // even if a future admin accidentally enables retention on a file field.
+  if (field.kind === "file") return null;
+
+  const dimension = field.anonymous_audit_dimension ?? null;
+  if (field.kind === "university") {
+    const university = await applicationUniversityValue(client, value, identity, universityNames);
+    return university;
+  }
+
+  if (field.kind === "date" && dimension === "age") {
+    return ageFromDate(value, asOf);
+  }
+
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return null;
+    if (dimension === "age" && (!Number.isInteger(value) || value < 0 || value > 150)) {
+      return null;
+    }
+    if (
+      dimension === "graduation_year" &&
+      (!Number.isInteger(value) || value < 1900 || value > 2200)
+    ) {
+      return null;
+    }
+    return value;
+  }
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    if (field.kind === "number") {
+      const number = numericValue(value);
+      if (number == null) return null;
+      if (dimension === "age" && (number < 0 || number > 150)) return null;
+      if (dimension === "graduation_year" && (number < 1900 || number > 2200)) return null;
+      return number;
+    }
+    return safeDemographicText(value, field.kind === "textarea" ? 4000 : 500, identity);
+  }
+  if (Array.isArray(value)) {
+    const sanitized: Array<string | number | boolean> = [];
+    for (const item of value.slice(0, 100)) {
+      if (typeof item === "boolean") sanitized.push(item);
+      else if (typeof item === "number" && Number.isFinite(item)) sanitized.push(item);
+      else if (typeof item === "string") {
+        const text = safeDemographicText(item, 200, identity);
+        if (text != null) sanitized.push(text);
+      }
+    }
+    return sanitized.length > 0 ? sanitized : null;
+  }
+  return null;
+}
+
+/**
+ * Copy only explicitly retained fields from the immutable form snapshot tied
+ * to each submitted response. Missing answers are skipped; no current mutable
+ * form, label, or hardcoded demographic list participates in this decision.
+ */
+async function extractAnonymousAuditFields(
   client: pg.PoolClient,
   user: UserRemovalRow,
-): Promise<{
-  age: number | null;
-  gender: string | null;
-  university: string | null;
-  degree: string | null;
-  graduationYear: number | null;
-  originCity: string | null;
-}> {
-  const { rows: current } = await client.query<{ university: string | null }>(
-    `SELECT u2.name AS university
-       FROM users u
-       LEFT JOIN universities u2 ON u2.id = u.university_id
-      WHERE u.id = $1`,
-    [user.id],
-  );
+): Promise<AnonymousAuditField[]> {
   // Email changes are intentionally retained only in this transient table so
   // cleanup can find legacy denormalized copies. They are also identity
   // tokens: an old address must not be copied into a supposedly anonymous
@@ -640,63 +681,57 @@ async function extractAnonymousDemographics(
     ...user,
     historicalEmails: historicalEmailRows.map((row) => row.email),
   };
-  const values = {
-    age: null as number | null,
-    gender: null as string | null,
-    university: safeDemographicText(current[0]?.university, 200, identity),
-    degree: null as string | null,
-    graduationYear: null as number | null,
-    originCity: null as string | null,
-  };
   const universityNames = new Map<number, string | null>();
 
   const { rows } = await client.query<{
     responses: Record<string, unknown>;
+    application_id: number;
+    form_version: number;
     template: unknown;
   }>(
-    `SELECT ar.responses, a.template
+    `SELECT ar.responses, ar.application_id, fv.version AS form_version, fv.template
        FROM application_responses ar
-       JOIN applications a ON a.id = ar.application_id
+       JOIN application_form_versions fv ON fv.id = ar.application_form_version_id
       WHERE ar.user_id = $1
+        AND ar.status <> 'draft'
       ORDER BY ar.id`,
     [user.id],
   );
   const asOf = new Date();
+  const retained: AnonymousAuditField[] = [];
   for (const row of rows) {
     const fields = Array.isArray(row.template) ? row.template : [];
     for (const candidate of fields) {
       if (!candidate || typeof candidate !== "object") continue;
-      const field = candidate as Record<string, unknown>;
+      const field = candidate as TemplateField;
       const key = typeof field.key === "string" ? field.key : "";
       if (!key) continue;
-      const category = anonymousFieldFor(field);
-      if (!category) continue;
+      if (field.retention_mode !== "anonymous_audit") continue;
       const value = firstResponseValue(row.responses ?? {}, key);
       if (value === undefined || value === null) continue;
-
-      if (category === "age" && values.age == null) {
-        const age = numericValue(value);
-        values.age = age != null && age >= 0 && age <= 150 ? age : ageFromDate(value, asOf);
-      } else if (category === "gender" && values.gender == null) {
-        values.gender = safeDemographicText(value, 100, identity);
-      } else if (category === "degree" && values.degree == null) {
-        values.degree = safeDemographicText(value, 200, identity);
-      } else if (category === "graduationYear" && values.graduationYear == null) {
-        const year = numericValue(value);
-        values.graduationYear = year != null && year >= 1900 && year <= 2200 ? year : null;
-      } else if (category === "originCity" && values.originCity == null) {
-        values.originCity = safeDemographicText(value, 200, identity);
-      } else if (category === "university" && values.university == null) {
-        values.university = await applicationUniversityValue(
-          client,
-          value,
-          identity,
-          universityNames,
-        );
-      }
+      const sanitized = await sanitizeAnonymousAuditValue(
+        client,
+        field,
+        value,
+        identity,
+        universityNames,
+        asOf,
+      );
+      if (sanitized == null) continue;
+      retained.push({
+        applicationId: row.application_id,
+        applicationFormVersion: row.form_version,
+        fieldKey: key,
+        dimension:
+          typeof field.anonymous_audit_dimension === "string"
+            ? field.anonymous_audit_dimension
+            : null,
+        fieldKind: field.kind,
+        value: sanitized,
+      });
     }
   }
-  return values;
+  return retained;
 }
 
 async function guaranteedMinutesAtRemoval(client: pg.PoolClient, userId: number): Promise<number> {
@@ -757,43 +792,38 @@ async function deleteOrphanedProjects(client: pg.PoolClient, repoIds: number[]):
 }
 
 /**
- * Keep only an event-sized revocation set for disconnected scanners. These
- * values are not connected to a user or anonymous participant and expire one
- * day after the configured event end (or one day from now when no end is
- * configured). This prevents old badges/tickets from living in the permanent
- * audit dataset while giving a scanner time to receive a fresh snapshot.
+ * Retire credentials in a global, unlinked denylist. A disconnected scanner
+ * can replay an old badge/ticket after its former user row is gone; allowing
+ * that credential to be reassigned would make the stale payload resolve to a
+ * new participant. The denylist contains no user/application FK and is not an
+ * audit subject. Permanent non-reuse is the smallest server-side guarantee
+ * that an arbitrarily late offline retry cannot be attributed to somebody
+ * else.
  */
 async function addScannerTombstones(
   client: pg.PoolClient,
   badgeIds: string[],
   ticketTokens: string[],
 ): Promise<void> {
-  const expiry = `COALESCE(
-    (SELECT GREATEST(event_ends_at + interval '1 day', clock_timestamp() + interval '1 day')
-       FROM event_config WHERE id = 1),
-    clock_timestamp() + interval '1 day'
-  )`;
   if (badgeIds.length > 0) {
     await client.query(
-      `WITH expiry AS (SELECT ${expiry} AS expires_at)
-       INSERT INTO scanner_revoked_badges (badge_id, revoked_at, expires_at)
-       SELECT value, clock_timestamp(), expiry.expires_at
-         FROM unnest($1::text[]) AS badge_values(value) CROSS JOIN expiry
+      `INSERT INTO scanner_revoked_badges (badge_id, revoked_at, expires_at)
+       SELECT value, clock_timestamp(), NULL::timestamptz
+         FROM unnest($1::text[]) AS badge_values(value)
        ON CONFLICT (badge_id) DO UPDATE
          SET revoked_at = EXCLUDED.revoked_at,
-             expires_at = GREATEST(scanner_revoked_badges.expires_at, EXCLUDED.expires_at)`,
+             expires_at = NULL`,
       [badgeIds],
     );
   }
   if (ticketTokens.length > 0) {
     await client.query(
-      `WITH expiry AS (SELECT ${expiry} AS expires_at)
-       INSERT INTO scanner_revoked_tickets (ticket_token, revoked_at, expires_at)
-       SELECT value, clock_timestamp(), expiry.expires_at
-         FROM unnest($1::text[]) AS ticket_values(value) CROSS JOIN expiry
+      `INSERT INTO scanner_revoked_tickets (ticket_token, revoked_at, expires_at)
+       SELECT value, clock_timestamp(), NULL::timestamptz
+         FROM unnest($1::text[]) AS ticket_values(value)
        ON CONFLICT (ticket_token) DO UPDATE
          SET revoked_at = EXCLUDED.revoked_at,
-             expires_at = GREATEST(scanner_revoked_tickets.expires_at, EXCLUDED.expires_at)`,
+             expires_at = NULL`,
       [ticketTokens],
     );
   }
@@ -801,9 +831,9 @@ async function addScannerTombstones(
 
 /**
  * Remove every identity-bearing relationship before deleting the users row.
- * The only permanent row created for an anonymized participant is the
- * aggregate anonymous_participants subject. Raw presence and scan rows are
- * deleted after their guaranteed-time aggregate is calculated.
+ * The permanent anonymous subject is created before this scrub, with only the
+ * verified-time aggregate and explicitly retained form values. Raw presence
+ * and scan rows are deleted after that aggregate is calculated.
  */
 async function scrubRelationships(
   client: pg.PoolClient,
@@ -895,8 +925,8 @@ async function scrubRelationships(
   await deleteOrphanedProjects(client, repoIds);
 
   // Raw accreditation/door rows contain timestamps, methods, notes, badge
-  // identifiers, and operator provenance. The approved permanent audit set
-  // keeps only guaranteedPresenceMs calculated before this deletion.
+  // identifiers, and operator provenance. The permanent audit subject keeps
+  // only explicitly retained application values plus verified venue time.
   await client.query(`DELETE FROM check_in_logs WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM time_logs WHERE user_id = $1`, [userId]);
   // Staff provenance is not part of the retained audit subject. Detach it
@@ -1023,6 +1053,16 @@ async function scrubRelationships(
 
   await client.query(
     `UPDATE data_subject_requests
+        SET status = 'completed', completed_at = clock_timestamp(), error = NULL,
+            subject_user_id = NULL, requested_by = NULL,
+            reason = NULL, storage_key = NULL
+      WHERE subject_user_id = $1
+        AND type = 'deletion'
+        AND status = 'processing'`,
+    [userId],
+  );
+  await client.query(
+    `UPDATE data_subject_requests
         SET subject_user_id = NULL, requested_by = NULL,
             reason = NULL, storage_key = NULL, error = NULL
       WHERE subject_user_id = $1 OR requested_by = $1`,
@@ -1100,6 +1140,8 @@ async function scrubRelationships(
     `DELETE FROM idempotency_keys
       WHERE (
         scope ~ ('(^| )u:' || $1::text || '($| )')
+        OR scope LIKE ('DELETE /api/users/' || $1::text || ' %')
+        OR scope LIKE ('POST /api/users/' || $1::text || '/anonymize %')
         OR coalesce(response_body::text, '') ILIKE ANY($2::text[])
         OR coalesce(response_body::text, '') ~ $3
         OR coalesce(response_body::text, '') ~ $4
@@ -1136,9 +1178,9 @@ export async function finalizeAccountRemoval(
       action: user.removal_action,
     });
   }
-  if (options.action === "anonymize" && (await openVenueSession(client, user.id)).open) {
+  if ((await openVenueSession(client, user.id)).open) {
     throw new ConflictError(
-      "Close the participant's venue session before anonymizing their account.",
+      "Close the participant's venue session before finalizing account removal.",
       {
         code: "participant_inside",
       },
@@ -1147,29 +1189,40 @@ export async function finalizeAccountRemoval(
 
   const wasWildcardHolder = await userHasWildcardRegardlessOfState(client, user.id);
   let anonymousId: string | null = null;
+  let retainedApplicationFields: AnonymousAuditField[] = [];
   if (options.action === "anonymize") {
     anonymousId = randomUUID();
-    const demographics = await extractAnonymousDemographics(client, user);
+    retainedApplicationFields = await extractAnonymousAuditFields(client, user);
     const guaranteedMinutes = await guaranteedMinutesAtRemoval(client, user.id);
     await client.query(
       `INSERT INTO anonymous_participants
-         (id, age, gender, university, degree, graduation_year, origin_city, guaranteed_presence_minutes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [
-        anonymousId,
-        demographics.age,
-        demographics.gender,
-        demographics.university,
-        demographics.degree,
-        demographics.graduationYear,
-        demographics.originCity,
-        guaranteedMinutes,
-      ],
+         (id, guaranteed_presence_minutes)
+       VALUES ($1, $2)`,
+      [anonymousId, guaranteedMinutes],
     );
+    for (const field of retainedApplicationFields) {
+      await client.query(
+        `INSERT INTO anonymous_participant_fields
+           (anonymous_participant_id, application_id, application_form_version,
+            field_key, anonymous_audit_dimension, field_kind, value)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)`,
+        [
+          anonymousId,
+          field.applicationId,
+          field.applicationFormVersion,
+          field.fieldKey,
+          field.dimension,
+          field.fieldKind,
+          JSON.stringify(field.value),
+        ],
+      );
+    }
   }
 
   await scrubRelationships(client, user, options.preserveIdempotency);
-  const completion = anonymousId ? { anonymized: true as const } : { deleted: true as const };
+  const completion = anonymousId
+    ? { status: "completed" as const, anonymized: true as const }
+    : { status: "completed" as const, deleted: true as const };
   if (options.preserveIdempotency) {
     // A storage/DB failure can return after preparation has revoked access and
     // the original HTTP response is lost. Complete the preserved self-service
@@ -1177,9 +1230,25 @@ export async function finalizeAccountRemoval(
     // boolean result, never the deleted identity (H54).
     await client.query(
       `UPDATE idempotency_keys
-          SET response_status = 200, response_body = $3, completed_at = clock_timestamp()
+          SET response_status = 200, response_body = $3::jsonb, completed_at = clock_timestamp()
         WHERE key = $1 AND scope = $2 AND response_status IS NULL`,
-      [options.preserveIdempotency.key, options.preserveIdempotency.completionScope, completion],
+      [
+        options.preserveIdempotency.key,
+        options.preserveIdempotency.completionScope,
+        JSON.stringify(completion),
+      ],
+    );
+  }
+  if (user.removal_idempotency_key) {
+    const completionScope =
+      options.action === "anonymize"
+        ? "POST /api/me/anonymize removal-complete"
+        : "DELETE /api/me removal-complete";
+    await client.query(
+      `UPDATE idempotency_keys
+          SET response_status = 200, response_body = $2::jsonb, completed_at = clock_timestamp()
+        WHERE key = $1 AND scope = $3 AND response_status = 202`,
+      [user.removal_idempotency_key, JSON.stringify(completion), completionScope],
     );
   }
   if (anonymousId) {
@@ -1200,12 +1269,51 @@ export async function finalizeAccountRemoval(
       // deliberate suppression of request context.
       ip: null,
       userAgent: null,
-      after: { retainedFields: [...ANONYMOUS_AUDIT_FIELDS] },
+      after: {
+        retainedFields: [
+          ...new Set([
+            ...retainedApplicationFields.map((field) => field.dimension ?? field.fieldKey),
+            VERIFIED_PRESENCE_AUDIT_FIELD,
+          ]),
+        ],
+      },
     });
   }
   await client.query(`DELETE FROM users WHERE id = $1`, [user.id]);
   if (wasWildcardHolder) await assertActiveWildcardHolder(client);
   return completion;
+}
+
+/**
+ * Re-check the live door state after private-object cleanup. A participant
+ * can exit while storage work is in progress; finalization must not return a
+ * false pending state or delete an identity still needed by the exit scanner.
+ */
+async function removalLiveState(
+  targetId: number,
+): Promise<{ gone: boolean; requiresExit: boolean }> {
+  return withTransaction(async (client) => {
+    const { rows } = await client.query<{ removal_requires_exit: boolean }>(
+      `SELECT removal_requires_exit FROM users WHERE id = $1 FOR UPDATE`,
+      [targetId],
+    );
+    if (!rows[0]) return { gone: true, requiresExit: false };
+    const open = (await openVenueSession(client, targetId)).open;
+    if (open) {
+      if (!rows[0].removal_requires_exit) {
+        await client.query(`UPDATE users SET removal_requires_exit = true WHERE id = $1`, [
+          targetId,
+        ]);
+      }
+      return { gone: false, requiresExit: true };
+    }
+    if (rows[0].removal_requires_exit) {
+      await client.query(`UPDATE users SET removal_requires_exit = false WHERE id = $1`, [
+        targetId,
+      ]);
+    }
+    return { gone: false, requiresExit: false };
+  });
 }
 
 /**
@@ -1228,23 +1336,45 @@ export async function runAccountRemoval(
     }
     throw error;
   }
+  const liveState = await removalLiveState(preparation.targetId);
+  if (liveState.gone) {
+    // A concurrent exit completion may have finalized the same removal after
+    // this request released its preparation lock. The other transaction has
+    // already produced the only valid identity-free result; do not turn that
+    // successful race into a spurious 404/5xx for this retry.
+    return preparation.action === "anonymize"
+      ? { status: "completed", anonymized: true }
+      : { status: "completed", deleted: true };
+  }
+  if (liveState.requiresExit) {
+    return { status: "pending_exit", pendingExit: true, accessRevoked: true };
+  }
   try {
     return await withTransaction((client) =>
       finalizeAccountRemoval(client, { ...options, action: preparation.action }),
     );
   } catch (error) {
+    if (error instanceof NotFoundError) {
+      // The same pending removal may have won the finalization race after the
+      // live-state check above. The users row is intentionally gone, so the
+      // only safe response is the already-completed identity-free outcome.
+      return preparation.action === "anonymize"
+        ? { status: "completed", anonymized: true }
+        : { status: "completed", deleted: true };
+    }
     // Storage cleanup succeeded, but a transient DB/worker failure can still
     // roll back the final transaction. Keep the account inaccessible and make
     // completion retriable; a known business conflict is returned to the
     // caller for reconciliation instead of creating an unbounded retry loop.
-    if (options.scheduleRetry !== false && !(error instanceof ConflictError)) {
+    if (
+      options.scheduleRetry !== false &&
+      (!(error instanceof ConflictError) || options.source === "presence_exit_completion")
+    ) {
       await enqueueRemovalRetry(options, preparation.action);
     }
     throw error;
   }
 }
-
-export { ANONYMOUS_AUDIT_FIELDS };
 
 registerWorker(REMOVAL_RETRY_QUEUE, async (job: Job<RemovalRetryJob>) => {
   await runAccountRemoval({ ...job.data, scheduleRetry: false });

@@ -16,9 +16,9 @@ import type { Language } from "../notifications/translate/index.js";
  * missed sync harmless: every successful refresh converges to server truth.
  */
 export async function scannerSnapshot() {
-  // Expiry is the retention boundary for H54 scanner tombstones. This is
-  // intentionally best-effort housekeeping; an expired row never identifies
-  // a participant and a later snapshot simply omits it.
+  // The snapshot is replace-all. Permanent retired-credential tombstones are
+  // included so a device can reject stale scans locally; finite expiry is
+  // retained only for legacy housekeeping rows.
   await purgeExpiredScannerTombstones();
   const [peopleResult, activitiesResult, statesResult, revokedBadgeResult, revokedTicketResult] =
     await Promise.all([
@@ -109,11 +109,11 @@ export async function scannerSnapshot() {
       ),
       pool.query(
         `SELECT badge_id FROM scanner_revoked_badges
-        WHERE expires_at > now() ORDER BY badge_id`,
+        WHERE expires_at IS NULL OR expires_at > now() ORDER BY badge_id`,
       ),
       pool.query(
         `SELECT ticket_token FROM scanner_revoked_tickets
-        WHERE expires_at > now() ORDER BY ticket_token`,
+        WHERE expires_at IS NULL OR expires_at > now() ORDER BY ticket_token`,
       ),
     ]);
 
@@ -170,11 +170,15 @@ export async function scannerSnapshot() {
 
 const TOMBSTONE_CLEANUP_QUEUE = "scanner-tombstone-cleanup";
 
-/** H54: expiry is enforced even when no scanner requests a fresh snapshot. */
+/** H54: legacy finite expiry is enforced even when no scanner requests a fresh snapshot. */
 export async function purgeExpiredScannerTombstones(): Promise<void> {
   await Promise.all([
-    pool.query(`DELETE FROM scanner_revoked_badges WHERE expires_at <= now()`),
-    pool.query(`DELETE FROM scanner_revoked_tickets WHERE expires_at <= now()`),
+    pool.query(
+      `DELETE FROM scanner_revoked_badges WHERE expires_at IS NOT NULL AND expires_at <= now()`,
+    ),
+    pool.query(
+      `DELETE FROM scanner_revoked_tickets WHERE expires_at IS NOT NULL AND expires_at <= now()`,
+    ),
   ]);
 }
 

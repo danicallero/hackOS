@@ -7,14 +7,19 @@ import { AppError } from "../../lib/errors.js";
  * explicitly revoked; an unknown badge is unknown. Neither error names any
  * personal data (plan/07: rotated-away scan returns a bare "badge revoked").
  */
-export async function resolveByBadge(db: Queryable, badgeId: string): Promise<number> {
+export async function resolveByBadge(
+  db: Queryable,
+  badgeId: string,
+  options: { allowPendingExit?: boolean } = {},
+): Promise<number> {
   // A badge can be reassigned after its former owner's account is removed.
-  // Reject the short-lived tombstone before resolving the current owner so a
-  // disconnected scanner cannot replay an old identity-bearing scan against
-  // the replacement participant (H54).
+  // Reject the permanent, unlinked retirement tombstone before resolving the
+  // current owner so a disconnected scanner cannot replay an old
+  // identity-bearing scan against the replacement participant (H54).
   const tombstone = await db.query(
     `SELECT 1 FROM scanner_revoked_badges
-      WHERE badge_id = $1 AND expires_at > clock_timestamp()
+      WHERE badge_id = $1
+        AND (expires_at IS NULL OR expires_at > clock_timestamp())
       LIMIT 1`,
     [badgeId],
   );
@@ -24,8 +29,13 @@ export async function resolveByBadge(db: Queryable, badgeId: string): Promise<nu
 
   const current = await db.query(
     `SELECT id FROM users
-      WHERE badge_id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
-    [badgeId],
+      WHERE badge_id = $1
+        AND anonymized_at IS NULL
+        AND (
+          account_state = 'active'
+          OR ($2::boolean AND account_state = 'removal_pending' AND removal_requires_exit = true)
+        )`,
+    [badgeId, options.allowPendingExit === true],
   );
   if (current.rows[0]) return current.rows[0].id as number;
 

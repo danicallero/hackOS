@@ -112,8 +112,12 @@ describe("H22-H26 native scanner snapshot", () => {
   });
 
   it("excludes anonymized profiles from the snapshot (H54)", async () => {
+    const { pool } = await import("../../src/db/pool.js");
     const userId = await createUser({ name: "Ada" });
     await assignBadge(userId, "BADGE-ANON");
+    await pool.query(`INSERT INTO check_in_logs (user_id, badge_id) VALUES ($1, 'BADGE-ANON')`, [
+      userId,
+    ]);
 
     const admin = await createUserWithCapabilities(["*"]);
     const anon = await app.inject({
@@ -137,6 +141,9 @@ describe("H22-H26 native scanner snapshot", () => {
     const { pool } = await import("../../src/db/pool.js");
     const formerOwner = await createUser();
     await assignBadge(formerOwner, "BADGE-RETIRED");
+    await pool.query(`INSERT INTO check_in_logs (user_id, badge_id) VALUES ($1, 'BADGE-RETIRED')`, [
+      formerOwner,
+    ]);
     const admin = await createUserWithCapabilities(["*"]);
     const removed = await app.inject({
       method: "POST",

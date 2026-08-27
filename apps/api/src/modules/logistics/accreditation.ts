@@ -27,7 +27,8 @@ async function assertTicketNotRevoked(
 ): Promise<void> {
   const revoked = await client.query(
     `SELECT 1 FROM scanner_revoked_tickets
-      WHERE ticket_token = $1 AND expires_at > clock_timestamp()
+      WHERE ticket_token = $1
+        AND (expires_at IS NULL OR expires_at > clock_timestamp())
       LIMIT 1`,
     [token],
   );
