@@ -2,7 +2,10 @@ import { type MenuAction, MenuView } from "@expo/ui/community/menu";
 import { useRouter, useScrollToTop } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Linking, ScrollView, Text, useColorScheme, View } from "react-native";
-
+import {
+  type AccountRemovalPinAction,
+  AccountRemovalPinModal,
+} from "@/components/account-removal-pin-modal";
 import {
   ActionButton,
   AndroidStatusBarScrim,
@@ -32,6 +35,7 @@ import {
   anonymizeOwnAccount,
   deleteOwnAccount,
   fetchAccountRemovalEligibility,
+  requestAccountRemovalPin,
 } from "@/lib/self-service";
 import {
   clearAccountData,
@@ -78,6 +82,12 @@ export default function AccountScreen() {
   const [removalLoading, setRemovalLoading] = useState(true);
   const [removalError, setRemovalError] = useState<Error | null>(null);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [removalPinAction, setRemovalPinAction] = useState<AccountRemovalPinAction | null>(null);
+  const [removalPinError, setRemovalPinError] = useState<string | null>(null);
+  const [removalPinRequestAction, setRemovalPinRequestAction] =
+    useState<AccountRemovalPinAction | null>(null);
+  const [removalPinRequestError, setRemovalPinRequestError] = useState<Error | null>(null);
+  const [requestingRemovalPin, setRequestingRemovalPin] = useState(false);
 
   const loadStorageUsage = useCallback(async () => {
     setStorageUsage(await getStorageUsage());
@@ -252,12 +262,28 @@ export default function AccountScreen() {
     setRemovalError(cause instanceof Error ? cause : new Error(fallback));
   }
 
-  async function deleteAccount() {
+  function handleRemovalPinFailure(cause: unknown, action: AccountRemovalPinAction): boolean {
+    if (!(cause instanceof ApiError)) return false;
+    if (cause.code === "removal_pin_invalid") {
+      setRemovalPinError(t("accountRemovalPinInvalid"));
+      return true;
+    }
+    if (cause.code === "removal_pin_expired" || cause.code === "removal_pin_required") {
+      setRemovalPinAction(null);
+      setRemovalPinError(null);
+      setRemovalPinRequestAction(action);
+      setRemovalPinRequestError(new Error(t("accountRemovalPinExpired")));
+      return true;
+    }
+    return false;
+  }
+
+  async function deleteAccount(securityPin?: string) {
     if (!me) return;
     setDeletingAccount(true);
     setRemovalError(null);
     try {
-      const result = await deleteOwnAccount();
+      const result = await deleteOwnAccount(securityPin);
       const progress =
         result.status === "completed"
           ? undefined
@@ -269,6 +295,7 @@ export default function AccountScreen() {
         progress,
       );
     } catch (cause) {
+      if (handleRemovalPinFailure(cause, "delete")) return;
       await handleRemovalFailure(cause, me.id, t("accountDeleteError"), "delete");
     } finally {
       setDeletingAccount(false);
@@ -285,17 +312,17 @@ export default function AccountScreen() {
       {
         text: t("accountDeleteAction"),
         style: "destructive",
-        onPress: () => void deleteAccount(),
+        onPress: () => void beginRemoval("delete"),
       },
     ]);
   }
 
-  async function anonymizeAccount() {
+  async function anonymizeAccount(securityPin?: string) {
     if (!me) return;
     setDeletingAccount(true);
     setRemovalError(null);
     try {
-      const result = await anonymizeOwnAccount();
+      const result = await anonymizeOwnAccount(securityPin);
       const progress =
         result.status === "completed"
           ? undefined
@@ -307,6 +334,7 @@ export default function AccountScreen() {
         progress,
       );
     } catch (cause) {
+      if (handleRemovalPinFailure(cause, "anonymize")) return;
       await handleRemovalFailure(cause, me.id, t("accountAnonymizeError"), "anonymize");
     } finally {
       setDeletingAccount(false);
@@ -323,9 +351,51 @@ export default function AccountScreen() {
       {
         text: t("accountAnonymizeAction"),
         style: "destructive",
-        onPress: () => void anonymizeAccount(),
+        onPress: () => void beginRemoval("anonymize"),
       },
     ]);
+  }
+
+  async function beginRemoval(action: AccountRemovalPinAction): Promise<void> {
+    setRemovalPinRequestAction(action);
+    setRemovalPinRequestError(null);
+    if (!removalEligibility?.securityPinRequired) {
+      setRemovalPinRequestAction(null);
+      if (action === "delete") await deleteAccount();
+      else await anonymizeAccount();
+      return;
+    }
+
+    setRequestingRemovalPin(true);
+    try {
+      const result = await requestAccountRemovalPin();
+      if (result.status === "not_required") {
+        setRemovalPinRequestAction(null);
+        if (action === "delete") await deleteAccount();
+        else await anonymizeAccount();
+        return;
+      }
+      setRemovalPinRequestAction(null);
+      setRemovalPinError(null);
+      setRemovalPinAction(action);
+    } catch (cause) {
+      setRemovalPinRequestError(
+        cause instanceof Error ? cause : new Error(t("accountRemovalLoadError")),
+      );
+    } finally {
+      setRequestingRemovalPin(false);
+    }
+  }
+
+  async function submitRemovalPin(pin: string): Promise<void> {
+    if (removalPinAction === "delete") await deleteAccount(pin);
+    else if (removalPinAction === "anonymize") await anonymizeAccount(pin);
+  }
+
+  function cancelRemovalPin() {
+    if (deletingAccount) return;
+    setRemovalPinAction(null);
+    setRemovalPinError(null);
   }
 
   if (loading && !me) return <RequestFeedback loading />;
@@ -622,6 +692,18 @@ export default function AccountScreen() {
                 </View>
               ) : removalEligibility === null ? null : removalEligibility.action === "delete" ? (
                 <View style={{ gap: 12, padding: 16 }}>
+                  {removalPinRequestError ? (
+                    <RequestFeedback
+                      error={removalPinRequestError}
+                      message={removalPinRequestError.message}
+                      onRetry={
+                        removalPinRequestAction
+                          ? () => void beginRemoval(removalPinRequestAction)
+                          : undefined
+                      }
+                      retrying={requestingRemovalPin}
+                    />
+                  ) : null}
                   <Text
                     selectable
                     style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
@@ -658,12 +740,24 @@ export default function AccountScreen() {
                     label={t("accountDeleteAction")}
                     icon="trash"
                     destructive
-                    busy={deletingAccount}
+                    busy={deletingAccount || requestingRemovalPin}
                     onPress={confirmDeleteAccount}
                   />
                 </View>
               ) : (
                 <View style={{ gap: 12, padding: 16 }}>
+                  {removalPinRequestError ? (
+                    <RequestFeedback
+                      error={removalPinRequestError}
+                      message={removalPinRequestError.message}
+                      onRetry={
+                        removalPinRequestAction
+                          ? () => void beginRemoval(removalPinRequestAction)
+                          : undefined
+                      }
+                      retrying={requestingRemovalPin}
+                    />
+                  ) : null}
                   <Text
                     selectable
                     accessibilityLiveRegion="polite"
@@ -720,7 +814,7 @@ export default function AccountScreen() {
                     label={t("accountAnonymizeAction")}
                     icon="person.crop.circle.badge.xmark"
                     destructive
-                    busy={deletingAccount}
+                    busy={deletingAccount || requestingRemovalPin}
                     onPress={confirmAnonymizeAccount}
                   />
                 </View>
@@ -729,6 +823,14 @@ export default function AccountScreen() {
           ) : null}
         </Section>
       </ScrollView>
+      <AccountRemovalPinModal
+        action={removalPinAction}
+        busy={deletingAccount}
+        error={removalPinError}
+        onCancel={cancelRemovalPin}
+        onConfirm={(pin) => void submitRemovalPin(pin)}
+        visible={removalPinAction !== null}
+      />
       <AndroidStatusBarScrim />
     </View>
   );
