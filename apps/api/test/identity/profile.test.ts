@@ -46,6 +46,29 @@ async function snapshotFormVersion(applicationId: number, template: unknown): Pr
   return rows[0].id;
 }
 
+async function requestRemovalPin(a: App, userId: number): Promise<string> {
+  const { pool } = await import("../../src/db/pool.js");
+  const response = await a.inject({
+    method: "POST",
+    url: "/api/me/removal-pin",
+    headers: asUser(userId),
+  });
+  expect(response.statusCode).toBe(200);
+  expect(response.json().status).toBe("sent");
+  const { rows } = await pool.query<{ payload: { vars?: { pin?: string } } }>(
+    `SELECT payload
+       FROM notification_outbox
+      WHERE user_id = $1
+        AND payload->>'template' = 'auth.accountRemovalPin'
+      ORDER BY id DESC
+      LIMIT 1`,
+    [userId],
+  );
+  const pin = rows[0]?.payload?.vars?.pin;
+  expect(pin).toMatch(/^\d{6}$/);
+  return pin as string;
+}
+
 describe("GET /api/me (H7)", () => {
   it("lets staff manually classify a user as participant or mentor and issues a ticket", async () => {
     const a = await getApp();
@@ -255,6 +278,94 @@ describe("GET /api/me (H7)", () => {
 });
 
 describe("self-service account removal (H54)", () => {
+  it("requires and consumes a one-time PIN for verified-primary-email self-removal", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const user = await createUser({
+      name: "Verified Self Deletable",
+      email: "verified-self-deletable@example.test",
+      emailVerified: true,
+    });
+
+    const eligibility = await a.inject({
+      method: "GET",
+      url: "/api/me/removal-eligibility",
+      headers: asUser(user),
+    });
+    expect(eligibility.statusCode).toBe(200);
+    expect(eligibility.json()).toMatchObject({ action: "delete", securityPinRequired: true });
+
+    const withoutPin = await a.inject({
+      method: "DELETE",
+      url: "/api/me",
+      headers: asUser(user),
+    });
+    expect(withoutPin.statusCode).toBe(400);
+    expect(withoutPin.json().error.message).toContain("security PIN");
+    expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [user])).rowCount).toBe(1);
+
+    const pin = await requestRemovalPin(a, user);
+    const { rows: challenge } = await pool.query<{ pin_digest: string; nonce: string }>(
+      `SELECT pin_digest, nonce
+         FROM account_removal_pin_challenges
+        WHERE user_id = $1 AND consumed_at IS NULL`,
+      [user],
+    );
+    expect(challenge).toHaveLength(1);
+    const issuedChallenge = challenge[0];
+    expect(issuedChallenge).toBeDefined();
+    if (!issuedChallenge) throw new Error("Expected an active removal PIN challenge");
+    expect(issuedChallenge.pin_digest).not.toBe(pin);
+    expect(issuedChallenge.pin_digest).not.toContain(pin);
+    expect(issuedChallenge.nonce).not.toBe(pin);
+
+    const wrongPin = pin === "000000" ? "000001" : "000000";
+    const wrong = await a.inject({
+      method: "DELETE",
+      url: "/api/me",
+      headers: asUser(user),
+      payload: { securityPin: wrongPin },
+    });
+    expect(wrong.statusCode).toBe(400);
+    expect(wrong.json().error.details.code).toBe("removal_pin_invalid");
+
+    const deleted = await a.inject({
+      method: "DELETE",
+      url: "/api/me",
+      headers: asUser(user),
+      payload: { securityPin: pin },
+    });
+    expect(deleted.statusCode).toBe(200);
+    expect(deleted.json().deleted).toBe(true);
+    expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [user])).rowCount).toBe(0);
+    expect(
+      (await pool.query(`SELECT 1 FROM account_removal_pin_challenges WHERE user_id = $1`, [user]))
+        .rowCount,
+    ).toBe(0);
+  });
+
+  it("does not require a PIN for an unverified primary email", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const user = await createUser({ emailVerified: false });
+
+    const pin = await a.inject({
+      method: "POST",
+      url: "/api/me/removal-pin",
+      headers: asUser(user),
+    });
+    expect(pin.statusCode).toBe(200);
+    expect(pin.json()).toEqual({ status: "not_required" });
+    expect(
+      (await pool.query(`SELECT 1 FROM account_removal_pin_challenges WHERE user_id = $1`, [user]))
+        .rowCount,
+    ).toBe(0);
+
+    const deleted = await a.inject({ method: "DELETE", url: "/api/me", headers: asUser(user) });
+    expect(deleted.statusCode).toBe(200);
+    expect(deleted.json().deleted).toBe(true);
+  });
+
   it("lets an accepted but unconfirmed applicant delete their account and forfeit the spot", async () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
@@ -300,14 +411,21 @@ describe("self-service account removal (H54)", () => {
     expect(eligibility.statusCode).toBe(200);
     expect(eligibility.json().action).toBe("delete");
 
+    const pin = await requestRemovalPin(a, user);
     const removalHeaders = { ...asUser(user), "idempotency-key": "accepted-delete-replay" };
-    const deleted = await a.inject({ method: "DELETE", url: "/api/me", headers: removalHeaders });
+    const deleted = await a.inject({
+      method: "DELETE",
+      url: "/api/me",
+      headers: removalHeaders,
+      payload: { securityPin: pin },
+    });
     expect(deleted.statusCode).toBe(200);
     expect(deleted.json().deleted).toBe(true);
     const replay = await a.inject({
       method: "DELETE",
       url: "/api/me",
       headers: removalHeaders,
+      payload: { securityPin: pin },
     });
     expect(replay.statusCode).toBe(200);
     expect(replay.headers["idempotency-replayed"]).toBe("true");
@@ -325,7 +443,7 @@ describe("self-service account removal (H54)", () => {
   it("lets an unaccepted applicant delete their own account and its application data", async () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
-    const user = await createUser({ name: "Self Deletable" });
+    const user = await createUser({ name: "Self Deletable", emailVerified: false });
     const { rows: applications } = await pool.query(
       `INSERT INTO applications (name, type, template)
        VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
@@ -369,7 +487,7 @@ describe("self-service account removal (H54)", () => {
     // notification_outbox row from its invite email).
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
-    const user = await createUser({ name: "Invited Unassigned" });
+    const user = await createUser({ name: "Invited Unassigned", emailVerified: false });
     const { rows: tok } = await pool.query(
       `INSERT INTO email_verification_tokens (token, type, email, user_id, kind, expires_at, used_at)
        VALUES ('claim-tok', 'account_claim', 'invited@example.com', $1, 'participant', now(), now())
@@ -416,7 +534,7 @@ describe("self-service account removal (H54)", () => {
   it("lets a confirmed ticket-holder who hasn't been accredited yet delete their account", async () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
-    const user = await createUser({ name: "Confirmed Not Accredited" });
+    const user = await createUser({ name: "Confirmed Not Accredited", emailVerified: false });
     await pool.query(`INSERT INTO tickets (user_id, token) VALUES ($1, 'tok-self-deletable')`, [
       user,
     ]);
@@ -448,7 +566,7 @@ describe("self-service account removal (H54)", () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
     const staff = await createUser({ name: "Door Staff" });
-    const user = await createUser({ name: "Accredited" });
+    const user = await createUser({ name: "Accredited", emailVerified: false });
     await pool.query(`INSERT INTO tickets (user_id, token) VALUES ($1, 'tok-self-blocked')`, [
       user,
     ]);
@@ -477,7 +595,10 @@ describe("self-service account removal (H54)", () => {
   it("treats door history without canonical accreditation as an integrity warning, not permanent retention", async () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
-    const user = await createUser({ email: "inconsistent-presence@example.test" });
+    const user = await createUser({
+      email: "inconsistent-presence@example.test",
+      emailVerified: false,
+    });
     await pool.query(
       `INSERT INTO time_logs (user_id, kind, scanned_at)
        VALUES ($1, 'in', now() - interval '10 minutes')`,
@@ -499,6 +620,45 @@ describe("self-service account removal (H54)", () => {
     });
   });
 
+  it("uses event dates only for the live warning, never to bypass the lifecycle boundary", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const staff = await createUser({ emailVerified: false });
+    const user = await createUser({
+      email: "partial-event-window@example.test",
+      emailVerified: false,
+    });
+    await pool.query(`UPDATE users SET badge_id = 'B-PARTIAL-WINDOW' WHERE id = $1`, [user]);
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, staff_id)
+       VALUES ($1, 'B-PARTIAL-WINDOW', $2)`,
+      [user, staff],
+    );
+    await pool.query(
+      `INSERT INTO time_logs (user_id, kind, scanned_at)
+       VALUES ($1, 'in', now() - interval '10 minutes')`,
+      [user],
+    );
+    await pool.query(
+      `UPDATE event_config
+          SET event_starts_at = NULL,
+              event_ends_at = clock_timestamp() + interval '1 hour'
+        WHERE id = 1`,
+    );
+
+    const eligibility = await a.inject({
+      method: "GET",
+      url: "/api/me/removal-eligibility",
+      headers: asUser(user),
+    });
+    expect(eligibility.statusCode).toBe(200);
+    expect(eligibility.json()).toMatchObject({
+      action: "anonymize",
+      activeEventConsequences: false,
+      requiresVenueExit: true,
+    });
+  });
+
   it("accepts self-anonymization inside and completes it after a valid exit", async () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
@@ -506,7 +666,10 @@ describe("self-service account removal (H54)", () => {
       CAPABILITIES.PRESENCE_SCAN,
       CAPABILITIES.ACTIVITY_SCAN,
     ]);
-    const user = await createUser({ email: "inside-at-removal@example.test" });
+    const user = await createUser({
+      email: "inside-at-removal@example.test",
+      emailVerified: false,
+    });
     await pool.query(
       `UPDATE users
           SET badge_id = 'B-INSIDE',
@@ -636,6 +799,7 @@ describe("self-service account removal (H54)", () => {
     const user = await createUser({
       name: "Self Anonymized Person",
       email: "self-anonymized@example.test",
+      emailVerified: false,
     });
     await pool.query(
       `UPDATE users SET surname = 'Identity', dni = '12345678Z', badge_id = 'B-SELF-ANON' WHERE id = $1`,
@@ -1076,7 +1240,10 @@ describe("self-service account removal (H54)", () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
     const staff = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
-    const target = await createUser({ email: "race-before-accreditation@example.test" });
+    const target = await createUser({
+      email: "race-before-accreditation@example.test",
+      emailVerified: false,
+    });
     await pool.query(`INSERT INTO tickets (user_id, token) VALUES ($1, 'race-ticket')`, [target]);
 
     const [removal, checkIn] = await Promise.all([

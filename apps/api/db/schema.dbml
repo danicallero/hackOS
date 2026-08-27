@@ -151,6 +151,24 @@ Table anonymous_participant_fields {
   Note: 'H54 dynamic anonymous application answers. Rows are copied only from fields explicitly marked ANONYMOUS_AUDIT in the immutable submitted form version; no user or response foreign key is retained.'
 }
 
+Table account_removal_pin_challenges {
+  id bigint [pk, increment, not null]
+  user_id integer [not null]
+  email text [not null, note: 'Verified primary address at issue time; transient and deleted with the user.']
+  pin_digest text [not null, note: 'HMAC digest only; raw PIN is never persisted.']
+  nonce text [not null]
+  attempts smallint [not null, default: `0`]
+  expires_at "timestamp with time zone" [not null]
+  consumed_at "timestamp with time zone"
+  created_at "timestamp with time zone" [not null, default: `clock_timestamp()`]
+
+  indexes {
+  (user_id, created_at) [name: 'account_removal_pin_challenges_user']
+  }
+
+  Note: 'H54 transient one-time security PIN state for verified-primary-email self-service removal; never anonymous audit data.'
+}
+
 Table applicant_reviews {
   response_id integer [not null]
   author_id integer [not null]

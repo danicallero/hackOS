@@ -20,6 +20,7 @@ import { canCreateMyProject, hasMyProject, myProjects } from "../../projects/ser
 import { hasMyQueueItems } from "../../queue/reads.js";
 import { hasMobileAccess } from "../mobile-access.js";
 import { getAccountRemovalEligibility, runAccountRemoval } from "../removal.js";
+import { issueRemovalPin } from "../removal-pin.js";
 import { computeDerivedRole, computeMembershipFlags, hasEventAccess } from "../role.js";
 
 /**
@@ -95,6 +96,7 @@ const removalEligibilityResponseSchema = z.object({
   activeEventConsequences: z.boolean(),
   requiresVenueExit: z.boolean(),
   integrityWarning: z.boolean(),
+  securityPinRequired: z.boolean(),
 });
 
 const removalCompletedResponseSchema = z.union([
@@ -109,6 +111,20 @@ const removalPendingResponseSchema = z.union([
   }),
   z.object({ status: z.literal("processing"), accessRevoked: z.literal(true) }),
 ]);
+const removalPinResponseSchema = z.union([
+  z.object({ status: z.literal("sent"), expiresAt: z.string() }),
+  z.object({ status: z.literal("not_required") }),
+]);
+const optionalRemovalPinBodySchema = z
+  .object({
+    securityPin: z
+      .string()
+      .regex(/^\d{6}$/)
+      .optional(),
+  })
+  .strict()
+  .nullable()
+  .optional();
 
 const userResponseSchema = z.object({
   id: z.number(),
@@ -478,6 +494,21 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => getAccountRemovalEligibility(pool, req.userId as number),
   );
 
+  api.post(
+    "/api/me/removal-pin",
+    {
+      preHandler: assertActiveAuthenticatedUser,
+      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      schema: {
+        summary: "Send my account-removal security PIN",
+        description:
+          "H54 sends a short-lived one-time PIN to the caller's verified primary email. Unverified accounts do not need this additional step.",
+        response: { 200: removalPinResponseSchema },
+      },
+    },
+    async (req) => withTransaction((client) => issueRemovalPin(client, req.userId as number)),
+  );
+
   // Self-service deletion (H54). The server chooses the mode from the locked
   // operational-history boundary; the mobile client never infers it from a
   // badge flag or cached profile. A fresh account is fully deleted.
@@ -492,6 +523,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         description:
           "H54 self-service full deletion. The server chooses this only before canonical accreditation; an inconsistent open door record may wait for a valid exit.",
         summary: "Delete my account",
+        body: optionalRemovalPinBodySchema,
         response: { 200: removalCompletedResponseSchema, 202: removalPendingResponseSchema },
       },
     },
@@ -502,6 +534,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         actorId: userId,
         source: "self_service",
         requestedAction: "delete",
+        securityPin: req.body?.securityPin,
         preserveIdempotency: req.idempotency
           ? {
               key: req.idempotency.key,
@@ -537,7 +570,15 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         summary: "Anonymize my data and close my account",
         description:
           "H54 irreversible self-service anonymization. The request is accepted immediately; when the participant is inside, finalization waits for a valid exit.",
-        body: z.object({ confirm: z.literal(true) }).strict(),
+        body: z
+          .object({
+            confirm: z.literal(true),
+            securityPin: z
+              .string()
+              .regex(/^\d{6}$/)
+              .optional(),
+          })
+          .strict(),
         response: { 200: removalCompletedResponseSchema, 202: removalPendingResponseSchema },
       },
     },
@@ -548,6 +589,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         actorId: userId,
         source: "self_service",
         requestedAction: "anonymize",
+        securityPin: req.body.securityPin,
         preserveIdempotency: req.idempotency
           ? {
               key: req.idempotency.key,

@@ -17,6 +17,10 @@
         "subject": "Restablece tu contraseña de hackOS",
         "body": "Hola {{name}},\n\nUsa este botón para fijar una contraseña nueva:\n\n[Restablecer contraseña]({{resetUrl}})\n\n¿Caímos en spam? Mueve este mensaje a la bandeja de entrada y añade {{fromAddress}} a tus contactos para no perderte ningún mensaje.\n\nSi no lo has pedido tú, puedes ignorar este correo — tu contraseña no ha cambiado."
       },
+      "accountRemovalPin": {
+        "subject": "Confirma la eliminación de tu cuenta de hackOS",
+        "body": "Hola {{name}},\n\nTu PIN de seguridad para eliminar tu cuenta de hackOS es:\n\n{{pin}}\n\nEste PIN caduca en {{expiresMinutes}} minutos. Si no lo has pedido tú, puedes ignorar este correo."
+      },
       "invite": {
         "subject": "Te han invitado a hackOS",
         "body": "Hola,\n\nCrea tu cuenta para continuar:\n\n[Crear cuenta]({{claimUrl}})\n\n¿Caímos en spam? Mueve este mensaje a la bandeja de entrada y añade {{fromAddress}} a tus contactos para no perderte ningún mensaje.\n\nDesde ahí fijas tu contraseña, nombre y el resto de tus datos."

@@ -17,6 +17,10 @@
         "subject": "Reset your hackOS password",
         "body": "Hi {{name}},\n\nUse this button to set a new password:\n\n[Reset password]({{resetUrl}})\n\nDid we land in spam? Move this message to your inbox and add {{fromAddress}} to your contacts so you don't miss future messages.\n\nIf you didn't request this, you can safely ignore this email — your password hasn't changed."
       },
+      "accountRemovalPin": {
+        "subject": "Confirm your hackOS account removal",
+        "body": "Hi {{name}},\n\nYour security PIN for removing your hackOS account is:\n\n{{pin}}\n\nThis PIN expires in {{expiresMinutes}} minutes. If you didn't request this, you can safely ignore this email."
+      },
       "invite": {
         "subject": "You're invited to hackOS",
         "body": "Hi,\n\nCreate your account to continue:\n\n[Create account]({{claimUrl}})\n\nDid we land in spam? Move this message to your inbox and add {{fromAddress}} to your contacts so you don't miss future messages.\n\nSet your password, name and the rest of your details from there."

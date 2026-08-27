@@ -14,6 +14,7 @@ import { deleteObject, deletePrefix, deleteSubjectUploadObjects } from "../../li
 import type { TemplateField } from "../applications/schemas.js";
 import { ApplePushUnregisteredError, sendApplePush } from "../logistics/apple-push.js";
 import {
+  buildCertaintyWindows,
   DEFAULT_SUSPICIOUS_GAP_MS,
   guaranteedPresenceMs,
   type PresenceEvent,
@@ -21,6 +22,7 @@ import {
 import { expireGoogleObject } from "../logistics/google-wallet.js";
 import { PASS_TYPE_IDENTIFIER } from "../logistics/wallet.js";
 import { assertActiveWildcardHolder, lockPermissionGraph } from "./permission-graph.js";
+import { consumeRemovalPin } from "./removal-pin.js";
 
 export type AccountRemovalAction = "delete" | "anonymize";
 const REMOVAL_RETRY_QUEUE = "account-removal-retries";
@@ -39,11 +41,14 @@ export type AccountRemovalEligibility = {
   requiresVenueExit: boolean;
   /** Non-canonical operational rows exist without accreditation; reconcile safely. */
   integrityWarning: boolean;
+  /** Verified-primary-email self-service requests require a one-time PIN. */
+  securityPinRequired: boolean;
 };
 
 interface UserRemovalRow {
   id: number;
   email: string;
+  email_verified: boolean;
   secondary_email: string | null;
   name: string | null;
   surname: string | null;
@@ -73,6 +78,8 @@ export interface RunAccountRemovalOptions {
   actorId: number | null;
   source: string;
   reason?: string;
+  /** One-time email PIN required for verified-primary-email self-service. */
+  securityPin?: string;
   /** Admin routes can force the action only after the locked preflight agrees. */
   requestedAction?: AccountRemovalAction;
   /** Internal queue jobs already have BullMQ retry semantics. */
@@ -141,6 +148,66 @@ async function openVenueSession(
   return { open: last?.kind === "in", since: last?.kind === "in" ? last.scanned_at : null };
 }
 
+export type RemovalVenueState = {
+  /** Raw door state: the latest door event is an `in`. */
+  open: boolean;
+  /** Whether identity must remain available for a real or system exit. */
+  requiresExit: boolean;
+  /** The latest H24 certainty window expired and no longer credits presence. */
+  expired: boolean;
+};
+
+/**
+ * Resolve the removal-specific venue state from both accrued door and activity
+ * logs. H24 deliberately keeps a raw `in` session open for staff
+ * reconciliation, but an old session whose latest certainty window expired no
+ * longer proves current presence and is a valid removal exit condition. This
+ * is intentionally separate from `openVenueSession`: ordinary logistics still
+ * needs the raw in/out invariant, while account removal may safely complete
+ * once the accrued presence calculation has invalidated the last provisional
+ * window.
+ */
+export async function removalVenueState(
+  client: Queryable,
+  userId: number,
+): Promise<RemovalVenueState> {
+  const session = await openVenueSession(client, userId);
+  if (!session.open || !session.since) {
+    return { open: false, requiresExit: false, expired: false };
+  }
+
+  const { rows: configRows } = await client.query<{
+    now: Date;
+    presence_certainty_window_minutes: number | null;
+  }>(
+    `SELECT clock_timestamp() AS now, presence_certainty_window_minutes
+       FROM event_config WHERE id = 1`,
+  );
+  const now = configRows[0]?.now ?? new Date();
+  const gapMs =
+    Number(configRows[0]?.presence_certainty_window_minutes ?? DEFAULT_SUSPICIOUS_GAP_MS / 60_000) *
+    60_000;
+  const { rows: signalRows } = await client.query<{
+    t: string;
+    kind: PresenceEvent["kind"];
+  }>(
+    `SELECT extract(epoch FROM scanned_at) * 1000 AS t, kind
+       FROM time_logs
+      WHERE user_id = $1 AND kind IN ('in', 'out')
+     UNION ALL
+     SELECT extract(epoch FROM logged_at) * 1000 AS t, 'activity' AS kind
+       FROM activity_logs
+      WHERE user_id = $1
+     ORDER BY t ASC`,
+    [userId],
+  );
+  const events = signalRows.map((row) => ({ t: Number(row.t), kind: row.kind }));
+  const windows = buildCertaintyWindows(events, now.getTime(), { suspiciousGapMs: gapMs });
+  const latest = windows[windows.length - 1];
+  const expired = latest != null && latest.deadline < now.getTime();
+  return { open: true, requiresExit: !expired, expired };
+}
+
 async function eventIsActive(client: Queryable): Promise<boolean> {
   const { rows } = await client.query<{
     current_time: Date;
@@ -151,15 +218,12 @@ async function eventIsActive(client: Queryable): Promise<boolean> {
        FROM event_config WHERE id = 1`,
   );
   const config = rows[0];
-  // A missing or unconfigured event window is not evidence that a live event
-  // is running. The irreversible action is still guarded by the authoritative
+  // A missing or incomplete event window is not evidence that a live event is
+  // running. The irreversible action is still guarded by the authoritative
   // operational-history boundary; this flag only controls the extra warning.
-  if (!config || (config.event_starts_at == null && config.event_ends_at == null)) return false;
+  if (!config || config.event_starts_at == null || config.event_ends_at == null) return false;
   const now = config.current_time.getTime();
-  return (
-    (config.event_starts_at == null || now >= config.event_starts_at.getTime()) &&
-    (config.event_ends_at == null || now <= config.event_ends_at.getTime())
-  );
+  return now >= config.event_starts_at.getTime() && now <= config.event_ends_at.getTime();
 }
 
 /**
@@ -172,14 +236,17 @@ export async function getAccountRemovalEligibility(
   client: Queryable,
   userId: number,
 ): Promise<AccountRemovalEligibility> {
-  const { rows: users } = await client.query(`SELECT id FROM users WHERE id = $1`, [userId]);
+  const { rows: users } = await client.query<{ id: number; email_verified: boolean }>(
+    `SELECT id, email_verified FROM users WHERE id = $1`,
+    [userId],
+  );
   if (!users[0]) throw new NotFoundError("User not found", { userId });
 
   const signals = await readOperationalSignals(client, userId);
   const hasOperationalRows = signals.accredited || signals.hasIntegritySignals;
-  const session = hasOperationalRows
-    ? await openVenueSession(client, userId)
-    : { open: false, since: null };
+  const venue = hasOperationalRows
+    ? await removalVenueState(client, userId)
+    : { open: false, requiresExit: false, expired: false };
   const eventActive = hasOperationalRows ? await eventIsActive(client) : false;
   if (signals.accredited) {
     return {
@@ -188,8 +255,9 @@ export async function getAccountRemovalEligibility(
       accessRevoked: true,
       operationalHistoryRetained: true,
       activeEventConsequences: eventActive,
-      requiresVenueExit: session.open,
+      requiresVenueExit: venue.requiresExit,
       integrityWarning: false,
+      securityPinRequired: Boolean(users[0].email_verified),
     };
   }
   return {
@@ -200,14 +268,15 @@ export async function getAccountRemovalEligibility(
     accessRevoked: true,
     operationalHistoryRetained: false,
     activeEventConsequences: eventActive,
-    requiresVenueExit: session.open,
+    requiresVenueExit: venue.requiresExit,
     integrityWarning: signals.hasIntegritySignals,
+    securityPinRequired: Boolean(users[0].email_verified),
   };
 }
 
 async function loadUserForRemoval(client: pg.PoolClient, userId: number): Promise<UserRemovalRow> {
   const { rows } = await client.query<UserRemovalRow>(
-    `SELECT id, email, secondary_email, name, surname, dni, badge_id, badge_id_history,
+    `SELECT id, email, email_verified, secondary_email, name, surname, dni, badge_id, badge_id_history,
             university_id, account_state, removal_action,
             removal_requires_exit, removal_idempotency_key
        FROM users WHERE id = $1 FOR UPDATE`,
@@ -330,6 +399,15 @@ async function prepareAccountRemoval(
       // the normal irreversible finalization runs.
       requiresVenueExit = eligibility.requiresVenueExit;
 
+      // A verified primary address is an additional proof of intent for
+      // self-service deletion/anonymization. Verify it while this transaction
+      // owns the same user-row lock that selects the lifecycle boundary, so a
+      // concurrent email change or second destructive request cannot race the
+      // PIN check.
+      if (options.actorId === options.targetId) {
+        await consumeRemovalPin(client, user, options.securityPin);
+      }
+
       // This mutation still has to happen while the user is active: the H54
       // full-row FK guard intentionally rejects updates to a pending user's
       // wallet records. The transaction rolls back both this voiding and the
@@ -402,8 +480,14 @@ async function prepareAccountRemoval(
       // Legacy pending rows may predate removal_requires_exit.  Re-check the
       // authoritative door state rather than allowing finalization to delete
       // an identity that is still needed to record its exit.
-      requiresVenueExit =
-        requiresVenueExit || (await openVenueSession(client, options.targetId)).open;
+      const venue = await removalVenueState(client, options.targetId);
+      requiresVenueExit = venue.requiresExit;
+      if (user.removal_requires_exit !== requiresVenueExit) {
+        await client.query(`UPDATE users SET removal_requires_exit = $2 WHERE id = $1`, [
+          options.targetId,
+          requiresVenueExit,
+        ]);
+      }
     }
 
     const walletArtifacts = await collectWalletArtifacts(client, options.targetId);
@@ -1195,7 +1279,8 @@ export async function finalizeAccountRemoval(
       action: user.removal_action,
     });
   }
-  if ((await openVenueSession(client, user.id)).open) {
+  const venue = await removalVenueState(client, user.id);
+  if (venue.requiresExit) {
     throw new ConflictError(
       "Close the participant's venue session before finalizing account removal.",
       {
@@ -1315,8 +1400,8 @@ async function removalLiveState(
       [targetId],
     );
     if (!rows[0]) return { gone: true, requiresExit: false };
-    const open = (await openVenueSession(client, targetId)).open;
-    if (open) {
+    const venue = await removalVenueState(client, targetId);
+    if (venue.requiresExit) {
       if (!rows[0].removal_requires_exit) {
         await client.query(`UPDATE users SET removal_requires_exit = true WHERE id = $1`, [
           targetId,

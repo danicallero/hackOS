@@ -3,6 +3,11 @@ import { config } from "../../config.js";
 import { withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
+import {
+  type AccountRemovalAction,
+  removalVenueState,
+  runAccountRemoval,
+} from "../identity/removal.js";
 import { broadcastForActiveUsers } from "./active-broadcast.js";
 
 /**
@@ -18,13 +23,37 @@ import { broadcastForActiveUsers } from "./active-broadcast.js";
  *
  * Idempotent by construction: after the insert, the person's latest door log
  * is an `out`, so the next run selects nobody. Sessions opened *after*
- * event_ends_at are left alone (staff activity during teardown).
+ * event_ends_at are left alone (staff activity during teardown). Pending
+ * removals can finalize from this system-generated exit; expired H24
+ * certainty windows can also finalize without inventing a door scan.
  */
 
 const QUEUE_NAME = "presence-event-end-closer";
 
-export async function runPresenceEventEndCloserOnce(): Promise<{ closed: number[] }> {
-  const closed = await withTransaction(async (client) => {
+async function finalizePendingRemoval(
+  userId: number,
+  action: AccountRemovalAction,
+): Promise<boolean> {
+  try {
+    const result = await runAccountRemoval({
+      targetId: userId,
+      actorId: null,
+      source: "presence_exit_completion",
+      requestedAction: action,
+    });
+    return result.status === "completed";
+  } catch {
+    // The pending row remains inaccessible and all writers remain blocked;
+    // the next closer tick can safely retry it.
+    return false;
+  }
+}
+
+export async function runPresenceEventEndCloserOnce(): Promise<{
+  closed: number[];
+  finalized: number[];
+}> {
+  const { closed, pending } = await withTransaction(async (client) => {
     // Do not keep a set-based candidate snapshot until the insert. Account
     // removal locks the same user row and moves it to removal_pending before
     // any identity-bearing records are scrubbed. Lock and re-check each
@@ -39,16 +68,26 @@ export async function runPresenceEventEndCloserOnce(): Promise<{ closed: number[
          JOIN time_logs tl ON tl.scanned_at <= now()
          JOIN users u ON u.id = tl.user_id
         WHERE ec.id = 1 AND ec.event_ends_at IS NOT NULL AND ec.event_ends_at <= now()
-          AND u.account_state = 'active' AND u.anonymized_at IS NULL
+          AND (
+            u.account_state = 'active'
+            OR (u.account_state = 'removal_pending' AND u.removal_requires_exit = true)
+          )
+          AND u.anonymized_at IS NULL
         ORDER BY tl.user_id, tl.scanned_at DESC, tl.id DESC`,
     );
 
     const closedIds: number[] = [];
+    const pendingIds: Array<{ userId: number; action: AccountRemovalAction }> = [];
     for (const candidate of candidates) {
       const active = await client.query<{ id: number }>(
         `SELECT id
            FROM users
-          WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+          WHERE id = $1
+            AND (
+              account_state = 'active'
+              OR (account_state = 'removal_pending' AND removal_requires_exit = true)
+            )
+            AND anonymized_at IS NULL
           FOR UPDATE`,
         [candidate.user_id],
       );
@@ -76,6 +115,14 @@ export async function runPresenceEventEndCloserOnce(): Promise<{ closed: number[
         [candidate.user_id, candidate.event_ends_at],
       );
       closedIds.push(candidate.user_id);
+      const { rows: stateRows } = await client.query<{
+        account_state: "active" | "removal_pending";
+        removal_action: AccountRemovalAction | null;
+      }>(`SELECT account_state, removal_action FROM users WHERE id = $1`, [candidate.user_id]);
+      const state = stateRows[0];
+      if (state?.account_state === "removal_pending" && state.removal_action) {
+        pendingIds.push({ userId: candidate.user_id, action: state.removal_action });
+      }
       await audit(client, {
         actorId: null,
         entityType: "presence",
@@ -84,8 +131,39 @@ export async function runPresenceEventEndCloserOnce(): Promise<{ closed: number[
         after: { kind: "out", scannedAt: candidate.event_ends_at },
       });
     }
-    return closedIds;
+
+    // The raw H24 session can remain open after its latest certainty window
+    // expires, even though the accrued presence calculation has invalidated
+    // that provisional sum. Treat that as a valid removal exit and let the
+    // normal finalizer perform the irreversible scrub.
+    const { rows: pendingRows } = await client.query<{
+      id: number;
+      removal_action: AccountRemovalAction;
+    }>(
+      `SELECT id, removal_action
+         FROM users
+        WHERE account_state = 'removal_pending'
+          AND removal_requires_exit = true
+          AND anonymized_at IS NULL
+        FOR UPDATE`,
+    );
+    for (const row of pendingRows) {
+      const venue = await removalVenueState(client, row.id);
+      if (!venue.requiresExit) {
+        await client.query(`UPDATE users SET removal_requires_exit = false WHERE id = $1`, [
+          row.id,
+        ]);
+        if (!pendingIds.some((pendingRow) => pendingRow.userId === row.id)) {
+          pendingIds.push({ userId: row.id, action: row.removal_action });
+        }
+      }
+    }
+    return { closed: closedIds, pending: pendingIds };
   });
+  const finalized: number[] = [];
+  for (const row of pending) {
+    if (await finalizePendingRemoval(row.userId, row.action)) finalized.push(row.userId);
+  }
   if (closed.length > 0) {
     await broadcastForActiveUsers(
       closed,
@@ -97,7 +175,7 @@ export async function runPresenceEventEndCloserOnce(): Promise<{ closed: number[
       }),
     );
   }
-  return { closed };
+  return { closed, finalized };
 }
 
 registerWorker(QUEUE_NAME, async () => {

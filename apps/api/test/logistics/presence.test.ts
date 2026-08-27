@@ -634,4 +634,92 @@ describe("H24 event-end automatic exit (product override: the one system-closed 
     const run = await runPresenceEventEndCloserOnce();
     expect(run.closed).toEqual([]);
   });
+
+  it("finalizes a pending removal from the automatic event-end exit", async () => {
+    const uid = await createUser({ emailVerified: false });
+    const { pool } = await import("../../src/db/pool.js");
+    const endedAt = new Date(Date.now() - 3_600_000);
+    const enteredAt = new Date(endedAt.getTime() - 3_600_000);
+    await pool.query(`UPDATE users SET badge_id = 'P-EVENT-END-REMOVAL' WHERE id = $1`, [uid]);
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, check_in_method)
+       VALUES ($1, 'P-EVENT-END-REMOVAL', 'scan')`,
+      [uid],
+    );
+    await pool.query(
+      `INSERT INTO time_logs (user_id, kind, scanned_at)
+       VALUES ($1, 'in', $2)`,
+      [uid, enteredAt],
+    );
+    await pool.query(
+      `INSERT INTO event_config (id, event_starts_at, event_ends_at)
+       VALUES (1, NULL, $1)
+       ON CONFLICT (id) DO UPDATE SET event_starts_at = NULL, event_ends_at = EXCLUDED.event_ends_at`,
+      [endedAt],
+    );
+
+    const removal = await app.inject({
+      method: "POST",
+      url: "/api/me/anonymize",
+      headers: { ...asUser(uid), "idempotency-key": "event-end-removal" },
+      payload: { confirm: true },
+    });
+    expect(removal.statusCode).toBe(202);
+    expect(removal.json().status).toBe("pending_exit");
+
+    const { runPresenceEventEndCloserOnce } = await import(
+      "../../src/modules/logistics/presence-closer.js"
+    );
+    const first = await runPresenceEventEndCloserOnce();
+    expect(first.closed).toEqual([uid]);
+    expect(first.finalized).toEqual([uid]);
+    expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [uid])).rowCount).toBe(0);
+    const { rows: anonymous } = await pool.query(
+      `SELECT guaranteed_presence_minutes FROM anonymous_participants`,
+    );
+    expect(anonymous).toEqual([{ guaranteed_presence_minutes: 60 }]);
+    expect((await pool.query(`SELECT 1 FROM time_logs WHERE user_id = $1`, [uid])).rowCount).toBe(
+      0,
+    );
+
+    const again = await runPresenceEventEndCloserOnce();
+    expect(again.closed).toEqual([]);
+    expect(again.finalized).toEqual([]);
+  });
+
+  it("finalizes from an expired certainty window and preserves only accrued activity time", async () => {
+    const uid = await createUser({ emailVerified: false });
+    const activity = await createMeal("Accrued presence meal");
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE users SET badge_id = 'P-EXPIRED-REMOVAL' WHERE id = $1`, [uid]);
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, check_in_method)
+       VALUES ($1, 'P-EXPIRED-REMOVAL', 'scan')`,
+      [uid],
+    );
+    await pool.query(
+      `INSERT INTO time_logs (user_id, kind, scanned_at)
+       VALUES ($1, 'in', now() - interval '24 hours')`,
+      [uid],
+    );
+    await pool.query(
+      `INSERT INTO activity_logs (user_id, activity_id, logged_by, logged_at)
+       VALUES ($1, $2, $3, now() - interval '13 hours')`,
+      [uid, activity, doorStaff],
+    );
+
+    const removal = await app.inject({
+      method: "POST",
+      url: "/api/me/anonymize",
+      headers: { ...asUser(uid), "idempotency-key": "expired-removal" },
+      payload: { confirm: true },
+    });
+    expect(removal.statusCode).toBe(200);
+    expect(removal.json().anonymized).toBe(true);
+    const { rows: anonymous } = await pool.query(
+      `SELECT guaranteed_presence_minutes FROM anonymous_participants`,
+    );
+    expect(anonymous).toEqual([{ guaranteed_presence_minutes: 660 }]);
+    expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [uid])).rowCount).toBe(0);
+  });
 });
