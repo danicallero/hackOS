@@ -639,22 +639,32 @@ describe("concurrency and idempotency", () => {
       scores: { innovation: 8, demo: 7 },
       submit: true,
     });
-    await waitForBlockedQuery("SELECT qe.id, qe.challenge_id, qe.status");
-
-    const editing = updateQueueGroup({
-      queueGroupId: groupId,
-      criteria: [scale("replacement", "Replacement")],
-      actorId: adminId,
-    });
-
+    let editing: ReturnType<typeof updateQueueGroup> | undefined;
+    let synchronizationComplete = false;
     try {
+      await waitForBlockedQuery("SELECT qe.id, qe.challenge_id, qe.status");
+      editing = updateQueueGroup({
+        queueGroupId: groupId,
+        criteria: [scale("replacement", "Replacement")],
+        actorId: adminId,
+      });
       await waitForBlockedQuery("SELECT id FROM queue_groups WHERE id");
+      synchronizationComplete = true;
     } finally {
-      await blocker.query("COMMIT");
-      blocker.release();
+      try {
+        await blocker.query("ROLLBACK");
+      } finally {
+        blocker.release();
+      }
+      // A failed observation must not leave an in-flight database operation
+      // behind to race this file's next beforeEach TRUNCATE.
+      if (!synchronizationComplete) {
+        await Promise.allSettled([submitting, ...(editing ? [editing] : [])]);
+      }
     }
 
     expect((await submitting).status).toBe("submitted");
+    if (!editing) throw new Error("Expected the concurrent queue-group edit");
     await expect(editing).rejects.toThrow(/form is locked/i);
 
     const { rows } = await pool.query(
