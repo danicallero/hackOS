@@ -765,6 +765,19 @@ describe("self-service account removal (H54)", () => {
     expect(blockedMeal.statusCode).toBe(409);
     expect(blockedMeal.json().error.code).toBe("badge_revoked");
 
+    const { rows: activitiesAfterRemoval } = await pool.query(
+      `INSERT INTO activities (name, category, requires_scan)
+       VALUES ('Workshop after removal request', 'workshop', true) RETURNING id`,
+    );
+    const blockedActivity = await a.inject({
+      method: "POST",
+      url: `/api/activities/${activitiesAfterRemoval[0].id}/scan`,
+      headers: { ...asUser(presenceStaff), "idempotency-key": "inside-activity-after-request" },
+      payload: { badgeId: "B-INSIDE" },
+    });
+    expect(blockedActivity.statusCode).toBe(409);
+    expect(blockedActivity.json().error.code).toBe("badge_revoked");
+
     const exit = await a.inject({
       method: "POST",
       url: "/api/presence/scan",
