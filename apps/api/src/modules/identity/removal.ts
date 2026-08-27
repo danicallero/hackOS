@@ -1051,16 +1051,33 @@ async function scrubRelationships(
     [userId, normalizedEmails],
   );
 
-  await client.query(
+  const { rows: completedDeletionRequests } = await client.query<{ id: number }>(
     `UPDATE data_subject_requests
         SET status = 'completed', completed_at = clock_timestamp(), error = NULL,
             subject_user_id = NULL, requested_by = NULL,
             reason = NULL, storage_key = NULL
       WHERE subject_user_id = $1
         AND type = 'deletion'
-        AND status = 'processing'`,
+        AND status = 'processing'
+      RETURNING id`,
     [userId],
   );
+  // Keep an identity-free completion marker for the DSR admin view. The
+  // request row has already lost its subject/requester/reason, and the audit
+  // payload contains only its own opaque request id plus the terminal state;
+  // it cannot be used as an anonymous-participant mapping.
+  for (const request of completedDeletionRequests) {
+    await audit(client, {
+      actorId: null,
+      entityType: "data_subject_request",
+      entityId: request.id,
+      action: "deletion_completed",
+      source: "system",
+      after: { status: "completed" },
+      ip: null,
+      userAgent: null,
+    });
+  }
   await client.query(
     `UPDATE data_subject_requests
         SET subject_user_id = NULL, requested_by = NULL,
