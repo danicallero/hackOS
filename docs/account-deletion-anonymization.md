@@ -320,8 +320,9 @@ Both clients use an Account/Data danger zone and server preflight:
 
 The modal is keyboard/screen-reader reachable on web, uses native confirmation
 on mobile, and has English/Spanish/Galician strings. Verified-primary-email
-accounts receive a one-time security PIN in the flow; unverified accounts do
-not require that additional proof. The destructive copy stays concise and
+accounts receive a one-time security PIN in the flow; unverified real accounts
+re-enter their current password, while synthetic fixtures use the fixture-only
+PIN path. The destructive copy stays concise and
 links to the Privacy Policy for retention detail. On success or an
 ambiguous network/5xx/storage response, local account data is cleared and the
 session is ended; the UI tells the user that server processing may still be
@@ -630,7 +631,7 @@ Implemented or updated in this branch:
 | Scenario | Coverage |
 | --- | --- |
 | Deletion before check-in | `apps/api/test/identity/profile.test.ts`: accepted/unaccepted/confirmed-but-unaccredited cases. |
-| Verified-email security PIN | API profile tests cover PIN delivery, HMAC-only challenge storage, wrong/expired/correct PIN behavior, and unverified-account compatibility; web/mobile transport and mobile modal tests cover the client flow. |
+| Verified-email security PIN | API profile tests cover PIN delivery, HMAC-only challenge storage, wrong/expired/correct PIN behavior, and unverified-account password reauthentication; web/mobile transport and mobile credential-modal tests cover the client flow. |
 | Deletion immediately before concurrent check-in | User-row lock plus `0733` active-FK guard; add a production-load concurrency fixture before rollout. |
 | Anonymization after check-in | Admin and self-service profile tests. |
 | Anonymization while inside venue | Self-service request returns `202 pending_exit`, revokes access, permits a current staff `out` or exact event-end system `out`, and finalizes after a valid exit or expired H24 certainty window. |

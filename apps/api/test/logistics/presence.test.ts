@@ -1,7 +1,9 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { hashPassword } from "better-auth/crypto";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { App } from "../../src/app.js";
+import { pool } from "../../src/db/pool.js";
 import {
   asUser,
   buildTestApp,
@@ -14,6 +16,14 @@ import { assignBadge, createMeal } from "./fixtures.js";
 let app: App;
 let doorStaff: number;
 let statsStaff: number;
+
+async function addUnverifiedCredential(userId: number): Promise<void> {
+  await pool.query(
+    `INSERT INTO accounts (user_id, account_id, provider_id, password)
+     VALUES ($1, $2, 'credential', $3)`,
+    [userId, String(userId), await hashPassword("presence-removal-password")],
+  );
+}
 
 beforeEach(async () => {
   await truncateAll();
@@ -674,6 +684,7 @@ describe("H24 event-end automatic exit (product override: the one system-closed 
 
   it("finalizes a pending removal from the automatic event-end exit", async () => {
     const uid = await createUser({ emailVerified: false });
+    await addUnverifiedCredential(uid);
     const { pool } = await import("../../src/db/pool.js");
     const endedAt = new Date(Date.now() - 3_600_000);
     const enteredAt = new Date(endedAt.getTime() - 3_600_000);
@@ -726,6 +737,7 @@ describe("H24 event-end automatic exit (product override: the one system-closed 
 
   it("finalizes from an expired certainty window and preserves only accrued activity time", async () => {
     const uid = await createUser({ emailVerified: false });
+    await addUnverifiedCredential(uid);
     const activity = await createMeal("Accrued presence meal");
     const { pool } = await import("../../src/db/pool.js");
     await pool.query(`UPDATE users SET badge_id = 'P-EXPIRED-REMOVAL' WHERE id = $1`, [uid]);

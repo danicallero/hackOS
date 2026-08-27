@@ -105,6 +105,7 @@ const removalEligibilityResponseSchema = z.object({
   requiresVenueExit: z.boolean(),
   integrityWarning: z.boolean(),
   securityPinRequired: z.boolean(),
+  reauthenticationRequired: z.boolean(),
 });
 
 const removalCompletedResponseSchema = z.union([
@@ -148,6 +149,7 @@ const optionalRemovalPinBodySchema = z
       .string()
       .regex(/^\d{6}$/)
       .optional(),
+    reauthenticationPassword: z.string().min(1).max(128).optional(),
   })
   .strict()
   .nullable()
@@ -395,6 +397,12 @@ export function registerProfileRoutes(app: FastifyInstance): void {
   const selfRemovalPreHandler =
     (completionScope: string) =>
     async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+      const idempotencyKey = req.headers["idempotency-key"];
+      if (typeof idempotencyKey !== "string" || idempotencyKey.trim().length === 0) {
+        throw new BadRequestError("Idempotency-Key is required for account removal.", {
+          code: "idempotency_key_required",
+        });
+      }
       // Use the identity-free completion scope from the first insert. The
       // request may revoke the session before Fastify's onSend hook runs; a
       // later storage failure must therefore be retryable under the same
@@ -628,7 +636,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Send my account-removal security PIN",
         description:
-          "H54 sends a short-lived one-time PIN to a real verified primary email. Synthetic review fixtures may use the deployment's configured static review PIN; unverified accounts do not need this additional step.",
+          "H54 sends a short-lived one-time PIN to a real verified primary email. Synthetic review fixtures may use the deployment's configured static review PIN; an unverified real account must re-enter its current password.",
         response: { 200: removalPinResponseSchema },
       },
     },
@@ -643,11 +651,12 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     {
       preHandler: selfRemovalPreHandler("DELETE /api/me removal-complete"),
       // Account removal is a security/privacy lifecycle action, not an event
-      // transaction, so an unverified account may still use it (H1, H54).
+      // transaction, so an unverified account may still use it (H1, H54) after
+      // proving possession of its current credential.
       config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
       schema: {
         description:
-          "H54 self-service full deletion. The server chooses this only before canonical accreditation; an inconsistent open door record may wait for a valid exit.",
+          "H54 self-service full deletion. The server chooses this only before canonical accreditation; an inconsistent open door record may wait for a valid exit. Unverified real accounts must re-enter their current password.",
         summary: "Delete my account",
         body: optionalRemovalPinBodySchema,
         response: { 200: removalCompletedResponseSchema, 202: removalPendingResponseSchema },
@@ -661,6 +670,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         source: "self_service",
         requestedAction: "delete",
         securityPin: req.body?.securityPin,
+        reauthenticationPassword: req.body?.reauthenticationPassword,
         sessionToken: sessionTokenFromRequest(req),
         preserveIdempotency: req.idempotency
           ? {
@@ -696,7 +706,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Anonymize my data and close my account",
         description:
-          "H54 irreversible self-service anonymization. The request is accepted immediately; when the participant is inside, finalization waits for a valid exit.",
+          "H54 irreversible self-service anonymization. The request is accepted immediately; when the participant is inside, finalization waits for a valid exit. Unverified real accounts must re-enter their current password.",
         body: z
           .object({
             confirm: z.literal(true),
@@ -704,6 +714,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
               .string()
               .regex(/^\d{6}$/)
               .optional(),
+            reauthenticationPassword: z.string().min(1).max(128).optional(),
           })
           .strict(),
         response: { 200: removalCompletedResponseSchema, 202: removalPendingResponseSchema },
@@ -717,6 +728,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         source: "self_service",
         requestedAction: "anonymize",
         securityPin: req.body.securityPin,
+        reauthenticationPassword: req.body.reauthenticationPassword,
         sessionToken: sessionTokenFromRequest(req),
         preserveIdempotency: req.idempotency
           ? {

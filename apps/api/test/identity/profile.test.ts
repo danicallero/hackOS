@@ -1,5 +1,6 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { hashPassword } from "better-auth/crypto";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import {
@@ -33,6 +34,20 @@ afterAll(async () => {
 async function getApp(): Promise<App> {
   if (!app) app = await buildTestApp();
   return app;
+}
+
+const UNVERIFIED_TEST_PASSWORD = "remove-me-with-this-password";
+
+async function addCredentialPassword(
+  userId: number,
+  password = UNVERIFIED_TEST_PASSWORD,
+): Promise<void> {
+  const { pool } = await import("../../src/db/pool.js");
+  await pool.query(
+    `INSERT INTO accounts (user_id, account_id, provider_id, password)
+     VALUES ($1, $2, 'credential', $3)`,
+    [userId, String(userId), await hashPassword(password)],
+  );
 }
 
 async function snapshotFormVersion(applicationId: number, template: unknown): Promise<number> {
@@ -293,12 +308,16 @@ describe("self-service account removal (H54)", () => {
       headers: asUser(user),
     });
     expect(eligibility.statusCode).toBe(200);
-    expect(eligibility.json()).toMatchObject({ action: "delete", securityPinRequired: true });
+    expect(eligibility.json()).toMatchObject({
+      action: "delete",
+      securityPinRequired: true,
+      reauthenticationRequired: false,
+    });
 
     const withoutPin = await a.inject({
       method: "DELETE",
       url: "/api/me",
-      headers: asUser(user),
+      headers: { ...asUser(user), "idempotency-key": "verified-delete-without-pin" },
     });
     expect(withoutPin.statusCode).toBe(400);
     expect(withoutPin.json().error.message).toContain("security PIN");
@@ -323,7 +342,7 @@ describe("self-service account removal (H54)", () => {
     const wrong = await a.inject({
       method: "DELETE",
       url: "/api/me",
-      headers: asUser(user),
+      headers: { ...asUser(user), "idempotency-key": "verified-delete-wrong-pin" },
       payload: { securityPin: wrongPin },
     });
     expect(wrong.statusCode).toBe(400);
@@ -332,7 +351,7 @@ describe("self-service account removal (H54)", () => {
     const deleted = await a.inject({
       method: "DELETE",
       url: "/api/me",
-      headers: asUser(user),
+      headers: { ...asUser(user), "idempotency-key": "verified-delete-correct-pin" },
       payload: { securityPin: pin },
     });
     expect(deleted.statusCode).toBe(200);
@@ -344,10 +363,11 @@ describe("self-service account removal (H54)", () => {
     ).toBe(0);
   });
 
-  it("does not require a PIN for an unverified primary email", async () => {
+  it("requires the current password when an unverified account cannot receive an email PIN", async () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
     const user = await createUser({ emailVerified: false });
+    await addCredentialPassword(user);
 
     const pin = await a.inject({
       method: "POST",
@@ -361,9 +381,49 @@ describe("self-service account removal (H54)", () => {
         .rowCount,
     ).toBe(0);
 
-    const deleted = await a.inject({ method: "DELETE", url: "/api/me", headers: asUser(user) });
+    const eligibility = await a.inject({
+      method: "GET",
+      url: "/api/me/removal-eligibility",
+      headers: asUser(user),
+    });
+    expect(eligibility.json()).toMatchObject({
+      securityPinRequired: false,
+      reauthenticationRequired: true,
+    });
+
+    const withoutPassword = await a.inject({
+      method: "DELETE",
+      url: "/api/me",
+      headers: { ...asUser(user), "idempotency-key": "unverified-delete-no-password" },
+    });
+    expect(withoutPassword.statusCode).toBe(400);
+    expect(withoutPassword.json().error.details.code).toBe("removal_reauthentication_required");
+
+    const wrongPassword = await a.inject({
+      method: "DELETE",
+      url: "/api/me",
+      headers: { ...asUser(user), "idempotency-key": "unverified-delete-wrong-password" },
+      payload: { reauthenticationPassword: "wrong-password" },
+    });
+    expect(wrongPassword.statusCode).toBe(400);
+    expect(wrongPassword.json().error.details.code).toBe("removal_reauthentication_invalid");
+
+    const deleted = await a.inject({
+      method: "DELETE",
+      url: "/api/me",
+      headers: { ...asUser(user), "idempotency-key": "unverified-delete-correct-password" },
+      payload: { reauthenticationPassword: UNVERIFIED_TEST_PASSWORD },
+    });
     expect(deleted.statusCode).toBe(200);
     expect(deleted.json().deleted).toBe(true);
+  });
+
+  it("requires an idempotency key for self-service removal", async () => {
+    const a = await getApp();
+    const user = await createUser({ emailVerified: true });
+    const response = await a.inject({ method: "DELETE", url: "/api/me", headers: asUser(user) });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.details.code).toBe("idempotency_key_required");
   });
 
   it("lets an accepted but unconfirmed applicant delete their account and forfeit the spot", async () => {
@@ -444,6 +504,7 @@ describe("self-service account removal (H54)", () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
     const user = await createUser({ name: "Self Deletable", emailVerified: false });
+    await addCredentialPassword(user);
     const { rows: applications } = await pool.query(
       `INSERT INTO applications (name, type, template)
        VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
@@ -462,7 +523,12 @@ describe("self-service account removal (H54)", () => {
     expect(eligibility.statusCode).toBe(200);
     expect(eligibility.json().action).toBe("delete");
 
-    const deleted = await a.inject({ method: "DELETE", url: "/api/me", headers: asUser(user) });
+    const deleted = await a.inject({
+      method: "DELETE",
+      url: "/api/me",
+      headers: { ...asUser(user), "idempotency-key": "unaccepted-delete" },
+      payload: { reauthenticationPassword: UNVERIFIED_TEST_PASSWORD },
+    });
     expect(deleted.statusCode).toBe(200);
     expect(deleted.json().deleted).toBe(true);
     expect(
@@ -488,6 +554,7 @@ describe("self-service account removal (H54)", () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
     const user = await createUser({ name: "Invited Unassigned", emailVerified: false });
+    await addCredentialPassword(user);
     const { rows: tok } = await pool.query(
       `INSERT INTO email_verification_tokens (token, type, email, user_id, kind, expires_at, used_at)
        VALUES ('claim-tok', 'account_claim', 'invited@example.com', $1, 'participant', now(), now())
@@ -513,7 +580,12 @@ describe("self-service account removal (H54)", () => {
     expect(eligibility.statusCode).toBe(200);
     expect(eligibility.json().action).toBe("delete");
 
-    const deleted = await a.inject({ method: "DELETE", url: "/api/me", headers: asUser(user) });
+    const deleted = await a.inject({
+      method: "DELETE",
+      url: "/api/me",
+      headers: { ...asUser(user), "idempotency-key": "invited-delete" },
+      payload: { reauthenticationPassword: UNVERIFIED_TEST_PASSWORD },
+    });
     expect(deleted.statusCode).toBe(200);
     expect(deleted.json().deleted).toBe(true);
     expect(
@@ -535,6 +607,7 @@ describe("self-service account removal (H54)", () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
     const user = await createUser({ name: "Confirmed Not Accredited", emailVerified: false });
+    await addCredentialPassword(user);
     await pool.query(`INSERT INTO tickets (user_id, token) VALUES ($1, 'tok-self-deletable')`, [
       user,
     ]);
@@ -552,7 +625,12 @@ describe("self-service account removal (H54)", () => {
     expect(eligibility.statusCode).toBe(200);
     expect(eligibility.json().action).toBe("delete");
 
-    const deleted = await a.inject({ method: "DELETE", url: "/api/me", headers: asUser(user) });
+    const deleted = await a.inject({
+      method: "DELETE",
+      url: "/api/me",
+      headers: { ...asUser(user), "idempotency-key": "confirmed-delete" },
+      payload: { reauthenticationPassword: UNVERIFIED_TEST_PASSWORD },
+    });
     expect(deleted.statusCode).toBe(200);
     expect(deleted.json().deleted).toBe(true);
     expect((await pool.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [user])).rowCount).toBe(0);
@@ -587,7 +665,11 @@ describe("self-service account removal (H54)", () => {
       reasonCode: "operational_history",
     });
 
-    const blocked = await a.inject({ method: "DELETE", url: "/api/me", headers: asUser(user) });
+    const blocked = await a.inject({
+      method: "DELETE",
+      url: "/api/me",
+      headers: { ...asUser(user), "idempotency-key": "accredited-delete-blocked" },
+    });
     expect(blocked.statusCode).toBe(409);
     expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [user])).rowCount).toBe(1);
   });
@@ -670,6 +752,7 @@ describe("self-service account removal (H54)", () => {
       email: "inside-at-removal@example.test",
       emailVerified: false,
     });
+    await addCredentialPassword(user);
     await pool.query(
       `UPDATE users
           SET badge_id = 'B-INSIDE',
@@ -814,6 +897,7 @@ describe("self-service account removal (H54)", () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
     const user = await createUser({ email: "cancel-pending@example.test", emailVerified: false });
+    await addCredentialPassword(user);
     await pool.query(
       `UPDATE users
           SET badge_id = 'B-CANCEL-PENDING',
@@ -900,6 +984,7 @@ describe("self-service account removal (H54)", () => {
       email: "self-anonymized@example.test",
       emailVerified: false,
     });
+    await addCredentialPassword(user);
     await pool.query(
       `UPDATE users SET surname = 'Identity', dni = '12345678Z', badge_id = 'B-SELF-ANON' WHERE id = $1`,
       [user],
@@ -1343,6 +1428,7 @@ describe("self-service account removal (H54)", () => {
       email: "race-before-accreditation@example.test",
       emailVerified: false,
     });
+    await addCredentialPassword(target);
     await pool.query(`INSERT INTO tickets (user_id, token) VALUES ($1, 'race-ticket')`, [target]);
 
     const [removal, checkIn] = await Promise.all([

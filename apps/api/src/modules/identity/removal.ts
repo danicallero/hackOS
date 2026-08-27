@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { verifyPassword } from "better-auth/crypto";
 import type { Job } from "bullmq";
 import type pg from "pg";
 import { type Queryable, withTransaction } from "../../db/pool.js";
@@ -45,6 +46,8 @@ export type AccountRemovalEligibility = {
   integrityWarning: boolean;
   /** Verified-primary-email self-service requests require a one-time PIN. */
   securityPinRequired: boolean;
+  /** Unverified real accounts must prove possession of their current password. */
+  reauthenticationRequired: boolean;
 };
 
 interface UserRemovalRow {
@@ -84,6 +87,8 @@ export interface RunAccountRemovalOptions {
   reason?: string;
   /** One-time email PIN required for verified-primary-email self-service. */
   securityPin?: string;
+  /** Current credential for an unverified real self-service account. */
+  reauthenticationPassword?: string;
   /** The authenticated session that initiated self-service removal, if known. */
   sessionToken?: string | null;
   /** Admin routes can force the action only after the locked preflight agrees. */
@@ -242,10 +247,11 @@ export async function getAccountRemovalEligibility(
   client: Queryable,
   userId: number,
 ): Promise<AccountRemovalEligibility> {
-  const { rows: users } = await client.query<{ id: number; email_verified: boolean }>(
-    `SELECT id, email_verified FROM users WHERE id = $1`,
-    [userId],
-  );
+  const { rows: users } = await client.query<{
+    id: number;
+    email_verified: boolean;
+    is_test_account: boolean;
+  }>(`SELECT id, email_verified, is_test_account FROM users WHERE id = $1`, [userId]);
   if (!users[0]) throw new NotFoundError("User not found", { userId });
 
   const signals = await readOperationalSignals(client, userId);
@@ -264,6 +270,7 @@ export async function getAccountRemovalEligibility(
       requiresVenueExit: venue.requiresExit,
       integrityWarning: false,
       securityPinRequired: Boolean(users[0].email_verified),
+      reauthenticationRequired: !users[0].email_verified && !users[0].is_test_account,
     };
   }
   return {
@@ -277,6 +284,7 @@ export async function getAccountRemovalEligibility(
     requiresVenueExit: venue.requiresExit,
     integrityWarning: signals.hasIntegritySignals,
     securityPinRequired: Boolean(users[0].email_verified),
+    reauthenticationRequired: !users[0].email_verified && !users[0].is_test_account,
   };
 }
 
@@ -292,6 +300,49 @@ async function loadUserForRemoval(client: pg.PoolClient, userId: number): Promis
   const user = rows[0];
   if (!user) throw new NotFoundError("User not found", { userId });
   return user;
+}
+
+/**
+ * An unverified real account cannot receive the destructive-action email PIN.
+ * Require its current Better Auth credential instead. The hash is read and
+ * verified only while the removal transaction owns the user row lock; neither
+ * the password nor the hash is copied into an idempotency row, retry job, audit
+ * event, or API response.
+ */
+async function verifyUnverifiedSelfServicePassword(
+  client: pg.PoolClient,
+  user: Pick<UserRemovalRow, "email_verified" | "is_test_account" | "id">,
+  password: string | undefined,
+): Promise<void> {
+  if (user.email_verified || user.is_test_account) return;
+  if (!password) {
+    throw new BadRequestError("Re-enter your current password to continue.", {
+      code: "removal_reauthentication_required",
+    });
+  }
+
+  const { rows } = await client.query<{ password: string }>(
+    `SELECT password
+       FROM accounts
+      WHERE user_id = $1 AND provider_id = 'credential' AND password IS NOT NULL
+      ORDER BY id ASC
+      LIMIT 1`,
+    [user.id],
+  );
+  const hash = rows[0]?.password;
+  let valid = false;
+  if (hash) {
+    try {
+      valid = await verifyPassword({ hash, password });
+    } catch {
+      valid = false;
+    }
+  }
+  if (!valid) {
+    throw new BadRequestError("The current password is incorrect.", {
+      code: "removal_reauthentication_invalid",
+    });
+  }
 }
 
 /**
@@ -568,9 +619,10 @@ async function prepareAccountRemoval(
       // self-service deletion/anonymization. Verify it while this transaction
       // owns the same user-row lock that selects the lifecycle boundary, so a
       // concurrent email change or second destructive request cannot race the
-      // PIN check.
+      // PIN/password check.
       if (options.actorId === options.targetId) {
         await consumeRemovalPin(client, user, options.securityPin);
+        await verifyUnverifiedSelfServicePassword(client, user, options.reauthenticationPassword);
       }
 
       // Retire wallet credentials while the account is still active. The H54
@@ -698,7 +750,10 @@ async function deleteExternalArtifacts(preparation: RemovalPreparation): Promise
   }
 }
 
-type RemovalRetryJob = Omit<RunAccountRemovalOptions, "scheduleRetry"> & {
+type RemovalRetryJob = Omit<
+  RunAccountRemovalOptions,
+  "scheduleRetry" | "reauthenticationPassword"
+> & {
   requestedAction: AccountRemovalAction;
 };
 
