@@ -4,9 +4,9 @@ import { config } from "../../config.js";
 /**
  * Stable, keyed representation of a retired scanner credential. The raw
  * badge/ticket value is accepted at the scanner boundary, but is never
- * persisted in the central retired-credential tables. A keyed digest alone
- * does not make a reusable physical badge safe; assignment binding remains a
- * separate release decision (H54/F07).
+ * persisted in the central retired-credential tables. Ordinary physical
+ * badge reuse is governed by the server-side assignment timestamp fence;
+ * account-retired credentials are permanently denied (H54/F07).
  */
 export function scannerCredentialDigest(kind: "badge" | "ticket", value: string): string {
   return createHmac("sha256", config.BETTER_AUTH_SECRET)

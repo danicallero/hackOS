@@ -36,12 +36,12 @@ export async function resolveByBadge(
   // Reject the permanent, unlinked retirement tombstone before resolving the
   // current owner so a disconnected scanner cannot replay an old
   // identity-bearing scan against the replacement participant (H54). The
-  // central table stores only a keyed digest; physical badge reuse still
-  // requires assignment binding and is a separate release decision.
+  // central table stores only a keyed digest. Ordinary physical badge reuse
+  // is governed by the server-side assignment timestamp fence; a credential
+  // retired with an account is never reused.
   const tombstone = await db.query(
     `SELECT 1 FROM scanner_revoked_badges
       WHERE credential_digest = $1
-      AND (expires_at IS NULL OR expires_at > clock_timestamp())
       LIMIT 1`,
     [scannerCredentialDigest("badge", badgeId)],
   );

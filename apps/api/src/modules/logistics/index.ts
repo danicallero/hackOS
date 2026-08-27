@@ -6,7 +6,6 @@ import { registerLogisticsRoutes } from "./routes.js";
 import "./presence-closer.js";
 import { schedulePresenceEventEndCloser } from "./presence-closer.js";
 import "./schedule-publisher.js";
-import { scheduleScannerTombstoneCleanup } from "./scanner-sync.js";
 import { scheduleSchedulePublisher } from "./schedule-publisher.js";
 import { registerUniversityRoutes } from "./universities.js";
 
@@ -24,5 +23,4 @@ export async function registerLogisticsModule(app: FastifyInstance): Promise<voi
 
   await scheduleSchedulePublisher();
   await schedulePresenceEventEndCloser();
-  await scheduleScannerTombstoneCleanup();
 }

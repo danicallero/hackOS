@@ -30,7 +30,6 @@ async function assertTicketNotRevoked(
   const revoked = await client.query(
     `SELECT 1 FROM scanner_revoked_tickets
       WHERE credential_digest = $1
-        AND (expires_at IS NULL OR expires_at > clock_timestamp())
       LIMIT 1`,
     [scannerCredentialDigest("ticket", token)],
   );
@@ -134,7 +133,6 @@ async function assertNotTicketToken(client: pg.PoolClient, badgeId: string): Pro
      SELECT 1
        FROM scanner_revoked_tickets
       WHERE credential_digest = $2
-        AND (expires_at IS NULL OR expires_at > clock_timestamp())
       LIMIT 1`,
     [badgeId, scannerCredentialDigest("ticket", badgeId)],
   );
@@ -143,14 +141,13 @@ async function assertNotTicketToken(client: pg.PoolClient, badgeId: string): Pro
   }
 }
 
-/** A retired badge credential must not be assigned again under the current
- * fail-closed policy. Assignment-scoped binding is the future path if
- * physical badge reuse is approved (H54/F07). */
+/** A credential retired with an account must not be assigned again. Ordinary
+ * badge rotation is allowed through the current assignment timestamp fence
+ * before account retirement (H54/F07). */
 async function assertBadgeNotRevoked(client: pg.PoolClient, badgeId: string): Promise<void> {
   const revoked = await client.query(
     `SELECT 1 FROM scanner_revoked_badges
       WHERE credential_digest = $1
-        AND (expires_at IS NULL OR expires_at > clock_timestamp())
       LIMIT 1`,
     [scannerCredentialDigest("badge", badgeId)],
   );

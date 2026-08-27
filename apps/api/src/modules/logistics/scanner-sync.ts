@@ -1,7 +1,5 @@
 import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
-import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
-import { getQueue, registerWorker } from "../../lib/queues.js";
 import type { Language } from "../notifications/translate/index.js";
 import { isSyntheticOperator } from "./review-fixture-scope.js";
 
@@ -47,7 +45,6 @@ export async function scannerSnapshot(actorId?: number) {
   // scanner as raw bearer values. A stale queued mutation is rejected by the
   // server; the local roster still includes per-person historical badge ids
   // for immediate operator feedback.
-  await purgeExpiredScannerTombstones();
   const [peopleResult, activitiesResult, statesResult] = await Promise.all([
     pool.query(
       `WITH RECURSIVE effective_groups (user_id, group_id) AS (
@@ -186,36 +183,4 @@ export async function scannerSnapshot(actorId?: number) {
     revokedBadgeIds: [],
     revokedTicketTokens: [],
   };
-}
-
-const TOMBSTONE_CLEANUP_QUEUE = "scanner-tombstone-cleanup";
-
-/** H54: legacy finite expiry is enforced even when no scanner requests a fresh snapshot. */
-export async function purgeExpiredScannerTombstones(): Promise<void> {
-  await Promise.all([
-    pool.query(
-      `DELETE FROM scanner_revoked_badges WHERE expires_at IS NOT NULL AND expires_at <= now()`,
-    ),
-    pool.query(
-      `DELETE FROM scanner_revoked_tickets WHERE expires_at IS NOT NULL AND expires_at <= now()`,
-    ),
-  ]);
-}
-
-registerWorker(TOMBSTONE_CLEANUP_QUEUE, async () => {
-  await purgeExpiredScannerTombstones();
-});
-
-export async function scheduleScannerTombstoneCleanup(): Promise<void> {
-  if (config.isTest) return;
-  await getQueue(TOMBSTONE_CLEANUP_QUEUE).add(
-    TOMBSTONE_CLEANUP_QUEUE,
-    {},
-    {
-      repeat: { every: 60 * 60_000 },
-      jobId: TOMBSTONE_CLEANUP_QUEUE,
-      removeOnComplete: true,
-      removeOnFail: true,
-    },
-  );
 }

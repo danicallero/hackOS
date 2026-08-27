@@ -1116,23 +1116,21 @@ async function addScannerTombstones(
 ): Promise<void> {
   if (badgeIds.length > 0) {
     await client.query(
-      `INSERT INTO scanner_revoked_badges (credential_digest, revoked_at, expires_at)
-       SELECT value, clock_timestamp(), NULL::timestamptz
+      `INSERT INTO scanner_revoked_badges (credential_digest, revoked_at)
+       SELECT value, clock_timestamp()
          FROM unnest($1::text[]) AS badge_values(value)
        ON CONFLICT (credential_digest) DO UPDATE
-         SET revoked_at = EXCLUDED.revoked_at,
-             expires_at = NULL`,
+         SET revoked_at = EXCLUDED.revoked_at`,
       [badgeIds.map((badgeId) => scannerCredentialDigest("badge", badgeId))],
     );
   }
   if (ticketTokens.length > 0) {
     await client.query(
-      `INSERT INTO scanner_revoked_tickets (credential_digest, revoked_at, expires_at)
-       SELECT value, clock_timestamp(), NULL::timestamptz
+      `INSERT INTO scanner_revoked_tickets (credential_digest, revoked_at)
+       SELECT value, clock_timestamp()
          FROM unnest($1::text[]) AS ticket_values(value)
        ON CONFLICT (credential_digest) DO UPDATE
-         SET revoked_at = EXCLUDED.revoked_at,
-             expires_at = NULL`,
+         SET revoked_at = EXCLUDED.revoked_at`,
       [ticketTokens.map((token) => scannerCredentialDigest("ticket", token))],
     );
   }
