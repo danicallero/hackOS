@@ -570,6 +570,18 @@ async function prepareAccountRemoval(
         await consumeRemovalPin(client, user, options.securityPin);
       }
 
+      // Retire wallet credentials while the account is still active. The H54
+      // reference guard intentionally rejects UPDATEs that keep an
+      // identity-bearing wallet row attached after removal_pending; this
+      // write is serialized with issuance by the user-row lock above and is
+      // committed atomically with the lifecycle transition below.
+      await client.query(
+        `UPDATE wallet_passes
+            SET status = 'voided', last_updated_at = clock_timestamp(),
+                update_tag = ((extract(epoch FROM clock_timestamp()) * 1000)::bigint)::text
+          WHERE user_id = $1 AND status <> 'voided'`,
+        [options.targetId],
+      );
       await client.query(
         `UPDATE users
             SET account_state = 'removal_pending',
@@ -593,13 +605,6 @@ async function prepareAccountRemoval(
       // ordinary event writer and the recovery surface is the only allowed
       // participant action. Full cleanup remains below for non-pending paths.
       if (!(action === "anonymize" && requiresVenueExit)) {
-        await client.query(
-          `UPDATE wallet_passes
-              SET status = 'voided', last_updated_at = clock_timestamp(),
-                  update_tag = ((extract(epoch FROM clock_timestamp()) * 1000)::bigint)::text
-            WHERE user_id = $1 AND status <> 'voided'`,
-          [options.targetId],
-        );
         await client.query(`DELETE FROM sessions WHERE user_id = $1`, [options.targetId]);
         await client.query(`DELETE FROM accounts WHERE user_id = $1`, [options.targetId]);
         await client.query(`DELETE FROM push_tokens WHERE user_id = $1`, [options.targetId]);
