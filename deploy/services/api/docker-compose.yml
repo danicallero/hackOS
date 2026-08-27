@@ -75,6 +75,16 @@ x-app-env: &app-env
   LIBRETRANSLATE_URL: "${LIBRETRANSLATE_URL:-}"
   LIBRETRANSLATE_API_KEY: "${LIBRETRANSLATE_API_KEY:-}"
 
+# App Store/QA fixture secrets are intentionally API-only. The migration
+# container does not need them, and keeping them out of the shared anchor makes
+# accidental use outside an isolated reviewer deployment less likely.
+x-review-fixture-env: &review-fixture-env
+  REVIEW_FIXTURE_PASSWORD: "${REVIEW_FIXTURE_PASSWORD:-}"
+  REVIEW_FIXTURE_DELETION_PIN: "${REVIEW_FIXTURE_DELETION_PIN:-}"
+
+x-api-env: &api-env
+  <<: [*app-env, *review-fixture-env]
+
 services:
   migrate:
     image: "${IMAGE_REPO:-hackos-api}:${IMAGE_TAG:-latest}"
@@ -97,7 +107,7 @@ services:
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
-    environment: *app-env
+    environment: *api-env
     # Deterministic external DNS — don't inherit the host's resolv.conf, which
     # can be transiently wrong at deploy time and poison outbound fetches (mail,
     # APNs, Google Wallet). Internal names still resolve via 127.0.0.11.

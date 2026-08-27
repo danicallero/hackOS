@@ -62,9 +62,11 @@ Two containers share this file: `minio` (the S3-compatible object server) and
 
 Runs two containers from the same image: a one-shot `migrate` (must complete
 successfully before `api` starts — see the `depends_on: service_completed_successfully`
-gate in the compose file) and the long-running `api` server. Both get
-identical container env, because the migration script and the server share
-the same `DATABASE_URL`/config-loading code path.
+gate in the compose file) and the long-running `api` server. They share the
+application/database configuration because the migration script and server use
+the same config-loading path. The optional `REVIEW_FIXTURE_*` secrets are the
+deliberate exception: Compose passes them to `api` only because migrations never
+need them.
 
 | Variable | Kind | Required | What it does |
 |---|---|---|---|
@@ -75,6 +77,8 @@ the same `DATABASE_URL`/config-loading code path.
 | `BETTER_AUTH_SECRET` | container | yes 🔒 | Signs and encrypts Better Auth sessions/tokens. Rotating it invalidates every existing session — everyone gets logged out — so treat it as a "break glass" secret, not something to rotate casually. |
 | `CORS_ORIGINS` | container | no | Comma-separated browser origins allowed to make credentialed requests. In production this is the *only* CORS allowlist (no wildcard fallback, since credentials are always on); it must include `https://${WEB_DOMAIN}` or the web app's authenticated calls get blocked by the browser before they reach the API. |
 | `MOBILE_APP_SCHEME` | container | no | Custom URL scheme of the Expo mobile app (default `hackos`), added to Better Auth's `trustedOrigins` for the `expo()` plugin (H4, H55). Only worth changing if `apps/mobile`'s `app.json` `scheme` is renamed from the default. |
+| `REVIEW_FIXTURE_PASSWORD` | container (api only) | no; isolated review/QA deployment only | Password assigned to the synthetic accounts returned by the admin fixture-regeneration route. Leave unset for event deployments. It is intentionally not passed to `migrate` or `worker`, and must be supplied to reviewers out-of-band rather than returned by the API. |
+| `REVIEW_FIXTURE_DELETION_PIN` | container (api only) | no; isolated review/QA deployment only | Six-digit static deletion PIN accepted only for `users.is_test_account = true` synthetic fixtures. It is not a universal PIN for real participants, is not returned by the API, and must not be enabled on a deployment containing real attendee data. |
 | `LOG_LEVEL` | container | no | Pino log level (`info` by default). Turning it to `debug` in production is noisy but harmless; there's no separate audit-log toggle — sensitive-mutation auditing (H53) happens in Postgres regardless of this setting. |
 | `DB_POOL_MAX` | container | no (default 20, 5 in tests) | Max size of this process's `pg` pool (H540). Per-process — api and worker each hold their own, and every replica of each multiplies it: `(api replicas × DB_POOL_MAX) + (worker replicas × DB_POOL_MAX)` must stay under Postgres's own `max_connections` (default 100), with headroom for `migrate`'s one-shot connections and admin/superuser use. Raise it for big-event load — see `docs/architecture.md` and `docs/big-event-readiness.md`. |
 | `DB_IDLE_TIMEOUT_MS` | container | no (default 30000) | How long an idle pooled connection is kept before being closed. |
