@@ -271,7 +271,18 @@ export function registerReviewFixtureRoutes(app: FastifyInstance): void {
                 .filter((userId): userId is number => userId !== null),
             ),
           ];
-          for (const userId of oldUserIds) await purgeReviewFixtureAccount(client, userId);
+          if (oldUserIds.length > 0) {
+            const { rows: oldUsers } = await client.query<{ id: number; is_test_account: boolean }>(
+              `SELECT id, is_test_account FROM users WHERE id = ANY($1::int[]) FOR UPDATE`,
+              [oldUserIds],
+            );
+            for (const row of oldUsers) {
+              if (!row.is_test_account) {
+                throw new Error("Review fixture registry points at a real account");
+              }
+              await purgeReviewFixtureAccount(client, row.id);
+            }
+          }
 
           // Anonymous fixture subjects are synthetic QA state, not audit data
           // to carry into the next reviewer generation.
