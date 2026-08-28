@@ -17,7 +17,7 @@ import {
   isSyntheticOperator,
 } from "../logistics/review-fixture-scope.js";
 import { notify } from "../notifications/service.js";
-import { broadcastQueueEvent } from "../queue/broadcast.js";
+import { broadcastQueueEvent, broadcastQueueEventWithMarker } from "../queue/broadcast.js";
 import { writeQueueHistory } from "../queue/history.js";
 import { notifyChallengeQueueChanged } from "../queue/notify.js";
 import { compactQueueGroupPositions, nextBottomPosition } from "../queue/ordering.js";
@@ -2174,13 +2174,57 @@ export async function leaveMyProject(userId: number, repoId: number): Promise<{ 
   });
 }
 
+interface DeletedQueueEntry {
+  id: number;
+  challenge_id: number;
+  repo_id: number;
+  fixtureMarker: boolean | null;
+}
+
 /**
  * Deletes every row that transitively references repoId before the repo row
  * itself — none of the FKs onto `repos`/`queue_entries` cascade, and
  * `deleteMyProject` only ever reaches here once the caller has confirmed
  * they're the project's sole member.
+ *
+ * H19/H20 + H38/H41: queue entries disappear in this transaction, so their
+ * ids and marker-scoped broadcast topics must be captured before the delete.
+ * The caller emits those notifications only after this transaction commits.
  */
-async function deleteRepoCascade(client: Queryable, repoId: number): Promise<void> {
+async function deleteRepoCascade(
+  client: Queryable,
+  repoId: number,
+): Promise<{ queueEntries: DeletedQueueEntry[] }> {
+  const queueEntriesRes = await client.query<{
+    id: number;
+    challenge_id: number;
+    repo_id: number;
+    challenge_is_test_account: boolean;
+    repo_is_test_account: boolean;
+  }>(
+    `SELECT qe.id, qe.challenge_id, qe.repo_id,
+            c.is_test_account AS challenge_is_test_account,
+            r.is_test_account AS repo_is_test_account
+       FROM queue_entries qe
+       JOIN challenges c ON c.id = qe.challenge_id
+       JOIN repos r ON r.id = qe.repo_id
+      WHERE qe.repo_id = $1
+      ORDER BY qe.id
+      FOR UPDATE OF qe`,
+    [repoId],
+  );
+  const queueEntries = queueEntriesRes.rows.map((entry) => ({
+    id: Number(entry.id),
+    challenge_id: Number(entry.challenge_id),
+    repo_id: Number(entry.repo_id),
+    // A mixed queue graph is an isolation violation; fail closed instead of
+    // putting a deleted fixture payload on the real operator stream (H54).
+    fixtureMarker:
+      entry.challenge_is_test_account === entry.repo_is_test_account
+        ? entry.challenge_is_test_account === true
+        : null,
+  }));
+
   await client.query(
     `DELETE FROM attempt_review_versions WHERE attempt_id IN
        (SELECT id FROM queue_entries WHERE repo_id = $1)`,
@@ -2207,6 +2251,7 @@ async function deleteRepoCascade(client: Queryable, repoId: number): Promise<voi
   await client.query(`DELETE FROM devpost_participants WHERE repo_id = $1`, [repoId]);
   await client.query(`DELETE FROM repo_devpost_prizes WHERE repo_id = $1`, [repoId]);
   await client.query(`DELETE FROM repos WHERE id = $1`, [repoId]);
+  return { queueEntries };
 }
 
 /**
@@ -2215,7 +2260,7 @@ async function deleteRepoCascade(client: Queryable, repoId: number): Promise<voi
  * transaction before touching anything irreversible.
  */
 export async function deleteMyProject(userId: number, repoId: number): Promise<{ deleted: true }> {
-  return withTransaction(async (client) => {
+  const { queueEntries } = await withTransaction(async (client) => {
     const user = await client.query(
       `SELECT id FROM users
         WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
@@ -2240,7 +2285,7 @@ export async function deleteMyProject(userId: number, repoId: number): Promise<{
     const repo = repoRes.rows[0] as { id: number; name: string } | undefined;
     if (!repo) throw new NotFoundError(`Repo ${repoId} not found`);
 
-    await deleteRepoCascade(client, repoId);
+    const deleted = await deleteRepoCascade(client, repoId);
 
     await audit(client, {
       actorId: userId,
@@ -2250,8 +2295,28 @@ export async function deleteMyProject(userId: number, repoId: number): Promise<{
       before: { name: repo.name },
       source: "participant",
     });
-    return { deleted: true };
+    return deleted;
   });
+
+  // The queue rows no longer exist, so resolve each topic from the marker
+  // captured inside the transaction. These are best-effort notifications on
+  // top of the committed deletion; they must not become part of its rollback
+  // boundary or the idempotent request response (H19/H20, H38/H41).
+  for (const entry of queueEntries) {
+    await broadcastQueueEventWithMarker(entry.fixtureMarker, EVENTS.QUEUE_ENTRY_CHANGED, {
+      id: entry.id,
+      challenge_id: entry.challenge_id,
+      repo_id: entry.repo_id,
+      deleted: true,
+    });
+  }
+
+  const affectedChallenges = [...new Set(queueEntries.map((entry) => entry.challenge_id))];
+  for (const challengeId of affectedChallenges) {
+    await notifyChallengeQueueChanged(pool, challengeId);
+  }
+
+  return { deleted: true };
 }
 
 export interface PublicChallenge {

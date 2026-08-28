@@ -1,4 +1,5 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { SSE_TOPICS } from "@hackos/shared/events";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
@@ -9,7 +10,7 @@ import {
   createUserWithCapabilities,
   truncateAll,
 } from "../helpers.js";
-import { admitParticipant, setHackingWindow } from "./fixtures.js";
+import { admitParticipant, createChallenge, setHackingWindow } from "./fixtures.js";
 
 /**
  * H19/H20 self-service on an EXISTING project: edit metadata, invite/accept
@@ -476,6 +477,44 @@ describe("DELETE /api/me/projects/:id (H19/H20 sole-member delete)", () => {
 
     const { rowCount } = await pool.query(`SELECT 1 FROM repos WHERE id = $1`, [repoId]);
     expect(rowCount).toBe(0);
+  });
+
+  it("invalidates deleted queue entries on the scoped topic and queues participant refresh", async () => {
+    const server = await getApp();
+    const owner = await createUser();
+    const repoId = await seedRepo("Solo in queue", [owner]);
+    const challengeId = await createChallenge("Queue challenge", []);
+    const { rows: entryRows } = await pool.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status, position)
+       VALUES ($1, $2, 'waiting', 1)
+       RETURNING id`,
+      [challengeId, repoId],
+    );
+    const entryId = entryRows[0].id as number;
+    await setHackingWindow(true);
+
+    const { valkey } = await import("../../src/lib/valkey.js");
+    const queueBefore = Number((await valkey.get(`sse:seq:${SSE_TOPICS.QUEUE}`)) ?? 0);
+    const publicTvBefore = Number((await valkey.get(`sse:seq:${SSE_TOPICS.PUBLIC_TV}`)) ?? 0);
+    const response = await server.inject({
+      method: "DELETE",
+      url: `/api/me/projects/${repoId}`,
+      headers: { ...asUser(owner), "idempotency-key": crypto.randomUUID() },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(
+      (await pool.query(`SELECT 1 FROM queue_entries WHERE id = $1`, [entryId])).rowCount,
+    ).toBe(0);
+    expect(await valkey.get(`sse:seq:${SSE_TOPICS.QUEUE}`)).toBe(String(queueBefore + 1));
+    expect(await valkey.get(`sse:seq:${SSE_TOPICS.PUBLIC_TV}`)).toBe(String(publicTvBefore + 1));
+
+    const { getQueue } = await import("../../src/lib/queues.js");
+    const { QUEUE_PARTICIPANT_INVALIDATIONS } = await import("../../src/modules/queue/notify.js");
+    const invalidation = await getQueue(QUEUE_PARTICIPANT_INVALIDATIONS).getJob(
+      `challenge-${challengeId}`,
+    );
+    expect(invalidation?.data).toEqual({ challengeId });
   });
 
   it("409s when there's more than one member", async () => {
