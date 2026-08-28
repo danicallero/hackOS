@@ -213,6 +213,25 @@ async function emitPreCallWarnings(): Promise<void> {
               AND qe.repo_id = $3
               AND qe.status = 'waiting'
               AND qe.precalled_at IS NULL
+              AND NOT EXISTS (
+                SELECT 1
+                  FROM queue_entries active
+                  JOIN queue_group_challenges active_qgc
+                    ON active_qgc.challenge_id = active.challenge_id
+                 WHERE active_qgc.queue_group_id = $1
+                   AND active.repo_id = qe.repo_id
+                   AND active.status IN ('called', 'in_room', 'presenting', 'completed')
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                  FROM queue_entries already
+                  JOIN queue_group_challenges already_qgc
+                    ON already_qgc.challenge_id = already.challenge_id
+                 WHERE already_qgc.queue_group_id = $1
+                   AND already.repo_id = qe.repo_id
+                   AND already.status = 'waiting'
+                   AND already.precalled_at IS NOT NULL
+              )
          ), claimed AS (
            UPDATE queue_entries qe
               SET precalled_at = now()

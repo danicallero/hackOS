@@ -10,6 +10,7 @@ import {
   lockEvaluationEntriesForChallenges,
   lockEvaluationEntriesForGroup,
 } from "./evaluation-lock.js";
+import { notifyChallengeQueueChanged } from "./notify.js";
 import { compactQueueGroupPositions } from "./ordering.js";
 
 /**
@@ -341,6 +342,11 @@ export async function mergeQueueGroups(
   await broadcastQueueEvent(pool, "queueGroup", result.summary.id, EVENTS.QUEUE_ROOM_CHANGED, {
     queueGroupId: result.summary.id,
   });
+  await Promise.all(
+    result.summary.challenges.map((challenge) =>
+      notifyChallengeQueueChanged(pool, Number(challenge.id)),
+    ),
+  );
   return { ...result.summary, mergedPanel: { duplicatesDropped: result.duplicatesDropped } };
 }
 
@@ -431,6 +437,11 @@ export async function splitQueueGroup(input: {
   await broadcastQueueEvent(pool, "queueGroup", queueGroupId, EVENTS.QUEUE_ROOM_CHANGED, {
     queueGroupId,
   });
+  await Promise.all(
+    groups.flatMap((group) =>
+      group.challenges.map((challenge) => notifyChallengeQueueChanged(pool, Number(challenge.id))),
+    ),
+  );
   return groups;
 }
 
@@ -497,6 +508,9 @@ export async function updateQueueGroup(input: {
   await broadcastQueueEvent(pool, "queueGroup", queueGroupId, EVENTS.QUEUE_ROOM_CHANGED, {
     queueGroupId,
   });
+  await Promise.all(
+    summary.challenges.map((challenge) => notifyChallengeQueueChanged(pool, Number(challenge.id))),
+  );
   return summary;
 }
 
@@ -598,6 +612,9 @@ export async function setQueueGroupRooms(input: {
   await broadcastQueueEvent(pool, "queueGroup", queueGroupId, EVENTS.QUEUE_ROOM_CHANGED, {
     queueGroupId,
   });
+  await Promise.all(
+    summary.challenges.map((challenge) => notifyChallengeQueueChanged(pool, Number(challenge.id))),
+  );
   return summary;
 }
 
