@@ -494,7 +494,8 @@ describe("queue contextual isolation", () => {
     const roomId = await createRoom();
     await assignChallengeToRoom(roomId, challengeId);
     const { pool } = await import("../../src/db/pool.js");
-    const { repoId } = await createRepoWithTeam();
+    const crossMarkerRepoName = `cross-marker-${crypto.randomUUID().slice(0, 8)}`;
+    const { repoId } = await createRepoWithTeam(undefined, crossMarkerRepoName);
 
     const syntheticChallengeId = await createChallenge();
     await pool.query(`UPDATE challenges SET is_test_account = true WHERE id = $1`, [
@@ -508,23 +509,20 @@ describe("queue contextual isolation", () => {
           AND s.id = (SELECT author FROM challenges WHERE id = $1)`,
       [syntheticChallengeId],
     );
-    const crossMarkerEntryId = (
-      await pool.query(
-        `INSERT INTO queue_entries (challenge_id, repo_id, status, assigned_room_id)
-         VALUES ($1, $2, 'presenting', $3) RETURNING id`,
-        [syntheticChallengeId, repoId, roomId],
-      )
-    ).rows[0].id;
+    await pool.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status, assigned_room_id)
+       VALUES ($1, $2, 'presenting', $3)`,
+      [syntheticChallengeId, repoId, roomId],
+    );
 
     const ungroupedChallengeId = await createChallenge();
-    const { repoId: ungroupedRepoId } = await createRepoWithTeam();
-    const ungroupedEntryId = (
-      await pool.query(
-        `INSERT INTO queue_entries (challenge_id, repo_id, status, assigned_room_id)
-         VALUES ($1, $2, 'called', $3) RETURNING id`,
-        [ungroupedChallengeId, ungroupedRepoId, roomId],
-      )
-    ).rows[0].id;
+    const ungroupedRepoName = `ungrouped-${crypto.randomUUID().slice(0, 8)}`;
+    const { repoId: ungroupedRepoId } = await createRepoWithTeam(undefined, ungroupedRepoName);
+    await pool.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status, assigned_room_id)
+       VALUES ($1, $2, 'called', $3)`,
+      [ungroupedChallengeId, ungroupedRepoId, roomId],
+    );
     await pool.query(`DELETE FROM queue_group_challenges WHERE challenge_id = $1`, [
       ungroupedChallengeId,
     ]);
@@ -534,7 +532,8 @@ describe("queue contextual isolation", () => {
     const view = snapshot.json()[0];
     expect(view.active).toBeNull();
     expect(view.called).toEqual([]);
-    expect(JSON.stringify(view)).not.toContain(String(crossMarkerEntryId));
-    expect(JSON.stringify(view)).not.toContain(String(ungroupedEntryId));
+    const serializedView = JSON.stringify(view);
+    expect(serializedView).not.toContain(crossMarkerRepoName);
+    expect(serializedView).not.toContain(ungroupedRepoName);
   });
 });

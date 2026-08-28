@@ -11,10 +11,10 @@ rate-limited review history.
 - Base: `067d783befc732fc625fd4a8bd3c0b4ad046733f`
 - Review head at intake: `5059ff81a5076c3b070c2b8d013be90f461bb0d4`
 - Checkpoint commit: `e6ce8c1d` (`fix(H54): close PR review isolation and migration gaps`)
-- Current pushed head: verify with `git rev-parse
-  origin/danicallero/account-deletion-anonymization` before resuming; the
-  current pushed checkpoint at the last archival update was `91b6f3bb`, with
-  additional queue/docs follow-up changes in the working tree.
+- Current pushed head: `8a6a62f748f7e383c3deb4ba38f10de44f71eaa9`
+  (`fix(H54): close queue scope and shared project deletion gaps`), preceded
+  by `23b782f5` for the Compose mail-brand default. Verify the remote SHA
+  before resuming; the worktree is clean at this checkpoint.
 - GitHub PR: <https://github.com/danicallero/hackOS/pull/584>; the feature branch is
   pushed to the origin branch above.
 - Worktree policy: shared active checkout; no blind reset, force-push, or destructive history rewrite.
@@ -75,7 +75,9 @@ rate-limited review history.
 | T23 | Remove stale one-project self-service documentation | complete | `docs/challenges-devpost.md` now matches the current H19/H20 contract: participant self-creation has no per-participant project-count cap; the former advisory-lock/one-winner wording was obsolete. |
 | T24 | Targeted Luna follow-up for deletion and queue P2s | failed/continued by coordinator | Dispatched after seq 523 as `task_01ce42a0dc1f` / `ctx_d3fc72184adf` / `term_f1dde2c5-5c92-4c7d-a551-b844ea20f201`; the Luna terminal hit its usage limit before worker_done and made no edits. Coordinator is continuing from the prior exact findings and bounded collaboration audits; terminal closed and task marked failed with that reason. |
 | T25 | Preserve auth during inconsistent pending-delete exit | complete | The fresh-account/inconsistent operational path now retains sessions, Better Auth accounts, push tokens and dietary state whenever `requiresVenueExit` is true, regardless of delete vs anonymize action; profile coverage asserts a pending delete keeps its credential. |
-| T26 | Triage fresh documentation findings | complete with fixes in progress | Seq 537 confirmed one real P1 deploy-topology correction and concrete P2 documentation drift; coordinator is applying the verified wording, endpoint, worker, env, anchor, and release-metadata fixes. |
+| T26 | Triage fresh documentation findings | complete | Seq 537 confirmed one real P1 deploy-topology correction and concrete P2 documentation drift; verified wording, endpoint, worker, env, anchor, mobile, and release-metadata fixes are in `37fb433c` and subsequent checkpoints. |
+| T27 | Close public room snapshot scope gap | complete | Luna room audit seq 553 confirmed the public `/api/tv/rooms` read needed challenge, queue-group, and room-serving joins; `8a6a62f7` adds both query-branch joins and a separate-repository regression fixture. |
+| T28 | Preserve Devpost-linked shared projects during removal | complete | Luna identity audit seq 554 confirmed `REPO_MEMBER_RELATION_SQL` plus pre-delete repo-ID capture preserves a linked member with no submission; `8a6a62f7` includes the guard and profile regression. |
 
 ## Code/schema changes reconciled
 
@@ -141,6 +143,15 @@ rate-limited review history.
 - Queue ETA calculations now exclude paused rooms from throughput, and room
   topology snapshots re-read serving links after room locks so concurrent room
   replacement cannot omit the prior queue from participant invalidation.
+- Compose now defaults an unset `MAIL_LAYOUT_LOGO_URL` to the configured
+  `WEB_DOMAIN` brand mark while preserving an explicit empty override.
+- Public room snapshots now require a real challenge, a queue-group link, and
+  a serving-room-group link in both active and called reads, preventing
+  malformed or cross-marker entries from leaking repository data.
+- Account removal now captures every subject-linked repository before
+  relationship scrubbing and treats active submission or matched Devpost
+  membership as shared ownership; queue cascade also rechecks every entry's
+  complete fixture marker and fails closed on a mismatch.
 
 ## Validation record
 
@@ -178,8 +189,9 @@ coverage, and corrects the authentication documentation. Full CI run
 `33165065129` is green on head `89fbe59e`; run `33184695748` is green on
 `5a9973e3` after the queue rank/pause/synthetic-scope fixes. The final audit's
 ETA/topology corrections are pushed as `095a4b23`; archival metadata is on the
-origin branch; exact runs through the latest recorded tip are green across all
-jobs. Verify the current branch-tip run before merge.
+origin branch. Current head `8a6a62f7` has run `33206892769` in progress at the
+time of this archival update; verify that exact run reaches success before
+merge.
 
 Blocked/limited:
 
@@ -236,6 +248,8 @@ Blocked/limited:
 | Fresh migration/release-integrity review | `task_710d3245f178` / `ctx_edf36d553d88` / `term_bc5e4140-593a-4af7-ad22-7bf77936bdd8` | worker_done seq 521; no P0–P2 migration/schema finding; external `_migrations` ledger remains a conditional release gate; terminal closed |
 | Targeted deletion/queue P2 follow-up | `task_01ce42a0dc1f` / `ctx_d3fc72184adf` / `term_f1dde2c5-5c92-4c7d-a551-b844ea20f201` | failed at 19:04 after Luna usage limit before worker_done; no files modified; terminal closed; coordinator continues the audit |
 | Bounded documentation triage | `task_32639df46b83` / `ctx_e7ab6a36a2a7` / `term_c27e4b4a-587b-4a7a-a8cc-c09a56961143` | worker_done seq 537; no files modified; P1/P2 dispositions archived; terminal closed |
+| Public room snapshot scope | `task_24932195a6d5` / `ctx_76f8639ffd76` / `term_a89acd04-ef02-4a1b-8e5a-2d067fa81505` | worker_done seq 553; confirmed the two-query scope fix and corrected the regression fixture to use separate repositories; terminal closed |
+| Identity/shared-project deletion scope | `task_30b16417f697` / `ctx_7249ffae4fa4` / `term_21772a04-1dcb-4885-9b56-0d33ae8a2fcc` | worker_done seq 554; independently confirmed the relation-based orphan predicate and pre-delete capture; integration setup blocked by Postgres 5433; terminal closed |
 
 ## Received-message ledger (archival coordination artifact)
 
@@ -245,8 +259,9 @@ losing worker findings or status messages. It should not be copied into user-
 facing documentation.
 
 The raw first-wave archive is `/tmp/pr584-orchestration-messages.json`
-(200 messages). A live inbox snapshot added 58 messages; after de-duplication
-by message id, 338 received messages are listed below. The ledger records every
+(200 messages). A live inbox snapshot and post-rate-limit dispatches are
+included below; after de-duplication by message id, 357 received messages are
+listed below. The ledger records every
 received id/type/subject/timestamp, including heartbeats and status noise so
 the rate-limited handoff is auditable. Full bodies remain in the raw archive
 where present; the most important worker_done bodies are summarized in the
@@ -594,7 +609,25 @@ Messages received after the prior rate-limit snapshot (seq 405–450):
 - 2026-08-28 16:44:12 · seq 533 · worker_done · `msg_1f289508a619` · documentation audit reviewed all 14 modified/new Markdown files plus program.md; no P0; concrete P1/P2 candidates archived for coordinator triage
 - 2026-08-28 19:04:25 · orchestration task failure (no sequence) · `task_01ce42a0dc1f` / `ctx_d3fc72184adf` / `term_f1dde2c5-5c92-4c7d-a551-b844ea20f201` · targeted Luna terminal hit the account usage limit before worker_done; no files modified; terminal closed; coordinator retained ownership of the remaining deletion/queue P2 audit
 - 2026-08-28 19:05:12 · seq 535 · heartbeat · `msg_3cda2d81f15a` · bounded documentation triage alive (empty heartbeat)
+- 2026-08-28 19:13:03 · seq 536 · heartbeat · `msg_d9685ef64ef6` · bounded documentation triage alive (empty heartbeat)
 - 2026-08-28 19:14:03 · seq 537 · worker_done · `msg_42ee3df26de8` · docs triage found no P0, one real P1 deploy topology issue, and verified P2 drift; no files modified; terminal closed
+- 2026-08-28 19:24:38 · seq 538 · status · `msg_a77b1a91f558` · current-head review started at 37fb433c; static checks only
+- 2026-08-28 19:47:11 · seq 539 · heartbeat · `msg_24e966850dfe` · current-head review alive
+- 2026-08-28 19:49:41 · seq 540 · status · `msg_cd2d0ac187e2` · fresh review reported public room scope, shared-project, delete-marker, Compose, and documentation findings
+- 2026-08-28 19:50:37 · seq 541 · status · `msg_51a6e66e3f4f` · Compose fallback correction rendered the WEB_DOMAIN brand mark and preserved explicit empty override
+- 2026-08-28 19:50:46 · seq 542 · status · `msg_1c5bebb4cd09` · Compose fix rechecked in all three files; unset/default and explicit-empty cases render correctly
+- 2026-08-28 19:51:10 · seq 543 · status · `msg_73db04302b69` · final unresolved review list before coordinator remediation; runtime API remained setup-blocked
+- 2026-08-28 19:53:03 · seq 544 · heartbeat · `msg_d42249d47403` · current-head review alive
+- 2026-08-28 19:53:22 · seq 545 · worker_done · `msg_8ab8c57366d6` · current-head review complete; no P0, P1 candidates and P2 drift reported; terminal closed
+- 2026-08-28 19:56:55 · seq 546 · status · `msg_848bcd98fbc1` · room/public-queue review started after required contract reads
+- 2026-08-28 19:59:59 · seq 547 · status · `msg_8b4709f8e83c` · public TV route could expose real repository data for ungrouped or cross-marker entries
+- 2026-08-28 20:02:38 · seq 548 · status · `msg_5cf23de443b5` · reviewer saw the coordinator's reads.ts joins and audited completeness without editing
+- 2026-08-28 20:02:51 · seq 549 · status · `msg_293c07fac0c8` · regression fixture reused one repository for two active called rows; separate repositories required by migration 0404
+- 2026-08-28 20:03:32 · seq 550 · heartbeat · `msg_6ce69274e3fa` · identity/shared-project review alive
+- 2026-08-28 20:05:13 · seq 551 · heartbeat · `msg_c9d1ed45dd46` · room/public-queue review alive
+- 2026-08-28 20:06:27 · seq 552 · status · `msg_775ea4541f3e` · detailed public-TV scope proof and minimal two-query join recommendation; runtime Postgres setup blocked
+- 2026-08-28 20:07:32 · seq 553 · worker_done · `msg_39c4f09ebcbf` · public room audit complete; confirmed joins and separate-repository regression; terminal closed
+- 2026-08-28 20:13:07 · seq 554 · worker_done · `msg_34716e1a48f7` · identity audit confirmed Devpost-linked shared-project preservation and fail-closed marker recheck; Postgres 5433 integration blocked; terminal closed
 
 Coordinator-originated inbox echoes (kept for chronology, excluded from the
 received-message count) were seq 474 `msg_939f59e3d657` and seq 476
@@ -637,8 +670,9 @@ Use this prompt for a future coordinator:
 > room ETA exclusion, and post-lock room-link topology snapshots. Review the
 > diff and any new audit result before changing behavior.
 >
-> Exact runs through the latest recorded metadata head are green; do not call
-> the current or any later branch SHA mergeable until its own run is green. Local API
+> Exact runs through `5a9973e3` are green; current head `8a6a62f7` is covered by
+> run `33206892769` (verify its final conclusion). Do not call the current or
+> any later branch SHA mergeable until its own run is green. Local API
 > integration setup is unavailable when Postgres 5433 or
 > Valkey 6379 resets/unresponsive; record such runs as setup-blocked, never as
 > passed assertions. Local gates that have passed include `pnpm lint`, API/web/
@@ -660,4 +694,6 @@ Use this prompt for a future coordinator:
 > collaboration result without an Orca sequence id. After each worker_done,
 > review the diff, update the ledger, close the worker terminal, commit/push
 > changes, and verify the remote SHA and checks. Preserve the coordinator/server
-> terminals and close only stale worker panes at the end.
+> terminals and close only the worker panes owned by this review at the end.
+> The external release gate remains: verify no populated `_migrations` ledger
+> contains removed H54 files before deploy.
