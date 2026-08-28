@@ -113,6 +113,33 @@ function assertFrom(entry: QueueEntryRow, allowed: string[], action: string): vo
   }
 }
 
+/**
+ * A pre-call is for one logical team, not one physical queue-entry row. Once
+ * one sibling is called, clear any warning markers on the remaining waiting
+ * siblings so a later requeue/re-entry can begin a fresh call cycle.
+ */
+async function clearWaitingSiblingPrecall(
+  client: pg.PoolClient,
+  entry: Pick<QueueEntryRow, "challenge_id" | "repo_id">,
+): Promise<void> {
+  await client.query(
+    `UPDATE queue_entries sibling
+        SET precalled_at = NULL
+      WHERE sibling.repo_id = $1
+        AND sibling.status = 'waiting'
+        AND sibling.challenge_id IN (
+          SELECT qgc.challenge_id
+            FROM queue_group_challenges qgc
+           WHERE qgc.queue_group_id = (
+             SELECT own.queue_group_id
+               FROM queue_group_challenges own
+              WHERE own.challenge_id = $2
+           )
+        )`,
+    [entry.repo_id, entry.challenge_id],
+  );
+}
+
 // ── H29/H30: call_next ──────────────────────────────────────────────────────
 
 /**
@@ -270,6 +297,7 @@ export async function callNextForRoom(
         throw err;
       }
       await client.query(`RELEASE SAVEPOINT call_next_candidate`);
+      await clearWaitingSiblingPrecall(client, candidate);
       await writeQueueHistory(client, {
         entryId: entry.id,
         actorId,
@@ -1066,6 +1094,8 @@ export async function manualCall(
       }
       throw err;
     }
+
+    await clearWaitingSiblingPrecall(client, entry);
 
     await writeQueueHistory(client, {
       entryId,

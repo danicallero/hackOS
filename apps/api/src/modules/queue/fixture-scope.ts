@@ -231,5 +231,26 @@ export async function assertQueueRepoScope(
 ): Promise<boolean> {
   await assertFixtureQueueScope(client, actorId, "repo", repoId);
   await assertRepoFixtureGraph(client, repoId);
+  const { rows: repoRows } = await client.query<{ is_test_account: boolean }>(
+    `SELECT is_test_account FROM repos WHERE id = $1`,
+    [repoId],
+  );
+  const repoMarker = repoRows[0]?.is_test_account === true;
+  const { rows: groupRows } = await client.query<{ queue_group_id: number }>(
+    `SELECT DISTINCT qgc.queue_group_id
+       FROM queue_entries qe
+       JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+      WHERE qe.repo_id = $1`,
+    [repoId],
+  );
+  for (const row of groupRows) {
+    if ((await queueGroupFixtureMarker(client, Number(row.queue_group_id))) !== repoMarker) {
+      throw new ConflictError("Queue fixture markers must match", {
+        code: "review_fixture_scope",
+        resource: "repo",
+        resourceId: repoId,
+      });
+    }
+  }
   return isSyntheticOperator(client, actorId);
 }
