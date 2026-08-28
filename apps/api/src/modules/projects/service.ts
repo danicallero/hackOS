@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { firstNumericQuestionKey, type Question } from "@hackos/shared/questions";
 import { config } from "../../config.js";
 import type { Queryable } from "../../db/pool.js";
@@ -7,6 +7,7 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { assertWithinHackingWindow, isWithinHackingWindow } from "../../lib/hacking-window.js";
+import { broadcast } from "../../lib/sse.js";
 import { hasMobileAccess } from "../identity/mobile-access.js";
 import { enqueueAuthEmail } from "../identity/outbox.js";
 import { computeDerivedRole } from "../identity/role.js";
@@ -19,7 +20,7 @@ import {
 import { notify } from "../notifications/service.js";
 import { broadcastQueueEvent, broadcastQueueEventWithMarker } from "../queue/broadcast.js";
 import { writeQueueHistory } from "../queue/history.js";
-import { notifyChallengeQueueChanged } from "../queue/notify.js";
+import { notifyChallengeQueueChanged, repoMemberIds } from "../queue/notify.js";
 import { compactQueueGroupPositions, nextBottomPosition } from "../queue/ordering.js";
 import { type RepositoryAccessScope, repositoryIdsForScope } from "./access.js";
 import { buildImportPlan, type ImportPlan, type PlannedRepo } from "./plan.js";
@@ -2187,14 +2188,18 @@ interface DeletedQueueEntry {
  * `deleteMyProject` only ever reaches here once the caller has confirmed
  * they're the project's sole member.
  *
- * H19/H20 + H38/H41: queue entries disappear in this transaction, so their
- * ids and marker-scoped broadcast topics must be captured before the delete.
- * The caller emits those notifications only after this transaction commits.
+ * H19/H20 + H38/H41: queue entries and their active repo members disappear in
+ * this transaction, so ids, marker-scoped broadcast topics, and personal
+ * invalidation recipients must be captured before the delete. The caller emits
+ * those notifications only after this transaction commits; the delayed worker
+ * cannot rediscover a member from queue rows that no longer exist.
  */
 async function deleteRepoCascade(
   client: Queryable,
   repoId: number,
-): Promise<{ queueEntries: DeletedQueueEntry[] }> {
+  fixtureMarker: boolean,
+): Promise<{ queueEntries: DeletedQueueEntry[]; memberIds: number[] }> {
+  const memberIds = await repoMemberIds(client, repoId, fixtureMarker);
   const queueEntriesRes = await client.query<{
     id: number;
     challenge_id: number;
@@ -2251,7 +2256,7 @@ async function deleteRepoCascade(
   await client.query(`DELETE FROM devpost_participants WHERE repo_id = $1`, [repoId]);
   await client.query(`DELETE FROM repo_devpost_prizes WHERE repo_id = $1`, [repoId]);
   await client.query(`DELETE FROM repos WHERE id = $1`, [repoId]);
-  return { queueEntries };
+  return { queueEntries, memberIds };
 }
 
 /**
@@ -2260,7 +2265,7 @@ async function deleteRepoCascade(
  * transaction before touching anything irreversible.
  */
 export async function deleteMyProject(userId: number, repoId: number): Promise<{ deleted: true }> {
-  const { queueEntries } = await withTransaction(async (client) => {
+  const { queueEntries, memberIds } = await withTransaction(async (client) => {
     const user = await client.query(
       `SELECT id FROM users
         WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
@@ -2279,13 +2284,16 @@ export async function deleteMyProject(userId: number, repoId: number): Promise<{
       throw new ConflictError("Remove other members first, or ask queue management");
     }
 
-    const repoRes = await client.query(`SELECT id, name FROM repos WHERE id = $1 FOR UPDATE`, [
-      repoId,
-    ]);
-    const repo = repoRes.rows[0] as { id: number; name: string } | undefined;
+    const repoRes = await client.query(
+      `SELECT id, name, is_test_account FROM repos WHERE id = $1 FOR UPDATE`,
+      [repoId],
+    );
+    const repo = repoRes.rows[0] as
+      | { id: number; name: string; is_test_account: boolean }
+      | undefined;
     if (!repo) throw new NotFoundError(`Repo ${repoId} not found`);
 
-    const deleted = await deleteRepoCascade(client, repoId);
+    const deleted = await deleteRepoCascade(client, repoId, repo.is_test_account === true);
 
     await audit(client, {
       actorId: userId,
@@ -2310,6 +2318,22 @@ export async function deleteMyProject(userId: number, repoId: number): Promise<{
       deleted: true,
     });
   }
+
+  // Queue rows are gone by this point, so the delayed challenge worker cannot
+  // discover the deleted team's recipients. Refresh each marker-matched
+  // member directly; the payload is only the challenge id and never queue data.
+  const participantChallenges = new Set(
+    queueEntries.filter((entry) => entry.fixtureMarker !== null).map((entry) => entry.challenge_id),
+  );
+  await Promise.all(
+    [...participantChallenges].flatMap((challengeId) =>
+      memberIds.map((memberId) =>
+        broadcast(`${SSE_TOPICS.USER_PREFIX}${memberId}`, EVENTS.USER_QUEUE_CHANGED, {
+          challengeId,
+        }),
+      ),
+    ),
+  );
 
   const affectedChallenges = [...new Set(queueEntries.map((entry) => entry.challenge_id))];
   for (const challengeId of affectedChallenges) {

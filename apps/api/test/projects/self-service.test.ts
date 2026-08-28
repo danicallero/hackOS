@@ -496,6 +496,9 @@ describe("DELETE /api/me/projects/:id (H19/H20 sole-member delete)", () => {
     const { valkey } = await import("../../src/lib/valkey.js");
     const queueBefore = Number((await valkey.get(`sse:seq:${SSE_TOPICS.QUEUE}`)) ?? 0);
     const publicTvBefore = Number((await valkey.get(`sse:seq:${SSE_TOPICS.PUBLIC_TV}`)) ?? 0);
+    const userQueueBefore = Number(
+      (await valkey.get(`sse:seq:${SSE_TOPICS.USER_PREFIX}${owner}`)) ?? 0,
+    );
     const response = await server.inject({
       method: "DELETE",
       url: `/api/me/projects/${repoId}`,
@@ -508,6 +511,9 @@ describe("DELETE /api/me/projects/:id (H19/H20 sole-member delete)", () => {
     ).toBe(0);
     expect(await valkey.get(`sse:seq:${SSE_TOPICS.QUEUE}`)).toBe(String(queueBefore + 1));
     expect(await valkey.get(`sse:seq:${SSE_TOPICS.PUBLIC_TV}`)).toBe(String(publicTvBefore + 1));
+    expect(await valkey.get(`sse:seq:${SSE_TOPICS.USER_PREFIX}${owner}`)).toBe(
+      String(userQueueBefore + 1),
+    );
 
     const { getQueue } = await import("../../src/lib/queues.js");
     const { QUEUE_PARTICIPANT_INVALIDATIONS } = await import("../../src/modules/queue/notify.js");
