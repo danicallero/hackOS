@@ -11,10 +11,11 @@ rate-limited review history.
 - Base: `067d783befc732fc625fd4a8bd3c0b4ad046733f`
 - Review head at intake: `5059ff81a5076c3b070c2b8d013be90f461bb0d4`
 - Checkpoint commit: `e6ce8c1d` (`fix(H54): close PR review isolation and migration gaps`)
-- Current pushed head: `8a6a62f748f7e383c3deb4ba38f10de44f71eaa9`
-  (`fix(H54): close queue scope and shared project deletion gaps`), preceded
-  by `23b782f5` for the Compose mail-brand default. Verify the remote SHA
-  before resuming; the worktree is clean at this checkpoint.
+- Current pushed head: `e053d32e641d0caac394959a56b937f77ebec9bd`
+  (`test(H54): align queue fixtures with room scope`), preceded by `8a6a62f7`
+  for the queue/shared-project fixes and `23b782f5` for the Compose mail-brand
+  default. Verify the remote SHA before resuming; the worktree is clean at
+  this checkpoint.
 - GitHub PR: <https://github.com/danicallero/hackOS/pull/584>; the feature branch is
   pushed to the origin branch above.
 - Worktree policy: shared active checkout; no blind reset, force-push, or destructive history rewrite.
@@ -190,8 +191,11 @@ coverage, and corrects the authentication documentation. Full CI run
 `5a9973e3` after the queue rank/pause/synthetic-scope fixes. The final audit's
 ETA/topology corrections are pushed as `095a4b23`; archival metadata is on the
 origin branch. Current head `8a6a62f7` has run `33206892769` in progress at the
-time of this archival update; verify that exact run reaches success before
-merge.
+time of the archival update; that run later failed only its API suite on two
+test regressions (a legacy resolve fixture lacked the room-group link and the
+new isolation assertion compared numeric entry IDs against unrelated JSON
+IDs). Both were corrected in `e053d32e`; replacement run `33207668843` is green
+on the current head across every job, including API integration.
 
 Blocked/limited:
 
@@ -670,9 +674,9 @@ Use this prompt for a future coordinator:
 > room ETA exclusion, and post-lock room-link topology snapshots. Review the
 > diff and any new audit result before changing behavior.
 >
-> Exact runs through `5a9973e3` are green; current head `8a6a62f7` is covered by
-> run `33206892769` (verify its final conclusion). Do not call the current or
-> any later branch SHA mergeable until its own run is green. Local API
+> Exact runs through `5a9973e3` are green; current head `e053d32e` is covered by
+> successful run `33207668843`. Do not call the current or any later branch SHA
+> mergeable until its own run is green. Local API
 > integration setup is unavailable when Postgres 5433 or
 > Valkey 6379 resets/unresponsive; record such runs as setup-blocked, never as
 > passed assertions. Local gates that have passed include `pnpm lint`, API/web/
