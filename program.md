@@ -11,9 +11,9 @@ rate-limited review history.
 - Base: `067d783befc732fc625fd4a8bd3c0b4ad046733f`
 - Review head at intake: `5059ff81a5076c3b070c2b8d013be90f461bb0d4`
 - Checkpoint commit: `e6ce8c1d` (`fix(H54): close PR review isolation and migration gaps`)
-- Current pushed head: `5a9973e3` (`fix(queue): refresh enterprise groups after lock`)
+- Current pushed head: `095a4b23` (`fix(queue): exclude paused ETA capacity`)
 - GitHub PR: <https://github.com/danicallero/hackOS/pull/584>; the feature branch is
-  pushed to `origin` through `5a9973e3`.
+  pushed to `origin` through `095a4b23`.
 - Worktree policy: shared active checkout; no blind reset, force-push, or destructive history rewrite.
 - Workers: Orca orchestration with `gpt-5.6-luna` at max effort only. Worker edits were reviewed in place and committed as a checkpoint.
 - Coordinator terminal: `term_d22851bc-ee04-441c-aaa9-ff22ee0f213e`.
@@ -58,12 +58,12 @@ rate-limited review history.
 | T9 | Target-selected scan-log fixture isolation | complete | `4dc7f7cb`; authenticated reader marker is separated from selected staff target and subject rows; focused static checks pass, runtime suite is Valkey-blocked. |
 | T10 | Project deletion queue invalidations | complete | `fd7d0581` + `e1c6f826`; deletion snapshots entry/challenge/repo markers and emits scoped queue SSE plus participant invalidations after commit. |
 | T11 | Participant self-queue marker alignment | complete | `d22f7731`; authenticated-marker CTE covers repositories, challenges, groups, ranks, pace, rooms and called-room joins; malformed cross-marker rows are omitted without hiding valid same-marker rows. |
-| T12 | Final release audit and external PR metadata | complete pending PR-body refresh | Exact GitHub run `33184695748` is green on pushed head `5a9973e3`: lint, typecheck, web/mobile tests, browser smoke, and all API integration tests. The final audit found no P0/P1; two P2 ETA/topology edges were fixed locally and await this final push's CI. PR body still needs its final checklist/count refresh before merge; keep the PR Draft unless a release owner marks it ready. |
-| T13 | Queue release follow-up from post-fix audit | complete | Coordinator reconciled the confirmed queue findings in `a0b5f144`, `222f4fda`, and `5a9973e3`: global-rank pump selection, transactional pause gating, synthetic queue-admin fail-closed group listing, topology/read marker propagation, and post-lock enterprise-group re-resolution. The final audit's paused-room ETA and concurrently replaced-room topology edges are now covered in the pending final commit. |
+| T12 | Final release audit and external PR metadata | complete pending PR-body refresh | Exact run `33185764618` is green on pushed head `095a4b23` across lint, typecheck, web/mobile tests, browser smoke, and API integration. PR body still needs its final checklist/count refresh before merge; keep the PR Draft unless a release owner marks it ready. |
+| T13 | Queue release follow-up from post-fix audit | complete | Coordinator reconciled the confirmed queue findings in `a0b5f144`, `222f4fda`, `5a9973e3`, and `095a4b23`: global-rank pump selection, transactional pause gating, synthetic queue-admin fail-closed group listing, topology/read marker propagation, post-lock enterprise-group re-resolution, paused-room ETA exclusion, and post-lock room-link topology re-read. |
 | T14 | Pending recovery session boundary | checkpoint committed | `159fdcb8` + `8caeceea`; independent auth-trigger review confirmed the app cap and recommended an additive migration only for populated deployments. Better Auth `databaseHooks.session.create/update.before` caps sessions, while the fresh `0730` trigger accepts only future anonymization exits whose `expires_at <= removal_expires_at`; auth-flow coverage exercises sign-in and refresh, and the migration suite now directly checks allowed/rejected INSERT/UPDATE cases. Local API typecheck/lint/fresh migration suite pass; runtime auth remains CI-gated by Valkey/Postgres setup. |
 | T15 | Queue implementation follow-up dispatch | rate-limited before edits | Two disjoint Luna-max lanes were dispatched at head `89fbe59e` (`task_3662f2c66e7d` state transitions, `task_fe7eccc78510` scope/invalidation). Both hit the account usage limit after required reads and before edits; terminals were closed. Coordinator is implementing the independently confirmed findings with the exact lane boundaries and regression goals preserved. |
 | T16 | Queue checkpoint CI regression | complete pending replacement CI | Run `33178695481` failed only `test/projects/self-service.test.ts` because it still looked for the superseded `challenge-<id>` invalidation job. The test now captures the challenge's `queue_group_id` and asserts `group-<id>` with `{ challengeId, queueGroupId }`; pushed as `eeb47be8`. |
-| T17 | Fresh Luna residual queue review | complete | Seq 478 and seq 500–503 were reconciled. Queue fixes are committed/pushed through `5a9973e3`; CI run `33184695748` is green. The bounded final audit (`/root/final_merge_audit`) found no P0/P1 and two P2 edges; both are fixed in the pending final commit. Local focused API setup remains unavailable on Postgres 5433/Valkey, so those local setup failures are not represented as passing assertions. |
+| T17 | Fresh Luna residual queue review | complete | Seq 478 and seq 500–503 were reconciled. Queue fixes are committed/pushed through `095a4b23`; exact CI run `33185764618` is green. The bounded final audit (`/root/final_merge_audit`) found no P0/P1 and two P2 edges; both are fixed. Local focused API setup remains unavailable on Postgres 5433/Valkey, so those local setup failures are not represented as passing assertions. |
 
 ## Code/schema changes reconciled
 
@@ -144,6 +144,9 @@ where noted):
 - `pnpm --filter @hackos/mobile test` — 44 suites, 222 tests
 - `TEST_DATABASE_URL=postgres://dani@localhost:5432/hackos_test_skipjack pnpm --filter @hackos/api exec vitest run test/migrations.test.ts` — 1 file, 10 tests
 - `TEST_DATABASE_URL=postgres://dani@localhost:5432/hackos_test_skipjack pnpm --filter @hackos/api exec vitest run test/queue/fixture-transition-isolation.test.ts` — 1 file, 2 tests
+- `pnpm exec biome check` on the queue changes and API typecheck pass after the final P2 fixes.
+- The focused `test/queue/room-queue-groups.test.ts` run remains setup-blocked by
+  the unavailable Postgres 5433 proxy; GitHub CI is the runtime gate.
 
 GitHub Actions API integration run `33160373207` reached the test suite on
 head `6d9ef60f` and reported 952/956 tests passing. Its four failures were
@@ -160,8 +163,10 @@ returned 500 because the final active-user trigger rejected Better Auth's new
 `8caeceea` narrows the matching pending-session exception in the fresh `0730`
 trigger to future anonymization exits, adds direct migration regression
 coverage, and corrects the authentication documentation. Full CI run
-`33165065129` is green on head `89fbe59e`; the remaining release gate is queue
-remediation and its focused runtime coverage.
+`33165065129` is green on head `89fbe59e`; run `33184695748` is green on
+`5a9973e3` after the queue rank/pause/synthetic-scope fixes. The final audit's
+ETA/topology corrections are pushed as `095a4b23`; exact run `33185764618` is
+green across all jobs.
 
 Blocked/limited:
 
@@ -581,42 +586,42 @@ recorded in task T6 and the task ledger.
 
 Use this prompt for a future coordinator:
 
-> Continue PR #584 remediation on
-> `/Users/dani/orca/workspaces/fablehackos/skipjack`, branch
-> `danicallero/account-deletion-anonymization`, from pushed head
-> `eeb47be8`. Read `AGENTS.md`, `CLAUDE.md`, `plan/historias-hackos.md`,
-> `plan/07-datos-relevantes-ers.md`, `docs/README.md`, and `program.md`. Use
-> the Orca `orchestration` skill and `gpt-5.6-luna` max workers only; do not
-> substitute Terra. Inspect `orca orchestration task-list --json` and
-> `orca terminal list --json` before dispatching. Preserve the shared worktree
-> and never reset blindly. Collect the result of bounded post-fix audit
-> `task_15ec28a8b3f6` / `ctx_c731149899a0`; if it reports a concrete P0–P2
-> issue, fix it with a focused regression, commit, rerun static checks, and
-> push. Run `33161700626` verified the four earlier fixes but exposed one
-> session-deadline failure because Better Auth refreshed the initiating session;
-> `36126e50` passes `disableRefresh` and `disableCookieCache` for the
-> authorization-only lookup. Run the replacement CI workflow for `eeb47be8`
-> after this auth checkpoint; collect auth audit
-> `task_aff0cb25d0f3` / `ctx_cfc30b0c38e9`. The completed auth-trigger audit
-> `task_357b9641b657` / `ctx_b99867fdff16` confirmed the narrow future
-> anonymization predicate and the populated-ledger immutability caveat. The
-> completed queue audits
-> `task_15ec28a8b3f6` and `task_5a46182712b1` found P1/P2 manual-call target-room/source-state,
-> merged-group pre-call claiming, stale `precalled_at`, group-wide participant
-> invalidation, malformed-group read, and docs gaps; trace these against the
-> current head and fix or explicitly disposition each before merge. The stale
-> project-invalidation assertion was updated in `eeb47be8`; review the fresh
-> Luna-max checkpoint `task_7f51b1507230` / `ctx_ab90fb331011` before release.
-> Review the
-> queue self-read decision in A8: migration 0410 guarantees
-> one group per challenge, but restore nullable negative-challenge fallback if
-> a deployment can contain ungrouped legacy rows. Run `git diff --check`,
-> `pnpm lint`, API/web/mobile typechecks, web/mobile suites, the fresh migration
-> suite, and the passing `test/queue/fixture-transition-isolation.test.ts`
-> against a working Postgres/Valkey pair. Do not claim API integration coverage
-> while localhost:5433/Valkey is unavailable; record setup failures separately
-> from assertions. Update DOC2 in the external PR body/checklist. After every
-> worker_done, review the diff, update the received-message ledger, and close
-> that worker terminal. At the end, verify the branch SHA on GitHub, ensure
-> `orca terminal list --json` contains only the coordinator, close stale panes,
-> commit/push any `program.md` update, and report remaining release gates.
+> Continue PR #584 on `/Users/dani/orca/workspaces/fablehackos/skipjack`,
+> branch `danicallero/account-deletion-anonymization`, from pushed head
+> `095a4b23` (replace with the latest `origin` SHA after checking). Read
+> `AGENTS.md`, `CLAUDE.md`, `plan/historias-hackos.md`,
+> `plan/07-datos-relevantes-ers.md`, `docs/README.md`, and `program.md`.
+> Use the Orca `orchestration` skill and `gpt-5.6-luna` max workers only;
+> do not substitute Terra. Inspect `orca orchestration task-list --json` and
+> `orca terminal list --json` before dispatching, preserve the shared worktree,
+> and never reset blindly. The confirmed queue findings were fixed through
+> `095a4b23`: global-rank pre-call selection, transaction-local pause gates,
+> stale-marker clears, topology/read marker propagation, synthetic queue-admin
+> fail-closed group listing, post-lock enterprise-group re-resolution, paused-
+> room ETA exclusion, and post-lock room-link topology snapshots. Review the
+> diff and any new audit result before changing behavior.
+>
+> The exact CI run for `095a4b23` is `33185764618`, and it is green; do not
+> call any later branch SHA mergeable until its own run is green. Local API
+> integration setup is unavailable when Postgres 5433 or
+> Valkey 6379 resets/unresponsive; record such runs as setup-blocked, never as
+> passed assertions. Local gates that have passed include `pnpm lint`, API/web/
+> mobile typechecks, web (40 files/298 tests), mobile (44 suites/222 tests),
+> `git diff --check`, and the fresh squashed-migration suite (10 tests).
+>
+> The branch intentionally contains one H54 migration,
+> `apps/api/db/migrations/0730_account_deletion_anonymization.sql`; before a
+> production deploy, verify no populated external `_migrations` ledger applied
+> removed H54 intermediate files. If one did, stop and add an additive upgrade
+> migration rather than editing the baseline. The PR is currently OPEN and
+> DRAFT at <https://github.com/danicallero/hackOS/pull/584>; update its template
+> body/checklist with the exact final CI run, 10 migration tests, the fresh-
+> schema/no-external-ledger condition, and local setup limitations, but do not
+> mark it ready without a release-owner decision.
+>
+> Keep this file's archival received-message ledger complete, including every
+> Orca message id/type/subject/timestamp after rate-limit recovery and any
+> collaboration result without an Orca sequence id. After each worker_done,
+> review the diff, update the ledger, close the worker terminal, commit/push
+> changes, and verify the remote SHA and checks. Preserve the coordinator/server
+> terminals and close only stale worker panes at the end.
