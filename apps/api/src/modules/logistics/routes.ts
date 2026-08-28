@@ -941,7 +941,10 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         response: { 200: ticketResponse },
       },
     },
-    async (req) => ticketQrPayload(actor(req.userId)),
+    async (req) => {
+      const userId = actor(req.userId);
+      return ticketQrPayload(userId, userId);
+    },
   );
 
   typed.get(
@@ -954,7 +957,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         response: { 200: ticketResponse },
       },
     },
-    async (req) => ticketQrPayload(req.params.userId),
+    async (req) => ticketQrPayload(req.params.userId, actor(req.userId)),
   );
 
   // ── H28 Apple Wallet / PassKit ──────────────────────────────────────────

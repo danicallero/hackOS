@@ -3,6 +3,7 @@ import type pg from "pg";
 import { pool } from "../../db/pool.js";
 import { NotFoundError } from "../../lib/errors.js";
 import { hasEventAccess } from "../identity/role.js";
+import { assertFixtureSubjectScope } from "./review-fixture-scope.js";
 import { PASS_TYPE_IDENTIFIER } from "./wallet.js";
 
 /**
@@ -32,7 +33,8 @@ export async function issueTicket(client: pg.PoolClient, userId: number): Promis
   return existing.rows[0].token as string;
 }
 
-export async function ticketQrPayload(userId: number) {
+export async function ticketQrPayload(userId: number, actorId?: number) {
+  if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
   const [{ rows }, { rows: acceptedRows }, { rows: applePassRows }, eventAccess] =
     await Promise.all([
       pool.query(
