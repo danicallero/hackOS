@@ -11,11 +11,12 @@ rate-limited review history.
 - Base: `067d783befc732fc625fd4a8bd3c0b4ad046733f`
 - Review head at intake: `5059ff81a5076c3b070c2b8d013be90f461bb0d4`
 - Checkpoint commit: `e6ce8c1d` (`fix(H54): close PR review isolation and migration gaps`)
-- Current pushed head before this final archival update: `c283e24d4cd20713cbe2c3332eac606613226d16`
-  (`fix(H54): harden queue topology and review transitions`), preceded by
-  `089d6b1e` for the review metadata. Its head-specific GitHub CI run
-  `33211977919` is green across all seven jobs; the follow-up archival commit
-  below will be docs-only and must be checked separately.
+- Reviewed implementation checkpoint: `c283e24d4cd20713cbe2c3332eac606613226d16`
+  (`fix(H54): harden queue topology and review transitions`) and archival
+  checkpoint `84ded005e676b1fe56f531416489db1a4bdf95e9` both passed all seven
+  GitHub CI jobs in runs `33211977919` and `33212650674`, respectively. The
+  branch tip may advance with this archival commit; verify `git rev-parse HEAD`
+  and its latest run before resuming.
 - GitHub PR: <https://github.com/danicallero/hackOS/pull/584>; the feature branch is
   pushed to the origin branch above.
 - Worktree policy: shared active checkout; no blind reset, force-push, or destructive history rewrite.
@@ -83,7 +84,7 @@ rate-limited review history.
 | T30 | Queue notification/review residual implementation | complete | Luna-max worker `task_ff303d55e8a6` / seq 572 cleared review-submit pre-call markers, locked stale call/pre-call notification inputs, and preserved source-group invalidation payloads; Biome/API typecheck/diff checks passed, focused Vitest setup-blocked by Postgres 5433. |
 | T31 | Documentation/migration audit and route-ledger integrity | complete | Luna-max worker `task_00056d998fdd` / seq 573 corrected concrete Markdown and migration-release claims; lint, diff, and relative-link checks passed. Coordinator also synchronized the generated public telemetry sentence; route audit execution is Valkey-blocked locally. |
 | T32 | Durable BullMQ topology-payload merge | complete | Coordinator re-reads `queue.getJob(jobId)` before merging topology challenge IDs, because duplicate `Queue.add` returns a fresh wrapper whose `data` is only the attempted payload; API typecheck, Biome, and diff checks pass. |
-| T33 | Final branch validation, commit, push, and CI refresh | complete pending archival push | Reviewed changes are committed as `c283e24d`; its head-specific run `33211977919` is green across all seven jobs. Refresh this archival head and the PR template body after the docs-only follow-up push; retain the populated `_migrations` verification as a release gate. |
+| T33 | Final branch validation, commit, push, and CI refresh | complete | Reviewed implementation `c283e24d` and archival checkpoint `84ded005` are green across all seven jobs (`33211977919`, `33212650674`); this handoff update is archival-only. The PR template body is refreshed; retain the populated `_migrations` verification as a release gate. |
 
 ## Code/schema changes reconciled
 
@@ -206,7 +207,8 @@ two test regressions (a legacy resolve fixture lacked the room-group link and
 the new isolation assertion compared numeric entry IDs against unrelated JSON
 IDs). Both were corrected in `e053d32e`; run `33207668843` was green across
 every job, and the later queue/docs follow-up head `c283e24d` is green across
-every job in run `33211977919`.
+every job in run `33211977919`. The final archival tip `84ded005` is also green
+across every job in run `33212650674`.
 
 Blocked/limited:
 
@@ -714,11 +716,10 @@ Use this prompt for a future coordinator:
 > jobs, and synchronizes the generated telemetry route-ledger wording. Fresh
 > Luna worker terminals are closed; do not close unrelated historical panes.
 >
-> The queue/docs implementation head `c283e24d4cd20713cbe2c3332eac606613226d16`
-> is covered by successful all-job run `33211977919`. A later archival-only
-> commit may change the SHA and trigger a lint-only run; verify that run too,
-> and do not call any branch SHA mergeable until its applicable checks are
-> green. Local API
+> The reviewed implementation `c283e24d` and archival checkpoint `84ded005` are
+> covered by successful all-job runs `33211977919` and `33212650674`. This
+> handoff update is archival-only; verify the latest branch SHA and its
+> applicable checks before calling it mergeable. Local API
 > integration setup is unavailable when Postgres 5433 or
 > Valkey 6379 resets/unresponsive; record such runs as setup-blocked, never as
 > passed assertions. Local gates that have passed include `pnpm lint`, API/web/
