@@ -1,6 +1,6 @@
 # H54 — account deletion and irreversible anonymization audit
 
-**Review date:** 2026-08-27
+**Review date:** 2026-08-29
 **Scope:** `apps/api`, `apps/mobile`, `apps/web`, Postgres migrations, object
 storage references, offline scanner paths, notification workers, audit/export
 paths, and the account/privacy copy.  This is a code and data-lifecycle audit,
@@ -22,9 +22,11 @@ active --(check_in_logs accreditation)--> removal_pending
                                                               recovery expiry
                                                           --> anonymous participant
                                       pending exit keeps only transient
-                                      recovery/exit identity; finalization
-                                      revokes sessions/accounts/push and
-                                      removes the remaining profile data
+                                      recovery/exit identity; wallet rows are
+                                      voided and provider invalidation starts
+                                      immediately; finalization revokes
+                                      sessions/accounts/push and removes the
+                                      remaining profile data
                                       no anonymous-to-user mapping
 ```
 
@@ -100,11 +102,13 @@ implementation is now the shared lifecycle in `removal.ts`.
    identity and catering rows remain only for the fixed recovery window so the
    participant can cancel or staff can record the exit; `account_state` blocks
    normal participant activity. Wallet rows are marked `voided` during removal
-   preparation (including `pending_exit`); finalization deletes them while
-   external invalidation is attempted.
+   preparation (including `pending_exit`) and provider invalidation is
+   attempted immediately. Cancellation never reactivates that old pass; a
+   later issuance creates a fresh row. Finalization deletes the voided rows.
 4. S3/MinIO uploads, DSR exports, and provider wallet artifacts are cleaned
-   outside the database transaction. A failure returns `503
-   removal_storage_pending`, keeps the account inaccessible, and queues a
+   outside the database transaction. A storage failure returns `503
+   removal_storage_pending`; a provider failure returns `503
+   removal_provider_pending`. Both keep the account inaccessible and queue a
    bounded retry.
 5. Once a valid staff/system exit, H24 certainty-window expiry, or the fixed
    recovery deadline makes a pending request finalizable, `finalizeAccountRemoval()` takes a new
@@ -423,8 +427,11 @@ namespace during closure.
 ### Wallets, logs, backups
 
 Database wallet rows are voided during removal preparation and deleted at
-finalization, along with access tokens, device registrations and credentials;
-installed passes and provider delivery logs are not controlled by Postgres.
+finalization, along with access tokens, device registrations and credentials.
+Google objects are expired and Apple update pushes are attempted during
+preparation, including for `pending_exit`; a cancelled request leaves the old
+row/pass revoked and a subsequent issuance creates a new active row. Installed
+passes and provider delivery logs are not controlled by Postgres.
 The same distinction applies to reverse proxies, analytics,
 exception telemetry, PostgreSQL WAL/backups and S3 versioning. The codebase
 does not expose those retention systems, so “irreversible” must not be used to
@@ -540,7 +547,7 @@ synthetic identity-shaped `users` row.
 | `notification_outbox`: payload, recipient FK, status/errors | Pending welcome/service message | Operational delivery | Delete subject rows; active filters prevent new rows | No | Payload may contain identifying notification data. |
 | `announcement_reads` / `announcement_recipients`: user FK, timestamps | Personal delivery/read state | Personal delivery/read state | Delete | No | Not an audit requirement. |
 | `tickets`: user FK, token | Unused ticket | QR/ticket credential | Delete; permanent unlinked non-reuse ticket tombstone | No | Credential must not regain access or resolve to a replacement account. |
-| `wallet_passes`: user FK, serial/auth token/provider object ID | Wallet credential | Venue ticket/pass | Void during removal preparation; delete at finalization; pending-exit may retain the already-voided row transiently for recovery/void processing | No | Apple/Google copies are external residuals and the credential is not anonymous audit data. |
+| `wallet_passes`: user FK, serial/auth token/provider object ID | Wallet credential | Venue ticket/pass | Void during removal preparation; provider invalidation is attempted immediately; delete at finalization; pending-exit may retain the already-voided row transiently for recovery/void processing. Cancellation does not restore it; re-issuance creates a fresh active row. | No | Apple/Google copies are external residuals and the credential is not anonymous audit data. |
 | `wallet_pass_devices`: device library identifier/push token | Wallet device registration | Wallet updates | Delete with pass | No | Device/pass delivery identifiers. |
 | `wallet_access_tokens`: scoped wallet token | Acceptance/wallet retrieval | Wallet retrieval | Delete | No | Temporary credential. |
 | `applications`: template, labels, intake configuration | Shared form definition | Shared form definition | Survive | No | No subject row; the mutable form is not used to decide historical retention. |
@@ -695,7 +702,7 @@ silently converted into a legal conclusion.
 | A24 | Form administrators may explicitly mark arbitrary fields, including potentially sensitive ones; the builder warning is the current safeguard. A future product/privacy policy may add prohibited categories or small-cohort publication controls without changing the anonymous subject identity model. | Product/privacy + applications owners |
 | A25 | A pending-exit removal may complete after a valid current staff exit, the exact system-generated event-closing `out` at `event_config.event_ends_at`, or expiry of the latest H24 certainty window that invalidates the last provisional presence sum. Missing event dates remove only the live warning; they do not bypass the lifecycle boundary. | Event-operations owner |
 | A26 | The fresh `0730` baseline snapshots each application's current form configuration as version 1. The repository cannot reconstruct edits from before versioning existed; any initial retention choices are explicit migration input and must be reviewed with the data owner. | Applications + data owner |
-| A27 | A pending-exit request ends new participation but retains the existing profile, authentication, wallet and dietary artifacts only for the reversible recovery/exit window. This temporary retention lets staff complete already-started operational work safely; dietary data is cleared at irreversible finalization and is never copied to anonymous audit data. | Event-operations + privacy owner |
+| A27 | A pending-exit request ends new participation and retains the profile, authentication and dietary envelope only for the reversible recovery/exit window. Wallet database rows are voided and provider invalidation is attempted at preparation; cancellation does not restore the old pass, so a later issuance creates a fresh active row. Dietary data is cleared at irreversible finalization and is never copied to anonymous audit data. | Event-operations + privacy owner |
 | A28 | The restart marker is best-effort, device-local, and contains only the action and `pending_exit`/`processing`/`device_cleanup_pending` status. It is not an account lookup or a guarantee that an offline device has received a remote wipe. | Mobile/web + release owners |
 | A29 | Admin removal idempotency rows are deleted with the target during finalization. An admin retry after finalization receives the normal not-found result rather than a replayable completion response; this avoids retaining a target-bearing audit/replay record. | Security + operations owner |
 | A30 | Badge and ticket credentials permanently retired with an account are recorded in an unlinked global denylist whose central values are stable HMAC digests, not raw credentials; these rows are security metadata, not anonymous audit data. Ordinary physical badge rotation may reuse the old badge for another participant because each current assignment has a server-side timestamp boundary; offline events before that replacement are rejected. Permanently retired credentials remain non-reusable so late offline scans cannot resolve to a replacement participant. | Security + privacy + operations owners |

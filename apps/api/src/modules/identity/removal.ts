@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { verifyPassword } from "better-auth/crypto";
 import type { Job } from "bullmq";
 import type pg from "pg";
-import { type Queryable, withTransaction } from "../../db/pool.js";
+import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import {
   BadRequestError,
@@ -75,6 +75,7 @@ interface UserRemovalRow {
 interface RemovalPreparation {
   targetId: number;
   action: AccountRemovalAction;
+  walletPassIds: number[];
   uploadPrefixes: string[];
   exportPrefixes: string[];
   storageKeys: string[];
@@ -104,6 +105,10 @@ export interface RunAccountRemovalOptions {
     scope: string;
     completionScope: string;
   };
+  /** Internal retry guard: never restart a removal that was cancelled. */
+  retryOnlyPending?: boolean;
+  /** Internal worker handoff: provider invalidation already succeeded. */
+  skipWalletProviderInvalidation?: boolean;
 }
 
 export type AccountRemovalResult =
@@ -590,21 +595,60 @@ async function collectExportPrefixes(client: pg.PoolClient, userId: number): Pro
   return rows.map((row) => `exports/${row.id}/`);
 }
 
-async function collectWalletArtifacts(
-  client: pg.PoolClient,
-  userId: number,
-): Promise<{ googleWalletObjectIds: string[]; appleWalletPushTokens: string[] }> {
+type WalletArtifacts = Pick<
+  RemovalPreparation,
+  "walletPassIds" | "googleWalletObjectIds" | "appleWalletPushTokens"
+>;
+
+function emptyWalletArtifacts(): WalletArtifacts {
+  return { walletPassIds: [], googleWalletObjectIds: [], appleWalletPushTokens: [] };
+}
+
+async function collectWalletArtifacts(client: Queryable, userId: number): Promise<WalletArtifacts> {
   const { rows } = await client.query<{
+    id: number;
     google_object_id: string | null;
     push_token: string | null;
   }>(
-    `SELECT wp.google_object_id, wpd.push_token
+    `SELECT wp.id, wp.google_object_id, wpd.push_token
        FROM wallet_passes wp
        LEFT JOIN wallet_pass_devices wpd ON wpd.pass_id = wp.id
       WHERE wp.user_id = $1`,
     [userId],
   );
   return {
+    walletPassIds: [...new Set(rows.map((row) => row.id))],
+    googleWalletObjectIds: [
+      ...new Set(
+        rows.map((row) => row.google_object_id).filter((value): value is string => Boolean(value)),
+      ),
+    ],
+    appleWalletPushTokens: [
+      ...new Set(
+        rows.map((row) => row.push_token).filter((value): value is string => Boolean(value)),
+      ),
+    ],
+  };
+}
+
+async function collectWalletArtifactsByPassIds(
+  client: Queryable,
+  passIds: number[],
+): Promise<WalletArtifacts> {
+  if (passIds.length === 0) return emptyWalletArtifacts();
+  const { rows } = await client.query<{
+    id: number;
+    google_object_id: string | null;
+    push_token: string | null;
+  }>(
+    `SELECT wp.id, wp.google_object_id, wpd.push_token
+       FROM wallet_passes wp
+       LEFT JOIN wallet_pass_devices wpd ON wpd.pass_id = wp.id
+      WHERE wp.id = ANY($1::int[])`,
+    [passIds],
+  );
+  return {
+    walletPassIds: [...new Set(rows.map((row) => row.id))],
     googleWalletObjectIds: [
       ...new Set(
         rows.map((row) => row.google_object_id).filter((value): value is string => Boolean(value)),
@@ -620,10 +664,21 @@ async function collectWalletArtifacts(
 
 async function prepareAccountRemoval(
   options: RunAccountRemovalOptions,
-): Promise<RemovalPreparation> {
+): Promise<RemovalPreparation | null> {
   return withTransaction(async (client) => {
     await lockPermissionGraph(client);
     const user = await loadUserForRemoval(client, options.targetId);
+    if (
+      options.retryOnlyPending &&
+      (user.account_state !== "removal_pending" ||
+        user.removal_idempotency_key !== (options.preserveIdempotency?.key ?? null))
+    ) {
+      // A user may cancel while a provider-retry job is waiting in Valkey.
+      // Never let that stale job start a fresh removal or void a newly issued
+      // pass after cancellation. The lifecycle key distinguishes a reissued
+      // self-service request that is pending again from the old request.
+      return null;
+    }
     // Check the graph invariant before committing REMOVAL_PENDING. If this
     // account is the last wildcard holder, failing only in the final
     // transaction would leave a half-revoked pending account that can never
@@ -766,7 +821,9 @@ async function prepareAccountRemoval(
   });
 }
 
-async function deleteExternalArtifacts(preparation: RemovalPreparation): Promise<void> {
+async function invalidateWalletProviders(
+  preparation: Pick<RemovalPreparation, "googleWalletObjectIds" | "appleWalletPushTokens">,
+): Promise<void> {
   try {
     for (const objectId of preparation.googleWalletObjectIds) {
       await expireGoogleObject(objectId);
@@ -779,6 +836,21 @@ async function deleteExternalArtifacts(preparation: RemovalPreparation): Promise
         throw error;
       }
     }
+  } catch {
+    throw new ServiceUnavailableError(
+      "Account wallet cleanup is waiting for an external provider. Your access has already been revoked; retry the operation later.",
+      { code: "removal_provider_pending" },
+    );
+  }
+}
+
+async function deleteStorageArtifacts(
+  preparation: Pick<
+    RemovalPreparation,
+    "targetId" | "uploadPrefixes" | "exportPrefixes" | "storageKeys"
+  >,
+): Promise<void> {
+  try {
     await deleteSubjectUploadObjects(preparation.targetId);
     for (const prefix of preparation.uploadPrefixes) await deletePrefix(prefix);
     for (const prefix of preparation.exportPrefixes) await deletePrefix(prefix);
@@ -791,16 +863,27 @@ async function deleteExternalArtifacts(preparation: RemovalPreparation): Promise
   }
 }
 
+async function deleteExternalArtifacts(preparation: RemovalPreparation): Promise<void> {
+  await invalidateWalletProviders(preparation);
+  await deleteStorageArtifacts(preparation);
+}
+
 type RemovalRetryJob = Omit<
   RunAccountRemovalOptions,
-  "scheduleRetry" | "reauthenticationPassword"
+  | "scheduleRetry"
+  | "reauthenticationPassword"
+  | "retryOnlyPending"
+  | "skipWalletProviderInvalidation"
 > & {
   requestedAction: AccountRemovalAction;
+  retryOnlyPending: true;
+  walletPassIds: number[];
 };
 
 async function enqueueRemovalRetry(
   options: RunAccountRemovalOptions,
   action: AccountRemovalAction,
+  walletPassIds: number[],
 ): Promise<void> {
   try {
     await getQueue(REMOVAL_RETRY_QUEUE).add(
@@ -812,6 +895,8 @@ async function enqueueRemovalRetry(
         reason: options.reason,
         requestedAction: action,
         preserveIdempotency: options.preserveIdempotency,
+        retryOnlyPending: true,
+        walletPassIds,
       } satisfies RemovalRetryJob,
       {
         attempts: 8,
@@ -1829,14 +1914,22 @@ export async function runAccountRemoval(
     throw new BadRequestError("You can't anonymize your own account");
   }
   const preparation = await prepareAccountRemoval(options);
+  if (!preparation) {
+    // Only the bounded retry worker can request this path. A cancellation that
+    // won the user-row lock makes the old retry a harmless no-op.
+    return { status: "processing", accessRevoked: true };
+  }
   try {
+    if (!options.skipWalletProviderInvalidation) {
+      await invalidateWalletProviders(preparation);
+    }
     if (preparation.requiresVenueExit) {
       return { status: "pending_exit", pendingExit: true, accessRevoked: true };
     }
-    await deleteExternalArtifacts(preparation);
+    await deleteStorageArtifacts(preparation);
   } catch (error) {
     if (options.scheduleRetry !== false && error instanceof ServiceUnavailableError) {
-      await enqueueRemovalRetry(options, preparation.action);
+      await enqueueRemovalRetry(options, preparation.action, preparation.walletPassIds);
     }
     throw error;
   }
@@ -1881,12 +1974,32 @@ export async function runAccountRemoval(
       options.scheduleRetry !== false &&
       (!(error instanceof ConflictError) || options.source === "presence_exit_completion")
     ) {
-      await enqueueRemovalRetry(options, preparation.action);
+      await enqueueRemovalRetry(options, preparation.action, preparation.walletPassIds);
     }
     throw error;
   }
 }
 
-registerWorker(REMOVAL_RETRY_QUEUE, async (job: Job<RemovalRetryJob>) => {
-  await runAccountRemoval({ ...job.data, scheduleRetry: false });
-});
+export async function processAccountRemovalRetry(job: Job<RemovalRetryJob>): Promise<void> {
+  // Provider retries carry pass row ids rather than raw external credentials.
+  // That lets a cancelled request still invalidate the original installed
+  // copy, while preventing a stale retry from touching a pass reissued after
+  // cancellation.
+  const walletArtifacts = await collectWalletArtifactsByPassIds(pool, job.data.walletPassIds ?? []);
+  await invalidateWalletProviders(walletArtifacts);
+  try {
+    await runAccountRemoval({
+      ...job.data,
+      scheduleRetry: false,
+      skipWalletProviderInvalidation: true,
+    });
+  } catch (error) {
+    // Another finalizer may have completed the same removal between provider
+    // invalidation and this retry. The identity is gone and no further work is
+    // required; do not keep a dead-letter job alive for a successful race.
+    if (error instanceof NotFoundError) return;
+    throw error;
+  }
+}
+
+registerWorker(REMOVAL_RETRY_QUEUE, processAccountRemovalRetry);

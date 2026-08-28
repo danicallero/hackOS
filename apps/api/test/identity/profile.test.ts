@@ -1025,6 +1025,18 @@ describe("self-service account removal (H54)", () => {
         WHERE id = $1`,
       [user],
     );
+    const firstPass = await a.inject({
+      method: "GET",
+      url: "/api/me/wallet/apple/badge.pkpass",
+      headers: asUser(user),
+    });
+    expect(firstPass.statusCode).toBe(200);
+    const { rows: issuedPasses } = await pool.query<{ id: number }>(
+      `SELECT id FROM wallet_passes WHERE user_id = $1 AND purpose = 'badge' AND platform = 'apple'`,
+      [user],
+    );
+    expect(issuedPasses).toHaveLength(1);
+    const oldPassId = issuedPasses[0]!.id;
     await pool.query(
       `INSERT INTO check_in_logs (user_id, badge_id, check_in_method)
        VALUES ($1, 'B-CANCEL-PENDING', 'scan')`,
@@ -1043,6 +1055,9 @@ describe("self-service account removal (H54)", () => {
       payload: { confirm: true, reauthenticationPassword: UNVERIFIED_TEST_PASSWORD },
     });
     expect(requested.statusCode).toBe(202);
+    expect(
+      (await pool.query(`SELECT status FROM wallet_passes WHERE id = $1`, [oldPassId])).rows,
+    ).toEqual([{ status: "voided" }]);
 
     const profile = await a.inject({ method: "GET", url: "/api/me", headers: asUser(user) });
     expect(profile.statusCode).toBe(200);
@@ -1068,6 +1083,27 @@ describe("self-service account removal (H54)", () => {
     });
     expect(cancelled.statusCode).toBe(200);
     expect(cancelled.json()).toEqual({ status: "cancelled" });
+
+    // Cancellation never restores the old serial: a later issuance is a new
+    // active row, while the already-installed pass remains revoked.
+    const replacementPass = await a.inject({
+      method: "GET",
+      url: "/api/me/wallet/apple/badge.pkpass",
+      headers: asUser(user),
+    });
+    expect(replacementPass.statusCode).toBe(200);
+    const { rows: passStates } = await pool.query<{ id: number; status: string }>(
+      `SELECT id, status
+         FROM wallet_passes
+        WHERE user_id = $1 AND purpose = 'badge' AND platform = 'apple'
+        ORDER BY id`,
+      [user],
+    );
+    expect(passStates).toEqual([
+      { id: oldPassId, status: "voided" },
+      { id: expect.any(Number), status: "active" },
+    ]);
+    expect(passStates[1]!.id).not.toBe(oldPassId);
 
     const replay = await a.inject({
       method: "POST",
@@ -1101,6 +1137,43 @@ describe("self-service account removal (H54)", () => {
         await a.inject({ method: "GET", url: "/api/me/removal-status", headers: asUser(user) })
       ).json(),
     ).toEqual({ status: "active" });
+
+    // A delayed retry from the cancelled request must not finalize a newer
+    // pending request that has a different lifecycle key.
+    const secondRequest = await a.inject({
+      method: "POST",
+      url: "/api/me/anonymize",
+      headers: { ...asUser(user), "idempotency-key": "replacement-removal-request" },
+      payload: { confirm: true, reauthenticationPassword: UNVERIFIED_TEST_PASSWORD },
+    });
+    expect(secondRequest.statusCode).toBe(202);
+    const { processAccountRemovalRetry } = await import("../../src/modules/identity/removal.js");
+    await processAccountRemovalRetry({
+      data: {
+        targetId: user,
+        actorId: user,
+        source: "self_service",
+        requestedAction: "anonymize",
+        preserveIdempotency: {
+          key: "cancel-pending-request",
+          scope: "POST /api/me/anonymize removal-complete",
+          completionScope: "POST /api/me/anonymize removal-complete",
+        },
+        retryOnlyPending: true,
+        walletPassIds: [oldPassId],
+      },
+    } as never);
+    expect(
+      (
+        await pool.query(
+          `SELECT account_state, removal_idempotency_key
+             FROM users WHERE id = $1`,
+          [user],
+        )
+      ).rows,
+    ).toEqual([
+      { account_state: "removal_pending", removal_idempotency_key: "replacement-removal-request" },
+    ]);
   });
 
   it("rejects cancellation at the recovery deadline and leaves the pending state intact", async () => {
