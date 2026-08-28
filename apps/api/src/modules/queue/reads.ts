@@ -951,13 +951,14 @@ export async function roomPace(roomId: number) {
   // every team the group calls.
   const primaryChallenge = (
     await pool.query(
-      `SELECT MIN(qgc.challenge_id)::int AS id,
-              MIN(c.max_presentation_seconds)::int AS max_presentation_seconds
+      `SELECT qgc.challenge_id::int AS id,
+              c.max_presentation_seconds::int AS max_presentation_seconds
          FROM room_queue_groups rqg
          JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
          JOIN challenges c ON c.id = qgc.challenge_id AND c.is_test_account = false
-        WHERE rqg.room_id = $1
-       HAVING COUNT(*) > 0`,
+         WHERE rqg.room_id = $1
+         ORDER BY qgc.challenge_id ASC
+         LIMIT 1`,
       [roomId],
     )
   ).rows[0] as { id: number; max_presentation_seconds: number | null } | undefined;

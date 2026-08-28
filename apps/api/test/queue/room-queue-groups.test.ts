@@ -228,6 +228,27 @@ describe("merged N>1 group", () => {
     expect((await roomPace(roomId)).pendingCount).toBe(2);
   });
 
+  it("uses the limit belonging to the lowest challenge id in a merged group", async () => {
+    const { roomPace } = await import("../../src/modules/queue/reads.js");
+    const { pool } = await import("../../src/db/pool.js");
+    const { challengeIds } = await createEnterpriseChallenges(2);
+    const first = challengeIds[0]!;
+    const second = challengeIds[1]!;
+    const groupId = await mergeChallengesIntoOneGroup(challengeIds);
+    const roomId = await createRoom();
+    await assignQueueGroupToRoom(roomId, groupId);
+    await pool.query(`UPDATE challenges SET max_presentation_seconds = $2 WHERE id = $1`, [
+      first,
+      600,
+    ]);
+    await pool.query(`UPDATE challenges SET max_presentation_seconds = $2 WHERE id = $1`, [
+      second,
+      120,
+    ]);
+
+    expect((await roomPace(roomId)).challengeMaxMinutes).toBe(10);
+  });
+
   it("calls the merged team once, not once per entry", async () => {
     const { callNextForRoom } = await import("../../src/modules/queue/service.js");
     const { pool } = await import("../../src/db/pool.js");
