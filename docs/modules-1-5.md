@@ -292,16 +292,19 @@ credential login is the user id as text, while `sessions`/`accounts` FK on
   then finalize the database transaction. The final `0730` migration adds a
   database-level active-user reference guard so stale notification, token,
   project, logistics or audit writers cannot create new FK rows after pending
-  begins; only the already-open participant exit is allowed through the
-  transition. It also permanently retires disconnected scanner credentials
-  without a participant foreign key and prevents a response from selecting
-  another form's retention snapshot.
+  begins; the already-open participant exit and sessions bounded by the fixed
+  recovery deadline are the only identity-bearing exceptions. It also
+  permanently retires disconnected scanner credentials without a participant
+  foreign key and prevents a response from selecting another form's retention
+  snapshot.
 
 **State transitions.** `active → removal_pending → users row deleted`, with an
 anonymous participant created only for the anonymization branch. A pending
-account is not eligible for authentication or event operations except that a
-validated `out` scan may close its already-open venue session; finalization
-then removes the identity.
+account is eligible only for same-account recovery sign-in/session reads during
+a future anonymization exit window; its sessions cannot outlive the fixed
+`removal_expires_at`. Event operations remain blocked except that a validated
+`out` scan may close its already-open venue session; finalization then removes
+the identity.
 
 ---
 

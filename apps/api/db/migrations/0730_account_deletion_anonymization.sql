@@ -5,7 +5,8 @@
 -- no mapping table is created.
 -- DELTA(H24,H54): raw presence and scanner provenance are operational data and
 -- are deleted after guaranteed minutes are calculated.  A pending account can
--- receive only its locked exit time log until finalization.
+-- receive only its locked exit time log and bounded recovery sessions until
+-- finalization.
 -- DELTA(H23,H54): current badge assignment time fences stale offline events.
 -- DELTA(H54,F16): retired scanner credentials are keyed, unlinked digests.
 --
@@ -474,8 +475,11 @@ BEGIN
          FROM users
         WHERE id = referenced_user_id
           AND account_state = 'removal_pending'
+          AND removal_action = 'anonymize'
+          AND removal_requires_exit = true
           AND anonymized_at IS NULL
           AND removal_expires_at IS NOT NULL
+          AND removal_expires_at > clock_timestamp()
         FOR SHARE
      ) THEN
     RETURN NEW;
@@ -497,7 +501,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION h54_require_active_user_reference() IS
-  'H54: reject identity-bearing rows for pending/anonymized users; permit only the locked pending exit time log.';
+  'H54: reject identity-bearing rows for pending/anonymized users; permit only the locked pending exit time log and bounded recovery sessions.';
 
 -- Every final FK to users receives a full-row trigger.  The user_id time-log
 -- trigger is specialized above; scanned_by still receives the ordinary gate.

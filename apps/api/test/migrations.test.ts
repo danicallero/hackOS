@@ -198,12 +198,66 @@ describe("migration history (H53)", () => {
     expect(triggerNames).toEqual(
       expect.arrayContaining([
         "application_form_versions.h54_application_form_version_immutable",
+        "sessions.h54_active_user_user_id",
         "time_logs.h54_active_user_scanned_by",
         "time_logs.h54_active_user_user_id",
       ]),
     );
     expect(shape.digestColumns.rows).toHaveLength(2);
     expect(shape.digestColumns.rows.every((row) => row.typname === "text")).toBe(true);
+  });
+
+  it("bounds pending recovery sessions at the fixed anonymization deadline (H54)", async () => {
+    await withMigrationClient(async (client) => {
+      const { rows: users } = await client.query<{ id: number }>(
+        `INSERT INTO users (email, email_verified)
+         VALUES ($1, true) RETURNING id`,
+        [`pending-session-trigger-${randomUUID()}@test.local`],
+      );
+      const userId = users[0]?.id;
+      if (userId == null) throw new Error("Expected pending-session test user");
+
+      await client.query(
+        `UPDATE users
+            SET account_state = 'removal_pending',
+                removal_action = 'anonymize',
+                removal_requires_exit = true,
+                removal_expires_at = clock_timestamp() + interval '1 hour'
+          WHERE id = $1`,
+        [userId],
+      );
+
+      const token = `pending-session-${randomUUID()}`;
+      await client.query(
+        `INSERT INTO sessions (user_id, token, expires_at)
+         VALUES ($1, $2, clock_timestamp() + interval '30 minutes')`,
+        [userId, token],
+      );
+      await expect(
+        client.query(
+          `INSERT INTO sessions (user_id, token, expires_at)
+           VALUES ($1, $2, clock_timestamp() + interval '2 hours')`,
+          [userId, `over-deadline-${randomUUID()}`],
+        ),
+      ).rejects.toMatchObject({ code: "23514" });
+      await expect(
+        client.query(
+          `UPDATE sessions
+              SET expires_at = clock_timestamp() + interval '2 hours'
+            WHERE token = $1`,
+          [token],
+        ),
+      ).rejects.toMatchObject({ code: "23514" });
+
+      await client.query(`UPDATE users SET removal_action = 'delete' WHERE id = $1`, [userId]);
+      await expect(
+        client.query(
+          `INSERT INTO sessions (user_id, token, expires_at)
+           VALUES ($1, $2, clock_timestamp() + interval '30 minutes')`,
+          [userId, `delete-pending-${randomUUID()}`],
+        ),
+      ).rejects.toMatchObject({ code: "23514" });
+    });
   });
 
   it("requires every response to reference an immutable snapshot from the same application (H54)", async () => {
