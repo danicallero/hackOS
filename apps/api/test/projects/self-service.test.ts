@@ -484,6 +484,12 @@ describe("DELETE /api/me/projects/:id (H19/H20 sole-member delete)", () => {
     const owner = await createUser();
     const repoId = await seedRepo("Solo in queue", [owner]);
     const challengeId = await createChallenge("Queue challenge", []);
+    const { rows: groupRows } = await pool.query(
+      `SELECT queue_group_id FROM queue_group_challenges WHERE challenge_id = $1`,
+      [challengeId],
+    );
+    const queueGroupId = groupRows[0]?.queue_group_id as number | undefined;
+    expect(queueGroupId).toBeDefined();
     const { rows: entryRows } = await pool.query(
       `INSERT INTO queue_entries (challenge_id, repo_id, status, position)
        VALUES ($1, $2, 'waiting', 1)
@@ -518,9 +524,9 @@ describe("DELETE /api/me/projects/:id (H19/H20 sole-member delete)", () => {
     const { getQueue } = await import("../../src/lib/queues.js");
     const { QUEUE_PARTICIPANT_INVALIDATIONS } = await import("../../src/modules/queue/notify.js");
     const invalidation = await getQueue(QUEUE_PARTICIPANT_INVALIDATIONS).getJob(
-      `challenge-${challengeId}`,
+      `group-${queueGroupId}`,
     );
-    expect(invalidation?.data).toEqual({ challengeId });
+    expect(invalidation?.data).toEqual({ challengeId, queueGroupId });
   });
 
   it("409s when there's more than one member", async () => {
