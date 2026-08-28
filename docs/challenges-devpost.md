@@ -211,7 +211,10 @@ membership and the sole-member count inside its own transaction, then cascades
 every FK-referencing row (`queue_entries`, `queue_history`, `attempt_review`,
 `attempt_review_versions`, `judging_session`, `submissions`,
 `devpost_participants`, `repo_devpost_prizes`, `challenge_winners` — none of
-those FKs cascade at the schema level) before deleting the repo itself.
+those FKs cascade at the schema level) before deleting the repo itself. Queue
+entry ids and fixture markers are captured before that delete; after commit,
+each affected entry emits a marker-scoped queue invalidation and each affected
+challenge queues a participant read-model refresh (H38/H41).
 
 The self-view is still the only read that redacts the roster: `myProjects()`
 nulls every member `email` except the caller's own, so teammates are listed by
