@@ -3,7 +3,7 @@ import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastif
 import { pool } from "../../db/pool.js";
 import { userHasCapability } from "../../lib/capabilities.js";
 import { ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
-import { assertFixtureQueueScope } from "../logistics/review-fixture-scope.js";
+import { assertFixtureQueueScope, fixtureRoomIds } from "../logistics/review-fixture-scope.js";
 import { assertEntryInScope, resolveReviewScope } from "./reviews.js";
 
 type ParamName = "roomId" | "challengeId" | "entryId" | "repoId";
@@ -212,12 +212,14 @@ export function requireEntryJudgeOrCapability(
 /** Lists are centrally filtered; an association never turns into global room access. */
 export async function accessibleRoomIds(req: FastifyRequest): Promise<number[] | null> {
   const userId = await requireUser(req);
+  const scopedRoomIds = await fixtureRoomIds(pool, userId);
   if (
     (await userHasCapability(userId, CAPABILITIES.QUEUE_OPERATE, req)) ||
     (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN, req))
   ) {
-    return null;
+    return scopedRoomIds;
   }
+  if (scopedRoomIds.length === 0) return [];
   // Every room linked to a queue_group whose enterprise this user judges for
   // or reps — the room's enterprise is now read straight off the group, with
   // no challenge hop.
@@ -228,9 +230,10 @@ export async function accessibleRoomIds(req: FastifyRequest): Promise<number[] |
        LEFT JOIN enterprise_judges ej
               ON ej.enterprise_id = qg.enterprise_id AND ej.user_id = $1
        LEFT JOIN sponsors mine ON mine.enterprise_id = qg.enterprise_id
-      WHERE ej.user_id = $1 OR mine.user_id = $1
+      WHERE (ej.user_id = $1 OR mine.user_id = $1)
+        AND rqg.room_id = ANY($2::int[])
       ORDER BY rqg.room_id ASC`,
-    [userId],
+    [userId, scopedRoomIds],
   );
   return rows.map((row: { room_id: number }) => row.room_id);
 }

@@ -8,6 +8,7 @@ import {
   createChallenge,
   createEnterpriseChallenges,
   createRepoWithTeam,
+  createRoom,
   queueGroupOf,
 } from "./fixtures.js";
 
@@ -261,6 +262,133 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
       (await pool.query(`SELECT enterprise_id FROM room_enterprises WHERE room_id = $1`, [roomId]))
         .rows,
     ).toEqual([{ enterprise_id: multiEnterpriseId }]);
+  });
+
+  it("keeps room graphs inside one fixture boundary for writes and global lists", async () => {
+    const fixtureAdminId = await createUserWithCapabilities([CAPABILITIES.QUEUE_ADMIN]);
+    const { pool } = await import("../../src/db/pool.js");
+    const {
+      enterpriseId: fixtureEnterpriseId,
+      repId: fixtureRepId,
+      challengeIds,
+    } = await createEnterpriseChallenges(1);
+    const fixtureChallengeId = challengeIds[0]!;
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id IN ($1, $2)`, [
+      fixtureAdminId,
+      fixtureRepId,
+    ]);
+    await pool.query(`UPDATE challenges SET is_test_account = true WHERE id = $1`, [
+      fixtureChallengeId,
+    ]);
+
+    const fixtureRoomId = await createRoom();
+    await assignChallengeToRoom(fixtureRoomId, fixtureChallengeId);
+
+    const { enterpriseId: realEnterpriseId } = await createEnterpriseChallenges(1);
+    const realRoomId = await createRoom();
+    const realAssignment = await app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${realRoomId}/enterprise`,
+      headers: { ...asUser(adminId), "idempotency-key": crypto.randomUUID() },
+      payload: { enterpriseId: realEnterpriseId },
+    });
+    expect(realAssignment.statusCode).toBe(201);
+
+    const bareRoomId = await createRoom();
+    const realToFixture = await app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${bareRoomId}/enterprise`,
+      headers: { ...asUser(adminId), "idempotency-key": crypto.randomUUID() },
+      payload: { enterpriseId: fixtureEnterpriseId },
+    });
+    expect(realToFixture.statusCode).toBe(404);
+    expect(
+      (await pool.query(`SELECT 1 FROM room_enterprises WHERE room_id = $1`, [bareRoomId]))
+        .rowCount,
+    ).toBe(0);
+
+    const realPatchFixture = await app.inject({
+      method: "PATCH",
+      url: `/api/queue/rooms/${fixtureRoomId}`,
+      headers: asUser(adminId),
+      payload: { name: "Leaked synthetic room" },
+    });
+    expect(realPatchFixture.statusCode).toBe(404);
+
+    const realStateFixture = await app.inject({
+      method: "PATCH",
+      url: `/api/queue/rooms/${fixtureRoomId}/state`,
+      headers: asUser(adminId),
+      payload: { maxInWaitingArea: 9 },
+    });
+    expect(realStateFixture.statusCode).toBe(404);
+
+    const realReplaceFixture = await app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${fixtureRoomId}/enterprise`,
+      headers: { ...asUser(adminId), "idempotency-key": crypto.randomUUID() },
+      payload: { enterpriseId: realEnterpriseId },
+    });
+    expect(realReplaceFixture.statusCode).toBe(404);
+    expect(
+      (
+        await pool.query(`SELECT enterprise_id FROM room_enterprises WHERE room_id = $1`, [
+          fixtureRoomId,
+        ])
+      ).rows,
+    ).toEqual([{ enterprise_id: fixtureEnterpriseId }]);
+
+    const realDeleteFixture = await app.inject({
+      method: "DELETE",
+      url: `/api/queue/rooms/${fixtureRoomId}/enterprise`,
+      headers: asUser(adminId),
+    });
+    expect(realDeleteFixture.statusCode).toBe(404);
+    expect(
+      (await pool.query(`SELECT 1 FROM room_queue_groups WHERE room_id = $1`, [fixtureRoomId]))
+        .rowCount,
+    ).toBe(1);
+
+    const fixturePatchReal = await app.inject({
+      method: "PATCH",
+      url: `/api/queue/rooms/${realRoomId}`,
+      headers: asUser(fixtureAdminId),
+      payload: { name: "Leaked real room" },
+    });
+    expect(fixturePatchReal.statusCode).toBe(403);
+
+    const fixtureReplaceReal = await app.inject({
+      method: "POST",
+      url: `/api/queue/rooms/${realRoomId}/enterprise`,
+      headers: { ...asUser(fixtureAdminId), "idempotency-key": crypto.randomUUID() },
+      payload: { enterpriseId: realEnterpriseId },
+    });
+    expect(fixtureReplaceReal.statusCode).toBe(403);
+
+    const fixtureList = await app.inject({
+      method: "GET",
+      url: "/api/queue/rooms",
+      headers: asUser(fixtureAdminId),
+    });
+    expect(fixtureList.statusCode).toBe(200);
+    expect(fixtureList.json().map((room: { id: number }) => room.id)).toContain(fixtureRoomId);
+    expect(fixtureList.json().map((room: { id: number }) => room.id)).not.toContain(realRoomId);
+
+    const realList = await app.inject({
+      method: "GET",
+      url: "/api/queue/rooms",
+      headers: asUser(adminId),
+    });
+    expect(realList.statusCode).toBe(200);
+    expect(realList.json().map((room: { id: number }) => room.id)).toContain(realRoomId);
+    expect(realList.json().map((room: { id: number }) => room.id)).not.toContain(fixtureRoomId);
+
+    const fixtureDeleteReal = await app.inject({
+      method: "DELETE",
+      url: `/api/queue/rooms/${realRoomId}/enterprise`,
+      headers: asUser(fixtureAdminId),
+    });
+    expect(fixtureDeleteReal.statusCode).toBe(403);
   });
 });
 

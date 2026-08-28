@@ -1,6 +1,7 @@
 import { SSE_TOPICS, type SseEnvelope } from "@hackos/shared/events";
 import type { Queryable } from "../../db/pool.js";
 import { broadcast } from "../../lib/sse.js";
+import { inspectFixtureRoomScope } from "../logistics/review-fixture-scope.js";
 
 /** Queue resources whose marker determines the operator SSE topic. */
 export type QueueBroadcastResource = "challenge" | "entry" | "queueGroup" | "room";
@@ -61,27 +62,12 @@ export async function queueFixtureMarker(
     return row.has_synthetic;
   }
 
-  const { rows } = await db.query<{
-    assigned: boolean;
-    has_synthetic: boolean;
-    has_real: boolean;
-  }>(
-    `SELECT EXISTS (
-              SELECT 1 FROM room_queue_groups assigned WHERE assigned.room_id = $1
-            ) AS assigned,
-            COALESCE(bool_or(c.is_test_account IS TRUE), false) AS has_synthetic,
-            COALESCE(bool_or(c.is_test_account IS NOT TRUE), false) AS has_real
-       FROM room_queue_groups rqg
-       JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
-       JOIN challenges c ON c.id = qgc.challenge_id
-      WHERE rqg.room_id = $1`,
-    [resourceId],
-  );
-  const row = rows[0];
+  const row = await inspectFixtureRoomScope(db, resourceId);
+  if (!row.exists) return null;
   // An unassigned room is part of the real operator surface, preserving the
   // existing pause/resume behavior for rooms with no queue yet.
-  if (!row?.assigned) return false;
-  if ((!row.has_synthetic && !row.has_real) || (row.has_synthetic && row.has_real)) return null;
+  if (!row.has_graph) return false;
+  if (row.has_synthetic && row.has_real) return null;
   return row.has_synthetic;
 }
 
