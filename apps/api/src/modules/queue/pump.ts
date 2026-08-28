@@ -201,7 +201,7 @@ async function claimPreCall(queueGroupId: number, repoId: number): Promise<PreCa
            JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $2
           WHERE qgc.queue_group_id = $1
             AND qe.status = 'waiting'
-       ), eligible AS (
+       ), ranked AS MATERIALIZED (
          SELECT gw.id, gw.challenge_id, gw.repo_id, gw.position,
                 ROW_NUMBER() OVER (
                   ORDER BY gw.position ASC NULLS LAST, gw.id ASC
@@ -217,20 +217,20 @@ async function claimPreCall(queueGroupId: number, repoId: number): Promise<PreCa
                  AND active.repo_id = gw.repo_id
                  AND active.status IN ('called', 'in_room', 'presenting', 'completed')
             )
-            AND NOT EXISTS (
-              SELECT 1
-                FROM queue_entries already
-                JOIN queue_group_challenges already_qgc
-                  ON already_qgc.challenge_id = already.challenge_id
-               WHERE already_qgc.queue_group_id = $1
-                 AND already.repo_id = gw.repo_id
-                 AND already.status = 'waiting'
-                 AND already.precalled_at IS NOT NULL
-            )
        )
-       SELECT id, challenge_id, repo_id, position, rank
-         FROM eligible
-        WHERE repo_id = $3
+       SELECT ranked.id, ranked.challenge_id, ranked.repo_id, ranked.position, ranked.rank
+         FROM ranked
+        WHERE ranked.repo_id = $3
+          AND NOT EXISTS (
+            SELECT 1
+              FROM queue_entries already
+              JOIN queue_group_challenges already_qgc
+                ON already_qgc.challenge_id = already.challenge_id
+             WHERE already_qgc.queue_group_id = $1
+               AND already.repo_id = ranked.repo_id
+               AND already.status = 'waiting'
+               AND already.precalled_at IS NOT NULL
+          )
         ORDER BY rank ASC
         LIMIT 1`,
       [queueGroupId, groupMarker, repoId],
