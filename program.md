@@ -11,11 +11,11 @@ rate-limited review history.
 - Base: `067d783befc732fc625fd4a8bd3c0b4ad046733f`
 - Review head at intake: `5059ff81a5076c3b070c2b8d013be90f461bb0d4`
 - Checkpoint commit: `e6ce8c1d` (`fix(H54): close PR review isolation and migration gaps`)
-- Current pushed head: `e053d32e641d0caac394959a56b937f77ebec9bd`
-  (`test(H54): align queue fixtures with room scope`), preceded by `8a6a62f7`
-  for the queue/shared-project fixes and `23b782f5` for the Compose mail-brand
-  default. Verify the remote SHA before resuming; the worktree is clean at
-  this checkpoint.
+- Current pushed head before this final archival update: `c283e24d4cd20713cbe2c3332eac606613226d16`
+  (`fix(H54): harden queue topology and review transitions`), preceded by
+  `089d6b1e` for the review metadata. Its head-specific GitHub CI run
+  `33211977919` is green across all seven jobs; the follow-up archival commit
+  below will be docs-only and must be checked separately.
 - GitHub PR: <https://github.com/danicallero/hackOS/pull/584>; the feature branch is
   pushed to the origin branch above.
 - Worktree policy: shared active checkout; no blind reset, force-push, or destructive history rewrite.
@@ -83,7 +83,7 @@ rate-limited review history.
 | T30 | Queue notification/review residual implementation | complete | Luna-max worker `task_ff303d55e8a6` / seq 572 cleared review-submit pre-call markers, locked stale call/pre-call notification inputs, and preserved source-group invalidation payloads; Biome/API typecheck/diff checks passed, focused Vitest setup-blocked by Postgres 5433. |
 | T31 | Documentation/migration audit and route-ledger integrity | complete | Luna-max worker `task_00056d998fdd` / seq 573 corrected concrete Markdown and migration-release claims; lint, diff, and relative-link checks passed. Coordinator also synchronized the generated public telemetry sentence; route audit execution is Valkey-blocked locally. |
 | T32 | Durable BullMQ topology-payload merge | complete | Coordinator re-reads `queue.getJob(jobId)` before merging topology challenge IDs, because duplicate `Queue.add` returns a fresh wrapper whose `data` is only the attempted payload; API typecheck, Biome, and diff checks pass. |
-| T33 | Final branch validation, commit, push, and CI refresh | pending | Commit the reviewed queue/docs changes, push the branch, verify the new head-specific GitHub Actions run, refresh the PR template body, and retain the populated `_migrations` verification as a release gate. |
+| T33 | Final branch validation, commit, push, and CI refresh | complete pending archival push | Reviewed changes are committed as `c283e24d`; its head-specific run `33211977919` is green across all seven jobs. Refresh this archival head and the PR template body after the docs-only follow-up push; retain the populated `_migrations` verification as a release gate. |
 
 ## Code/schema changes reconciled
 
@@ -201,12 +201,12 @@ coverage, and corrects the authentication documentation. Full CI run
 `33165065129` is green on head `89fbe59e`; run `33184695748` is green on
 `5a9973e3` after the queue rank/pause/synthetic-scope fixes. The final audit's
 ETA/topology corrections are pushed as `095a4b23`; archival metadata is on the
-origin branch. Current head `8a6a62f7` has run `33206892769` in progress at the
-time of the archival update; that run later failed only its API suite on two
-test regressions (a legacy resolve fixture lacked the room-group link and the
-new isolation assertion compared numeric entry IDs against unrelated JSON
-IDs). Both were corrected in `e053d32e`; replacement run `33207668843` is green
-on the current head across every job, including API integration.
+origin branch. Head `8a6a62f7` had run `33206892769` fail only its API suite on
+two test regressions (a legacy resolve fixture lacked the room-group link and
+the new isolation assertion compared numeric entry IDs against unrelated JSON
+IDs). Both were corrected in `e053d32e`; run `33207668843` was green across
+every job, and the later queue/docs follow-up head `c283e24d` is green across
+every job in run `33211977919`.
 
 Blocked/limited:
 
@@ -708,10 +708,17 @@ Use this prompt for a future coordinator:
 > fail-closed group listing, post-lock enterprise-group re-resolution, paused-
 > room ETA exclusion, and post-lock room-link topology snapshots. Review the
 > diff and any new audit result before changing behavior.
+> The latest queue/docs follow-up also locks every target-current serving room
+> (including clear-to-zero), clears stale review pre-call markers, revalidates
+> notification rows, preserves source-group challenge IDs in durable BullMQ
+> jobs, and synchronizes the generated telemetry route-ledger wording. Fresh
+> Luna worker terminals are closed; do not close unrelated historical panes.
 >
-> Exact runs through `5a9973e3` are green; current head `e053d32e` is covered by
-> successful run `33207668843`. Do not call the current or any later branch SHA
-> mergeable until its own run is green. Local API
+> The queue/docs implementation head `c283e24d4cd20713cbe2c3332eac606613226d16`
+> is covered by successful all-job run `33211977919`. A later archival-only
+> commit may change the SHA and trigger a lint-only run; verify that run too,
+> and do not call any branch SHA mergeable until its applicable checks are
+> green. Local API
 > integration setup is unavailable when Postgres 5433 or
 > Valkey 6379 resets/unresponsive; record such runs as setup-blocked, never as
 > passed assertions. Local gates that have passed include `pnpm lint`, API/web/
