@@ -110,6 +110,70 @@ describe("challenge progress (H40)", () => {
     });
     expect(forbidden.statusCode).toBe(403);
   });
+
+  it("keeps synthetic challenge progress functional when the caller carries the same marker", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const syntheticOperator = await createUserWithCapabilities([CAPABILITIES.QUEUE_OPERATE]);
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [syntheticOperator]);
+    const challengeId = await createChallenge({ title: "Synthetic progress" });
+    await pool.query(`UPDATE challenges SET is_test_account = true WHERE id = $1`, [challengeId]);
+    await pool.query(
+      `UPDATE users u
+          SET is_test_account = true
+         FROM sponsors s
+        WHERE s.user_id = u.id
+          AND s.id = (SELECT author FROM challenges WHERE id = $1)`,
+      [challengeId],
+    );
+    const { repoId, memberIds } = await createRepoWithTeam(undefined, "Synthetic team");
+    await pool.query(`UPDATE repos SET is_test_account = true WHERE id = $1`, [repoId]);
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = ANY($1::int[])`, [
+      memberIds,
+    ]);
+    await enqueueRepo(challengeId, repoId, 1);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/queue/challenges/${challengeId}/progress`,
+      headers: asUser(syntheticOperator),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ challengeId, waiting: 1 });
+  });
+
+  it("fails closed when a challenge is ungrouped or its group is mixed", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const ungroupedChallengeId = await createChallenge({ title: "Ungrouped challenge" });
+    await pool.query(`DELETE FROM queue_group_challenges WHERE challenge_id = $1`, [
+      ungroupedChallengeId,
+    ]);
+    const ungrouped = await app.inject({
+      method: "GET",
+      url: `/api/queue/challenges/${ungroupedChallengeId}/progress`,
+      headers: asUser(operatorId),
+    });
+    expect(ungrouped.statusCode).toBe(409);
+
+    const { challengeIds } = await createEnterpriseChallenges(2);
+    await pool.query(`UPDATE challenges SET is_test_account = true WHERE id = $1`, [
+      challengeIds[1],
+    ]);
+    await pool.query(
+      `UPDATE users u
+          SET is_test_account = true
+         FROM sponsors s
+        WHERE s.user_id = u.id
+          AND s.id = (SELECT author FROM challenges WHERE id = $1)`,
+      [challengeIds[1]],
+    );
+    await mergeChallengesIntoOneGroup(challengeIds);
+    const mixed = await app.inject({
+      method: "GET",
+      url: `/api/queue/challenges/${challengeIds[0]}/progress`,
+      headers: asUser(operatorId),
+    });
+    expect(mixed.statusCode).toBe(409);
+  });
 });
 
 describe("room view (H41)", () => {

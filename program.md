@@ -204,14 +204,14 @@ Blocked/limited:
 | Queue state transition safeguards | `task_3662f2c66e7d` / `ctx_455e22403ab1` / `term_2ae20fb7-1f6f-4bf0-b5d0-d1501e80715f` | Luna max hit account usage limit after required reads (seq 473); no edits; terminal closed; coordinator continuation active |
 | Queue scope and invalidation safeguards | `task_fe7eccc78510` / `ctx_ebed4cce9304` / `term_b2d5ddf0-d12f-4e2e-938b-fccdb1cfc640` | Luna max hit account usage limit after required reads; no edits/messages; terminal closed; coordinator continuation active |
 | Queue final malformed-read/migration checkpoint | `task_7f51b1507230` / `ctx_ab90fb331011` / `term_0055c933-d5ab-4df7-9fcf-397596b0fc0f` | worker_done seq 478; no edits; confirmed pre-call atomicity, four transition timestamp, topology invalidation, stale group-id, and challenge-only read-scope findings; terminal closed |
-| Queue state residual implementation | `task_a0e4561bfe94` / `ctx_687665ab4f57` / `term_7c70c396-f851-4a76-9646-79771798799b` | dispatched Luna-max; seq 481 required reads complete; implementing transactional pre-call claims and stale-marker clears; no worker_done yet |
-| Queue scope/topology residual implementation | `task_1eb9b2da89c5` / `ctx_449db3463fe7` / `term_feed0274-9319-4ed1-a2db-952694e7ed36` | dispatched Luna-max; seq 479–480 started and completed required reads; route call-site edit scope approved by coordinator; no worker_done yet |
+| Queue state residual implementation | `task_a0e4561bfe94` / `ctx_687665ab4f57` / `term_7c70c396-f851-4a76-9646-79771798799b` | worker_done seq 492; pump/service/tests updated; targeted checks pass; focused Vitest blocked by Postgres 5433; terminal closed |
+| Queue scope/topology residual implementation | `task_1eb9b2da89c5` / `ctx_449db3463fe7` / `term_feed0274-9319-4ed1-a2db-952694e7ed36` | worker_done seq 498; topology/read/docs updates; lint/typecheck/Biome/diff checks pass; focused Vitest blocked by Postgres 5433; room routes integrated by coordinator; terminal closed |
 
 ## Received-message ledger
 
 The raw first-wave archive is `/tmp/pr584-orchestration-messages.json`
 (200 messages). A live inbox snapshot added 58 messages; after de-duplication
-by message id, 312 received messages are listed below. The ledger records every
+by message id, 322 received messages are listed below. The ledger records every
 received id/type/subject/timestamp, including heartbeats and status noise so
 the rate-limited handoff is auditable. Full bodies remain in the raw archive
 where present; the most important worker_done bodies are summarized in the
@@ -532,6 +532,16 @@ Messages received after the prior rate-limit snapshot (seq 405–450):
 - 2026-08-28 14:24:30 · seq 480 · status · `msg_35d91f56d48c` · queue scope/topology lane completed required reads and began tracing fixes
 - 2026-08-28 14:26:32 · seq 481 · status · `msg_d59d7e35a1ab` · queue state implementation lane completed required reads and began transactional pre-call claim work
 - 2026-08-28 14:27:10 · seq 483 · status · `msg_1f66646473e9` · queue scope/topology residual scope traced
+- 2026-08-28 14:33:30 · seq 485 · status · `msg_451f754c84a7` · queue state lane transactional pre-call patch typechecks; focused runtime blocked by Postgres 5433
+- 2026-08-28 14:34:17 · seq 486 · status · `msg_ebe696a4d466` · queue state lane targeted checks pass; concurrent group-merge edits temporarily fail whole-project typecheck/lint
+- 2026-08-28 14:35:16 · seq 487 · status · `msg_e66ae8fd300d` · queue state lane kept pre-call notification inside the group lock; final handoff pending
+- 2026-08-28 14:38:17 · seq 490 · heartbeat · `msg_86ed15d254ba` · queue state lane alive before handoff
+- 2026-08-28 14:39:04 · seq 491 · status · `msg_8beeb97e2340` · queue state lane ready for integration
+- 2026-08-28 14:39:13 · seq 492 · worker_done · `msg_22e42fb65f85` · queue state lane completed transactional pre-call claims and H32 stale-marker clears; targeted checks pass; runtime blocked by Postgres 5433
+- 2026-08-28 14:39:14 · seq 493 · heartbeat · `msg_8ca063b15081` · queue scope/topology lane implementing
+- 2026-08-28 14:39:59 · seq 494 · status · `msg_1367f2e2a3d1` · queue scope lane finished topology/read propagation; room assignment/deletion callers remain for coordinator
+- 2026-08-28 14:46:43 · seq 496 · status · `msg_ff3de1443c93` · queue scope lane reports topology/read/docs changes ready; lint/typecheck/diff checks pass; focused Vitest blocked by Postgres 5433
+- 2026-08-28 14:54:09 · seq 498 · worker_done · `msg_537560f097e3` · queue scope/topology lane complete; lint/typecheck/Biome/diff checks pass; focused Vitest blocked by Postgres 5433; room callers integrated by coordinator
 
 Coordinator-originated inbox echoes (kept for chronology, excluded from the
 received-message count) were seq 474 `msg_939f59e3d657` and seq 476

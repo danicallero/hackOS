@@ -7,6 +7,7 @@ import { broadcast } from "../../lib/sse.js";
 import { broadcastQueueEvent } from "./broadcast.js";
 import { resolveChallengePanel } from "./criteria-merge.js";
 import { lockQueueGroupForEntry } from "./evaluation-lock.js";
+import { assertQueueChallengeReadScope } from "./fixture-scope.js";
 import { writeQueueHistory } from "./history.js";
 import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 import { notifyChallengeQueueChanged } from "./notify.js";
@@ -334,7 +335,8 @@ export async function listActiveJudgingSessions(entryId: number) {
 
 // ── H37: manual search ───────────────────────────────────────────────────────
 
-export async function searchChallengeQueue(challengeId: number, q: string) {
+export async function searchChallengeQueue(challengeId: number, q: string, fixtureMarker: boolean) {
+  await assertQueueChallengeReadScope(pool, challengeId, fixtureMarker);
   const like = `%${q}%`;
   const { rows } = await pool.query(
     `SELECT qe.*, r.name AS repo_name,
@@ -344,18 +346,22 @@ export async function searchChallengeQueue(challengeId: number, q: string) {
             busy.team_name AS blocked_by_team_name,
             busy.status AS blocked_by_status
        FROM queue_entries qe
-       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
-       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $4
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $4
        LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
        LEFT JOIN LATERAL (
          SELECT br.id AS room_id, br.name AS room_name, brepo.name AS team_name, bqe.status
            FROM (${REPO_MEMBER_RELATION_SQL}) s1
            JOIN (${REPO_MEMBER_RELATION_SQL}) s2 ON s2.user_id = s1.user_id
+           JOIN users scoped_member
+             ON scoped_member.id = s1.user_id AND scoped_member.is_test_account = $4
            JOIN queue_entries bqe ON bqe.repo_id = s2.repo_id
                                   AND bqe.status IN ('called', 'in_room', 'presenting')
                                   AND bqe.id <> qe.id
+           JOIN challenges bchallenge
+             ON bchallenge.id = bqe.challenge_id AND bchallenge.is_test_account = $4
            JOIN rooms br ON br.id = bqe.assigned_room_id
-           JOIN repos brepo ON brepo.id = bqe.repo_id AND brepo.is_test_account = false
+           JOIN repos brepo ON brepo.id = bqe.repo_id AND brepo.is_test_account = $4
           WHERE s1.repo_id = qe.repo_id
           ORDER BY bqe.id
           LIMIT 1
@@ -364,7 +370,7 @@ export async function searchChallengeQueue(challengeId: number, q: string) {
         AND (r.name ILIKE $2 OR CAST(r.id AS text) = $3 OR CAST(qe.id AS text) = $3)
       ORDER BY qe.position ASC NULLS LAST, qe.id ASC
       LIMIT 25`,
-    [challengeId, like, q],
+    [challengeId, like, q, fixtureMarker],
   );
   return rows;
 }

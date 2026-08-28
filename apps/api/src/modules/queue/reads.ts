@@ -1,7 +1,7 @@
 import { pool } from "../../db/pool.js";
 import { NotFoundError } from "../../lib/errors.js";
 import { queueFixtureMarker } from "./broadcast.js";
-import { assertQueueEntryScope } from "./fixture-scope.js";
+import { assertQueueChallengeReadScope, assertQueueEntryScope } from "./fixture-scope.js";
 import {
   CHALLENGE_ROOM_IDS_FOR_MARKER_SQL,
   CHALLENGE_ROOM_IDS_SQL,
@@ -237,19 +237,16 @@ export async function queueGroupQueue(queueGroupId: number, fixtureMarker = fals
 }
 
 /** H40: counts by status for the challenge progress panel. */
-export async function challengeProgress(challengeId: number) {
-  const challenge = await pool.query(
-    `SELECT 1 FROM challenges WHERE id = $1 AND is_test_account = false`,
-    [challengeId],
-  );
-  if (challenge.rowCount === 0) throw new NotFoundError("Challenge not found", { challengeId });
+export async function challengeProgress(challengeId: number, fixtureMarker: boolean) {
+  await assertQueueChallengeReadScope(pool, challengeId, fixtureMarker);
   const { rows } = await pool.query(
     `SELECT qe.status, COUNT(*)::int AS count
        FROM queue_entries qe
-       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $2
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
       WHERE qe.challenge_id = $1
       GROUP BY qe.status`,
-    [challengeId],
+    [challengeId, fixtureMarker],
   );
   const counts: Record<string, number> = {};
   for (const r of rows as { status: string; count: number }[]) counts[r.status] = r.count;
@@ -264,10 +261,11 @@ export async function challengeProgress(challengeId: number) {
   const { rows: avgRows } = await pool.query(
     `SELECT AVG(EXTRACT(EPOCH FROM (qe.completed_at - qe.presentation_started_at)) / 60) AS avg_minutes
        FROM queue_entries qe
-       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $2
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
       WHERE qe.challenge_id = $1 AND qe.status = 'completed'
         AND qe.completed_at IS NOT NULL AND qe.presentation_started_at IS NOT NULL`,
-    [challengeId],
+    [challengeId, fixtureMarker],
   );
   const avgEvaluationMinutes =
     avgRows[0].avg_minutes != null ? Number(avgRows[0].avg_minutes) : null;

@@ -285,6 +285,14 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
     await assignChallengeToRoom(fixtureRoomId, fixtureChallengeId);
 
     const { enterpriseId: realEnterpriseId } = await createEnterpriseChallenges(1);
+    const fixtureQueueList = await app.inject({
+      method: "GET",
+      url: "/api/queue/groups",
+      headers: asUser(fixtureAdminId),
+    });
+    expect(fixtureQueueList.statusCode).toBe(200);
+    expect(fixtureQueueList.json()).toEqual({ groups: [] });
+
     const realRoomId = await createRoom();
     const realAssignment = await app.inject({
       method: "POST",

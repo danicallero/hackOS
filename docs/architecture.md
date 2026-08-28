@@ -277,9 +277,11 @@ only by #540's connection budgets and write backpressure. Monitor
 `hackos_http_request_admission_queue_size` by lane, plus
 `hackos_sse_local_connections` by lane and normalized topic family.
 
-Participant queue invalidations are one delayed BullMQ job per challenge;
-called and pre-call notifications remain immediate. Their scheduling and
-fan-out outcomes are exposed as
+Participant queue invalidations are one delayed BullMQ job per current queue
+group, coalescing all affected challenge transitions in that shared queue;
+topology writes snapshot old and new groups and the worker re-resolves current
+membership when a queued group id has gone stale. Called and pre-call
+notifications remain immediate. Their scheduling and fan-out outcomes are exposed as
 `hackos_queue_participant_invalidations_total{outcome="queued|coalesced|dropped|degraded"}`.
 For browser-only refetch storms the optional
 `POST /api/telemetry/refetch-storm` contract accepts only bounded enum fields
@@ -325,9 +327,13 @@ replicas via Valkey (§5), and `/readyz` gating keeps initializing replicas out
 of rotation. The only shared state is Postgres/Valkey, both reached by name.
 
 **worker — scale by replica count.** The outbox claim is
-`FOR UPDATE SKIP LOCKED`, so N workers split the load with no double-send;
-state-machine ticks (queue pump, expirer) mutate under `SELECT … FOR UPDATE`
-with an "exactly one winner per transition" invariant. More replicas = more
+`FOR UPDATE SKIP LOCKED`, so N workers split the load with no double-send.
+The queue pump discovers active rooms outside a transaction, then each
+`callNextForRoom` runs as its own `withTransaction` with the transition locks;
+pre-call discovery is likewise outside a transaction and `claimPreCall`
+reacquires the queue-group lock and atomically claims one repo cycle. This
+per-transition boundary preserves the "exactly one winner" invariant while
+allowing replicas to process independent rooms. More replicas = more
 throughput on notification dispatch and queue processing, safely. (Tick cadence,
 not replica count, bounds latency for the periodic drains — tune `every: N` if a
 5 s notification lag is too much before adding replicas.)

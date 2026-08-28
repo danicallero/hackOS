@@ -1,7 +1,8 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { EVENTS } from "@hackos/shared/events";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { pool, withTransaction } from "../../db/pool.js";
+import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireCapability, userHasCapability } from "../../lib/capabilities.js";
 import { NotFoundError } from "../../lib/errors.js";
@@ -12,6 +13,7 @@ import {
 } from "../logistics/review-fixture-scope.js";
 import { requireAnyCapability } from "./access.js";
 import { actor } from "./actor.js";
+import { broadcastQueueEvent } from "./broadcast.js";
 import {
   accessibleRoomIds,
   requireRoomAccessOrCapability,
@@ -19,6 +21,7 @@ import {
   requireRoomListAccess,
 } from "./contextual-access.js";
 import { listManageableQueueGroups } from "./group-merge.js";
+import { notifyQueueTopologyChanged } from "./notify.js";
 import { scheduleTopUp } from "./pump.js";
 import {
   assignRoomEnterpriseBody,
@@ -38,6 +41,50 @@ function auditRequest(req: FastifyRequest) {
     userAgent:
       typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : undefined,
   };
+}
+
+type QueueTopologySnapshot = {
+  queueGroupIds: number[];
+  challengeIds: number[];
+};
+
+/** Snapshot queue memberships before/after room serving changes. */
+async function captureQueueTopology(
+  client: Queryable,
+  queueGroupIds: readonly (number | null | undefined)[],
+): Promise<QueueTopologySnapshot> {
+  const ids = [...new Set(queueGroupIds.filter((id): id is number => Number.isFinite(id)))];
+  if (ids.length === 0) return { queueGroupIds: [], challengeIds: [] };
+  const { rows } = await client.query(
+    `SELECT challenge_id
+       FROM queue_group_challenges
+      WHERE queue_group_id = ANY($1::int[])`,
+    [ids],
+  );
+  return {
+    queueGroupIds: ids,
+    challengeIds: [...new Set(rows.map((row) => Number(row.challenge_id)))],
+  };
+}
+
+async function emitQueueTopologyChanged(
+  before: QueueTopologySnapshot,
+  after: QueueTopologySnapshot,
+): Promise<void> {
+  const groupIds = [...new Set([...before.queueGroupIds, ...after.queueGroupIds])];
+  await Promise.all(
+    groupIds.map((queueGroupId) =>
+      broadcastQueueEvent(pool, "queueGroup", queueGroupId, EVENTS.QUEUE_ROOM_CHANGED, {
+        queueGroupId,
+      }),
+    ),
+  );
+  await notifyQueueTopologyChanged(pool, {
+    oldQueueGroupIds: before.queueGroupIds,
+    newQueueGroupIds: after.queueGroupIds,
+    oldChallengeIds: before.challengeIds,
+    newChallengeIds: after.challengeIds,
+  });
 }
 
 /** Rooms, assignment admin, room/queue settings, enqueue (H29 admin surface). */
@@ -213,13 +260,44 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
       const userId = actor(req.userId);
 
       const result = await withTransaction(async (client) => {
-        const room = (await client.query(`SELECT id FROM rooms WHERE id = $1 FOR UPDATE`, [roomId]))
+        const roomExists = (await client.query(`SELECT id FROM rooms WHERE id = $1`, [roomId]))
           .rows[0];
-        if (!room) throw new NotFoundError("Room not found", { roomId });
+        if (!roomExists) throw new NotFoundError("Room not found", { roomId });
         const enterprise = (
           await client.query(`SELECT id FROM enterprises WHERE id = $1 FOR UPDATE`, [enterpriseId])
         ).rows[0];
         if (!enterprise) throw new NotFoundError("Enterprise not found", { enterpriseId });
+
+        // Queue-group mutations lock groups before rooms. Resolve the current
+        // serving link and target group set before taking the room lock so a
+        // concurrent queue-room update cannot deadlock this enterprise-pool
+        // assignment in the opposite order.
+        const { rows: servingSnapshot } = await client.query<{ queue_group_id: number }>(
+          `SELECT queue_group_id FROM room_queue_groups WHERE room_id = $1`,
+          [roomId],
+        );
+        const { rows: targetGroupRows } = await client.query<{ id: number }>(
+          `SELECT id FROM queue_groups WHERE enterprise_id = $1 ORDER BY id`,
+          [enterpriseId],
+        );
+        const groupIdsToLock = [
+          ...new Set([
+            ...targetGroupRows.map((row) => Number(row.id)),
+            ...servingSnapshot.map((row) => Number(row.queue_group_id)),
+          ]),
+        ]
+          .filter(Number.isFinite)
+          .sort((a, b) => a - b);
+        if (groupIdsToLock.length) {
+          await client.query(
+            `SELECT id FROM queue_groups WHERE id = ANY($1::int[]) ORDER BY id FOR UPDATE`,
+            [groupIdsToLock],
+          );
+        }
+
+        const room = (await client.query(`SELECT id FROM rooms WHERE id = $1 FOR UPDATE`, [roomId]))
+          .rows[0];
+        if (!room) throw new NotFoundError("Room not found", { roomId });
         await assertFixtureRoomEnterpriseScope(client, userId, roomId, enterpriseId);
 
         const beforePool = (
@@ -247,17 +325,17 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
         });
 
         // Auto-resolve the serving queue only when it is unambiguous.
-        const groups = (
-          await client.query(`SELECT id FROM queue_groups WHERE enterprise_id = $1 ORDER BY id`, [
-            enterpriseId,
-          ])
-        ).rows;
+        const groups = targetGroupRows;
         const beforeServing = (
           await client.query(`SELECT * FROM room_queue_groups WHERE room_id = $1 FOR UPDATE`, [
             roomId,
           ])
         ).rows[0];
-        const queueGroupId = groups.length === 1 ? Number(groups[0].id) : null;
+        const queueGroupId = groups.length === 1 ? Number(groups[0]?.id) : null;
+        const beforeTopology = await captureQueueTopology(client, [
+          beforeServing?.queue_group_id == null ? null : Number(beforeServing.queue_group_id),
+          queueGroupId,
+        ]);
 
         if (queueGroupId != null) {
           await client.query(
@@ -288,13 +366,19 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
         // Re-read the complete graph before committing so an existing-room
         // marker mismatch can never be hidden by replacing one side of it.
         await assertFixtureQueueScope(client, userId, "room", roomId);
-        return { roomId, enterpriseId, queueGroupId };
+        const afterTopology = await captureQueueTopology(client, [queueGroupId]);
+        return { roomId, enterpriseId, queueGroupId, beforeTopology, afterTopology };
       });
+      await emitQueueTopologyChanged(result.beforeTopology, result.afterTopology);
       // The room's callable set may have just changed; fill its waiting area
       // from the group it now serves rather than waiting for the next tick.
       if (result.queueGroupId != null) await scheduleTopUp(roomId);
       reply.code(201);
-      return result;
+      return {
+        roomId: result.roomId,
+        enterpriseId: result.enterpriseId,
+        queueGroupId: result.queueGroupId,
+      };
     },
   );
 
@@ -313,7 +397,22 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     async (req) => {
       const { roomId } = req.params;
       const userId = actor(req.userId);
-      await withTransaction(async (client) => {
+      const result = await withTransaction(async (client) => {
+        const { rows: servingSnapshot } = await client.query<{ queue_group_id: number }>(
+          `SELECT queue_group_id FROM room_queue_groups WHERE room_id = $1`,
+          [roomId],
+        );
+        const groupIdsToLock = [
+          ...new Set(servingSnapshot.map((row) => Number(row.queue_group_id))),
+        ]
+          .filter(Number.isFinite)
+          .sort((a, b) => a - b);
+        if (groupIdsToLock.length) {
+          await client.query(
+            `SELECT id FROM queue_groups WHERE id = ANY($1::int[]) ORDER BY id FOR UPDATE`,
+            [groupIdsToLock],
+          );
+        }
         const room = (await client.query(`SELECT id FROM rooms WHERE id = $1 FOR UPDATE`, [roomId]))
           .rows[0];
         if (!room) throw new NotFoundError("Room not found", { roomId });
@@ -328,6 +427,9 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
             roomId,
           ])
         ).rows[0];
+        const beforeTopology = await captureQueueTopology(client, [
+          beforeServing?.queue_group_id == null ? null : Number(beforeServing.queue_group_id),
+        ]);
         await client.query(`DELETE FROM room_queue_groups WHERE room_id = $1`, [roomId]);
         await client.query(`DELETE FROM room_enterprises WHERE room_id = $1`, [roomId]);
         await audit(client, {
@@ -348,7 +450,13 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
             ...auditRequest(req),
           });
         }
+        const afterTopology = {
+          queueGroupIds: [],
+          challengeIds: [],
+        } satisfies QueueTopologySnapshot;
+        return { beforeTopology, afterTopology };
       });
+      await emitQueueTopologyChanged(result.beforeTopology, result.afterTopology);
       return { ok: true };
     },
   );

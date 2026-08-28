@@ -110,7 +110,8 @@ export function registerReadsRoutes(app: FastifyInstance): void {
       },
       schema: { params: challengeIdParam },
     },
-    async (req) => challengeProgress(req.params.challengeId),
+    async (req) =>
+      challengeProgress(req.params.challengeId, await isSyntheticOperator(pool, req.userId!)),
   );
 
   typed.get(

@@ -1,5 +1,5 @@
 import type { Queryable } from "../../db/pool.js";
-import { ConflictError } from "../../lib/errors.js";
+import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import {
   assertFixtureQueueScope,
   inspectFixtureEnterpriseScope,
@@ -22,7 +22,7 @@ type QueueFixtureMarkers = {
 export async function queueGroupFixtureMarker(
   client: Queryable,
   queueGroupId: number,
-): Promise<boolean> {
+): Promise<boolean | null> {
   const { rows } = await client.query<QueueFixtureMarkers>(
     `SELECT COALESCE(bool_or(c.is_test_account IS TRUE), false) AS has_synthetic,
             COALESCE(bool_or(c.is_test_account IS NOT TRUE), false) AS has_real,
@@ -44,6 +44,10 @@ export async function queueGroupFixtureMarker(
     [queueGroupId],
   );
   const marker = rows[0];
+  // A queue group without a membership row is malformed, just like a group
+  // id that was deleted. Never let either case fall through to the real
+  // marker (`false`) — callers that carry queue payloads must fail closed.
+  if (!marker) return null;
   if (marker?.has_entry_marker_mismatch || (marker?.has_synthetic && marker.has_real)) {
     throw new ConflictError("Queue fixture markers must match", {
       code: "review_fixture_scope",
@@ -87,6 +91,78 @@ export async function queueGroupFixtureMarker(
     }
   }
   return marker?.has_synthetic === true;
+}
+
+export type QueueChallengeFixtureScope = {
+  challengeId: number;
+  queueGroupId: number;
+  fixtureMarker: boolean;
+};
+
+/**
+ * Resolve a challenge's complete queue scope for challenge-only reads.
+ *
+ * Migration 0410 gives managed challenges one queue-group membership, but a
+ * manually deleted group or a legacy row can still leave malformed data in a
+ * database. Those rows are not a queue: callers must not silently fall back
+ * to challenge-only filtering because that can expose a partial or mixed
+ * queue. The group marker also validates every member challenge, enterprise,
+ * and queued repository before the read proceeds.
+ */
+export async function resolveQueueChallengeScope(
+  client: Queryable,
+  challengeId: number,
+): Promise<QueueChallengeFixtureScope> {
+  const { rows } = await client.query<{
+    is_test_account: boolean;
+    queue_group_id: number | null;
+  }>(
+    `SELECT c.is_test_account, qgc.queue_group_id
+       FROM challenges c
+       LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = c.id
+      WHERE c.id = $1`,
+    [challengeId],
+  );
+  const challenge = rows[0];
+  if (!challenge) throw new NotFoundError("Challenge not found", { challengeId });
+  if (challenge.queue_group_id == null) {
+    throw new ConflictError("Challenge has no complete queue-group scope", {
+      code: "review_fixture_scope",
+      resource: "challenge",
+      resourceId: challengeId,
+    });
+  }
+
+  const fixtureMarker = await queueGroupFixtureMarker(client, Number(challenge.queue_group_id));
+  if (fixtureMarker === null || fixtureMarker !== (challenge.is_test_account === true)) {
+    throw new ConflictError("Queue fixture markers must match", {
+      code: "review_fixture_scope",
+      resource: "challenge",
+      resourceId: challengeId,
+    });
+  }
+  return {
+    challengeId,
+    queueGroupId: Number(challenge.queue_group_id),
+    fixtureMarker,
+  };
+}
+
+/** Require a caller-supplied fixture marker to match the complete challenge scope. */
+export async function assertQueueChallengeReadScope(
+  client: Queryable,
+  challengeId: number,
+  fixtureMarker: boolean,
+): Promise<QueueChallengeFixtureScope> {
+  const scope = await resolveQueueChallengeScope(client, challengeId);
+  if (scope.fixtureMarker !== fixtureMarker) {
+    throw new ConflictError("Queue fixture markers must match", {
+      code: "review_fixture_scope",
+      resource: "challenge",
+      resourceId: challengeId,
+    });
+  }
+  return scope;
 }
 
 async function assertRepoFixtureGraph(client: Queryable, repoId: number): Promise<void> {
@@ -144,7 +220,10 @@ export async function assertQueueEntryScope(
   }
   if (row?.queue_group_id != null) {
     const groupIsSynthetic = await queueGroupFixtureMarker(client, row.queue_group_id);
-    if (groupIsSynthetic !== (row.challenge_is_test_account === true)) {
+    if (
+      groupIsSynthetic === null ||
+      groupIsSynthetic !== (row.challenge_is_test_account === true)
+    ) {
       throw new ConflictError("Queue fixture markers must match", {
         code: "review_fixture_scope",
         resource: "entry",
@@ -169,6 +248,13 @@ export async function assertQueueRoomScope(
   let fixtureMarker: boolean | undefined;
   for (const row of rows) {
     const groupMarker = await queueGroupFixtureMarker(client, Number(row.queue_group_id));
+    if (groupMarker === null) {
+      throw new ConflictError("Queue fixture markers must match", {
+        code: "review_fixture_scope",
+        resource: "room",
+        resourceId: roomId,
+      });
+    }
     if (fixtureMarker !== undefined && groupMarker !== fixtureMarker) {
       throw new ConflictError("Queue fixture markers must match", {
         code: "review_fixture_scope",
@@ -188,7 +274,13 @@ export async function assertQueueGroupScope(
   queueGroupId: number,
 ): Promise<boolean> {
   await assertFixtureQueueScope(client, actorId, "queueGroup", queueGroupId);
-  await queueGroupFixtureMarker(client, queueGroupId);
+  if ((await queueGroupFixtureMarker(client, queueGroupId)) === null) {
+    throw new ConflictError("Queue group has no complete fixture scope", {
+      code: "review_fixture_scope",
+      resource: "queueGroup",
+      resourceId: queueGroupId,
+    });
+  }
   return isSyntheticOperator(client, actorId);
 }
 
@@ -199,26 +291,14 @@ export async function assertQueueChallengeScope(
   challengeId: number,
 ): Promise<boolean> {
   await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
-  const { rows } = await client.query<{ queue_group_id: number }>(
-    `SELECT queue_group_id
-       FROM queue_group_challenges
-      WHERE challenge_id = $1`,
-    [challengeId],
-  );
   const actorMarker = await isSyntheticOperator(client, actorId);
-  if (rows[0]) {
-    const groupMarker = await queueGroupFixtureMarker(client, Number(rows[0].queue_group_id));
-    const { rows: challengeRows } = await client.query<{ is_test_account: boolean }>(
-      `SELECT is_test_account FROM challenges WHERE id = $1`,
-      [challengeId],
-    );
-    if (groupMarker !== (challengeRows[0]?.is_test_account === true)) {
-      throw new ConflictError("Queue fixture markers must match", {
-        code: "review_fixture_scope",
-        resource: "challenge",
-        resourceId: challengeId,
-      });
-    }
+  const scope = await resolveQueueChallengeScope(client, challengeId);
+  if (scope.fixtureMarker !== actorMarker) {
+    throw new ConflictError("Queue fixture markers must match", {
+      code: "review_fixture_scope",
+      resource: "challenge",
+      resourceId: challengeId,
+    });
   }
   return actorMarker;
 }
@@ -244,7 +324,8 @@ export async function assertQueueRepoScope(
     [repoId],
   );
   for (const row of groupRows) {
-    if ((await queueGroupFixtureMarker(client, Number(row.queue_group_id))) !== repoMarker) {
+    const groupMarker = await queueGroupFixtureMarker(client, Number(row.queue_group_id));
+    if (groupMarker === null || groupMarker !== repoMarker) {
       throw new ConflictError("Queue fixture markers must match", {
         code: "review_fixture_scope",
         resource: "repo",

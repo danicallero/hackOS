@@ -259,38 +259,113 @@ export async function notifyChallengeQueueChanged(
 export const QUEUE_PARTICIPANT_INVALIDATIONS = "queue-participant-invalidations";
 const participantInvalidationJobsInFlight = new Set<string>();
 
+export type QueueTopologyInvalidation = {
+  /** Queue groups before the topology mutation committed. */
+  oldQueueGroupIds: readonly number[];
+  /** Queue groups after the topology mutation committed. */
+  newQueueGroupIds: readonly number[];
+  /** Challenges present in the affected groups before the mutation. */
+  oldChallengeIds: readonly number[];
+  /** Challenges present in the affected groups after the mutation. */
+  newChallengeIds: readonly number[];
+};
+
+/**
+ * Queue topology changes can affect participants on both sides of a move:
+ * changing a room's serving group changes the old queue's possible rooms as
+ * well as the new queue's, and merging/splitting changes the queue key itself.
+ * Callers take both snapshots inside their transaction and invoke this only
+ * after commit. The group lookup here picks up challenges that stayed in a
+ * surviving group; the snapshot challenge ids also cover groups that were
+ * deleted or whose memberships moved during the transaction.
+ *
+ * `notifyChallengeQueueChanged` resolves each challenge to its current group,
+ * so calls for several challenges in one shared group retain the one delayed
+ * BullMQ job/coalescing contract.
+ */
+export async function notifyQueueTopologyChanged(
+  client: Queryable,
+  topology: QueueTopologyInvalidation,
+): Promise<void> {
+  const oldQueueGroupIds = [...new Set(topology.oldQueueGroupIds)].filter(Number.isFinite);
+  const newQueueGroupIds = [...new Set(topology.newQueueGroupIds)].filter(Number.isFinite);
+  const queueGroupIds = [...new Set([...oldQueueGroupIds, ...newQueueGroupIds])];
+  const challengeIds = new Set(
+    [...topology.oldChallengeIds, ...topology.newChallengeIds].filter(Number.isFinite),
+  );
+
+  if (queueGroupIds.length > 0) {
+    try {
+      const { rows } = await client.query<{ challenge_id: number }>(
+        `SELECT DISTINCT challenge_id
+           FROM queue_group_challenges
+          WHERE queue_group_id = ANY($1::int[])`,
+        [queueGroupIds],
+      );
+      for (const row of rows) challengeIds.add(Number(row.challenge_id));
+    } catch (err) {
+      // The topology write already committed. Snapshot challenge ids still
+      // provide the best-effort invalidation path if this post-commit lookup
+      // races a transient database failure.
+      console.error("[queue] unable to resolve topology invalidation groups", err);
+    }
+  }
+
+  await Promise.all(
+    [...challengeIds].map((challengeId) => notifyChallengeQueueChanged(client, challengeId)),
+  );
+}
+
+/** Resolve a worker job's explicit group id against the post-mutation graph. */
+async function resolveInvalidationGroupId(
+  challengeId: number,
+  requestedGroupId?: number,
+): Promise<number | null> {
+  const { rows: currentRows } = await pool.query<{ queue_group_id: number }>(
+    `SELECT queue_group_id
+       FROM queue_group_challenges
+      WHERE challenge_id = $1`,
+    [challengeId],
+  );
+  const currentGroupId = currentRows[0]?.queue_group_id;
+  if (currentGroupId != null) return Number(currentGroupId);
+
+  // A challenge may have been deleted from its old group while that group
+  // still serves sibling challenges. If the job's group still exists and is
+  // non-empty, publish that group's refresh; an empty/deleted stale id has no
+  // safe recipient set and must be dropped.
+  if (requestedGroupId == null) return null;
+  const { rows: requestedRows } = await pool.query<{ queue_group_id: number }>(
+    `SELECT qgc.queue_group_id
+       FROM queue_group_challenges qgc
+      WHERE qgc.queue_group_id = $1
+      LIMIT 1`,
+    [requestedGroupId],
+  );
+  return requestedRows[0] ? Number(requestedRows[0].queue_group_id) : null;
+}
+
 /** H38 (#544): worker-side fan-out, deliberately outside queue transition requests. */
 export async function publishChallengeQueueInvalidation(
   challengeId: number,
   queueGroupId?: number,
 ): Promise<void> {
-  const groupId =
-    queueGroupId ??
-    (
-      await pool.query<{ queue_group_id: number }>(
-        `SELECT queue_group_id
-           FROM queue_group_challenges
-          WHERE challenge_id = $1`,
-        [challengeId],
-      )
-    ).rows[0]?.queue_group_id;
-  const fixtureMarker = await queueFixtureMarker(
-    pool,
-    groupId == null ? "challenge" : "queueGroup",
-    groupId == null ? challengeId : groupId,
-  );
+  // Jobs carry the group id captured when the transition committed. A merge,
+  // split, room reassignment, or deletion may have made that id stale by the
+  // time BullMQ drains it, so always prefer the challenge's current group and
+  // only use the explicit id when it still has members.
+  const groupId = await resolveInvalidationGroupId(challengeId, queueGroupId);
+  if (groupId == null) return;
+  const fixtureMarker = await queueFixtureMarker(pool, "queueGroup", groupId);
   if (fixtureMarker === null) return;
-  const challengeIds =
-    groupId == null
-      ? [challengeId]
-      : (
-          await pool.query<{ challenge_id: number }>(
-            `SELECT challenge_id
-               FROM queue_group_challenges
-              WHERE queue_group_id = $1`,
-            [groupId],
-          )
-        ).rows.map((row) => Number(row.challenge_id));
+  const challengeIds = (
+    await pool.query<{ challenge_id: number }>(
+      `SELECT challenge_id
+         FROM queue_group_challenges
+        WHERE queue_group_id = $1`,
+      [groupId],
+    )
+  ).rows.map((row) => Number(row.challenge_id));
   if (challengeIds.length === 0) return;
   const { rows } = await pool.query(
     `SELECT DISTINCT members.user_id

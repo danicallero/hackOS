@@ -2,9 +2,11 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { SSE_TOPICS } from "@hackos/shared/events";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
+import { pool } from "../../db/pool.js";
 import { requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { subscribe } from "../../lib/sse.js";
+import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
 import { actor } from "./actor.js";
 import {
   requireChallengeExport,
@@ -191,7 +193,12 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
       },
       schema: { params: challengeIdParam, querystring: searchQuery },
     },
-    async (req) => searchChallengeQueue(req.params.challengeId, req.query.q),
+    async (req) =>
+      searchChallengeQueue(
+        req.params.challengeId,
+        req.query.q,
+        await isSyntheticOperator(pool, req.userId!),
+      ),
   );
 
   // H40: CSV exports.
@@ -214,7 +221,7 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
         "content-disposition",
         `attachment; filename="challenge-${req.params.challengeId}-queue.csv"`,
       );
-      return exportQueueCsv(req.params.challengeId);
+      return exportQueueCsv(req.params.challengeId, await isSyntheticOperator(pool, req.userId!));
     },
   );
 
@@ -237,7 +244,10 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
         "content-disposition",
         `attachment; filename="challenge-${req.params.challengeId}-evaluations.csv"`,
       );
-      return exportEvaluationsCsv(req.params.challengeId);
+      return exportEvaluationsCsv(
+        req.params.challengeId,
+        await isSyntheticOperator(pool, req.userId!),
+      );
     },
   );
 

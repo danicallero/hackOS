@@ -141,18 +141,20 @@ async function claimPreCall(queueGroupId: number, repoId: number): Promise<PreCa
     if (groupMarker === null) return null;
 
     // The outer group/repo snapshot can race room pause, unassignment, or
-    // teardown. Re-check that this queue still has a live serving room while
-    // holding the same transaction locks used for the claim.
-    const { rows: servingRooms } = await client.query(
-      `SELECT 1
+    // teardown. Lock every currently serving room state before checking the
+    // gate so pauseRoom cannot commit between this read and the precall claim.
+    // The queue-group lock is already held, which also keeps setQueueGroupRooms
+    // from changing the serving set while these state rows are acquired.
+    const { rows: servingRooms } = await client.query<{ room_id: number; is_paused: boolean }>(
+      `SELECT rqs.room_id, rqs.is_paused
          FROM room_queue_groups rqg
          JOIN room_queue_state rqs ON rqs.room_id = rqg.room_id
         WHERE rqg.queue_group_id = $1
-          AND rqs.is_paused = false
-        LIMIT 1`,
+        ORDER BY rqs.room_id
+        FOR UPDATE OF rqs`,
       [queueGroupId],
     );
-    if (servingRooms.length === 0) return null;
+    if (!servingRooms.some((room) => room.is_paused === false)) return null;
 
     // Lock every entry in the group before resolving the canonical rank. This
     // keeps a concurrent call/requeue from changing the line between the

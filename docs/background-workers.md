@@ -43,8 +43,8 @@ queue no matter how many times scheduling runs (idempotent scheduling).
 | `notifications-outbox` | `notifications/dispatcher.ts` | **5 s** | `notification_outbox` rows that are `queued AND next_attempt_at <= now()` → renders + sends via the channel adapter |
 | `announcements-publisher` | `notifications/announcements-publisher.ts` | **15 s** | announcements whose `publish_at` has passed → reveals their configured screen placement and, when selected, fans out inbox/email/push through each recipient's preferences exactly once |
 | `spot-confirmation expirer` | `applications/expirer.ts` | **60 s** | accepted responses whose confirmation window elapsed → `expired` (`expireDueConfirmations`), then scoped wallet tokens dead for over a day (`purgeExpiredWalletAccessTokens`, issue #369) |
-| `queue-pump` | `queue/pump.ts` | repeatable | for each active room, tops up the live judging queue (`callNextForRoom`) |
-| `queue-participant-invalidations` | `queue/notify.ts` | event-driven, 250 ms debounce | coalesces participant H38 read-model refresh fan-out by queue group after queue transitions commit; a merged group reaches members queued on any member challenge; called/pre-call events bypass it and remain immediate; Prometheus records `queued`, `coalesced`, `dropped` (broker unavailable) and `degraded` (partial fan-out) outcomes |
+| `queue-pump` | `queue/pump.ts` | repeatable | discovers each active room, then tops up its live judging queue (`topUpRoom` → one transactional `callNextForRoom` per slot) and emits pre-call warnings through a separately locked group/repo claim |
+| `queue-participant-invalidations` | `queue/notify.ts` | event-driven, 250 ms debounce | coalesces participant H38 read-model refresh fan-out by current queue group after queue transitions commit; topology mutations snapshot old and new groups so moved, split, merged, reassigned, or deleted memberships still refresh every affected group; a merged group reaches members queued on any member challenge; called/pre-call events bypass it and remain immediate; Prometheus records `queued`, `coalesced`, `dropped` (broker unavailable) and `degraded` (partial fan-out) outcomes |
 | `tv-scheduler` | `queue/tv-scheduler.ts` | **5 s** | resolves what the venue screens should show (operator override → covering `tv_slots` window → default `rooms`), drops an override whose `expiresAt` passed, and broadcasts `tv.mode.changed` **only when the resolved state changed** — so a slot boundary reaches the fleet unattended without waking every screen every tick (H42). The public TV SSE endpoint receives only the dedicated payload-free `public-tv` invalidation mirror and refetches its sanitized projection; the operational TV event remains off the public stream. |
 | `presence-event-end-closer` | `logistics/presence-closer.ts` | **60 s** | once `event_config.event_ends_at` passes, force-closes every still-open door session with an audited `out` at that instant (`scanned_by NULL` = system actor, migration 0708), and finalizes pending account removals after that valid event-end exit or after the latest accrued H24 certainty window expires. An `out` outside the certainty window credits no hours; it restores the in/out invariant while the expiry path preserves only already-guaranteed minutes. |
 
@@ -116,9 +116,15 @@ the dead-letter queue.
   was in flight, independent of batch size — see
   `docs/big-event-readiness.md` for why that makes 100 safe as a permanent
   default.
-- State-machine ticks (expirer, pump) run their mutations inside
-  `withTransaction` + `SELECT … FOR UPDATE`, honouring the "exactly one winner
-  per transition" invariant (`plan/07`).
+- The queue pump does not wrap a whole tick in one transaction. `pumpTick`
+  discovers active rooms, `topUpRoom` checks the live window, and each
+  `callNextForRoom` owns its own `withTransaction` and row/advisory locks; a
+  later slot can therefore refill independently if an earlier call loses a
+  race. Pre-call discovery is also deliberately outside a transaction, while
+  `claimPreCall` reacquires the queue-group lock, locks its entries, validates
+  the fixture marker, and atomically claims one logical repo cycle before
+  notifying. These are the transaction boundaries that preserve the
+  "exactly one winner per transition" invariant (`plan/07`).
 
 ## Event mapping — synchronous vs. background
 
@@ -137,7 +143,7 @@ controllers. This is the honest map:
 | **Spot-confirmation expiry** (H15) | **Async** | `spot-confirmation expirer` tick every 60 s |
 | **Scheduled announcement reveals** | **Async** | `announcements-publisher` tick every 15 s |
 | **Judging queue top-up** (H29+) | **Async** | `queue-pump` tick |
-| **Participant queue read-model invalidation** (H38) | **Async** | one delayed BullMQ job per queue group coalesces transition bursts; its worker fans out personal refresh signals to members queued on any challenge in that group. A broker failure is best-effort `dropped`, while partial SSE publication is `degraded`; called/pre-call notifications stay immediate. |
+| **Participant queue read-model invalidation** (H38) | **Async** | one delayed BullMQ job per current queue group coalesces transition bursts; topology writes carry old/new group snapshots and the worker re-resolves current membership, so stale/deleted group ids do not discard a valid refresh. It fans out personal signals to members queued on any challenge in that group. A broker failure is best-effort `dropped`, while partial SSE publication is `degraded`; called/pre-call notifications stay immediate. |
 | **TV slot boundaries / override expiry** (H42) | **Async** | `tv-scheduler` tick every 5 s |
 
 **Takeaway for future work:** if you want something processed in the background,

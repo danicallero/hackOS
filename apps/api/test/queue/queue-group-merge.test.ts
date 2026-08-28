@@ -158,6 +158,27 @@ describe("merging challenges into a shared queue", () => {
     expect(rows[0].n).toBe(2);
   });
 
+  it("keeps a room on a source group that still has an unselected challenge", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const { enterpriseId, challengeIds } = await createEnterpriseChallenges(3);
+    const [first, second, retained] = challengeIds as [number, number, number];
+    const sourceGroup = (await merge(enterpriseId, [second, retained], "Source queue")).json()
+      .id as number;
+    const roomId = await createRoom();
+    await assignQueueGroupToRoom(roomId, sourceGroup);
+
+    await merge(enterpriseId, [first, second], "Target queue");
+
+    // The source group was only partially selected. Its remaining challenge
+    // and serving room must stay together instead of losing the room link.
+    expect(await queueGroupOf(retained)).toBe(sourceGroup);
+    const { rows } = await pool.query(
+      `SELECT queue_group_id FROM room_queue_groups WHERE room_id = $1`,
+      [roomId],
+    );
+    expect(Number(rows[0]?.queue_group_id)).toBe(sourceGroup);
+  });
+
   it("refuses to span enterprises", async () => {
     const a = await createEnterpriseChallenges(1);
     const b = await createEnterpriseChallenges(1);

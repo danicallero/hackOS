@@ -138,6 +138,17 @@ Consumers: `queue/reads.ts`, `queue/rooms.routes.ts`, `queue/entries.routes.ts`,
 `queue/notify.ts`, `queue/service.ts`, `queue/contextual-access.ts` and
 `challenges/service.ts`.
 
+### Topology invalidation
+
+Queue-group topology is also the participant read-model boundary. Merge, split,
+group edits, and room serving changes capture the old and new group/challenge
+membership while their transaction is open; only after commit do they publish
+the affected `queueGroup` events and schedule participant invalidations. The
+delayed worker uses the current membership when it runs, so a group id carried
+by an older job may safely be stale or deleted without dropping a valid refresh
+for the challenge's surviving group. Calls and pre-call warnings remain
+immediate events and are not folded into this debounce path.
+
 ### Ordering
 
 `queue_entries.position` is now scoped to the **queue group**, not the

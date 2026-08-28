@@ -86,4 +86,26 @@ describe("participant queue invalidations (H38, #544)", () => {
     expect(await valkey.get(`sse:seq:user:${firstMember}`)).toBe("1");
     expect(await valkey.get(`sse:seq:user:${secondMember}`)).toBe("1");
   });
+
+  it("re-resolves an explicit stale group id after a merge", async () => {
+    const { challengeIds } = await createEnterpriseChallenges(2);
+    const staleGroupId = await queueGroupOf(challengeIds[1]!);
+    const currentGroupId = await mergeChallengesIntoOneGroup(challengeIds);
+    const firstMember = await createUser();
+    const secondMember = await createUser();
+    const firstRepo = await createRepoWithTeam([firstMember]);
+    const secondRepo = await createRepoWithTeam([secondMember]);
+    await enqueueRepo(challengeIds[0]!, firstRepo.repoId, 1);
+    await enqueueRepo(challengeIds[1]!, secondRepo.repoId, 2);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`DELETE FROM queue_groups WHERE id = $1`, [staleGroupId]);
+    const { publishChallengeQueueInvalidation } = await import("../../src/modules/queue/notify.js");
+    const { valkey } = await import("../../src/lib/valkey.js");
+
+    await publishChallengeQueueInvalidation(challengeIds[1]!, staleGroupId);
+
+    expect(currentGroupId).not.toBe(staleGroupId);
+    expect(await valkey.get(`sse:seq:user:${firstMember}`)).toBe("1");
+    expect(await valkey.get(`sse:seq:user:${secondMember}`)).toBe("1");
+  });
 });
