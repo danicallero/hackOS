@@ -66,6 +66,9 @@ rate-limited review history.
 | T15 | Queue implementation follow-up dispatch | rate-limited before edits | Two disjoint Luna-max lanes were dispatched at head `89fbe59e` (`task_3662f2c66e7d` state transitions, `task_fe7eccc78510` scope/invalidation). Both hit the account usage limit after required reads and before edits; terminals were closed. Coordinator is implementing the independently confirmed findings with the exact lane boundaries and regression goals preserved. |
 | T16 | Queue checkpoint CI regression | complete pending replacement CI | Run `33178695481` failed only `test/projects/self-service.test.ts` because it still looked for the superseded `challenge-<id>` invalidation job. The test now captures the challenge's `queue_group_id` and asserts `group-<id>` with `{ challengeId, queueGroupId }`; pushed as `eeb47be8`. |
 | T17 | Fresh Luna residual queue review | complete | Seq 478 and seq 500–503 were reconciled. Queue fixes are committed/pushed through `095a4b23`; exact runs through the current code/metadata checkpoints are green. The bounded final audit (`/root/final_merge_audit`) found no P0/P1 and two P2 edges; both are fixed. Local focused API setup remains unavailable on Postgres 5433/Valkey, so those local setup failures are not represented as passing assertions. |
+| T18 | Fresh Luna-max code/functionality review | in progress | Dispatched at current origin tip `1cacbe04` as `task_8385dd83fa72` / `ctx_4eff2c4e09ab` to a dedicated active-worktree terminal. Review-only; coordinator must inspect any finding before edits. |
+| T19 | Fresh Luna-max documentation/contracts review | in progress | Dispatched at current origin tip `1cacbe04` as `task_f45031efa267` / `ctx_1dfd3f014be4` to a dedicated active-worktree terminal. Review-only; all modified/new Markdown plus `program.md` are in scope. |
+| T20 | Fresh Luna-max migration/release-integrity review | in progress | Dispatched at current origin tip `1cacbe04` as `task_710d3245f178` / `ctx_edf36d553d88` to a dedicated active-worktree terminal. Review-only; migration squash and external-ledger assumption are release gates. |
 
 ## Code/schema changes reconciled
 
@@ -217,6 +220,9 @@ Blocked/limited:
 | Queue final malformed-read/migration checkpoint | `task_7f51b1507230` / `ctx_ab90fb331011` / `term_0055c933-d5ab-4df7-9fcf-397596b0fc0f` | worker_done seq 478; no edits; confirmed pre-call atomicity, four transition timestamp, topology invalidation, stale group-id, and challenge-only read-scope findings; terminal closed |
 | Queue state residual implementation | `task_a0e4561bfe94` / `ctx_687665ab4f57` / `term_7c70c396-f851-4a76-9646-79771798799b` | worker_done seq 492; pump/service/tests updated; targeted checks pass; focused Vitest blocked by Postgres 5433; terminal closed |
 | Queue scope/topology residual implementation | `task_1eb9b2da89c5` / `ctx_449db3463fe7` / `term_feed0274-9319-4ed1-a2db-952694e7ed36` | worker_done seq 498; topology/read/docs updates; lint/typecheck/Biome/diff checks pass; focused Vitest blocked by Postgres 5433; room routes integrated by coordinator; terminal closed |
+| Fresh code/functionality review | `task_8385dd83fa72` / `ctx_4eff2c4e09ab` / `term_08af9992-9959-46b3-8cfc-adebd9774552` | dispatched at `1cacbe04`; review-only Luna max lane in progress |
+| Fresh documentation/contracts review | `task_f45031efa267` / `ctx_1dfd3f014be4` / `term_b7f8b9a5-345f-4731-b209-6ca77d060654` | dispatched at `1cacbe04`; review-only Luna max lane in progress |
+| Fresh migration/release-integrity review | `task_710d3245f178` / `ctx_edf36d553d88` / `term_bc5e4140-593a-4af7-ad22-7bf77936bdd8` | dispatched at `1cacbe04`; review-only Luna max lane in progress |
 
 ## Received-message ledger (archival coordination artifact)
 
@@ -562,6 +568,8 @@ Messages received after the prior rate-limit snapshot (seq 405–450):
 - 2026-08-28 15:15:39 · seq 501 · status · `msg_dbc8707db87a` · queue checkpoint found pump pause race and synthetic queue-list exposure for a synthetic queue-admin
 - 2026-08-28 15:19:24 · seq 502 · status · `msg_0ffcc79a3440` · queue checkpoint confirmed group→room-state→entry lock order is safe and preferred for the pause gate
 - 2026-08-28 15:19:34 · seq 503 · status · `msg_4d789fb7b007` · queue checkpoint found stale pre-lock enterprise queue-group snapshot in room assignment; coordinator refreshed it after locks
+- 2026-08-28 15:28:15 · seq 505 · worker_done · `msg_0afb676d9753` · duplicate final merge audit delivered after checkpoint; no P0/P1, prior paused-room ETA and concurrent room-replacement topology P2s were already fixed in `095a4b23`
+- 2026-08-28 15:31:30 · seq 506 · worker_done · `msg_acb0851e5fbc` · duplicate migration/docs audit; fresh 0730/10-test/schema checks pass, external-ledger verification remains a release condition, seed-mock wording and archival ledger caveats already reconciled
 
 Coordinator-originated inbox echoes (kept for chronology, excluded from the
 received-message count) were seq 474 `msg_939f59e3d657` and seq 476
