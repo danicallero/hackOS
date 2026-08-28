@@ -69,6 +69,7 @@ rate-limited review history.
 | T18 | Fresh Luna-max code/functionality review | in progress | Dispatched at current origin tip `1cacbe04` as `task_8385dd83fa72` / `ctx_4eff2c4e09ab` to a dedicated active-worktree terminal. Review-only; coordinator must inspect any finding before edits. |
 | T19 | Fresh Luna-max documentation/contracts review | in progress | Dispatched at current origin tip `1cacbe04` as `task_f45031efa267` / `ctx_1dfd3f014be4` to a dedicated active-worktree terminal. Review-only; all modified/new Markdown plus `program.md` are in scope. |
 | T20 | Fresh Luna-max migration/release-integrity review | in progress | Dispatched at current origin tip `1cacbe04` as `task_710d3245f178` / `ctx_edf36d553d88` to a dedicated active-worktree terminal. Review-only; migration squash and external-ledger assumption are release gates. |
+| T21 | Synchronize generated route-policy audit and ledger | complete | `apps/api/scripts/route-policy-audit.ts` now expects the live 339-row inventory (18 public, 12 token, 47 authenticated, 195 capability, 67 contextual); `NODE_ENV=test pnpm --filter @hackos/api route-policy:audit` passed and regenerated `docs/access-control-route-ledger.md`, adding the four routes that had drifted from the checked-in counts. |
 
 ## Code/schema changes reconciled
 
@@ -233,7 +234,7 @@ facing documentation.
 
 The raw first-wave archive is `/tmp/pr584-orchestration-messages.json`
 (200 messages). A live inbox snapshot added 58 messages; after de-duplication
-by message id, 326 received messages are listed below. The ledger records every
+by message id, 328 received messages are listed below. The ledger records every
 received id/type/subject/timestamp, including heartbeats and status noise so
 the rate-limited handoff is auditable. Full bodies remain in the raw archive
 where present; the most important worker_done bodies are summarized in the
