@@ -1,130 +1,391 @@
-# H54 remediation program
+# H54 PR #584 remediation program
 
-This file is the live work plan for resolving the PR #584 account-deletion and
-anonymization findings on `danicallero/account-deletion-anonymization`.
+This tracker records the coordinated review and remediation of PR #584
+(`feat(H54): implement account deletion and anonymization`) on
+`danicallero/account-deletion-anonymization`. It is intentionally kept in the
+worktree so a later coordinator can resume without reconstructing the
+rate-limited review history.
 
-## Baseline
+## Baseline and coordination
 
-- PR: #584 (`feat(H54): implement account deletion and anonymization`)
 - Base: `067d783befc732fc625fd4a8bd3c0b4ad046733f`
 - Review head at intake: `5059ff81a5076c3b070c2b8d013be90f461bb0d4`
-- Working mode: same active worktree, coordinated Luna-max workers, no blind
-  resets or destructive history rewriting.
-- Prior raw orchestration messages: `/tmp/pr584-orchestration-messages.json`.
-- Prior validation: lint, web typecheck/tests, mobile tests, and CI run
-  `33100380561` passed; local API integration was unavailable because the
-  PostgreSQL/worker setup was not running.
+- Checkpoint commit: `e6ce8c1d` (`fix(H54): close PR review isolation and migration gaps`)
+- Worktree policy: shared active checkout; no blind reset, force-push, or destructive history rewrite.
+- Workers: Orca orchestration with `gpt-5.6-luna` at max effort only. Worker edits were reviewed in place and committed as a checkpoint.
+- Coordinator terminal: `term_d22851bc-ee04-441c-aaa9-ff22ee0f213e`.
 
-## Assumptions requiring verification
+## Assumptions and decisions
 
-| ID | Assumption | Effect if false | Owner/status |
+| ID | Current decision/evidence | Release implication |
+|---|---|---|
+| A1 | H54 files `0730`–`0746` were development-only; the chain is now one final `0730_account_deletion_anonymization.sql`. Fresh migration tests and a temporary full-schema apply passed on local Postgres 5432. | Release owner must still confirm no external database has recorded any deleted H54 filename/checksum. If false, restore an additive upgrade path before merge. |
+| A2 | Pending accounts retain only the short-lived exit-operational envelope; ordinary identity/domain writers are blocked and exit expiry is bounded. | Product/legal must confirm the retention boundary; no broader pending retention is implied by this code. |
+| A3 | Pending allowlist is recovery/status/cancel/sign-out plus a valid current-badge/event-end exit. Better Auth generated routes and identity writers are gated; admin-origin cancellation is rejected by policy (A7). | Keep the route-matrix and multi-session tests in the release gate. |
+| A4 | `users.badge_assigned_at` is the authoritative stale-scan fence; web/mobile retries and native roster replacement use owner/session epochs. | Do not replace the fence with client time. |
+| A5 | Fixture markers are enforced on project/challenge/repository, queue, logistics, notification, presence, Devpost, SSE, and explicit challenge-enqueue writes. | Any new capability that can read/write queue graphs must call the same marker guard. |
+| A6 | Form versions are immutable; responses are non-null and composite-FK bound to the same application. Fixtures and `seed-mock.ts` now create/select the current snapshot and update the pointer on upsert. | Keep direct SQL fixture exceptions only where a test deliberately asserts the NOT NULL error. |
+| A7 | Admin-originated pending removals have no self-service idempotency marker and are rejected by the cancellation path; self-service cancellation is deadline-locked and replay-safe. | If administrators need cancellation later, add an explicit audited policy rather than widening the current route. |
+
+## Work ledger
+
+| ID | Work item | Status | Evidence / assumption note |
 |---|---|---|---|
-| A1 | Migrations `0730`–`0746` have never shipped outside this development branch. | Do not rewrite names/checksums; design a separately verified upgrade path. | Release/DB — pending |
-| A2 | A pending account may retain only the minimum short-lived exit-operational state until a physical exit. | If the product accepts broader temporary retention, document the exception; otherwise scrub/redesign the pending envelope. | Identity/product — pending |
-| A3 | A pending user may perform only recovery/status/cancel/sign-out plus a valid current-badge exit. | Better Auth and all ordinary domain writers must remain blocked. | Identity/security — pending |
-| A4 | `users.badge_assigned_at` is the authoritative stale-scan fence. | Do not weaken timestamp checks or replace it with client time. | Logistics/security — pending |
-| A5 | Fixture accounts/resources must never cross ordinary account/resource scopes. | Any exception needs an explicit fixture capability and tests. | Domain owners — pending |
-| A6 | Form versions are immutable and every response has a valid version. | Preserve an explicit compatibility policy instead of nullable fallbacks. | Applications — pending |
-| A7 | Admin-originated pending removal cancellation is either intentionally allowed or source-restricted. | Persist initiator/source and enforce the chosen policy. | Product/security — decision needed |
+| C1–C4 | Web queue ownership/serialization, account-switch fencing, stale badge terminal code | complete | Client wave plus focused web tests; A4/A5. |
+| C5–C6 | Mobile retry classification and native roster generation fencing | complete | Mobile tests/typecheck; A4/A5. |
+| C7–C10 | Pending-removal retry surfaces, bounded refresh, Dynamic Type, trilingual integrity copy | complete | Web/mobile tests and copy check; A2/A3. |
+| I1–I4 | Better Auth route allowlist, signed-cookie expiry binding, cancellation race/idempotency, pending identity mutation rejection | complete | Identity worker tests/static checks; A3/A7. |
+| D1–D2 | Pending-target review locks and durable DSR failure transitions | complete | API source/tests and durable retry paths; A2/A3. |
+| D3–D5 | Fixture graph isolation, logistics/SSE scope, hidden fixture visibility after scrubbing | complete | Domain and cross-layer audits; A5. |
+| DB1–DB4 | Squash H54 migrations, install final active-user triggers, versioned responses, remove temporary scanner DDL/cleanup DML | complete | Fresh migration suite: 9/9 on local Postgres 5432; schema DBML synchronized; A1/A6. |
+| DOC1 | Rewrite stale account-removal, worker, fixture, module, migration/schema claims | complete | Migration/docs audit and `pnpm lint`; no stale 0731–0746 references remain in reviewed docs. |
+| DOC2 | Update the external PR body/checklist and release/legal metadata | pending external gate | The PR description is not a tracked worktree file; update it from the final validation below before merge. |
+| T1 | Add regression coverage for races, pending allowlist, fixture scope, queue SSE, form versions, and migrations | complete | Web: 40 files/298 tests; mobile: 44 suites/222 tests; migration: 9 tests; API DB suites require Valkey/5433. |
+| T2 | Run repository gates and record infrastructure limitations | complete with blocker recorded | `pnpm lint`, API/web/mobile typechecks, web/mobile suites, diff checks, and fresh migration suite pass. Full API integration and queue DB suites cannot run against unavailable/resetting Valkey/Postgres 5433. |
+| T3 | Repair all direct application-response fixtures and non-test writers for H54 form-version NOT NULL | complete | Shared race-safe test helper, all fixtures, `applications/service.ts`, and `seed-mock.ts`; seed upsert updates the current snapshot pointer. |
+| T4 | Isolate queue fixture broadcasts and explicit challenge enqueue | complete | `queue:fixture` topic, marker-scoped notifications, and transactional challenge/repo guards with regression coverage. |
+| T5 | Make offline meal fixture classification stable across account scrubbing | complete | `meal_scan_batches.is_test_account` captured at enqueue; processing uses the persisted marker; migration/DBML coverage added. |
+| T6 | Final high-risk Luna audit | coordinator-reconciled | First final auditor hit the Luna usage limit before `worker_done` after reporting the enqueue gap; coordinator applied the guard. A bounded replacement audit is dispatched below. |
 
-## Work items
+## Code/schema changes reconciled
 
-| ID | Area/task | Status | Assumption/acceptance evidence |
-|---|---|---|---|
-| C1 | Web queue cleanup must be owner-scoped; never clear another account's local queues. | pending | A5; cross-account browser test |
-| C2 | Serialize web offline queue load/enqueue/replay persistence. | pending | A4; lost-update/concurrency test |
-| C3 | Guard web queue loads/saves across account switches. | pending | A5; A→B epoch test |
-| C4 | Terminalize `badge_scan_before_assignment` on web and share the code contract. | pending | A4; stale replay test |
-| C5 | Fix mobile corrected-clock retry result classification. | pending | Retryable failures stop replay; terminal failures are acked |
-| C6 | Guard native roster snapshot replacement by owner/generation. | pending | A5; sign-out/switch race test |
-| C7 | Make pending-removal web polling resilient to transient refresh failures. | pending | A3; visible retry, no false redirect |
-| C8 | Make pending-removal mobile refresh bounded, retryable, and error-visible. | pending | A3; expiry/5xx tests |
-| C9 | Make pending-removal UI Dynamic-Type/large-text safe. | pending | Accessibility/manual test |
-| C10 | Align deletion copy with `integrityWarning` and pending states. | pending | A2; es/gl/en parity |
-| I1 | Enforce pending-state allowlist around Better Auth generated routes. | pending | A3; route matrix test |
-| I2 | Parse the actual Better Auth session cookie and bind exact expiry. | pending | A3; multi-session test |
-| I3 | Close cancellation deadline race and add cancellation idempotency. | pending | A7; row-lock/retry tests |
-| I4 | Reject/handle pending-account writes in all identity mutation paths. | pending | A2/A3; direct SQL and API tests |
-| D1 | Block application reviews/staff mutations against pending targets. | pending | A3; user-first lock-order test |
-| D2 | Make DSR worker failure transition durable and retryable. | pending | A3; failure-after-removal test |
-| D3 | Enforce fixture markers in project/repository/challenge graph mutations. | pending | A5; mixed-graph tests |
-| D4 | Enforce fixture scope in notifications, sponsors, queue writes, and SSE. | pending | A5; read/write/broadcast tests |
-| D5 | Preserve hidden fixture visibility after DSR subject scrubbing. | pending | A5; post-scrub listing test |
-| DB1 | Squash H54 migrations into one dependency-safe final `0730` migration. | in progress | A1; fresh install and ledger checks |
-| DB2 | Install active-user reference triggers after all final FKs; cover `time_logs`. | in progress | A3; catalog/behavior tests |
-| DB3 | Enforce non-null/versioned application responses and regenerate DBML. | in progress | A6; composite-FK tests |
-| DB4 | Remove temporary scanner DDL and broad fresh-schema cleanup DML. | in progress | A1; separate populated upgrade if needed |
-| DOC1 | Rewrite stale account-removal, fixture, module, worker, and migration claims. | pending | Must match final code/schema |
-| DOC2 | Update PR body/checklist and legal/copy metadata inconsistencies. | pending | CI/checklist reflects actual state |
-| T1 | Add regression coverage for races, pending allowlist, fixture isolation, and migrations. | pending | Tests listed beside each fix |
-| T2 | Run lint, typechecks, web/mobile tests, API tests where DB permits, and diff/schema audits. | pending | No unresolved P1s; record blockers |
+- Replaced the development-only 0730–0746 chain with one dependency-safe H54
+  migration; generated DBML matches the resulting schema.
+- Added lifecycle gates, immutable application form versions and composite
+  response FK, active-user reference triggers (including `time_logs`),
+  keyed scanner denylist digests, anonymous audit subjects, and fixture
+  registries/queues.
+- Hardened pending identity/auth flows, cancellation deadlines, DSR retries,
+  application/review locking, export visibility, and synthetic announcement/DSR
+  marker retention.
+- Scoped project/challenge/repository mutations and reads, queue/logistics
+  broadcasts and notifications, presence/Devpost aggregates, scanner rosters,
+  and pending-exit response contracts.
+- Fixed mobile/web offline queue ownership, epoch fencing, retry outcomes,
+  stale-badge terminalization, pending-removal retry UX, and Dynamic Type/copy
+  parity.
+- Preserved durable offline scans when storage persistence fails; replay remains
+  idempotent via `(deviceId, clientScanId)` instead of clearing the owner queue.
+- Captured meal-batch fixture state at enqueue so scrubbing `submitted_by`
+  cannot leak a synthetic completion on the real logistics topic.
+- Added the explicit challenge enqueue marker guard: a real `QUEUE_ADMIN`
+  cannot guess synthetic challenge/repository ids, and a fixture operator cannot
+  cross into real graph ids.
+- Seed/test response writers now always bind current immutable form snapshots.
 
-## Coordination rules
+## Validation record
 
-1. Workers use Luna max only and stay inside their assigned file boundaries.
-2. Workers report exact files, tests, assumptions, and any blocker before
-   stopping. A worker terminal is either actively progressing or closed; no
-   stale/rate-limited panes remain.
-3. No migration rewrite is treated as safe until A1 is verified. If A1 fails,
-   preserve deployed filenames/checksums and split upgrade work from the fresh
-   schema.
-4. `program.md` is updated at each completed wave and before the final merge
-   recommendation.
+Passed on the current checkpoint (and rerun after the final guard/marker edits
+where noted):
 
-## Received-message digest
+- `git diff --check`
+- `pnpm lint` (Biome, copy parity, page-size advisory only)
+- `pnpm --filter @hackos/api typecheck`
+- `pnpm --filter @hackos/web typecheck`
+- `pnpm --filter @hackos/mobile typecheck`
+- `pnpm --filter @hackos/web test` — 40 files, 298 tests
+- `pnpm --filter @hackos/mobile test` — 44 suites, 222 tests
+- `TEST_DATABASE_URL=postgres://dani@localhost:5432/hackos_test_skipjack pnpm --filter @hackos/api exec vitest run test/migrations.test.ts` — 1 file, 9 tests
 
-The complete raw review archive is `/tmp/pr584-orchestration-messages.json`.
-The rate-limited review wave produced the following actionable message groups;
-the individual messages remain in that archive and the current worker inbox:
+Blocked/limited:
 
-- Client review: web queue deletion must be owner-scoped and serialized; guard
-  account-switch races; terminalize `badge_scan_before_assignment`; mobile
-  corrected-clock retries must distinguish terminal from transient failures;
-  native roster replacement needs an owner/generation fence; pending-removal
-  refresh must show retry state; large text and all three locales must remain
-  usable.
-- Identity review: restrict Better Auth generated routes for pending accounts;
-  parse the actual signed session cookie and bind the initiating expiry; close
-  cancellation-deadline races; add cancel idempotency; reject pending identity
-  mutations; decide and enforce the admin-origin cancellation policy; do not
-  let a late `202` overwrite a finalized `200`.
-- Domain review: lock users before application decisions/expiry; make DSR
-  failures durable and retryable; isolate project/challenge/repository,
-  notification, sponsor, queue and logistics fixture graphs; preserve hidden
-  fixture visibility after subject scrubbing; sanitize logistics SSE and
-  pending-exit responses; close pending sessions at event end or expiry.
-- Migration/docs review: the development-only H54 chain must be flattened;
-  install final active-user triggers after all foreign keys, including
-  `time_logs`; make application response form versions non-null and
-  same-application; use keyed scanner denylist digests; remove stale migration
-  references and overconfident deletion claims from docs.
-- Final contract audit (`task_f138457866da` / `ctx_911d7131f24f`) reported and
-  fixed pending-exit identity-less response contracts, collision-proof session
-  row IDs, fixture-scoped presence aggregates and Devpost prize mappings, and
-  restored all real attendee roles to scanner snapshots. Web/API typechecks,
-  lint/copy/page checks, mobile scanner tests, and the web suite passed; API
-  integration remained blocked by the unavailable/resetting local PostgreSQL
-  service on port 5433.
+- API integration suites and queue access-isolation require Valkey and the
+  configured Postgres test service on localhost:5433. The Postgres proxy resets
+  connections and Valkey 6379 is unresponsive; the queue isolation run failed
+  in setup at `valkey.flushdb()`, before assertions. Do not report those
+  suites as passed.
+- A temporary database applying all migrations and schema generation succeeded
+  on local Postgres 5432; it was dropped after verification.
 
-The current Luna-max remediation assignments are:
+## Orca task/terminal ledger
 
-| Task | Orca task / dispatch | Terminal | Boundary |
-|---|---|---|---|
-| Client C1–C10 | `task_0d915065b06b` / `ctx_8df30fb8aed4` | `term_7af73a39-37e2-43ba-8992-d6ffd72b25ef` | web/mobile and client tests |
-| Identity I1–I4 | `task_baa929b4817e` / `ctx_944e85b10af2` | `term_d35800db-2dd2-4f22-bfa0-69b0a19c8e7f` | API identity/auth and identity tests |
-| Domain D1–D5 | `task_800af7e1d910` / `ctx_8757843fcfa7` | `term_d8effabb-d4a9-4b0b-9d40-55c4e8fc3a32` | API domain code/tests outside identity/migrations |
-| Final contract audit | `task_f138457866da` / `ctx_911d7131f24f` | `term_a67f02ea-1dc1-43a7-af78-a590cd9b6cbf` | pending-exit contracts, scanner scope, Devpost fixture reads |
-| Queue fixture SSE audit | `task_36bf90626c45` / `ctx_8cf9abcfc93d` | `term_d56cdf6e-3563-4af2-a1d6-b0db6bc81707` | queue/project broadcasts and stream topic isolation |
-| Migration/docs final audit | `task_d4ca8403635b` / `ctx_5f42fc884e5c` | `term_c58c595f-0ab2-448e-bf9c-2d1cae872fde` | squashed DDL, DBML, documentation and migration tests |
+| Task | Dispatch / terminal | Result |
+|---|---|---|
+| Client C1–C10 | `task_0d915065b06b` / `ctx_8df30fb8aed4` / `term_7af73a39-37e2-43ba-8992-d6ffd72b25ef` | worker_done; closed |
+| Identity I1–I4 | `task_baa929b4817e` / `ctx_944e85b10af2` / `term_d35800db-2dd2-4f22-bfa0-69b0a19c8e7f` | worker_done; closed |
+| Domain D1–D5 | `task_800af7e1d910` / `ctx_8757843fcfa7` / `term_d8effabb-d4a9-4b0b-9d40-55c4e8fc3a32` | worker_done; closed |
+| Final contract audit | `task_f138457866da` / `ctx_911d7131f24f` / `term_a67f02ea-1dc1-43a7-af78-a590cd9b6cbf` | worker_done; closed |
+| Queue fixture SSE audit | `task_36bf90626c45` / `ctx_8cf9abcfc93d` / `term_d56cdf6e-3563-4af2-a1d6-b0db6bc81707` | worker_done; closed |
+| Migration/docs audit | `task_d4ca8403635b` / `ctx_5f42fc184e5c` / `term_c58c595f-0ab2-448e-bf9c-2d1cae872fde` | worker_done; closed |
+| Fixture compatibility | `task_df9e1802430e` / `ctx_8bc9b3b59437` / `term_27ef62da-b9e0-4c9d-9a7b-a367ea8ebba9` | worker_done; closed |
+| Offline queue persistence | `task_fec6ea6fe8ba` / `ctx_ff54a849ee39` / `term_8ed39853-21ac-44ad-879b-8b5f692ceb14` | worker_done; closed |
+| Seed writer audit | `task_917eceaf4b27` / `ctx_349a9b061ef5` / `term_adb22f56-8f92-4324-a259-fbf20257d9e3` | worker_done; closed; coordinator strengthened upsert pointer |
+| First final regression audit | `task_9d1538ff7e76` / `ctx_bca828f9bd5d` / `term_c6bae4ca-c8b6-4327-a294-9aa88ae49587` | failed: Luna usage limit before worker_done; terminal closed; enqueue gap reconciled |
+| Bounded replacement audit | `task_19883aa8e94e` / `ctx_6cb71354099b` / `term_6491c35d-a808-4483-9d95-302da3bc475a` | dispatched; read-only; await worker_done |
 
-All three use `gpt-5.6-luna max`, share this worktree, were told not to commit,
-and must send exactly one `worker_done` before their terminal is closed. The
-coordinator is `term_d22851bc-ee04-441c-aaa9-ff22ee0f213e`; no Terra worker is
-part of the active wave. Stale terminals are closed after their evidence is
-captured.
+## Received-message ledger
+
+The raw first-wave archive is `/tmp/pr584-orchestration-messages.json`
+(200 messages). A live inbox snapshot added 58 messages; after de-duplication
+by message id, 238 received messages are listed below. The ledger records every
+received id/type/subject/timestamp, including heartbeats and status noise so
+the rate-limited handoff is auditable. Full bodies remain in the raw archive
+where present; the most important worker_done bodies are summarized in the
+work ledger above.
+
+- 2026-08-28 00:36:23 · seq 404 · worker_done · `msg_06c42af2c0c4` · Fixed H54 seed application-response writer
+- 2026-08-28 00:33:25 · seq 401 · heartbeat · `msg_af7e391f2a98` · seed writer audit
+- 2026-08-28 00:32:14 · seq 400 · worker_done · `msg_c39a12ef0875` · Fixed offline queue loss on persistence failure
+- 2026-08-28 00:30:57 · seq 398 · heartbeat · `msg_efeda70a0589` · alive
+- 2026-08-28 00:30:53 · seq 397 · status · `msg_05da485c18fc` · Minimal fix applied and tests pass
+- 2026-08-28 00:30:38 · seq 396 · heartbeat · `msg_f2fcc2362562` · alive
+- 2026-08-28 00:27:58 · seq 395 · worker_done · `msg_d066d2ec1dd8` · Completed H54 fixture compatibility
+- 2026-08-28 00:26:02 · seq 394 · status · `msg_3da4599a9912` · Found queue-loss bug
+- 2026-08-28 00:25:26 · seq 393 · heartbeat · `msg_63eb78de48c4` · fixture audit complete
+- 2026-08-28 00:24:44 · seq 392 · heartbeat · `msg_74de1e28c51e` · alive
+- 2026-08-28 00:22:53 · seq 391 · status · `msg_1a917214c753` · Investigating offline queue persistence
+- 2026-08-28 00:17:48 · seq 390 · heartbeat · `msg_da0946e850e0` · alive
+- 2026-08-28 00:15:35 · seq 387 · status · `msg_81d4efdc3386` · audit progress
+- 2026-08-28 00:11:10 · seq 386 · heartbeat · `msg_27fa883e4eb1` · alive
+- 2026-08-28 00:03:32 · seq 385 · worker_done · `msg_75a2953a55ed` · Completed static H54 migration/docs audit
+- 2026-08-28 00:01:55 · seq 384 · worker_done · `msg_8bd1a8102572` · Fixed fixture queue SSE isolation
+- 2026-08-28 00:00:52 · seq 383 · heartbeat · `msg_eddfeb445245` · alive
+- 2026-08-27 23:59:03 · seq 382 · status · `msg_030dba3224d9` · Read/context audit: safe real-only assumption
+- 2026-08-27 23:56:57 · seq 381 · heartbeat · `msg_f585a8319ef7` · alive
+- 2026-08-27 23:54:21 · seq 380 · heartbeat · `msg_8942301a6eff` · alive
+- 2026-08-27 23:51:40 · seq 379 · status · `msg_96ca4e29123d` · Scoped notify fan-out too
+- 2026-08-27 23:50:58 · seq 378 · worker_done · `msg_3a383c2e9b71` · Fixed H54 cross-layer regressions
+- 2026-08-27 23:50:48 · seq 377 · heartbeat · `msg_382020ef91ae` · alive
+- 2026-08-27 23:44:03 · seq 376 · heartbeat · `msg_1f556f2d0f62` · alive
+- 2026-08-27 23:41:18 · seq 375 · status · `msg_6a73f3ca0951` · Audit found shared queue topic leak
+- 2026-08-27 23:29:37 · seq 374 · heartbeat · `msg_70b9dea92224` · alive
+- 2026-08-27 23:27:37 · seq 372 · worker_done · `msg_7372246cc87a` · Completed H54 domain remediation
+- 2026-08-27 23:22:49 · seq 371 · worker_done · `msg_c9f9b9f980ff` · Completed: synthetic announcement and DSR marker scrubbing
+- 2026-08-27 23:17:21 · seq 370 · worker_done · `msg_da32cf70c0ac` · Completed H54 client wave
+- 2026-08-27 23:15:20 · seq 369 · worker_done · `msg_a5a79664df9f` · Completed: H54 identity remediation I1-I4
+- 2026-08-27 23:13:54 · seq 368 · heartbeat · `msg_891a0d9de9e6` · alive
+- 2026-08-27 23:05:06 · seq 362 · heartbeat · `msg_6365febb1522` · alive
+- 2026-08-27 22:47:19 · seq 357 · heartbeat · `msg_4d51fbcfeaa2` · alive
+- 2026-08-27 22:46:30 · seq 356 · heartbeat · `msg_ffc69bf7780b` · alive
+- 2026-08-27 22:43:59 · seq 354 · status · `msg_5b47b4ff782f` · Coordinator takeover: report remediation ownership
+- 2026-08-27 18:23:17 · seq 353 · status · `msg_d8ff18b1850c` · Per-file squash disposition
+- 2026-08-27 18:22:53 · seq 352 · status · `msg_61569f234356` · Exact squash map A-E
+- 2026-08-27 18:22:40 · seq 351 · status · `msg_9843942f22c6` · Review findings validated: DSR, application reviews, project scope
+- 2026-08-27 18:22:25 · seq 350 · worker_done · `msg_3310e33de778` · Review findings reported
+- 2026-08-27 18:22:17 · seq 349 · status · `msg_c2c43474103a` · PR #584 findings 2/2: pending removal, UX, contracts
+- 2026-08-27 18:22:07 · seq 348 · status · `msg_781e68c87785` · Migration review findings 8-9
+- 2026-08-27 18:21:59 · seq 347 · status · `msg_66bff8a02fb1` · PR #584 findings 1/2: offline scanner and queue
+- 2026-08-27 18:21:57 · seq 346 · status · `msg_ff3cff538151` · Migration review findings 4-7
+- 2026-08-27 18:21:42 · seq 345 · status · `msg_10cbac071fc1` · Migration review findings 1-3
+- 2026-08-27 18:21:25 · seq 344 · status · `msg_6870ca7dd90c` · test
+- 2026-08-27 18:21:21 · seq 343 · heartbeat · `msg_7f507b9b024b` · alive
+- 2026-08-27 18:16:19 · seq 342 · heartbeat · `msg_8aa4aa272f10` · alive
+- 2026-08-27 18:14:55 · seq 341 · heartbeat · `msg_86464e6af826` · alive
+- 2026-08-27 18:12:17 · seq 340 · heartbeat · `msg_f22f7c9f064b` · alive
+- 2026-08-27 18:10:28 · seq 339 · heartbeat · `msg_ed28083511bd` · alive
+- 2026-08-27 18:06:32 · seq 338 · heartbeat · `msg_65d1f34adb8f` · alive
+- 2026-08-27 18:05:37 · seq 337 · heartbeat · `msg_052232b451ee` · alive
+- 2026-08-27 18:01:48 · seq 336 · heartbeat · `msg_9ef23a6f1f6e` · alive
+- 2026-08-27 18:01:47 · seq 335 · heartbeat · `msg_17396815e4ec` · alive
+- 2026-08-27 18:00:49 · seq 334 · status · `msg_c0e2ffb8076c` · Review started
+- 2026-08-27 17:59:42 · seq 333 · heartbeat · `msg_d5df1bd83b2f` · alive
+- 2026-08-27 17:59:39 · seq 332 · heartbeat · `msg_75d84407b593` · alive
+- 2026-08-27 17:59:38 · seq 331 · heartbeat · `msg_a56fb572b2f8` · alive
+- 2026-08-27 15:37:35 · status · `msg_687289499fcb` · Status check: synthetic queue/read-path audit
+- 2026-08-27 14:34:35 · status · `msg_bc0337ba5490` · Follow-up: fixture visibility and synthetic judging queue audit
+- 2026-08-27 14:02:26 · worker_done · `msg_b1c376a5a37f` · Completed: H54 privacy/fixture/PIN audit
+- 2026-08-27 13:59:33 · status · `msg_ac19c34afb40` · H54 follow-up audit: legal, fixtures, stats, PIN
+- 2026-08-27 13:40:10 · heartbeat · `msg_71c3591f44b8` · alive
+- 2026-08-27 12:24:18 · worker_done · `msg_6c38243eb337` · Review complete: auth and deadline bugs
+- 2026-08-27 12:05:22 · heartbeat · `msg_79dde87e26a8` · alive
+- 2026-08-27 11:58:53 · heartbeat · `msg_aaee0d679380` · alive
+- 2026-08-27 06:28:37 · worker_done · `msg_c849491aafda` · H54 venue-state audit complete
+- 2026-08-27 06:28:23 · heartbeat · `msg_218a8dab678e` · alive
+- 2026-08-27 06:28:16 · status · `msg_2105140c6463` · Consolidated H54 venue-state audit
+- 2026-08-27 06:27:27 · status · `msg_d6f91d93e6f2` · Validation snapshot: lint/typechecks fail on live H54 diff
+- 2026-08-27 06:27:13 · escalation · `msg_74df8151dd28` · Web typecheck regressions in H54 UI/tests
+- 2026-08-27 06:26:58 · escalation · `msg_9ddb1530b570` · Mobile typecheck regression in pending Alert
+- 2026-08-27 06:26:35 · status · `msg_f8162bfedc5e` · Mobile pending response is accepted but ignored
+- 2026-08-27 06:24:59 · status · `msg_0cc8b74973a1` · P0 privacy race: pending exit scan idempotency response persists target identity
+- 2026-08-27 06:24:43 · status · `msg_dd83043d3786` · P1 race: late 202 onSend can regress completed removal
+- 2026-08-27 06:24:20 · status · `msg_1dc5386948cb` · P0/P1 DB gate detail: time_logs update trigger scope bypass
+- 2026-08-27 06:21:53 · status · `msg_08e83e67f524` · P1 idempotency issue: storage failure leaves replayable 202
+- 2026-08-27 06:21:20 · status · `msg_d5869494b55b` · Correction: all four 202 handlers omit reply
+- 2026-08-27 06:21:01 · escalation · `msg_78d5ca17977b` · Blocking review finding: self-service pending branch uses undefined reply
+- 2026-08-27 06:19:37 · heartbeat · `msg_844a726a2462` · alive
+- 2026-08-27 06:19:37 · status · `msg_764bac8c69b6` · Follow-up findings: FK guards, web presence, badge-less pending
+- 2026-08-27 06:15:36 · status · `msg_2fbe77e04a09` · H54 venue-state audit findings
+- 2026-08-27 06:04:43 · heartbeat · `msg_ac4c68621d8c` · alive
+- 2026-08-27 05:59:04 · status · `msg_632bbc8ad0de` · Correction: live removal diff still needs venue deferral
+- 2026-08-27 05:57:16 · status · `msg_479173938da5` · H54 audit: race/offline/privacy/test matrix
+- 2026-08-27 05:55:36 · status · `msg_6535608d4d6a` · H54 audit: venue-state blockers and minimum design
+- 2026-08-27 05:55:05 · worker_done · `msg_991b85a9d45a` · Completed: H54 review-only audit
+- 2026-08-27 05:54:54 · heartbeat · `msg_8113fa752b03` · alive
+- 2026-08-27 05:54:48 · status · `msg_8eb5354998fc` · Concrete 0735 breakages and policy decisions
+- 2026-08-27 05:52:58 · status · `msg_1f89cb717cdd` · Review of in-flight 0735 changes
+- 2026-08-27 05:52:10 · status · `msg_54ffb32ac71c` · H54 tests docs assumptions
+- 2026-08-27 05:51:09 · status · `msg_968202a9a0e4` · H54 recommended versioned retention design
+- 2026-08-27 05:49:53 · status · `msg_c2a2ad21b233` · H54 audit evidence
+- 2026-08-27 05:43:59 · heartbeat · `msg_e380dea3da23` · alive
+- 2026-08-27 05:43:56 · heartbeat · `msg_889b33574bbf` · alive
+- 2026-08-27 05:37:58 · status · `msg_35850ea5466c` · Starting H54 venue-state audit
+- 2026-08-27 05:37:56 · heartbeat · `msg_7f8f9fee5475` · alive
+- 2026-08-26 22:01:21 · worker_done · `msg_1d2a71866753` · Review complete: offline queue privacy gaps
+- 2026-08-26 22:00:36 · status · `msg_bbfd7241252c` · Focused review can close
+- 2026-08-26 21:59:56 · heartbeat · `msg_037537af5279` · reviewing owner/closure races
+- 2026-08-26 21:51:41 · heartbeat · `msg_6b67737a19b5` · reviewing latest queue changes
+- 2026-08-26 20:51:33 · worker_done · `msg_97e9ca094105` · H54 review complete: blockers found
+- 2026-08-26 20:51:27 · status · `msg_dd107ad62bc8` · Detailed H54 review
+- 2026-08-26 20:50:16 · heartbeat · `msg_0fee0f3c5733` · alive
+- 2026-08-26 20:36:47 · heartbeat · `msg_ed0a50b6bad5` · alive
+- 2026-08-26 19:02:31 · worker_done · `msg_18c5a4f5f234` · Review complete: concurrency/security findings
+- 2026-08-26 19:02:23 · status · `msg_41d0f0390de3` · Review findings: concurrency/security
+- 2026-08-26 18:55:27 · worker_done · `msg_fca8efda91c3` · Audit complete
+- 2026-08-26 18:55:20 · status · `msg_88cd5a73c316` · Audit findings
+- 2026-08-26 18:50:27 · worker_done · `msg_487a5baa467b` · Completed account deletion audit
+- 2026-08-26 18:50:18 · escalation · `msg_2c779bf3198d` · Critical account-removal blockers and retention audit
+- 2026-08-26 18:47:40 · heartbeat · `msg_c46e20c45633` · alive
+- 2026-08-26 18:31:56 · heartbeat · `msg_086a04a25320` · alive
+- 2026-08-26 18:31:53 · heartbeat · `msg_6177a96c5402` · alive
+- 2026-08-26 18:25:58 · heartbeat · `msg_a6896c5a82da` · alive
+- 2026-08-26 18:24:25 · heartbeat · `msg_c30e812b6c1e` · alive
+- 2026-08-25 07:49:59 · worker_done · `msg_6be83366d6ab` · Completed internal #544 qualification gate
+- 2026-08-25 00:28:34 · worker_done · `msg_db443a6e03d0` · Completed #544 SSE metric aggregation
+- 2026-08-25 00:25:22 · heartbeat · `msg_07f394c680c1` · alive
+- 2026-08-25 00:23:58 · worker_done · `msg_60f24a05d618` · Completed: #544 event-day load harness
+- 2026-08-25 00:18:59 · heartbeat · `msg_073540b24e53` · alive
+- 2026-08-25 00:05:39 · worker_done · `msg_5c438ac93d5b` · Completed browser realtime telemetry
+- 2026-08-25 00:00:27 · heartbeat · `msg_7b43169f9bba` · alive
+- 2026-08-24 23:55:49 · heartbeat · `msg_4c7e6faf7294` · alive
+- 2026-08-24 23:51:24 · status · `msg_c5b31d61d18c` · Overlap reconciliation complete
+- 2026-08-24 23:49:27 · heartbeat · `msg_073864d6629c` · alive
+- 2026-08-24 23:49:15 · worker_done · `msg_dbf662685f2d` · Completed #544 server lanes and telemetry (29c27e9)
+- 2026-08-24 23:44:29 · status · `msg_8af19f96ae13` · Integrated existing request lane primitives
+- 2026-08-24 23:40:20 · status · `msg_be0856951276` · Re: Shared worktree overlap detected
+- 2026-08-24 23:40:20 · status · `msg_216f49b4ca6b` · You own overlap reconciliation
+- 2026-08-24 23:39:58 · escalation · `msg_331fdcd24e5c` · Shared worktree overlap detected
+- 2026-08-24 23:38:54 · status · `msg_8eb069587eaf` · Found concurrent admission worktree changes
+- 2026-08-24 23:34:21 · heartbeat · `msg_090e5426b8b1` · alive
+- 2026-08-24 23:30:26 · heartbeat · `msg_9de1b87e8389` · alive
+- 2026-08-24 23:07:40 · worker_done · `msg_a55b896c3290` · Completed Stream C queue coalescing and gates
+- 2026-08-24 23:02:58 · worker_done · `msg_22a881560c53` · Completed: myQueueStatus N+1 removal
+- 2026-08-24 23:00:07 · heartbeat · `msg_e900bc9dbe7d` · alive
+- 2026-08-24 22:59:17 · worker_done · `msg_e0554b8b6fd5` · Completed: shared browser SSE broker
+- 2026-08-24 15:16:14 · status · `msg_08b84943f5e5` · PR #529 final: remove operator Check here concept
+- 2026-08-24 14:34:53 · status · `msg_b8b8f0d1e2f8` · Added visible waiting-room reminder action
+- 2026-08-24 14:22:56 · status · `msg_40fab79e1fd7` · Operator console action contract updated
+- 2026-08-24 14:13:03 · status · `msg_00d3101ffe0f` · Safety rules added to operator search actions
+- 2026-08-24 14:02:37 · status · `msg_4c0b81c04481` · Operator UI follow-up: single search and overflow actions
+- 2026-08-24 13:46:45 · status · `msg_053176070d3d` · New operator UX: remove stats and move global team search into tabs
+- 2026-08-24 13:17:27 · status · `msg_f13fc0f39d5c` · PR #529 updated with final operator UX
+- 2026-08-24 13:04:46 · status · `msg_e32eefb835b7` · Operator console visual contract: active rooms only
+- 2026-08-24 12:41:12 · status · `msg_d78420034468` · Sigue con Operator Console
+- 2026-08-24 12:36:46 · status · `msg_aa73cee3913d` · Operator Console UX revision from Dani
+- 2026-08-24 12:31:32 · status · `msg_3b20fb69debd` · Dependent PR opened for Operator Console
+- 2026-08-24 12:17:36 · status · `msg_bcd92c0db54e` · Operator Console branch ready for integration
+- 2026-08-24 12:05:35 · status · `msg_6e41c045e160` · Re: Confirmed terminal pairing for PR #528 integration
+- 2026-08-24 12:04:36 · status · `msg_05f6fc28fcd8` · Confirmed terminal pairing for PR #528 integration
+- 2026-08-24 12:03:35 · status · `msg_125f4a3b4330` · Operator Console integration contact
+- 2026-08-24 11:59:49 · status · `msg_e80c187d5b6b` · Dani asks you to continue Operator Console work
+- 2026-08-24 11:57:09 · status · `msg_9a4e604ffaed` · PR #528 shared queue UI status
+- 2026-08-23 12:59:35 · heartbeat · `msg_c1cf8738e248` · alive
+- 2026-08-23 12:56:23 · worker_done · `msg_9fb4cf296db1` · Review complete: one tooltip removal
+- 2026-08-23 12:54:59 · worker_done · `msg_0c10cd2def89` · Review complete: 2 high-confidence schedule copy removals
+- 2026-08-23 12:54:37 · worker_done · `msg_8cadf6c9986c` · Review complete: no high-confidence copy removals
+- 2026-08-23 12:53:54 · heartbeat · `msg_7e2652703476` · alive
+- 2026-08-23 12:49:15 · worker_done · `msg_50e6a61fef1f` · Review complete: one high-confidence duplicate
+- 2026-08-23 12:49:13 · worker_done · `msg_a257ecea9c5f` · Review complete: no removals
+- 2026-08-23 12:49:06 · worker_done · `msg_3becc34ac4f8` · Review complete: 3 copy removals
+- 2026-08-23 12:46:26 · heartbeat · `msg_a022d41ca0aa` · alive
+- 2026-08-23 12:42:39 · worker_done · `msg_610971ebbf05` · Review complete: 2 copy candidates
+- 2026-08-23 12:42:30 · worker_done · `msg_808eaea4764e` · Copy audit complete
+- 2026-08-23 12:42:17 · worker_done · `msg_aef1b7900a75` · Review complete: two high-confidence copy removals
+- 2026-08-23 12:42:06 · status · `msg_e2fb695da37c` · Copy audit findings: participant applications + secondary email
+- 2026-08-23 12:41:31 · status · `msg_7a84a24dd9a1` · copy audit underway
+- 2026-08-23 12:39:38 · heartbeat · `msg_a8c40eeacaaf` · alive
+- 2026-08-23 12:33:56 · worker_done · `msg_27a774c98183` · Public Packet 2 audit complete
+- 2026-08-23 12:32:58 · worker_done · `msg_ddb524d31c3c` · Packet 2 audit complete: no redundant copy findings
+- 2026-08-23 12:32:17 · heartbeat · `msg_2eec41078a3e` · audit pass
+- 2026-08-23 12:32:12 · worker_done · `msg_26b298eb9fc1` · Packet 2 public copy audit: no removals
+- 2026-08-23 12:31:18 · heartbeat · `msg_281c38ede247` · alive
+- 2026-08-23 12:23:50 · worker_done · `msg_fd8d44246e2e` · Packet 1 auth copy audit complete
+- 2026-08-23 12:22:28 · status · `msg_bea704166719` · Packet 1 auth copy audit findings
+- 2026-08-23 12:21:31 · worker_done · `msg_79d7ae531a7c` · Packet 1 auth copy audit complete: no removals
+- 2026-08-22 01:06:03 · worker_done · `msg_cb45740709a6` · Android schedule detail header fixed
+- 2026-08-22 01:04:25 · status · `msg_f1d0bf5248fe` · Issue audit complete; scoped fix identified
+- 2026-08-22 01:04:21 · heartbeat · `msg_6d833eb4555a` · alive
+- 2026-08-22 01:03:52 · worker_done · `msg_61fc642af5c0` · Android scanner crypto fix complete
+- 2026-08-22 01:03:22 · heartbeat · `msg_15a1707cd23f` · crypto boundary fix implemented and focused checks pass
+- 2026-08-22 01:01:00 · heartbeat · `msg_006a258e1e85` · instructions and crypto contract reviewed
+- 2026-08-22 01:00:13 · heartbeat · `msg_62a5c06dbe08` · docs and scope reviewed
+- 2026-08-22 00:59:50 · status · `msg_6748db3db180` · Reading complete; auditing Android symbols and glass contrast
+- 2026-08-22 00:58:56 · heartbeat · `msg_ba7bafba3e4d` · alive
+- 2026-08-22 00:58:55 · heartbeat · `msg_d8550d26e7ab` · alive
+- 2026-07-31 11:04:01 · worker_done · `msg_52aa5ccc7ee2` · PASS: independent AC-5 release gate; merge approved
+- 2026-07-31 10:58:20 · worker_done · `msg_206810898da0` · Completed: exact room judge scope
+- 2026-07-31 10:57:55 · status · `msg_fb38170c7337` · Coordinator review: bind active room assignment
+- 2026-07-31 10:57:42 · worker_done · `msg_a2e165f382f5` · FAIL: Orca provenance unavailable
+- 2026-07-31 10:55:46 · worker_done · `msg_fcce1c4fac10` · FAIL: cross-room judge authorization
+- 2026-07-31 10:53:39 · status · `msg_b234d116169b` · Finish release gate
+- 2026-07-31 10:50:52 · status · `msg_e1464fd9d391` · Release gate: scrutinize DAG records
+- 2026-07-31 10:49:06 · worker_done · `msg_57b3ad85636f` · Completed: mobile SSE Jest teardown remediation
+- 2026-07-31 10:40:30 · worker_done · `msg_373ca52dc3a9` · Resolved permission page-size ratchet
+- 2026-07-31 10:35:06 · worker_done · `msg_242918b745e0` · Anonymized capability revocation fixed
+- 2026-07-31 10:33:22 · worker_done · `msg_33c439c575fd` · Completed: AC-4 policy contract follow-ups
+- 2026-07-31 10:32:22 · worker_done · `msg_49ff186a8648` · Security review: one high, one medium
+- 2026-07-31 10:32:17 · status · `msg_2b59209927d6` · Finish security review report
+- 2026-07-31 10:32:05 · heartbeat · `msg_b7a1d6bf496c` · alive
+- 2026-07-31 10:30:15 · worker_done · `msg_00b36a30b184` · Completed template/client review remediation
+- 2026-07-31 10:30:01 · status · `msg_c2a4c803c5f6` · Coordinator will run route audit
+- 2026-07-31 10:28:50 · status · `msg_8c0d237dd981` · Coordinator review: OpenAPI public set is stale
+- 2026-07-31 10:28:28 · status · `msg_973ba5d56ed0` · Coordinator review: assert every class count
+- 2026-07-31 10:27:54 · status · `msg_d216698be808` · Coordinator review: reject unknown policy kinds
+- 2026-07-31 10:25:33 · worker_done · `msg_593dcc7723ad` · Completed templates backend (19 documented entries)
+- 2026-07-31 10:24:58 · status · `msg_cee5302f1921` · Finish AC-3T1
+- 2026-07-31 10:23:12 · worker_done · `msg_f94983231a26` · AC-2AR invite provenance remediated
+- 2026-07-31 10:21:15 · worker_done · `msg_d249242c17ce` · Completed: dedicated public invalidations
+- 2026-07-31 10:20:01 · status · `msg_0015575913a6` · Template count correction: 19
+- 2026-07-31 10:18:14 · worker_done · `msg_fc684b5f08c5` · AC-2A access policies complete
+- 2026-07-31 10:17:56 · worker_done · `msg_3eed40c6c6e6` · Completed: AC-3T2 permission-template web UI
+- 2026-07-31 10:17:50 · worker_done · `msg_5ae7d5cbf713` · Completed: public TV and authenticated operational clients
+- 2026-07-31 10:17:42 · heartbeat · `msg_0716a7371056` · alive
+- 2026-07-31 10:17:31 · worker_done · `msg_3e958bb7c444` · Completed: queue access and SSE isolation
+- 2026-07-31 10:16:09 · worker_done · `msg_c6eb593a31ee` · Completed: decision-only applications and additive dashboard
+- 2026-07-31 10:15:15 · status · `msg_041c7c5d53f3` · Coordinator review: queue entry scope widening
+- 2026-07-31 10:15:05 · worker_done · `msg_2c1383f014d8` · Completed AC-2D route policies (+71 ledger rows)
+- 2026-07-31 10:14:43 · status · `msg_9c71f8fb7873` · Serialized API tests
+- 2026-07-31 10:14:14 · worker_done · `msg_a23dcf245298` · Completed: AC-2B contextual authorization
+- 2026-07-31 10:12:25 · status · `msg_b88f8d20066a` · Queue registration corrected; finish without API tests
+- 2026-07-31 10:12:19 · escalation · `msg_7d7ffcaf61d1` · Shared route-policy suite blocked
+- 2026-07-31 10:12:04 · status · `msg_11c7d9cab7f3` · Stop API tests until slot granted
+- 2026-07-31 10:12:04 · status · `msg_5b5680ba497d` · Stop API tests until slot granted
+- 2026-07-31 10:11:42 · heartbeat · `msg_d06798a6ac4e` · alive
+- 2026-07-31 10:11:38 · status · `msg_1a9f3a75ae40` · Boundary correction: TV docs
+- 2026-07-31 10:11:14 · status · `msg_cd38550114f7` · Continue implementation; defer API tests
+- 2026-07-31 10:11:13 · status · `msg_ecbeff2192fb` · Fix empty contextual locator now
+- 2026-07-31 10:10:19 · escalation · `msg_4de18d529151` · Blocked test registration: queue contextual policy
+- 2026-07-31 10:08:59 · worker_done · `msg_81ae2ef5797e` · Completed: contextual collection route-policy scope
+- 2026-07-31 10:06:33 · worker_done · `msg_79d8cbfa62e1` · Completed: shared permission graph remediation
+- 2026-07-31 10:05:59 · status · `msg_4cd29f0b022f` · Contextual collection metadata
+- 2026-07-31 10:05:59 · status · `msg_ea82cb6909d8` · Contextual collection metadata
+- 2026-07-31 10:05:59 · status · `msg_489b573e8aea` · Contextual collection metadata
+- 2026-07-31 10:05:50 · status · `msg_696ed9fa29ad` · AC-1R additional route-policy correction
+- 2026-07-31 10:04:04 · status · `msg_374f9cbb5e5f` · Shared API test mutex
+
+Messages sent by the coordinator to workers (not received by the coordinator)
+are intentionally not counted in this incoming ledger. The first final auditor
+also emitted a terminal usage-limit event rather than a protocol message; it is
+recorded in task T6 and the task ledger.
 
 ## Continuation prompt
 
-Use this prompt if another coordinator must resume:
+Use this prompt for a future coordinator:
 
-> Continue PR #584 remediation on `/Users/dani/orca/workspaces/fablehackos/skipjack`, branch `danicallero/account-deletion-anonymization`. Read `AGENTS.md`, `CLAUDE.md`, `plan/historias-hackos.md`, `plan/07-datos-relevantes-ers.md`, `docs/README.md`, and this `program.md`. Use the Orca `orchestration` skill and Luna max workers only; inspect current task/terminal state before dispatching anything. Treat the current worktree as shared and preserve all uncommitted changes. First collect `worker_done`/escalation messages for `task_0d915065b06b`, `task_baa929b4817e`, and `task_800af7e1d910`; close each worker terminal only after completion evidence. Review their diffs for correctness before updating statuses. Finish remaining root-owned work: pending-identity exposure in logistics reads/SSE, DSR/fixture marker races, migration trigger cleanup, docs/schema consistency, and any type/lint/test regressions. Run `git diff --check`, API/web/mobile typechecks, focused tests, `pnpm lint`, and the fresh migration suite with an available Postgres/Valkey setup. Do not call the goal complete while any C/I/D/DB/DOC/T item is unresolved; update this tracker after every wave with tests, assumptions, blockers, and exact file paths. At the end verify `orca terminal list --json` contains only the coordinator and no stale/rate-limited panes, then report the final fix list and remaining external release-gate tests.
+> Continue PR #584 remediation on
+> `/Users/dani/orca/workspaces/fablehackos/skipjack`, branch
+> `danicallero/account-deletion-anonymization`. Read `AGENTS.md`,
+> `CLAUDE.md`, `plan/historias-hackos.md`, `plan/07-datos-relevantes-ers.md`,
+> `docs/README.md`, and `program.md`. Use the Orca `orchestration` skill
+> and `gpt-5.6-luna` max workers only; do not substitute Terra. Inspect
+> `orca orchestration task-list --json` and `orca terminal list --json`
+> before dispatching. Preserve the shared uncommitted worktree and never reset
+> blindly. First collect the bounded replacement audit result for
+> `task_19883aa8e94e`; if it reports a P0–P2 issue, fix it and add a focused
+> regression before merge. Then rerun `git diff --check`, `pnpm lint`, API/web/mobile
+> typechecks, web/mobile suites, and the fresh migration suite against a working
+> Postgres/Valkey pair. Update DOC2 in the external PR body/checklist. Do not
+> claim API integration coverage while localhost:5433/Valkey is unavailable.
+> After every worker_done, review the diff and close that worker terminal. At
+> the end, ensure `orca terminal list --json` contains only the coordinator,
+> close any stale panes, update this file with exact new message ids, and report
+> remaining release gates.
