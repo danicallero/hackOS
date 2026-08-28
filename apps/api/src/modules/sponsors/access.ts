@@ -7,6 +7,7 @@ import type {
   ContextualPolicyResolver,
   ContextualResourceLocator,
 } from "../../lib/route-policy.js";
+import { assertFixtureEnterpriseScope } from "../logistics/review-fixture-scope.js";
 
 /** How a user was allowed to touch an enterprise. */
 export type EnterpriseAccess = "admin" | "owner";
@@ -51,6 +52,7 @@ export async function assertCanEditEnterprise(
   if (!activeCount) throw new UnauthorizedError("This account is closed or being removed");
   const { rowCount } = await pool.query(`SELECT 1 FROM enterprises WHERE id = $1`, [enterpriseId]);
   if (rowCount === 0) throw new NotFoundError("Enterprise not found", { enterpriseId });
+  await assertFixtureEnterpriseScope(pool, userId, enterpriseId);
 
   if (await userHasCapability(userId, CAPABILITIES.SPONSORS_MANAGE)) return "admin";
   if (await ownsEnterprise(userId, enterpriseId)) return "owner";
@@ -87,6 +89,7 @@ export async function assertCanManageEnterpriseJudging(
   enterpriseId: number,
 ): Promise<void> {
   if (request.userId == null) throw new UnauthorizedError();
+  await assertFixtureEnterpriseScope(pool, request.userId, enterpriseId);
   const { rowCount: activeCount } = await pool.query(
     `SELECT 1 FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
     [request.userId],

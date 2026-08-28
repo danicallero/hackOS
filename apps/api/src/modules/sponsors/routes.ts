@@ -90,8 +90,8 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
           "Lists all sponsor enterprises, for global sponsor administrators and the Rooms admin page's enterprise picker (H43, H46).",
       },
     },
-    async () => ({
-      enterprises: await listEnterprises(),
+    async (req) => ({
+      enterprises: await listEnterprises(actor(req.userId)),
     }),
   );
 
@@ -199,7 +199,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
         description: "Lists sponsor affiliations for a globally managed enterprise (H43).",
       },
     },
-    async (req) => ({ members: await listEnterpriseMembers(req.params.id) }),
+    async (req) => ({ members: await listEnterpriseMembers(req.params.id, actor(req.userId)) }),
   );
 
   r.post(
@@ -261,7 +261,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
           "The enterprise's judge roster. Roster membership grants judging access to every room currently serving one of the enterprise's challenges (H46). Readable by a queue:admin or the enterprise's own representatives.",
       },
     },
-    async (req) => ({ judges: await listEnterpriseJudges(req.params.id) }),
+    async (req) => ({ judges: await listEnterpriseJudges(req.params.id, actor(req.userId)) }),
   );
 
   r.get(
@@ -276,7 +276,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
           "Accounts that may be added to the enterprise's judge roster (H46). Deliberately unscoped: an enterprise may bring outside judges who are neither its representatives nor event participants.",
       },
     },
-    async () => ({ users: await listJudgeCandidates() }),
+    async (req) => ({ users: await listJudgeCandidates(actor(req.userId)) }),
   );
 
   r.post(
@@ -330,7 +330,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
           "Lists sponsor enterprise affiliations for an account with global user-read access (H43).",
       },
     },
-    async (req) => ({ enterprises: await listUserEnterprises(req.params.id) }),
+    async (req) => ({ enterprises: await listUserEnterprises(req.params.id, actor(req.userId)) }),
   );
 
   // Logo upload (H44 object storage) — the client POSTs the file as multipart;
