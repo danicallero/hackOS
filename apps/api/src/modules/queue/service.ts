@@ -5,7 +5,7 @@ import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { notify, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
-import { broadcastQueueEvent } from "./broadcast.js";
+import { broadcastQueueEvent, queueFixtureMarker } from "./broadcast.js";
 import { anyEvaluationStarted, lockQueueGroupForEntry } from "./evaluation-lock.js";
 import {
   assertQueueChallengeScope,
@@ -136,9 +136,22 @@ export async function callNextForRoom(
     const roomRes = await client.query(`SELECT * FROM rooms WHERE id = $1`, [roomId]);
     const room = roomRes.rows[0];
     if (!room) throw new NotFoundError("Room not found", { roomId });
-    let fixtureMarker = false;
+    let fixtureMarker: boolean;
     if (actorId != null) {
       fixtureMarker = await assertQueueRoomScope(client, actorId, roomId);
+    } else {
+      // The automatic pump has no user marker. Resolve the room's complete
+      // graph instead of defaulting to the real queue, and fail closed on a
+      // mixed or markerless fixture graph.
+      const roomMarker = await queueFixtureMarker(client, "room", roomId);
+      if (roomMarker === null) {
+        throw new ConflictError("Queue fixture markers must match", {
+          code: "review_fixture_scope",
+          resource: "room",
+          resourceId: roomId,
+        });
+      }
+      fixtureMarker = roomMarker;
     }
 
     if (opts.automatic) {

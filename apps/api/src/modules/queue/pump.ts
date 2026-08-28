@@ -2,6 +2,7 @@ import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
+import { queueFixtureMarker } from "./broadcast.js";
 import { notifyTeamPreCall } from "./notify.js";
 import { challengeEtaMinutesPerSlot } from "./reads.js";
 import { callNextForRoom } from "./service.js";
@@ -122,7 +123,9 @@ async function emitPreCallWarnings(): Promise<void> {
   );
 
   for (const { challenge_id: challengeId } of challengeIds as { challenge_id: number }[]) {
-    const perSlot = await challengeEtaMinutesPerSlot(challengeId);
+    const challengeMarker = await queueFixtureMarker(pool, "challenge", challengeId);
+    if (challengeMarker === null) continue;
+    const perSlot = await challengeEtaMinutesPerSlot(challengeId, challengeMarker);
     const { rows: waiting } = await pool.query(
       `SELECT id, repo_id, precalled_at,
               ROW_NUMBER() OVER (ORDER BY position ASC NULLS LAST, id ASC) AS rank
@@ -136,6 +139,12 @@ async function emitPreCallWarnings(): Promise<void> {
       precalled_at: string | null;
       rank: number;
     }[]) {
+      // Re-check the full entry/group/room graph before claiming the row. A
+      // stale or mixed graph must not advance its pre-call state or notify a
+      // participant from the wrong fixture boundary.
+      if ((await queueFixtureMarker(pool, "entry", Number(w.id))) !== challengeMarker) {
+        continue;
+      }
       const eta = w.rank * perSlot;
       if (w.precalled_at || eta > threshold) continue;
       // Atomic claim before notifying: if a previous, still-running tick (or

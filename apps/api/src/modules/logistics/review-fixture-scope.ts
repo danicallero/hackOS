@@ -109,6 +109,12 @@ WITH room_markers AS (
     FROM room_queue_groups rqg
     JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
     JOIN challenges c ON c.id = qgc.challenge_id
+  UNION ALL
+  SELECT rqg.room_id, r.is_test_account AS marker
+    FROM room_queue_groups rqg
+    JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
+    JOIN queue_entries qe ON qe.challenge_id = qgc.challenge_id
+    JOIN repos r ON r.id = qe.repo_id
 )`;
 
 /** Resolve a room's marker from its complete pool/serving graph. */
@@ -139,8 +145,13 @@ export async function fixtureRoomIds(db: Queryable, actorId: number): Promise<nu
   const { rows } = await db.query<{ room_id: number }>(
     `${ROOM_MARKERS_CTE}, room_scopes AS (
        SELECT r.id AS room_id,
+              EXISTS (
+                SELECT 1 FROM room_enterprises re WHERE re.room_id = r.id
+                UNION ALL
+                SELECT 1 FROM room_queue_groups rqg WHERE rqg.room_id = r.id
+              ) AS has_graph,
               COALESCE(bool_or(rm.marker IS TRUE), false) AS has_synthetic,
-              COALESCE(bool_or(rm.marker IS NOT TRUE), false) AS has_real
+              COALESCE(bool_or(rm.marker IS FALSE), false) AS has_real
          FROM rooms r
          LEFT JOIN room_markers rm ON rm.room_id = r.id
         GROUP BY r.id
@@ -148,7 +159,7 @@ export async function fixtureRoomIds(db: Queryable, actorId: number): Promise<nu
      SELECT room_id
        FROM room_scopes
       WHERE ($1::boolean AND has_synthetic AND NOT has_real)
-         OR (NOT $1::boolean AND NOT has_synthetic)
+         OR (NOT $1::boolean AND NOT has_synthetic AND (has_real OR NOT has_graph))
       ORDER BY room_id ASC`,
     [actorIsSynthetic],
   );
@@ -230,6 +241,13 @@ export async function assertFixtureRoomEnterpriseScope(
   if (!room.exists) throw new NotFoundError("Room not found", { roomId });
   if (room.has_synthetic && room.has_real) {
     throw new ConflictError("Queue fixture markers must match", {
+      code: "review_fixture_scope",
+      resource: "room",
+      resourceId: roomId,
+    });
+  }
+  if (room.has_graph && !room.has_synthetic && !room.has_real) {
+    throw new ConflictError("Queue fixture markers are missing from the room graph", {
       code: "review_fixture_scope",
       resource: "room",
       resourceId: roomId,
@@ -332,6 +350,13 @@ export async function assertFixtureQueueScope(
       const marker = await inspectFixtureRoomScope(db, resourceId);
       if (marker.has_synthetic && marker.has_real) {
         throw new ConflictError("Queue fixture markers must match", {
+          code: "review_fixture_scope",
+          resource,
+          resourceId,
+        });
+      }
+      if (marker.has_graph && !marker.has_synthetic && !marker.has_real) {
+        throw new ConflictError("Queue fixture markers are missing from the room graph", {
           code: "review_fixture_scope",
           resource,
           resourceId,

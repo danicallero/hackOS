@@ -2,6 +2,7 @@ import { SSE_TOPICS, type SseEnvelope } from "@hackos/shared/events";
 import type { Queryable } from "../../db/pool.js";
 import { broadcast } from "../../lib/sse.js";
 import { inspectFixtureRoomScope } from "../logistics/review-fixture-scope.js";
+import { queueGroupFixtureMarker } from "./fixture-scope.js";
 
 /** Queue resources whose marker determines the operator SSE topic. */
 export type QueueBroadcastResource = "challenge" | "entry" | "queueGroup" | "room";
@@ -32,34 +33,45 @@ export async function queueFixtureMarker(
     const { rows } = await db.query<{
       challenge_is_test_account: boolean;
       repo_is_test_account: boolean;
+      queue_group_id: number | null;
+      assigned_room_id: number | null;
     }>(
       `SELECT c.is_test_account AS challenge_is_test_account,
-              r.is_test_account AS repo_is_test_account
+              r.is_test_account AS repo_is_test_account,
+              qgc.queue_group_id,
+              qe.assigned_room_id
          FROM queue_entries qe
          JOIN challenges c ON c.id = qe.challenge_id
          JOIN repos r ON r.id = qe.repo_id
+         LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
         WHERE qe.id = $1`,
       [resourceId],
     );
     const row = rows[0];
     if (!row || row.challenge_is_test_account !== row.repo_is_test_account) return null;
-    return row.challenge_is_test_account === true;
+    const marker = row.challenge_is_test_account === true;
+    if (row.queue_group_id != null) {
+      try {
+        if ((await queueGroupFixtureMarker(db, Number(row.queue_group_id))) !== marker) {
+          return null;
+        }
+      } catch {
+        return null;
+      }
+    }
+    if (row.assigned_room_id != null) {
+      const roomMarker = await queueFixtureMarker(db, "room", Number(row.assigned_room_id));
+      if (roomMarker !== marker) return null;
+    }
+    return marker;
   }
 
   if (resource === "queueGroup") {
-    const { rows } = await db.query<{ has_synthetic: boolean; has_real: boolean }>(
-      `SELECT COALESCE(bool_or(c.is_test_account IS TRUE), false) AS has_synthetic,
-              COALESCE(bool_or(c.is_test_account IS NOT TRUE), false) AS has_real
-         FROM queue_group_challenges qgc
-         JOIN challenges c ON c.id = qgc.challenge_id
-        WHERE qgc.queue_group_id = $1`,
-      [resourceId],
-    );
-    const row = rows[0];
-    if (!row || (!row.has_synthetic && !row.has_real) || (row.has_synthetic && row.has_real)) {
+    try {
+      return await queueGroupFixtureMarker(db, resourceId);
+    } catch {
       return null;
     }
-    return row.has_synthetic;
   }
 
   const row = await inspectFixtureRoomScope(db, resourceId);
@@ -67,7 +79,9 @@ export async function queueFixtureMarker(
   // An unassigned room is part of the real operator surface, preserving the
   // existing pause/resume behavior for rooms with no queue yet.
   if (!row.has_graph) return false;
-  if (row.has_synthetic && row.has_real) return null;
+  if ((row.has_synthetic && row.has_real) || (!row.has_synthetic && !row.has_real)) {
+    return null;
+  }
   return row.has_synthetic;
 }
 

@@ -1,11 +1,17 @@
 import type { Queryable } from "../../db/pool.js";
 import { ConflictError } from "../../lib/errors.js";
-import { assertFixtureQueueScope, isSyntheticOperator } from "../logistics/review-fixture-scope.js";
+import {
+  assertFixtureQueueScope,
+  inspectFixtureEnterpriseScope,
+  inspectFixtureRoomScope,
+  isSyntheticOperator,
+} from "../logistics/review-fixture-scope.js";
 
 type QueueFixtureMarkers = {
   has_synthetic: boolean;
   has_real: boolean;
   has_entry_marker_mismatch: boolean;
+  enterprise_id?: number;
 };
 
 /**
@@ -13,7 +19,10 @@ type QueueFixtureMarkers = {
  * repo marker. Queue transitions lock their entry/group before calling this;
  * keeping this check on that same client makes the boundary transaction-safe.
  */
-async function queueGroupFixtureMarker(client: Queryable, queueGroupId: number): Promise<boolean> {
+export async function queueGroupFixtureMarker(
+  client: Queryable,
+  queueGroupId: number,
+): Promise<boolean> {
   const { rows } = await client.query<QueueFixtureMarkers>(
     `SELECT COALESCE(bool_or(c.is_test_account IS TRUE), false) AS has_synthetic,
             COALESCE(bool_or(c.is_test_account IS NOT TRUE), false) AS has_real,
@@ -23,12 +32,15 @@ async function queueGroupFixtureMarker(client: Queryable, queueGroupId: number):
                 AND c.is_test_account IS DISTINCT FROM r.is_test_account
               ),
               false
-            ) AS has_entry_marker_mismatch
+            ) AS has_entry_marker_mismatch,
+            qg.enterprise_id
        FROM queue_group_challenges qgc
        JOIN challenges c ON c.id = qgc.challenge_id
+       JOIN queue_groups qg ON qg.id = qgc.queue_group_id
        LEFT JOIN queue_entries qe ON qe.challenge_id = qgc.challenge_id
        LEFT JOIN repos r ON r.id = qe.repo_id
-      WHERE qgc.queue_group_id = $1`,
+      WHERE qgc.queue_group_id = $1
+      GROUP BY qg.enterprise_id`,
     [queueGroupId],
   );
   const marker = rows[0];
@@ -38,6 +50,41 @@ async function queueGroupFixtureMarker(client: Queryable, queueGroupId: number):
       resource: "queueGroup",
       resourceId: queueGroupId,
     });
+  }
+  if (marker && (marker.has_synthetic || marker.has_real)) {
+    const enterprise = await inspectFixtureEnterpriseScope(client, Number(marker.enterprise_id));
+    if (
+      !enterprise.exists ||
+      (enterprise.has_synthetic && enterprise.has_real) ||
+      (!enterprise.has_synthetic && !enterprise.has_real) ||
+      enterprise.has_synthetic !== marker.has_synthetic
+    ) {
+      throw new ConflictError("Queue fixture markers must match across the queue graph", {
+        code: "review_fixture_scope",
+        resource: "queueGroup",
+        resourceId: queueGroupId,
+      });
+    }
+
+    const { rows: roomRows } = await client.query<{ room_id: number }>(
+      `SELECT room_id FROM room_queue_groups WHERE queue_group_id = $1`,
+      [queueGroupId],
+    );
+    for (const roomRow of roomRows) {
+      const room = await inspectFixtureRoomScope(client, Number(roomRow.room_id));
+      if (
+        !room.exists ||
+        (room.has_synthetic && room.has_real) ||
+        (room.has_graph && !room.has_synthetic && !room.has_real) ||
+        room.has_synthetic !== marker.has_synthetic
+      ) {
+        throw new ConflictError("Queue fixture markers must match across the room graph", {
+          code: "review_fixture_scope",
+          resource: "queueGroup",
+          resourceId: queueGroupId,
+        });
+      }
+    }
   }
   return marker?.has_synthetic === true;
 }

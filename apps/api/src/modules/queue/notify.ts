@@ -248,6 +248,16 @@ const participantInvalidationJobsInFlight = new Set<string>();
 export async function publishChallengeQueueInvalidation(challengeId: number): Promise<void> {
   const fixtureMarker = await queueFixtureMarker(pool, "challenge", challengeId);
   if (fixtureMarker === null) return;
+  const { rows: groupRows } = await pool.query<{ queue_group_id: number }>(
+    `SELECT queue_group_id
+       FROM queue_group_challenges
+      WHERE challenge_id = $1`,
+    [challengeId],
+  );
+  const groupMarker = groupRows[0]
+    ? await queueFixtureMarker(pool, "queueGroup", Number(groupRows[0].queue_group_id))
+    : null;
+  if (groupMarker === null || groupMarker !== fixtureMarker) return;
   const { rows } = await pool.query(
     `SELECT DISTINCT members.user_id
        FROM queue_entries qe

@@ -3,6 +3,7 @@ import { NotFoundError } from "../../lib/errors.js";
 import { queueFixtureMarker } from "./broadcast.js";
 import { assertQueueEntryScope } from "./fixture-scope.js";
 import {
+  CHALLENGE_ROOM_IDS_FOR_MARKER_SQL,
   CHALLENGE_ROOM_IDS_SQL,
   QUEUE_GROUP_LABEL_JOIN,
   QUEUE_GROUP_LABEL_SQL,
@@ -569,13 +570,19 @@ export async function publicRoomViews() {
   }));
 }
 
-export async function challengeEtaMinutesPerSlot(challengeId: number): Promise<number> {
+export async function challengeEtaMinutesPerSlot(
+  challengeId: number,
+  fixtureMarker = false,
+): Promise<number> {
+  const servingRoomsSql = fixtureMarker
+    ? CHALLENGE_ROOM_IDS_FOR_MARKER_SQL
+    : CHALLENGE_ROOM_IDS_SQL;
   const { rows } = await pool.query(
     // Every room working this challenge's queue_group shares its pace.
     `SELECT COALESCE(AVG(rqs.desired_minutes_per_team), 8) AS avg, COUNT(*)::int AS rooms
-       FROM (${CHALLENGE_ROOM_IDS_SQL}) serving
+       FROM (${servingRoomsSql}) serving
        JOIN room_queue_state rqs ON rqs.room_id = serving.room_id`,
-    [challengeId],
+    fixtureMarker ? [challengeId, fixtureMarker] : [challengeId],
   );
   const avg = Number(rows[0].avg);
   const roomCount = Math.max(1, Number(rows[0].rooms));
@@ -648,13 +655,82 @@ WITH viewer AS (
       AND (lower(dp.email) = lower(u.email)
        OR (u.secondary_email_verified_at IS NOT NULL
            AND lower(dp.email) = lower(u.secondary_email)))
+ ), enterprise_markers AS (
+   SELECT s.enterprise_id, u.is_test_account AS marker
+     FROM sponsors s
+     JOIN users u ON u.id = s.user_id
+   UNION ALL
+   SELECT s.enterprise_id, c.is_test_account AS marker
+     FROM sponsors s
+     JOIN challenges c ON c.author = s.id
  ), visible_queue_groups AS (
    SELECT qgc.queue_group_id
      FROM queue_group_challenges qgc
      JOIN challenges group_challenge ON group_challenge.id = qgc.challenge_id
+     JOIN queue_groups group_qg ON group_qg.id = qgc.queue_group_id
+     LEFT JOIN queue_entries group_entry ON group_entry.challenge_id = qgc.challenge_id
+     LEFT JOIN repos group_repo ON group_repo.id = group_entry.repo_id
+     LEFT JOIN enterprise_markers em ON em.enterprise_id = group_qg.enterprise_id
      CROSS JOIN viewer v
     GROUP BY qgc.queue_group_id, v.is_test_account
    HAVING bool_and(group_challenge.is_test_account = v.is_test_account)
+      AND bool_and(group_repo.id IS NULL OR group_repo.is_test_account = v.is_test_account)
+      AND COUNT(em.marker) > 0
+      AND bool_and(em.marker = v.is_test_account)
+ ), room_markers AS (
+   SELECT re.room_id, u.is_test_account AS marker
+     FROM room_enterprises re
+     JOIN sponsors s ON s.enterprise_id = re.enterprise_id
+     JOIN users u ON u.id = s.user_id
+   UNION ALL
+   SELECT re.room_id, c.is_test_account AS marker
+     FROM room_enterprises re
+     JOIN sponsors s ON s.enterprise_id = re.enterprise_id
+     JOIN challenges c ON c.author = s.id
+   UNION ALL
+   SELECT rqg.room_id, u.is_test_account AS marker
+     FROM room_queue_groups rqg
+     JOIN queue_groups qg ON qg.id = rqg.queue_group_id
+     JOIN sponsors s ON s.enterprise_id = qg.enterprise_id
+     JOIN users u ON u.id = s.user_id
+   UNION ALL
+   SELECT rqg.room_id, c.is_test_account AS marker
+     FROM room_queue_groups rqg
+     JOIN queue_groups qg ON qg.id = rqg.queue_group_id
+     JOIN sponsors s ON s.enterprise_id = qg.enterprise_id
+     JOIN challenges c ON c.author = s.id
+   UNION ALL
+   SELECT rqg.room_id, c.is_test_account AS marker
+     FROM room_queue_groups rqg
+     JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
+     JOIN challenges c ON c.id = qgc.challenge_id
+   UNION ALL
+   SELECT rqg.room_id, r.is_test_account AS marker
+     FROM room_queue_groups rqg
+     JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
+     JOIN queue_entries qe ON qe.challenge_id = qgc.challenge_id
+     JOIN repos r ON r.id = qe.repo_id
+ ), room_scopes AS (
+   SELECT r.id AS room_id,
+          EXISTS (
+            SELECT 1 FROM room_enterprises re WHERE re.room_id = r.id
+            UNION ALL
+            SELECT 1 FROM room_queue_groups rqg WHERE rqg.room_id = r.id
+          ) AS has_graph,
+          COUNT(rm.marker) > 0 AS has_marker,
+          COALESCE(bool_or(rm.marker IS TRUE), false) AS has_synthetic,
+          COALESCE(bool_or(rm.marker IS FALSE), false) AS has_real
+     FROM rooms r
+     LEFT JOIN room_markers rm ON rm.room_id = r.id
+    GROUP BY r.id
+ ), visible_rooms AS (
+   SELECT rs.room_id
+     FROM room_scopes rs
+     CROSS JOIN viewer v
+    WHERE (NOT rs.has_graph)
+       OR (rs.has_marker
+           AND NOT (rs.has_synthetic AND rs.has_real)
+           AND rs.has_synthetic = v.is_test_account)
  )`;
 
 /**
@@ -747,6 +823,7 @@ export async function myQueueStatus(userId: number) {
          JOIN (SELECT DISTINCT challenge_id FROM my_entries) mine
            ON mine.challenge_id = qgc.challenge_id
          LEFT JOIN room_queue_groups rqg ON rqg.queue_group_id = qgc.queue_group_id
+         JOIN visible_rooms vr ON vr.room_id = rqg.room_id
          LEFT JOIN room_queue_state rqs ON rqs.room_id = rqg.room_id
         GROUP BY qgc.challenge_id
      )
@@ -762,6 +839,7 @@ export async function myQueueStatus(userId: number) {
                  FROM queue_group_challenges self
                  JOIN visible_queue_groups vq ON vq.queue_group_id = self.queue_group_id
                  JOIN room_queue_groups rqg ON rqg.queue_group_id = self.queue_group_id
+                 JOIN visible_rooms vr ON vr.room_id = rqg.room_id
                  JOIN rooms rm ON rm.id = rqg.room_id
                 WHERE self.challenge_id = qe.challenge_id),
               '[]'::jsonb
@@ -775,7 +853,8 @@ export async function myQueueStatus(userId: number) {
       LEFT JOIN room_queue_groups called_rqg
         ON called_rqg.room_id = qe.assigned_room_id
        AND called_rqg.queue_group_id = qgc_label.queue_group_id
-      LEFT JOIN rooms ar ON ar.id = called_rqg.room_id
+      LEFT JOIN visible_rooms called_vr ON called_vr.room_id = called_rqg.room_id
+      LEFT JOIN rooms ar ON ar.id = called_vr.room_id
       LEFT JOIN waiting_ranks wr ON wr.id = qe.id
       LEFT JOIN queue_pace qp ON qp.challenge_id = qe.challenge_id
       WHERE qe.status NOT IN ('cancelled', 'disqualified')

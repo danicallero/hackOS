@@ -312,6 +312,14 @@ describe("queue contextual isolation", () => {
     await pool.query(`UPDATE challenges SET is_test_account = true WHERE id = $1`, [
       fixtureChallengeId,
     ]);
+    await pool.query(
+      `UPDATE users u
+          SET is_test_account = true
+         FROM sponsors s
+        WHERE s.user_id = u.id
+          AND s.id = (SELECT author FROM challenges WHERE id = $1)`,
+      [fixtureChallengeId],
+    );
     await pool.query(`UPDATE repos SET is_test_account = true WHERE id = $1`, [fixtureRepoId]);
     const fixtureRoomId = await createRoom({ name: "Synthetic room" });
     await assignChallengeToRoom(fixtureRoomId, fixtureChallengeId);
@@ -422,6 +430,14 @@ describe("queue contextual isolation", () => {
     const challengeId = await createChallenge({ title: "Synthetic enqueue" });
     const { repoId } = await createRepoWithTeam([fixtureMember], "Synthetic enqueue team");
     await pool.query(`UPDATE challenges SET is_test_account = true WHERE id = $1`, [challengeId]);
+    await pool.query(
+      `UPDATE users u
+          SET is_test_account = true
+         FROM sponsors s
+        WHERE s.user_id = u.id
+          AND s.id = (SELECT author FROM challenges WHERE id = $1)`,
+      [challengeId],
+    );
     await pool.query(`UPDATE repos SET is_test_account = true WHERE id = $1`, [repoId]);
 
     const blocked = await app.inject({

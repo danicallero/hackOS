@@ -51,6 +51,14 @@ export const CHALLENGE_ROOM_IDS_SQL = `
     JOIN room_queue_groups rqg ON rqg.queue_group_id = self.queue_group_id
    WHERE self.challenge_id = $1`;
 
+/** Every room serving a marker-scoped challenge queue. */
+export const CHALLENGE_ROOM_IDS_FOR_MARKER_SQL = `
+  SELECT rqg.room_id
+    FROM queue_group_challenges self
+    JOIN challenges c ON c.id = self.challenge_id AND c.is_test_account = $2
+    JOIN room_queue_groups rqg ON rqg.queue_group_id = self.queue_group_id
+   WHERE self.challenge_id = $1`;
+
 /**
  * The name a queue carries, for any query that already has `challenges c` in
  * scope. Always the queue group's `display_name`: a solo group's name follows

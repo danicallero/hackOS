@@ -19,6 +19,7 @@ import {
 } from "../logistics/review-fixture-scope.js";
 import { notify } from "../notifications/service.js";
 import { broadcastQueueEvent, broadcastQueueEventWithMarker } from "../queue/broadcast.js";
+import { assertQueueChallengeScope, assertQueueRepoScope } from "../queue/fixture-scope.js";
 import { writeQueueHistory } from "../queue/history.js";
 import { notifyChallengeQueueChanged, repoMemberIds } from "../queue/notify.js";
 import { compactQueueGroupPositions, nextBottomPosition } from "../queue/ordering.js";
@@ -1295,8 +1296,15 @@ async function enqueueRepoOnChallenge(
   challengeId: number,
   auditSource: string,
 ): Promise<EnqueueOutcome | null> {
-  await assertFixtureQueueScope(client, actorId, "repo", repoId);
-  await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
+  const repoMarker = await assertQueueRepoScope(client, actorId, repoId);
+  const challengeMarker = await assertQueueChallengeScope(client, actorId, challengeId);
+  if (repoMarker !== challengeMarker) {
+    throw new ConflictError("Queue fixture markers must match", {
+      code: "review_fixture_scope",
+      repoId,
+      challengeId,
+    });
+  }
   const existing = await client.query(
     `SELECT * FROM queue_entries WHERE repo_id = $1 AND challenge_id = $2 FOR UPDATE`,
     [repoId, challengeId],
@@ -1362,8 +1370,15 @@ async function enqueueRepoOnChallenge(
 
 export async function addRepoChallenge(actorId: number, repoId: number, challengeId: number) {
   const result = await withTransaction(async (client) => {
-    await assertFixtureQueueScope(client, actorId, "repo", repoId);
-    await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
+    const repoMarker = await assertQueueRepoScope(client, actorId, repoId);
+    const challengeMarker = await assertQueueChallengeScope(client, actorId, challengeId);
+    if (repoMarker !== challengeMarker) {
+      throw new ConflictError("Queue fixture markers must match", {
+        code: "review_fixture_scope",
+        repoId,
+        challengeId,
+      });
+    }
     const repo = await client.query(`SELECT id FROM repos WHERE id = $1 FOR UPDATE`, [repoId]);
     if (!repo.rows[0]) throw new NotFoundError(`Repo ${repoId} not found`);
     const challenge = await client.query(`SELECT id FROM challenges WHERE id = $1`, [challengeId]);
@@ -1429,8 +1444,15 @@ async function terminateQueueEntry(
 
 export async function removeRepoChallenge(actorId: number, repoId: number, challengeId: number) {
   const result = await withTransaction(async (client) => {
-    await assertFixtureQueueScope(client, actorId, "repo", repoId);
-    await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
+    const repoMarker = await assertQueueRepoScope(client, actorId, repoId);
+    const challengeMarker = await assertQueueChallengeScope(client, actorId, challengeId);
+    if (repoMarker !== challengeMarker) {
+      throw new ConflictError("Queue fixture markers must match", {
+        code: "review_fixture_scope",
+        repoId,
+        challengeId,
+      });
+    }
     const entryRes = await client.query(
       `SELECT * FROM queue_entries WHERE repo_id = $1 AND challenge_id = $2 FOR UPDATE`,
       [repoId, challengeId],
@@ -1482,7 +1504,7 @@ export async function bulkAddRepoChallenge(
   challengeId: number,
 ): Promise<BulkAddResult> {
   const { outcomes, total } = await withTransaction(async (client) => {
-    await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
+    await assertQueueChallengeScope(client, actorId, challengeId);
     const challenge = await client.query(`SELECT id FROM challenges WHERE id = $1`, [challengeId]);
     if (!challenge.rows[0]) throw new NotFoundError(`Challenge ${challengeId} not found`);
 
@@ -1527,7 +1549,7 @@ export async function bulkRemoveRepoChallenge(
   challengeId: number,
 ): Promise<BulkRemoveResult> {
   const { updatedEntries, total } = await withTransaction(async (client) => {
-    await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
+    await assertQueueChallengeScope(client, actorId, challengeId);
     const challenge = await client.query(`SELECT id FROM challenges WHERE id = $1`, [challengeId]);
     if (!challenge.rows[0]) throw new NotFoundError(`Challenge ${challengeId} not found`);
 
