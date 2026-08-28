@@ -705,7 +705,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       ) {
         throw new ForbiddenError("Cannot view another staff member's scan log");
       }
-      return queryScanLog(staffId, req.query.limit, req.query.offset);
+      return queryScanLog(staffId, req.query.limit, req.query.offset, callerId);
     },
   );
 

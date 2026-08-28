@@ -1,5 +1,5 @@
 import { pool } from "../../db/pool.js";
-import { fixtureReadFilter } from "./review-fixture-scope.js";
+import { assertFixtureSubjectScope, fixtureReadFilter } from "./review-fixture-scope.js";
 
 /**
  * Team-wide scan history and per-staff counts (extends H22-H27): every scan
@@ -48,13 +48,20 @@ function scanLogUnion(subjectFilter: string): string {
 `;
 }
 
-/** Paginated scan-log feed for one staff member, most recent first. */
+/**
+ * Paginated scan-log feed for one staff member, most recent first (H22-H27,
+ * H54). The reader is separate from the selected staff member because the
+ * fixture boundary is determined by the authenticated reader, not by a
+ * client-selected target.
+ */
 export async function queryScanLog(
   staffId: number,
   limit: number,
   offset: number,
+  readerId: number,
 ): Promise<ScanLogPage> {
-  const subjectFilter = await fixtureReadFilter(pool, staffId, "u");
+  await assertFixtureSubjectScope(pool, readerId, staffId);
+  const subjectFilter = await fixtureReadFilter(pool, readerId, "u");
   const union = scanLogUnion(subjectFilter);
   const [{ rows }, { rows: countRows }] = await Promise.all([
     pool.query(

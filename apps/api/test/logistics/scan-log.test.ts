@@ -2,6 +2,7 @@ import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
+import { pool } from "../../src/db/pool.js";
 import {
   asUser,
   buildTestApp,
@@ -36,8 +37,11 @@ afterAll(async () => {
   await pool.end();
 });
 
-async function checkIn(staffId: number, badgeId: string) {
+async function checkIn(staffId: number, badgeId: string, syntheticSubject = false) {
   const uid = await createUser();
+  if (syntheticSubject) {
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [uid]);
+  }
   const token = await issueTicket(uid);
   const res = await app.inject({
     method: "POST",
@@ -144,6 +148,40 @@ describe("staff scan stats and scan-log (extends H22-H27)", () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().total).toBe(1);
+  });
+
+  it("keeps scan-log target and subject rows inside the reader's fixture boundary", async () => {
+    const fixtureOperator = await createUserWithCapabilities([
+      CAPABILITIES.ACCREDIT_SCAN,
+      CAPABILITIES.LOGISTICS_STATS,
+    ]);
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [fixtureOperator]);
+    const fixtureSubject = await checkIn(fixtureOperator, "S-F1", true);
+    await checkIn(operatorB, "S-B1");
+
+    const realReaderView = await app.inject({
+      method: "GET",
+      url: `/api/logistics/scan-log?staffId=${fixtureOperator}`,
+      headers: asUser(statsStaff),
+    });
+    expect(realReaderView.statusCode).toBe(404);
+
+    const fixtureOwnView = await app.inject({
+      method: "GET",
+      url: "/api/logistics/scan-log",
+      headers: asUser(fixtureOperator),
+    });
+    expect(fixtureOwnView.statusCode).toBe(200);
+    expect(fixtureOwnView.json().items).toEqual([
+      expect.objectContaining({ subjectUserId: fixtureSubject }),
+    ]);
+
+    const fixtureRealTargetView = await app.inject({
+      method: "GET",
+      url: `/api/logistics/scan-log?staffId=${operatorB}`,
+      headers: asUser(fixtureOperator),
+    });
+    expect(fixtureRealTargetView.statusCode).toBe(403);
   });
 
   it("requires a scan or stats capability at all", async () => {
