@@ -4,10 +4,16 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
-import { assertFixtureQueueScope } from "../logistics/review-fixture-scope.js";
 import { notify, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
-import { broadcastQueueEvent, queueFixtureMarker } from "./broadcast.js";
+import { broadcastQueueEvent } from "./broadcast.js";
 import { anyEvaluationStarted, lockQueueGroupForEntry } from "./evaluation-lock.js";
+import {
+  assertQueueChallengeScope,
+  assertQueueEntryScope,
+  assertQueueGroupScope,
+  assertQueueRepoScope,
+  assertQueueRoomScope,
+} from "./fixture-scope.js";
 import { challengeQueueGroupId, roomChallengeIds } from "./groups.js";
 import { isRepoBlockedByBusyMember } from "./guard.js";
 import { writeQueueHistory } from "./history.js";
@@ -67,6 +73,20 @@ async function lockEntry(client: pg.PoolClient, entryId: number): Promise<QueueE
   return entry;
 }
 
+/**
+ * Entry transitions must re-check the fixture boundary after the entry and
+ * its queue-group siblings are locked. Route middleware is useful for early
+ * rejection, but this transaction-local check is the guard that protects the
+ * actual mutation from stale or guessed ids.
+ */
+async function assertEntryFixtureScope(
+  client: pg.PoolClient,
+  actorId: number,
+  entryId: number,
+): Promise<boolean> {
+  return assertQueueEntryScope(client, actorId, entryId);
+}
+
 async function broadcastEntry(entry: QueueEntryRow): Promise<QueueEntryRow> {
   await broadcastQueueEvent(pool, "entry", entry.id, EVENTS.QUEUE_ENTRY_CHANGED, entry);
   await notifyChallengeQueueChanged(pool, entry.challenge_id);
@@ -116,6 +136,10 @@ export async function callNextForRoom(
     const roomRes = await client.query(`SELECT * FROM rooms WHERE id = $1`, [roomId]);
     const room = roomRes.rows[0];
     if (!room) throw new NotFoundError("Room not found", { roomId });
+    let fixtureMarker = false;
+    if (actorId != null) {
+      fixtureMarker = await assertQueueRoomScope(client, actorId, roomId);
+    }
 
     if (opts.automatic) {
       const { rows: settingsRows } = await client.query(
@@ -132,8 +156,12 @@ export async function callNextForRoom(
 
     if (!opts.force) {
       const { rows: countRows } = await client.query(
-        `SELECT count(*)::int AS n FROM queue_entries WHERE assigned_room_id = $1 AND status = 'called'`,
-        [roomId],
+        `SELECT count(*)::int AS n
+           FROM queue_entries qe
+           JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
+           JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $2
+          WHERE qe.assigned_room_id = $1 AND qe.status = 'called'`,
+        [roomId, fixtureMarker],
       );
       if (countRows[0].n >= state.max_in_waiting_area) {
         throw new ConflictError("Waiting area is full", {
@@ -146,7 +174,7 @@ export async function callNextForRoom(
     // H46: the room's callable set is every challenge in the queue_group it
     // serves — one challenge today, 1..N once groups are merged. call_next
     // already selected across a list, so widening the list is all this needs.
-    const challengeIds = await roomChallengeIds(client, roomId);
+    const challengeIds = await roomChallengeIds(client, roomId, fixtureMarker);
     if (challengeIds.length === 0) return null;
 
     // Ordering (H34 ladder): explicit priority first, then the no-show
@@ -162,10 +190,17 @@ export async function callNextForRoom(
     // so the only sibling is the row itself), so today's candidate list and
     // ordering are unchanged.
     const { rows: candidates } = await client.query(
-      `SELECT * FROM queue_entries qe
+      `SELECT qe.* FROM queue_entries qe
+        JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
+        JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $2
         WHERE qe.challenge_id = ANY($1) AND qe.status = 'waiting'
           AND NOT EXISTS (
-            SELECT 1 FROM queue_entries sib
+            SELECT 1
+              FROM queue_entries sib
+              JOIN challenges sib_c ON sib_c.id = sib.challenge_id
+                                    AND sib_c.is_test_account = $2
+              JOIN repos sib_r ON sib_r.id = sib.repo_id
+                               AND sib_r.is_test_account = $2
              WHERE sib.repo_id = qe.repo_id
                AND sib.challenge_id = ANY($1)
                AND sib.id <> qe.id
@@ -174,7 +209,7 @@ export async function callNextForRoom(
         ORDER BY qe.priority DESC, qe.call_count ASC, qe.position ASC NULLS LAST, qe.id ASC
         LIMIT 50
         FOR UPDATE SKIP LOCKED`,
-      [challengeIds],
+      [challengeIds, fixtureMarker],
     );
 
     // H46 "call once": within one queue_group a repo is a single line item,
@@ -191,6 +226,7 @@ export async function callNextForRoom(
         await isRepoBlockedByBusyMember(client, candidate.repo_id, {
           roomId,
           excludeEntryId: candidate.id,
+          fixtureMarker,
         })
       )
         continue; // H30: skip, keep position
@@ -251,14 +287,8 @@ export async function callNextForRoom(
 export async function notifyEnter(entryId: number, actorId: number): Promise<QueueEntryRow> {
   const { entry, memberIds, eventPayload } = await withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
+    const fixtureMarker = await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, ["called"], "notify_enter");
-    const fixtureMarker = await queueFixtureMarker(client, "entry", entryId);
-    if (fixtureMarker === null) {
-      throw new ConflictError("Queue fixture markers must match", {
-        code: "review_fixture_scope",
-        entryId,
-      });
-    }
     await writeQueueHistory(client, {
       entryId,
       actorId,
@@ -360,6 +390,7 @@ export async function notifyEnter(entryId: number, actorId: number): Promise<Que
 export async function remindWaitingRoom(entryId: number, actorId: number): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
+    await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, ["called"], "remind_waiting_room");
     if (entry.assigned_room_id == null) {
       throw new ConflictError("Called team has no waiting room", { entryId });
@@ -397,6 +428,7 @@ export async function remindWaitingRoom(entryId: number, actorId: number): Promi
 export async function bringIn(entryId: number, actorId: number): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
+    await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, ["called"], "bring_in");
     if (!entry.assigned_room_id) throw new ConflictError("Entry has no assigned room", { entryId });
 
@@ -429,6 +461,7 @@ export async function bringIn(entryId: number, actorId: number): Promise<QueueEn
 export async function startPresentation(entryId: number, actorId: number): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
+    await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, ["in_room"], "start");
     const res = await client.query(
       `UPDATE queue_entries SET status = 'presenting', presentation_started_at = now() WHERE id = $1 RETURNING *`,
@@ -454,6 +487,7 @@ export async function completePresentation(
     // queue edits' group-then-entry lock order before setting `completed`.
     await lockQueueGroupForEntry(client, entryId);
     const entry = await lockEntry(client, entryId);
+    await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, ["presenting"], "complete");
     const res = await client.query(
       `UPDATE queue_entries SET status = 'completed', completed_at = now() WHERE id = $1 RETURNING *`,
@@ -480,6 +514,7 @@ export async function sendBackToWaiting(
 ): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
+    await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, ["in_room", "presenting"], "send_back_to_waiting");
     const position = await placeEntry(client, entry.challenge_id, entryId, "top");
     const res = await client.query(
@@ -511,7 +546,8 @@ export async function requeue(
 ): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
-    await assertEntryCanMove(client, entry);
+    const fixtureMarker = await assertEntryFixtureScope(client, actorId, entryId);
+    await assertEntryCanMove(client, entry, fixtureMarker);
     assertFrom(entry, ["called"], "requeue");
     const pos = await placeEntry(client, entry.challenge_id, entryId, position);
     const res = await client.query(
@@ -545,6 +581,7 @@ export async function reEnter(
 ): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
+    await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, RE_ENTER_FROM, "re_enter");
     const pos = await placeEntry(client, entry.challenge_id, entryId, position);
     const res = await client.query(
@@ -590,6 +627,7 @@ export async function markNoShow(
 ): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
+    await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, NO_SHOW_FROM, "no_show");
     const position = await placeEntry(client, entry.challenge_id, entryId, "bottom");
     const res = await client.query(
@@ -629,7 +667,8 @@ export async function moveToPosition(
 ): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
-    await assertEntryCanMove(client, entry);
+    const fixtureMarker = await assertEntryFixtureScope(client, actorId, entryId);
+    await assertEntryCanMove(client, entry, fixtureMarker);
     assertFrom(entry, MOVE_TO_POSITION_FROM, "move_to_position");
     const position = await placeEntry(client, entry.challenge_id, entryId, { rank });
     const res = await client.query(
@@ -663,7 +702,8 @@ export async function skipToEnd(
 ): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
-    await assertEntryCanMove(client, entry);
+    const fixtureMarker = await assertEntryFixtureScope(client, actorId, entryId);
+    await assertEntryCanMove(client, entry, fixtureMarker);
     assertFrom(entry, SKIP_FROM, "skip");
     const position = await placeEntry(client, entry.challenge_id, entryId, "bottom");
     const res = await client.query(
@@ -701,15 +741,20 @@ async function repoBusyRoomName(
   client: pg.PoolClient,
   repoId: number,
   excludeEntryId?: number | null,
+  fixtureMarker?: boolean,
 ): Promise<string | null> {
   const { rows } = await client.query(
     `SELECT r.name
        FROM queue_entries qe
        JOIN rooms r ON r.id = qe.assigned_room_id
+       JOIN challenges c ON c.id = qe.challenge_id
+       JOIN repos repo ON repo.id = qe.repo_id
       WHERE qe.repo_id = $1 AND qe.status = ANY($2)
         AND ($3::int IS NULL OR qe.id <> $3::int)
+        AND ($4::boolean IS NULL OR c.is_test_account = $4::boolean)
+        AND ($4::boolean IS NULL OR repo.is_test_account = $4::boolean)
       LIMIT 1`,
-    [repoId, EVALUATING_STATUSES, excludeEntryId ?? null],
+    [repoId, EVALUATING_STATUSES, excludeEntryId ?? null, fixtureMarker ?? null],
   );
   return rows[0]?.name ?? null;
 }
@@ -720,14 +765,19 @@ async function repoBusyRoomName(
  * be moved out of its own waiting room; the current entry is therefore
  * excluded from the shared-member guard.
  */
-async function assertEntryCanMove(client: pg.PoolClient, entry: QueueEntryRow): Promise<void> {
+async function assertEntryCanMove(
+  client: pg.PoolClient,
+  entry: QueueEntryRow,
+  fixtureMarker?: boolean,
+): Promise<void> {
   const blocked = await isRepoBlockedByBusyMember(client, entry.repo_id, {
     roomId: entry.assigned_room_id,
     excludeEntryId: entry.id,
     statuses: EVALUATING_STATUSES,
+    fixtureMarker,
   });
   if (!blocked) return;
-  const busyRoom = await repoBusyRoomName(client, entry.repo_id, entry.id);
+  const busyRoom = await repoBusyRoomName(client, entry.repo_id, entry.id, fixtureMarker);
   throw new ConflictError(
     busyRoom ? `Busy in ${busyRoom}` : "Team has a member busy in another room (H30)",
     { entryId: entry.id, repoId: entry.repo_id, ...(busyRoom ? { roomName: busyRoom } : {}) },
@@ -751,7 +801,8 @@ export async function moveToTop(
 ): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
-    await assertEntryCanMove(client, entry);
+    const fixtureMarker = await assertEntryFixtureScope(client, actorId, entryId);
+    await assertEntryCanMove(client, entry, fixtureMarker);
     assertFrom(entry, MOVE_TOP_FROM, "move_to_top");
     const position = await placeEntry(client, entry.challenge_id, entryId, "top");
     const res = await client.query(
@@ -785,6 +836,7 @@ export async function disqualify(
 ): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
+    await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, DISQUALIFY_FROM, "disqualify");
     const res = await client.query(
       `UPDATE queue_entries SET status = 'disqualified' WHERE id = $1 RETURNING *`,
@@ -819,6 +871,7 @@ export async function cancelEntry(
 ): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
+    await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, ["waiting", "called"], "cancel");
     const res = await client.query(
       `UPDATE queue_entries SET status = 'cancelled' WHERE id = $1 RETURNING *`,
@@ -857,6 +910,7 @@ export async function removeRepoFromChallenge(
 ): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
+    await assertEntryFixtureScope(client, actorId, entryId);
     const removable = ["waiting", "called", "in_room", "presenting"];
     assertFrom(entry, removable, "remove from challenge");
     const nextStatus =
@@ -902,6 +956,8 @@ export async function manualCall(
 ): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
+    const fixtureMarker = await assertEntryFixtureScope(client, actorId, entryId);
+    await assertQueueRoomScope(client, actorId, roomId);
     if (entry.status === targetStatus) {
       throw new ConflictError(`Entry is already ${targetStatus}`, { entryId });
     }
@@ -912,6 +968,7 @@ export async function manualCall(
       await isRepoBlockedByBusyMember(client, entry.repo_id, {
         roomId,
         excludeEntryId: entry.id,
+        fixtureMarker,
       })
     ) {
       throw new ConflictError("Team has a member busy in another room (H30)", { entryId });
@@ -1004,8 +1061,8 @@ async function enqueueQueueRepo(
   // Keep the shared queue-group path subject to the same marker boundary as
   // the explicit challenge endpoint. Prize-derived repo ids are global, so a
   // tag lookup can otherwise mix real and synthetic graphs.
-  await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
-  await assertFixtureQueueScope(client, actorId, "repo", repoId);
+  await assertQueueChallengeScope(client, actorId, challengeId);
+  await assertQueueRepoScope(client, actorId, repoId);
   const existing = await client.query(
     `SELECT * FROM queue_entries WHERE repo_id = $1 AND challenge_id = $2 FOR UPDATE`,
     [repoId, challengeId],
@@ -1081,6 +1138,7 @@ async function enqueueQueueRepo(
 async function challengePrizeRepoIds(
   client: pg.PoolClient,
   challengeId: number,
+  fixtureMarker = false,
 ): Promise<number[]> {
   const challenge = await client.query(`SELECT devpost_tags FROM challenges WHERE id = $1`, [
     challengeId,
@@ -1089,8 +1147,11 @@ async function challengePrizeRepoIds(
   const tags: string[] = challenge.rows[0].devpost_tags ?? [];
   if (tags.length === 0) return [];
   const { rows } = await client.query(
-    `SELECT DISTINCT repo_id FROM repo_devpost_prizes WHERE prize = ANY($1)`,
-    [tags],
+    `SELECT DISTINCT rdp.repo_id
+       FROM repo_devpost_prizes rdp
+       JOIN repos r ON r.id = rdp.repo_id AND r.is_test_account = $2
+      WHERE rdp.prize = ANY($1)`,
+    [tags, fixtureMarker],
   );
   return rows.map((row: { repo_id: number }) => Number(row.repo_id));
 }
@@ -1106,13 +1167,13 @@ export async function enqueueChallenge(
     // out of ordinary operators' writes. Validate the challenge and every
     // repo before creating any entry; the same transaction also covers the
     // prize-derived repo list used when the body omits repoIds.
-    await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
+    const fixtureMarker = await assertQueueChallengeScope(client, actorId, challengeId);
     let ids = repoIds;
     if (!ids || ids.length === 0) {
-      ids = await challengePrizeRepoIds(client, challengeId);
+      ids = await challengePrizeRepoIds(client, challengeId, fixtureMarker);
     }
     for (const repoId of ids) {
-      await assertFixtureQueueScope(client, actorId, "repo", repoId);
+      await assertQueueRepoScope(client, actorId, repoId);
     }
 
     const inserted: { entry: QueueEntryRow }[] = [];
@@ -1157,6 +1218,7 @@ export async function enqueueQueueGroup(
     if (group.rowCount === 0) {
       throw new NotFoundError("Queue group not found", { queueGroupId });
     }
+    const fixtureMarker = await assertQueueGroupScope(client, actorId, queueGroupId);
     const { rows: challenges } = await client.query(
       `SELECT c.id FROM queue_group_challenges qgc
         JOIN challenges c ON c.id = qgc.challenge_id
@@ -1172,7 +1234,7 @@ export async function enqueueQueueGroup(
     }> = [];
     for (const challenge of challenges as Array<{ id: number }>) {
       const challengeId = Number(challenge.id);
-      const repoIds = await challengePrizeRepoIds(client, challengeId);
+      const repoIds = await challengePrizeRepoIds(client, challengeId, fixtureMarker);
       let inserted = 0;
       let revived = 0;
       let alreadyQueued = 0;
@@ -1212,6 +1274,7 @@ export async function clearQueueGroup(
     if (group.rowCount === 0) {
       throw new NotFoundError("Queue group not found", { queueGroupId });
     }
+    const fixtureMarker = await assertQueueGroupScope(client, actorId, queueGroupId);
     const { rows: challenges } = await client.query(
       `SELECT challenge_id FROM queue_group_challenges WHERE queue_group_id = $1 ORDER BY challenge_id`,
       [queueGroupId],
@@ -1226,10 +1289,12 @@ export async function clearQueueGroup(
     }
 
     const entries = await client.query(
-      `SELECT * FROM queue_entries
-        WHERE challenge_id = ANY($1::int[]) AND status IN ('waiting', 'called', 'in_room', 'presenting')
-        ORDER BY id FOR UPDATE`,
-      [challengeIds],
+      `SELECT qe.* FROM queue_entries qe
+        JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
+        JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $2
+        WHERE qe.challenge_id = ANY($1::int[]) AND qe.status IN ('waiting', 'called', 'in_room', 'presenting')
+        ORDER BY qe.id FOR UPDATE`,
+      [challengeIds, fixtureMarker],
     );
     const activeInRoom = (entries.rows as QueueEntryRow[]).find((entry) =>
       ["in_room", "presenting"].includes(entry.status),
@@ -1291,15 +1356,20 @@ export async function pauseRoom(roomId: number, actorId: number): Promise<void> 
       [roomId],
     );
     if (stateRes.rowCount === 0) throw new NotFoundError("Room not found", { roomId });
+    const fixtureMarker = await assertQueueRoomScope(client, actorId, roomId);
     if (stateRes.rows[0].is_paused) return; // idempotent no-op
 
     await client.query(`UPDATE room_queue_state SET is_paused = true WHERE room_id = $1`, [roomId]);
 
     const { rows: calledEntries } = await client.query(
-      `SELECT * FROM queue_entries WHERE assigned_room_id = $1 AND status = 'called'
-        ORDER BY called_at ASC
+      `SELECT qe.*
+         FROM queue_entries qe
+         JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
+         JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $2
+        WHERE qe.assigned_room_id = $1 AND qe.status = 'called'
+        ORDER BY qe.called_at ASC
         FOR UPDATE`,
-      [roomId],
+      [roomId, fixtureMarker],
     );
 
     // Group by queue_group — "top" is relative to the group's shared queue,
@@ -1356,13 +1426,14 @@ export async function pauseRoom(roomId: number, actorId: number): Promise<void> 
   await notifyRoomQueueChanged(pool, roomId);
 }
 
-export async function resumeRoom(roomId: number, _actorId: number): Promise<void> {
+export async function resumeRoom(roomId: number, actorId: number): Promise<void> {
   await withTransaction(async (client) => {
     const stateRes = await client.query(
       `SELECT * FROM room_queue_state WHERE room_id = $1 FOR UPDATE`,
       [roomId],
     );
     if (stateRes.rowCount === 0) throw new NotFoundError("Room not found", { roomId });
+    await assertQueueRoomScope(client, actorId, roomId);
     await client.query(
       `UPDATE room_queue_state SET is_paused = false, started_at = COALESCE(started_at, now()) WHERE room_id = $1`,
       [roomId],

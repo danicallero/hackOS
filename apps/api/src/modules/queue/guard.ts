@@ -38,9 +38,11 @@ export async function isRepoBlockedByBusyMember(
     roomId?: number | null;
     excludeEntryId?: number | null;
     statuses?: readonly string[];
+    fixtureMarker?: boolean;
   } = {},
 ): Promise<boolean> {
   const statuses = opts.statuses ?? ["called", "in_room", "presenting"];
+  const fixtureMarker = opts.fixtureMarker ?? null;
   await client.query(`SELECT pg_advisory_xact_lock($1::int, $2::int)`, [
     H30_REPO_LOCK_NAMESPACE,
     repoId,
@@ -50,10 +52,12 @@ export async function isRepoBlockedByBusyMember(
        FROM (
          SELECT DISTINCT user_id
            FROM (${REPO_MEMBER_RELATION_SQL}) repo_members
+           JOIN users member_user ON member_user.id = repo_members.user_id
           WHERE repo_id = $2
+            AND ($3::boolean IS NULL OR member_user.is_test_account = $3::boolean)
           ORDER BY user_id
        ) members`,
-    [H30_LOCK_NAMESPACE, repoId],
+    [H30_LOCK_NAMESPACE, repoId, fixtureMarker],
   );
   const { rows } = await client.query(
     `WITH repo_members AS (${REPO_MEMBER_RELATION_SQL})
@@ -62,18 +66,33 @@ export async function isRepoBlockedByBusyMember(
        JOIN repo_members active ON active.user_id = candidate.user_id
        JOIN queue_entries qe ON qe.repo_id = active.repo_id
                               AND qe.status = ANY($4::queue_status[])
+       JOIN repos active_repo ON active_repo.id = qe.repo_id
+                              AND ($5::boolean IS NULL OR active_repo.is_test_account = $5::boolean)
+       JOIN challenges active_challenge ON active_challenge.id = qe.challenge_id
+                                      AND ($5::boolean IS NULL OR active_challenge.is_test_account = $5::boolean)
       WHERE candidate.repo_id = $1
         AND ($2::int IS NULL OR qe.assigned_room_id IS DISTINCT FROM $2::int)
         AND ($3::int IS NULL OR qe.id <> $3::int)
+        AND ($5::boolean IS NULL OR EXISTS (
+          SELECT 1
+            FROM repos candidate_repo
+           WHERE candidate_repo.id = candidate.repo_id
+             AND candidate_repo.is_test_account = $5::boolean
+        ))
      UNION ALL
      SELECT 1
        FROM queue_entries qe
+       JOIN repos active_repo ON active_repo.id = qe.repo_id
+                              AND ($5::boolean IS NULL OR active_repo.is_test_account = $5::boolean)
+       JOIN challenges active_challenge ON active_challenge.id = qe.challenge_id
+                                      AND ($5::boolean IS NULL OR active_challenge.is_test_account = $5::boolean)
       WHERE qe.repo_id = $1
         AND qe.status = ANY($4::queue_status[])
         AND ($2::int IS NULL OR qe.assigned_room_id IS DISTINCT FROM $2::int)
         AND ($3::int IS NULL OR qe.id <> $3::int)
+        AND ($5::boolean IS NULL OR active_repo.is_test_account = $5::boolean)
       LIMIT 1`,
-    [repoId, opts.roomId ?? null, opts.excludeEntryId ?? null, statuses],
+    [repoId, opts.roomId ?? null, opts.excludeEntryId ?? null, statuses, fixtureMarker],
   );
   return rows.length > 0;
 }

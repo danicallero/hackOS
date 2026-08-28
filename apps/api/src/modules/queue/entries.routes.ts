@@ -6,7 +6,7 @@ import { requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { actor } from "./actor.js";
 import { requireEntryJudgeOrCapability } from "./contextual-access.js";
-import { CHALLENGE_ROOM_IDS_SQL } from "./groups.js";
+import { assertQueueEntryScope } from "./fixture-scope.js";
 import { scheduleTopUp } from "./pump.js";
 import { entryHistory } from "./reads.js";
 import {
@@ -49,11 +49,18 @@ import type { QueueEntryRow } from "./types.js";
  */
 async function transitionAndTopUp(
   entryId: number,
+  actorId: number,
   run: () => Promise<QueueEntryRow>,
 ): Promise<QueueEntryRow> {
-  const { rows } = await pool.query(`SELECT assigned_room_id FROM queue_entries WHERE id = $1`, [
-    entryId,
-  ]);
+  const fixtureMarker = await assertQueueEntryScope(pool, actorId, entryId);
+  const { rows } = await pool.query(
+    `SELECT qe.assigned_room_id
+       FROM queue_entries qe
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $2
+      WHERE qe.id = $1`,
+    [entryId, fixtureMarker],
+  );
   const roomBefore = (rows[0]?.assigned_room_id as number | null) ?? null;
   const entry = await run();
   const roomId = roomBefore ?? entry.assigned_room_id;
@@ -63,15 +70,23 @@ async function transitionAndTopUp(
 
 /** A top-of-challenge move should immediately fill any open waiting-room slot. */
 async function moveToTopAndTopUp(
-  _entryId: number,
+  entryId: number,
+  actorId: number,
   run: () => Promise<QueueEntryRow>,
 ): Promise<QueueEntryRow> {
+  const fixtureMarker = await assertQueueEntryScope(pool, actorId, entryId);
   const entry = await run();
   // H46: every room serving this challenge's queue_group has a slot that a
   // top-of-queue move could fill.
-  const { rows } = await pool.query(`${CHALLENGE_ROOM_IDS_SQL} ORDER BY rqg.room_id ASC`, [
-    entry.challenge_id,
-  ]);
+  const { rows } = await pool.query(
+    `SELECT rqg.room_id
+       FROM queue_group_challenges self
+       JOIN challenges c ON c.id = self.challenge_id AND c.is_test_account = $2
+       JOIN room_queue_groups rqg ON rqg.queue_group_id = self.queue_group_id
+      WHERE self.challenge_id = $1
+      ORDER BY rqg.room_id ASC`,
+    [entry.challenge_id, fixtureMarker],
+  );
   await Promise.all(rows.map((row: { room_id: number }) => scheduleTopUp(row.room_id)));
   return entry;
 }
@@ -156,7 +171,9 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       schema: { params: entryIdParam },
     },
     async (req) =>
-      transitionAndTopUp(req.params.entryId, () => bringIn(req.params.entryId, actor(req.userId))),
+      transitionAndTopUp(req.params.entryId, actor(req.userId), () =>
+        bringIn(req.params.entryId, actor(req.userId)),
+      ),
   );
 
   typed.post(
@@ -189,7 +206,7 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       schema: { params: entryIdParam },
     },
     async (req) =>
-      transitionAndTopUp(req.params.entryId, () =>
+      transitionAndTopUp(req.params.entryId, actor(req.userId), () =>
         completePresentation(req.params.entryId, actor(req.userId)),
       ),
   );
@@ -212,7 +229,7 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       schema: { params: entryIdParam, body: reasonBody },
     },
     async (req) =>
-      transitionAndTopUp(req.params.entryId, () =>
+      transitionAndTopUp(req.params.entryId, actor(req.userId), () =>
         sendBackToWaiting(req.params.entryId, actor(req.userId), req.body.reason),
       ),
   );
@@ -232,7 +249,7 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       schema: { params: entryIdParam, body: requeueBody },
     },
     async (req) =>
-      transitionAndTopUp(req.params.entryId, () =>
+      transitionAndTopUp(req.params.entryId, actor(req.userId), () =>
         requeue(req.params.entryId, actor(req.userId), req.body.position, req.body.reason),
       ),
   );
@@ -264,7 +281,7 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       schema: { params: entryIdParam, body: reasonBody },
     },
     async (req) =>
-      transitionAndTopUp(req.params.entryId, () =>
+      transitionAndTopUp(req.params.entryId, actor(req.userId), () =>
         markNoShow(req.params.entryId, actor(req.userId), req.body.reason),
       ),
   );
@@ -285,7 +302,7 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       schema: { params: entryIdParam, body: reasonBody },
     },
     async (req) =>
-      moveToTopAndTopUp(req.params.entryId, () =>
+      moveToTopAndTopUp(req.params.entryId, actor(req.userId), () =>
         moveToTop(req.params.entryId, actor(req.userId), req.body.reason),
       ),
   );
@@ -311,7 +328,7 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       },
     },
     async (req) =>
-      transitionAndTopUp(req.params.entryId, () =>
+      transitionAndTopUp(req.params.entryId, actor(req.userId), () =>
         moveToPosition(req.params.entryId, actor(req.userId), req.body.position, req.body.reason),
       ),
   );
@@ -369,7 +386,7 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       schema: { params: entryIdParam, body: manualCallBody },
     },
     async (req) =>
-      transitionAndTopUp(req.params.entryId, () =>
+      transitionAndTopUp(req.params.entryId, actor(req.userId), () =>
         manualCall(
           req.params.entryId,
           actor(req.userId),
@@ -394,6 +411,6 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       },
       schema: { params: entryIdParam },
     },
-    async (req) => entryHistory(req.params.entryId),
+    async (req) => entryHistory(req.params.entryId, actor(req.userId)),
   );
 }

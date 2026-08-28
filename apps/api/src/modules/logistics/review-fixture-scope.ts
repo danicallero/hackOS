@@ -183,76 +183,6 @@ export async function inspectFixtureEnterpriseScope(
   return rows[0] ?? { exists: false, has_synthetic: false, has_real: false };
 }
 
-type QueueFixtureMarkers = {
-  has_synthetic: boolean;
-  has_real: boolean;
-  has_entry_marker_mismatch: boolean;
-};
-
-async function queueGroupFixtureMarker(db: Queryable, queueGroupId: number): Promise<boolean> {
-  const { rows } = await db.query<QueueFixtureMarkers>(
-    `SELECT COALESCE(bool_or(c.is_test_account IS TRUE), false) AS has_synthetic,
-            COALESCE(bool_or(c.is_test_account IS NOT TRUE), false) AS has_real,
-            COALESCE(
-              bool_or(
-                r.id IS NOT NULL
-                AND c.is_test_account IS DISTINCT FROM r.is_test_account
-              ),
-              false
-            ) AS has_entry_marker_mismatch
-       FROM queue_group_challenges qgc
-       JOIN challenges c ON c.id = qgc.challenge_id
-       LEFT JOIN queue_entries qe ON qe.challenge_id = qgc.challenge_id
-       LEFT JOIN repos r ON r.id = qe.repo_id
-      WHERE qgc.queue_group_id = $1`,
-    [queueGroupId],
-  );
-  const marker = rows[0];
-  if (marker?.has_entry_marker_mismatch || (marker?.has_synthetic && marker.has_real)) {
-    throw new ConflictError("Queue fixture markers must match", {
-      code: "review_fixture_scope",
-      resource: "queueGroup",
-      resourceId: queueGroupId,
-    });
-  }
-  return marker?.has_synthetic === true;
-}
-
-async function assertQueueRepoFixtureGraph(
-  db: Queryable,
-  repoId: number,
-  repoIsSynthetic: boolean,
-): Promise<void> {
-  const { rows } = await db.query<QueueFixtureMarkers>(
-    `SELECT COALESCE(bool_or(c.is_test_account IS TRUE), false) AS has_synthetic,
-            COALESCE(bool_or(c.is_test_account IS NOT TRUE), false) AS has_real,
-            COALESCE(
-              bool_or(c.is_test_account IS DISTINCT FROM r.is_test_account),
-              false
-            ) AS has_entry_marker_mismatch
-       FROM queue_entries qe
-       JOIN challenges c ON c.id = qe.challenge_id
-       JOIN repos r ON r.id = qe.repo_id
-      WHERE qe.repo_id = $1`,
-    [repoId],
-  );
-  const marker = rows[0];
-  if (marker?.has_entry_marker_mismatch || (marker?.has_synthetic && marker.has_real)) {
-    throw new ConflictError("Queue fixture markers must match", {
-      code: "review_fixture_scope",
-      resource: "repo",
-      resourceId: repoId,
-    });
-  }
-  if (marker?.has_real && repoIsSynthetic && marker.has_synthetic === false) {
-    throw new ConflictError("Queue fixture markers must match", {
-      code: "review_fixture_scope",
-      resource: "repo",
-      resourceId: repoId,
-    });
-  }
-}
-
 /**
  * Check whether an enterprise belongs to the synthetic graph.  Enterprises do
  * not carry their own marker: the marker is inherited from the sponsor user or
@@ -358,40 +288,16 @@ export async function assertFixtureQueueScope(
       [resourceId],
     );
     isSynthetic = rows[0]?.is_test_account === true;
-    if (resource === "challenge") {
-      const { rows: groupRows } = await db.query<{ queue_group_id: number }>(
-        `SELECT queue_group_id
-           FROM queue_group_challenges
-          WHERE challenge_id = $1`,
-        [resourceId],
-      );
-      const queueGroupId = groupRows[0]?.queue_group_id;
-      if (queueGroupId != null) {
-        const groupIsSynthetic = await queueGroupFixtureMarker(db, queueGroupId);
-        if (groupIsSynthetic !== isSynthetic) {
-          throw new ConflictError("Queue fixture markers must match", {
-            code: "review_fixture_scope",
-            resource,
-            resourceId,
-          });
-        }
-      }
-    } else if (rows[0]) {
-      await assertQueueRepoFixtureGraph(db, resourceId, isSynthetic);
-    }
   } else if (resource === "entry") {
     const { rows } = await db.query<{
       challenge_is_test_account: boolean;
       repo_is_test_account: boolean;
-      queue_group_id: number | null;
     }>(
       `SELECT c.is_test_account AS challenge_is_test_account,
-              r.is_test_account AS repo_is_test_account,
-              qgc.queue_group_id
+              r.is_test_account AS repo_is_test_account
          FROM queue_entries qe
          JOIN challenges c ON c.id = qe.challenge_id
          JOIN repos r ON r.id = qe.repo_id
-         LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
         WHERE qe.id = $1`,
       [resourceId],
     );
@@ -403,19 +309,25 @@ export async function assertFixtureQueueScope(
       });
     }
     isSynthetic = row?.challenge_is_test_account === true;
-    if (row?.queue_group_id != null) {
-      const groupIsSynthetic = await queueGroupFixtureMarker(db, row.queue_group_id);
-      if (groupIsSynthetic !== isSynthetic) {
+  } else {
+    if (resource === "queueGroup") {
+      const { rows } = await db.query<{ has_synthetic: boolean; has_real: boolean }>(
+        `SELECT COALESCE(bool_or(c.is_test_account), false) AS has_synthetic,
+                COALESCE(bool_or(NOT c.is_test_account), false) AS has_real
+           FROM queue_group_challenges qgc
+           JOIN challenges c ON c.id = qgc.challenge_id
+          WHERE qgc.queue_group_id = $1`,
+        [resourceId],
+      );
+      const row = rows[0];
+      if (row?.has_synthetic && row.has_real) {
         throw new ConflictError("Queue fixture markers must match", {
           code: "review_fixture_scope",
           resource,
           resourceId,
         });
       }
-    }
-  } else {
-    if (resource === "queueGroup") {
-      isSynthetic = await queueGroupFixtureMarker(db, resourceId);
+      isSynthetic = row?.has_synthetic === true;
     } else {
       const marker = await inspectFixtureRoomScope(db, resourceId);
       if (marker.has_synthetic && marker.has_real) {

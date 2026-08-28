@@ -334,6 +334,8 @@ export async function notifyTeamMessage(
 export async function notifyRoomQueueChanged(client: Queryable, roomId: number): Promise<void> {
   // H46: a room serves a queue_group, so a room-level change affects every
   // challenge feeding that group — one today, 1..N once groups are merged.
-  const challengeIds = await roomChallengeIds(client, roomId);
+  const fixtureMarker = await queueFixtureMarker(client, "room", roomId);
+  if (fixtureMarker === null) return;
+  const challengeIds = await roomChallengeIds(client, roomId, fixtureMarker);
   await Promise.all(challengeIds.map((id) => notifyChallengeQueueChanged(client, id)));
 }
