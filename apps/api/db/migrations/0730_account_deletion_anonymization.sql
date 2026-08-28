@@ -465,6 +465,22 @@ BEGIN
     END IF;
   END IF;
 
+  -- Recovery sign-in and session refresh remain available during a reversible
+  -- exit, but a session must never outlive the already-captured deadline.
+  IF TG_TABLE_NAME = 'sessions'
+     AND TG_ARGV[0] = 'user_id'
+     AND NULLIF(to_jsonb(NEW)->>'expires_at', '')::timestamptz <= (
+       SELECT removal_expires_at
+         FROM users
+        WHERE id = referenced_user_id
+          AND account_state = 'removal_pending'
+          AND anonymized_at IS NULL
+          AND removal_expires_at IS NOT NULL
+        FOR SHARE
+     ) THEN
+    RETURN NEW;
+  END IF;
+
   PERFORM 1
     FROM users
    WHERE id = referenced_user_id

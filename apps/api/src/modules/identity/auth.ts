@@ -39,6 +39,40 @@ export async function getBetterAuthSessionToken(headers: Headers): Promise<strin
   }
 }
 
+async function pendingRemovalDeadlineForUser(userId: string | number): Promise<Date | null> {
+  const { rows } = await pool.query<{ removal_expires_at: Date | null }>(
+    `SELECT removal_expires_at
+       FROM users
+      WHERE id = $1
+        AND account_state = 'removal_pending'
+        AND anonymized_at IS NULL
+        AND removal_expires_at IS NOT NULL
+      FOR SHARE`,
+    [userId],
+  );
+  return rows[0]?.removal_expires_at ?? null;
+}
+
+async function pendingRemovalDeadlineForSession(token: string): Promise<Date | null> {
+  const { rows } = await pool.query<{ removal_expires_at: Date | null }>(
+    `SELECT u.removal_expires_at
+       FROM sessions s
+       JOIN users u ON u.id = s.user_id
+      WHERE s.token = $1
+        AND u.account_state = 'removal_pending'
+        AND u.anonymized_at IS NULL
+        AND u.removal_expires_at IS NOT NULL
+      FOR SHARE OF u`,
+    [token],
+  );
+  return rows[0]?.removal_expires_at ?? null;
+}
+
+function capSessionExpiry(expiresAt: Date | undefined, deadline: Date | null): Date | undefined {
+  if (!expiresAt || !deadline || expiresAt <= deadline) return undefined;
+  return deadline;
+}
+
 /**
  * Origins Better Auth accepts on state-changing auth requests. This is a
  * SEPARATE check from CORS: even with permissive CORS, Better Auth 403s a
@@ -161,6 +195,30 @@ export const auth = betterAuth({
   secret: config.BETTER_AUTH_SECRET,
   database: pool,
   trustedOrigins,
+  databaseHooks: {
+    session: {
+      create: {
+        before: async (session) => {
+          const deadline = await pendingRemovalDeadlineForUser(session.userId);
+          const expiresAt = capSessionExpiry(session.expiresAt, deadline);
+          return expiresAt ? { data: { expiresAt } } : undefined;
+        },
+      },
+      update: {
+        before: async (session, context) => {
+          let deadline = session.userId
+            ? await pendingRemovalDeadlineForUser(session.userId)
+            : null;
+          if (!deadline && context?.headers) {
+            const token = await getBetterAuthSessionToken(context.headers);
+            if (token) deadline = await pendingRemovalDeadlineForSession(token);
+          }
+          const expiresAt = capSessionExpiry(session.expiresAt, deadline);
+          return expiresAt ? { data: { expiresAt } } : undefined;
+        },
+      },
+    },
+  },
   advanced: {
     database: { generateId: "serial" },
     // In production the web app and API live on different origins (and often

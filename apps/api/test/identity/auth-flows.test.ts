@@ -508,6 +508,30 @@ describe("H54 pending identity boundary", () => {
     });
     expect(status.statusCode).toBe(200);
 
+    // Better Auth refreshes sessions that enter its update window. A pending
+    // account may still read its session, but that refresh must stay inside
+    // the already-captured recovery deadline.
+    await pool.query(
+      `UPDATE sessions SET expires_at = now() + interval '10 minutes' WHERE token = $1`,
+      [rawSessionToken(cookie)],
+    );
+    const refreshedSession = await a.inject({
+      method: "GET",
+      url: "/api/auth/get-session",
+      headers: { cookie },
+    });
+    expect(refreshedSession.statusCode).toBe(200);
+    const { rows: refreshedRows } = await pool.query(
+      `SELECT s.expires_at, u.removal_expires_at
+         FROM sessions s
+         JOIN users u ON u.id = s.user_id
+        WHERE s.token = $1`,
+      [rawSessionToken(cookie)],
+    );
+    expect(new Date(refreshedRows[0].expires_at).getTime()).toBeLessThanOrEqual(
+      new Date(refreshedRows[0].removal_expires_at).getTime(),
+    );
+
     const profileMutation = await a.inject({
       method: "PATCH",
       url: "/api/me",
@@ -620,6 +644,13 @@ describe("H54 pending identity boundary", () => {
     // already captured removal deadline forward.
     const laterLogin = await signIn(a, email, SIGNUP.password);
     expect(laterLogin.statusCode).toBe(200);
+    const { rows: laterSessionRows } = await pool.query(
+      `SELECT expires_at FROM sessions WHERE token = $1`,
+      [laterLogin.json().token],
+    );
+    expect(new Date(laterSessionRows[0].expires_at).getTime()).toBeLessThanOrEqual(
+      new Date(pendingRows[0].removal_expires_at).getTime(),
+    );
     const { rows: unchangedRows } = await pool.query(
       `SELECT removal_expires_at FROM users WHERE id = $1`,
       [userId],
