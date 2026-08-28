@@ -354,11 +354,11 @@ exactly which stream sees what.
 ### Background work
 Background work uses two patterns. Repeatable BullMQ ticks drain durable
 Postgres tables such as `notification_outbox`, due confirmations, scheduled
-reveals, and room queues. Event-driven BullMQ jobs carry explicit payloads for
-account-removal retries, data-subject requests, meal-scan batches, wallet sync,
-schedule reminders, and queue participant invalidations. Each processor defines
-its own idempotency/retry behavior; see [`background-workers.md`](./background-workers.md)
-for the complete map.
+reveals, room queues, and schedule reminders. Event-driven BullMQ jobs carry
+explicit payloads for account-removal retries, data-subject requests, meal-scan
+batches, wallet sync, and queue participant invalidations. Each processor
+defines its own idempotency/retry behavior; see
+[`background-workers.md`](./background-workers.md) for the complete map.
 
 ### Trilingual copy (i18n)
 Anything a user reads — UI strings and outbound notification templates alike

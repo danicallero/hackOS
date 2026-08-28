@@ -488,4 +488,53 @@ describe("queue contextual isolation", () => {
       stream.stream().destroy();
     }
   });
+
+  it("omits ungrouped and cross-marker entries from the public room snapshot", async () => {
+    const challengeId = await createChallenge();
+    const roomId = await createRoom();
+    await assignChallengeToRoom(roomId, challengeId);
+    const { pool } = await import("../../src/db/pool.js");
+    const { repoId } = await createRepoWithTeam();
+
+    const syntheticChallengeId = await createChallenge();
+    await pool.query(`UPDATE challenges SET is_test_account = true WHERE id = $1`, [
+      syntheticChallengeId,
+    ]);
+    await pool.query(
+      `UPDATE users u
+          SET is_test_account = true
+         FROM sponsors s
+        WHERE s.user_id = u.id
+          AND s.id = (SELECT author FROM challenges WHERE id = $1)`,
+      [syntheticChallengeId],
+    );
+    const crossMarkerEntryId = (
+      await pool.query(
+        `INSERT INTO queue_entries (challenge_id, repo_id, status, assigned_room_id)
+         VALUES ($1, $2, 'presenting', $3) RETURNING id`,
+        [syntheticChallengeId, repoId, roomId],
+      )
+    ).rows[0].id;
+
+    const ungroupedChallengeId = await createChallenge();
+    const { repoId: ungroupedRepoId } = await createRepoWithTeam();
+    const ungroupedEntryId = (
+      await pool.query(
+        `INSERT INTO queue_entries (challenge_id, repo_id, status, assigned_room_id)
+         VALUES ($1, $2, 'called', $3) RETURNING id`,
+        [ungroupedChallengeId, ungroupedRepoId, roomId],
+      )
+    ).rows[0].id;
+    await pool.query(`DELETE FROM queue_group_challenges WHERE challenge_id = $1`, [
+      ungroupedChallengeId,
+    ]);
+
+    const snapshot = await app.inject({ method: "GET", url: "/api/tv/rooms" });
+    expect(snapshot.statusCode).toBe(200);
+    const view = snapshot.json()[0];
+    expect(view.active).toBeNull();
+    expect(view.called).toEqual([]);
+    expect(JSON.stringify(view)).not.toContain(String(crossMarkerEntryId));
+    expect(JSON.stringify(view)).not.toContain(String(ungroupedEntryId));
+  });
 });

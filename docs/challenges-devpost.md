@@ -81,11 +81,11 @@ challenge content and judging panel under the H44/H45 rules below.
 | `GET /api/challenges` | contextual `challenge-directory` | H44/H46 | global challenge admins see all; sponsor representatives and assigned judges see their scoped challenges |
 | `POST /api/challenges` | `sponsors:manage` OR `queue:admin` | H43/H44 | create hidden draft template bound to an enterprise |
 | `GET /api/challenges/mine` | authenticated + sponsor row | H44/H46 | challenges owned by the caller's enterprise |
-| `GET /api/challenges/:id` | contextual `challenge-access` | H44/H46 | global admins, the owning sponsor enterprise, or an assigned judge |
+| `GET /api/challenges/:id` | contextual `challenge-access` | H44/H46 | global admins, `JUDGE_PANEL`/`QUEUE_OPERATE`, the owning sponsor enterprise, or an assigned judge |
 | `PATCH /api/challenges/:id` | ownership check | H44 | partial edit + version snapshot + audit |
 | `POST /api/challenges/:id/publish` | `sponsors:manage` OR `queue:admin` | H45 | publish immediately or schedule reveal |
 | `POST /api/challenges/:id/unpublish` | `sponsors:manage` OR `queue:admin` | H45 | hide a mistakenly published challenge |
-| `GET /api/challenges/:id/panel/preview` | contextual `challenge-access` | H44/H46 | global admins, sponsor/queue/panel operators, the owning sponsor enterprise, or an assigned judge |
+| `GET /api/challenges/:id/panel/preview` | contextual `challenge-access` | H44/H46 | global admins, `SPONSORS_MANAGE`/`QUEUE_ADMIN`/`JUDGE_PANEL`/`QUEUE_OPERATE`, the owning sponsor enterprise, or an assigned judge |
 | `GET /api/challenges/:id/versions` | ownership check | H44 | immutable edit history |
 
 `POST /api/challenges` resolves the supplied `enterpriseId` to the existing
@@ -98,16 +98,15 @@ same enterprise.
 **Edit safety (H44).** `updateChallenge` runs `SELECT … FOR UPDATE`, writes one
 immutable `challenge_versions` snapshot and one `audit` row inside the same
 transaction as the `UPDATE` (per CLAUDE.md invariants 3, 6). The **judging panel
-is frozen once judging starts**: `panelIsLocked()` compares now against
-`queue_settings.schedule_start_at`, and any patch touching
-`judging_panel_criteria` after that instant is rejected with a `ConflictError`
-(`code: panel_locked`). This is the "restrict editing critical evaluation
-criteria once paired with judging" rule from the brief — realised through the
-judging clock, which is the deadline the stories actually name, not through a
-"has submissions" heuristic. Once a challenge is published or archived, sponsor
-owners can still update the judging panel and presentation duration until that
-judging deadline, but the public/general fields (`title`, `description`,
-`criteria`, `prizes`) are admin-only.
+is frozen after the first submitted evaluation**: `panelIsLocked()` uses
+`queue/evaluation-lock.ts` to check for a submitted review or completed queue
+entry in the challenge's queue group, and any later patch touching
+`judging_panel_criteria` is rejected with a `ConflictError` (`code:
+panel_locked`). A scheduled judging start or a generated queue alone does not
+freeze the form. Once a challenge is published or archived, sponsor owners can
+still update the judging panel and presentation duration until that first
+evaluation, but the public/general fields (`title`, `description`, `criteria`,
+`prizes`) are admin-only.
 
 **Winner eligibility is queue-group scoped (H46).** `winners.ts` records each
 win against the exact `challenge_id` the sponsor is picking for —

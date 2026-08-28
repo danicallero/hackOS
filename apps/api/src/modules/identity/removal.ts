@@ -24,6 +24,7 @@ import {
 import { expireGoogleObject } from "../logistics/google-wallet.js";
 import { PASS_TYPE_IDENTIFIER } from "../logistics/wallet.js";
 import { queueFixtureMarker } from "../queue/broadcast.js";
+import { REPO_MEMBER_RELATION_SQL } from "../queue/membership.js";
 import { type DeletedQueueEntryNotification, notifyDeletedQueueEntries } from "../queue/notify.js";
 import { assertActiveWildcardHolder, lockPermissionGraph } from "./permission-graph.js";
 import { consumeRemovalPin } from "./removal-pin.js";
@@ -1111,7 +1112,11 @@ async function deleteOrphanedProjects(
     `SELECT r.id
        FROM repos r
       WHERE r.id = ANY($1::int[])
-        AND NOT EXISTS (SELECT 1 FROM submissions s WHERE s.repo_id = r.id)`,
+        AND NOT EXISTS (
+          SELECT 1
+            FROM (${REPO_MEMBER_RELATION_SQL}) remaining_members
+           WHERE remaining_members.repo_id = r.id
+        )`,
     [repoIds],
   );
   const orphanIds = rows.map((row) => row.id);
@@ -1261,14 +1266,18 @@ async function scrubRelationships(
     ]);
   }
 
-  // No project membership is an audit requirement. Preserve a team's repo
-  // only when another member still has a submission; a solo project and its
-  // judging/queue records are personal data and are removed as a unit.
-  const { rows: submissionRows } = await client.query<{ repo_id: number }>(
-    `SELECT repo_id FROM submissions WHERE user_id = $1`,
-    [userId],
+  // No project membership is an audit requirement. Capture every repository
+  // linked to the subject before removing either the submission or Devpost
+  // participant row; a matched Devpost member may have no submission yet.
+  const { rows: membershipRows } = await client.query<{ repo_id: number }>(
+    `SELECT repo_id FROM submissions WHERE user_id = $1
+     UNION
+     SELECT repo_id FROM devpost_participants
+      WHERE user_id = $1 OR lower(email) = ANY($2::text[])
+     ORDER BY repo_id`,
+    [userId, emails.map((email) => email.toLowerCase())],
   );
-  const repoIds = submissionRows.map((row) => row.repo_id);
+  const repoIds = membershipRows.map((row) => row.repo_id);
   const submissionAuditEntityIds = repoIds.map((repoId) => `${repoId}:${userId}`);
   const { rows: scheduleOwnerRows } = await client.query<{
     id: number;

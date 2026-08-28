@@ -212,10 +212,10 @@ identifiers:
     "slug": "hackos",
     "scheme": "hackos",
     "ios": {
-      "bundleIdentifier": "org.example.hackos"
+      "bundleIdentifier": "com.hackudc.os"
     },
     "android": {
-      "package": "org.example.hackos"
+      "package": "com.hackudc.os"
     },
     "extra": {
       "eas": {

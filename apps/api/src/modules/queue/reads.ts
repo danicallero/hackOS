@@ -299,7 +299,13 @@ export async function roomView(roomId: number, opts: { includeCrossRoomSkips?: b
     (
       await pool.query(
         `SELECT ${QUEUE_ENTRY_SELECT}
-         FROM queue_entries qe JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
+         FROM queue_entries qe
+         JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
+         JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
+         JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+         JOIN room_queue_groups rqg
+           ON rqg.room_id = qe.assigned_room_id
+          AND rqg.queue_group_id = qgc.queue_group_id
         WHERE qe.assigned_room_id = $1 AND qe.status IN ('in_room', 'presenting')
         LIMIT 1`,
         [roomId],
@@ -309,7 +315,13 @@ export async function roomView(roomId: number, opts: { includeCrossRoomSkips?: b
   const called = (
     await pool.query(
       `SELECT ${QUEUE_ENTRY_SELECT}
-         FROM queue_entries qe JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
+         FROM queue_entries qe
+         JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
+         JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
+         JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+         JOIN room_queue_groups rqg
+           ON rqg.room_id = qe.assigned_room_id
+          AND rqg.queue_group_id = qgc.queue_group_id
         WHERE qe.assigned_room_id = $1 AND qe.status = 'called'
         ORDER BY qe.called_at ASC NULLS LAST, qe.id ASC`,
       [roomId],

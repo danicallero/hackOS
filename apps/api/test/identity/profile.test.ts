@@ -774,6 +774,52 @@ describe("self-service account removal (H54)", () => {
     );
   });
 
+  it("preserves a shared project held by a linked Devpost member without a submission", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const { createChallenge, createRepoWithTeam, enqueueRepo } = await import(
+      "../queue/fixtures.js"
+    );
+    const departing = await createUser({
+      email: "shared-project-departure@example.test",
+      emailVerified: false,
+    });
+    const surviving = await createUser({ email: "linked-devpost-member@example.test" });
+    await addCredentialPassword(departing);
+    const challengeId = await createChallenge();
+    const { repoId } = await createRepoWithTeam([departing], "Shared Devpost project");
+    await pool.query(
+      `INSERT INTO devpost_participants
+         (repo_id, email, user_id, import_batch, merge_status)
+       VALUES ($1, $2, $3, 'test', 'manually_linked')`,
+      [repoId, "linked-devpost-member@example.test", surviving],
+    );
+    const entryId = await enqueueRepo(challengeId, repoId, 1);
+
+    const removal = await a.inject({
+      method: "DELETE",
+      url: "/api/me",
+      headers: { ...asUser(departing), "idempotency-key": "shared-project-departure" },
+      payload: { reauthenticationPassword: UNVERIFIED_TEST_PASSWORD },
+    });
+
+    expect(removal.statusCode).toBe(200);
+    expect(removal.json()).toEqual({ status: "completed", deleted: true });
+    expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [departing])).rowCount).toBe(0);
+    expect((await pool.query(`SELECT 1 FROM repos WHERE id = $1`, [repoId])).rowCount).toBe(1);
+    expect(
+      (await pool.query(`SELECT 1 FROM queue_entries WHERE id = $1`, [entryId])).rowCount,
+    ).toBe(1);
+    expect(
+      (
+        await pool.query(
+          `SELECT user_id FROM devpost_participants WHERE repo_id = $1 AND user_id = $2`,
+          [repoId, surviving],
+        )
+      ).rows,
+    ).toEqual([{ user_id: surviving }]);
+  });
+
   it("uses event dates only for the live warning, never to bypass the lifecycle boundary", async () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");

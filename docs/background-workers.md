@@ -141,8 +141,7 @@ the dead-letter queue.
 
 ## Event mapping — synchronous vs. background
 
-The brief asked which module events are background jobs vs. handled by API
-controllers. This is the honest map:
+The table below maps module events to their execution path:
 
 | Module event | Where it runs | Notes |
 | --- | --- | --- |

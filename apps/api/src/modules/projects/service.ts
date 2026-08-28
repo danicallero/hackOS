@@ -18,7 +18,11 @@ import {
   isSyntheticOperator,
 } from "../logistics/review-fixture-scope.js";
 import { notify } from "../notifications/service.js";
-import { broadcastQueueEvent, broadcastQueueEventWithMarker } from "../queue/broadcast.js";
+import {
+  broadcastQueueEvent,
+  broadcastQueueEventWithMarker,
+  queueFixtureMarker,
+} from "../queue/broadcast.js";
 import { assertQueueChallengeScope, assertQueueRepoScope } from "../queue/fixture-scope.js";
 import { writeQueueHistory } from "../queue/history.js";
 import { notifyChallengeQueueChanged, repoMemberIds } from "../queue/notify.js";
@@ -2253,6 +2257,28 @@ async function deleteRepoCascade(
         ? entry.challenge_is_test_account === true
         : null,
   }));
+
+  // The caller checked the repository graph before locking it, but a stale
+  // or direct-SQL queue row can still be introduced before this transaction
+  // acquires the entry locks. Re-resolve every locked entry's complete group
+  // and room graph before any destructive delete so self-service cannot turn
+  // a raced mixed fixture into a real-topic invalidation (H19/H20, H54).
+  for (const entry of queueEntries) {
+    let resolvedMarker: boolean | null;
+    try {
+      resolvedMarker = await queueFixtureMarker(client, "entry", entry.id);
+    } catch {
+      resolvedMarker = null;
+    }
+    if (resolvedMarker === null || resolvedMarker !== fixtureMarker) {
+      throw new ConflictError("Queue fixture markers must match", {
+        code: "review_fixture_scope",
+        resource: "repo",
+        resourceId: repoId,
+      });
+    }
+    entry.fixtureMarker = resolvedMarker;
+  }
 
   await client.query(
     `DELETE FROM attempt_review_versions WHERE attempt_id IN
