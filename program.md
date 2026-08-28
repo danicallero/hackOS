@@ -11,9 +11,9 @@ rate-limited review history.
 - Base: `067d783befc732fc625fd4a8bd3c0b4ad046733f`
 - Review head at intake: `5059ff81a5076c3b070c2b8d013be90f461bb0d4`
 - Checkpoint commit: `e6ce8c1d` (`fix(H54): close PR review isolation and migration gaps`)
-- Current pushed head: `159fdcb8` (`fix(auth): bound pending recovery sessions`)
+- Current pushed head: `8caeceea` (`fix(auth): narrow pending session trigger`)
 - GitHub PR: <https://github.com/danicallero/hackOS/pull/584>; the feature branch is
-  pushed to `origin` through `159fdcb8`.
+  pushed to `origin` through `8caeceea`.
 - Worktree policy: shared active checkout; no blind reset, force-push, or destructive history rewrite.
 - Workers: Orca orchestration with `gpt-5.6-luna` at max effort only. Worker edits were reviewed in place and committed as a checkpoint.
 - Coordinator terminal: `term_d22851bc-ee04-441c-aaa9-ff22ee0f213e`.
@@ -32,6 +32,7 @@ rate-limited review history.
 | A8 | Migration 0410's trigger/backfill gives every challenge exactly one `queue_group_challenges` row. The participant queue read now uses that invariant rather than the legacy negative-challenge fallback; malformed/ungrouped rows are omitted instead of crossing a marker boundary. | If deployments can contain pre-0410 or manually inserted ungrouped challenges, restore an explicit nullable fallback before enabling the participant queue read. |
 | A9 | A room's marker is inherited from its complete pool/serving graph. Unassigned rooms remain neutral/real for global venue operations; once pooled or serving, room-enterprise, room-group and room state writes must remain in one marker boundary. | Mixed or markerless fixture graphs are an invariant violation and are rejected or omitted; do not broaden neutral-room access to synthetic operators without a product decision. |
 | A10 | Better Auth recovery sign-in and refresh may remain available while an account is `removal_pending`, but every new or refreshed session is capped at the existing `removal_expires_at`; the final H54 trigger rejects direct writes that exceed it. | This narrows the CI fix to the reversible recovery window. The edit is to the fresh, development-only `0730` baseline under A1; an external database would require a new additive migration instead. |
+| A11 | The auth-trigger audit recommended an additive `0731` for any populated database because applied migration checksums are immutable. This branch intentionally retains the correction in the already-squashed `0730` fresh baseline under A1, and the release gate must verify that no external ledger contains the prior H54 chain. | If that verification fails, stop and restore a new additive upgrade migration; do not deploy the edited baseline against a populated database. |
 
 ## Work ledger
 
@@ -59,7 +60,7 @@ rate-limited review history.
 | T11 | Participant self-queue marker alignment | complete | `d22f7731`; authenticated-marker CTE covers repositories, challenges, groups, ranks, pace, rooms and called-room joins; malformed cross-marker rows are omitted without hiding valid same-marker rows. |
 | T12 | Final release audit and external PR metadata | in progress | Run `33161700626` verified the four earlier API fixes but exposed one H54 session-deadline assertion: Better Auth refreshed the initiating session during authorization. Commit `36126e50` makes this lookup read-only (`disableRefresh` + `disableCookieCache`). Run `33162990085` then exposed the second boundary: permitted pending recovery sign-in failed when Better Auth inserted a new `sessions` row and the blanket active-user trigger rejected it. Commit `159fdcb8` caps Better Auth session create/update hooks and the fresh `0730` trigger at the captured deadline; a replacement CI run is required. Queue P1/P2 findings remain open. |
 | T13 | Queue release follow-up from post-fix audit | in progress | Luna audit `task_15ec28a8b3f6` found manual-call wrong-room/resurrection risk, per-challenge pre-call claims that can duplicate merged groups, stale `precalled_at`, missing sibling-wide participant invalidations, and conditional malformed-group read scope. Coordinator is tracing each path and will add focused regression coverage before release. |
-| T14 | Pending recovery session boundary | checkpoint committed | `159fdcb8`; independent auth-trigger review was dispatched after CI run `33162990085`. Better Auth `databaseHooks.session.create/update.before` caps pending sessions, while `h54_require_active_user_reference()` accepts only pending sessions whose `expires_at <= removal_expires_at`; auth-flow coverage exercises sign-in and refresh. Local API typecheck/lint/fresh migration suite pass; runtime auth remains CI-gated by Valkey/Postgres setup. |
+| T14 | Pending recovery session boundary | checkpoint committed | `159fdcb8` + `8caeceea`; independent auth-trigger review confirmed the app cap and recommended an additive migration only for populated deployments. Better Auth `databaseHooks.session.create/update.before` caps sessions, while the fresh `0730` trigger accepts only future anonymization exits whose `expires_at <= removal_expires_at`; auth-flow coverage exercises sign-in and refresh, and the migration suite now directly checks allowed/rejected INSERT/UPDATE cases. Local API typecheck/lint/fresh migration suite pass; runtime auth remains CI-gated by Valkey/Postgres setup. |
 
 ## Code/schema changes reconciled
 
@@ -105,7 +106,7 @@ rate-limited review history.
 - Kept permitted pending-account recovery sign-in/session refresh inside the
   captured H54 exit window: Better Auth session hooks cap expiry, and the
   fresh-baseline active-user trigger rejects direct session rows past the
-  deadline.
+  deadline or for delete/non-exit pending states.
 - Post-fix queue audit identified additional release risks in manual-call,
   merged-group pre-call claiming, stale pre-call timestamps, group-wide
   participant invalidation, and challenge-only malformed-graph reads; these
@@ -128,7 +129,7 @@ where noted):
 - `pnpm --filter @hackos/mobile typecheck`
 - `pnpm --filter @hackos/web test` — 40 files, 298 tests
 - `pnpm --filter @hackos/mobile test` — 44 suites, 222 tests
-- `TEST_DATABASE_URL=postgres://dani@localhost:5432/hackos_test_skipjack pnpm --filter @hackos/api exec vitest run test/migrations.test.ts` — 1 file, 9 tests
+- `TEST_DATABASE_URL=postgres://dani@localhost:5432/hackos_test_skipjack pnpm --filter @hackos/api exec vitest run test/migrations.test.ts` — 1 file, 10 tests
 - `TEST_DATABASE_URL=postgres://dani@localhost:5432/hackos_test_skipjack pnpm --filter @hackos/api exec vitest run test/queue/fixture-transition-isolation.test.ts` — 1 file, 2 tests
 
 GitHub Actions API integration run `33160373207` reached the test suite on
@@ -142,9 +143,11 @@ during authorization. Commit `36126e50` disables refresh and cookie-cache use
 for this read. Run `33162990085` on the subsequent docs checkpoint fixed that
 mismatch but exposed a second H54 failure: permitted pending recovery sign-in
 returned 500 because the final active-user trigger rejected Better Auth's new
-`sessions` row. Commit `159fdcb8` adds deadline-capping Better Auth hooks and a
-matching pending-session exception in the fresh `0730` trigger, plus sign-in
-and refresh assertions. The replacement run is the release gate.
+`sessions` row. Commit `159fdcb8` adds deadline-capping Better Auth hooks and
+`8caeceea` narrows the matching pending-session exception in the fresh `0730`
+trigger to future anonymization exits, adds direct migration regression
+coverage, and corrects the authentication documentation. The replacement run
+is the release gate.
 
 Blocked/limited:
 
@@ -186,13 +189,13 @@ Blocked/limited:
 | Post-fix release audit | `task_15ec28a8b3f6` / `ctx_c731149899a0` / `term_7f22e0f0-5b58-4f54-aee0-fde679dfe826` | worker_done seq 461; no P0, but P1/P2 manual-call, merged-group claim, stale pre-call, invalidation, malformed-read, and docs findings; terminal pending close |
 | Auth session-deadline audit | `task_aff0cb25d0f3` / `ctx_cfc30b0c38e9` / `term_f7e84e30-02e1-488a-954f-8432b6731a65` | dispatched Luna max; read-only; independently tracing Better Auth session refresh; awaiting worker_done (terminal has an unresolved approval prompt) |
 | Queue release verification | `task_5a46182712b1` / `ctx_28c0a06580eb` / `term_3f87913b-d380-4d30-9a94-20aa4352d412` | worker_done seq 468; independently confirmed all queue P1/P2 findings and setup blockers; terminal closed |
-| Auth trigger review | `task_357b9641b657` / `ctx_b99867fdff16` / `term_4c8b970d-5a0b-48d8-af81-dd740b5aa211` | dispatched Luna max; read-only; validating the pending-session exception/cap and migration immutability; awaiting worker_done |
+| Auth trigger review | `task_357b9641b657` / `ctx_b99867fdff16` / `term_4c8b970d-5a0b-48d8-af81-dd740b5aa211` | worker_done seq 472; no edits; independently confirmed trigger root cause, narrow future anonymization predicate, auth/refresh coverage, and populated-ledger immutability caveat; terminal closed |
 
 ## Received-message ledger
 
 The raw first-wave archive is `/tmp/pr584-orchestration-messages.json`
 (200 messages). A live inbox snapshot added 58 messages; after de-duplication
-by message id, 302 received messages are listed below. The ledger records every
+by message id, 304 received messages are listed below. The ledger records every
 received id/type/subject/timestamp, including heartbeats and status noise so
 the rate-limited handoff is auditable. Full bodies remain in the raw archive
 where present; the most important worker_done bodies are summarized in the
@@ -503,6 +506,8 @@ Messages received after the prior rate-limit snapshot (seq 405–450):
 - 2026-08-28 10:39:00 · seq 467 · heartbeat · `msg_26cbdcacdff7` · queue release verification alive
 - 2026-08-28 10:39:11 · seq 468 · worker_done · `msg_189be4bc0123` · queue release verification complete; no edits; all P1/P2 findings confirmed; runtime tests setup-blocked
 - 2026-08-28 10:42:39 · seq 469 · heartbeat · `msg_2eda8924958c` · auth-trigger review alive
+- 2026-08-28 10:47:26 · seq 471 · status · `msg_50de06762548` · auth-trigger audit confirmed session INSERT root cause and recommended narrow future anonymization exception/additive migration caveat
+- 2026-08-28 10:47:37 · seq 472 · worker_done · `msg_627b90a9ca12` · auth-trigger audit complete; no edits; runtime integration remains unavailable
 
 Messages sent by the coordinator to workers (not received by the coordinator)
 are intentionally not counted in this incoming ledger. The first final auditor
@@ -516,7 +521,7 @@ Use this prompt for a future coordinator:
 > Continue PR #584 remediation on
 > `/Users/dani/orca/workspaces/fablehackos/skipjack`, branch
 > `danicallero/account-deletion-anonymization`, from pushed head
-> `159fdcb8`. Read `AGENTS.md`, `CLAUDE.md`, `plan/historias-hackos.md`,
+> `8caeceea`. Read `AGENTS.md`, `CLAUDE.md`, `plan/historias-hackos.md`,
 > `plan/07-datos-relevantes-ers.md`, `docs/README.md`, and `program.md`. Use
 > the Orca `orchestration` skill and `gpt-5.6-luna` max workers only; do not
 > substitute Terra. Inspect `orca orchestration task-list --json` and
@@ -527,10 +532,12 @@ Use this prompt for a future coordinator:
 > push. Run `33161700626` verified the four earlier fixes but exposed one
 > session-deadline failure because Better Auth refreshed the initiating session;
 > `36126e50` passes `disableRefresh` and `disableCookieCache` for the
-> authorization-only lookup. Run the replacement CI workflow for `159fdcb8`
-> after this auth checkpoint; collect auth audits
-> `task_aff0cb25d0f3` / `ctx_cfc30b0c38e9` and
-> `task_357b9641b657` / `ctx_b99867fdff16`. The completed queue audits
+> authorization-only lookup. Run the replacement CI workflow for `8caeceea`
+> after this auth checkpoint; collect auth audit
+> `task_aff0cb25d0f3` / `ctx_cfc30b0c38e9`. The completed auth-trigger audit
+> `task_357b9641b657` / `ctx_b99867fdff16` confirmed the narrow future
+> anonymization predicate and the populated-ledger immutability caveat. The
+> completed queue audits
 > `task_15ec28a8b3f6` and `task_5a46182712b1` found P1/P2 manual-call target-room/source-state,
 > merged-group pre-call claiming, stale `precalled_at`, group-wide participant
 > invalidation, malformed-group read, and docs gaps; trace these against the
