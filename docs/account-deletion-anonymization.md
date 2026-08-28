@@ -52,9 +52,14 @@ and stored on a new `anonymous_participants.id` generated with
 `crypto.randomUUID()`; no deterministic input and no mapping table is used.
 The anonymous row contains a random subject ID, verified venue minutes, and
 dynamic application values explicitly marked `ANONYMOUS_AUDIT` in the immutable
-form version used by each submitted response. The current HackUDC forms start
-with age, gender, university, degree, graduation year, and origin city, but
-future configured dimensions do not require anonymization-service changes.
+form version used by each submitted response. The current HackUDC event
+configuration starts with age, gender, university, degree, graduation year, and
+origin city, but future configured dimensions do not require anonymization-
+service changes. The `seed-mock` script's fallback form is intentionally a
+minimal local-dev form (`major`, `location`, `motivation`, and `github`) and
+does not define retention; it is used only when no event application exists.
+The deployed application's immutable form version, not that fallback, is the
+authority for retained fields.
 Missing values are omitted. The guarantee is scoped precisely: the retained
 record has no identity mapping in the hackOS Postgres database. Provider copies,
 browser/device caches, infrastructure logs, backups, and inference from an
@@ -238,10 +243,12 @@ stored on that response and the current university directory value. It copies
 only fields whose snapshot explicitly says `retention_mode =
 anonymous_audit`; unmarked fields are destroyed with the response. The
 optional semantic dimension is an open stable slug for reporting, not a
-hardcoded whitelist. The current HackUDC configuration uses age, gender,
-university, degree, graduation year, and origin city; another application may
-retain a different explicitly configured field. A missing answer produces no
-row and no fabricated value. Labels and translations have no retention effect.
+hardcoded whitelist. The current event configuration uses age, gender,
+university, degree, graduation year, and origin city; the `seed-mock` fallback
+form is deliberately smaller and has no retention flags. Another application
+may retain a different explicitly configured field. A missing answer produces
+no row and no fabricated value. Labels and translations have no retention
+effect.
 
 The guarantee is “not recoverable through normal hackOS database relationships”
 and not “impossible for every external observer to infer.” Cohort-size risk,

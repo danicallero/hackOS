@@ -579,7 +579,9 @@ export async function challengeEtaMinutesPerSlot(
     // Every room working this challenge's queue_group shares its pace.
     `SELECT COALESCE(AVG(rqs.desired_minutes_per_team), 8) AS avg, COUNT(*)::int AS rooms
        FROM (${servingRoomsSql}) serving
-       JOIN room_queue_state rqs ON rqs.room_id = serving.room_id`,
+       JOIN room_queue_state rqs
+         ON rqs.room_id = serving.room_id
+        AND rqs.is_paused = false`,
     fixtureMarker ? [challengeId, fixtureMarker] : [challengeId],
   );
   const avg = Number(rows[0].avg);
@@ -823,7 +825,9 @@ export async function myQueueStatus(userId: number) {
            ON mine.challenge_id = qgc.challenge_id
          LEFT JOIN room_queue_groups rqg ON rqg.queue_group_id = qgc.queue_group_id
          JOIN visible_rooms vr ON vr.room_id = rqg.room_id
-         LEFT JOIN room_queue_state rqs ON rqs.room_id = rqg.room_id
+         LEFT JOIN room_queue_state rqs
+           ON rqs.room_id = rqg.room_id
+          AND rqs.is_paused = false
         GROUP BY qgc.challenge_id
      )
      SELECT qe.*, ${QUEUE_GROUP_LABEL_SQL} AS challenge_title, r.name AS repo_name,
@@ -969,7 +973,11 @@ export async function roomPace(roomId: number) {
         1,
         (
           await pool.query(
-            `SELECT COUNT(DISTINCT room_id)::int AS n FROM (${CHALLENGE_ROOM_IDS_SQL}) serving`,
+            `SELECT COUNT(DISTINCT serving.room_id)::int AS n
+               FROM (${CHALLENGE_ROOM_IDS_SQL}) serving
+               JOIN room_queue_state rqs
+                 ON rqs.room_id = serving.room_id
+                AND rqs.is_paused = false`,
             [primaryChallenge.id],
           )
         ).rows[0].n,

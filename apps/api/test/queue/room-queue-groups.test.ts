@@ -138,6 +138,20 @@ describe("1:1 group parity", () => {
     expect(status.position).toBe(1);
   });
 
+  it("excludes paused rooms from ETA throughput", async () => {
+    const { challengeEtaMinutesPerSlot, roomPace } = await import(
+      "../../src/modules/queue/reads.js"
+    );
+    const challengeId = await createChallenge();
+    const activeRoom = await createRoom({ desiredMinutesPerTeam: 8 });
+    const pausedRoom = await createRoom({ isPaused: true, desiredMinutesPerTeam: 2 });
+    await assignChallengeToRoom(activeRoom, challengeId);
+    await assignChallengeToRoom(pausedRoom, challengeId);
+
+    expect(await challengeEtaMinutesPerSlot(challengeId)).toBe(8);
+    expect((await roomPace(activeRoom)).roomCount).toBe(1);
+  });
+
   it("ranks the back of a one-challenge queue exactly as before", async () => {
     const { pool } = await import("../../src/db/pool.js");
     const { nextBottomPosition } = await import("../../src/modules/queue/ordering.js");

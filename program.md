@@ -11,9 +11,9 @@ rate-limited review history.
 - Base: `067d783befc732fc625fd4a8bd3c0b4ad046733f`
 - Review head at intake: `5059ff81a5076c3b070c2b8d013be90f461bb0d4`
 - Checkpoint commit: `e6ce8c1d` (`fix(H54): close PR review isolation and migration gaps`)
-- Current pushed head: `0c19b7c4` (`docs: archive queue review findings`)
+- Current pushed head: `5a9973e3` (`fix(queue): refresh enterprise groups after lock`)
 - GitHub PR: <https://github.com/danicallero/hackOS/pull/584>; the feature branch is
-  pushed to `origin` through `0c19b7c4`.
+  pushed to `origin` through `5a9973e3`.
 - Worktree policy: shared active checkout; no blind reset, force-push, or destructive history rewrite.
 - Workers: Orca orchestration with `gpt-5.6-luna` at max effort only. Worker edits were reviewed in place and committed as a checkpoint.
 - Coordinator terminal: `term_d22851bc-ee04-441c-aaa9-ff22ee0f213e`.
@@ -44,10 +44,10 @@ rate-limited review history.
 | I1–I4 | Better Auth route allowlist, signed-cookie expiry binding, cancellation race/idempotency, pending identity mutation rejection | complete | Identity worker tests/static checks; A3/A7. |
 | D1–D2 | Pending-target review locks and durable DSR failure transitions | complete | API source/tests and durable retry paths; A2/A3. |
 | D3–D5 | Fixture graph isolation, logistics/SSE scope, hidden fixture visibility after scrubbing | complete | Domain and cross-layer audits; A5. |
-| DB1–DB4 | Squash H54 migrations, install final active-user triggers, versioned responses, remove temporary scanner DDL/cleanup DML | complete | Fresh migration suite: 9/9 on local Postgres 5432; schema DBML synchronized; A1/A6. |
+| DB1–DB4 | Squash H54 migrations, install final active-user triggers, versioned responses, remove temporary scanner DDL/cleanup DML | complete | Fresh migration suite: 10/10 on local Postgres 5432; schema DBML synchronized; A1/A6. |
 | DOC1 | Rewrite stale account-removal, worker, fixture, module, migration/schema claims | complete | Migration/docs audit and `pnpm lint`; no stale 0731–0746 references remain in reviewed docs. |
 | DOC2 | Update the external PR body/checklist and release/legal metadata | pending external gate | The PR description is not a tracked worktree file; update it from the final validation below before merge. |
-| T1 | Add regression coverage for races, pending allowlist, fixture scope, queue SSE, form versions, and migrations | complete | Web: 40 files/298 tests; mobile: 44 suites/222 tests; migration: 9 tests; API DB suites require Valkey/5433. |
+| T1 | Add regression coverage for races, pending allowlist, fixture scope, queue SSE, form versions, and migrations | complete | Web: 40 files/298 tests; mobile: 44 suites/222 tests; migration: 10 tests; API DB suites require Valkey/5433. |
 | T2 | Run repository gates and record infrastructure limitations | complete with blocker recorded | `pnpm lint`, API/web/mobile typechecks, web/mobile suites, diff checks, and fresh migration suite pass. Full API integration and queue DB suites cannot run against unavailable/resetting Valkey/Postgres 5433. |
 | T3 | Repair all direct application-response fixtures and non-test writers for H54 form-version NOT NULL | complete | Shared race-safe test helper, all fixtures, `applications/service.ts`, and `seed-mock.ts`; seed upsert updates the current snapshot pointer. |
 | T4 | Isolate queue fixture broadcasts and explicit challenge enqueue | complete | `queue:fixture` topic, marker-scoped notifications, and transactional challenge/repo guards with regression coverage. |
@@ -58,12 +58,12 @@ rate-limited review history.
 | T9 | Target-selected scan-log fixture isolation | complete | `4dc7f7cb`; authenticated reader marker is separated from selected staff target and subject rows; focused static checks pass, runtime suite is Valkey-blocked. |
 | T10 | Project deletion queue invalidations | complete | `fd7d0581` + `e1c6f826`; deletion snapshots entry/challenge/repo markers and emits scoped queue SSE plus participant invalidations after commit. |
 | T11 | Participant self-queue marker alignment | complete | `d22f7731`; authenticated-marker CTE covers repositories, challenges, groups, ranks, pace, rooms and called-room joins; malformed cross-marker rows are omitted without hiding valid same-marker rows. |
-| T12 | Final release audit and external PR metadata | in progress | Run `33161700626` verified the four earlier API fixes but exposed one H54 session-deadline assertion: Better Auth refreshed the initiating session during authorization. Commit `36126e50` makes this lookup read-only (`disableRefresh` + `disableCookieCache`). Run `33162990085` then exposed the second boundary: permitted pending recovery sign-in failed when Better Auth inserted a new `sessions` row and the blanket active-user trigger rejected it. Commits `159fdcb8` and `8caeceea` cap Better Auth session create/update hooks and the fresh `0730` trigger at the captured deadline. Full CI run `33165065129` is green on head `89fbe59e`; run `33178695481` reached 960/961 API tests on `1701608b` and exposed one stale group-invalidation assertion, corrected in `eeb47be8`; docs/archive checkpoint `0c19b7c4` is pushed and replacement CI `33179796085` is pending. |
-| T13 | Queue release follow-up from post-fix audit | in progress | Luna audit `task_15ec28a8b3f6` found manual-call wrong-room/resurrection risk, per-challenge pre-call claims that can duplicate merged groups, stale `precalled_at`, missing sibling-wide participant invalidations, and conditional malformed-group read scope. Coordinator committed `59dd0766`, `1701608b`, `9e814843`, and `eeb47be8`; the fresh review-only checkpoint `task_7f51b1507230` / seq 478 confirmed residual pre-call race, four transition clears, old-group/stale-id invalidation, and challenge-only read-scope gaps. These remain the active release work. |
+| T12 | Final release audit and external PR metadata | complete pending PR-body refresh | Exact GitHub run `33184695748` is green on pushed head `5a9973e3`: lint, typecheck, web/mobile tests, browser smoke, and all API integration tests. The final audit found no P0/P1; two P2 ETA/topology edges were fixed locally and await this final push's CI. PR body still needs its final checklist/count refresh before merge; keep the PR Draft unless a release owner marks it ready. |
+| T13 | Queue release follow-up from post-fix audit | complete | Coordinator reconciled the confirmed queue findings in `a0b5f144`, `222f4fda`, and `5a9973e3`: global-rank pump selection, transactional pause gating, synthetic queue-admin fail-closed group listing, topology/read marker propagation, and post-lock enterprise-group re-resolution. The final audit's paused-room ETA and concurrently replaced-room topology edges are now covered in the pending final commit. |
 | T14 | Pending recovery session boundary | checkpoint committed | `159fdcb8` + `8caeceea`; independent auth-trigger review confirmed the app cap and recommended an additive migration only for populated deployments. Better Auth `databaseHooks.session.create/update.before` caps sessions, while the fresh `0730` trigger accepts only future anonymization exits whose `expires_at <= removal_expires_at`; auth-flow coverage exercises sign-in and refresh, and the migration suite now directly checks allowed/rejected INSERT/UPDATE cases. Local API typecheck/lint/fresh migration suite pass; runtime auth remains CI-gated by Valkey/Postgres setup. |
 | T15 | Queue implementation follow-up dispatch | rate-limited before edits | Two disjoint Luna-max lanes were dispatched at head `89fbe59e` (`task_3662f2c66e7d` state transitions, `task_fe7eccc78510` scope/invalidation). Both hit the account usage limit after required reads and before edits; terminals were closed. Coordinator is implementing the independently confirmed findings with the exact lane boundaries and regression goals preserved. |
 | T16 | Queue checkpoint CI regression | complete pending replacement CI | Run `33178695481` failed only `test/projects/self-service.test.ts` because it still looked for the superseded `challenge-<id>` invalidation job. The test now captures the challenge's `queue_group_id` and asserts `group-<id>` with `{ challengeId, queueGroupId }`; pushed as `eeb47be8`. |
-| T17 | Fresh Luna residual queue review | active | Seq 478 confirms pre-call snapshot/claim atomicity, four missing `precalled_at` clears, old-group topology invalidation, stale explicit group-id handling, and challenge-only marker propagation/ungrouped fail-closed gaps. Seq 479–481 record the two Luna implementation lanes starting after the rate-limit checkpoint; route call-site scope was approved narrowly. Runtime verification remains blocked locally by Postgres 5433/Valkey; fixes and CI follow. |
+| T17 | Fresh Luna residual queue review | complete | Seq 478 and seq 500–503 were reconciled. Queue fixes are committed/pushed through `5a9973e3`; CI run `33184695748` is green. The bounded final audit (`/root/final_merge_audit`) found no P0/P1 and two P2 edges; both are fixed in the pending final commit. Local focused API setup remains unavailable on Postgres 5433/Valkey, so those local setup failures are not represented as passing assertions. |
 
 ## Code/schema changes reconciled
 
@@ -126,6 +126,9 @@ rate-limited review history.
 - Fixed target-selected scan-log scope and post-commit queue/participant
   invalidations after sole-member project deletion.
 - Seed/test response writers now always bind current immutable form snapshots.
+- Queue ETA calculations now exclude paused rooms from throughput, and room
+  topology snapshots re-read serving links after room locks so concurrent room
+  replacement cannot omit the prior queue from participant invalidation.
 
 ## Validation record
 
@@ -207,11 +210,16 @@ Blocked/limited:
 | Queue state residual implementation | `task_a0e4561bfe94` / `ctx_687665ab4f57` / `term_7c70c396-f851-4a76-9646-79771798799b` | worker_done seq 492; pump/service/tests updated; targeted checks pass; focused Vitest blocked by Postgres 5433; terminal closed |
 | Queue scope/topology residual implementation | `task_1eb9b2da89c5` / `ctx_449db3463fe7` / `term_feed0274-9319-4ed1-a2db-952694e7ed36` | worker_done seq 498; topology/read/docs updates; lint/typecheck/Biome/diff checks pass; focused Vitest blocked by Postgres 5433; room routes integrated by coordinator; terminal closed |
 
-## Received-message ledger
+## Received-message ledger (archival coordination artifact)
+
+This section is intentionally an audit log rather than product documentation:
+the full history is retained so a rate-limited coordinator can resume without
+losing worker findings or status messages. It should not be copied into user-
+facing documentation.
 
 The raw first-wave archive is `/tmp/pr584-orchestration-messages.json`
 (200 messages). A live inbox snapshot added 58 messages; after de-duplication
-by message id, 322 received messages are listed below. The ledger records every
+by message id, 326 received messages are listed below. The ledger records every
 received id/type/subject/timestamp, including heartbeats and status noise so
 the rate-limited handoff is auditable. Full bodies remain in the raw archive
 where present; the most important worker_done bodies are summarized in the
@@ -542,15 +550,27 @@ Messages received after the prior rate-limit snapshot (seq 405–450):
 - 2026-08-28 14:39:59 · seq 494 · status · `msg_1367f2e2a3d1` · queue scope lane finished topology/read propagation; room assignment/deletion callers remain for coordinator
 - 2026-08-28 14:46:43 · seq 496 · status · `msg_ff3de1443c93` · queue scope lane reports topology/read/docs changes ready; lint/typecheck/diff checks pass; focused Vitest blocked by Postgres 5433
 - 2026-08-28 14:54:09 · seq 498 · worker_done · `msg_537560f097e3` · queue scope/topology lane complete; lint/typecheck/Biome/diff checks pass; focused Vitest blocked by Postgres 5433; room callers integrated by coordinator
+- 2026-08-28 15:11:54 · seq 500 · status · `msg_514145449fef` · queue checkpoint reviewed the global-rank pump fix; second-tick regression suggested, runtime still Postgres-blocked
+- 2026-08-28 15:15:39 · seq 501 · status · `msg_dbc8707db87a` · queue checkpoint found pump pause race and synthetic queue-list exposure for a synthetic queue-admin
+- 2026-08-28 15:19:24 · seq 502 · status · `msg_0ffcc79a3440` · queue checkpoint confirmed group→room-state→entry lock order is safe and preferred for the pause gate
+- 2026-08-28 15:19:34 · seq 503 · status · `msg_4d789fb7b007` · queue checkpoint found stale pre-lock enterprise queue-group snapshot in room assignment; coordinator refreshed it after locks
 
 Coordinator-originated inbox echoes (kept for chronology, excluded from the
 received-message count) were seq 474 `msg_939f59e3d657` and seq 476
 `msg_228f9a04cd2a`, both internal queue-checkpoint status notes, plus seq 482
-`msg_1e92739a8e67`, the narrow approval for directly related route call sites.
+`msg_1e92739a8e67`, the narrow approval for directly related route call sites,
+and seq 499 `msg_38831a688591`, the coordinator's pump-rank root-cause note.
 The separate
 `/root/queue_review_checkpoint` collaboration worker also returned a final
 review message with the same residual findings; it has no Orca sequence id and
-made no file changes.
+made no file changes. Two bounded collaboration audits then returned without
+Orca sequence ids: `/root/final_merge_audit` reported no P0/P1 and identified
+the paused-room ETA and concurrent room-replacement topology edges, both fixed
+in the pending code checkpoint; `/root/migration_docs_audit` confirmed the
+10/10 migration suite and fresh-schema integrity, required the populated-ledger
+verification in A1/A11, and identified the seed-mock fallback-form distinction
+now documented in `docs/account-deletion-anonymization.md`. Neither worker
+edited files.
 
 Messages sent by the coordinator to workers (not received by the coordinator)
 are intentionally not counted in this incoming ledger. The first final auditor

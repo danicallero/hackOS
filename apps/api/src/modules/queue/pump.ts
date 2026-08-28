@@ -247,7 +247,9 @@ async function claimPreCall(queueGroupId: number, repoId: number): Promise<PreCa
       `SELECT COALESCE(AVG(rqs.desired_minutes_per_team), 8) AS avg,
               COUNT(*)::int AS rooms
          FROM room_queue_groups rqg
-         JOIN room_queue_state rqs ON rqs.room_id = rqg.room_id
+         JOIN room_queue_state rqs
+           ON rqs.room_id = rqg.room_id
+          AND rqs.is_paused = false
         WHERE rqg.queue_group_id = $1`,
       [queueGroupId],
     );

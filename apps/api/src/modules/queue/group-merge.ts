@@ -652,14 +652,46 @@ export async function setQueueGroupRooms(input: {
       .rows[0];
     if (!before) throw new NotFoundError("Queue group not found", { queueGroupId });
     const enterpriseId = Number(before.enterprise_id);
-    const beforeTopology = await captureQueueTopology(client, affectedGroupIds);
+
+    // Lock the rooms in id order so two enterprises claiming the same room
+    // serialise rather than deadlock. When clearing every room, lock the
+    // group's current links too; otherwise a concurrent replacement can
+    // commit while we wait and its former group would be absent from the
+    // invalidation snapshot.
+    const roomIdsToLock = [
+      ...new Set([
+        ...roomIds,
+        ...servingBefore
+          .filter((row) => Number(row.queue_group_id) === queueGroupId)
+          .map((row) => Number(row.room_id)),
+      ]),
+    ].sort((a, b) => a - b);
+    if (roomIdsToLock.length) {
+      await client.query(`SELECT id FROM rooms WHERE id = ANY($1::int[]) ORDER BY id FOR UPDATE`, [
+        roomIdsToLock,
+      ]);
+    }
+    // The room lock is the point at which serving links stop changing. Re-read
+    // them before the mutation so a group that replaced the pre-lock snapshot
+    // is still included in the old-side topology invalidation.
+    const { rows: servingAtLock } = await client.query<{
+      room_id: number;
+      queue_group_id: number;
+    }>(
+      `SELECT rqg.room_id, rqg.queue_group_id
+         FROM room_queue_groups rqg
+        WHERE rqg.room_id = ANY($1::int[])
+        ORDER BY rqg.queue_group_id, rqg.room_id`,
+      [roomIdsToLock],
+    );
+    const topologyGroupIds = [
+      ...new Set([...affectedGroupIds, ...servingAtLock.map((row) => Number(row.queue_group_id))]),
+    ]
+      .filter(Number.isFinite)
+      .sort((a, b) => a - b);
+    const beforeTopology = await captureQueueTopology(client, topologyGroupIds);
 
     if (roomIds.length) {
-      // Lock the rooms in id order so two enterprises claiming the same room
-      // serialise rather than deadlock.
-      await client.query(`SELECT id FROM rooms WHERE id = ANY($1::int[]) ORDER BY id FOR UPDATE`, [
-        roomIds,
-      ]);
       const { rows: found } = await client.query(`SELECT id FROM rooms WHERE id = ANY($1::int[])`, [
         roomIds,
       ]);
@@ -717,7 +749,7 @@ export async function setQueueGroupRooms(input: {
       ip: input.request?.ip,
       userAgent: input.request?.userAgent,
     });
-    const afterTopology = await captureQueueTopology(client, affectedGroupIds);
+    const afterTopology = await captureQueueTopology(client, topologyGroupIds);
     return {
       summary: toSummary(after),
       topology: [beforeTopology, afterTopology] as QueueTopologyPair,
