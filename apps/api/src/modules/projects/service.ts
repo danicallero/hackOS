@@ -2298,7 +2298,7 @@ export async function deleteMyProject(userId: number, repoId: number): Promise<{
     );
     if (!user.rows[0]) throw new NotFoundError("User not found");
     await assertFixtureSubjectScope(client, userId, userId);
-    await assertFixtureQueueScope(client, userId, "repo", repoId);
+    await assertQueueRepoScope(client, userId, repoId);
     await assertWithinHackingWindow(client);
     if (!(await isActiveProjectMember(client, repoId, userId))) {
       throw new ForbiddenError("Not a member of this project");

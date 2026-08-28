@@ -529,6 +529,34 @@ describe("DELETE /api/me/projects/:id (H19/H20 sole-member delete)", () => {
     expect(invalidation?.data).toEqual({ challengeId, queueGroupId });
   });
 
+  it("rejects deletion before touching a project with mixed queue markers", async () => {
+    const server = await getApp();
+    const owner = await createUser();
+    const repoId = await seedRepo("Mixed marker project", [owner]);
+    const challengeId = await createChallenge("Synthetic queue challenge", []);
+    await pool.query(`UPDATE challenges SET is_test_account = true WHERE id = $1`, [challengeId]);
+    const { rows: entryRows } = await pool.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status, position)
+       VALUES ($1, $2, 'waiting', 1)
+       RETURNING id`,
+      [challengeId, repoId],
+    );
+    const entryId = entryRows[0].id as number;
+    await setHackingWindow(true);
+
+    const response = await server.inject({
+      method: "DELETE",
+      url: `/api/me/projects/${repoId}`,
+      headers: asUser(owner),
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect((await pool.query(`SELECT 1 FROM repos WHERE id = $1`, [repoId])).rowCount).toBe(1);
+    expect(
+      (await pool.query(`SELECT 1 FROM queue_entries WHERE id = $1`, [entryId])).rowCount,
+    ).toBe(1);
+  });
+
   it("409s when there's more than one member", async () => {
     const server = await getApp();
     const owner = await createUser();
