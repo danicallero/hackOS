@@ -60,12 +60,12 @@ rate-limited review history.
 | T9 | Target-selected scan-log fixture isolation | complete | `4dc7f7cb`; authenticated reader marker is separated from selected staff target and subject rows; focused static checks pass, runtime suite is Valkey-blocked. |
 | T10 | Project deletion queue invalidations | complete | `fd7d0581` + `e1c6f826`; deletion snapshots entry/challenge/repo markers and emits scoped queue SSE plus participant invalidations after commit. |
 | T11 | Participant self-queue marker alignment | complete | `d22f7731`; authenticated-marker CTE covers repositories, challenges, groups, ranks, pace, rooms and called-room joins; malformed cross-marker rows are omitted without hiding valid same-marker rows. |
-| T12 | Final release audit and external PR metadata | complete pending final tip CI | Exact run `33186417443` is green on metadata head `c3d50033` across lint, typecheck, web/mobile tests, browser smoke, and API integration. The PR body template/checklist is refreshed; the final branch-tip metadata commit still needs its exact CI check. Keep the PR Draft unless a release owner marks it ready. |
+| T12 | Final release audit and external PR metadata | complete | Code checkpoint `095a4b23` and metadata checkpoints through `13ed728a` passed their exact GitHub CI runs (`33185764618`, `33186417443`, `33187144564`). The PR body template/checklist is refreshed; verify the latest branch-tip checks after any future archival-only update. Keep the PR Draft unless a release owner marks it ready. |
 | T13 | Queue release follow-up from post-fix audit | complete | Coordinator reconciled the confirmed queue findings in `a0b5f144`, `222f4fda`, `5a9973e3`, and `095a4b23`: global-rank pump selection, transactional pause gating, synthetic queue-admin fail-closed group listing, topology/read marker propagation, post-lock enterprise-group re-resolution, paused-room ETA exclusion, and post-lock room-link topology re-read. |
 | T14 | Pending recovery session boundary | checkpoint committed | `159fdcb8` + `8caeceea`; independent auth-trigger review confirmed the app cap and recommended an additive migration only for populated deployments. Better Auth `databaseHooks.session.create/update.before` caps sessions, while the fresh `0730` trigger accepts only future anonymization exits whose `expires_at <= removal_expires_at`; auth-flow coverage exercises sign-in and refresh, and the migration suite now directly checks allowed/rejected INSERT/UPDATE cases. Local API typecheck/lint/fresh migration suite pass; runtime auth remains CI-gated by Valkey/Postgres setup. |
 | T15 | Queue implementation follow-up dispatch | rate-limited before edits | Two disjoint Luna-max lanes were dispatched at head `89fbe59e` (`task_3662f2c66e7d` state transitions, `task_fe7eccc78510` scope/invalidation). Both hit the account usage limit after required reads and before edits; terminals were closed. Coordinator is implementing the independently confirmed findings with the exact lane boundaries and regression goals preserved. |
 | T16 | Queue checkpoint CI regression | complete pending replacement CI | Run `33178695481` failed only `test/projects/self-service.test.ts` because it still looked for the superseded `challenge-<id>` invalidation job. The test now captures the challenge's `queue_group_id` and asserts `group-<id>` with `{ challengeId, queueGroupId }`; pushed as `eeb47be8`. |
-| T17 | Fresh Luna residual queue review | complete pending final tip CI | Seq 478 and seq 500–503 were reconciled. Queue fixes are committed/pushed through `095a4b23`; archival metadata commits follow on the origin branch. Exact run `33186417443` is green for the prior metadata head. The bounded final audit (`/root/final_merge_audit`) found no P0/P1 and two P2 edges; both are fixed. Local focused API setup remains unavailable on Postgres 5433/Valkey, so those local setup failures are not represented as passing assertions. |
+| T17 | Fresh Luna residual queue review | complete | Seq 478 and seq 500–503 were reconciled. Queue fixes are committed/pushed through `095a4b23`; exact runs through the current code/metadata checkpoints are green. The bounded final audit (`/root/final_merge_audit`) found no P0/P1 and two P2 edges; both are fixed. Local focused API setup remains unavailable on Postgres 5433/Valkey, so those local setup failures are not represented as passing assertions. |
 
 ## Code/schema changes reconciled
 
@@ -168,8 +168,8 @@ coverage, and corrects the authentication documentation. Full CI run
 `33165065129` is green on head `89fbe59e`; run `33184695748` is green on
 `5a9973e3` after the queue rank/pause/synthetic-scope fixes. The final audit's
 ETA/topology corrections are pushed as `095a4b23`; archival metadata is on the
-origin branch; exact run `33186417443` is green across all jobs for the prior
-metadata head. Verify the current branch-tip run before merge.
+origin branch; exact runs through the latest recorded tip are green across all
+jobs. Verify the current branch-tip run before merge.
 
 Blocked/limited:
 
@@ -604,7 +604,7 @@ Use this prompt for a future coordinator:
 > room ETA exclusion, and post-lock room-link topology snapshots. Review the
 > diff and any new audit result before changing behavior.
 >
-> The prior metadata head's exact CI run `33186417443` is green; do not call
+> Exact runs through the latest recorded metadata head are green; do not call
 > the current or any later branch SHA mergeable until its own run is green. Local API
 > integration setup is unavailable when Postgres 5433 or
 > Valkey 6379 resets/unresponsive; record such runs as setup-blocked, never as
