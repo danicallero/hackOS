@@ -11,9 +11,9 @@ rate-limited review history.
 - Base: `067d783befc732fc625fd4a8bd3c0b4ad046733f`
 - Review head at intake: `5059ff81a5076c3b070c2b8d013be90f461bb0d4`
 - Checkpoint commit: `e6ce8c1d` (`fix(H54): close PR review isolation and migration gaps`)
-- Current pushed head: `89fbe59e` (`docs: record session trigger audit`)
+- Current pushed head: `eeb47be8` (`test(queue): assert group-scoped participant invalidation`)
 - GitHub PR: <https://github.com/danicallero/hackOS/pull/584>; the feature branch is
-  pushed to `origin` through `8caeceea`.
+  pushed to `origin` through `eeb47be8`.
 - Worktree policy: shared active checkout; no blind reset, force-push, or destructive history rewrite.
 - Workers: Orca orchestration with `gpt-5.6-luna` at max effort only. Worker edits were reviewed in place and committed as a checkpoint.
 - Coordinator terminal: `term_d22851bc-ee04-441c-aaa9-ff22ee0f213e`.
@@ -58,10 +58,11 @@ rate-limited review history.
 | T9 | Target-selected scan-log fixture isolation | complete | `4dc7f7cb`; authenticated reader marker is separated from selected staff target and subject rows; focused static checks pass, runtime suite is Valkey-blocked. |
 | T10 | Project deletion queue invalidations | complete | `fd7d0581` + `e1c6f826`; deletion snapshots entry/challenge/repo markers and emits scoped queue SSE plus participant invalidations after commit. |
 | T11 | Participant self-queue marker alignment | complete | `d22f7731`; authenticated-marker CTE covers repositories, challenges, groups, ranks, pace, rooms and called-room joins; malformed cross-marker rows are omitted without hiding valid same-marker rows. |
-| T12 | Final release audit and external PR metadata | in progress | Run `33161700626` verified the four earlier API fixes but exposed one H54 session-deadline assertion: Better Auth refreshed the initiating session during authorization. Commit `36126e50` makes this lookup read-only (`disableRefresh` + `disableCookieCache`). Run `33162990085` then exposed the second boundary: permitted pending recovery sign-in failed when Better Auth inserted a new `sessions` row and the blanket active-user trigger rejected it. Commits `159fdcb8` and `8caeceea` cap Better Auth session create/update hooks and the fresh `0730` trigger at the captured deadline. Full CI run `33165065129` is green on head `89fbe59e`; queue P1/P2 findings remain open. |
-| T13 | Queue release follow-up from post-fix audit | in progress | Luna audit `task_15ec28a8b3f6` found manual-call wrong-room/resurrection risk, per-challenge pre-call claims that can duplicate merged groups, stale `precalled_at`, missing sibling-wide participant invalidations, and conditional malformed-group read scope. Coordinator is tracing each path and will add focused regression coverage before release. |
+| T12 | Final release audit and external PR metadata | in progress | Run `33161700626` verified the four earlier API fixes but exposed one H54 session-deadline assertion: Better Auth refreshed the initiating session during authorization. Commit `36126e50` makes this lookup read-only (`disableRefresh` + `disableCookieCache`). Run `33162990085` then exposed the second boundary: permitted pending recovery sign-in failed when Better Auth inserted a new `sessions` row and the blanket active-user trigger rejected it. Commits `159fdcb8` and `8caeceea` cap Better Auth session create/update hooks and the fresh `0730` trigger at the captured deadline. Full CI run `33165065129` is green on head `89fbe59e`; run `33178695481` reached 960/961 API tests on `1701608b` and exposed one stale group-invalidation assertion, corrected in `eeb47be8`; replacement CI is pending. |
+| T13 | Queue release follow-up from post-fix audit | in progress | Luna audit `task_15ec28a8b3f6` found manual-call wrong-room/resurrection risk, per-challenge pre-call claims that can duplicate merged groups, stale `precalled_at`, missing sibling-wide participant invalidations, and conditional malformed-group read scope. Coordinator committed `59dd0766`, `1701608b`, `9e814843`, and `eeb47be8`; the fresh review-only Luna checkpoint `task_7f51b1507230` is independently auditing the remaining malformed-read and migration assumptions before release. |
 | T14 | Pending recovery session boundary | checkpoint committed | `159fdcb8` + `8caeceea`; independent auth-trigger review confirmed the app cap and recommended an additive migration only for populated deployments. Better Auth `databaseHooks.session.create/update.before` caps sessions, while the fresh `0730` trigger accepts only future anonymization exits whose `expires_at <= removal_expires_at`; auth-flow coverage exercises sign-in and refresh, and the migration suite now directly checks allowed/rejected INSERT/UPDATE cases. Local API typecheck/lint/fresh migration suite pass; runtime auth remains CI-gated by Valkey/Postgres setup. |
 | T15 | Queue implementation follow-up dispatch | rate-limited before edits | Two disjoint Luna-max lanes were dispatched at head `89fbe59e` (`task_3662f2c66e7d` state transitions, `task_fe7eccc78510` scope/invalidation). Both hit the account usage limit after required reads and before edits; terminals were closed. Coordinator is implementing the independently confirmed findings with the exact lane boundaries and regression goals preserved. |
+| T16 | Queue checkpoint CI regression | complete pending replacement CI | Run `33178695481` failed only `test/projects/self-service.test.ts` because it still looked for the superseded `challenge-<id>` invalidation job. The test now captures the challenge's `queue_group_id` and asserts `group-<id>` with `{ challengeId, queueGroupId }`; pushed as `eeb47be8`. |
 
 ## Code/schema changes reconciled
 
@@ -110,8 +111,10 @@ rate-limited review history.
   deadline or for delete/non-exit pending states.
 - Post-fix queue audit identified additional release risks in manual-call,
   merged-group pre-call claiming, stale pre-call timestamps, group-wide
-  participant invalidation, and challenge-only malformed-graph reads; these
-  remain under targeted coordinator review and are not yet declared fixed.
+  participant invalidation, and challenge-only malformed-graph reads. Manual-call,
+  pre-call, stale-marker, group invalidation, and repository-scope fixes are now
+  in `59dd0766`, `1701608b`, and `9e814843`; challenge-only malformed-read
+  handling remains under the fresh review-only checkpoint `task_7f51b1507230`.
 - Added room pool/serving graph marker classification and transactional room /
   enterprise assignment, state, delete and queue-group routing checks.
 - Fixed target-selected scan-log scope and post-commit queue/participant
@@ -194,6 +197,7 @@ Blocked/limited:
 | Auth trigger review | `task_357b9641b657` / `ctx_b99867fdff16` / `term_4c8b970d-5a0b-48d8-af81-dd740b5aa211` | worker_done seq 472; no edits; independently confirmed trigger root cause, narrow future anonymization predicate, auth/refresh coverage, and populated-ledger immutability caveat; terminal closed |
 | Queue state transition safeguards | `task_3662f2c66e7d` / `ctx_455e22403ab1` / `term_2ae20fb7-1f6f-4bf0-b5d0-d1501e80715f` | Luna max hit account usage limit after required reads (seq 473); no edits; terminal closed; coordinator continuation active |
 | Queue scope and invalidation safeguards | `task_fe7eccc78510` / `ctx_ebed4cce9304` / `term_b2d5ddf0-d12f-4e2e-938b-fccdb1cfc640` | Luna max hit account usage limit after required reads; no edits/messages; terminal closed; coordinator continuation active |
+| Queue final malformed-read/migration checkpoint | `task_7f51b1507230` / `ctx_ab90fb331011` / `term_0055c933-d5ab-4df7-9fcf-397596b0fc0f` | Luna max review-only dispatch; no edits or commit authorized; pending worker_done and terminal close |
 
 ## Received-message ledger
 
@@ -526,7 +530,7 @@ Use this prompt for a future coordinator:
 > Continue PR #584 remediation on
 > `/Users/dani/orca/workspaces/fablehackos/skipjack`, branch
 > `danicallero/account-deletion-anonymization`, from pushed head
-> `89fbe59e`. Read `AGENTS.md`, `CLAUDE.md`, `plan/historias-hackos.md`,
+> `eeb47be8`. Read `AGENTS.md`, `CLAUDE.md`, `plan/historias-hackos.md`,
 > `plan/07-datos-relevantes-ers.md`, `docs/README.md`, and `program.md`. Use
 > the Orca `orchestration` skill and `gpt-5.6-luna` max workers only; do not
 > substitute Terra. Inspect `orca orchestration task-list --json` and
@@ -537,7 +541,7 @@ Use this prompt for a future coordinator:
 > push. Run `33161700626` verified the four earlier fixes but exposed one
 > session-deadline failure because Better Auth refreshed the initiating session;
 > `36126e50` passes `disableRefresh` and `disableCookieCache` for the
-> authorization-only lookup. Run the replacement CI workflow for `8caeceea`
+> authorization-only lookup. Run the replacement CI workflow for `eeb47be8`
 > after this auth checkpoint; collect auth audit
 > `task_aff0cb25d0f3` / `ctx_cfc30b0c38e9`. The completed auth-trigger audit
 > `task_357b9641b657` / `ctx_b99867fdff16` confirmed the narrow future
@@ -546,7 +550,10 @@ Use this prompt for a future coordinator:
 > `task_15ec28a8b3f6` and `task_5a46182712b1` found P1/P2 manual-call target-room/source-state,
 > merged-group pre-call claiming, stale `precalled_at`, group-wide participant
 > invalidation, malformed-group read, and docs gaps; trace these against the
-> current head and fix or explicitly disposition each before merge. Review the
+> current head and fix or explicitly disposition each before merge. The stale
+> project-invalidation assertion was updated in `eeb47be8`; review the fresh
+> Luna-max checkpoint `task_7f51b1507230` / `ctx_ab90fb331011` before release.
+> Review the
 > queue self-read decision in A8: migration 0410 guarantees
 > one group per challenge, but restore nullable negative-challenge fallback if
 > a deployment can contain ungrouped legacy rows. Run `git diff --check`,
