@@ -54,11 +54,13 @@ queue endpoint. The generated `staff-exit-operator` currently has only
 accreditation, presence and activity capabilities, so it cannot call queue
 APIs. If queue capabilities are added to a synthetic role later, every queue
 read and write must enforce this same marker boundary. Ordinary admin/staff
-project, challenge, queue, roster, scanner, presence, statistics,
-application-file exports and data-subject request views exclude the marked
-fixture. A guessed private-upload key or personal export bundle cannot cross
-that boundary. Synthetic rows are excluded from statistics and exports and are
-not permanent anonymous audit data.
+project, challenge, queue, roster, scanner, presence, sponsor-enterprise,
+statistics, application-file exports and data-subject request views exclude the
+marked fixture. Sponsor enterprise/member/judge administration and candidate
+lists use the same marker boundary, while the public sponsor reveal excludes
+synthetic enterprises. A guessed private-upload key or personal export bundle
+cannot cross that boundary. Synthetic rows are excluded from statistics and
+exports and are not permanent anonymous audit data.
 
 ## Checking whether credentials were used
 
