@@ -1001,6 +1001,11 @@ async function enqueueQueueRepo(
   repoId: number,
   challengeId: number,
 ): Promise<QueueGenerationOutcome | null> {
+  // Keep the shared queue-group path subject to the same marker boundary as
+  // the explicit challenge endpoint. Prize-derived repo ids are global, so a
+  // tag lookup can otherwise mix real and synthetic graphs.
+  await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
+  await assertFixtureQueueScope(client, actorId, "repo", repoId);
   const existing = await client.query(
     `SELECT * FROM queue_entries WHERE repo_id = $1 AND challenge_id = $2 FOR UPDATE`,
     [repoId, challengeId],
