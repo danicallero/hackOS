@@ -272,10 +272,20 @@ export function requireChallengeExport(): preHandlerHookHandler {
 
 /** H46 review lists/details/exports use the same sponsor-or-admin scope. */
 export const requireReviewScopeAccess: preHandlerHookHandler = async (req) => {
-  await resolveReviewScope(await requireUser(req));
+  const userId = await requireUser(req);
+  await resolveReviewScope(userId);
+  const query = req.query as Partial<{ challengeId: number; roomId: number }>;
+  if (query.challengeId != null) {
+    await assertQueueChallengeScope(pool, userId, query.challengeId);
+  }
+  if (query.roomId != null) {
+    await assertQueueRoomScope(pool, userId, query.roomId);
+  }
 };
 
 export const requireReviewEntryAccess: preHandlerHookHandler = async (req) => {
   const userId = await requireUser(req);
-  await assertEntryInScope(await resolveReviewScope(userId), numberParam(req, "entryId"));
+  const entryId = numberParam(req, "entryId");
+  await assertQueueEntryScope(pool, userId, entryId);
+  await assertEntryInScope(await resolveReviewScope(userId), entryId);
 };
