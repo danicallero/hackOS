@@ -1,5 +1,6 @@
 import { pool } from "../../db/pool.js";
 import { NotFoundError } from "../../lib/errors.js";
+import { queueFixtureMarker } from "./broadcast.js";
 import { assertQueueEntryScope } from "./fixture-scope.js";
 import {
   CHALLENGE_ROOM_IDS_SQL,
@@ -519,7 +520,17 @@ export async function allRoomViews() {
  * separately mapped so a new operational field cannot leak by accident.
  */
 export async function publicRoomViews() {
-  const views = await allRoomViews();
+  // Public TV is the real-venue projection. Synthetic and mixed room graphs
+  // are omitted entirely rather than appearing as empty room shells after
+  // `roomView` filters their queue contents.
+  const { rows: rooms } = await pool.query<{ id: number }>(`SELECT id FROM rooms ORDER BY id ASC`);
+  const realRoomIds: number[] = [];
+  for (const room of rooms) {
+    if ((await queueFixtureMarker(pool, "room", Number(room.id))) === false) {
+      realRoomIds.push(Number(room.id));
+    }
+  }
+  const views = await Promise.all(realRoomIds.map((roomId) => roomView(roomId)));
   const entry = (value: Record<string, unknown> | null) =>
     value
       ? {

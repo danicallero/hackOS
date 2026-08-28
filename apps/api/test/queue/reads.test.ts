@@ -257,6 +257,12 @@ describe("participant view (H38)", () => {
     await assignChallengeToRoom(realRoomId, realChallengeId);
     await assignChallengeToRoom(syntheticRoomId, syntheticChallengeId);
 
+    const publicTv = await app.inject({ method: "GET", url: "/api/tv/rooms" });
+    expect(publicTv.statusCode).toBe(200);
+    expect(publicTv.json().map((view: { room: { id: number } }) => view.room.id)).not.toContain(
+      syntheticRoomId,
+    );
+
     const { repoId: realRepoId } = await createRepoWithTeam([realUser], "Real queue project");
     const { repoId: syntheticRepoId } = await createRepoWithTeam(
       [syntheticUser],
