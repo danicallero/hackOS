@@ -640,7 +640,7 @@ type FormField = {
   key: string;
   kind: string;
   label?: { en?: string; es?: string; gl?: string };
-  options?: { value: string; label?: { en?: string } }[];
+  options?: { value: string; label?: { en?: string; es?: string; gl?: string } }[];
   required?: boolean;
   validation?: { text_condition?: string };
 };
@@ -706,20 +706,42 @@ function fieldValue(
 }
 
 const FALLBACK_APPLICATION_TEMPLATE: FormField[] = [
-  { key: "major", kind: "text", label: { en: "What's your major/degree?" }, required: true },
+  {
+    key: "major",
+    kind: "text",
+    label: {
+      en: "What's your major/degree?",
+      es: "¿Cuál es tu especialidad o titulación?",
+      gl: "Cal é a túa especialidade ou titulación?",
+    },
+    required: true,
+  },
   {
     key: "location",
     kind: "text",
-    label: { en: "Where are you joining us from?" },
+    label: {
+      en: "Where are you joining us from?",
+      es: "¿Desde dónde te unes?",
+      gl: "Dende onde te unes?",
+    },
     required: true,
   },
   {
     key: "motivation",
     kind: "textarea",
-    label: { en: "What motivates you to join?" },
+    label: {
+      en: "What motivates you to join?",
+      es: "¿Qué te motiva a participar?",
+      gl: "Que che motiva a participar?",
+    },
     required: true,
   },
-  { key: "github", kind: "text", label: { en: "Github" }, validation: { text_condition: "url" } },
+  {
+    key: "github",
+    kind: "text",
+    label: { en: "GitHub", es: "GitHub", gl: "GitHub" },
+    validation: { text_condition: "url" },
+  },
 ];
 
 /** H54: every response must bind to the application's current immutable form snapshot. */

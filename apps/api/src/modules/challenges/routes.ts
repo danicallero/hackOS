@@ -155,7 +155,7 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
         body: updateChallengeBody,
         summary: "Update a challenge",
         description:
-          "Partially updates challenge content, prizes, judging configuration, timing and visibility. Organization admins with sponsors:manage, queue:admin or the admin wildcard may update any editable field; a sponsor representative may edit only their own challenge, and public content is locked after reveal. Judging panel criteria remain locked once judging starts. Every successful edit is versioned and audited (H44, H45, H53).",
+          "Partially updates challenge content, prizes, judging configuration, timing and visibility. Organization admins with sponsors:manage, queue:admin or the admin wildcard may update any editable field; a sponsor representative may edit only their own challenge, and public content is locked after reveal. Judging panel criteria remain locked after the first submitted evaluation or completed queue entry in the challenge's queue group. Every successful edit is versioned and audited (H44, H45, H53).",
       },
     },
     async (req) => {

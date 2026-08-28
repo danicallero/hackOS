@@ -14,7 +14,8 @@ const prizeSchema = z.object({
 /**
  * Partial edit of the sponsor-owned surface of a challenge. `judgingPanelCriteria`
  * is the typed questionnaire the judges will fill in; it is validated against
- * the shared question catalogue and locked once judging starts.
+ * the shared question catalogue and locked after the first submitted
+ * evaluation or completed queue entry.
  */
 export const updateChallengeBody = z
   .object({
@@ -40,7 +41,8 @@ export type UpdateChallengeBody = z.infer<typeof updateChallengeBody>;
 /**
  * Public/general fields that are frozen for sponsor owners after reveal. The
  * presentation duration is judging timing configuration and intentionally stays
- * sponsor-editable, as does the judging panel until judging starts. See
+ * sponsor-editable, as does the judging panel until the first evaluation is
+ * submitted or a queue entry is completed. See
  * updateChallenge().
  */
 export const CHALLENGE_GENERAL_FIELDS = [

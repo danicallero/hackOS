@@ -273,7 +273,8 @@ match. Keys are preserved wherever possible, since `attempt_review.scores` is
 keyed by them; only a key claimed by two genuinely different questions is
 renamed (`nota` → `nota-2`). Nothing semantic is attempted — the admin's
 review step is what catches near-misses, and the merge is refused after
-judging starts precisely so no existing answer can be orphaned by a rename.
+the first evaluation is submitted precisely so no existing answer can be
+orphaned by a rename.
 
 Everything that reads a panel resolves through the group: `judging.ts`'s
 answer validation, `reviews.ts`'s overview and detail, `exports.ts`'s CSV

@@ -99,8 +99,9 @@ implementation is now the shared lifecycle in `removal.ts`.
    dietary values are removed in preparation. For `pending_exit`, those
    identity and catering rows remain only for the fixed recovery window so the
    participant can cancel or staff can record the exit; `account_state` blocks
-   normal participant activity. Wallet rows are marked voided on finalizable
-   paths while external invalidation is attempted.
+   normal participant activity. Wallet rows are marked `voided` during removal
+   preparation (including `pending_exit`); finalization deletes them while
+   external invalidation is attempted.
 4. S3/MinIO uploads, DSR exports, and provider wallet artifacts are cleaned
    outside the database transaction. A failure returns `503
    removal_storage_pending`, keeps the account inaccessible, and queues a
@@ -421,9 +422,10 @@ namespace during closure.
 
 ### Wallets, logs, backups
 
-Database wallet rows, access tokens, device registrations and credentials are
-deleted; installed passes and provider delivery logs are not controlled by
-Postgres. The same distinction applies to reverse proxies, analytics,
+Database wallet rows are voided during removal preparation and deleted at
+finalization, along with access tokens, device registrations and credentials;
+installed passes and provider delivery logs are not controlled by Postgres.
+The same distinction applies to reverse proxies, analytics,
 exception telemetry, PostgreSQL WAL/backups and S3 versioning. The codebase
 does not expose those retention systems, so “irreversible” must not be used to
 claim those systems have been purged without an operations runbook.
@@ -538,7 +540,7 @@ synthetic identity-shaped `users` row.
 | `notification_outbox`: payload, recipient FK, status/errors | Pending welcome/service message | Operational delivery | Delete subject rows; active filters prevent new rows | No | Payload may contain identifying notification data. |
 | `announcement_reads` / `announcement_recipients`: user FK, timestamps | Personal delivery/read state | Personal delivery/read state | Delete | No | Not an audit requirement. |
 | `tickets`: user FK, token | Unused ticket | QR/ticket credential | Delete; permanent unlinked non-reuse ticket tombstone | No | Credential must not regain access or resolve to a replacement account. |
-| `wallet_passes`: user FK, serial/auth token/provider object ID | Wallet credential | Venue ticket/pass | Void/delete during finalization; pending-exit may retain the row transiently for recovery/void processing | No | Apple/Google copies are external residuals and the credential is not anonymous audit data. |
+| `wallet_passes`: user FK, serial/auth token/provider object ID | Wallet credential | Venue ticket/pass | Void during removal preparation; delete at finalization; pending-exit may retain the already-voided row transiently for recovery/void processing | No | Apple/Google copies are external residuals and the credential is not anonymous audit data. |
 | `wallet_pass_devices`: device library identifier/push token | Wallet device registration | Wallet updates | Delete with pass | No | Device/pass delivery identifiers. |
 | `wallet_access_tokens`: scoped wallet token | Acceptance/wallet retrieval | Wallet retrieval | Delete | No | Temporary credential. |
 | `applications`: template, labels, intake configuration | Shared form definition | Shared form definition | Survive | No | No subject row; the mutable form is not used to decide historical retention. |
