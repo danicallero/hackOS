@@ -11,9 +11,9 @@ rate-limited review history.
 - Base: `067d783befc732fc625fd4a8bd3c0b4ad046733f`
 - Review head at intake: `5059ff81a5076c3b070c2b8d013be90f461bb0d4`
 - Checkpoint commit: `e6ce8c1d` (`fix(H54): close PR review isolation and migration gaps`)
-- Current pushed head: `6c58fdb4` (`fix(queue): isolate fixture transitions and participant reads`)
+- Current pushed head: `d22f7731` (`fix(queue): ignore malformed entries in read markers`)
 - GitHub PR: <https://github.com/danicallero/hackOS/pull/584>; the feature branch is
-  pushed to `origin` through `6c58fdb4`.
+  pushed to `origin` through `d22f7731`.
 - Worktree policy: shared active checkout; no blind reset, force-push, or destructive history rewrite.
 - Workers: Orca orchestration with `gpt-5.6-luna` at max effort only. Worker edits were reviewed in place and committed as a checkpoint.
 - Coordinator terminal: `term_d22851bc-ee04-441c-aaa9-ff22ee0f213e`.
@@ -55,8 +55,8 @@ rate-limited review history.
 | T8 | Room/enterprise fixture graph isolation | complete | `ba43a983`; room pool/serving markers, CRUD/state/delete and enterprise assignment are transactional; global room lists/broadcasts are scoped; runtime tests require Docker/Postgres/Valkey. |
 | T9 | Target-selected scan-log fixture isolation | complete | `4dc7f7cb`; authenticated reader marker is separated from selected staff target and subject rows; focused static checks pass, runtime suite is Valkey-blocked. |
 | T10 | Project deletion queue invalidations | complete | `fd7d0581` + `e1c6f826`; deletion snapshots entry/challenge/repo markers and emits scoped queue SSE plus participant invalidations after commit. |
-| T11 | Participant self-queue marker alignment | complete | `6c58fdb4`; `myQueueStatus`/`hasMyQueueItems` share an authenticated-marker CTE for repositories, challenges, groups, ranks, pace, rooms and called-room joins; adversarial coverage added. |
-| T12 | Final release audit and external PR metadata | in progress | Await bounded Luna max review `task_8f66d9a881b6`; then update DOC2, rerun gates, push any final commit, and close stale terminals. |
+| T11 | Participant self-queue marker alignment | complete | `d22f7731`; authenticated-marker CTE covers repositories, challenges, groups, ranks, pace, rooms and called-room joins; malformed cross-marker rows are omitted without hiding valid same-marker rows. |
+| T12 | Final release audit and external PR metadata | in progress | GitHub run `33160373207` exposed four API assertions; focused fixes are pushed in `ff63f586` and `d22f7731`. Await bounded Luna max review `task_15ec28a8b3f6`, then rerun CI, update DOC2, and close stale terminals. |
 
 ## Code/schema changes reconciled
 
@@ -89,6 +89,13 @@ rate-limited review history.
   queue groups, rank/pace, possible rooms, called-room joins and existence
   checks. The generated synthetic staff fixture remains intentionally outside
   queue operations; the synthetic participant owns the marked queue workflow.
+- Carried the verified Better Auth session token on the request context so
+  pending-recovery deadlines bind to the session that initiated the request;
+  made project prize ordering deterministic; and corrected the pending-account
+  deadline fixture to seed identity history before the active-user gate applies.
+- Kept valid participant queue reads available when malformed cross-marker
+  entry rows coexist: invalid entries are filtered from the read marker graph,
+  while mutation paths continue to reject mixed graphs transactionally.
 - Added room pool/serving graph marker classification and transactional room /
   enterprise assignment, state, delete and queue-group routing checks.
 - Fixed target-selected scan-log scope and post-commit queue/participant
@@ -109,6 +116,13 @@ where noted):
 - `pnpm --filter @hackos/mobile test` — 44 suites, 222 tests
 - `TEST_DATABASE_URL=postgres://dani@localhost:5432/hackos_test_skipjack pnpm --filter @hackos/api exec vitest run test/migrations.test.ts` — 1 file, 9 tests
 - `TEST_DATABASE_URL=postgres://dani@localhost:5432/hackos_test_skipjack pnpm --filter @hackos/api exec vitest run test/queue/fixture-transition-isolation.test.ts` — 1 file, 2 tests
+
+GitHub Actions API integration run `33160373207` reached the test suite on
+head `6d9ef60f` and reported 952/956 tests passing. Its four failures were
+triaged and fixed: session-token deadline binding, a stale post-removal
+fixture write, nondeterministic project-prize ordering, and valid queue reads
+hidden by malformed cross-marker entries. The fixes are pushed as `ff63f586`
+and `d22f7731`; run `33161438972` is the resulting CI rerun.
 
 Blocked/limited:
 
@@ -143,13 +157,14 @@ Blocked/limited:
 | Room/enterprise graph scope | `task_5d3cfc85f19a` / `ctx_08b39c66a67f` / `term_7d3953ea-64ea-4c6b-a6ad-83fc4a0246fb` | worker_done; `ba43a983`; closed |
 | Project deletion invalidation | `task_f35951284cee` / `ctx_d8fcef9d3fbe` / `term_8b2432a3-5e68-4c7f-a38c-93625947a718` | worker_done; `fd7d0581` + `e1c6f826`; closed |
 | Participant self-queue scope | `task_25d84f09eb44` / `ctx_5a9369551080` / `term_4d300b63-51fd-4ad3-935d-62f1a7523a26` | worker_done; reconciled in `6c58fdb4`; closed |
-| Final queue release audit | `task_8f66d9a881b6` / `ctx_8c97ff862beb` / `term_6c3479e7-1e5a-40e0-bb3d-9c90278d58ce` | dispatched Luna max; read-only; await worker_done |
+| Final queue release audit | `task_8f66d9a881b6` / `ctx_8c97ff862beb` / `term_6c3479e7-1e5a-40e0-bb3d-9c90278d58ce` | worker_done; bounded findings reconciled in `67973297` and `6d9ef60f`; terminal closed |
+| Post-fix release audit | `task_15ec28a8b3f6` / `ctx_c731149899a0` / `term_7f22e0f0-5b58-4f54-aee0-fde679dfe826` | dispatched Luna max; read-only; awaiting worker_done |
 
 ## Received-message ledger
 
 The raw first-wave archive is `/tmp/pr584-orchestration-messages.json`
 (200 messages). A live inbox snapshot added 58 messages; after de-duplication
-by message id, 284 received messages are listed below. The ledger records every
+by message id, 291 received messages are listed below. The ledger records every
 received id/type/subject/timestamp, including heartbeats and status noise so
 the rate-limited handoff is auditable. Full bodies remain in the raw archive
 where present; the most important worker_done bodies are summarized in the
@@ -442,6 +457,13 @@ Messages received after the prior rate-limit snapshot (seq 405–450):
 - 2026-08-28 09:01:15 · seq 448 · status · `msg_2806d48e8e54` · Self-queue marker fix ready for review
 - 2026-08-28 09:03:12 · seq 449 · worker_done · `msg_edc9ada7012f` · Completed self-queue marker isolation
 - 2026-08-28 09:10:38 · seq 450 · heartbeat · `msg_fe1aabfe505c` · alive
+- 2026-08-28 09:19:36 · seq 451 · heartbeat · `msg_9e77da657f81` · alive
+- 2026-08-28 09:25:31 · seq 452 · status · `msg_50e643290422` · Finalize bounded Luna audit
+- 2026-08-28 09:28:39 · seq 453 · status · `msg_3a28ddc9fde2` · Deletion invalidation checkpoint
+- 2026-08-28 09:29:54 · seq 454 · status · `msg_54fb9d6b8f9b` · Final review findings
+- 2026-08-28 09:30:30 · seq 455 · worker_done · `msg_9fc78e536a96` · Review complete: P1/P2 findings
+- 2026-08-28 09:43:42 · seq 456 · heartbeat · `msg_f9156f5199dd` · alive
+- 2026-08-28 09:57:36 · seq 457 · heartbeat · `msg_cac37955c614` · alive
 
 Messages sent by the coordinator to workers (not received by the coordinator)
 are intentionally not counted in this incoming ledger. The first final auditor
@@ -455,15 +477,17 @@ Use this prompt for a future coordinator:
 > Continue PR #584 remediation on
 > `/Users/dani/orca/workspaces/fablehackos/skipjack`, branch
 > `danicallero/account-deletion-anonymization`, from pushed head
-> `6c58fdb4`. Read `AGENTS.md`, `CLAUDE.md`, `plan/historias-hackos.md`,
+> `d22f7731`. Read `AGENTS.md`, `CLAUDE.md`, `plan/historias-hackos.md`,
 > `plan/07-datos-relevantes-ers.md`, `docs/README.md`, and `program.md`. Use
 > the Orca `orchestration` skill and `gpt-5.6-luna` max workers only; do not
 > substitute Terra. Inspect `orca orchestration task-list --json` and
 > `orca terminal list --json` before dispatching. Preserve the shared worktree
-> and never reset blindly. Collect the result of bounded audit
-> `task_8f66d9a881b6` / `ctx_8c97ff862beb`; if it reports a concrete P0–P2
+> and never reset blindly. Collect the result of bounded post-fix audit
+> `task_15ec28a8b3f6` / `ctx_c731149899a0`; if it reports a concrete P0–P2
 > issue, fix it with a focused regression, commit, rerun static checks, and
-> push. Review the queue self-read decision in A8: migration 0410 guarantees
+> push. The prior GitHub API run `33160373207` had four failures; fixes in
+> `ff63f586` and `d22f7731` must be verified by the rerun before declaring the
+> PR merge-ready. Review the queue self-read decision in A8: migration 0410 guarantees
 > one group per challenge, but restore nullable negative-challenge fallback if
 > a deployment can contain ungrouped legacy rows. Run `git diff --check`,
 > `pnpm lint`, API/web/mobile typechecks, web/mobile suites, the fresh migration
