@@ -295,6 +295,15 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
           );
         }
 
+        // A split/merge may have committed while the lock acquisition above
+        // waited. Re-read the enterprise's groups after those locks rather
+        // than using the pre-lock snapshot to decide whether auto-serving is
+        // unambiguous.
+        const { rows: currentTargetGroupRows } = await client.query<{ id: number }>(
+          `SELECT id FROM queue_groups WHERE enterprise_id = $1 ORDER BY id`,
+          [enterpriseId],
+        );
+
         const room = (await client.query(`SELECT id FROM rooms WHERE id = $1 FOR UPDATE`, [roomId]))
           .rows[0];
         if (!room) throw new NotFoundError("Room not found", { roomId });
@@ -325,7 +334,7 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
         });
 
         // Auto-resolve the serving queue only when it is unambiguous.
-        const groups = targetGroupRows;
+        const groups = currentTargetGroupRows;
         const beforeServing = (
           await client.query(`SELECT * FROM room_queue_groups WHERE room_id = $1 FOR UPDATE`, [
             roomId,
