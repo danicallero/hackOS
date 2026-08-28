@@ -701,12 +701,16 @@ WITH viewer AS (
      FROM room_queue_groups rqg
      JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
      JOIN challenges c ON c.id = qgc.challenge_id
-   UNION ALL
+ UNION ALL
+   -- A malformed cross-marker entry is excluded from the room marker; the
+   -- entry itself is filtered below, while transition paths reject the graph.
    SELECT rqg.room_id, r.is_test_account AS marker
      FROM room_queue_groups rqg
      JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
+     JOIN challenges c ON c.id = qgc.challenge_id
      JOIN queue_entries qe ON qe.challenge_id = qgc.challenge_id
      JOIN repos r ON r.id = qe.repo_id
+    WHERE r.is_test_account = c.is_test_account
  ), room_scopes AS (
    SELECT r.id AS room_id,
           EXISTS (
