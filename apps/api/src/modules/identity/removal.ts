@@ -23,6 +23,8 @@ import {
 } from "../logistics/estimate.js";
 import { expireGoogleObject } from "../logistics/google-wallet.js";
 import { PASS_TYPE_IDENTIFIER } from "../logistics/wallet.js";
+import { queueFixtureMarker } from "../queue/broadcast.js";
+import { type DeletedQueueEntryNotification, notifyDeletedQueueEntries } from "../queue/notify.js";
 import { assertActiveWildcardHolder, lockPermissionGraph } from "./permission-graph.js";
 import { consumeRemovalPin } from "./removal-pin.js";
 import { purgeReviewFixtureQueuesForUser } from "./review-fixture-queues.js";
@@ -1100,8 +1102,11 @@ async function guaranteedMinutesAtRemoval(client: pg.PoolClient, userId: number)
   return Math.floor(guaranteedPresenceMs(events, cutoff, { suspiciousGapMs: gap }) / 60_000);
 }
 
-async function deleteOrphanedProjects(client: pg.PoolClient, repoIds: number[]): Promise<void> {
-  if (repoIds.length === 0) return;
+async function deleteOrphanedProjects(
+  client: pg.PoolClient,
+  repoIds: number[],
+): Promise<DeletedQueueEntryNotification[]> {
+  if (repoIds.length === 0) return [];
   const { rows } = await client.query<{ id: number }>(
     `SELECT r.id
        FROM repos r
@@ -1110,12 +1115,37 @@ async function deleteOrphanedProjects(client: pg.PoolClient, repoIds: number[]):
     [repoIds],
   );
   const orphanIds = rows.map((row) => row.id);
-  if (orphanIds.length === 0) return;
-  const { rows: queueRows } = await client.query<{ id: number }>(
-    `SELECT id FROM queue_entries WHERE repo_id = ANY($1::int[])`,
+  if (orphanIds.length === 0) return [];
+  const { rows: queueRows } = await client.query<{
+    id: number;
+    challenge_id: number;
+    repo_id: number;
+  }>(
+    `SELECT id, challenge_id, repo_id
+       FROM queue_entries
+      WHERE repo_id = ANY($1::int[])
+      ORDER BY id
+      FOR UPDATE`,
     [orphanIds],
   );
   const queueIds = queueRows.map((row) => row.id);
+  const deletedQueueEntries: DeletedQueueEntryNotification[] = [];
+  for (const row of queueRows) {
+    let fixtureMarker: boolean | null;
+    try {
+      fixtureMarker = await queueFixtureMarker(client, "entry", Number(row.id));
+    } catch {
+      // Deletion remains durable, but a malformed graph must never leak an
+      // identity-bearing event onto the real operator topic.
+      fixtureMarker = null;
+    }
+    deletedQueueEntries.push({
+      id: Number(row.id),
+      challengeId: Number(row.challenge_id),
+      repoId: Number(row.repo_id),
+      fixtureMarker,
+    });
+  }
   if (queueIds.length > 0) {
     await client.query(`DELETE FROM attempt_review_versions WHERE attempt_id = ANY($1::int[])`, [
       queueIds,
@@ -1136,6 +1166,7 @@ async function deleteOrphanedProjects(client: pg.PoolClient, repoIds: number[]):
   ]);
   await client.query(`DELETE FROM submissions WHERE repo_id = ANY($1::int[])`, [orphanIds]);
   await client.query(`DELETE FROM repos WHERE id = ANY($1::int[])`, [orphanIds]);
+  return deletedQueueEntries;
 }
 
 /**
@@ -1184,6 +1215,7 @@ async function scrubRelationships(
   client: pg.PoolClient,
   user: UserRemovalRow,
   preserveIdempotency?: RunAccountRemovalOptions["preserveIdempotency"],
+  deletedQueueEntries?: DeletedQueueEntryNotification[],
 ): Promise<void> {
   const userId = user.id;
   const { rows: historicalEmailRows } = await client.query<{ email: string }>(
@@ -1267,7 +1299,8 @@ async function scrubRelationships(
       WHERE user_id = $1 OR lower(email) = ANY($2::text[])`,
     [userId, normalizedEmails],
   );
-  await deleteOrphanedProjects(client, repoIds);
+  const deletedEntries = await deleteOrphanedProjects(client, repoIds);
+  deletedQueueEntries?.push(...deletedEntries);
 
   // Raw accreditation/door rows contain timestamps, methods, notes, badge
   // identifiers, and operator provenance. The permanent audit subject keeps
@@ -1613,7 +1646,10 @@ export async function purgeReviewFixtureAccount(
 
 export async function finalizeAccountRemoval(
   client: pg.PoolClient,
-  options: RunAccountRemovalOptions & { action: AccountRemovalAction },
+  options: RunAccountRemovalOptions & {
+    action: AccountRemovalAction;
+    deletedQueueEntries?: DeletedQueueEntryNotification[];
+  },
 ): Promise<AccountRemovalResult> {
   await lockPermissionGraph(client);
   const user = await loadUserForRemoval(client, options.targetId);
@@ -1671,7 +1707,7 @@ export async function finalizeAccountRemoval(
     }
   }
 
-  await scrubRelationships(client, user, options.preserveIdempotency);
+  await scrubRelationships(client, user, options.preserveIdempotency, options.deletedQueueEntries);
   const completion = anonymousId
     ? { status: "completed" as const, anonymized: true as const }
     : { status: "completed" as const, deleted: true as const };
@@ -1808,10 +1844,17 @@ export async function runAccountRemoval(
   if (liveState.requiresExit) {
     return { status: "pending_exit", pendingExit: true, accessRevoked: true };
   }
+  const deletedQueueEntries: DeletedQueueEntryNotification[] = [];
   try {
-    return await withTransaction((client) =>
-      finalizeAccountRemoval(client, { ...options, action: preparation.action }),
+    const result = await withTransaction((client) =>
+      finalizeAccountRemoval(client, {
+        ...options,
+        action: preparation.action,
+        deletedQueueEntries,
+      }),
     );
+    await notifyDeletedQueueEntries(deletedQueueEntries);
+    return result;
   } catch (error) {
     if (error instanceof NotFoundError) {
       // The same pending removal may have won the finalization race after the

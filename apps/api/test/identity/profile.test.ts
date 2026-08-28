@@ -1,5 +1,6 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { SSE_TOPICS } from "@hackos/shared/events";
 import { hashPassword } from "better-auth/crypto";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
@@ -723,6 +724,53 @@ describe("self-service account removal (H54)", () => {
     // open exit; deleting it before returning pending_exit strands the flow.
     expect((await pool.query(`SELECT 1 FROM accounts WHERE user_id = $1`, [user])).rowCount).toBe(
       1,
+    );
+  });
+
+  it("broadcasts queue deletion after self-removal deletes an orphan project", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const { createChallenge, createRepoWithTeam, enqueueRepo, queueGroupOf } = await import(
+      "../queue/fixtures.js"
+    );
+    const { getQueue } = await import("../../src/lib/queues.js");
+    const { QUEUE_PARTICIPANT_INVALIDATIONS } = await import("../../src/modules/queue/notify.js");
+    const user = await createUser({
+      email: "orphan-queue-removal@example.test",
+      emailVerified: false,
+    });
+    await addCredentialPassword(user);
+    const challengeId = await createChallenge();
+    const { repoId } = await createRepoWithTeam([user]);
+    const entryId = await enqueueRepo(challengeId, repoId, 1);
+    const queueGroupId = await queueGroupOf(challengeId);
+
+    const removal = await a.inject({
+      method: "DELETE",
+      url: "/api/me",
+      headers: { ...asUser(user), "idempotency-key": "orphan-queue-removal" },
+      payload: { reauthenticationPassword: UNVERIFIED_TEST_PASSWORD },
+    });
+
+    expect(removal.statusCode).toBe(200);
+    expect(removal.json()).toEqual({ status: "completed", deleted: true });
+    expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [user])).rowCount).toBe(0);
+    expect((await pool.query(`SELECT 1 FROM repos WHERE id = $1`, [repoId])).rowCount).toBe(0);
+    expect(
+      (await pool.query(`SELECT 1 FROM queue_entries WHERE id = $1`, [entryId])).rowCount,
+    ).toBe(0);
+
+    const { valkey } = await import("../../src/lib/valkey.js");
+    expect(await valkey.get(`sse:seq:${SSE_TOPICS.QUEUE}`)).toBe("1");
+    const jobs = await getQueue(QUEUE_PARTICIPANT_INVALIDATIONS).getJobs([
+      "delayed",
+      "waiting",
+      "active",
+    ]);
+    expect(jobs).toContainEqual(
+      expect.objectContaining({
+        data: { challengeId, queueGroupId },
+      }),
     );
   });
 

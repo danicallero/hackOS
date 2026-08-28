@@ -259,6 +259,37 @@ export async function notifyChallengeQueueChanged(
 export const QUEUE_PARTICIPANT_INVALIDATIONS = "queue-participant-invalidations";
 const participantInvalidationJobsInFlight = new Set<string>();
 
+/** Queue row captured before an account/project deletion removes it. */
+export type DeletedQueueEntryNotification = {
+  id: number;
+  challengeId: number;
+  repoId: number;
+  fixtureMarker: boolean | null;
+};
+
+/**
+ * Publish deletion events after the owning transaction commits. The row no
+ * longer exists, so callers must resolve its marker and ids before deleting;
+ * the participant worker then re-reads the surviving group membership.
+ */
+export async function notifyDeletedQueueEntries(
+  entries: readonly DeletedQueueEntryNotification[],
+): Promise<void> {
+  if (entries.length === 0) return;
+  await Promise.all(
+    entries.map((entry) =>
+      broadcastQueueEventWithMarker(entry.fixtureMarker, EVENTS.QUEUE_ENTRY_CHANGED, {
+        id: entry.id,
+        challenge_id: entry.challengeId,
+        repo_id: entry.repoId,
+        deleted: true,
+      }),
+    ),
+  );
+  const challengeIds = new Set(entries.map((entry) => entry.challengeId));
+  await Promise.all([...challengeIds].map((id) => notifyChallengeQueueChanged(pool, id)));
+}
+
 export type QueueTopologyInvalidation = {
   /** Queue groups before the topology mutation committed. */
   oldQueueGroupIds: readonly number[];

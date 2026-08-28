@@ -13,19 +13,15 @@ import type { Queryable } from "../../db/pool.js";
  */
 
 /**
- * Every challenge sharing a queue_group with `$1`, always including `$1`
- * itself. The `UNION` self-row is a safety net, not decoration: a challenge
- * with no group row (impossible today, but only because of a trigger) must
- * still order and read as its own single-challenge queue rather than silently
- * resolving to the empty set.
+ * Every challenge sharing a queue_group with `$1`. A missing membership is a
+ * malformed queue graph and must resolve to no rows; callers that mutate or
+ * read queue state validate the complete group scope before reaching here.
  */
 export const GROUP_SIBLING_CHALLENGE_IDS_SQL = `
   SELECT sibling.challenge_id
     FROM queue_group_challenges self
     JOIN queue_group_challenges sibling ON sibling.queue_group_id = self.queue_group_id
-   WHERE self.challenge_id = $1
-   UNION
-  SELECT $1::int`;
+   WHERE self.challenge_id = $1`;
 
 /** Every challenge the room currently serves, via its queue_group. */
 export const ROOM_CHALLENGE_IDS_SQL = `

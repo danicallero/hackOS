@@ -11,6 +11,7 @@ type QueueFixtureMarkers = {
   has_synthetic: boolean;
   has_real: boolean;
   has_entry_marker_mismatch: boolean;
+  has_ungrouped_entry?: boolean;
   enterprise_id?: number;
 };
 
@@ -172,15 +173,21 @@ async function assertRepoFixtureGraph(client: Queryable, repoId: number): Promis
             COALESCE(
               bool_or(c.is_test_account IS DISTINCT FROM r.is_test_account),
               false
-            ) AS has_entry_marker_mismatch
+            ) AS has_entry_marker_mismatch,
+            COALESCE(bool_or(qgc.queue_group_id IS NULL), false) AS has_ungrouped_entry
        FROM queue_entries qe
        JOIN challenges c ON c.id = qe.challenge_id
        JOIN repos r ON r.id = qe.repo_id
+       LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
       WHERE qe.repo_id = $1`,
     [repoId],
   );
   const marker = rows[0];
-  if (marker?.has_entry_marker_mismatch || (marker?.has_synthetic && marker.has_real)) {
+  if (
+    marker?.has_ungrouped_entry ||
+    marker?.has_entry_marker_mismatch ||
+    (marker?.has_synthetic && marker.has_real)
+  ) {
     throw new ConflictError("Queue fixture markers must match", {
       code: "review_fixture_scope",
       resource: "repo",
@@ -218,18 +225,20 @@ export async function assertQueueEntryScope(
       entryId,
     });
   }
-  if (row?.queue_group_id != null) {
-    const groupIsSynthetic = await queueGroupFixtureMarker(client, row.queue_group_id);
-    if (
-      groupIsSynthetic === null ||
-      groupIsSynthetic !== (row.challenge_is_test_account === true)
-    ) {
-      throw new ConflictError("Queue fixture markers must match", {
-        code: "review_fixture_scope",
-        resource: "entry",
-        resourceId: entryId,
-      });
-    }
+  if (row?.queue_group_id == null) {
+    throw new ConflictError("Queue entry has no complete queue-group scope", {
+      code: "review_fixture_scope",
+      resource: "entry",
+      resourceId: entryId,
+    });
+  }
+  const groupIsSynthetic = await queueGroupFixtureMarker(client, row.queue_group_id);
+  if (groupIsSynthetic === null || groupIsSynthetic !== (row.challenge_is_test_account === true)) {
+    throw new ConflictError("Queue fixture markers must match", {
+      code: "review_fixture_scope",
+      resource: "entry",
+      resourceId: entryId,
+    });
   }
   return isSyntheticOperator(client, actorId);
 }

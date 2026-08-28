@@ -144,6 +144,8 @@ describe("challenge progress (H40)", () => {
   it("fails closed when a challenge is ungrouped or its group is mixed", async () => {
     const { pool } = await import("../../src/db/pool.js");
     const ungroupedChallengeId = await createChallenge({ title: "Ungrouped challenge" });
+    const { repoId } = await createRepoWithTeam();
+    const entryId = await enqueueRepo(ungroupedChallengeId, repoId, 1);
     await pool.query(`DELETE FROM queue_group_challenges WHERE challenge_id = $1`, [
       ungroupedChallengeId,
     ]);
@@ -153,6 +155,12 @@ describe("challenge progress (H40)", () => {
       headers: asUser(operatorId),
     });
     expect(ungrouped.statusCode).toBe(409);
+    const ungroupedEntry = await app.inject({
+      method: "GET",
+      url: `/api/queue/entries/${entryId}/history`,
+      headers: asUser(operatorId),
+    });
+    expect(ungroupedEntry.statusCode).toBe(409);
 
     const { challengeIds } = await createEnterpriseChallenges(2);
     await pool.query(`UPDATE challenges SET is_test_account = true WHERE id = $1`, [
