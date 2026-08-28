@@ -11,7 +11,7 @@ rate-limited review history.
 - Base: `067d783befc732fc625fd4a8bd3c0b4ad046733f`
 - Review head at intake: `5059ff81a5076c3b070c2b8d013be90f461bb0d4`
 - Checkpoint commit: `e6ce8c1d` (`fix(H54): close PR review isolation and migration gaps`)
-- Current pushed head: `8caeceea` (`fix(auth): narrow pending session trigger`)
+- Current pushed head: `89fbe59e` (`docs: record session trigger audit`)
 - GitHub PR: <https://github.com/danicallero/hackOS/pull/584>; the feature branch is
   pushed to `origin` through `8caeceea`.
 - Worktree policy: shared active checkout; no blind reset, force-push, or destructive history rewrite.
@@ -58,9 +58,10 @@ rate-limited review history.
 | T9 | Target-selected scan-log fixture isolation | complete | `4dc7f7cb`; authenticated reader marker is separated from selected staff target and subject rows; focused static checks pass, runtime suite is Valkey-blocked. |
 | T10 | Project deletion queue invalidations | complete | `fd7d0581` + `e1c6f826`; deletion snapshots entry/challenge/repo markers and emits scoped queue SSE plus participant invalidations after commit. |
 | T11 | Participant self-queue marker alignment | complete | `d22f7731`; authenticated-marker CTE covers repositories, challenges, groups, ranks, pace, rooms and called-room joins; malformed cross-marker rows are omitted without hiding valid same-marker rows. |
-| T12 | Final release audit and external PR metadata | in progress | Run `33161700626` verified the four earlier API fixes but exposed one H54 session-deadline assertion: Better Auth refreshed the initiating session during authorization. Commit `36126e50` makes this lookup read-only (`disableRefresh` + `disableCookieCache`). Run `33162990085` then exposed the second boundary: permitted pending recovery sign-in failed when Better Auth inserted a new `sessions` row and the blanket active-user trigger rejected it. Commit `159fdcb8` caps Better Auth session create/update hooks and the fresh `0730` trigger at the captured deadline; a replacement CI run is required. Queue P1/P2 findings remain open. |
+| T12 | Final release audit and external PR metadata | in progress | Run `33161700626` verified the four earlier API fixes but exposed one H54 session-deadline assertion: Better Auth refreshed the initiating session during authorization. Commit `36126e50` makes this lookup read-only (`disableRefresh` + `disableCookieCache`). Run `33162990085` then exposed the second boundary: permitted pending recovery sign-in failed when Better Auth inserted a new `sessions` row and the blanket active-user trigger rejected it. Commits `159fdcb8` and `8caeceea` cap Better Auth session create/update hooks and the fresh `0730` trigger at the captured deadline. Full CI run `33165065129` is green on head `89fbe59e`; queue P1/P2 findings remain open. |
 | T13 | Queue release follow-up from post-fix audit | in progress | Luna audit `task_15ec28a8b3f6` found manual-call wrong-room/resurrection risk, per-challenge pre-call claims that can duplicate merged groups, stale `precalled_at`, missing sibling-wide participant invalidations, and conditional malformed-group read scope. Coordinator is tracing each path and will add focused regression coverage before release. |
 | T14 | Pending recovery session boundary | checkpoint committed | `159fdcb8` + `8caeceea`; independent auth-trigger review confirmed the app cap and recommended an additive migration only for populated deployments. Better Auth `databaseHooks.session.create/update.before` caps sessions, while the fresh `0730` trigger accepts only future anonymization exits whose `expires_at <= removal_expires_at`; auth-flow coverage exercises sign-in and refresh, and the migration suite now directly checks allowed/rejected INSERT/UPDATE cases. Local API typecheck/lint/fresh migration suite pass; runtime auth remains CI-gated by Valkey/Postgres setup. |
+| T15 | Queue implementation follow-up dispatch | rate-limited before edits | Two disjoint Luna-max lanes were dispatched at head `89fbe59e` (`task_3662f2c66e7d` state transitions, `task_fe7eccc78510` scope/invalidation). Both hit the account usage limit after required reads and before edits; terminals were closed. Coordinator is implementing the independently confirmed findings with the exact lane boundaries and regression goals preserved. |
 
 ## Code/schema changes reconciled
 
@@ -146,8 +147,9 @@ returned 500 because the final active-user trigger rejected Better Auth's new
 `sessions` row. Commit `159fdcb8` adds deadline-capping Better Auth hooks and
 `8caeceea` narrows the matching pending-session exception in the fresh `0730`
 trigger to future anonymization exits, adds direct migration regression
-coverage, and corrects the authentication documentation. The replacement run
-is the release gate.
+coverage, and corrects the authentication documentation. Full CI run
+`33165065129` is green on head `89fbe59e`; the remaining release gate is queue
+remediation and its focused runtime coverage.
 
 Blocked/limited:
 
@@ -187,15 +189,17 @@ Blocked/limited:
 | Participant self-queue scope | `task_25d84f09eb44` / `ctx_5a9369551080` / `term_4d300b63-51fd-4ad3-935d-62f1a7523a26` | worker_done; reconciled in `6c58fdb4`; closed |
 | Final queue release audit | `task_8f66d9a881b6` / `ctx_8c97ff862beb` / `term_6c3479e7-1e5a-40e0-bb3d-9c90278d58ce` | worker_done; bounded findings reconciled in `67973297` and `6d9ef60f`; terminal closed |
 | Post-fix release audit | `task_15ec28a8b3f6` / `ctx_c731149899a0` / `term_7f22e0f0-5b58-4f54-aee0-fde679dfe826` | worker_done seq 461; no P0, but P1/P2 manual-call, merged-group claim, stale pre-call, invalidation, malformed-read, and docs findings; terminal pending close |
-| Auth session-deadline audit | `task_aff0cb25d0f3` / `ctx_cfc30b0c38e9` / `term_f7e84e30-02e1-488a-954f-8432b6731a65` | dispatched Luna max; read-only; independently tracing Better Auth session refresh; awaiting worker_done (terminal has an unresolved approval prompt) |
+| Auth session-deadline audit | `task_aff0cb25d0f3` / `ctx_cfc30b0c38e9` / `term_f7e84e30-02e1-488a-954f-8432b6731a65` | no worker_done before Luna usage limit/approval prompt; terminal closed; findings superseded and independently verified by `task_357b9641b657` |
 | Queue release verification | `task_5a46182712b1` / `ctx_28c0a06580eb` / `term_3f87913b-d380-4d30-9a94-20aa4352d412` | worker_done seq 468; independently confirmed all queue P1/P2 findings and setup blockers; terminal closed |
 | Auth trigger review | `task_357b9641b657` / `ctx_b99867fdff16` / `term_4c8b970d-5a0b-48d8-af81-dd740b5aa211` | worker_done seq 472; no edits; independently confirmed trigger root cause, narrow future anonymization predicate, auth/refresh coverage, and populated-ledger immutability caveat; terminal closed |
+| Queue state transition safeguards | `task_3662f2c66e7d` / `ctx_455e22403ab1` / `term_2ae20fb7-1f6f-4bf0-b5d0-d1501e80715f` | Luna max hit account usage limit after required reads (seq 473); no edits; terminal closed; coordinator continuation active |
+| Queue scope and invalidation safeguards | `task_fe7eccc78510` / `ctx_ebed4cce9304` / `term_b2d5ddf0-d12f-4e2e-938b-fccdb1cfc640` | Luna max hit account usage limit after required reads; no edits/messages; terminal closed; coordinator continuation active |
 
 ## Received-message ledger
 
 The raw first-wave archive is `/tmp/pr584-orchestration-messages.json`
 (200 messages). A live inbox snapshot added 58 messages; after de-duplication
-by message id, 304 received messages are listed below. The ledger records every
+by message id, 305 received messages are listed below. The ledger records every
 received id/type/subject/timestamp, including heartbeats and status noise so
 the rate-limited handoff is auditable. Full bodies remain in the raw archive
 where present; the most important worker_done bodies are summarized in the
@@ -508,6 +512,7 @@ Messages received after the prior rate-limit snapshot (seq 405–450):
 - 2026-08-28 10:42:39 · seq 469 · heartbeat · `msg_2eda8924958c` · auth-trigger review alive
 - 2026-08-28 10:47:26 · seq 471 · status · `msg_50de06762548` · auth-trigger audit confirmed session INSERT root cause and recommended narrow future anonymization exception/additive migration caveat
 - 2026-08-28 10:47:37 · seq 472 · worker_done · `msg_627b90a9ca12` · auth-trigger audit complete; no edits; runtime integration remains unavailable
+- 2026-08-28 10:55:20 · seq 473 · status · `msg_e59ebb261cc1` · queue state lane started required reads; lane later hit the Luna usage limit before edits
 
 Messages sent by the coordinator to workers (not received by the coordinator)
 are intentionally not counted in this incoming ledger. The first final auditor
@@ -521,7 +526,7 @@ Use this prompt for a future coordinator:
 > Continue PR #584 remediation on
 > `/Users/dani/orca/workspaces/fablehackos/skipjack`, branch
 > `danicallero/account-deletion-anonymization`, from pushed head
-> `8caeceea`. Read `AGENTS.md`, `CLAUDE.md`, `plan/historias-hackos.md`,
+> `89fbe59e`. Read `AGENTS.md`, `CLAUDE.md`, `plan/historias-hackos.md`,
 > `plan/07-datos-relevantes-ers.md`, `docs/README.md`, and `program.md`. Use
 > the Orca `orchestration` skill and `gpt-5.6-luna` max workers only; do not
 > substitute Terra. Inspect `orca orchestration task-list --json` and
