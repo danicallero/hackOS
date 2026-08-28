@@ -11,9 +11,9 @@ rate-limited review history.
 - Base: `067d783befc732fc625fd4a8bd3c0b4ad046733f`
 - Review head at intake: `5059ff81a5076c3b070c2b8d013be90f461bb0d4`
 - Checkpoint commit: `e6ce8c1d` (`fix(H54): close PR review isolation and migration gaps`)
-- Current pushed head: `d22f7731` (`fix(queue): ignore malformed entries in read markers`)
+- Current pushed head: `36126e50` (`fix(auth): keep session deadline reads read-only`)
 - GitHub PR: <https://github.com/danicallero/hackOS/pull/584>; the feature branch is
-  pushed to `origin` through `d22f7731`.
+  pushed to `origin` through `36126e50`.
 - Worktree policy: shared active checkout; no blind reset, force-push, or destructive history rewrite.
 - Workers: Orca orchestration with `gpt-5.6-luna` at max effort only. Worker edits were reviewed in place and committed as a checkpoint.
 - Coordinator terminal: `term_d22851bc-ee04-441c-aaa9-ff22ee0f213e`.
@@ -56,7 +56,7 @@ rate-limited review history.
 | T9 | Target-selected scan-log fixture isolation | complete | `4dc7f7cb`; authenticated reader marker is separated from selected staff target and subject rows; focused static checks pass, runtime suite is Valkey-blocked. |
 | T10 | Project deletion queue invalidations | complete | `fd7d0581` + `e1c6f826`; deletion snapshots entry/challenge/repo markers and emits scoped queue SSE plus participant invalidations after commit. |
 | T11 | Participant self-queue marker alignment | complete | `d22f7731`; authenticated-marker CTE covers repositories, challenges, groups, ranks, pace, rooms and called-room joins; malformed cross-marker rows are omitted without hiding valid same-marker rows. |
-| T12 | Final release audit and external PR metadata | in progress | GitHub run `33160373207` exposed four API assertions; focused fixes are pushed in `ff63f586` and `d22f7731`. Await bounded Luna max review `task_15ec28a8b3f6`, then rerun CI, update DOC2, and close stale terminals. |
+| T12 | Final release audit and external PR metadata | in progress | Run `33161700626` verified the four earlier API fixes but exposed one H54 session-deadline assertion: Better Auth refreshed the initiating session during authorization. Commit `36126e50` makes this lookup read-only (`disableRefresh` + `disableCookieCache`); CI run `33162877946` is queued. Await both bounded Luna max reviews, verify the new run, update DOC2, and close stale terminals. |
 
 ## Code/schema changes reconciled
 
@@ -96,6 +96,9 @@ rate-limited review history.
 - Kept valid participant queue reads available when malformed cross-marker
   entry rows coexist: invalid entries are filtered from the read marker graph,
   while mutation paths continue to reject mixed graphs transactionally.
+- Made the identity resolver's Better Auth lookup read-only so authorization
+  cannot refresh a near-expiry initiating session and move its H54 exit
+  deadline; the verified session token remains attached to the request.
 - Added room pool/serving graph marker classification and transactional room /
   enterprise assignment, state, delete and queue-group routing checks.
 - Fixed target-selected scan-log scope and post-commit queue/participant
@@ -121,8 +124,11 @@ GitHub Actions API integration run `33160373207` reached the test suite on
 head `6d9ef60f` and reported 952/956 tests passing. Its four failures were
 triaged and fixed: session-token deadline binding, a stale post-removal
 fixture write, nondeterministic project-prize ordering, and valid queue reads
-hidden by malformed cross-marker entries. The fixes are pushed as `ff63f586`
-and `d22f7731`; run `33161438972` is the resulting CI rerun.
+hidden by malformed cross-marker entries. Run `33161700626` on head `7ed17067`
+then reached 955/956: the remaining H54 assertion showed Better Auth had
+refreshed the initiating two-hour session to the default seven-day lifetime
+during authorization. Commit `36126e50` disables refresh and cookie-cache use
+for this read; run `33162877946` is queued on that head.
 
 Blocked/limited:
 
@@ -159,12 +165,13 @@ Blocked/limited:
 | Participant self-queue scope | `task_25d84f09eb44` / `ctx_5a9369551080` / `term_4d300b63-51fd-4ad3-935d-62f1a7523a26` | worker_done; reconciled in `6c58fdb4`; closed |
 | Final queue release audit | `task_8f66d9a881b6` / `ctx_8c97ff862beb` / `term_6c3479e7-1e5a-40e0-bb3d-9c90278d58ce` | worker_done; bounded findings reconciled in `67973297` and `6d9ef60f`; terminal closed |
 | Post-fix release audit | `task_15ec28a8b3f6` / `ctx_c731149899a0` / `term_7f22e0f0-5b58-4f54-aee0-fde679dfe826` | dispatched Luna max; read-only; awaiting worker_done |
+| Auth session-deadline audit | `task_aff0cb25d0f3` / `ctx_cfc30b0c38e9` / `term_f7e84e30-02e1-488a-954f-8432b6731a65` | dispatched Luna max; read-only; independently tracing Better Auth session refresh; awaiting worker_done |
 
 ## Received-message ledger
 
 The raw first-wave archive is `/tmp/pr584-orchestration-messages.json`
 (200 messages). A live inbox snapshot added 58 messages; after de-duplication
-by message id, 291 received messages are listed below. The ledger records every
+by message id, 293 received messages are listed below. The ledger records every
 received id/type/subject/timestamp, including heartbeats and status noise so
 the rate-limited handoff is auditable. Full bodies remain in the raw archive
 where present; the most important worker_done bodies are summarized in the
@@ -464,6 +471,8 @@ Messages received after the prior rate-limit snapshot (seq 405–450):
 - 2026-08-28 09:30:30 · seq 455 · worker_done · `msg_9fc78e536a96` · Review complete: P1/P2 findings
 - 2026-08-28 09:43:42 · seq 456 · heartbeat · `msg_f9156f5199dd` · alive
 - 2026-08-28 09:57:36 · seq 457 · heartbeat · `msg_cac37955c614` · alive
+- 2026-08-28 10:18:51 · seq 458 · heartbeat · `msg_e5e3f6979654` · alive
+- 2026-08-28 10:18:51 · seq 459 · heartbeat · `msg_5aa1e5cc7af4` · alive
 
 Messages sent by the coordinator to workers (not received by the coordinator)
 are intentionally not counted in this incoming ledger. The first final auditor
@@ -477,7 +486,7 @@ Use this prompt for a future coordinator:
 > Continue PR #584 remediation on
 > `/Users/dani/orca/workspaces/fablehackos/skipjack`, branch
 > `danicallero/account-deletion-anonymization`, from pushed head
-> `d22f7731`. Read `AGENTS.md`, `CLAUDE.md`, `plan/historias-hackos.md`,
+> `36126e50`. Read `AGENTS.md`, `CLAUDE.md`, `plan/historias-hackos.md`,
 > `plan/07-datos-relevantes-ers.md`, `docs/README.md`, and `program.md`. Use
 > the Orca `orchestration` skill and `gpt-5.6-luna` max workers only; do not
 > substitute Terra. Inspect `orca orchestration task-list --json` and
@@ -485,9 +494,11 @@ Use this prompt for a future coordinator:
 > and never reset blindly. Collect the result of bounded post-fix audit
 > `task_15ec28a8b3f6` / `ctx_c731149899a0`; if it reports a concrete P0–P2
 > issue, fix it with a focused regression, commit, rerun static checks, and
-> push. The prior GitHub API run `33160373207` had four failures; fixes in
-> `ff63f586` and `d22f7731` must be verified by the rerun before declaring the
-> PR merge-ready. Review the queue self-read decision in A8: migration 0410 guarantees
+> push. Run `33161700626` verified the four earlier fixes but exposed one
+> session-deadline failure because Better Auth refreshed the initiating session;
+> `36126e50` passes `disableRefresh` and `disableCookieCache` for the
+> authorization-only lookup. Verify queued run `33162877946` and both worker
+> findings before declaring the PR merge-ready. Review the queue self-read decision in A8: migration 0410 guarantees
 > one group per challenge, but restore nullable negative-challenge fallback if
 > a deployment can contain ungrouped legacy rows. Run `git diff --check`,
 > `pnpm lint`, API/web/mobile typechecks, web/mobile suites, the fresh migration
