@@ -691,12 +691,13 @@ async function prepareAccountRemoval(
           options.preserveIdempotency?.key ?? null,
         ],
       );
-      // Pending in-venue anonymization is intentionally reversible. Keep the
-      // authentication/profile/operational rows until staff record the exit
-      // or the fixed recovery deadline expires; account_state blocks every
-      // ordinary event writer and the recovery surface is the only allowed
-      // participant action. Full cleanup remains below for non-pending paths.
-      if (!(action === "anonymize" && requiresVenueExit)) {
+      // Any pending in-venue removal is intentionally held until staff record
+      // the exit or the fixed recovery deadline expires. Keep the
+      // authentication/profile/operational rows for both delete and anonymize:
+      // account_state blocks ordinary event writers, while the recovery
+      // surface and staff exit path still need the temporary identity. Full
+      // cleanup remains below for non-pending paths.
+      if (!requiresVenueExit) {
         await client.query(`DELETE FROM sessions WHERE user_id = $1`, [options.targetId]);
         await client.query(`DELETE FROM accounts WHERE user_id = $1`, [options.targetId]);
         await client.query(`DELETE FROM push_tokens WHERE user_id = $1`, [options.targetId]);

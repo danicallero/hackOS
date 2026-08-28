@@ -73,6 +73,7 @@ rate-limited review history.
 | T22 | Close pending-session identity-reassignment bypass | complete | Fresh migration review found the bounded recovery exception also matched `UPDATE sessions SET user_id = pending_user`; `0730` now permits the exception only for inserts or same-user expiry updates, and migration coverage rejects active-to-pending reassignment. Fresh migration suite remains 10/10. |
 | T23 | Remove stale one-project self-service documentation | complete | `docs/challenges-devpost.md` now matches the current H19/H20 contract: participant self-creation has no per-participant project-count cap; the former advisory-lock/one-winner wording was obsolete. |
 | T24 | Targeted Luna follow-up for deletion and queue P2s | in progress | Dispatched at current shared tree after seq 523 as `task_01ce42a0dc1f` / `ctx_d3fc72184adf` / `term_f1dde2c5-5c92-4c7d-a551-b844ea20f201`; review-only, focused on the mixed-marker delete fix and the remaining invalidation/lock-order/pending-delete findings. |
+| T25 | Preserve auth during inconsistent pending-delete exit | complete | The fresh-account/inconsistent operational path now retains sessions, Better Auth accounts, push tokens and dietary state whenever `requiresVenueExit` is true, regardless of delete vs anonymize action; profile coverage asserts a pending delete keeps its credential. |
 
 ## Code/schema changes reconciled
 

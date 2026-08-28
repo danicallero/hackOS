@@ -685,6 +685,7 @@ describe("self-service account removal (H54)", () => {
       email: "inconsistent-presence@example.test",
       emailVerified: false,
     });
+    await addCredentialPassword(user);
     await pool.query(
       `INSERT INTO time_logs (user_id, kind, scanned_at)
        VALUES ($1, 'in', now() - interval '10 minutes')`,
@@ -704,6 +705,25 @@ describe("self-service account removal (H54)", () => {
       integrityWarning: true,
       requiresVenueExit: true,
     });
+
+    const removal = await a.inject({
+      method: "DELETE",
+      url: "/api/me",
+      headers: { ...asUser(user), "idempotency-key": "inconsistent-delete" },
+      payload: { reauthenticationPassword: UNVERIFIED_TEST_PASSWORD },
+    });
+    expect(removal.statusCode).toBe(202);
+    expect(removal.json()).toEqual({
+      status: "pending_exit",
+      pendingExit: true,
+      accessRevoked: true,
+    });
+    // Even an inconsistent account selected for full deletion must retain its
+    // temporary Better Auth credential while staff still need to record the
+    // open exit; deleting it before returning pending_exit strands the flow.
+    expect((await pool.query(`SELECT 1 FROM accounts WHERE user_id = $1`, [user])).rowCount).toBe(
+      1,
+    );
   });
 
   it("uses event dates only for the live warning, never to bypass the lifecycle boundary", async () => {
