@@ -23,7 +23,10 @@ let snapshot: ScannerSnapshot = {
 };
 let scans: (PendingScan & { ownerUserId: number })[] = [];
 
-export async function applyScannerSnapshot(next: ScannerSnapshot): Promise<void> {
+export async function applyScannerSnapshot(
+  next: ScannerSnapshot,
+  _ownerUserId?: number,
+): Promise<void> {
   snapshot = next;
 }
 

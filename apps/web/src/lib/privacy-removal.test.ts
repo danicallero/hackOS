@@ -80,6 +80,8 @@ describe("account removal eligibility", () => {
   it("clears app-owned browser state after account closure", () => {
     window.localStorage.setItem("hackos:profile", "identity");
     window.localStorage.setItem("queue-ops-arrival-hints", "1");
+    window.localStorage.setItem("hackos:logistics:meal-scans:v2:other-owner", "encrypted");
+    window.localStorage.setItem("hackos:logistics:meal-scans", "legacy");
     window.localStorage.setItem("unrelated-app", "keep");
     window.sessionStorage.setItem("profile-cache", "identity");
 
@@ -87,6 +89,10 @@ describe("account removal eligibility", () => {
 
     expect(window.localStorage.getItem("hackos:profile")).toBeNull();
     expect(window.localStorage.getItem("queue-ops-arrival-hints")).toBeNull();
+    expect(window.localStorage.getItem("hackos:logistics:meal-scans:v2:other-owner")).toBe(
+      "encrypted",
+    );
+    expect(window.localStorage.getItem("hackos:logistics:meal-scans")).toBeNull();
     expect(window.localStorage.getItem("unrelated-app")).toBe("keep");
     expect(window.sessionStorage.length).toBe(0);
   });

@@ -47,6 +47,7 @@ vi.mock("@/lib/i18n", () => ({
         accountRemovalExpiryHint: "You can cancel before the timer expires.",
         accountRemovalExpiryLabel: "Recovery window",
         accountRemovalExpiryUnknown: "Checking expiry…",
+        accountRemovalRefreshError: "Couldn't refresh account-removal status.",
         accountRemovalPendingBody: "Your participation has ended.",
         accountRemovalPendingDescription: "Ask event staff to record your exit.",
         accountRemovalPendingTitle: "Exit needed to finish anonymization",
@@ -57,6 +58,7 @@ vi.mock("@/lib/i18n", () => ({
         keepAnonymization: "Keep anonymization",
         privacyPolicy: "Privacy policy",
         signOut: "Sign out",
+        retry: "Retry",
       })[key] ?? (key === "accountRemovalExpiry" ? `Recovery window: ${values?.time}` : key),
   }),
 }));
@@ -120,5 +122,27 @@ describe("PendingRemovalScreen", () => {
     expect(api.post).toHaveBeenCalledWith("/api/me/anonymize/cancel", {});
     expect(clearAccountRemovalProgress).toHaveBeenCalledTimes(1);
     expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the pending screen visible and offers retry after a transient refresh failure", async () => {
+    const refresh = vi.fn().mockRejectedValue(new Error("temporary outage"));
+    act(() => {
+      root.render(
+        <PendingRemovalScreen
+          removal={removal}
+          onRefresh={refresh}
+          refreshError={new Error("temporary outage")}
+        />,
+      );
+    });
+
+    expect(container.textContent).toContain("Couldn't refresh account-removal status.");
+    const retry = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Retry",
+    );
+    await act(async () => userEvent.setup().click(retry as HTMLButtonElement));
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("Couldn't refresh account-removal status.");
   });
 });

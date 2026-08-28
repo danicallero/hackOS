@@ -1,10 +1,11 @@
 import { isMealActivityKind } from "@hackos/shared/activity-kinds";
-import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { EVENTS } from "@hackos/shared/events";
 import type { Job } from "bullmq";
 import { pool, withTransaction } from "../../db/pool.js";
 import { AppError, BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { broadcast } from "../../lib/sse.js";
+import { logisticsTopicForFixture } from "./active-broadcast.js";
 import { activityScan } from "./activities.js";
 import { assertBadgeScanTimestamp, resolveByBadge } from "./badge.js";
 import { assertFixtureSubjectScope } from "./review-fixture-scope.js";
@@ -35,6 +36,13 @@ export async function enqueueMealScanBatch(
   }
 
   const batch = await withTransaction(async (client) => {
+    const actor = await client.query<{ is_test_account: boolean }>(
+      `SELECT is_test_account FROM users WHERE id = $1 FOR SHARE`,
+      [actorId],
+    );
+    if (!actor.rows[0]) throw new NotFoundError("User not found");
+    const fixtureMarker = actor.rows[0].is_test_account;
+
     // H54: validate and share-lock every badge before persisting the offline
     // inbox row. Removal takes the same user row lock, so a stale device
     // cannot create a new identifying batch item after closure begins.
@@ -68,10 +76,10 @@ export async function enqueueMealScanBatch(
     }
 
     const b = await client.query(
-      `INSERT INTO meal_scan_batches (activity_id, device_id, submitted_by)
-       VALUES ($1, $2, $3)
+      `INSERT INTO meal_scan_batches (activity_id, device_id, submitted_by, is_test_account)
+       VALUES ($1, $2, $3, $4)
        RETURNING id, status`,
-      [activityId, input.deviceId, actorId],
+      [activityId, input.deviceId, actorId, fixtureMarker],
     );
     const batchId = b.rows[0].id as number;
 
@@ -108,10 +116,17 @@ export async function enqueueMealScanBatch(
 export async function processMealScanBatch(job: Job<MealScanJob>) {
   const batchId = job.data.batchId;
   const batch = await pool.query(
-    `SELECT activity_id, submitted_by FROM meal_scan_batches WHERE id = $1`,
+    `SELECT b.activity_id, b.submitted_by, b.is_test_account
+       FROM meal_scan_batches b
+      WHERE b.id = $1`,
     [batchId],
   );
   if (!batch.rows[0]) throw new NotFoundError("Meal scan batch not found");
+
+  // Batch notifications are identity-bearing through their batch id even
+  // though the payload contains only counters. The marker is captured at
+  // enqueue so scrubbing submitted_by cannot reclassify the batch as real.
+  const fixtureMarker = batch.rows[0].is_test_account === true;
 
   const rows = await withTransaction(async (client) => {
     await client.query(`UPDATE meal_scan_batches SET status = 'processing' WHERE id = $1`, [
@@ -207,7 +222,11 @@ export async function processMealScanBatch(job: Job<MealScanJob>) {
   const status = failed === 0 ? "processed" : processed === 0 ? "failed" : "partial";
   await pool.query(`UPDATE meal_scan_batches SET status = $2 WHERE id = $1`, [batchId, status]);
   const payload = { batchId, status, processed, failed };
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_MEAL_SCAN_BATCH, payload);
+  await broadcast(
+    logisticsTopicForFixture(fixtureMarker),
+    EVENTS.LOGISTICS_MEAL_SCAN_BATCH,
+    payload,
+  );
   return payload;
 }
 

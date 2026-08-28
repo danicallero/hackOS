@@ -1,9 +1,9 @@
-import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { EVENTS } from "@hackos/shared/events";
 import type { Question } from "@hackos/shared/questions";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
-import { broadcast } from "../../lib/sse.js";
+import { broadcastQueueEvent } from "./broadcast.js";
 import { challengePanels, mergeJudgingPanels } from "./criteria-merge.js";
 import {
   anyEvaluationStarted,
@@ -338,7 +338,9 @@ export async function mergeQueueGroups(
     return { summary: toSummary(after), duplicatesDropped: merged.duplicatesDropped };
   });
 
-  await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ROOM_CHANGED, { queueGroupId: result.summary.id });
+  await broadcastQueueEvent(pool, "queueGroup", result.summary.id, EVENTS.QUEUE_ROOM_CHANGED, {
+    queueGroupId: result.summary.id,
+  });
   return { ...result.summary, mergedPanel: { duplicatesDropped: result.duplicatesDropped } };
 }
 
@@ -426,7 +428,9 @@ export async function splitQueueGroup(input: {
     return after.map(toSummary);
   });
 
-  await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ROOM_CHANGED, { queueGroupId });
+  await broadcastQueueEvent(pool, "queueGroup", queueGroupId, EVENTS.QUEUE_ROOM_CHANGED, {
+    queueGroupId,
+  });
   return groups;
 }
 
@@ -490,7 +494,9 @@ export async function updateQueueGroup(input: {
     return toSummary(after);
   });
 
-  await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ROOM_CHANGED, { queueGroupId });
+  await broadcastQueueEvent(pool, "queueGroup", queueGroupId, EVENTS.QUEUE_ROOM_CHANGED, {
+    queueGroupId,
+  });
   return summary;
 }
 
@@ -589,7 +595,9 @@ export async function setQueueGroupRooms(input: {
     return toSummary(after);
   });
 
-  await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ROOM_CHANGED, { queueGroupId });
+  await broadcastQueueEvent(pool, "queueGroup", queueGroupId, EVENTS.QUEUE_ROOM_CHANGED, {
+    queueGroupId,
+  });
   return summary;
 }
 

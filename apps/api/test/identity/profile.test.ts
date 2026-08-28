@@ -8,6 +8,7 @@ import {
   buildTestApp,
   createUser,
   createUserWithCapabilities,
+  ensureApplicationFormVersion,
   truncateAll,
 } from "../helpers.js";
 
@@ -48,17 +49,6 @@ async function addCredentialPassword(
      VALUES ($1, $2, 'credential', $3)`,
     [userId, String(userId), await hashPassword(password)],
   );
-}
-
-async function snapshotFormVersion(applicationId: number, template: unknown): Promise<number> {
-  const { pool } = await import("../../src/db/pool.js");
-  const { rows } = await pool.query(
-    `INSERT INTO application_form_versions (application_id, version, template, sections)
-     VALUES ($1, 1, $2::jsonb, '[]'::jsonb)
-     RETURNING id`,
-    [applicationId, JSON.stringify(template)],
-  );
-  return rows[0].id;
 }
 
 async function requestRemovalPin(a: App, userId: number): Promise<string> {
@@ -128,11 +118,12 @@ describe("GET /api/me (H7)", () => {
       `INSERT INTO applications (name, type, template)
        VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
     );
+    const formVersionId = await ensureApplicationFormVersion(applications[0].id);
     await pool.query(
       `INSERT INTO application_responses
-         (user_id, application_id, status, decision_sent_at)
-       VALUES ($1, $3, 'accepted', now()), ($2, $3, 'accepted_internal', NULL)`,
-      [accepted, internal, applications[0].id],
+         (user_id, application_id, application_form_version_id, status, decision_sent_at)
+       VALUES ($1, $3, $4, 'accepted', now()), ($2, $3, $4, 'accepted_internal', NULL)`,
+      [accepted, internal, applications[0].id, formVersionId],
     );
     await pool.query(
       `INSERT INTO email_verification_tokens
@@ -175,10 +166,20 @@ describe("GET /api/me (H7)", () => {
     const { rows: mentorApp } = await pool.query(
       `INSERT INTO applications (name, type, template) VALUES ('Mentors', 'mentor', '[]') RETURNING id`,
     );
+    const participantFormVersionId = await ensureApplicationFormVersion(participantApp[0].id);
+    const mentorFormVersionId = await ensureApplicationFormVersion(mentorApp[0].id);
     await pool.query(
-      `INSERT INTO application_responses (user_id, application_id, status)
-       VALUES ($1, $2, 'review'), ($3, $4, 'review')`,
-      [participant, participantApp[0].id, mentor, mentorApp[0].id],
+      `INSERT INTO application_responses
+         (user_id, application_id, application_form_version_id, status)
+       VALUES ($1, $2, $3, 'review'), ($4, $5, $6, 'review')`,
+      [
+        participant,
+        participantApp[0].id,
+        participantFormVersionId,
+        mentor,
+        mentorApp[0].id,
+        mentorFormVersionId,
+      ],
     );
 
     // judge: an enterprise_judges row (the roster is enterprise-scoped)
@@ -434,6 +435,7 @@ describe("self-service account removal (H54)", () => {
       `INSERT INTO applications (name, type, template)
        VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
     );
+    const formVersionId = await ensureApplicationFormVersion(applications[0].id);
     const { rows: tokens } = await pool.query(
       `INSERT INTO email_verification_tokens
          (token, type, email, user_id, expires_at)
@@ -444,11 +446,11 @@ describe("self-service account removal (H54)", () => {
     );
     const { rows: responses } = await pool.query(
       `INSERT INTO application_responses
-         (user_id, application_id, status, responses, confirmation_token_id,
+         (user_id, application_id, application_form_version_id, status, responses, confirmation_token_id,
           decision_sent_at, submitted_at)
-       VALUES ($1, $2, 'accepted', '{}'::jsonb, $3, now(), now())
+       VALUES ($1, $2, $3, 'accepted', '{}'::jsonb, $4, now(), now())
        RETURNING id`,
-      [user, applications[0].id, tokens[0].id],
+      [user, applications[0].id, formVersionId, tokens[0].id],
     );
     await pool.query(
       `INSERT INTO notification_outbox (user_id, category, channel, status)
@@ -509,10 +511,12 @@ describe("self-service account removal (H54)", () => {
       `INSERT INTO applications (name, type, template)
        VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
     );
+    const formVersionId = await ensureApplicationFormVersion(applications[0].id);
     await pool.query(
-      `INSERT INTO application_responses (user_id, application_id, status, responses)
-       VALUES ($1, $2, 'rejected', '{}'::jsonb)`,
-      [user, applications[0].id],
+      `INSERT INTO application_responses
+         (user_id, application_id, application_form_version_id, status, responses)
+       VALUES ($1, $2, $3, 'rejected', '{}'::jsonb)`,
+      [user, applications[0].id, formVersionId],
     );
 
     const eligibility = await a.inject({
@@ -945,11 +949,20 @@ describe("self-service account removal (H54)", () => {
     const cancelled = await a.inject({
       method: "POST",
       url: "/api/me/anonymize/cancel",
-      headers: asUser(user),
+      headers: { ...asUser(user), "idempotency-key": "cancel-pending-request" },
       payload: {},
     });
     expect(cancelled.statusCode).toBe(200);
     expect(cancelled.json()).toEqual({ status: "cancelled" });
+
+    const replay = await a.inject({
+      method: "POST",
+      url: "/api/me/anonymize/cancel",
+      headers: { ...asUser(user), "idempotency-key": "cancel-pending-request" },
+      payload: {},
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.headers["idempotency-replayed"]).toBe("true");
     expect(
       (
         await pool.query(
@@ -974,6 +987,89 @@ describe("self-service account removal (H54)", () => {
         await a.inject({ method: "GET", url: "/api/me/removal-status", headers: asUser(user) })
       ).json(),
     ).toEqual({ status: "active" });
+  });
+
+  it("rejects cancellation at the recovery deadline and leaves the pending state intact", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const user = await createUser({ email: "deadline-race@example.test", emailVerified: false });
+    await pool.query(
+      `UPDATE users
+          SET badge_id = 'B-DEADLINE-RACE',
+              account_state = 'removal_pending',
+              removal_action = 'anonymize',
+              removal_requires_exit = true,
+              removal_expires_at = clock_timestamp() + interval '1 millisecond',
+              removal_idempotency_key = 'deadline-race-removal'
+        WHERE id = $1`,
+      [user],
+    );
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, check_in_method)
+       VALUES ($1, 'B-DEADLINE-RACE', 'scan')`,
+      [user],
+    );
+    await pool.query(
+      `INSERT INTO time_logs (user_id, kind, scanned_at)
+       VALUES ($1, 'in', now() - interval '5 minutes')`,
+      [user],
+    );
+    // Let the deadline cross before the cancellation transaction reaches its
+    // final guarded UPDATE predicate.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const cancelled = await a.inject({
+      method: "POST",
+      url: "/api/me/anonymize/cancel",
+      headers: { ...asUser(user), "idempotency-key": "deadline-race-cancel" },
+      payload: {},
+    });
+    expect(cancelled.statusCode).toBe(409);
+    expect(cancelled.json().error.details.code).toBe("removal_expired");
+    expect(
+      (
+        await pool.query(`SELECT account_state, removal_requires_exit FROM users WHERE id = $1`, [
+          user,
+        ])
+      ).rows,
+    ).toEqual([{ account_state: "removal_pending", removal_requires_exit: true }]);
+  });
+
+  it("does not let a target cancel an administrator-originated pending request", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const admin = await createUserWithCapabilities(["*"]);
+    const target = await createUser({ email: "admin-pending-cancel@example.test" });
+    await pool.query(`UPDATE users SET badge_id = 'B-ADMIN-PENDING' WHERE id = $1`, [target]);
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, check_in_method)
+       VALUES ($1, 'B-ADMIN-PENDING', 'scan')`,
+      [target],
+    );
+    await pool.query(
+      `INSERT INTO time_logs (user_id, kind, scanned_at)
+       VALUES ($1, 'in', now() - interval '5 minutes')`,
+      [target],
+    );
+
+    const requested = await a.inject({
+      method: "POST",
+      url: `/api/users/${target}/anonymize`,
+      headers: { ...asUser(admin), "idempotency-key": "admin-pending-cancel" },
+    });
+    expect(requested.statusCode).toBe(202);
+
+    const cancelled = await a.inject({
+      method: "POST",
+      url: "/api/me/anonymize/cancel",
+      headers: { ...asUser(target), "idempotency-key": "target-admin-cancel" },
+      payload: {},
+    });
+    expect(cancelled.statusCode).toBe(409);
+    expect(cancelled.json().error.details.code).toBe("removal_not_cancellable");
+    expect(
+      (await pool.query(`SELECT account_state FROM users WHERE id = $1`, [target])).rows,
+    ).toEqual([{ account_state: "removal_pending" }]);
   });
 
   it("self-anonymizes after venue exit, preserves verified minutes, revokes credentials, and replays safely", async () => {
@@ -1047,7 +1143,7 @@ describe("self-service account removal (H54)", () => {
        VALUES ('Demographic extraction', 'participant', $1::jsonb) RETURNING id`,
       [JSON.stringify(demographicTemplate)],
     );
-    const formVersionId = await snapshotFormVersion(applicationRows[0].id, demographicTemplate);
+    const formVersionId = await ensureApplicationFormVersion(applicationRows[0].id);
     await pool.query(
       `INSERT INTO application_responses
          (user_id, application_id, application_form_version_id, status, responses)
@@ -1245,7 +1341,7 @@ describe("self-service account removal (H54)", () => {
       [JSON.stringify(templateV1)],
     );
     const applicationId = applications[0].id as number;
-    const formVersionId = await snapshotFormVersion(applicationId, templateV1);
+    const formVersionId = await ensureApplicationFormVersion(applicationId);
     await pool.query(
       `INSERT INTO application_responses
          (user_id, application_id, application_form_version_id, status, responses)
@@ -1274,7 +1370,7 @@ describe("self-service account removal (H54)", () => {
        VALUES ('Draft retention form', 'participant', $1::jsonb) RETURNING id`,
       [JSON.stringify(draftTemplate)],
     );
-    const draftVersionId = await snapshotFormVersion(draftApplications[0].id, draftTemplate);
+    const draftVersionId = await ensureApplicationFormVersion(draftApplications[0].id);
     await pool.query(
       `INSERT INTO application_responses
          (user_id, application_id, application_form_version_id, status, responses)
@@ -1373,8 +1469,8 @@ describe("self-service account removal (H54)", () => {
        VALUES ('Form B', 'participant', $1::jsonb) RETURNING id`,
       [JSON.stringify(templateB)],
     );
-    const versionA = await snapshotFormVersion(formA[0].id, templateA);
-    const versionB = await snapshotFormVersion(formB[0].id, templateB);
+    const versionA = await ensureApplicationFormVersion(formA[0].id);
+    const versionB = await ensureApplicationFormVersion(formB[0].id);
     await pool.query(
       `INSERT INTO application_responses
          (user_id, application_id, application_form_version_id, status, responses)
@@ -1727,10 +1823,12 @@ describe("staff user routes (H7)", () => {
       `INSERT INTO applications (name, type, template)
        VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
     );
+    const formVersionId = await ensureApplicationFormVersion(applications[0].id);
     await pool.query(
-      `INSERT INTO application_responses (user_id, application_id, status, responses)
-       VALUES ($1, $2, 'accepted', '{}'::jsonb)`,
-      [target, applications[0].id],
+      `INSERT INTO application_responses
+         (user_id, application_id, application_form_version_id, status, responses)
+       VALUES ($1, $2, $3, 'accepted', '{}'::jsonb)`,
+      [target, applications[0].id, formVersionId],
     );
     // Accreditation at check-in is the real operational history — not the
     // ticket itself (a confirmed-but-not-yet-accredited holder can still
@@ -1788,10 +1886,12 @@ describe("staff user routes (H7)", () => {
       `INSERT INTO applications (name, type, template)
        VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
     );
+    const formVersionId = await ensureApplicationFormVersion(applications[0].id);
     const { rows: responseRows } = await pool.query(
-      `INSERT INTO application_responses (user_id, application_id, status, responses)
-       VALUES ($1, $2, 'rejected', '{}'::jsonb) RETURNING id`,
-      [target, applications[0].id],
+      `INSERT INTO application_responses
+         (user_id, application_id, application_form_version_id, status, responses)
+       VALUES ($1, $2, $3, 'rejected', '{}'::jsonb) RETURNING id`,
+      [target, applications[0].id, formVersionId],
     );
     await pool.query(
       `INSERT INTO applicant_reviews (response_id, author_id, score) VALUES ($1, $2, 50)`,
@@ -1976,12 +2076,14 @@ describe("staff user routes (H7)", () => {
        VALUES ('F', 'participant', '[]'::jsonb, '', true, 168) RETURNING id`,
     );
     const appId = appRows[0].id;
+    const formVersionId = await ensureApplicationFormVersion(appId);
 
     // While still in review, the participant may edit their own name.
     await pool.query(
-      `INSERT INTO application_responses (user_id, application_id, status, responses)
-       VALUES ($1, $2, 'review', '{}'::jsonb)`,
-      [user, appId],
+      `INSERT INTO application_responses
+         (user_id, application_id, application_form_version_id, status, responses)
+       VALUES ($1, $2, $3, 'review', '{}'::jsonb)`,
+      [user, appId, formVersionId],
     );
     expect(
       (
@@ -2273,7 +2375,7 @@ describe("staff user routes (H7)", () => {
        VALUES ('Free-text minimization', 'participant', $1::jsonb) RETURNING id`,
       [JSON.stringify(freeTextTemplate)],
     );
-    const formVersionId = await snapshotFormVersion(applicationRows[0].id, freeTextTemplate);
+    const formVersionId = await ensureApplicationFormVersion(applicationRows[0].id);
     await pool.query(
       `INSERT INTO application_responses
          (user_id, application_id, application_form_version_id, status, responses)

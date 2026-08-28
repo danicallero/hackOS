@@ -5,6 +5,16 @@ import { Alert } from "react-native";
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
+jest.mock("react-native", () => {
+  const RN = jest.requireActual("react-native");
+  return new Proxy(RN, {
+    get: (target, prop, receiver) =>
+      prop === "useWindowDimensions"
+        ? () => ({ fontScale: 1.4, height: 844, scale: 1, width: 390 })
+        : Reflect.get(target, prop, receiver),
+  });
+});
+
 jest.mock("@/components/auth-ui", () => {
   const ReactLib = require("react");
   const Native = require("react-native");
@@ -40,8 +50,12 @@ jest.mock("@/components/auth-ui", () => {
         ReactLib.createElement(Native.Text, null, title),
         ReactLib.createElement(Native.Text, null, description),
       ),
-    AuthScreen: ({ children }: { children: ReactNode }) =>
-      ReactLib.createElement(Native.View, null, children),
+    AuthScreen: ({ children, scrollable }: { children: ReactNode; scrollable?: boolean }) =>
+      ReactLib.createElement(
+        Native.View,
+        { testID: scrollable ? "pending-removal-scrollable" : "pending-removal-fixed" },
+        children,
+      ),
   };
 });
 jest.mock("@/lib/api", () => ({
@@ -71,9 +85,11 @@ jest.mock("@/lib/i18n", () => ({
         accountRemovalProcessingDescription: "Your request is being finalized.",
         accountRemovalProcessingTitle: "Finishing anonymization",
         accountRemovalExpiryUnknown: "Checking expiry…",
+        accountRemovalRefreshError: "Couldn't refresh account-removal status.",
         accountPrivacyPolicy: "Privacy policy",
         close: "Close",
         keepAnonymization: "Keep anonymization",
+        retry: "Retry",
         signOut: "Sign out",
         signOutError: "Couldn't sign out.",
       })[key] ?? key,
@@ -128,6 +144,7 @@ describe("pending account-removal screen", () => {
     expect(screen.getByRole("button", { name: "Cancel anonymization" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Sign out" })).toBeEnabled();
     expect(screen.getByText("Recovery window")).toBeTruthy();
+    expect(screen.getByTestId("pending-removal-scrollable")).toBeTruthy();
   });
 
   it("cancels the pending request and refreshes the authoritative profile", async () => {
@@ -154,5 +171,48 @@ describe("pending account-removal screen", () => {
     fireEvent.press(screen.getByText("Sign out"));
 
     await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
+  });
+
+  it("keeps the screen visible and retries after a transient refresh failure", async () => {
+    const refresh = jest.fn().mockRejectedValue(new Error("temporary outage"));
+    await renderMobile(
+      <PendingRemovalScreen
+        removal={removal}
+        onRefresh={refresh}
+        refreshError={new Error("temporary outage")}
+      />,
+    );
+
+    expect(
+      screen
+        .getAllByRole("alert")
+        .some((alert) => alert.props.children === "Couldn't refresh account-removal status."),
+    ).toBe(true);
+    fireEvent.press(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    expect(
+      screen
+        .getAllByRole("alert")
+        .some((alert) => alert.props.children === "Couldn't refresh account-removal status."),
+    ).toBe(true);
+  });
+
+  it("refreshes at recovery-window expiry and exposes a retry when that refresh fails", async () => {
+    const refresh = jest.fn().mockRejectedValue(new Error("service unavailable"));
+    await renderMobile(
+      <PendingRemovalScreen
+        removal={{ ...removal, expiresAt: new Date(Date.now() - 1_000).toISOString() }}
+        onRefresh={refresh}
+      />,
+    );
+
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
+    expect(
+      screen
+        .getAllByRole("alert")
+        .some((alert) => alert.props.children === "Couldn't refresh account-removal status."),
+    ).toBe(true);
   });
 });

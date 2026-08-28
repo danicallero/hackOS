@@ -66,8 +66,12 @@ export interface PresenceEstimate {
   present: number[];
 }
 
-export interface PresenceLookup extends PersonCard {
+export interface PresenceLookup extends Omit<PersonCard, "userId"> {
+  /** Omitted for a removal-pending account to avoid retaining its identity after exit. */
+  userId?: number;
   badgeId: string;
+  /** Removal-pending accounts are exit-only and carry no user id. */
+  pendingExit?: true;
   /** Whether the presence estimate currently has this person inside. */
   present: boolean;
   /** Ground truth: when their currently-open door session started, or null
@@ -158,11 +162,16 @@ export interface TimeLogUpdateResult {
 }
 
 export interface OpenPresenceSession {
-  userId: number;
+  /** Latest open-door time-log id; identity-free and unique per session row. */
+  sessionId: number;
+  /** Omitted for a removal-pending account; its row is exit-only. */
+  userId?: number;
   name: string | null;
   surname: string | null;
   since: string;
   lastSignal: string;
+  /** Removal-pending accounts are exit-only and carry no user id. */
+  pendingExit?: true;
   /** No supporting signal (door or activity) for longer than the
    * suspicious-gap window — flagged for staff to double-check, not
    * auto-closed. */
@@ -467,6 +476,11 @@ export const uiPrefsApi = {
     api.patch<Record<string, unknown>>("/api/me/ui-prefs", { key, value }),
 };
 
-export function personName(card: Pick<PersonCard, "name" | "surname" | "userId">): string {
-  return [card.name, card.surname].filter(Boolean).join(" ") || `User #${card.userId}`;
+export function personName(
+  card: Pick<PersonCard, "name" | "surname"> & { userId?: number },
+): string {
+  return (
+    [card.name, card.surname].filter(Boolean).join(" ") ||
+    (card.userId == null ? "Unknown user" : `User #${card.userId}`)
+  );
 }

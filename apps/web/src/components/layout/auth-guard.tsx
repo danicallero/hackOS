@@ -22,7 +22,7 @@ import { useSessionContext } from "@/lib/session";
  * doesn't force every authenticated page into a Suspense boundary.
  */
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { me, refresh, status } = useSessionContext();
+  const { me, refresh, status, error } = useSessionContext();
   const router = useRouter();
   useTrackNavigation();
 
@@ -41,7 +41,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
   if (me?.accountState === "removal_pending" && me.removal) {
-    return <PendingRemovalScreen removal={me.removal} onRefresh={refresh} />;
+    return <PendingRemovalScreen removal={me.removal} onRefresh={refresh} refreshError={error} />;
   }
   return <>{children}</>;
 }

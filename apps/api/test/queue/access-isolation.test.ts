@@ -1,7 +1,10 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { SSE_TOPICS } from "@hackos/shared/events";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
+import { pool } from "../../src/db/pool.js";
+import { notifyTeamCalled } from "../../src/modules/queue/notify.js";
 import {
   asUser,
   buildTestApp,
@@ -12,6 +15,7 @@ import {
 import {
   addChallengeJudge,
   assignChallengeToRoom,
+  broadcastCount,
   createChallenge,
   createRepoWithTeam,
   createRoom,
@@ -279,6 +283,167 @@ describe("queue contextual isolation", () => {
       expect(stream.statusCode).toBe(200);
       stream.stream().destroy();
     }
+  });
+
+  it("isolates fixture queue events and call notifications from real operators, users, and staff", async () => {
+    const realOperator = await createUserWithCapabilities([
+      CAPABILITIES.QUEUE_OPERATE,
+      CAPABILITIES.PROJECTS_EDIT,
+    ]);
+    const fixtureOperator = await createUserWithCapabilities([
+      CAPABILITIES.QUEUE_OPERATE,
+      CAPABILITIES.PROJECTS_EDIT,
+    ]);
+    const fixtureMember = await createUser();
+    const realMember = await createUser();
+    const realStaff = await createUser();
+    const fixtureStaff = await createUser();
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id IN ($1, $2, $3)`, [
+      fixtureOperator,
+      fixtureMember,
+      fixtureStaff,
+    ]);
+
+    const fixtureChallengeId = await createChallenge({ title: "Synthetic queue" });
+    const { repoId: fixtureRepoId } = await createRepoWithTeam(
+      [fixtureMember, realMember],
+      "Synthetic team",
+    );
+    await pool.query(`UPDATE challenges SET is_test_account = true WHERE id = $1`, [
+      fixtureChallengeId,
+    ]);
+    await pool.query(`UPDATE repos SET is_test_account = true WHERE id = $1`, [fixtureRepoId]);
+    const fixtureRoomId = await createRoom({ name: "Synthetic room" });
+    await assignChallengeToRoom(fixtureRoomId, fixtureChallengeId);
+
+    await pool.query(
+      `INSERT INTO notification_preferences (user_id, category, channel, enabled)
+       VALUES ($1, 'queue.staff', 'push', true), ($2, 'queue.staff', 'push', true)`,
+      [realStaff, fixtureStaff],
+    );
+
+    const realStream = await app.inject({
+      method: "GET",
+      url: "/api/queue/stream",
+      headers: asUser(realOperator),
+      payloadAsStream: true,
+    });
+    const fixtureStream = await app.inject({
+      method: "GET",
+      url: "/api/queue/stream",
+      headers: asUser(fixtureOperator),
+      payloadAsStream: true,
+    });
+    expect(realStream.statusCode).toBe(200);
+    expect(fixtureStream.statusCode).toBe(200);
+    const realFirstChunk: Buffer = await new Promise((resolve, reject) => {
+      realStream.stream().once("data", resolve);
+      realStream.stream().once("error", reject);
+    });
+    const fixtureFirstChunk: Buffer = await new Promise((resolve, reject) => {
+      fixtureStream.stream().once("data", resolve);
+      fixtureStream.stream().once("error", reject);
+    });
+    expect(realFirstChunk.toString()).toContain(`: connected topic=${SSE_TOPICS.QUEUE}\n`);
+    expect(fixtureFirstChunk.toString()).toContain(
+      `: connected topic=${SSE_TOPICS.QUEUE_FIXTURE}\n`,
+    );
+
+    const queueBeforeFixture = await broadcastCount(SSE_TOPICS.QUEUE);
+    const fixtureQueueBefore = await broadcastCount(SSE_TOPICS.QUEUE_FIXTURE);
+    const publicTvBeforeFixture = await broadcastCount(SSE_TOPICS.PUBLIC_TV);
+    const fixtureAdd = await app.inject({
+      method: "POST",
+      url: `/api/repos/${fixtureRepoId}/challenges`,
+      headers: { ...asUser(fixtureOperator), "idempotency-key": crypto.randomUUID() },
+      payload: { challengeId: fixtureChallengeId },
+    });
+    expect(fixtureAdd.statusCode).toBe(200);
+    expect(await broadcastCount(SSE_TOPICS.QUEUE)).toBe(queueBeforeFixture);
+    expect(await broadcastCount(SSE_TOPICS.QUEUE_FIXTURE)).toBe(fixtureQueueBefore + 1);
+    expect(await broadcastCount(SSE_TOPICS.PUBLIC_TV)).toBe(publicTvBeforeFixture);
+
+    const fixtureEntryId = fixtureAdd.json().entry.id as number;
+    await pool.query(
+      `UPDATE queue_entries SET status = 'called', assigned_room_id = $2 WHERE id = $1`,
+      [fixtureEntryId, fixtureRoomId],
+    );
+    const fixtureUserBefore = await broadcastCount(`${SSE_TOPICS.USER_PREFIX}${fixtureMember}`);
+    const realUserBefore = await broadcastCount(`${SSE_TOPICS.USER_PREFIX}${realMember}`);
+    await notifyTeamCalled(pool, {
+      entryId: fixtureEntryId,
+      challengeId: fixtureChallengeId,
+      repoId: fixtureRepoId,
+      roomId: fixtureRoomId,
+      roomName: "Synthetic room",
+    });
+    expect(await broadcastCount(SSE_TOPICS.QUEUE)).toBe(queueBeforeFixture);
+    expect(await broadcastCount(SSE_TOPICS.QUEUE_FIXTURE)).toBe(fixtureQueueBefore + 2);
+    expect(await broadcastCount(`${SSE_TOPICS.USER_PREFIX}${fixtureMember}`)).toBeGreaterThan(
+      fixtureUserBefore,
+    );
+    expect(await broadcastCount(`${SSE_TOPICS.USER_PREFIX}${realMember}`)).toBe(realUserBefore);
+
+    const staffAlerts = await pool.query<{ user_id: number }>(
+      `SELECT user_id
+         FROM notification_outbox
+        WHERE category = 'queue.staff' AND channel = 'push'
+          AND payload->>'template' = 'queue.staff.called'
+        ORDER BY user_id`,
+    );
+    expect(staffAlerts.rows.map((row) => row.user_id)).toEqual([fixtureStaff]);
+
+    const realChallengeId = await createChallenge({ title: "Real queue" });
+    const { repoId: realRepoId } = await createRepoWithTeam([realMember], "Real team");
+    const realQueueBefore = await broadcastCount(SSE_TOPICS.QUEUE);
+    const realPublicTvBefore = await broadcastCount(SSE_TOPICS.PUBLIC_TV);
+    const realAdd = await app.inject({
+      method: "POST",
+      url: `/api/repos/${realRepoId}/challenges`,
+      headers: { ...asUser(realOperator), "idempotency-key": crypto.randomUUID() },
+      payload: { challengeId: realChallengeId },
+    });
+    expect(realAdd.statusCode).toBe(200);
+    expect(await broadcastCount(SSE_TOPICS.QUEUE)).toBe(realQueueBefore + 1);
+    expect(await broadcastCount(SSE_TOPICS.PUBLIC_TV)).toBe(realPublicTvBefore + 1);
+
+    realStream.stream().destroy();
+    fixtureStream.stream().destroy();
+  });
+
+  it("scopes the explicit challenge enqueue endpoint by fixture marker", async () => {
+    const realOperator = await createUserWithCapabilities([CAPABILITIES.QUEUE_ADMIN]);
+    const fixtureOperator = await createUserWithCapabilities([CAPABILITIES.QUEUE_ADMIN]);
+    const fixtureMember = await createUser();
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id IN ($1, $2)`, [
+      fixtureOperator,
+      fixtureMember,
+    ]);
+    const challengeId = await createChallenge({ title: "Synthetic enqueue" });
+    const { repoId } = await createRepoWithTeam([fixtureMember], "Synthetic enqueue team");
+    await pool.query(`UPDATE challenges SET is_test_account = true WHERE id = $1`, [challengeId]);
+    await pool.query(`UPDATE repos SET is_test_account = true WHERE id = $1`, [repoId]);
+
+    const blocked = await app.inject({
+      method: "POST",
+      url: `/api/queue/challenges/${challengeId}/enqueue`,
+      headers: { ...asUser(realOperator), "idempotency-key": crypto.randomUUID() },
+      payload: { repoIds: [repoId] },
+    });
+    expect(blocked.statusCode).toBe(404);
+    expect(
+      (await pool.query(`SELECT 1 FROM queue_entries WHERE challenge_id = $1`, [challengeId]))
+        .rowCount,
+    ).toBe(0);
+
+    const allowed = await app.inject({
+      method: "POST",
+      url: `/api/queue/challenges/${challengeId}/enqueue`,
+      headers: { ...asUser(fixtureOperator), "idempotency-key": crypto.randomUUID() },
+      payload: { repoIds: [repoId] },
+    });
+    expect(allowed.statusCode).toBe(200);
+    expect(allowed.json().inserted).toHaveLength(1);
   });
 
   it("returns a sanitized public TV snapshot and keeps public invalidation streams anonymous", async () => {

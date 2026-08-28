@@ -169,6 +169,7 @@ export async function buildImportPlan(
               lower(secondary_email) AS secondary_email, secondary_email_verified_at
        FROM users
        WHERE account_state = 'active' AND anonymized_at IS NULL
+         AND is_test_account = false
          AND (lower(email) = ANY($1::text[])
           OR (secondary_email_verified_at IS NOT NULL AND lower(secondary_email) = ANY($1::text[])))`,
       [distinctEmails],
@@ -201,7 +202,8 @@ export async function buildImportPlan(
   const existingByUrl = new Map<string, number>();
   if (urls.length > 0) {
     const { rows } = await db.query(
-      `SELECT id, devpost_url FROM repos WHERE devpost_url = ANY($1::text[])`,
+      `SELECT id, devpost_url FROM repos
+        WHERE devpost_url = ANY($1::text[]) AND is_test_account = false`,
       [urls],
     );
     for (const row of rows as Array<{ id: number; devpost_url: string }>) {
@@ -215,7 +217,8 @@ export async function buildImportPlan(
   const existingByNullUrlName = new Map<string, number>();
   if (namesWithoutUrl.length > 0) {
     const { rows } = await db.query(
-      `SELECT id, name FROM repos WHERE devpost_url IS NULL AND name = ANY($1::text[])`,
+      `SELECT id, name FROM repos
+        WHERE devpost_url IS NULL AND is_test_account = false AND name = ANY($1::text[])`,
       [namesWithoutUrl],
     );
     for (const row of rows as Array<{ id: number; name: string }>) {
@@ -271,7 +274,8 @@ export async function buildImportPlan(
   const challengeByPrize = new Map<string, { id: number; title: string }>();
   if (prizeNames.length > 0) {
     const { rows } = await db.query(
-      `SELECT id, title, devpost_tags FROM challenges WHERE devpost_tags ?| $1::text[]`,
+      `SELECT id, title, devpost_tags FROM challenges
+        WHERE is_test_account = false AND devpost_tags ?| $1::text[]`,
       [prizeNames],
     );
     for (const row of rows as Array<{ id: number; title: string; devpost_tags: string[] }>) {

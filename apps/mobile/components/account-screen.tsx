@@ -166,6 +166,8 @@ export default function AccountScreen() {
   }
 
   async function endSession() {
+    if (!me) return;
+    const ownerUserId = me.id;
     setSigningOut(true);
     setSignOutError(null);
     try {
@@ -176,7 +178,7 @@ export default function AccountScreen() {
       // leaving it cached until the next signed-in device sync. The offline
       // scan queue is deliberately left alone: it's per-user encrypted and
       // reappears, still decryptable, if this same person signs back in.
-      await wipeAttendanceRoster();
+      await wipeAttendanceRoster(ownerUserId);
     } catch (cause) {
       setSignOutError(cause instanceof Error ? cause : new Error(t("signOutError")));
       setSigningOut(false);
@@ -324,6 +326,7 @@ export default function AccountScreen() {
     const body = [
       t("accountDeleteConfirmBody"),
       ...(removalEligibility?.requiresVenueExit ? [t("accountRemovalExitRequired")] : []),
+      ...(removalEligibility?.integrityWarning ? [t("accountRemovalIntegrityWarning")] : []),
     ].join("\n\n");
     Alert.alert(t("accountDeleteConfirmTitle"), body, [
       { text: t("cancel"), style: "cancel" },
@@ -360,7 +363,13 @@ export default function AccountScreen() {
   }
 
   function confirmAnonymizeAccount() {
-    Alert.alert(t("accountAnonymizeConfirmTitle"), t("accountAnonymizeConfirmBody"), [
+    const body = [
+      t("accountAnonymizeConfirmBody"),
+      ...(removalEligibility?.activeEventConsequences ? [t("accountAnonymizeActiveEvent")] : []),
+      ...(removalEligibility?.requiresVenueExit ? [t("accountAnonymizeExitRequired")] : []),
+      ...(removalEligibility?.integrityWarning ? [t("accountRemovalIntegrityWarning")] : []),
+    ].join("\n\n");
+    Alert.alert(t("accountAnonymizeConfirmTitle"), body, [
       { text: t("cancel"), style: "cancel" },
       {
         text: t("accountPrivacyPolicy"),
@@ -613,7 +622,7 @@ export default function AccountScreen() {
                 <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
                   {t("accountDietaryNotes")}
                 </Text>
-                <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 22 }}>
+                <Text selectable style={{ color: colors.label, fontSize: 16 }}>
                   {me.foodIntoleranceNotes}
                 </Text>
               </View>
@@ -747,17 +756,14 @@ export default function AccountScreen() {
                       retrying={requestingRemovalPin}
                     />
                   ) : null}
-                  <Text
-                    selectable
-                    style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
-                  >
+                  <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
                     {t("accountDeleteDescription")}
                   </Text>
                   {removalEligibility.requiresVenueExit ? (
                     <Text
                       selectable
                       accessibilityLiveRegion="polite"
-                      style={{ color: colors.warning, fontSize: 14, lineHeight: 20 }}
+                      style={{ color: colors.warning, fontSize: 14 }}
                     >
                       {t("accountRemovalExitRequired")}
                     </Text>
@@ -766,7 +772,7 @@ export default function AccountScreen() {
                     <Text
                       selectable
                       accessibilityLiveRegion="polite"
-                      style={{ color: colors.warning, fontSize: 14, lineHeight: 20 }}
+                      style={{ color: colors.warning, fontSize: 14 }}
                     >
                       {t("accountRemovalIntegrityWarning")}
                     </Text>
@@ -796,30 +802,24 @@ export default function AccountScreen() {
                   <Text
                     selectable
                     accessibilityLiveRegion="polite"
-                    style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
+                    style={{ color: colors.secondaryLabel, fontSize: 14 }}
                   >
                     {t("accountAnonymizeDescription")}
                   </Text>
-                  <Text
-                    selectable
-                    style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
-                  >
+                  <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
                     {t("accountAnonymizeProofLoss")}
                   </Text>
                   {removalEligibility.activeEventConsequences ? (
                     <Text
                       selectable
                       accessibilityLiveRegion="polite"
-                      style={{ color: colors.warning, fontSize: 14, lineHeight: 20 }}
+                      style={{ color: colors.warning, fontSize: 14 }}
                     >
                       {t("accountAnonymizeActiveEvent")}
                     </Text>
                   ) : null}
                   {removalEligibility.requiresVenueExit ? (
-                    <Text
-                      selectable
-                      style={{ color: colors.warning, fontSize: 14, lineHeight: 20 }}
-                    >
+                    <Text selectable style={{ color: colors.warning, fontSize: 14 }}>
                       {t("accountAnonymizeExitRequired")}
                     </Text>
                   ) : null}
@@ -827,7 +827,7 @@ export default function AccountScreen() {
                     <Text
                       selectable
                       accessibilityLiveRegion="polite"
-                      style={{ color: colors.warning, fontSize: 14, lineHeight: 20 }}
+                      style={{ color: colors.warning, fontSize: 14 }}
                     >
                       {t("accountRemovalIntegrityWarning")}
                     </Text>

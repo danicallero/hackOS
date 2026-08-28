@@ -1,9 +1,43 @@
 import { expo } from "@better-auth/expo";
 import { betterAuth } from "better-auth";
+import { getSessionCookie } from "better-auth/cookies";
+import { constantTimeEqual, makeSignature } from "better-auth/crypto";
 import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
 import { enqueueAuthEmail } from "./outbox.js";
 import { valkeyRateLimitStorage } from "./rate-limit-storage.js";
+
+/**
+ * Return the raw Better Auth session token represented by a request cookie.
+ *
+ * Better Auth does not store the raw token in the browser: the cookie value is
+ * `${token}.${HMAC-SHA256(token)}` (URL encoded), and production may prefix the
+ * cookie name with `__Secure-`.  The auth handler verifies this value before it
+ * looks up the session; removal must use the same token when it binds the
+ * pending-exit deadline to the session that initiated the request.
+ */
+export async function getBetterAuthSessionToken(headers: Headers): Promise<string | null> {
+  const signedCookie = getSessionCookie(headers, {
+    cookieName: "session_token",
+    cookiePrefix: "better-auth",
+  });
+  if (!signedCookie) return null;
+
+  const separator = signedCookie.lastIndexOf(".");
+  if (separator <= 0 || separator === signedCookie.length - 1) return null;
+
+  const token = signedCookie.slice(0, separator);
+  const signature = signedCookie.slice(separator + 1);
+  try {
+    const expected = await makeSignature(token, config.BETTER_AUTH_SECRET);
+    return constantTimeEqual(expected, signature) ? token : null;
+  } catch {
+    // Treat malformed/invalid cookies as unauthenticated for this helper. The
+    // normal Better Auth resolver remains authoritative for request auth; a
+    // removal deadline simply uses its bounded legacy/no-token fallback.
+    return null;
+  }
+}
 
 /**
  * Origins Better Auth accepts on state-changing auth requests. This is a

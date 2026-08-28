@@ -4,7 +4,9 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
+import { assertFixtureQueueScope } from "../logistics/review-fixture-scope.js";
 import { notify, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
+import { broadcastQueueEvent, queueFixtureMarker } from "./broadcast.js";
 import { anyEvaluationStarted, lockQueueGroupForEntry } from "./evaluation-lock.js";
 import { challengeQueueGroupId, roomChallengeIds } from "./groups.js";
 import { isRepoBlockedByBusyMember } from "./guard.js";
@@ -66,7 +68,7 @@ async function lockEntry(client: pg.PoolClient, entryId: number): Promise<QueueE
 }
 
 async function broadcastEntry(entry: QueueEntryRow): Promise<QueueEntryRow> {
-  await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, entry);
+  await broadcastQueueEvent(pool, "entry", entry.id, EVENTS.QUEUE_ENTRY_CHANGED, entry);
   await notifyChallengeQueueChanged(pool, entry.challenge_id);
   return entry;
 }
@@ -250,6 +252,13 @@ export async function notifyEnter(entryId: number, actorId: number): Promise<Que
   const { entry, memberIds, eventPayload } = await withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
     assertFrom(entry, ["called"], "notify_enter");
+    const fixtureMarker = await queueFixtureMarker(client, "entry", entryId);
+    if (fixtureMarker === null) {
+      throw new ConflictError("Queue fixture markers must match", {
+        code: "review_fixture_scope",
+        entryId,
+      });
+    }
     await writeQueueHistory(client, {
       entryId,
       actorId,
@@ -258,7 +267,7 @@ export async function notifyEnter(entryId: number, actorId: number): Promise<Que
       action: "notify_enter",
     });
 
-    const memberIds = await repoMemberIds(client, entry.repo_id);
+    const memberIds = await repoMemberIds(client, entry.repo_id, fixtureMarker);
     const { rows: ctxRows } = await client.query(
       `SELECT c.title AS challenge_name, r.name AS room_name, r.location AS room_location
          FROM challenges c, rooms r
@@ -298,6 +307,7 @@ export async function notifyEnter(entryId: number, actorId: number): Promise<Que
           template: "queue.enter",
           vars: { name: nameById.get(userId) ?? "", challengeName, roomName },
         },
+        fixtureMarker,
       });
     }
     const { rows: staffRows } = await client.query(
@@ -305,8 +315,9 @@ export async function notifyEnter(entryId: number, actorId: number): Promise<Que
          FROM notification_preferences np
          JOIN users u ON u.id = np.user_id
         WHERE np.category = $1 AND np.channel = 'push' AND np.enabled = true
-          AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
-      [QUEUE_STAFF_CATEGORY],
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
+          AND u.is_test_account = $2`,
+      [QUEUE_STAFF_CATEGORY, fixtureMarker],
     );
     for (const row of staffRows as { user_id: number }[]) {
       await notify(client, {
@@ -319,6 +330,7 @@ export async function notifyEnter(entryId: number, actorId: number): Promise<Que
           template: "queue.staff.enter",
           vars: { teamName, challengeName, roomName },
         },
+        fixtureMarker,
       });
     }
     return {
@@ -334,7 +346,7 @@ export async function notifyEnter(entryId: number, actorId: number): Promise<Que
     };
   });
 
-  await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_NOTIFY_ENTER, eventPayload);
+  await broadcastQueueEvent(pool, "entry", entry.id, EVENTS.QUEUE_NOTIFY_ENTER, eventPayload);
   for (const userId of memberIds) {
     await broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_NOTIFICATION, {
       entryId: entry.id,
@@ -1084,9 +1096,18 @@ export async function enqueueChallenge(
   repoIds?: number[],
 ): Promise<{ inserted: number[]; alreadyQueued: number[] }> {
   const result = await withTransaction(async (client) => {
+    // H54: this endpoint accepts caller-supplied challenge/repo ids, so the
+    // capability check alone is not enough to keep synthetic queue graphs
+    // out of ordinary operators' writes. Validate the challenge and every
+    // repo before creating any entry; the same transaction also covers the
+    // prize-derived repo list used when the body omits repoIds.
+    await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
     let ids = repoIds;
     if (!ids || ids.length === 0) {
       ids = await challengePrizeRepoIds(client, challengeId);
+    }
+    for (const repoId of ids) {
+      await assertFixtureQueueScope(client, actorId, "repo", repoId);
     }
 
     const inserted: { entry: QueueEntryRow }[] = [];
@@ -1323,7 +1344,10 @@ export async function pauseRoom(roomId: number, actorId: number): Promise<void> 
     // endpoint, H34).
   });
 
-  await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ROOM_CHANGED, { roomId, isPaused: true });
+  await broadcastQueueEvent(pool, "room", roomId, EVENTS.QUEUE_ROOM_CHANGED, {
+    roomId,
+    isPaused: true,
+  });
   await notifyRoomQueueChanged(pool, roomId);
 }
 
@@ -1339,6 +1363,9 @@ export async function resumeRoom(roomId: number, _actorId: number): Promise<void
       [roomId],
     );
   });
-  await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ROOM_CHANGED, { roomId, isPaused: false });
+  await broadcastQueueEvent(pool, "room", roomId, EVENTS.QUEUE_ROOM_CHANGED, {
+    roomId,
+    isPaused: false,
+  });
   await notifyRoomQueueChanged(pool, roomId);
 }

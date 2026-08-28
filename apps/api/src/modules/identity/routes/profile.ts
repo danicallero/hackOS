@@ -20,6 +20,7 @@ import { issueTicket } from "../../logistics/tickets.js";
 import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliation.js";
 import { canCreateMyProject, hasMyProject, myProjects } from "../../projects/service.js";
 import { hasMyQueueItems } from "../../queue/reads.js";
+import { getBetterAuthSessionToken } from "../auth.js";
 import { hasMobileAccess } from "../mobile-access.js";
 import {
   cancelPendingAccountRemoval,
@@ -283,22 +284,15 @@ async function assertProfileSubjectScope(actorId: number, subjectId: number): Pr
 }
 
 /** Read the Better Auth session credential without logging or persisting it. */
-function sessionTokenFromRequest(req: FastifyRequest): string | null {
+async function sessionTokenFromRequest(req: FastifyRequest): Promise<string | null> {
   const authorization = req.headers.authorization;
   if (authorization?.startsWith("Bearer ")) return authorization.slice("Bearer ".length);
-  const cookie = req.headers.cookie;
-  if (!cookie) return null;
-  const match = cookie.match(/(?:^|;\s*)(?:__Secure-)?session_token=([^;]+)/);
-  const token = match?.[1];
-  if (!token) return null;
-  try {
-    return decodeURIComponent(token);
-  } catch {
-    // A malformed cookie must not make an otherwise valid destructive request
-    // fail with a 500; the session lookup simply falls back to the user's
-    // shortest active session deadline.
-    return token;
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (value === undefined) continue;
+    headers.set(key, Array.isArray(value) ? value.join(", ") : String(value));
   }
+  return getBetterAuthSessionToken(headers);
 }
 
 // H7: once any application has been accepted, a participant can no longer
@@ -413,6 +407,22 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       await idempotencyGuard(req, reply);
       if (req.idempotency) req.idempotency.preserveOnFailure = true;
     };
+  const selfRemovalCancellationPreHandler = async (
+    req: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const idempotencyKey = req.headers["idempotency-key"];
+    // Keep cancellation replay rows user-scoped just like every other
+    // mutation when a client supplies a key. The request may be retried after
+    // the account returns to `active`, so the guard must replay before the
+    // state check in the route. Keep the key optional for existing recovery
+    // clients; keyed callers receive the stronger replay guarantee.
+    if (typeof idempotencyKey === "string" && idempotencyKey.trim().length > 0) {
+      req.idempotencyScope = `POST /api/me/anonymize/cancel u:${req.userId ?? "anon"}`;
+    }
+    await assertAuthenticatedProfileUser(req);
+    await idempotencyGuard(req, reply);
+  };
   const adminRemovalIdempotency = async (
     req: FastifyRequest,
     reply: FastifyReply,
@@ -613,7 +623,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
   api.post(
     "/api/me/anonymize/cancel",
     {
-      preHandler: assertAuthenticatedProfileUser,
+      preHandler: selfRemovalCancellationPreHandler,
       config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
       schema: {
         summary: "Cancel my pending account anonymization",
@@ -671,7 +681,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         requestedAction: "delete",
         securityPin: req.body?.securityPin,
         reauthenticationPassword: req.body?.reauthenticationPassword,
-        sessionToken: sessionTokenFromRequest(req),
+        sessionToken: await sessionTokenFromRequest(req),
         preserveIdempotency: req.idempotency
           ? {
               key: req.idempotency.key,
@@ -729,7 +739,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         requestedAction: "anonymize",
         securityPin: req.body.securityPin,
         reauthenticationPassword: req.body.reauthenticationPassword,
-        sessionToken: sessionTokenFromRequest(req),
+        sessionToken: await sessionTokenFromRequest(req),
         preserveIdempotency: req.idempotency
           ? {
               key: req.idempotency.key,

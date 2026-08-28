@@ -19,15 +19,25 @@ export type OfflineScan = {
 export function isStaleOfflineScanError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const code = (error as { code?: unknown }).code;
-  return typeof code === "string" && ["not_found", "badge_unknown", "badge_revoked"].includes(code);
+  return (
+    typeof code === "string" &&
+    [
+      "not_found",
+      "badge_unknown",
+      "badge_revoked",
+      "ticket_revoked",
+      "badge_scan_before_assignment",
+    ].includes(code)
+  );
 }
 
-const LEGACY_OFFLINE_KEY = "hackos:logistics:meal-scans";
-const OFFLINE_KEY_PREFIX = "hackos:logistics:meal-scans:v2:";
+export const LEGACY_OFFLINE_KEY = "hackos:logistics:meal-scans";
+export const OFFLINE_KEY_PREFIX = "hackos:logistics:meal-scans:v2:";
 const KEY_DATABASE = "hackos-logistics-offline-queue";
 const KEY_STORE = "keys";
 const QUEUE_VERSION = 2;
-let queueGeneration = 0;
+const queueGenerations = new Map<number, number>();
+let queueOperationChain: Promise<unknown> = Promise.resolve();
 
 type QueueEnvelope = {
   version: typeof QUEUE_VERSION;
@@ -45,6 +55,30 @@ type StoredKey = {
   slot: string;
   key: CryptoKey;
 };
+
+function withSerializedQueueOperation<T>(operation: () => Promise<T>): Promise<T> {
+  const run = queueOperationChain.then(operation);
+  queueOperationChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+function queueGeneration(ownerId: number): number {
+  return queueGenerations.get(ownerId) ?? 0;
+}
+
+function advanceQueueGeneration(ownerId: number): number {
+  const next = queueGeneration(ownerId) + 1;
+  queueGenerations.set(ownerId, next);
+  return next;
+}
+
+/** True for both the pre-H54 plaintext key and encrypted owner envelopes. */
+export function isOfflineQueueStorageKey(key: string): boolean {
+  return key === LEGACY_OFFLINE_KEY || key.startsWith(OFFLINE_KEY_PREFIX);
+}
 
 function webCrypto(): Crypto {
   if (!globalThis.crypto?.subtle) {
@@ -185,7 +219,7 @@ function removeStoredQueue(key: string): void {
  * The old plaintext array and corrupt/encrypted-with-another-owner state are
  * explicitly discarded instead of being retained or replayed.
  */
-export async function loadOfflineQueue(ownerId: number | null): Promise<OfflineScan[]> {
+async function loadOfflineQueueUnlocked(ownerId: number | null): Promise<OfflineScan[]> {
   if (ownerId === null) return [];
 
   let slot: string;
@@ -234,7 +268,11 @@ export async function loadOfflineQueue(ownerId: number | null): Promise<OfflineS
     ) {
       throw new Error("invalid offline queue payload");
     }
-    return payload.items;
+    // "syncing" is an in-memory lease, not a durable terminal state. A tab
+    // that closes mid-replay must make the item eligible on the next load.
+    return payload.items.map((item) =>
+      item.status === "syncing" ? { ...item, status: "pending" as const } : item,
+    );
   } catch {
     // A corrupt, stale, legacy, or owner-mismatched queue must not survive as
     // an indefinitely retained identity-bearing badge credential.
@@ -249,11 +287,14 @@ export async function loadOfflineQueue(ownerId: number | null): Promise<OfflineS
   }
 }
 
-export async function saveOfflineQueue(ownerId: number, items: OfflineScan[]): Promise<void> {
+async function saveOfflineQueueUnlocked(
+  ownerId: number,
+  items: OfflineScan[],
+  generation: number,
+): Promise<void> {
   // Remove the pre-H54 plaintext namespace before doing any new persistence,
   // including when encryption or browser storage later fails.
   removeStoredQueue(LEGACY_OFFLINE_KEY);
-  const generation = queueGeneration;
   const slot = await ownerSlot(ownerId);
   const key = await getOrCreateKey(slot);
   const payload: QueuePayload = { version: QUEUE_VERSION, ownerId, items };
@@ -270,40 +311,64 @@ export async function saveOfflineQueue(ownerId: number, items: OfflineScan[]): P
     iv: bytesToBase64(iv),
     ciphertext: bytesToBase64(ciphertext),
   };
-  if (generation !== queueGeneration) {
+  if (generation !== queueGeneration(ownerId)) {
     throw new Error("Offline queue was cleared while it was being saved");
   }
   window.localStorage.setItem(queueStorageKey(slot), JSON.stringify(envelope));
 }
 
-/** Remove the current owner's queue and key during account closure. */
-export async function clearOfflineQueue(ownerId: number | null): Promise<void> {
-  queueGeneration += 1;
-  removeStoredQueue(LEGACY_OFFLINE_KEY);
-  if (ownerId === null) {
-    try {
-      for (const key of Object.keys(window.localStorage)) {
-        if (key.startsWith(OFFLINE_KEY_PREFIX)) removeStoredQueue(key);
-      }
-    } catch {
-      // Best effort; the encrypted payload remains unusable without its key.
+/**
+ * Reads the latest owner queue and persists one update while holding the same
+ * browser-wide lock used by load/save/clear. Callers must use this for
+ * read-modify-write changes; saving a previously rendered React snapshot can
+ * otherwise lose a concurrent enqueue from another scanner surface.
+ */
+export async function updateOfflineQueue(
+  ownerId: number,
+  update: (items: OfflineScan[]) => OfflineScan[] | Promise<OfflineScan[]>,
+): Promise<OfflineScan[]> {
+  const generation = queueGeneration(ownerId);
+  return withSerializedQueueOperation(async () => {
+    const current = await loadOfflineQueueUnlocked(ownerId);
+    if (generation !== queueGeneration(ownerId)) {
+      throw new Error("Offline queue was cleared while it was being updated");
     }
-    await new Promise<void>((resolve, reject) => {
-      if (typeof indexedDB === "undefined") {
-        resolve();
-        return;
-      }
-      const request = indexedDB.deleteDatabase(KEY_DATABASE);
-      request.onsuccess = () => resolve();
-      request.onerror = () =>
-        reject(request.error ?? new Error("Could not remove offline queue keys"));
-      request.onblocked = () => reject(new Error("Offline queue key removal was blocked"));
-    });
-    return;
-  }
+    const next = await update(current);
+    if (generation !== queueGeneration(ownerId)) {
+      throw new Error("Offline queue was cleared while it was being updated");
+    }
+    await saveOfflineQueueUnlocked(ownerId, next, generation);
+    return next;
+  });
+}
+
+export function loadOfflineQueue(ownerId: number | null): Promise<OfflineScan[]> {
+  return withSerializedQueueOperation(() => loadOfflineQueueUnlocked(ownerId));
+}
+
+export function saveOfflineQueue(ownerId: number, items: OfflineScan[]): Promise<void> {
+  const generation = queueGeneration(ownerId);
+  return withSerializedQueueOperation(() => saveOfflineQueueUnlocked(ownerId, items, generation));
+}
+
+async function clearOfflineQueueUnlocked(ownerId: number): Promise<void> {
+  removeStoredQueue(LEGACY_OFFLINE_KEY);
   const slot = await ownerSlot(ownerId);
   removeStoredQueue(queueStorageKey(slot));
   await deleteStoredKey(slot);
+}
+
+/** Remove the current owner's queue and key during account closure. */
+export function clearOfflineQueue(ownerId: number | null): Promise<void> {
+  // An ownerless cleanup request must never broaden into deleting every
+  // account's queue. The legacy plaintext key is safe to retire, but the
+  // encrypted owner envelopes remain untouched until their owner is known.
+  if (ownerId === null) {
+    removeStoredQueue(LEGACY_OFFLINE_KEY);
+    return Promise.resolve();
+  }
+  advanceQueueGeneration(ownerId);
+  return withSerializedQueueOperation(() => clearOfflineQueueUnlocked(ownerId));
 }
 
 /** Local, not-yet-synced meal scans queued on this device (H25). */

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { Button } from "@/components/ui/button";
 import { ApiError, api } from "@/lib/api";
@@ -15,9 +15,11 @@ type RemovalState = Exclude<Me["removal"], null>;
 export function PendingRemovalScreen({
   removal,
   onRefresh,
+  refreshError,
 }: {
   removal: RemovalState;
   onRefresh: () => Promise<void>;
+  refreshError?: Error | null;
 }) {
   const { t } = useLocale();
   const [now, setNow] = useState(Date.now());
@@ -25,6 +27,9 @@ export function PendingRemovalScreen({
   const [cancelling, setCancelling] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshFailure, setRefreshFailure] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshInFlight = useRef(false);
   const expiresAt = removal.expiresAt ? Date.parse(removal.expiresAt) : Number.NaN;
   const secondsRemaining = Number.isFinite(expiresAt)
     ? Math.max(0, Math.ceil((expiresAt - now) / 1_000))
@@ -40,19 +45,36 @@ export function PendingRemovalScreen({
   const processing = removal.status === "processing" || secondsRemaining === 0;
   const canCancel = pendingExit && !processing;
 
+  const refresh = useCallback(async () => {
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
+    setRefreshing(true);
+    try {
+      await onRefresh();
+      setRefreshFailure(false);
+    } catch {
+      // Keep the pending-removal surface mounted and make the retry affordance
+      // explicit. AuthGuard only redirects after a confirmed 401.
+      setRefreshFailure(true);
+    } finally {
+      refreshInFlight.current = false;
+      setRefreshing(false);
+    }
+  }, [onRefresh]);
+
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1_000);
     return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
-    const refreshTimer = setInterval(() => void onRefresh(), 15_000);
+    const refreshTimer = setInterval(() => void refresh(), 15_000);
     return () => clearInterval(refreshTimer);
-  }, [onRefresh]);
+  }, [refresh]);
 
   useEffect(() => {
-    if (secondsRemaining === 0) void onRefresh();
-  }, [onRefresh, secondsRemaining]);
+    if (secondsRemaining === 0) void refresh();
+  }, [refresh, secondsRemaining]);
 
   async function cancel() {
     if (!canCancel || cancelling) return;
@@ -62,14 +84,14 @@ export function PendingRemovalScreen({
       await api.post<{ status: "cancelled" }>("/api/me/anonymize/cancel", {});
       clearAccountRemovalProgress();
       setCancelOpen(false);
-      await onRefresh();
+      await refresh();
     } catch (cause) {
       if (
         cause instanceof ApiError &&
         ["removal_expired", "removal_exit_recorded", "removal_not_cancellable"].includes(cause.code)
       ) {
         setCancelOpen(false);
-        await onRefresh();
+        await refresh();
       } else {
         setError(cause instanceof Error ? cause.message : t("accountRemovalCancelError"));
       }
@@ -127,10 +149,21 @@ export function PendingRemovalScreen({
           </div>
         )}
 
-        {error && (
+        {(error || refreshError || refreshFailure) && (
           <p role="alert" className="text-destructive text-sm">
-            {error}
+            {error ?? t("accountRemovalRefreshError")}
           </p>
+        )}
+
+        {(refreshError || refreshFailure) && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={refreshing}
+            onClick={() => void refresh()}
+          >
+            {t("retry")}
+          </Button>
         )}
 
         {!processing && (

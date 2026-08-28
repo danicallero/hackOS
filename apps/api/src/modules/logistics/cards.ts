@@ -17,12 +17,14 @@ export interface PersonCard {
   intolerances: { id: number; label: unknown }[];
   foodIntoleranceNotes: string | null;
   notes: string | null;
+  /** Present only for callers that explicitly request pending-exit metadata. */
+  pendingExit?: boolean;
 }
 
 export async function loadPersonCard(
   db: Queryable,
   userId: number,
-  options: { allowPendingExit?: boolean } = {},
+  options: { allowPendingExit?: boolean; includePendingExitMarker?: boolean } = {},
 ): Promise<PersonCard> {
   const { rows } = await db.query(
     `SELECT id, name, surname, food_intolerances, food_intolerance_notes, notes, account_state
@@ -56,5 +58,6 @@ export async function loadPersonCard(
     intolerances,
     foodIntoleranceNotes: exitOnly ? null : u.food_intolerance_notes,
     notes: exitOnly ? null : u.notes,
+    ...(options.includePendingExitMarker ? { pendingExit: exitOnly } : {}),
   };
 }

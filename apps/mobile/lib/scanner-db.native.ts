@@ -37,6 +37,11 @@ import type {
 let rosterDatabase: Promise<SQLite.SQLiteDatabase> | null = null;
 let queueDatabase: Promise<SQLite.SQLiteDatabase> | null = null;
 let legacyQueueMigration: Promise<void> | null = null;
+// The roster is shared by all staff accounts on a device, but its contents
+// are session-bound. A late snapshot from account A must not replace the
+// wiped/new account B roster after sign-out or an account switch (H54/C6).
+let rosterGeneration = 0;
+let rosterOwnerUserId: number | null = null;
 
 interface PersonPayload {
   email: string;
@@ -240,7 +245,15 @@ const queueChainRef = {
   },
 };
 
-export async function applyScannerSnapshot(snapshot: ScannerSnapshot): Promise<void> {
+export async function applyScannerSnapshot(
+  snapshot: ScannerSnapshot,
+  ownerUserId?: number,
+): Promise<void> {
+  const generation =
+    ownerUserId !== undefined && rosterOwnerUserId !== ownerUserId
+      ? ++rosterGeneration
+      : rosterGeneration;
+  if (ownerUserId !== undefined) rosterOwnerUserId = ownerUserId;
   const database = await rosterDb();
   const key = await getRosterKey();
   const encryptedPeople = await Promise.all(
@@ -265,6 +278,15 @@ export async function applyScannerSnapshot(snapshot: ScannerSnapshot): Promise<v
     })),
   );
   await withSerializedTransaction(rosterChainRef, database, async () => {
+    // Sign-out/wipe and a newer owner's snapshot advance the generation before
+    // their database transaction is queued. Do not let this stale operation
+    // clear or repopulate the roster when it finally reaches SQLite.
+    if (
+      generation !== rosterGeneration ||
+      (ownerUserId !== undefined && rosterOwnerUserId !== ownerUserId)
+    ) {
+      return;
+    }
     const statements = [
       `
       DELETE FROM scanner_people;
@@ -316,9 +338,30 @@ export async function applyScannerSnapshot(snapshot: ScannerSnapshot): Promise<v
  * roster is shared, event-wide data with no reason to survive a session
  * boundary, and a fresh snapshot rebuilds it in full on the next sign-in.
  */
-export async function wipeAttendanceRoster(): Promise<void> {
+export async function wipeAttendanceRoster(ownerUserId?: number): Promise<void> {
+  // If a newer session has already installed its owner fence, an older
+  // sign-out must not wipe that session's roster. This matters when the auth
+  // transition and SQLite cleanup resolve in opposite orders.
+  if (
+    ownerUserId !== undefined &&
+    rosterOwnerUserId !== null &&
+    rosterOwnerUserId !== ownerUserId
+  ) {
+    return;
+  }
+  const targetOwner = ownerUserId ?? rosterOwnerUserId;
+  // Advance the fence before awaiting database/key operations so an already
+  // started snapshot cannot commit after this session boundary.
+  const generation = ++rosterGeneration;
+  rosterOwnerUserId = null;
   const database = await rosterDb();
   await withSerializedTransaction(rosterChainRef, database, async () => {
+    if (
+      generation !== rosterGeneration ||
+      (targetOwner !== null && rosterOwnerUserId !== null && rosterOwnerUserId !== targetOwner)
+    ) {
+      return;
+    }
     await database.execAsync(`
       DELETE FROM scanner_people;
       DELETE FROM revoked_badges;
@@ -328,7 +371,7 @@ export async function wipeAttendanceRoster(): Promise<void> {
       DELETE FROM scanner_metadata;
     `);
   });
-  await resetRosterKey();
+  if (generation === rosterGeneration && rosterOwnerUserId === null) await resetRosterKey();
 }
 
 function sqlLiteral(value: string | number | boolean | Date | null): string {

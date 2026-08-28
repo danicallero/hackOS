@@ -10,6 +10,7 @@ import {
   buildTestApp,
   createUser,
   createUserWithCapabilities,
+  ensureApplicationFormVersion,
   truncateAll,
 } from "../helpers.js";
 
@@ -307,11 +308,13 @@ describe("review fixture regeneration", () => {
     );
     const applicationId = applicationRows[0]?.id;
     if (!applicationId) throw new Error("Expected synthetic response form");
+    const formVersionId = await ensureApplicationFormVersion(applicationId);
     const { rows: responseRows } = await pool.query<{ id: number }>(
-      `INSERT INTO application_responses (user_id, application_id, status, responses)
-       VALUES ($1, $2, 'review', '{}'::jsonb)
+      `INSERT INTO application_responses
+         (user_id, application_id, application_form_version_id, status, responses)
+       VALUES ($1, $2, $3, 'review', '{}'::jsonb)
        RETURNING id`,
-      [outsideId, applicationId],
+      [outsideId, applicationId, formVersionId],
     );
     const responseId = responseRows[0]?.id;
     if (!responseId) throw new Error("Expected synthetic application response");
@@ -438,6 +441,23 @@ describe("review fixture regeneration", () => {
     );
     expect(fixture).toBeDefined();
     const fixtureId = await fixtureUserId(fixture?.email ?? "");
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows: announcementRows } = await pool.query<{ id: number }>(
+      `INSERT INTO announcements (author_id, title, body)
+       VALUES ($1, 'Synthetic announcement', 'Fixture-only announcement')
+       RETURNING id`,
+      [fixtureId],
+    );
+    const announcementId = announcementRows[0]?.id;
+    if (!announcementId) throw new Error("Expected synthetic announcement");
+    const { rows: requestRows } = await pool.query<{ id: number }>(
+      `INSERT INTO data_subject_requests (subject_user_id, requested_by, type, status)
+       VALUES ($1, $2, 'export', 'pending')
+       RETURNING id`,
+      [fixtureId, admin],
+    );
+    const requestId = requestRows[0]?.id;
+    if (!requestId) throw new Error("Expected synthetic data-subject request");
 
     const response = await a.inject({
       method: "POST",
@@ -448,7 +468,34 @@ describe("review fixture regeneration", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ status: "completed", anonymized: true });
 
-    const { pool } = await import("../../src/db/pool.js");
+    expect(
+      (await pool.query(`SELECT 1 FROM announcements WHERE id = $1`, [announcementId])).rowCount,
+    ).toBe(0);
+    const { rows: scrubbedRequestRows } = await pool.query<{
+      subject_user_id: number | null;
+      status: string;
+    }>(`SELECT subject_user_id, status FROM data_subject_requests WHERE id = $1`, [requestId]);
+    expect(scrubbedRequestRows).toEqual([{ subject_user_id: null, status: "pending" }]);
+    expect(
+      (
+        await pool.query(
+          `SELECT 1 FROM audit_log
+            WHERE entity_type = 'data_subject_request'
+              AND entity_id = $1::text
+              AND action = 'fixture_scope_marked'
+              AND after ->> 'is_test_account' = 'true'`,
+          [requestId],
+        )
+      ).rowCount,
+    ).toBe(1);
+    const scrubbedRequests = await a.inject({
+      method: "GET",
+      url: "/api/exports/requests",
+      headers: asUser(admin),
+    });
+    expect(scrubbedRequests.statusCode).toBe(200);
+    expect(scrubbedRequests.json().items).toEqual([]);
+
     const { rows: anonymous } = await pool.query<{
       id: string;
       guaranteed_presence_minutes: number;

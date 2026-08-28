@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { EVENTS } from "@hackos/shared/events";
 import { firstNumericQuestionKey, type Question } from "@hackos/shared/questions";
 import { config } from "../../config.js";
 import type { Queryable } from "../../db/pool.js";
@@ -7,12 +7,17 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { assertWithinHackingWindow, isWithinHackingWindow } from "../../lib/hacking-window.js";
-import { broadcast } from "../../lib/sse.js";
 import { hasMobileAccess } from "../identity/mobile-access.js";
 import { enqueueAuthEmail } from "../identity/outbox.js";
 import { computeDerivedRole } from "../identity/role.js";
 import { assertSecondaryEmailAvailable } from "../identity/routes/secondary-email.js";
+import {
+  assertFixtureQueueScope,
+  assertFixtureSubjectScope,
+  isSyntheticOperator,
+} from "../logistics/review-fixture-scope.js";
 import { notify } from "../notifications/service.js";
+import { broadcastQueueEvent } from "../queue/broadcast.js";
 import { writeQueueHistory } from "../queue/history.js";
 import { notifyChallengeQueueChanged } from "../queue/notify.js";
 import { compactQueueGroupPositions, nextBottomPosition } from "../queue/ordering.js";
@@ -44,9 +49,11 @@ async function upsertRepo(
              demo_url = EXCLUDED.demo_url,
              github_url = COALESCE(EXCLUDED.github_url, repos.github_url),
              updated_at = now()
+         WHERE repos.is_test_account = false
        RETURNING id, (xmax = 0) AS was_insert`,
       [repo.title, repo.description, repo.url, repo.demoUrl, repo.githubUrl],
     );
+    if (!rows[0]) throw new ConflictError("Import cannot overwrite a review-fixture project");
     return { id: rows[0].id, wasInsert: rows[0].was_insert };
   }
 
@@ -57,7 +64,9 @@ async function upsertRepo(
   // repos (H18) are excluded: an import must never overwrite a hand-made
   // project that happens to share a title.
   const existing = await client.query(
-    `SELECT id FROM repos WHERE devpost_url IS NULL AND source = 'devpost' AND name = $1 LIMIT 1`,
+    `SELECT id FROM repos
+      WHERE devpost_url IS NULL AND source = 'devpost' AND is_test_account = false AND name = $1
+      LIMIT 1`,
     [repo.title],
   );
   if (existing.rows[0]) {
@@ -103,6 +112,11 @@ export async function confirmImport(
   participantsCsv: string,
 ): Promise<ConfirmImportResult> {
   return withTransaction(async (client) => {
+    if (await isSyntheticOperator(client, actorId)) {
+      throw new ForbiddenError("Review-fixture operators cannot run real Devpost imports", {
+        code: "review_fixture_scope",
+      });
+    }
     const plan = await buildImportPlan(client, projectsCsv, participantsCsv);
     const batchId = `dp_${randomUUID()}`;
 
@@ -253,17 +267,19 @@ export interface ProjectMemberCandidate {
 export async function listProjectMemberCandidates(
   query: string,
   limit: number,
+  actorId?: number,
 ): Promise<ProjectMemberCandidate[]> {
   const filter = `%${query.trim()}%`;
+  const fixtureMarker = actorId == null ? false : await isSyntheticOperator(pool, actorId);
   const { rows } = await pool.query(
     `SELECT id, email, name, surname
        FROM users
       WHERE account_state = 'active' AND anonymized_at IS NULL
-        AND is_test_account = false
+        AND is_test_account = $3
         AND (email ILIKE $1 OR name ILIKE $1 OR surname ILIKE $1)
       ORDER BY name ASC NULLS LAST, surname ASC NULLS LAST, email ASC
       LIMIT $2`,
-    [filter, limit],
+    [filter, limit, fixtureMarker],
   );
   return rows;
 }
@@ -283,6 +299,7 @@ export async function linkParticipant(
   userId: number,
 ): Promise<LinkResult> {
   return withTransaction(async (client) => {
+    await assertFixtureQueueScope(client, actorId, "repo", repoId);
     const existing = await client.query(
       `SELECT * FROM devpost_participants WHERE repo_id = $1 AND email = $2 FOR UPDATE`,
       [repoId, email],
@@ -304,6 +321,7 @@ export async function linkParticipant(
       [userId],
     );
     if (user.rows.length === 0) throw new NotFoundError(`User ${userId} not found`);
+    await assertFixtureSubjectScope(client, actorId, userId);
 
     const before = existing.rows[0];
     await client.query(
@@ -363,6 +381,7 @@ export async function linkParticipantSecondary(
   let secondaryEmailSent = false;
   let linked = false;
   await withTransaction(async (client) => {
+    await assertFixtureQueueScope(client, actorId, "repo", repoId);
     const participant = await client.query(
       `SELECT * FROM devpost_participants WHERE repo_id = $1 AND email = $2 FOR UPDATE`,
       [repoId, email],
@@ -385,6 +404,7 @@ export async function linkParticipantSecondary(
     );
     const user = userRes.rows[0] as { id: number; email: string; name: string | null } | undefined;
     if (!user) throw new NotFoundError(`User ${userId} not found`);
+    await assertFixtureSubjectScope(client, actorId, userId);
 
     const isPrimaryEmail = user.email.toLowerCase() === email;
     secondaryEmailSent = !isPrimaryEmail;
@@ -480,6 +500,8 @@ export async function sendClaimEmail(
   email: string,
 ): Promise<ClaimEmailResult> {
   return withTransaction(async (client) => {
+    await assertFixtureQueueScope(client, actorId, "repo", repoId);
+    const fixtureMarker = await isSyntheticOperator(client, actorId);
     const participant = await client.query(
       `SELECT * FROM devpost_participants WHERE repo_id = $1 AND email = $2 FOR UPDATE`,
       [repoId, email],
@@ -495,18 +517,20 @@ export async function sendClaimEmail(
 
     let userId: number;
     const existingUser = await client.query(
-      `SELECT id, account_state FROM users WHERE email = $1 FOR UPDATE`,
+      `SELECT id, account_state, is_test_account FROM users WHERE email = $1 FOR UPDATE`,
       [email],
     );
     if (existingUser.rows[0]) {
       if (existingUser.rows[0].account_state !== "active") {
         throw new ConflictError("This account is already being removed", { email });
       }
+      await assertFixtureSubjectScope(client, actorId, Number(existingUser.rows[0].id));
       userId = existingUser.rows[0].id;
     } else {
       const created = await client.query(
-        `INSERT INTO users (email, email_verified) VALUES ($1, false) RETURNING id`,
-        [email],
+        `INSERT INTO users (email, email_verified, is_test_account)
+         VALUES ($1, false, $2) RETURNING id`,
+        [email, fixtureMarker],
       );
       userId = created.rows[0].id;
     }
@@ -562,8 +586,9 @@ export async function mapPrizeToChallenge(
   challengeId: number,
 ): Promise<MapPrizeResult> {
   return withTransaction(async (client) => {
+    await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
     const challenge = await client.query(
-      `SELECT id, devpost_tags FROM challenges WHERE id = $1 FOR UPDATE`,
+      `SELECT id, devpost_tags, is_test_account FROM challenges WHERE id = $1 FOR UPDATE`,
       [challengeId],
     );
     if (challenge.rows.length === 0) throw new NotFoundError(`Challenge ${challengeId} not found`);
@@ -576,9 +601,13 @@ export async function mapPrizeToChallenge(
       );
     }
 
-    const repos = await client.query(`SELECT repo_id FROM repo_devpost_prizes WHERE prize = $1`, [
-      prizeName,
-    ]);
+    const repos = await client.query(
+      `SELECT rdp.repo_id
+         FROM repo_devpost_prizes rdp
+         JOIN repos r ON r.id = rdp.repo_id
+        WHERE rdp.prize = $1 AND r.is_test_account = $2`,
+      [prizeName, challenge.rows[0].is_test_account === true],
+    );
     const repoIds = repos.rows.map((r: { repo_id: number }) => r.repo_id);
 
     await audit(client, {
@@ -655,6 +684,7 @@ interface RepoWithExtras extends RepoRow {
 async function attachMembersAndPrizes(
   repoRows: RepoRow[],
   visibleChallengeIds: number[] | "all" = "all",
+  fixtureMarker = false,
 ): Promise<RepoWithExtras[]> {
   const ids = repoRows.map((r) => r.id);
   if (ids.length === 0) return [];
@@ -673,9 +703,9 @@ async function attachMembersAndPrizes(
        FROM devpost_participants dp
        LEFT JOIN users u ON u.id = dp.user_id
       WHERE repo_id = ANY($1::int[])
-        AND (u.id IS NULL OR (u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false))
+        AND (u.id IS NULL OR (u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = $2))
       ORDER BY repo_id, name ASC NULLS LAST, surname ASC NULLS LAST, email ASC`,
-    [ids],
+    [ids, fixtureMarker],
   );
   const manualMembersRes = await pool.query(
     `SELECT s.repo_id, u.id AS user_id, u.email, u.name, u.surname
@@ -687,7 +717,7 @@ async function attachMembersAndPrizes(
         -- /api/me/projects/invites until accepted.
         AND s.status = 'active'
         AND u.account_state = 'active' AND u.anonymized_at IS NULL
-        AND u.is_test_account = false
+        AND u.is_test_account = $2
         AND NOT EXISTS (
           SELECT 1
             FROM devpost_participants dp
@@ -695,18 +725,21 @@ async function attachMembersAndPrizes(
              AND dp.user_id = s.user_id
         )
       ORDER BY s.repo_id, u.name ASC NULLS LAST, u.surname ASC NULLS LAST, u.email ASC`,
-    [ids],
+    [ids, fixtureMarker],
   );
   const prizesRes = await pool.query(
-    `SELECT repo_id, prize FROM repo_devpost_prizes WHERE repo_id = ANY($1::int[])`,
-    [ids],
+    `SELECT p.repo_id, p.prize
+       FROM repo_devpost_prizes p
+       JOIN repos r ON r.id = p.repo_id AND r.is_test_account = $2
+      WHERE p.repo_id = ANY($1::int[])`,
+    [ids, fixtureMarker],
   );
   const prizeNames = [...new Set(prizesRes.rows.map((r: { prize: string }) => r.prize))];
   const challengesRes = prizeNames.length
     ? await pool.query(
         `SELECT id, title, devpost_tags FROM challenges
-          WHERE devpost_tags ?| $1::text[] AND is_test_account = false`,
-        [prizeNames],
+          WHERE devpost_tags ?| $1::text[] AND is_test_account = $2`,
+        [prizeNames, fixtureMarker],
       )
     : { rows: [] as Array<{ id: number; title: string; devpost_tags: string[] }> };
 
@@ -731,14 +764,14 @@ async function attachMembersAndPrizes(
             qe.assigned_room_id, r.name AS assigned_room_name,
             c.judging_panel_criteria, ar.status AS review_status, ar.scores AS review_scores
        FROM queue_entries qe
-       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
-       JOIN repos repo ON repo.id = qe.repo_id AND repo.is_test_account = false
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
+       JOIN repos repo ON repo.id = qe.repo_id AND repo.is_test_account = $2
        LEFT JOIN rooms r ON r.id = qe.assigned_room_id
        LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
       WHERE qe.repo_id = ANY($1::int[])
         AND qe.status NOT IN ('cancelled', 'disqualified')
       ORDER BY qe.repo_id, qe.position ASC NULLS LAST, qe.id ASC`,
-    [ids],
+    [ids, fixtureMarker],
   );
 
   const membersByRepo = new Map<number, RepoMember[]>();
@@ -881,33 +914,36 @@ async function attachMembersAndPrizes(
 const REPO_SELECT = `SELECT id, name, description, github_url, devpost_url, demo_url, source FROM repos`;
 
 /** PROJECTS_READ: repos with members, prizes, and mapped challenges. */
-export async function listRepos(): Promise<RepoWithExtras[]> {
-  const { rows } = await pool.query(`${REPO_SELECT} WHERE is_test_account = false ORDER BY name`);
-  return attachMembersAndPrizes(rows);
+export async function listRepos(fixtureMarker = false): Promise<RepoWithExtras[]> {
+  const { rows } = await pool.query(`${REPO_SELECT} WHERE is_test_account = $1 ORDER BY name`, [
+    fixtureMarker,
+  ]);
+  return attachMembersAndPrizes(rows, "all", fixtureMarker);
 }
 
-export async function getRepo(id: number): Promise<RepoWithExtras> {
-  const { rows } = await pool.query(`${REPO_SELECT} WHERE is_test_account = false AND id = $1`, [
+export async function getRepo(id: number, fixtureMarker = false): Promise<RepoWithExtras> {
+  const { rows } = await pool.query(`${REPO_SELECT} WHERE is_test_account = $2 AND id = $1`, [
     id,
+    fixtureMarker,
   ]);
   if (rows.length === 0) throw new NotFoundError(`Repo ${id} not found`);
-  const [withExtras] = await attachMembersAndPrizes(rows);
+  const [withExtras] = await attachMembersAndPrizes(rows, "all", fixtureMarker);
   if (!withExtras) throw new NotFoundError(`Repo ${id} not found`);
   return withExtras;
 }
 
 /** Repos visible under the shared repository policy's resolved scope. */
 export async function listReposForScope(scope: RepositoryAccessScope): Promise<RepoWithExtras[]> {
-  if (scope.fullAccess) return listRepos();
+  if (scope.fullAccess) return listRepos(scope.fixtureMarker === true);
   const repoIds = await repositoryIdsForScope(scope);
   if (repoIds.length === 0) return [];
   const { rows } = await pool.query(
-    `${REPO_SELECT} WHERE is_test_account = false AND id = ANY($1::int[]) ORDER BY name`,
-    [repoIds],
+    `${REPO_SELECT} WHERE is_test_account = $2 AND id = ANY($1::int[]) ORDER BY name`,
+    [repoIds, scope.fixtureMarker === true],
   );
   // Evaluation visibility is capped to this caller's own challenges (their
   // sponsor enterprise's, or the ones they judge) — never another sponsor's.
-  return attachMembersAndPrizes(rows, scope.challengeIds);
+  return attachMembersAndPrizes(rows, scope.challengeIds, scope.fixtureMarker === true);
 }
 
 /** A repository already authorized by the shared contextual policy. */
@@ -915,12 +951,17 @@ export async function getRepoForScope(
   id: number,
   scope: RepositoryAccessScope,
 ): Promise<RepoWithExtras> {
-  if (scope.fullAccess) return getRepo(id);
-  const { rows } = await pool.query(`${REPO_SELECT} WHERE is_test_account = false AND id = $1`, [
+  if (scope.fullAccess) return getRepo(id, scope.fixtureMarker === true);
+  const { rows } = await pool.query(`${REPO_SELECT} WHERE is_test_account = $2 AND id = $1`, [
     id,
+    scope.fixtureMarker === true,
   ]);
   if (!rows[0]) throw new NotFoundError(`Repo ${id} not found`);
-  const [repo] = await attachMembersAndPrizes(rows, scope.challengeIds);
+  const [repo] = await attachMembersAndPrizes(
+    rows,
+    scope.challengeIds,
+    scope.fixtureMarker === true,
+  );
   if (!repo) throw new NotFoundError(`Repo ${id} not found`);
   return repo;
 }
@@ -945,9 +986,16 @@ export async function getRepoForScope(
 export async function hasMyProject(userId: number): Promise<boolean> {
   const { rows } = await pool.query(
     `SELECT EXISTS (
-       SELECT 1 FROM submissions WHERE user_id = $1 AND status = 'active'
+       SELECT 1 FROM submissions s
+        JOIN repos r ON r.id = s.repo_id
+        JOIN users u ON u.id = s.user_id
+        WHERE s.user_id = $1 AND s.status = 'active'
+          AND r.is_test_account = u.is_test_account
        UNION
-       SELECT 1 FROM devpost_participants WHERE user_id = $1
+       SELECT 1 FROM devpost_participants dp
+        JOIN repos r ON r.id = dp.repo_id
+        JOIN users u ON u.id = dp.user_id
+        WHERE dp.user_id = $1 AND r.is_test_account = u.is_test_account
      ) AS exists`,
     [userId],
   );
@@ -955,10 +1003,15 @@ export async function hasMyProject(userId: number): Promise<boolean> {
 }
 
 export async function myProjects(userId: number): Promise<RepoWithExtras[]> {
+  const { rows: userRows } = await pool.query<{ is_test_account: boolean }>(
+    `SELECT is_test_account FROM users WHERE id = $1`,
+    [userId],
+  );
+  const fixtureMarker = userRows[0]?.is_test_account === true;
   const { rows } = await pool.query(
     `SELECT r.id, r.name, r.description, r.github_url, r.devpost_url, r.demo_url, r.source
      FROM repos r
-     WHERE r.id IN (
+     WHERE r.is_test_account = $2 AND r.id IN (
        -- H19/H20: a project the caller was merely invited to (status='invited')
        -- is not "my project" yet — it only shows via myPendingInvites until
        -- they accept it.
@@ -967,10 +1020,10 @@ export async function myProjects(userId: number): Promise<RepoWithExtras[]> {
        SELECT repo_id FROM devpost_participants WHERE user_id = $1
      )
      ORDER BY r.name`,
-    [userId],
+    [userId, fixtureMarker],
   );
   // H20 is read-only self-view — participants never see judging internals.
-  const repos = await attachMembersAndPrizes(rows, []);
+  const repos = await attachMembersAndPrizes(rows, [], fixtureMarker);
   // A teammate's address is not the participant's to read: only the caller's
   // own email survives the self-view (H20).
   return repos.map((repo) => ({
@@ -1003,14 +1056,20 @@ export async function isActiveProjectMember(
   const { rows } = await db.query(
     `SELECT (
        EXISTS (
-         SELECT 1 FROM submissions s JOIN users u ON u.id = s.user_id
+         SELECT 1 FROM submissions s
+          JOIN repos r ON r.id = s.repo_id
+          JOIN users u ON u.id = s.user_id
           WHERE s.repo_id = $1 AND s.user_id = $2 AND s.status = 'active'
             AND u.account_state = 'active' AND u.anonymized_at IS NULL
+            AND r.is_test_account = u.is_test_account
        )
        OR EXISTS (
-         SELECT 1 FROM devpost_participants dp JOIN users u ON u.id = dp.user_id
+         SELECT 1 FROM devpost_participants dp
+          JOIN repos r ON r.id = dp.repo_id
+          JOIN users u ON u.id = dp.user_id
           WHERE dp.repo_id = $1 AND dp.user_id = $2
             AND u.account_state = 'active' AND u.anonymized_at IS NULL
+            AND r.is_test_account = u.is_test_account
        )
      ) AS member`,
     [repoId, userId],
@@ -1022,13 +1081,19 @@ export async function isActiveProjectMember(
 export async function activeProjectMemberCount(db: Queryable, repoId: number): Promise<number> {
   const { rows } = await db.query(
     `SELECT count(*)::int AS n FROM (
-       SELECT s.user_id FROM submissions s JOIN users u ON u.id = s.user_id
+       SELECT s.user_id FROM submissions s
+        JOIN repos r ON r.id = s.repo_id
+        JOIN users u ON u.id = s.user_id
         WHERE s.repo_id = $1 AND s.status = 'active'
           AND u.account_state = 'active' AND u.anonymized_at IS NULL
+          AND r.is_test_account = u.is_test_account
        UNION
-       SELECT dp.user_id FROM devpost_participants dp JOIN users u ON u.id = dp.user_id
+       SELECT dp.user_id FROM devpost_participants dp
+        JOIN repos r ON r.id = dp.repo_id
+        JOIN users u ON u.id = dp.user_id
         WHERE dp.repo_id = $1 AND dp.user_id IS NOT NULL
           AND u.account_state = 'active' AND u.anonymized_at IS NULL
+          AND r.is_test_account = u.is_test_account
      ) members`,
     [repoId],
   );
@@ -1037,8 +1102,6 @@ export async function activeProjectMemberCount(db: Queryable, repoId: number): P
 
 export async function addRepoMember(actorId: number, repoId: number, userId: number) {
   return withTransaction(async (client) => {
-    const repo = await client.query(`SELECT id FROM repos WHERE id = $1 FOR UPDATE`, [repoId]);
-    if (!repo.rows[0]) throw new NotFoundError(`Repo ${repoId} not found`);
     const user = await client.query(
       `SELECT id FROM users
         WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
@@ -1046,6 +1109,10 @@ export async function addRepoMember(actorId: number, repoId: number, userId: num
       [userId],
     );
     if (!user.rows[0]) throw new NotFoundError(`User ${userId} not found`);
+    await assertFixtureSubjectScope(client, actorId, userId);
+    await assertFixtureQueueScope(client, actorId, "repo", repoId);
+    const repo = await client.query(`SELECT id FROM repos WHERE id = $1 FOR UPDATE`, [repoId]);
+    if (!repo.rows[0]) throw new NotFoundError(`Repo ${repoId} not found`);
 
     const inserted = await client.query(
       `INSERT INTO submissions (repo_id, user_id, imported_from, external_id)
@@ -1070,6 +1137,15 @@ export async function addRepoMember(actorId: number, repoId: number, userId: num
 
 export async function removeRepoMember(actorId: number, repoId: number, userId: number) {
   return withTransaction(async (client) => {
+    const user = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!user.rows[0]) throw new NotFoundError(`User ${userId} not found`);
+    await assertFixtureSubjectScope(client, actorId, userId);
+    await assertFixtureQueueScope(client, actorId, "repo", repoId);
     const existing = await client.query(
       `SELECT * FROM submissions WHERE repo_id = $1 AND user_id = $2 FOR UPDATE`,
       [repoId, userId],
@@ -1111,6 +1187,22 @@ export async function removeRepoMember(actorId: number, repoId: number, userId: 
 
 export async function removeDevpostParticipant(actorId: number, repoId: number, email: string) {
   return withTransaction(async (client) => {
+    await assertFixtureQueueScope(client, actorId, "repo", repoId);
+    const linked = await client.query<{ user_id: number | null }>(
+      `SELECT user_id FROM devpost_participants WHERE repo_id = $1 AND email = $2`,
+      [repoId, email],
+    );
+    const linkedUserId = linked.rows[0]?.user_id;
+    if (linkedUserId != null) {
+      const user = await client.query(
+        `SELECT id FROM users
+          WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+          FOR UPDATE`,
+        [linkedUserId],
+      );
+      if (!user.rows[0]) throw new NotFoundError(`User ${linkedUserId} not found`);
+      await assertFixtureSubjectScope(client, actorId, linkedUserId);
+    }
     const existing = await client.query(
       `SELECT * FROM devpost_participants WHERE repo_id = $1 AND email = $2 FOR UPDATE`,
       [repoId, email],
@@ -1156,6 +1248,7 @@ export async function removeDevpostParticipant(actorId: number, repoId: number, 
 
 export async function removeRepoPrize(actorId: number, repoId: number, prizeName: string) {
   return withTransaction(async (client) => {
+    await assertFixtureQueueScope(client, actorId, "repo", repoId);
     const existing = await client.query(
       `SELECT * FROM repo_devpost_prizes WHERE repo_id = $1 AND prize = $2 FOR UPDATE`,
       [repoId, prizeName],
@@ -1201,6 +1294,8 @@ async function enqueueRepoOnChallenge(
   challengeId: number,
   auditSource: string,
 ): Promise<EnqueueOutcome | null> {
+  await assertFixtureQueueScope(client, actorId, "repo", repoId);
+  await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
   const existing = await client.query(
     `SELECT * FROM queue_entries WHERE repo_id = $1 AND challenge_id = $2 FOR UPDATE`,
     [repoId, challengeId],
@@ -1266,6 +1361,8 @@ async function enqueueRepoOnChallenge(
 
 export async function addRepoChallenge(actorId: number, repoId: number, challengeId: number) {
   const result = await withTransaction(async (client) => {
+    await assertFixtureQueueScope(client, actorId, "repo", repoId);
+    await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
     const repo = await client.query(`SELECT id FROM repos WHERE id = $1 FOR UPDATE`, [repoId]);
     if (!repo.rows[0]) throw new NotFoundError(`Repo ${repoId} not found`);
     const challenge = await client.query(`SELECT id FROM challenges WHERE id = $1`, [challengeId]);
@@ -1276,7 +1373,13 @@ export async function addRepoChallenge(actorId: number, repoId: number, challeng
     return { repoId, challengeId, ...outcome };
   });
   if (result.entry) {
-    await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, result.entry);
+    await broadcastQueueEvent(
+      pool,
+      "entry",
+      result.entry.id,
+      EVENTS.QUEUE_ENTRY_CHANGED,
+      result.entry,
+    );
     await notifyChallengeQueueChanged(pool, result.entry.challenge_id);
   }
   return result;
@@ -1325,6 +1428,8 @@ async function terminateQueueEntry(
 
 export async function removeRepoChallenge(actorId: number, repoId: number, challengeId: number) {
   const result = await withTransaction(async (client) => {
+    await assertFixtureQueueScope(client, actorId, "repo", repoId);
+    await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
     const entryRes = await client.query(
       `SELECT * FROM queue_entries WHERE repo_id = $1 AND challenge_id = $2 FOR UPDATE`,
       [repoId, challengeId],
@@ -1340,7 +1445,13 @@ export async function removeRepoChallenge(actorId: number, repoId: number, chall
     await compactQueueGroupPositions(client, challengeId);
     return { repoId, challengeId, entry: updatedEntry, removed: true };
   });
-  await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, result.entry);
+  await broadcastQueueEvent(
+    pool,
+    "entry",
+    Number(result.entry.id),
+    EVENTS.QUEUE_ENTRY_CHANGED,
+    result.entry,
+  );
   await notifyChallengeQueueChanged(pool, result.challengeId);
   return result;
 }
@@ -1370,11 +1481,13 @@ export async function bulkAddRepoChallenge(
   challengeId: number,
 ): Promise<BulkAddResult> {
   const { outcomes, total } = await withTransaction(async (client) => {
+    await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
     const challenge = await client.query(`SELECT id FROM challenges WHERE id = $1`, [challengeId]);
     if (!challenge.rows[0]) throw new NotFoundError(`Challenge ${challengeId} not found`);
 
     const repos = await client.query(
-      `SELECT id FROM repos WHERE is_test_account = false ORDER BY id`,
+      `SELECT id FROM repos WHERE is_test_account = $1 ORDER BY id`,
+      [await isSyntheticOperator(client, actorId)],
     );
     const repoIds = repos.rows.map((r: { id: number }) => r.id);
 
@@ -1413,6 +1526,7 @@ export async function bulkRemoveRepoChallenge(
   challengeId: number,
 ): Promise<BulkRemoveResult> {
   const { updatedEntries, total } = await withTransaction(async (client) => {
+    await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
     const challenge = await client.query(`SELECT id FROM challenges WHERE id = $1`, [challengeId]);
     if (!challenge.rows[0]) throw new NotFoundError(`Challenge ${challengeId} not found`);
 
@@ -1446,7 +1560,7 @@ export async function bulkRemoveRepoChallenge(
   });
 
   for (const entry of updatedEntries) {
-    await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, entry);
+    await broadcastQueueEvent(pool, "entry", Number(entry.id), EVENTS.QUEUE_ENTRY_CHANGED, entry);
   }
   if (updatedEntries.length > 0) await notifyChallengeQueueChanged(pool, challengeId);
 
@@ -1480,7 +1594,13 @@ function toEnqueuedChallenge(outcome: EnqueueOutcome): EnqueuedChallenge {
 /** Enqueued entries a caller must announce (SSE + notify) after commit. */
 async function announceQueueOutcomes(outcomes: EnqueueOutcome[]): Promise<void> {
   for (const outcome of outcomes) {
-    await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, outcome.entry);
+    await broadcastQueueEvent(
+      pool,
+      "entry",
+      outcome.entry.id,
+      EVENTS.QUEUE_ENTRY_CHANGED,
+      outcome.entry,
+    );
     await notifyChallengeQueueChanged(pool, outcome.entry.challenge_id);
   }
 }
@@ -1494,12 +1614,13 @@ async function assertChallengesExist(
   client: Queryable,
   challengeIds: number[],
   visibleOnly = false,
+  fixtureMarker = false,
 ): Promise<void> {
   if (challengeIds.length === 0) return;
   const { rows } = await client.query(
-    `SELECT id FROM challenges WHERE id = ANY($1::int[]) AND is_test_account = false
+    `SELECT id FROM challenges WHERE id = ANY($1::int[]) AND is_test_account = $2
       ${visibleOnly ? `AND visibility = 'visible'` : ""}`,
-    [challengeIds],
+    [challengeIds, fixtureMarker],
   );
   const found = new Set(rows.map((r: { id: number }) => r.id));
   const missing = challengeIds.filter((id) => !found.has(id));
@@ -1510,12 +1631,13 @@ async function insertNativeRepo(
   client: Queryable,
   input: NativeRepoInput,
   createdBy: number,
+  fixtureMarker = false,
 ): Promise<RepoRow> {
   const { rows } = await client.query(
-    `INSERT INTO repos (name, description, github_url, demo_url, source, created_by)
-     VALUES ($1, $2, $3, $4, 'native', $5)
+    `INSERT INTO repos (name, description, github_url, demo_url, source, created_by, is_test_account)
+     VALUES ($1, $2, $3, $4, 'native', $5, $6)
      RETURNING id, name, description, github_url, devpost_url, demo_url, source`,
-    [input.name, input.description, input.githubUrl, input.demoUrl, createdBy],
+    [input.name, input.description, input.githubUrl, input.demoUrl, createdBy, fixtureMarker],
   );
   return rows[0];
 }
@@ -1533,9 +1655,10 @@ export async function createRepoNative(
   const memberUserIds = [...new Set(input.memberUserIds)];
   const challengeIds = [...new Set(input.challengeIds)];
   const { repo, outcomes } = await withTransaction(async (client) => {
+    const fixtureMarker = await isSyntheticOperator(client, actorId);
     if (memberUserIds.length > 0) {
       const { rows } = await client.query(
-        `SELECT id FROM users
+        `SELECT id, is_test_account FROM users
           WHERE id = ANY($1::int[])
             AND account_state = 'active' AND anonymized_at IS NULL
           ORDER BY id
@@ -1545,10 +1668,13 @@ export async function createRepoNative(
       const found = new Set(rows.map((r: { id: number }) => r.id));
       const missing = memberUserIds.filter((id) => !found.has(id));
       if (missing.length > 0) throw new NotFoundError(`User ${missing.join(", ")} not found`);
+      for (const userId of memberUserIds) {
+        await assertFixtureSubjectScope(client, actorId, userId);
+      }
     }
-    await assertChallengesExist(client, challengeIds);
+    await assertChallengesExist(client, challengeIds, false, fixtureMarker);
 
-    const created = await insertNativeRepo(client, input, actorId);
+    const created = await insertNativeRepo(client, input, actorId, fixtureMarker);
     for (const userId of memberUserIds) {
       await client.query(
         `INSERT INTO submissions (repo_id, user_id, imported_from, external_id)
@@ -1634,6 +1760,7 @@ function repoAuditFields(repo: RepoRow) {
 /** H18: edit a project's own metadata (title, description, links). Audited. */
 export async function updateRepo(actorId: number, repoId: number, patch: UpdateRepoPatch) {
   return withTransaction(async (client) => {
+    await assertFixtureQueueScope(client, actorId, "repo", repoId);
     const { before, after } = await applyRepoUpdate(client, repoId, patch);
     await audit(client, {
       actorId,
@@ -1660,6 +1787,15 @@ export async function updateMyProject(
   patch: UpdateRepoPatch,
 ): Promise<RepoRow> {
   return withTransaction(async (client) => {
+    const { rows: userRows } = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!userRows[0]) throw new NotFoundError("User not found");
+    await assertFixtureSubjectScope(client, userId, userId);
+    await assertFixtureQueueScope(client, userId, "repo", repoId);
     await assertWithinHackingWindow(client);
     if (!(await isActiveProjectMember(client, repoId, userId))) {
       throw new ForbiddenError("Not a member of this project");
@@ -1718,6 +1854,14 @@ export async function createMyProject(
 ): Promise<{ repo: RepoRow; challenges: EnqueuedChallenge[] }> {
   const challengeIds = [...new Set(input.challengeIds)];
   const { repo, outcomes } = await withTransaction(async (client) => {
+    const user = await client.query<{ is_test_account: boolean }>(
+      `SELECT is_test_account FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!user.rows[0]) throw new NotFoundError("User not found");
+    const fixtureMarker = user.rows[0].is_test_account === true;
     // Serialized per-user — harmless now that multiple projects are allowed,
     // kept for symmetry with the rest of this transaction's row locks.
     await client.query(`SELECT pg_advisory_xact_lock(hashtext('my_project_create'), $1)`, [userId]);
@@ -1734,9 +1878,9 @@ export async function createMyProject(
     }
     await assertWithinHackingWindow(client);
 
-    await assertChallengesExist(client, challengeIds, true);
+    await assertChallengesExist(client, challengeIds, true, fixtureMarker);
 
-    const created = await insertNativeRepo(client, input, userId);
+    const created = await insertNativeRepo(client, input, userId, fixtureMarker);
     await client.query(
       `INSERT INTO submissions (repo_id, user_id, imported_from, external_id)
        VALUES ($1, $2, 'manual', NULL)`,
@@ -1787,6 +1931,15 @@ export async function inviteProjectMember(
   email: string,
 ): Promise<{ invited: true }> {
   return withTransaction(async (client) => {
+    const inviterUser = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!inviterUser.rows[0]) throw new NotFoundError("User not found");
+    await assertFixtureSubjectScope(client, userId, userId);
+    await assertFixtureQueueScope(client, userId, "repo", repoId);
     await assertWithinHackingWindow(client);
     if (!(await isActiveProjectMember(client, repoId, userId))) {
       throw new ForbiddenError("Not a member of this project");
@@ -1805,6 +1958,7 @@ export async function inviteProjectMember(
     );
     const inviteeId = inviteeRes.rows[0]?.id as number | undefined;
     if (!inviteeId) throw new NotFoundError(`No account for ${email}`);
+    await assertFixtureSubjectScope(client, userId, inviteeId);
 
     if (!(await isAdmittedParticipant(client, inviteeId))) {
       throw new ForbiddenError(`${email} is not an admitted participant`);
@@ -1844,6 +1998,7 @@ export async function inviteProjectMember(
     await notify(client, {
       userId: inviteeId,
       category: "project",
+      actorId: userId,
       payload: {
         template: "project.invite",
         vars: { projectName: repo.name, inviterName: inviter ? displayName(inviter) : "" },
@@ -1863,16 +2018,21 @@ export interface PendingInvite {
 
 /** H19/H20: pending invites addressed to userId, newest first. */
 export async function myPendingInvites(userId: number): Promise<PendingInvite[]> {
+  const { rows: userRows } = await pool.query<{ is_test_account: boolean }>(
+    `SELECT is_test_account FROM users WHERE id = $1`,
+    [userId],
+  );
+  const fixtureMarker = userRows[0]?.is_test_account === true;
   const { rows } = await pool.query(
     `SELECT s.repo_id, r.name AS repo_name, u.name AS inviter_name, u.surname AS inviter_surname,
             u.email AS inviter_email, s.created_at AS invited_at
        FROM submissions s
-       JOIN repos r ON r.id = s.repo_id
+       JOIN repos r ON r.id = s.repo_id AND r.is_test_account = $2
        LEFT JOIN users u ON u.id = s.invited_by
           AND u.account_state = 'active' AND u.anonymized_at IS NULL
       WHERE s.user_id = $1 AND s.status = 'invited'
       ORDER BY s.created_at DESC`,
-    [userId],
+    [userId, fixtureMarker],
   );
   return (
     rows as Array<{
@@ -1903,6 +2063,15 @@ export async function acceptProjectInvite(
   repoId: number,
 ): Promise<{ accepted: true }> {
   return withTransaction(async (client) => {
+    const user = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!user.rows[0]) throw new NotFoundError("User not found");
+    await assertFixtureSubjectScope(client, userId, userId);
+    await assertFixtureQueueScope(client, userId, "repo", repoId);
     await assertWithinHackingWindow(client);
     const { rows } = await client.query(
       `UPDATE submissions SET status = 'active', responded_at = now()
@@ -1929,6 +2098,15 @@ export async function declineProjectInvite(
   repoId: number,
 ): Promise<{ declined: true }> {
   return withTransaction(async (client) => {
+    const user = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!user.rows[0]) throw new NotFoundError("User not found");
+    await assertFixtureSubjectScope(client, userId, userId);
+    await assertFixtureQueueScope(client, userId, "repo", repoId);
     await assertWithinHackingWindow(client);
     const { rows } = await client.query(
       `DELETE FROM submissions WHERE repo_id = $1 AND user_id = $2 AND status = 'invited'
@@ -1955,6 +2133,15 @@ export async function declineProjectInvite(
  */
 export async function leaveMyProject(userId: number, repoId: number): Promise<{ left: true }> {
   return withTransaction(async (client) => {
+    const user = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!user.rows[0]) throw new NotFoundError("User not found");
+    await assertFixtureSubjectScope(client, userId, userId);
+    await assertFixtureQueueScope(client, userId, "repo", repoId);
     await assertWithinHackingWindow(client);
     if (!(await isActiveProjectMember(client, repoId, userId))) {
       throw new ForbiddenError("Not a member of this project");
@@ -2029,6 +2216,15 @@ async function deleteRepoCascade(client: Queryable, repoId: number): Promise<voi
  */
 export async function deleteMyProject(userId: number, repoId: number): Promise<{ deleted: true }> {
   return withTransaction(async (client) => {
+    const user = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!user.rows[0]) throw new NotFoundError("User not found");
+    await assertFixtureSubjectScope(client, userId, userId);
+    await assertFixtureQueueScope(client, userId, "repo", repoId);
     await assertWithinHackingWindow(client);
     if (!(await isActiveProjectMember(client, repoId, userId))) {
       throw new ForbiddenError("Not a member of this project");

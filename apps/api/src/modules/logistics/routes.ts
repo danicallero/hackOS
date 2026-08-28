@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { config } from "../../config.js";
+import { pool } from "../../db/pool.js";
 import {
   requireAnyCapability,
   requireAuth,
@@ -26,6 +27,7 @@ import {
   removeBadge,
   rotateBadge,
 } from "./accreditation.js";
+import { logisticsTopicForFixture } from "./active-broadcast.js";
 import { activityScan } from "./activities.js";
 import { buildGoogleSaveUrl } from "./google-wallet.js";
 import { enqueueMealScanBatch } from "./offline-meals.js";
@@ -45,6 +47,7 @@ import {
   updateTimeLog,
   userHours,
 } from "./presence.js";
+import { isSyntheticOperator } from "./review-fixture-scope.js";
 import { queryScanLog, staffScanCounts, staffScanRanking } from "./scan-log.js";
 import { scannerSnapshot } from "./scanner-sync.js";
 import {
@@ -643,7 +646,8 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     "/api/logistics/stream",
     { ...routeAccess(access.logisticsRead), preHandler: logisticsRead },
     async (req, reply) => {
-      await subscribe("logistics", req, reply);
+      const synthetic = await isSyntheticOperator(pool, actor(req.userId));
+      await subscribe(logisticsTopicForFixture(synthetic), req, reply);
     },
   );
 
@@ -1079,7 +1083,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         body: appleLogBody,
       },
     },
-    async (req) => appleLog(req.body.logs),
+    async (req) => appleLog(req.body.logs, req.headers.authorization),
   );
 
   // ── H28 Google Wallet ────────────────────────────────────────────────────

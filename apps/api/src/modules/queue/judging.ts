@@ -4,6 +4,7 @@ import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
+import { broadcastQueueEvent } from "./broadcast.js";
 import { resolveChallengePanel } from "./criteria-merge.js";
 import { lockQueueGroupForEntry } from "./evaluation-lock.js";
 import { writeQueueHistory } from "./history.js";
@@ -250,7 +251,13 @@ export async function upsertAttemptReview(
   // One queue transition -> one broadcast (plan/07 invariant 5). The judging
   // panel's live query drops the completed team from the room on this event.
   if (completedEntry) {
-    await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, completedEntry);
+    await broadcastQueueEvent(
+      pool,
+      "entry",
+      completedEntry.id,
+      EVENTS.QUEUE_ENTRY_CHANGED,
+      completedEntry,
+    );
     await notifyChallengeQueueChanged(pool, completedEntry.challenge_id);
   }
 

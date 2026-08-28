@@ -1,442 +1,527 @@
--- 0730_account_deletion_anonymization.sql — H54 account lifecycle.
+-- 0730_account_deletion_anonymization.sql — H54 final fresh-schema state.
 --
--- A user row is an authenticated identity, not an anonymous audit subject.
--- Once a participant has operational history, the application migrates the
--- small attendance record that must survive to anonymous_participants and
--- deletes the users row. There is deliberately no mapping table.
+-- DELTA(H54): account removal is a transactional lifecycle gate.  Identity
+-- rows are either deleted or replaced by an unlinked anonymous audit subject;
+-- no mapping table is created.
+-- DELTA(H24,H54): raw presence and scanner provenance are operational data and
+-- are deleted after guaranteed minutes are calculated.  A pending account can
+-- receive only its locked exit time log until finalization.
+-- DELTA(H23,H54): current badge assignment time fences stale offline events.
+-- DELTA(H54,F16): retired scanner credentials are keyed, unlinked digests.
+--
+-- This migration is intentionally the single H54 baseline for a fresh schema.
+-- It consolidates the prior development-only H54 migration work.  If a populated database
+-- ever needs upgrading, that data migration must be designed and verified
+-- separately; this file does not perform broad identity cleanup/backfills.
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- ── users and lifecycle gates ──────────────────────────────────────────────
 
 ALTER TABLE users
   ADD COLUMN account_state text NOT NULL DEFAULT 'active'
     CHECK (account_state IN ('active', 'removal_pending')),
   ADD COLUMN removal_action text
     CHECK (removal_action IS NULL OR removal_action IN ('delete', 'anonymize')),
-  ADD COLUMN removal_started_at timestamptz;
+  ADD COLUMN removal_started_at timestamptz,
+  ADD COLUMN removal_requires_exit boolean NOT NULL DEFAULT false,
+  ADD COLUMN removal_idempotency_key text,
+  ADD COLUMN removal_expires_at timestamptz,
+  ADD COLUMN is_test_account boolean NOT NULL DEFAULT false,
+  ADD COLUMN badge_assigned_at timestamptz;
 
 COMMENT ON COLUMN users.account_state IS
-  'H54 lifecycle gate: active writers are rejected once removal_pending is committed.';
+  'H54 lifecycle gate: identity-bearing writers are rejected after removal_pending commits.';
 COMMENT ON COLUMN users.removal_action IS
-  'H54 action selected while the user row is locked; prevents a retry from changing mode.';
+  'H54 action selected while the user row is locked; retries cannot change the mode.';
+COMMENT ON COLUMN users.removal_requires_exit IS
+  'H54 pending-exit gate: only a valid current-badge or event-end exit may be recorded.';
+COMMENT ON COLUMN users.removal_idempotency_key IS
+  'H54 transient self-service replay key; it is deleted with the user and is not an identity map.';
+COMMENT ON COLUMN users.removal_expires_at IS
+  'H54 fixed pending-exit recovery deadline; later sign-ins cannot extend it.';
+COMMENT ON COLUMN users.is_test_account IS
+  'Synthetic reviewer/QA fixture marker; ordinary event surfaces exclude marked rows.';
+COMMENT ON COLUMN users.badge_assigned_at IS
+  'H23/H54 current physical badge assignment boundary for stale offline scan rejection.';
 
-CREATE TABLE anonymous_participants (
-  id uuid PRIMARY KEY,
-  age integer CHECK (age IS NULL OR age BETWEEN 0 AND 150),
-  gender text,
-  university text,
-  degree text,
-  graduation_year smallint CHECK (
-    graduation_year IS NULL OR graduation_year BETWEEN 1900 AND 2200
-  ),
-  origin_city text,
-  guaranteed_presence_minutes integer NOT NULL DEFAULT 0
-    CHECK (guaranteed_presence_minutes >= 0),
-  created_at timestamptz NOT NULL DEFAULT now()
-);
+-- A base row may already have a badge (for example, a deployment seed).  Set
+-- its initial boundary before enforcing the badge/timestamp XOR invariant.
+UPDATE users
+   SET badge_assigned_at = clock_timestamp()
+ WHERE badge_id IS NOT NULL;
 
-COMMENT ON TABLE anonymous_participants IS
-  'H54 permanent minimum audit subject. id is random and has no relationship to users.id.';
-COMMENT ON COLUMN anonymous_participants.guaranteed_presence_minutes IS
-  'H24 verified/guaranteed venue time, rounded down to complete minutes at anonymization.';
+ALTER TABLE users
+  ADD CONSTRAINT users_badge_assignment_timestamp_check
+  CHECK ((badge_id IS NULL) = (badge_assigned_at IS NULL));
 
--- Create the disconnected-scanner revocation set before the legacy conversion
--- below. 0731 keeps the same objects for fresh installs; defining them here
--- means an upgrade can capture credentials before deleting old users (H54).
-CREATE TABLE IF NOT EXISTS scanner_revoked_badges (
-  badge_id text PRIMARY KEY,
-  revoked_at timestamptz NOT NULL DEFAULT now(),
-  expires_at timestamptz NOT NULL
-);
-CREATE INDEX IF NOT EXISTS scanner_revoked_badges_expiry ON scanner_revoked_badges (expires_at);
-CREATE TABLE IF NOT EXISTS scanner_revoked_tickets (
-  ticket_token text PRIMARY KEY,
-  revoked_at timestamptz NOT NULL DEFAULT now(),
-  expires_at timestamptz NOT NULL
-);
-CREATE INDEX IF NOT EXISTS scanner_revoked_tickets_expiry ON scanner_revoked_tickets (expires_at);
+CREATE INDEX users_removal_expiry
+  ON users (removal_expires_at)
+  WHERE account_state = 'removal_pending' AND removal_expires_at IS NOT NULL;
+CREATE INDEX users_test_account_idx
+  ON users (id)
+  WHERE is_test_account = true;
+
+-- ── final column nullability ────────────────────────────────────────────────
 
 ALTER TABLE check_in_logs
   ALTER COLUMN user_id DROP NOT NULL,
-  ALTER COLUMN staff_id DROP NOT NULL,
-  ADD COLUMN anonymous_participant_id uuid REFERENCES anonymous_participants(id);
-
+  ALTER COLUMN staff_id DROP NOT NULL;
 ALTER TABLE time_logs
-  ALTER COLUMN user_id DROP NOT NULL,
-  ADD COLUMN anonymous_participant_id uuid REFERENCES anonymous_participants(id);
-
-ALTER TABLE check_in_logs
-  ADD CONSTRAINT check_in_logs_subject_check
-    CHECK ((user_id IS NULL) <> (anonymous_participant_id IS NULL));
-
-ALTER TABLE time_logs
-  ADD CONSTRAINT time_logs_subject_check
-    CHECK ((user_id IS NULL) <> (anonymous_participant_id IS NULL));
-
-CREATE INDEX check_in_logs_anonymous_participant
-  ON check_in_logs (anonymous_participant_id)
-  WHERE anonymous_participant_id IS NOT NULL;
-CREATE INDEX time_logs_anonymous_participant
-  ON time_logs (anonymous_participant_id)
-  WHERE anonymous_participant_id IS NOT NULL;
-
--- Actor provenance is not part of the anonymous participant audit set. Make
--- those authors nullable so removal can erase the actor without retaining a
--- fake user row. Domain records whose subject was the departing person are
--- deleted or moved by the H54 service below; these columns only cover actions
--- they performed for somebody else.
+  ALTER COLUMN user_id DROP NOT NULL;
+ALTER TABLE queue_history
+  ALTER COLUMN actor_id DROP NOT NULL;
 ALTER TABLE universities ALTER COLUMN proposed_by DROP NOT NULL;
 ALTER TABLE food_intolerances ALTER COLUMN proposed_by DROP NOT NULL;
-ALTER TABLE queue_history ALTER COLUMN actor_id DROP NOT NULL;
 ALTER TABLE attempt_review_versions ALTER COLUMN author_id DROP NOT NULL;
 ALTER TABLE judging_session ALTER COLUMN judge_id DROP NOT NULL;
 ALTER TABLE announcements ALTER COLUMN author_id DROP NOT NULL;
-ALTER TABLE meal_scan_batches ALTER COLUMN submitted_by DROP NOT NULL;
+ALTER TABLE meal_scan_batches
+  ALTER COLUMN submitted_by DROP NOT NULL,
+  ADD COLUMN is_test_account boolean NOT NULL DEFAULT false;
 ALTER TABLE challenge_winners ALTER COLUMN set_by DROP NOT NULL;
+ALTER TABLE room_enterprises ALTER COLUMN assigned_by DROP NOT NULL;
+ALTER TABLE room_queue_groups ALTER COLUMN assigned_by DROP NOT NULL;
 ALTER TABLE data_subject_requests
   ALTER COLUMN subject_user_id DROP NOT NULL,
   ALTER COLUMN requested_by DROP NOT NULL;
 ALTER TABLE activity_logs ALTER COLUMN logged_by DROP NOT NULL;
+ALTER TABLE meal_scan_batch_items ALTER COLUMN badge_id DROP NOT NULL;
 
-CREATE INDEX IF NOT EXISTS data_subject_requests_subject_nullable
-  ON data_subject_requests (subject_user_id)
-  WHERE subject_user_id IS NOT NULL;
+COMMENT ON COLUMN meal_scan_batch_items.badge_id IS
+  'H54 transient retry credential; NULL after terminal processing and never part of audit history.';
 
--- Retire the previous in-place anonymization implementation. Existing rows
--- marked anonymized_at predate this separation and have no trustworthy
--- guaranteed-time value (the old code never stored one). Move their raw door
--- and accreditation timestamps to a random anonymous subject, erase all
--- remaining identity-bearing relationships, then remove the old user row.
--- The temporary table exists only inside this migration transaction and is
--- dropped automatically; it is not a reversible lookup table.
-CREATE TEMP TABLE legacy_anonymized_users ON COMMIT DROP AS
-SELECT id AS old_user_id, gen_random_uuid() AS anonymous_id, university_id,
-       email, secondary_email, name, surname, dni,
-       array_remove(array_cat(badge_id_history, ARRAY[badge_id]), NULL) AS badge_ids
-  FROM users
- WHERE anonymized_at IS NOT NULL;
+COMMENT ON COLUMN meal_scan_batches.is_test_account IS
+  'H54 fixture marker captured at enqueue; remains stable if submitted_by is scrubbed.';
 
--- Capture project roots before removing the old member rows. A solo project
--- and its queue/judging history are subject data; a shared project must stay
--- available to its remaining members, but without the departing creator.
-CREATE TEMP TABLE legacy_subject_repos ON COMMIT DROP AS
-SELECT DISTINCT r.id
-  FROM repos r
-  JOIN legacy_anonymized_users legacy ON legacy.old_user_id = r.created_by
-UNION
-SELECT DISTINCT s.repo_id
-  FROM submissions s
-  JOIN legacy_anonymized_users legacy ON legacy.old_user_id = s.user_id;
+ALTER TABLE time_logs
+  ADD CONSTRAINT time_logs_kind_check CHECK (kind IN ('in', 'out'));
 
-INSERT INTO scanner_revoked_badges (badge_id, revoked_at, expires_at)
-SELECT DISTINCT badge_id, clock_timestamp(),
-       GREATEST(
-         COALESCE((SELECT event_ends_at + interval '1 day' FROM event_config WHERE id = 1), clock_timestamp() + interval '1 day'),
-         clock_timestamp() + interval '1 day'
-       )
-  FROM legacy_anonymized_users legacy
- CROSS JOIN LATERAL unnest(legacy.badge_ids) AS badges(badge_id)
- WHERE badge_id IS NOT NULL
-ON CONFLICT (badge_id) DO UPDATE
-  SET revoked_at = EXCLUDED.revoked_at,
-      expires_at = GREATEST(scanner_revoked_badges.expires_at, EXCLUDED.expires_at);
+-- ── permanent anonymous subject and credential denylist ────────────────────
 
-INSERT INTO scanner_revoked_tickets (ticket_token, revoked_at, expires_at)
-SELECT DISTINCT t.token, clock_timestamp(),
-       GREATEST(
-         COALESCE((SELECT event_ends_at + interval '1 day' FROM event_config WHERE id = 1), clock_timestamp() + interval '1 day'),
-         clock_timestamp() + interval '1 day'
-       )
-  FROM tickets t
-  JOIN legacy_anonymized_users legacy ON legacy.old_user_id = t.user_id
-ON CONFLICT (ticket_token) DO UPDATE
-  SET revoked_at = EXCLUDED.revoked_at,
-      expires_at = GREATEST(scanner_revoked_tickets.expires_at, EXCLUDED.expires_at);
+CREATE TABLE anonymous_participants (
+  id uuid PRIMARY KEY,
+  guaranteed_presence_minutes integer NOT NULL DEFAULT 0
+    CHECK (guaranteed_presence_minutes >= 0),
+  is_test_account boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
 
-INSERT INTO anonymous_participants (id, university)
-SELECT anonymous_id,
-       (SELECT name FROM universities WHERE id = legacy.university_id)
-  FROM legacy_anonymized_users AS legacy;
+COMMENT ON TABLE anonymous_participants IS
+  'H54 permanent anonymous audit subject. id is random and unrelated to users.id.';
+COMMENT ON COLUMN anonymous_participants.guaranteed_presence_minutes IS
+  'H24 verified venue time rounded down to complete minutes; raw presence rows are not retained.';
+COMMENT ON COLUMN anonymous_participants.is_test_account IS
+  'Synthetic fixture marker; marked anonymous subjects are excluded from normal statistics.';
 
-UPDATE check_in_logs cil
-   SET user_id = NULL,
-       anonymous_participant_id = legacy.anonymous_id,
-       badge_id = NULL,
-       notes = NULL,
-       staff_id = NULL
-  FROM legacy_anonymized_users legacy
- WHERE cil.user_id = legacy.old_user_id;
+CREATE INDEX anonymous_participants_test_account_idx
+  ON anonymous_participants (id)
+  WHERE is_test_account = true;
 
-UPDATE time_logs tl
-   SET user_id = NULL,
-       anonymous_participant_id = legacy.anonymous_id,
-       notes = NULL,
-       scanned_by = NULL
-  FROM legacy_anonymized_users legacy
- WHERE tl.user_id = legacy.old_user_id;
+CREATE TABLE scanner_revoked_badges (
+  credential_digest text PRIMARY KEY
+    CHECK (credential_digest ~ '^[0-9a-f]{64}$'),
+  revoked_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
 
-UPDATE permission_group_members SET assigned_by = NULL
- WHERE assigned_by IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE universities SET proposed_by = NULL
- WHERE proposed_by IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE enterprises SET director_id = NULL
- WHERE director_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE enterprise_invite_links SET created_by = NULL
- WHERE created_by IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE user_invite_links SET created_by = NULL
- WHERE created_by IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE queue_history SET actor_id = NULL
- WHERE actor_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE attempt_review_versions SET author_id = NULL
- WHERE author_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE judging_session SET judge_id = NULL
- WHERE judge_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE devpost_participants SET linked_by = NULL
- WHERE linked_by IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE activity_logs SET logged_by = NULL
- WHERE logged_by IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE check_in_logs SET staff_id = NULL
- WHERE staff_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE time_logs SET scanned_by = NULL
- WHERE scanned_by IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE food_intolerances SET proposed_by = NULL
- WHERE proposed_by IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE application_responses SET referrer_user_id = NULL
- WHERE referrer_user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-DELETE FROM applicant_reviews
- WHERE author_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE announcements SET author_id = NULL
- WHERE author_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE meal_scan_batches SET submitted_by = NULL
- WHERE submitted_by IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE audit_log SET actor_id = NULL
- WHERE actor_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE challenge_versions SET editor_id = NULL
- WHERE editor_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE challenge_winners SET set_by = NULL
- WHERE set_by IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE room_enterprises SET assigned_by = NULL
- WHERE assigned_by IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE room_queue_groups SET assigned_by = NULL
- WHERE assigned_by IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE manual_attendee_roles SET assigned_by = NULL
- WHERE assigned_by IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE enterprise_judges SET added_by = NULL
- WHERE added_by IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE queue_groups SET created_by = NULL
- WHERE created_by IN (SELECT old_user_id FROM legacy_anonymized_users);
--- schedule_owners requires exactly one of user_id/free_text_name. Never turn
--- an old account into a free-text copy of its name: delete rows owned by that
--- account, then detach authorship from rows owned by somebody else (H54).
-DELETE FROM schedule_owners
- WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE schedule_owners SET assigned_by = NULL
- WHERE assigned_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+CREATE TABLE scanner_revoked_tickets (
+  credential_digest text PRIMARY KEY
+    CHECK (credential_digest ~ '^[0-9a-f]{64}$'),
+  revoked_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
 
-DELETE FROM applicant_reviews
- WHERE response_id IN (
-   SELECT id FROM application_responses
-    WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users)
- )
- OR author_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-DELETE FROM application_responses
- WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-DELETE FROM submissions
- WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-DELETE FROM devpost_participants
- WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-UPDATE repos
-   SET created_by = NULL
- WHERE created_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+COMMENT ON TABLE scanner_revoked_badges IS
+  'H54 unlinked keyed-digest denylist for permanently retired badge credentials; raw badges are never retained.';
+COMMENT ON TABLE scanner_revoked_tickets IS
+  'H54 unlinked keyed-digest denylist for permanently retired ticket credentials; raw tokens are never retained.';
+COMMENT ON COLUMN scanner_revoked_badges.credential_digest IS
+  'HMAC-SHA256 of a retired badge credential under the deployment secret.';
+COMMENT ON COLUMN scanner_revoked_tickets.credential_digest IS
+  'HMAC-SHA256 of a retired ticket credential under the deployment secret.';
 
-CREATE TEMP TABLE legacy_orphan_repos ON COMMIT DROP AS
-SELECT subject.id
-  FROM legacy_subject_repos subject
- WHERE NOT EXISTS (
-   SELECT 1 FROM submissions s WHERE s.repo_id = subject.id
- );
-CREATE TEMP TABLE legacy_orphan_queue_entries ON COMMIT DROP AS
-SELECT qe.id
-  FROM queue_entries qe
-  JOIN legacy_orphan_repos orphan ON orphan.id = qe.repo_id;
-DELETE FROM attempt_review_versions arv
- USING legacy_orphan_queue_entries orphan
- WHERE arv.attempt_id = orphan.id;
-DELETE FROM attempt_review ar
- USING legacy_orphan_queue_entries orphan
- WHERE ar.attempt_id = orphan.id;
-DELETE FROM judging_session js
- USING legacy_orphan_queue_entries orphan
- WHERE js.queue_entry_id = orphan.id;
-DELETE FROM queue_history qh
- USING legacy_orphan_queue_entries orphan
- WHERE qh.queue_entry_id = orphan.id;
-DELETE FROM queue_entries qe
- USING legacy_orphan_queue_entries orphan
- WHERE qe.id = orphan.id;
-DELETE FROM challenge_winners
- WHERE repo_id IN (SELECT id FROM legacy_orphan_repos);
-DELETE FROM repo_devpost_prizes
- WHERE repo_id IN (SELECT id FROM legacy_orphan_repos);
-DELETE FROM devpost_participants
- WHERE repo_id IN (SELECT id FROM legacy_orphan_repos);
-DELETE FROM submissions
- WHERE repo_id IN (SELECT id FROM legacy_orphan_repos);
-DELETE FROM repos
- WHERE id IN (SELECT id FROM legacy_orphan_repos);
-DELETE FROM enterprise_invite_link_redemptions
- WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users)
-    OR lower(email) IN (
-      SELECT lower(email) FROM legacy_anonymized_users WHERE email IS NOT NULL
-      UNION
-      SELECT lower(secondary_email) FROM legacy_anonymized_users WHERE secondary_email IS NOT NULL
+-- ── transient cleanup/security tables ──────────────────────────────────────
+
+CREATE TABLE user_email_history (
+  user_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  email text NOT NULL CHECK (btrim(email) <> ''),
+  recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (user_id, email)
+);
+
+COMMENT ON TABLE user_email_history IS
+  'H54 transient cleanup aid. It is deleted with the owning user and never copied to anonymous data.';
+
+CREATE INDEX user_email_history_email
+  ON user_email_history (lower(email));
+
+CREATE TABLE account_removal_pin_challenges (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  user_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  email text NOT NULL,
+  pin_digest text NOT NULL,
+  nonce text NOT NULL,
+  attempts smallint NOT NULL DEFAULT 0 CHECK (attempts BETWEEN 0 AND 5),
+  expires_at timestamptz NOT NULL,
+  consumed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+
+CREATE INDEX account_removal_pin_challenges_user
+  ON account_removal_pin_challenges (user_id, created_at DESC);
+
+COMMENT ON TABLE account_removal_pin_challenges IS
+  'H54 transient one-time verified-email removal PIN state; deleted with the user.';
+COMMENT ON COLUMN account_removal_pin_challenges.pin_digest IS
+  'HMAC digest of the six-digit PIN, user id, email, and nonce; raw PINs are never persisted.';
+
+-- ── immutable application form snapshots ───────────────────────────────────
+
+ALTER TABLE applications
+  ADD COLUMN current_form_version integer NOT NULL DEFAULT 1
+    CHECK (current_form_version > 0);
+
+CREATE TABLE application_form_versions (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  application_id integer NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+  version integer NOT NULL CHECK (version > 0),
+  template jsonb NOT NULL,
+  sections jsonb NOT NULL DEFAULT '[]'::jsonb,
+  created_by integer REFERENCES users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  UNIQUE (application_id, version),
+  UNIQUE (application_id, id)
+);
+
+COMMENT ON TABLE application_form_versions IS
+  'H54 immutable form-definition snapshots; response retention uses the submitted snapshot.';
+COMMENT ON COLUMN application_form_versions.created_by IS
+  'Administrator who published the snapshot; nullable so removing that actor leaves no identity bridge.';
+
+INSERT INTO application_form_versions (application_id, version, template, sections)
+SELECT id, current_form_version, template, sections
+  FROM applications;
+
+ALTER TABLE application_responses
+  ADD COLUMN application_form_version_id bigint
+    REFERENCES application_form_versions(id) ON DELETE RESTRICT;
+
+-- Applications created before this baseline use version 1.  This only binds
+-- the immutable snapshot pointer; it never copies response data.
+UPDATE application_responses AS response
+   SET application_form_version_id = version.id
+  FROM application_form_versions AS version
+ WHERE response.application_form_version_id IS NULL
+   AND version.application_id = response.application_id
+   AND version.version = 1;
+
+ALTER TABLE application_responses
+  ALTER COLUMN application_form_version_id SET NOT NULL,
+  ADD CONSTRAINT application_responses_form_version_application_fk
+    FOREIGN KEY (application_id, application_form_version_id)
+    REFERENCES application_form_versions (application_id, id)
+    ON DELETE RESTRICT;
+
+CREATE INDEX application_responses_form_version
+  ON application_responses (application_form_version_id);
+
+CREATE TABLE anonymous_participant_fields (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  anonymous_participant_id uuid NOT NULL
+    REFERENCES anonymous_participants(id) ON DELETE CASCADE,
+  application_id integer REFERENCES applications(id) ON DELETE RESTRICT,
+  application_form_version integer
+    CHECK (application_form_version IS NULL OR application_form_version > 0),
+  field_key text NOT NULL CHECK (btrim(field_key) <> ''),
+  anonymous_audit_dimension text,
+  field_kind text NOT NULL CHECK (btrim(field_kind) <> ''),
+  value jsonb NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+
+CREATE INDEX anonymous_participant_fields_subject
+  ON anonymous_participant_fields (anonymous_participant_id);
+CREATE INDEX anonymous_participant_fields_dimension
+  ON anonymous_participant_fields (anonymous_audit_dimension)
+  WHERE anonymous_audit_dimension IS NOT NULL;
+CREATE INDEX anonymous_participant_fields_form
+  ON anonymous_participant_fields (application_id, application_form_version, field_key);
+
+COMMENT ON TABLE anonymous_participant_fields IS
+  'H54 permanent anonymous answers explicitly marked ANONYMOUS_AUDIT in the submitted form snapshot.';
+COMMENT ON COLUMN anonymous_participant_fields.application_id IS
+  'Form context only; it is not application_responses.id and does not identify the participant.';
+COMMENT ON COLUMN anonymous_participant_fields.value IS
+  'Sanitized typed value copied only when the submitted field definition opts into anonymous audit.';
+
+-- ── synthetic reviewer fixture graph ───────────────────────────────────────
+
+ALTER TABLE repos
+  ADD COLUMN is_test_account boolean NOT NULL DEFAULT false;
+ALTER TABLE challenges
+  ADD COLUMN is_test_account boolean NOT NULL DEFAULT false;
+
+COMMENT ON COLUMN repos.is_test_account IS
+  'Synthetic review-fixture project marker; ordinary event operations exclude marked rows.';
+COMMENT ON COLUMN challenges.is_test_account IS
+  'Synthetic review-fixture queue marker; ordinary event operations exclude marked rows.';
+
+CREATE INDEX repos_test_account_idx
+  ON repos (id)
+  WHERE is_test_account = true;
+CREATE INDEX challenges_test_account_idx
+  ON challenges (id)
+  WHERE is_test_account = true;
+
+CREATE TABLE review_fixture_accounts (
+  fixture_key text PRIMARY KEY CHECK (btrim(fixture_key) <> ''),
+  user_id integer UNIQUE REFERENCES users(id) ON DELETE SET NULL,
+  generation integer NOT NULL DEFAULT 0 CHECK (generation >= 0),
+  last_authenticated_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+
+CREATE TRIGGER review_fixture_accounts_updated_at
+  BEFORE UPDATE ON review_fixture_accounts
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+COMMENT ON TABLE review_fixture_accounts IS
+  'Current synthetic reviewer account pointers; never use as an anonymous identity mapping.';
+COMMENT ON COLUMN review_fixture_accounts.last_authenticated_at IS
+  'Last synthetic fixture sign-in signal; no credential or participant response is stored.';
+
+INSERT INTO review_fixture_accounts (fixture_key)
+VALUES
+  ('participant-delete'),
+  ('participant-anonymize-outside'),
+  ('participant-anonymize-inside'),
+  ('staff-exit-operator')
+ON CONFLICT (fixture_key) DO NOTHING;
+
+CREATE TABLE review_fixture_queues (
+  fixture_key text PRIMARY KEY
+    REFERENCES review_fixture_accounts(fixture_key) ON DELETE CASCADE,
+  enterprise_id integer UNIQUE REFERENCES enterprises(id) ON DELETE SET NULL,
+  sponsor_id integer UNIQUE REFERENCES sponsors(id) ON DELETE SET NULL,
+  challenge_id integer UNIQUE REFERENCES challenges(id) ON DELETE SET NULL,
+  repo_id integer UNIQUE REFERENCES repos(id) ON DELETE SET NULL,
+  queue_entry_id integer UNIQUE REFERENCES queue_entries(id) ON DELETE SET NULL,
+  generation integer NOT NULL CHECK (generation > 0),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+
+CREATE TRIGGER review_fixture_queues_updated_at
+  BEFORE UPDATE ON review_fixture_queues
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+COMMENT ON TABLE review_fixture_queues IS
+  'Current synthetic queue/project pointers; never use as a participant-to-anonymous mapping.';
+
+-- ── immutable/form and badge functions ─────────────────────────────────────
+
+CREATE OR REPLACE FUNCTION h54_prevent_form_version_update()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RAISE EXCEPTION 'application form versions are immutable'
+    USING ERRCODE = '55006';
+END;
+$$;
+
+CREATE TRIGGER h54_application_form_version_immutable
+  BEFORE UPDATE ON application_form_versions
+  FOR EACH ROW EXECUTE FUNCTION h54_prevent_form_version_update();
+
+CREATE OR REPLACE FUNCTION h54_capture_user_email_history()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  address text;
+BEGIN
+  FOREACH address IN ARRAY ARRAY[OLD.email, OLD.secondary_email, NEW.email, NEW.secondary_email]
+  LOOP
+    IF NULLIF(btrim(address), '') IS NOT NULL THEN
+      INSERT INTO user_email_history (user_id, email)
+      VALUES (NEW.id, lower(btrim(address)))
+      ON CONFLICT (user_id, email) DO NOTHING;
+    END IF;
+  END LOOP;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER h54_user_email_history
+  AFTER UPDATE OF email, secondary_email ON users
+  FOR EACH ROW EXECUTE FUNCTION h54_capture_user_email_history();
+
+CREATE OR REPLACE FUNCTION h54_set_badge_assigned_at()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.badge_id IS NULL THEN
+    NEW.badge_assigned_at := NULL;
+  ELSIF TG_OP = 'INSERT' THEN
+    NEW.badge_assigned_at := clock_timestamp();
+  ELSIF NEW.badge_id IS DISTINCT FROM OLD.badge_id THEN
+    NEW.badge_assigned_at := clock_timestamp();
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER users_badge_assigned_at
+  BEFORE INSERT OR UPDATE OF badge_id ON users
+  FOR EACH ROW EXECUTE FUNCTION h54_set_badge_assigned_at();
+
+-- ── active-user reference gate ─────────────────────────────────────────────
+
+CREATE OR REPLACE FUNCTION h54_require_active_user_reference()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  referenced_user_id bigint;
+  old_referenced_user_id bigint;
+  cutoff timestamptz;
+  removal_started_at_value timestamptz;
+  latest_id bigint;
+  latest_kind text;
+BEGIN
+  referenced_user_id := NULLIF(to_jsonb(NEW)->>TG_ARGV[0], '')::bigint;
+  -- Detaching an identity is always safe.  In particular, ON DELETE SET NULL
+  -- and the removal scrub deliberately clear references while the old user is
+  -- already `removal_pending`; do not make that cleanup depend on the old row
+  -- still passing the active-account gate.
+  IF referenced_user_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'UPDATE' THEN
+    old_referenced_user_id := NULLIF(to_jsonb(OLD)->>TG_ARGV[0], '')::bigint;
+    -- Never transfer a row from a pending identity to another identity.  A
+    -- NULL destination is allowed for the removal scrub below.
+    IF old_referenced_user_id IS NOT NULL
+       AND old_referenced_user_id IS DISTINCT FROM referenced_user_id THEN
+      PERFORM 1
+        FROM users
+       WHERE id = old_referenced_user_id
+         AND account_state = 'active'
+         AND anonymized_at IS NULL
+       FOR SHARE;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'user account is closed or being removed'
+          USING ERRCODE = '23514',
+                HINT = 'Retry after reloading the current account state';
+      END IF;
+    END IF;
+  END IF;
+
+  -- The only identity-bearing write permitted after removal starts is the
+  -- exit row for the already-open venue session.  It must retain the same
+  -- user_id on UPDATE and is serialized by the user-row lock.
+  IF TG_TABLE_NAME = 'time_logs'
+     AND TG_ARGV[0] = 'user_id'
+     AND to_jsonb(NEW)->>'kind' = 'out'
+     AND (TG_OP <> 'UPDATE' OR old_referenced_user_id IS NOT DISTINCT FROM referenced_user_id) THEN
+    cutoff := NULLIF(to_jsonb(NEW)->>'scanned_at', '')::timestamptz;
+    SELECT id, kind
+      INTO latest_id, latest_kind
+      FROM time_logs
+     WHERE user_id = referenced_user_id
+       AND kind IN ('in', 'out')
+       AND scanned_at <= cutoff
+     ORDER BY scanned_at DESC, id DESC
+     LIMIT 1;
+    SELECT removal_started_at
+      INTO removal_started_at_value
+      FROM users
+     WHERE id = referenced_user_id
+       AND account_state = 'removal_pending'
+       AND removal_requires_exit = true
+       AND anonymized_at IS NULL
+     FOR SHARE;
+    IF FOUND
+       AND latest_kind = 'in'
+       AND (TG_OP <> 'UPDATE' OR latest_id = NULLIF(to_jsonb(NEW)->>'id', '')::bigint)
+       AND removal_started_at_value IS NOT NULL
+       AND (
+         cutoff >= removal_started_at_value
+         OR (
+           TG_OP = 'INSERT'
+           AND to_jsonb(NEW)->>'scanned_by' IS NULL
+           AND to_jsonb(NEW)->>'notes' = 'Automatic exit at event end'
+           AND EXISTS (
+             SELECT 1
+               FROM event_config
+              WHERE id = 1
+                AND event_ends_at = cutoff
+                AND event_ends_at <= clock_timestamp()
+           )
+         )
+       ) THEN
+      RETURN NEW;
+    END IF;
+  END IF;
+
+  PERFORM 1
+    FROM users
+   WHERE id = referenced_user_id
+     AND account_state = 'active'
+     AND anonymized_at IS NULL
+   FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'user account is closed or being removed'
+      USING ERRCODE = '23514',
+            HINT = 'Retry after reloading the current account state';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+COMMENT ON FUNCTION h54_require_active_user_reference() IS
+  'H54: reject identity-bearing rows for pending/anonymized users; permit only the locked pending exit time log.';
+
+-- Every final FK to users receives a full-row trigger.  The user_id time-log
+-- trigger is specialized above; scanned_by still receives the ordinary gate.
+DO $$
+DECLARE
+  fk record;
+  trigger_name text;
+BEGIN
+  FOR fk IN
+    SELECT n.nspname AS schema_name,
+           c.relname AS table_name,
+           a.attname AS column_name
+      FROM pg_constraint con
+      JOIN pg_class c ON c.oid = con.conrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      JOIN pg_class parent ON parent.oid = con.confrelid
+      JOIN LATERAL unnest(con.conkey) WITH ORDINALITY key_column(attnum, ord)
+        ON true
+      JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = key_column.attnum
+     WHERE con.contype = 'f'
+       AND parent.relname = 'users'
+       AND n.nspname = 'public'
+       AND key_column.ord = 1
+       AND NOT (c.relname = 'time_logs' AND a.attname = 'user_id')
+  LOOP
+    trigger_name := format('h54_active_user_%s', fk.column_name);
+    EXECUTE format(
+      'DROP TRIGGER IF EXISTS %I ON %I.%I',
+      trigger_name, fk.schema_name, fk.table_name
     );
-DELETE FROM user_invite_link_redemptions
- WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users)
-    OR lower(email) IN (
-      SELECT lower(email) FROM legacy_anonymized_users WHERE email IS NOT NULL
-      UNION
-      SELECT lower(secondary_email) FROM legacy_anonymized_users WHERE secondary_email IS NOT NULL
+    EXECUTE format(
+      'CREATE TRIGGER %I BEFORE INSERT OR UPDATE ON %I.%I '
+      'FOR EACH ROW EXECUTE FUNCTION h54_require_active_user_reference(%L)',
+      trigger_name, fk.schema_name, fk.table_name, fk.column_name
     );
-DELETE FROM activity_logs
- WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-DELETE FROM meal_scan_batch_items item
- USING legacy_anonymized_users legacy
- WHERE item.badge_id = ANY(legacy.badge_ids)
-    OR coalesce(item.result::text, '') ILIKE '%"userId":' || legacy.old_user_id::text || '%'
-    OR coalesce(item.error::text, '') ILIKE '%"userId":' || legacy.old_user_id::text || '%'
-    OR (
-      legacy.email IS NOT NULL
-      AND (
-        coalesce(item.result::text, '') ILIKE '%' || legacy.email || '%'
-        OR coalesce(item.error::text, '') ILIKE '%' || legacy.email || '%'
-      )
-    )
-    OR (
-      legacy.secondary_email IS NOT NULL
-      AND (
-        coalesce(item.result::text, '') ILIKE '%' || legacy.secondary_email || '%'
-        OR coalesce(item.error::text, '') ILIKE '%' || legacy.secondary_email || '%'
-      )
-    );
-DELETE FROM enterprise_judges
- WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
--- A sponsor row may be the non-null author anchor of a challenge. Preserve
--- that organisation-owned anchor while removing the person relationship; an
--- unconditional delete would violate challenges.author's NO ACTION FK.
-UPDATE sponsors s
-   SET user_id = NULL
- WHERE s.user_id IN (SELECT old_user_id FROM legacy_anonymized_users)
-   AND EXISTS (SELECT 1 FROM challenges c WHERE c.author = s.id);
-DELETE FROM sponsors
- WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-DELETE FROM judging_session
- WHERE judge_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-DELETE FROM manual_attendee_roles
- WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-DELETE FROM announcement_reads
- WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-DELETE FROM announcement_recipients
- WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-DELETE FROM notification_preferences
- WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-DELETE FROM notification_outbox
- WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-DELETE FROM wallet_pass_devices
- WHERE pass_id IN (
-   SELECT id FROM wallet_passes
-    WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users)
- );
-DELETE FROM wallet_passes
- WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-DELETE FROM tickets
- WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-DELETE FROM wallet_access_tokens
- WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-DELETE FROM push_tokens
- WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-DELETE FROM sessions
- WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-DELETE FROM accounts
- WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
-DELETE FROM email_verification_tokens
- WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
--- Better Auth's `verifications` table intentionally has no user FK. Its
--- identifier is commonly the email address for email-verification and
--- password-reset flows, so an FK-only cleanup would leave a direct identity
--- copy behind after the legacy user row is removed.
-DELETE FROM verifications
- WHERE lower(identifier) IN (
-         SELECT lower(email) FROM legacy_anonymized_users WHERE email IS NOT NULL
-         UNION
-         SELECT lower(secondary_email) FROM legacy_anonymized_users WHERE secondary_email IS NOT NULL
-       )
-    OR identifier IN (SELECT old_user_id::text FROM legacy_anonymized_users);
-DELETE FROM data_subject_requests
- WHERE subject_user_id IN (SELECT old_user_id FROM legacy_anonymized_users)
-    OR requested_by IN (SELECT old_user_id FROM legacy_anonymized_users);
-DELETE FROM idempotency_keys ik
- USING legacy_anonymized_users legacy
- WHERE ik.scope ~ ('(^| )u:' || legacy.old_user_id::text || '($| )')
-    OR (
-      legacy.email IS NOT NULL
-      AND coalesce(ik.response_body::text, '') ILIKE '%' || legacy.email || '%'
-    )
-    OR (
-      legacy.secondary_email IS NOT NULL
-      AND coalesce(ik.response_body::text, '') ILIKE '%' || legacy.secondary_email || '%'
-    );
--- Old in-place anonymization rows could have left the original identifier in
--- JSON snapshots/reasons even after their actor FK was nulled. Delete those
--- rows rather than attempting to rewrite arbitrary historical payloads. The
--- temporary source table is dropped at commit and is never a mapping table.
-DELETE FROM audit_log al
- WHERE al.actor_id IN (SELECT old_user_id FROM legacy_anonymized_users)
-    OR (
-      al.entity_type = ANY(ARRAY['user', 'badge', 'accreditation', 'presence', 'meal', 'activity'])
-      AND al.entity_id IN (SELECT old_user_id::text FROM legacy_anonymized_users)
-    )
-    OR EXISTS (
-      SELECT 1
-        FROM legacy_anonymized_users legacy
-       WHERE coalesce(al.before::text, '') ~ (
-               '"(userId|user_id|subjectUserId|subject_user_id|actorId|actor_id|targetId|target_id|authorId|author_id|judgeId|judge_id|staffId|staff_id|createdBy|created_by|assignedBy|assigned_by|setBy|set_by|linkedBy|linked_by|loggedBy|logged_by|scannedBy|scanned_by|requestedBy|requested_by|submittedBy|submitted_by|referrerUserId|referrer_user_id|directorId|director_id)"[[:space:]]*:[[:space:]]*("'
-               || legacy.old_user_id::text || '"|' || legacy.old_user_id::text || ')([,}])'
-             )
-          OR coalesce(al.after::text, '') ~ (
-               '"(userId|user_id|subjectUserId|subject_user_id|actorId|actor_id|targetId|target_id|authorId|author_id|judgeId|judge_id|staffId|staff_id|createdBy|created_by|assignedBy|assigned_by|setBy|set_by|linkedBy|linked_by|loggedBy|logged_by|scannedBy|scanned_by|requestedBy|requested_by|submittedBy|submitted_by|referrerUserId|referrer_user_id|directorId|director_id)"[[:space:]]*:[[:space:]]*("'
-               || legacy.old_user_id::text || '"|' || legacy.old_user_id::text || ')([,}])'
-             )
-          OR coalesce(al.reason, '') ~ (
-               '(^|[^0-9])' || legacy.old_user_id::text || '([^0-9]|$)'
-             )
-          OR (
-            legacy.email IS NOT NULL
-            AND (
-              coalesce(al.before::text, '') ILIKE '%' || legacy.email || '%'
-              OR coalesce(al.after::text, '') ILIKE '%' || legacy.email || '%'
-              OR coalesce(al.reason, '') ILIKE '%' || legacy.email || '%'
-              OR coalesce(al.entity_id, '') ILIKE '%' || legacy.email || '%'
-            )
-          )
-          OR (
-            legacy.secondary_email IS NOT NULL
-            AND (
-              coalesce(al.before::text, '') ILIKE '%' || legacy.secondary_email || '%'
-              OR coalesce(al.after::text, '') ILIKE '%' || legacy.secondary_email || '%'
-              OR coalesce(al.reason, '') ILIKE '%' || legacy.secondary_email || '%'
-              OR coalesce(al.entity_id, '') ILIKE '%' || legacy.secondary_email || '%'
-            )
-          )
-          OR (
-            legacy.dni IS NOT NULL
-            AND (
-              coalesce(al.before::text, '') ILIKE '%' || legacy.dni || '%'
-              OR coalesce(al.after::text, '') ILIKE '%' || legacy.dni || '%'
-              OR coalesce(al.reason, '') ILIKE '%' || legacy.dni || '%'
-              OR coalesce(al.entity_id, '') ILIKE '%' || legacy.dni || '%'
-            )
-          )
-    );
+  END LOOP;
 
-DELETE FROM users
- WHERE id IN (SELECT old_user_id FROM legacy_anonymized_users);
+  DROP TRIGGER IF EXISTS h54_active_user_user_id ON time_logs;
+  CREATE TRIGGER h54_active_user_user_id
+    BEFORE INSERT OR UPDATE ON time_logs
+    FOR EACH ROW EXECUTE FUNCTION h54_require_active_user_reference('user_id');
+END;
+$$;

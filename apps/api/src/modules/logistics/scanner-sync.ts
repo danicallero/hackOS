@@ -16,7 +16,11 @@ import { isSyntheticOperator } from "./review-fixture-scope.js";
  */
 export async function scannerSnapshot(actorId?: number) {
   const fixtureOnly = actorId != null && (await isSyntheticOperator(pool, actorId));
-  const participantScope = fixtureOnly
+  // Synthetic review staff must only see the three synthetic participant
+  // fixtures. Real event scanners, however, need every active attendee type
+  // (mentors, sponsors, judges and capability holders included); the role
+  // stats read model and the mobile role filter already use that full roster.
+  const subjectScope = fixtureOnly
     ? ` AND u.is_test_account = true
               AND (
                 EXISTS (SELECT 1 FROM manual_attendee_roles mar
@@ -27,18 +31,6 @@ export async function scannerSnapshot(actorId?: number) {
                   WHERE ar.user_id = u.id AND a.type = 'participant' AND ar.status <> 'draft'
                 )
               )`
-    : ` AND u.is_test_account = false
-              AND (
-                EXISTS (SELECT 1 FROM manual_attendee_roles mar
-                        WHERE mar.user_id = u.id AND mar.role = 'participant')
-                OR EXISTS (
-                  SELECT 1 FROM application_responses ar
-                  JOIN applications a ON a.id = ar.application_id
-                  WHERE ar.user_id = u.id AND a.type = 'participant' AND ar.status <> 'draft'
-                )
-              )`;
-  const stateScope = fixtureOnly
-    ? " AND u.is_test_account = true"
     : " AND u.is_test_account = false";
   // The snapshot is replace-all. Retired credentials are represented by
   // keyed digests centrally and are intentionally not sent back to every
@@ -112,7 +104,7 @@ export async function scannerSnapshot(actorId?: number) {
             ORDER BY tl.scanned_at DESC, tl.id DESC
             LIMIT 1
          ) last_presence ON true
-        WHERE u.account_state = 'active' AND u.anonymized_at IS NULL${participantScope}
+        WHERE u.account_state = 'active' AND u.anonymized_at IS NULL${subjectScope}
         ORDER BY u.id`,
     ),
     pool.query(
@@ -129,7 +121,7 @@ export async function scannerSnapshot(actorId?: number) {
          FROM activity_logs al
          JOIN users u ON u.id = al.user_id
         WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
-          ${stateScope}
+          ${subjectScope}
         GROUP BY user_id, activity_id`,
     ),
   ]);

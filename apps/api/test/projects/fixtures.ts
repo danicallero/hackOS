@@ -1,4 +1,5 @@
 import { pool } from "../../src/db/pool.js";
+import { ensureApplicationFormVersion } from "../helpers.js";
 
 /**
  * Devpost-shaped CSV fixtures (H16). Header names mirror real Devpost
@@ -108,9 +109,12 @@ export async function admitParticipant(userId: number): Promise<void> {
     `INSERT INTO applications (name, type, template) VALUES ($1, 'participant', '{}'::jsonb) RETURNING id`,
     [`Test application ${crypto.randomUUID()}`],
   );
+  const formVersionId = await ensureApplicationFormVersion(application.rows[0].id);
   await pool.query(
-    `INSERT INTO application_responses (user_id, application_id, status) VALUES ($1, $2, 'accepted')`,
-    [userId, application.rows[0].id],
+    `INSERT INTO application_responses
+       (user_id, application_id, application_form_version_id, status)
+     VALUES ($1, $2, $3, 'accepted')`,
+    [userId, application.rows[0].id, formVersionId],
   );
 }
 

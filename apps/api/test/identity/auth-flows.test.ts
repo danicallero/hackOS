@@ -2,7 +2,7 @@ import "./env.js";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { createApplication } from "../applications/fixtures.js";
-import { buildTestApp, truncateAll } from "../helpers.js";
+import { buildTestApp, ensureApplicationFormVersion, truncateAll } from "../helpers.js";
 
 /**
  * Better Auth integration (H1-H5): real sign-up/sign-in/sign-out against
@@ -71,6 +71,14 @@ function sessionCookie(res: { headers: Record<string, unknown> }): string {
   const session = cookies.find((c) => c.includes("session_token"));
   expect(session, "expected a session_token set-cookie").toBeTruthy();
   return (session as string).split(";")[0] as string;
+}
+
+function rawSessionToken(cookie: string): string {
+  const value = cookie.slice(cookie.indexOf("=") + 1);
+  const signed = decodeURIComponent(value);
+  const separator = signed.lastIndexOf(".");
+  expect(separator).toBeGreaterThan(0);
+  return signed.slice(0, separator);
 }
 
 describe("H1 sign-up", () => {
@@ -286,11 +294,13 @@ describe("H1 verified-email transaction boundary", () => {
          VALUES ($1, 'spot_confirmation', $2, $3, now() + interval '1 hour') RETURNING id`,
         [token, email, userId],
       );
+      const formVersionId = await ensureApplicationFormVersion(formId);
       const { rows: responseRows } = await pool.query(
         `INSERT INTO application_responses
-           (user_id, application_id, status, responses, decision_sent_at, confirmation_token_id)
-         VALUES ($1, $2, 'accepted', '{}'::jsonb, now(), $3) RETURNING id`,
-        [userId, formId, tokenRows[0].id],
+           (user_id, application_id, application_form_version_id, status, responses,
+            decision_sent_at, confirmation_token_id)
+         VALUES ($1, $2, $3, 'accepted', '{}'::jsonb, now(), $4) RETURNING id`,
+        [userId, formId, formVersionId, tokenRows[0].id],
       );
       return { token, responseId: responseRows[0].id as number };
     }
@@ -465,6 +475,158 @@ describe("H5 password reset", () => {
     // old password dead, new one works
     expect((await signIn(a, SIGNUP.email, SIGNUP.password)).statusCode).toBe(401);
     expect((await signIn(a, SIGNUP.email, "brand-new-pass-1")).statusCode).toBe(200);
+  });
+});
+
+describe("H54 pending identity boundary", () => {
+  it("allows only recovery/session reads and sign-out around Better Auth generated routes", async () => {
+    const a = await getApp();
+    const email = "pending-auth-boundary@example.com";
+    await signUp(a, { email });
+    const login = await signIn(a, email, SIGNUP.password);
+    expect(login.statusCode).toBe(200);
+    const cookie = sessionCookie(login);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(`SELECT id FROM users WHERE email = $1`, [email]);
+    const userId = rows[0].id as number;
+    await pool.query(
+      `UPDATE users
+          SET account_state = 'removal_pending',
+              removal_action = 'anonymize',
+              removal_requires_exit = true,
+              removal_expires_at = clock_timestamp() + interval '1 hour',
+              removal_idempotency_key = 'pending-auth-boundary-removal'
+        WHERE id = $1`,
+      [userId],
+    );
+
+    const status = await a.inject({
+      method: "GET",
+      url: "/api/me/removal-status",
+      headers: { cookie },
+    });
+    expect(status.statusCode).toBe(200);
+
+    const profileMutation = await a.inject({
+      method: "PATCH",
+      url: "/api/me",
+      headers: { cookie },
+      payload: { language: "es" },
+    });
+    expect(profileMutation.statusCode).toBe(403);
+    expect(profileMutation.json().error.details.code).toBe("account_removal_pending");
+
+    const generatedMutation = await a.inject({
+      method: "POST",
+      url: "/api/auth/change-password",
+      headers: { cookie },
+      payload: { currentPassword: SIGNUP.password, newPassword: "another-pass-9" },
+    });
+    expect(generatedMutation.statusCode).toBe(403);
+    expect(generatedMutation.json().error.details.code).toBe("account_removal_pending");
+
+    // A public password-reset request must not mutate a pending account when
+    // its email is supplied without the original session.
+    const resetRequest = await a.inject({
+      method: "POST",
+      url: "/api/auth/request-password-reset",
+      payload: { email },
+    });
+    expect(resetRequest.statusCode).toBe(403);
+    expect(resetRequest.json().error.details.code).toBe("account_removal_pending");
+
+    // The app-owned resend wrapper is not the Better Auth catch-all and must
+    // still apply the same pending-account identity-mutation boundary.
+    const resendRequest = await a.inject({
+      method: "POST",
+      url: "/api/auth/resend-verification",
+      payload: { email },
+    });
+    expect(resendRequest.statusCode).toBe(403);
+    expect(resendRequest.json().error.details.code).toBe("account_removal_pending");
+
+    const session = await a.inject({
+      method: "GET",
+      url: "/api/auth/get-session",
+      headers: { cookie },
+    });
+    expect(session.statusCode).toBe(200);
+
+    const signout = await a.inject({
+      method: "POST",
+      url: "/api/auth/sign-out",
+      headers: { cookie },
+      payload: {},
+    });
+    expect(signout.statusCode).toBe(200);
+  });
+
+  it("binds pending recovery to the initiating signed session, not another session or later sign-in", async () => {
+    const a = await getApp();
+    const email = "pending-session-expiry@example.com";
+    await signUp(a, { email });
+    const firstLogin = await signIn(a, email, SIGNUP.password);
+    const secondLogin = await signIn(a, email, SIGNUP.password);
+    expect(firstLogin.statusCode).toBe(200);
+    expect(secondLogin.statusCode).toBe(200);
+    const firstCookie = sessionCookie(firstLogin);
+    const secondCookie = sessionCookie(secondLogin);
+    const firstToken = rawSessionToken(firstCookie);
+    const secondToken = rawSessionToken(secondCookie);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(`SELECT id FROM users WHERE email = $1`, [email]);
+    const userId = rows[0].id as number;
+    const initiatingExpiry = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    const otherExpiry = new Date(Date.now() + 10 * 60 * 1000);
+    await pool.query(`UPDATE sessions SET expires_at = $2 WHERE token = $1`, [
+      firstToken,
+      initiatingExpiry,
+    ]);
+    await pool.query(`UPDATE sessions SET expires_at = $2 WHERE token = $1`, [
+      secondToken,
+      otherExpiry,
+    ]);
+    await pool.query(`UPDATE users SET badge_id = 'B-PENDING-SESSION' WHERE id = $1`, [userId]);
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, check_in_method)
+       VALUES ($1, 'B-PENDING-SESSION', 'scan')`,
+      [userId],
+    );
+    await pool.query(
+      `INSERT INTO time_logs (user_id, kind, scanned_at)
+       VALUES ($1, 'in', now() - interval '5 minutes')`,
+      [userId],
+    );
+
+    const removal = await a.inject({
+      method: "POST",
+      url: "/api/me/anonymize",
+      headers: { cookie: firstCookie, "idempotency-key": "pending-session-expiry-removal" },
+      payload: { confirm: true, reauthenticationPassword: SIGNUP.password },
+    });
+    expect(removal.statusCode).toBe(202);
+
+    const { rows: pendingRows } = await pool.query(
+      `SELECT removal_expires_at FROM users WHERE id = $1`,
+      [userId],
+    );
+    expect(
+      Math.abs(new Date(pendingRows[0].removal_expires_at).getTime() - initiatingExpiry.getTime()),
+    ).toBeLessThan(1000);
+
+    // Sign-in after the request creates a new session but cannot move the
+    // already captured removal deadline forward.
+    const laterLogin = await signIn(a, email, SIGNUP.password);
+    expect(laterLogin.statusCode).toBe(200);
+    const { rows: unchangedRows } = await pool.query(
+      `SELECT removal_expires_at FROM users WHERE id = $1`,
+      [userId],
+    );
+    expect(new Date(unchangedRows[0].removal_expires_at).getTime()).toBe(
+      new Date(pendingRows[0].removal_expires_at).getTime(),
+    );
   });
 });
 

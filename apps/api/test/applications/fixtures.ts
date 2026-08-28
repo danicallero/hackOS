@@ -1,5 +1,6 @@
 import { pool } from "../../src/db/pool.js";
 import type { TemplateField } from "../../src/modules/applications/schemas.js";
+import { ensureApplicationFormVersion } from "../helpers.js";
 
 /** A minimal 2-field template: a required text field and an optional select. */
 export function sampleTemplate(): TemplateField[] {
@@ -63,15 +64,11 @@ export async function createApplication(
       overrides.ask_food_intolerances ?? asksByDefault,
     ],
   );
-  await pool.query(
-    `INSERT INTO application_form_versions (application_id, version, template, sections)
-     VALUES ($1, 1, $2::jsonb, '[]'::jsonb)`,
-    [rows[0].id, JSON.stringify(template)],
-  );
+  await ensureApplicationFormVersion(rows[0].id);
   return rows[0].id;
 }
 
-/** Insert a response row directly at a given status (test setup shortcut). */
+/** Insert a response row directly at a given status, bound to its H54 snapshot. */
 export async function createResponse(
   userId: number,
   applicationId: number,
@@ -81,11 +78,7 @@ export async function createResponse(
     decision_sent_at: string | null;
   }> = {},
 ): Promise<number> {
-  const { rows: versionRows } = await pool.query(
-    `SELECT id FROM application_form_versions
-      WHERE application_id = $1 ORDER BY version DESC LIMIT 1`,
-    [applicationId],
-  );
+  const formVersionId = await ensureApplicationFormVersion(applicationId);
   const { rows } = await pool.query(
     `INSERT INTO application_responses
        (user_id, application_id, application_form_version_id, status, responses, decision_sent_at)
@@ -93,7 +86,7 @@ export async function createResponse(
     [
       userId,
       applicationId,
-      versionRows[0]?.id ?? null,
+      formVersionId,
       overrides.status ?? "draft",
       JSON.stringify(overrides.responses ?? {}),
       overrides.decision_sent_at ?? null,

@@ -67,14 +67,13 @@ export function DangerZoneCard() {
     progress?: AccountRemovalProgress,
   ) {
     let localCleanupFailed = false;
-    try {
-      await clearOfflineQueue(me?.id ?? null);
-    } catch {
-      // Fall back to removing every encrypted queue envelope if deriving the
-      // current owner's slot or deleting its IndexedDB key failed. The
-      // ciphertext is removed even when the browser blocks key deletion.
+    if (me?.id === undefined) {
+      // Without a verified owner there is no safe queue namespace to clear.
+      // Never broaden this into deleting another account's queue.
+      localCleanupFailed = true;
+    } else {
       try {
-        await clearOfflineQueue(null);
+        await clearOfflineQueue(me.id);
       } catch {
         localCleanupFailed = true;
       }
@@ -322,8 +321,19 @@ export function DangerZoneCard() {
           }
           description={
             eligibility.action === "delete"
-              ? t("areYouSureCantBeUndone")
-              : t("accountAnonymizeConfirmBody")
+              ? [
+                  t("areYouSureCantBeUndone"),
+                  ...(eligibility.requiresVenueExit ? [t("accountRemovalExitRequired")] : []),
+                  ...(eligibility.integrityWarning ? [t("accountRemovalIntegrityWarning")] : []),
+                ].join("\n\n")
+              : [
+                  t("accountAnonymizeConfirmBody"),
+                  ...(eligibility.activeEventConsequences
+                    ? [t("accountAnonymizeActiveEvent")]
+                    : []),
+                  ...(eligibility.requiresVenueExit ? [t("accountAnonymizeExitRequired")] : []),
+                  ...(eligibility.integrityWarning ? [t("accountRemovalIntegrityWarning")] : []),
+                ].join("\n\n")
           }
           cancelLabel={t("cancel")}
           confirmLabel={

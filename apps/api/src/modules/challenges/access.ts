@@ -7,6 +7,7 @@ import type {
   ContextualPolicyResolver,
   ContextualResourceLocator,
 } from "../../lib/route-policy.js";
+import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
 
 /** How a user was allowed to touch a challenge. */
 export type ChallengeAccess = "admin" | "owner" | "assigned_judge";
@@ -30,21 +31,22 @@ function challengeIdFrom(request: FastifyRequest, locator: ContextualResourceLoc
  * enterprise (H44: "editar mi reto").
  */
 export async function ownsChallenge(userId: number, challengeId: number): Promise<boolean> {
+  const fixtureMarker = await isSyntheticOperator(pool, userId);
   const { rowCount } = await pool.query(
     `SELECT 1
        FROM challenges c
        JOIN sponsors author ON author.id = c.author
        JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
-      WHERE c.id = $1 AND mine.user_id = $2`,
-    [challengeId, userId],
+      WHERE c.id = $1 AND mine.user_id = $2 AND c.is_test_account = $3`,
+    [challengeId, userId, fixtureMarker],
   );
   return (rowCount ?? 0) > 0;
 }
 
-async function ensureExists(challengeId: number): Promise<void> {
+async function ensureExists(challengeId: number, fixtureMarker: boolean): Promise<void> {
   const { rowCount } = await pool.query(
-    `SELECT 1 FROM challenges WHERE id = $1 AND is_test_account = false`,
-    [challengeId],
+    `SELECT 1 FROM challenges WHERE id = $1 AND is_test_account = $2`,
+    [challengeId, fixtureMarker],
   );
   if (rowCount === 0) throw new NotFoundError("Challenge not found", { challengeId });
 }
@@ -76,7 +78,8 @@ export async function assertCanEditChallenge(
     [userId],
   );
   if (!activeCount) throw new UnauthorizedError("This account is closed or being removed");
-  await ensureExists(challengeId);
+  const fixtureMarker = await isSyntheticOperator(pool, userId);
+  await ensureExists(challengeId, fixtureMarker);
 
   if (await isChallengeAdmin(userId)) return "admin";
   if (await ownsChallenge(userId, challengeId)) return "owner";
@@ -98,7 +101,8 @@ export async function assertCanViewPanel(
     [userId],
   );
   if (!activeCount) throw new UnauthorizedError("This account is closed or being removed");
-  await ensureExists(challengeId);
+  const fixtureMarker = await isSyntheticOperator(pool, userId);
+  await ensureExists(challengeId, fixtureMarker);
   if (
     (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN)) ||
     (await userHasCapability(userId, CAPABILITIES.SPONSORS_MANAGE)) ||
@@ -113,9 +117,9 @@ export async function assertCanViewPanel(
        FROM challenges c
        JOIN sponsors author ON author.id = c.author
        JOIN enterprise_judges ej ON ej.enterprise_id = author.enterprise_id
-      WHERE ej.user_id = $1 AND c.id = $2
+      WHERE ej.user_id = $1 AND c.id = $2 AND c.is_test_account = $3
       LIMIT 1`,
-    [userId, challengeId],
+    [userId, challengeId, fixtureMarker],
   );
   if (assigned.rowCount) return;
   throw new ForbiddenError("Not allowed to view this panel", { challengeId });
@@ -126,11 +130,13 @@ export const challengeAccessPolicy: ContextualPolicyResolver<ChallengeResource> 
   name: "challenge-access",
   async resolve(request, locator) {
     const id = challengeIdFrom(request, locator);
+    const fixtureMarker =
+      request.userId == null ? false : await isSyntheticOperator(pool, request.userId);
     const { rows } = await pool.query(
       `SELECT c.id, author.enterprise_id
          FROM challenges c JOIN sponsors author ON author.id = c.author
-        WHERE c.id = $1`,
-      [id],
+        WHERE c.id = $1 AND c.is_test_account = $2`,
+      [id, fixtureMarker],
     );
     if (!rows[0]) throw new NotFoundError("Challenge not found", { challengeId: id });
     return { id: Number(rows[0].id), enterpriseId: Number(rows[0].enterprise_id) };

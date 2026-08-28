@@ -220,7 +220,7 @@ function PresencePanel({
     try {
       const result = await logisticsApi.presenceLookup(badgeId.trim());
       setLookup(result);
-      setManualKind(result.openSince ? "out" : "in");
+      setManualKind(result.pendingExit || result.openSince ? "out" : "in");
     } catch (err) {
       setLookup(null);
       setError(errorMessage(err, t("badgeLookupFailed")));
@@ -248,15 +248,16 @@ function PresencePanel({
 
   const doManualSave = async () => {
     if (!lookup || !manualScannedAt) return;
+    const kind = lookup.pendingExit ? "out" : manualKind;
     setBusy(true);
     setError("");
     try {
       const result = await logisticsApi.presenceScan({
         badgeId: lookup.badgeId,
-        kind: manualKind,
+        kind,
         scannedAt: new Date(manualScannedAt).toISOString(),
       });
-      setRecentScan({ kind: manualKind, person: personName(lookup), at: result.scannedAt });
+      setRecentScan({ kind, person: personName(lookup), at: result.scannedAt });
       toast.success(t("manualRecordAdded"));
       reset();
       onScanned();
@@ -362,7 +363,7 @@ function PresencePanel({
                 <Button
                   variant={lookup.openSince ? "outline" : "default"}
                   onClick={() => doScan("in")}
-                  disabled={busy || !!lookup.openSince}
+                  disabled={busy || !!lookup.openSince || lookup.pendingExit === true}
                 >
                   <LogInIcon className="size-4" />
                   {t("registerEntry")}
@@ -400,7 +401,9 @@ function PresencePanel({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="in">{t("entryOption")}</SelectItem>
+                          <SelectItem value="in" disabled={lookup.pendingExit === true}>
+                            {t("entryOption")}
+                          </SelectItem>
                           <SelectItem value="out">{t("exitOption")}</SelectItem>
                         </SelectContent>
                       </Select>
@@ -416,7 +419,9 @@ function PresencePanel({
                   <Button
                     variant="outline"
                     onClick={doManualSave}
-                    disabled={busy || !manualScannedAt}
+                    disabled={
+                      busy || !manualScannedAt || (lookup.pendingExit === true && !lookup.openSince)
+                    }
                   >
                     {t("saveManualRecord")}
                   </Button>
@@ -467,13 +472,15 @@ function PresencePanel({
           <DataTable
             columns={getOpenSessionColumns(t, timeFmt)}
             data={openSessions}
-            getRowId={(row) => String(row.userId)}
-            getRowHref={(row) => `/users/${row.userId}?tab=presence`}
+            getRowId={(row) =>
+              row.userId != null ? `user:${row.userId}` : `pending:${row.sessionId}`
+            }
             getRowLabel={(row) =>
-              `${row.name ?? ""} ${row.surname ?? ""}`.trim() || String(row.userId)
+              `${row.name ?? ""} ${row.surname ?? ""}`.trim() ||
+              (row.userId != null ? String(row.userId) : t("reviewSession"))
             }
             loading={openSessionsLoading}
-            searchable={(row) => `${row.userId} ${row.name ?? ""} ${row.surname ?? ""}`}
+            searchable={(row) => `${row.userId ?? ""} ${row.name ?? ""} ${row.surname ?? ""}`}
             searchPlaceholder={t("filterUsers")}
             pageSize={10}
             error={openSessionsError}
@@ -503,7 +510,9 @@ function getOpenSessionColumns(
         return name ? (
           <span>{name}</span>
         ) : (
-          <span className="text-muted-foreground font-mono text-sm">#{row.userId}</span>
+          <span className="text-muted-foreground font-mono text-sm">
+            {row.userId != null ? `#${row.userId}` : "—"}
+          </span>
         );
       },
     },
@@ -536,11 +545,12 @@ function getOpenSessionColumns(
       id: "review",
       header: t("columnActions"),
       align: "right",
-      cell: (row) => (
-        <Button asChild size="sm" variant="outline">
-          <Link href={`/users/${row.userId}?tab=presence`}>{t("reviewSession")}</Link>
-        </Button>
-      ),
+      cell: (row) =>
+        row.userId == null ? null : (
+          <Button asChild size="sm" variant="outline">
+            <Link href={`/users/${row.userId}?tab=presence`}>{t("reviewSession")}</Link>
+          </Button>
+        ),
     },
   ];
 }

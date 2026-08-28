@@ -1,7 +1,12 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { createUser, createUserWithCapabilities, truncateAll } from "../helpers.js";
+import {
+  createUser,
+  createUserWithCapabilities,
+  ensureApplicationFormVersion,
+  truncateAll,
+} from "../helpers.js";
 import { broadcastCount } from "./fixtures.js";
 
 /** H54: the data-subject-request worker's claim guard and failure handling. */
@@ -100,10 +105,12 @@ describe("processDataSubjectRequest (H54)", () => {
       `INSERT INTO applications (name, type, template)
        VALUES ('Pending response mutation guard', 'participant', '[]'::jsonb) RETURNING id`,
     );
+    const formVersionId = await ensureApplicationFormVersion(applications[0].id);
     const { rows: responses } = await pool.query(
-      `INSERT INTO application_responses (user_id, application_id, status, responses)
-       VALUES ($1, $2, 'accepted', '{}'::jsonb) RETURNING id`,
-      [subject, applications[0].id],
+      `INSERT INTO application_responses
+         (user_id, application_id, application_form_version_id, status, responses)
+       VALUES ($1, $2, $3, 'accepted', '{}'::jsonb) RETURNING id`,
+      [subject, applications[0].id, formVersionId],
     );
     const { rows } = await pool.query(
       `INSERT INTO data_subject_requests (subject_user_id, requested_by, type)

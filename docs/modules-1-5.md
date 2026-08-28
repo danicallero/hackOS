@@ -245,11 +245,11 @@ H23/H24), and a badge/"Batch" assignment control on profile details
 
 **Schema.** H54 adds `users.account_state` (`active` → `removal_pending`),
 `removal_action` and `removal_started_at`, plus the separate
-`anonymous_participants` audit subject. `check_in_logs` and `time_logs` can
-point to either an active user or an anonymous participant, never both; all
-direct user foreign-key writers are guarded by the 0733 active-reference
-triggers. `users.id` remains the authenticated identity PK and is never used
-as the anonymous identifier. Better Auth's `accounts.account_id` for
+`anonymous_participants` audit subject. `check_in_logs` and `time_logs` retain
+active-user references until the final scrub; all final direct user foreign-key
+writers are guarded by the squashed `0730` active-reference triggers.
+`users.id` remains the authenticated identity PK and is never used as the
+anonymous identifier. Better Auth's `accounts.account_id` for
 credential login is the user id as text, while `sessions`/`accounts` FK on
 `user_id`.
 
@@ -289,13 +289,13 @@ credential login is the user id as text, while `sessions`/`accounts` FK on
   because the actor row is deleted in the same transaction.
 - `identity/removal.ts` performs two phases: commit `removal_pending` and
   revoke local access, remove provider/storage artifacts with bounded retry,
-  then finalize the database transaction. `0733`/`0736` add a database-level
-  active-user reference guard so stale notification, token, project, logistics
-  or audit writers cannot create new FK rows after pending begins; only the
-  already-open participant exit is allowed through the transition. `0737`
-  permanently retires disconnected scanner credentials without a participant
-  foreign key, and `0738` prevents a response from selecting another form's
-  retention snapshot.
+  then finalize the database transaction. The final `0730` migration adds a
+  database-level active-user reference guard so stale notification, token,
+  project, logistics or audit writers cannot create new FK rows after pending
+  begins; only the already-open participant exit is allowed through the
+  transition. It also permanently retires disconnected scanner credentials
+  without a participant foreign key and prevents a response from selecting
+  another form's retention snapshot.
 
 **State transitions.** `active → removal_pending → users row deleted`, with an
 anonymous participant created only for the anonymization branch. A pending

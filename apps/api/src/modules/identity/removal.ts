@@ -363,12 +363,17 @@ async function pendingRecoveryExpiry(
            FROM sessions
           WHERE user_id = $1 AND token = $2 AND expires_at > clock_timestamp()
        ),
-       (
-         SELECT min(expires_at)
-           FROM sessions
-          WHERE user_id = $1 AND expires_at > clock_timestamp()
-       ),
-       clock_timestamp() + interval '1 hour'
+       LEAST(
+         COALESCE(
+           (
+             SELECT min(expires_at)
+               FROM sessions
+              WHERE user_id = $1 AND expires_at > clock_timestamp()
+           ),
+           clock_timestamp() + interval '1 hour'
+         ),
+         clock_timestamp() + interval '1 hour'
+       )
      ) AS expires_at`,
     [userId, sessionToken ?? null],
   );
@@ -461,7 +466,16 @@ export async function cancelPendingAccountRemoval(
       code: "removal_not_cancellable",
     });
   }
-  if (await removalDeadlineExpired(client, user.removal_expires_at)) {
+  // Admin-originated pending requests have no self-service idempotency marker.
+  // There is intentionally no target-facing admin-cancel endpoint, so do not
+  // let the target turn an administrator's irreversible request into a
+  // reversible one through this self-service route.
+  if (!user.removal_idempotency_key) {
+    throw new ConflictError("This account-removal request was initiated by an administrator.", {
+      code: "removal_not_cancellable",
+    });
+  }
+  if (!user.removal_expires_at || (await removalDeadlineExpired(client, user.removal_expires_at))) {
     throw new ConflictError("The account-removal recovery window has expired.", {
       code: "removal_expired",
     });
@@ -473,7 +487,11 @@ export async function cancelPendingAccountRemoval(
     });
   }
 
-  await client.query(
+  // The early deadline check above makes the common failure cheap, but is not
+  // authoritative: the deadline can pass while venue state is being read.
+  // Recheck it in the state transition itself so an expiry and cancellation
+  // cannot both commit successfully.
+  const restored = await client.query(
     `UPDATE users
         SET account_state = 'active',
             removal_action = NULL,
@@ -481,13 +499,32 @@ export async function cancelPendingAccountRemoval(
             removal_expires_at = NULL,
             removal_started_at = NULL,
             removal_idempotency_key = NULL
-      WHERE id = $1`,
-    [userId],
+      WHERE id = $1
+        AND account_state = 'removal_pending'
+        AND removal_action = 'anonymize'
+        AND removal_requires_exit = true
+        AND removal_idempotency_key = $2
+        AND removal_expires_at IS NOT NULL
+        AND clock_timestamp() < removal_expires_at
+      RETURNING id`,
+    [userId, user.removal_idempotency_key],
   );
+  if (restored.rowCount !== 1) {
+    if (await removalDeadlineExpired(client, user.removal_expires_at)) {
+      throw new ConflictError("The account-removal recovery window has expired.", {
+        code: "removal_expired",
+      });
+    }
+    throw new ConflictError("This account-removal request can no longer be cancelled.", {
+      code: "removal_not_cancellable",
+    });
+  }
   if (user.removal_idempotency_key) {
-    await client.query(`DELETE FROM idempotency_keys WHERE key = $1`, [
-      user.removal_idempotency_key,
-    ]);
+    await client.query(
+      `DELETE FROM idempotency_keys
+        WHERE key = $1 AND scope = 'POST /api/me/anonymize removal-complete'`,
+      [user.removal_idempotency_key],
+    );
   }
   await audit(client, {
     actorId,
@@ -1297,7 +1334,14 @@ async function scrubRelationships(
   // reviewer. Reviews of the departing person's own applications were
   // already deleted with their responses above.
   await client.query(`DELETE FROM applicant_reviews WHERE author_id = $1`, [userId]);
-  await client.query(`UPDATE announcements SET author_id = NULL WHERE author_id = $1`, [userId]);
+  if (user.is_test_account) {
+    // A synthetic announcement's fixture marker is derived from author_id.
+    // Detaching that FK would turn fixture content into ordinary staff-facing
+    // content, so purge it while the synthetic identity is still attached.
+    await client.query(`DELETE FROM announcements WHERE author_id = $1`, [userId]);
+  } else {
+    await client.query(`UPDATE announcements SET author_id = NULL WHERE author_id = $1`, [userId]);
+  }
   await client.query(`UPDATE challenge_versions SET editor_id = NULL WHERE editor_id = $1`, [
     userId,
   ]);
@@ -1357,6 +1401,40 @@ async function scrubRelationships(
       WHERE lower(identifier) = ANY($2::text[]) OR identifier = $1::text`,
     [userId, normalizedEmails],
   );
+
+  if (user.is_test_account) {
+    // DSR fixture visibility is intentionally carried by an identity-free
+    // audit marker once the subject FK is scrubbed. Mark every synthetic
+    // subject row before either of the updates below can erase that FK, so a
+    // pending/processing request cannot become visible or lose its fixture
+    // scope before the worker handles it.
+    const { rows: syntheticRequestRows } = await client.query<{ id: number }>(
+      `SELECT dsr.id
+         FROM data_subject_requests dsr
+        WHERE dsr.subject_user_id = $1
+          AND NOT EXISTS (
+            SELECT 1
+              FROM audit_log fixture_marker
+             WHERE fixture_marker.entity_type = 'data_subject_request'
+               AND fixture_marker.entity_id = dsr.id::text
+               AND fixture_marker.action = 'fixture_scope_marked'
+          )
+        FOR UPDATE`,
+      [userId],
+    );
+    for (const request of syntheticRequestRows) {
+      await audit(client, {
+        actorId: null,
+        entityType: "data_subject_request",
+        entityId: request.id,
+        action: "fixture_scope_marked",
+        source: "system",
+        after: { is_test_account: true },
+        ip: null,
+        userAgent: null,
+      });
+    }
+  }
 
   const { rows: completedDeletionRequests } = await client.query<{ id: number }>(
     `UPDATE data_subject_requests

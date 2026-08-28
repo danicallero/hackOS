@@ -7,6 +7,7 @@ import {
   loadOfflineQueue,
   type OfflineScan,
   saveOfflineQueue,
+  updateOfflineQueue,
 } from "./offline-queue";
 
 const saved: OfflineScan = {
@@ -123,15 +124,20 @@ function makeFakeIndexedDb() {
 
 describe("web scanner restart persistence", () => {
   const values = new Map<string, string>();
+  let failWrites = false;
 
   beforeEach(() => {
     vi.stubGlobal("indexedDB", makeFakeIndexedDb());
     values.clear();
+    failWrites = false;
     Object.defineProperty(window, "localStorage", {
       configurable: true,
       value: {
         getItem: (key: string) => values.get(key) ?? null,
-        setItem: (key: string, value: string) => values.set(key, value),
+        setItem: (key: string, value: string) => {
+          if (failWrites) throw new Error("storage unavailable");
+          values.set(key, value);
+        },
         removeItem: (key: string) => values.delete(key),
       },
     });
@@ -177,6 +183,52 @@ describe("web scanner restart persistence", () => {
     ]);
   });
 
+  it("never broadens ownerless cleanup into another account's queue", async () => {
+    await saveOfflineQueue(7, [saved]);
+    await saveOfflineQueue(8, [{ ...saved, clientScanId: "other-owner-operation" }]);
+
+    await clearOfflineQueue(null);
+
+    expect(await loadOfflineQueue(7)).toEqual([saved]);
+    expect(await loadOfflineQueue(8)).toEqual([
+      { ...saved, clientScanId: "other-owner-operation" },
+    ]);
+  });
+
+  it("serializes owner queue read-modify-write updates without losing an enqueue", async () => {
+    await saveOfflineQueue(7, [saved]);
+    const first = { ...saved, clientScanId: "concurrent-first" };
+    const second = { ...saved, clientScanId: "concurrent-second" };
+
+    await Promise.all([
+      updateOfflineQueue(7, (items) => [...items, first]),
+      updateOfflineQueue(7, (items) => [...items, second]),
+    ]);
+
+    expect(await loadOfflineQueue(7)).toEqual([saved, first, second]);
+  });
+
+  it("keeps the durable queue when replacing it fails", async () => {
+    const later = { ...saved, clientScanId: "later-operation" };
+    await saveOfflineQueue(7, [saved, later]);
+
+    failWrites = true;
+    await expect(
+      updateOfflineQueue(7, (items) =>
+        items.filter((item) => item.clientScanId !== saved.clientScanId),
+      ),
+    ).rejects.toThrow("storage unavailable");
+    failWrites = false;
+
+    expect(await loadOfflineQueue(7)).toEqual([saved, later]);
+  });
+
+  it("releases a persisted syncing lease after a restart", async () => {
+    await saveOfflineQueue(7, [{ ...saved, status: "syncing" }]);
+
+    expect(await loadOfflineQueue(7)).toEqual([saved]);
+  });
+
   it("does not load a queue without an authenticated owner", async () => {
     await saveOfflineQueue(7, [saved]);
 
@@ -187,6 +239,8 @@ describe("web scanner restart persistence", () => {
     "not_found",
     "badge_unknown",
     "badge_revoked",
+    "ticket_revoked",
+    "badge_scan_before_assignment",
   ])("recognizes %s as a stale participant rejection", (code) => {
     expect(isStaleOfflineScanError({ code })).toBe(true);
   });

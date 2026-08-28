@@ -3,6 +3,7 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
+import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
 
 export type RequestType = "export" | "deletion";
 export type RequestStatus = "pending" | "processing" | "completed" | "failed";
@@ -47,7 +48,13 @@ function syntheticVisibilityCondition(includeSynthetic: boolean, alias = "r"): s
     SELECT 1 FROM users synthetic_subject
      WHERE synthetic_subject.id = ${alias}.subject_user_id
        AND synthetic_subject.is_test_account = true
-  ))`;
+  )) AND NOT EXISTS (
+    SELECT 1 FROM audit_log fixture_marker
+     WHERE fixture_marker.entity_type = 'data_subject_request'
+       AND fixture_marker.entity_id = ${alias}.id::text
+       AND fixture_marker.action = 'fixture_scope_marked'
+       AND fixture_marker.after ->> 'is_test_account' = 'true'
+  )`;
 }
 
 function isUniqueViolation(err: unknown): boolean {
@@ -61,6 +68,18 @@ export async function createRequest(input: CreateRequestInput): Promise<DataSubj
   }
   try {
     return await withTransaction(async (client) => {
+      // Serialize request creation with account removal and enforce the same
+      // fixture boundary as the route pre-handler. A direct service caller
+      // must not be able to create a request for a pending or synthetic
+      // subject by bypassing HTTP policy.
+      const { rows: subjectRows } = await client.query(
+        `SELECT id FROM users
+          WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+          FOR UPDATE`,
+        [input.subjectUserId],
+      );
+      if (!subjectRows[0]) throw new NotFoundError("User not found");
+      await assertFixtureSubjectScope(client, input.requestedBy, input.subjectUserId);
       const { rows } = await client.query(
         `INSERT INTO data_subject_requests (subject_user_id, requested_by, type, reason)
          VALUES ($1, $2, $3, $4)
@@ -91,7 +110,7 @@ export async function createRequest(input: CreateRequestInput): Promise<DataSubj
 
 export async function listRequests(
   filter: ListRequestsFilter,
-  visibility: RequestVisibility = {},
+  visibility: RequestVisibility = { includeSynthetic: false },
 ): Promise<{ items: DataSubjectRequestRow[]; total: number }> {
   const conditions: string[] = [];
   const params: unknown[] = [];
@@ -124,7 +143,7 @@ export async function listRequests(
 
 export async function getRequest(
   id: number,
-  visibility: RequestVisibility = {},
+  visibility: RequestVisibility = { includeSynthetic: false },
 ): Promise<DataSubjectRequestRow> {
   const visibilityCondition = syntheticVisibilityCondition(visibility.includeSynthetic !== false);
   const { rows } = await pool.query(
@@ -142,11 +161,54 @@ export async function getRequest(
  */
 export async function claimForProcessing(id: number): Promise<DataSubjectRequestRow | null> {
   const { rows } = await pool.query(
-    `UPDATE data_subject_requests SET status = 'processing', started_at = now()
-     WHERE id = $1 AND status = 'pending' RETURNING *`,
+    `UPDATE data_subject_requests
+        SET status = 'processing', started_at = clock_timestamp(), completed_at = NULL
+      WHERE id = $1
+        AND (
+          status IN ('pending', 'failed')
+          OR (status = 'processing' AND started_at IS NOT NULL
+              AND started_at < clock_timestamp() - interval '30 minutes')
+        )
+      RETURNING *`,
     [id],
   );
   return (rows[0] as DataSubjectRequestRow | undefined) ?? null;
+}
+
+/**
+ * Preserve a fixture-only visibility marker without retaining its subject id.
+ * Account scrubbing deliberately removes identity-bearing DSR columns, so the
+ * marker lives in an identity-free audit row keyed only by the opaque request
+ * id. It is idempotent and is written before the removal transaction begins.
+ */
+export async function markSyntheticRequest(id: number, subjectUserId: number): Promise<boolean> {
+  return withTransaction(async (client) => {
+    const { rows: users } = await client.query<{ is_test_account: boolean }>(
+      `SELECT is_test_account FROM users WHERE id = $1`,
+      [subjectUserId],
+    );
+    if (!users[0]?.is_test_account) return false;
+    const { rows: existing } = await client.query(
+      `SELECT 1 FROM audit_log
+        WHERE entity_type = 'data_subject_request' AND entity_id = $1::text
+          AND action = 'fixture_scope_marked'
+        LIMIT 1`,
+      [id],
+    );
+    if (existing.length === 0) {
+      await audit(client, {
+        actorId: null,
+        entityType: "data_subject_request",
+        entityId: id,
+        action: "fixture_scope_marked",
+        source: "system",
+        after: { is_test_account: true },
+        ip: null,
+        userAgent: null,
+      });
+    }
+    return true;
+  });
 }
 
 async function finishRequest(
@@ -154,7 +216,7 @@ async function finishRequest(
   status: "completed" | "failed",
   extra: { storageKey?: string; error?: string },
 ): Promise<DataSubjectRequestRow> {
-  const row = await withTransaction(async (client) => {
+  const result = await withTransaction(async (client) => {
     const { rows } = await client.query(
       `UPDATE data_subject_requests
          SET status = $2, completed_at = now(),
@@ -177,10 +239,35 @@ async function finishRequest(
       after: { status },
       reason: extra.error,
     });
-    return updated;
+    // Fixture requests are hidden from ordinary export readers. Preserve the
+    // same boundary for the refresh stream: a synthetic row may still carry
+    // its subject id, or may already be detached with an identity-free marker.
+    const { rows: markerRows } = await client.query<{ is_synthetic: boolean }>(
+      `SELECT (
+         ($2::int IS NOT NULL AND EXISTS (
+           SELECT 1 FROM users u
+            WHERE u.id = $2 AND u.is_test_account = true
+         ))
+         OR EXISTS (
+           SELECT 1 FROM audit_log fixture_marker
+            WHERE fixture_marker.entity_type = 'data_subject_request'
+              AND fixture_marker.entity_id = $1::text
+              AND fixture_marker.action = 'fixture_scope_marked'
+              AND fixture_marker.after ->> 'is_test_account' = 'true'
+         )
+       ) AS is_synthetic`,
+      [updated.id, updated.subject_user_id],
+    );
+    return { row: updated, isSynthetic: markerRows[0]?.is_synthetic === true };
   });
-  await broadcast(SSE_TOPICS.EXPORTS, EVENTS.EXPORT_REQUEST_CHANGED, serializeRequest(row));
-  return row;
+  if (!result.isSynthetic) {
+    await broadcast(
+      SSE_TOPICS.EXPORTS,
+      EVENTS.EXPORT_REQUEST_CHANGED,
+      serializeRequest(result.row),
+    );
+  }
+  return result.row;
 }
 
 export function markCompleted(id: number, storageKey?: string): Promise<DataSubjectRequestRow> {

@@ -205,7 +205,7 @@ function MobileAccessGate({ authenticated }: { authenticated: boolean }) {
 function RootLayoutNav({ authenticated, pending }: { authenticated: boolean; pending: boolean }) {
   const colorScheme = useColorScheme();
   const { t } = useLocale();
-  const { me, loading: meLoading, refetch } = useMeContext();
+  const { me, loading: meLoading, error: meError, refetch } = useMeContext();
   const showRestoringSession = useDelayedVisibility(authenticated && !me && meLoading, 500);
   const canEnterApp = canEnterMobileApp(authenticated, me?.mobileAccess);
 
@@ -229,7 +229,7 @@ function RootLayoutNav({ authenticated, pending }: { authenticated: boolean; pen
   }
 
   if (me?.accountState === "removal_pending" && me.removal) {
-    return <PendingRemovalScreen removal={me.removal} onRefresh={refetch} />;
+    return <PendingRemovalScreen removal={me.removal} onRefresh={refetch} refreshError={meError} />;
   }
 
   // Access is part of the navigation guard, not just an asynchronous sign-out

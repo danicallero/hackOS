@@ -1,8 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { pool } from "../../../db/pool.js";
+import { withTransaction } from "../../../db/pool.js";
 import { requireAuth } from "../../../lib/capabilities.js";
+import { NotFoundError } from "../../../lib/errors.js";
 import { routeAccessOption as routeAccess } from "../../../lib/route-policy.js";
 import { registerPushTokenBodySchema } from "../schemas.js";
 
@@ -37,12 +38,21 @@ export function registerPushTokenRoutes(app: FastifyInstance): void {
     async (req) => {
       const userId = req.userId as number;
       const { token, platform } = req.body;
-      await pool.query(
-        `INSERT INTO push_tokens (user_id, token, platform)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (token) DO UPDATE SET user_id = $1, platform = $3, updated_at = now()`,
-        [userId, token, platform ?? null],
-      );
+      await withTransaction(async (client) => {
+        const { rows: userRows } = await client.query(
+          `SELECT id FROM users
+            WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+            FOR UPDATE`,
+          [userId],
+        );
+        if (!userRows[0]) throw new NotFoundError("User not found");
+        await client.query(
+          `INSERT INTO push_tokens (user_id, token, platform)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (token) DO UPDATE SET user_id = $1, platform = $3, updated_at = now()`,
+          [userId, token, platform ?? null],
+        );
+      });
       return { status: true as const };
     },
   );

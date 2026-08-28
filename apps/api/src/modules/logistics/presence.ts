@@ -178,14 +178,19 @@ async function openSessionAsOf(
 export async function presenceLookup(badgeId: string, actorId?: number) {
   const userId = await resolveByBadge(pool, badgeId, { allowPendingExit: true });
   if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
-  const card = await loadPersonCard(pool, userId, { allowPendingExit: true });
+  const card = await loadPersonCard(pool, userId, {
+    allowPendingExit: true,
+    includePendingExitMarker: true,
+  });
   const events = (await loadEvents(userId)).get(userId) ?? [];
   const now = await databaseNow();
   const session = await openSessionAsOf(pool, userId, now);
   const suspiciousGapMs = await certaintyWindowMs();
+  const { userId: _userId, pendingExit, ...sanitizedCard } = card;
   return {
-    ...card,
+    ...(pendingExit ? sanitizedCard : { userId: _userId, ...sanitizedCard }),
     badgeId,
+    ...(pendingExit ? { pendingExit: true } : {}),
     // Pending-exit rows are intentionally omitted from normal event reads, but
     // the raw open door session remains the authoritative operational state
     // until staff record the exit.
@@ -335,10 +340,10 @@ export async function openSessions(at?: number, actorId?: number) {
   const windowMs = await certaintyWindowMs();
   const fixtureFilter = await fixtureReadFilter(pool, actorId, "u");
   const { rows } = await pool.query(
-    `SELECT tl.user_id, tl.scanned_at AS since, u.name, u.surname,
+    `SELECT tl.id AS session_id, tl.user_id, tl.scanned_at AS since, u.name, u.surname, u.account_state,
             GREATEST(tl.scanned_at, COALESCE(la.last_activity, tl.scanned_at)) AS last_signal
        FROM (
-         SELECT DISTINCT ON (user_id) user_id, kind, scanned_at
+         SELECT DISTINCT ON (user_id) id, user_id, kind, scanned_at
            FROM time_logs
       WHERE scanned_at <= now() AND kind IN ('in', 'out')
           ORDER BY user_id, scanned_at DESC, id DESC
@@ -358,21 +363,27 @@ export async function openSessions(at?: number, actorId?: number) {
   );
   return (
     rows as {
+      session_id: number;
       user_id: number;
       since: Date;
       name: string | null;
       surname: string | null;
+      account_state: "active" | "removal_pending";
       last_signal: Date;
     }[]
   ).map((r) => {
     const staleMs = now - r.last_signal.getTime();
     return {
-      userId: r.user_id,
+      // This is the latest time-log row, not a user identity. It keeps
+      // identity-free pending rows stable and distinct in clients.
+      sessionId: r.session_id,
+      ...(r.account_state === "removal_pending" ? {} : { userId: r.user_id }),
       name: r.name,
       surname: r.surname,
       since: r.since.toISOString(),
       lastSignal: r.last_signal.toISOString(),
       stale: staleMs > windowMs,
+      ...(r.account_state === "removal_pending" ? { pendingExit: true } : {}),
     };
   });
 }
@@ -385,11 +396,15 @@ export async function openSessions(at?: number, actorId?: number) {
  */
 async function loadEvents(
   userId?: number,
-  options: { includeTestAccounts?: boolean } = {},
+  options: { accountScope?: "real" | "synthetic" | "all" } = {},
 ): Promise<Map<number, PresenceEvent[]>> {
   const scoped = userId != null;
   const testAccountFilter =
-    options.includeTestAccounts === false ? " AND u.is_test_account = false" : "";
+    options.accountScope === "real"
+      ? " AND u.is_test_account = false"
+      : options.accountScope === "synthetic"
+        ? " AND u.is_test_account = true"
+        : "";
   const timeFilter = scoped
     ? `WHERE tl.user_id = $1
          AND EXISTS (SELECT 1 FROM users u WHERE u.id = tl.user_id
@@ -426,8 +441,9 @@ async function loadEvents(
 /** H24/H27: how many people are estimated to be in the venue right now. */
 export async function occupancyEstimate(cutoff?: number, actorId?: number) {
   const at = cutoff ?? (await databaseNow()).getTime();
+  const syntheticOperator = actorId != null && (await isSyntheticOperator(pool, actorId));
   const map = await loadEvents(undefined, {
-    includeTestAccounts: actorId != null && (await isSyntheticOperator(pool, actorId)),
+    accountScope: syntheticOperator ? "synthetic" : "real",
   });
   const suspiciousGapMs = await certaintyWindowMs();
   const present: number[] = [];
@@ -459,8 +475,10 @@ export async function userHours(userId: number, cutoff?: number, actorId?: numbe
 /** H24: estimated hours for every user with presence signals (bulk, admin display). */
 export async function allHours(cutoff?: number, actorId?: number) {
   const now = cutoff ?? (await databaseNow()).getTime();
-  const includeTestAccounts = actorId != null && (await isSyntheticOperator(pool, actorId));
-  const map = await loadEvents(undefined, { includeTestAccounts });
+  const syntheticOperator = actorId != null && (await isSyntheticOperator(pool, actorId));
+  const map = await loadEvents(undefined, {
+    accountScope: syntheticOperator ? "synthetic" : "real",
+  });
   const suspiciousGapMs = await certaintyWindowMs();
   const userIds = [...map.keys()];
   if (userIds.length === 0) return [];
@@ -469,7 +487,7 @@ export async function allHours(cutoff?: number, actorId?: number) {
   const { rows: people } = await pool.query(
     `SELECT u.id, u.name, u.surname FROM users u
       WHERE u.id = ANY($1) AND u.account_state = 'active' AND u.anonymized_at IS NULL
-        ${actorId == null || !includeTestAccounts ? "AND u.is_test_account = false" : fixtureFilter}`,
+        ${syntheticOperator ? fixtureFilter : "AND u.is_test_account = false"}`,
     [userIds],
   );
   const nameById = new Map(

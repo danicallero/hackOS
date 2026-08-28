@@ -1,7 +1,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { pool } from "../../../db/pool.js";
+import { pool, withTransaction } from "../../../db/pool.js";
 import { requireAuth, userHasCapability } from "../../../lib/capabilities.js";
 import { ForbiddenError } from "../../../lib/errors.js";
 import { routeAccessOption as routeAccess } from "../../../lib/route-policy.js";
@@ -52,7 +52,9 @@ export function registerPreferenceRoutes(app: FastifyInstance): void {
           throw new ForbiddenError("Queue staff notifications require queue or judging access");
         }
       }
-      await setPreferences(pool, req.userId as number, req.body.preferences);
+      await withTransaction(async (client) => {
+        await setPreferences(client, req.userId as number, req.body.preferences);
+      });
       return getPreferences(pool, req.userId as number);
     },
   );

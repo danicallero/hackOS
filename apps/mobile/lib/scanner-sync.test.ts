@@ -288,6 +288,42 @@ describe("synchronizeScanner", () => {
     expect(mockAcknowledgeScan).toHaveBeenCalled();
   });
 
+  it("classifies a corrected terminal rejection as final instead of leaving it pending", async () => {
+    mockGetClockSkewMs.mockReturnValue(-5 * 60_000);
+    const scan = presenceScan("scan-terminal", "2026-01-01T00:05:00.000Z");
+    mockPendingScans.mockResolvedValue([scan]);
+    mockApiFetch
+      .mockRejectedValueOnce(apiError(400, "Offline scan timestamp must be in the past"))
+      .mockRejectedValueOnce(apiError(409, "No badge to remove"))
+      .mockResolvedValueOnce({ generatedAt: "t0", people: [], activities: [], activityStates: [] });
+
+    await synchronizeScanner(OWNER_USER_ID);
+
+    expect(mockCorrectScanTimestamp).toHaveBeenCalledTimes(1);
+    expect(mockFailScan).toHaveBeenCalledWith("scan-terminal", "No badge to remove", OWNER_USER_ID);
+    expect(mockNoteRetryable).not.toHaveBeenCalled();
+  });
+
+  it("stops after a corrected retryable failure and keeps the scan retryable", async () => {
+    mockGetClockSkewMs.mockReturnValue(-5 * 60_000);
+    const scan = presenceScan("scan-transient", "2026-01-01T00:05:00.000Z");
+    mockPendingScans.mockResolvedValue([scan]);
+    mockApiFetch
+      .mockRejectedValueOnce(apiError(400, "Offline scan timestamp must be in the past"))
+      .mockRejectedValueOnce(apiError(503, "Service unavailable"))
+      .mockResolvedValueOnce({ generatedAt: "t0", people: [], activities: [], activityStates: [] });
+
+    await synchronizeScanner(OWNER_USER_ID);
+
+    expect(mockNoteRetryable).toHaveBeenCalledWith(
+      "scan-transient",
+      "Service unavailable",
+      OWNER_USER_ID,
+    );
+    expect(mockFailScan).not.toHaveBeenCalled();
+    expect(mockApiFetch).toHaveBeenCalledTimes(3);
+  });
+
   it("fails a scan permanently if it's still rejected as future after a clock-skew correction", async () => {
     mockGetClockSkewMs.mockReturnValue(-5 * 60_000);
     const scan = { ...presenceScan("scan-1"), clockCorrected: true };

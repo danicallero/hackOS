@@ -80,8 +80,8 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
           "Lists all H50 announcements (regardless of publication window) for admin management and audit.",
       },
     },
-    async () => {
-      const items = await listAnnouncementsAdmin(pool);
+    async (req) => {
+      const items = await listAnnouncementsAdmin(pool, req.userId as number);
       return { items };
     },
   );
@@ -99,7 +99,12 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => ({
-      users: await listAnnouncementRecipientCandidates(pool, req.query.q, req.query.limit),
+      users: await listAnnouncementRecipientCandidates(
+        pool,
+        req.query.q,
+        req.query.limit,
+        req.userId as number,
+      ),
     }),
   );
 
@@ -153,7 +158,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      const announcement = await getAnnouncement(pool, req.params.id);
+      const announcement = await getAnnouncement(pool, req.params.id, req.userId as number);
       const recipients = await getAnnouncementRecipients(pool, announcement.id);
       return { ...announcement, recipients };
     },
@@ -218,19 +223,24 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
     async (req) => {
       const body = req.body;
       const announcement = await withTransaction(async (client) => {
-        const before = await getAnnouncement(client, req.params.id);
-        const updated = await updateAnnouncement(client, req.params.id, {
-          title: body.title,
-          body: body.body,
-          translations: body.translations,
-          notifyUsers: body.notifyUsers,
-          screenPlacement: body.screenPlacement,
-          publishAt: body.publishAt,
-          expiresAt: body.expiresAt,
-          audiences: body.audiences,
-          channels: body.channels,
-          recipientUserIds: body.recipientUserIds,
-        });
+        const before = await getAnnouncement(client, req.params.id, req.userId as number);
+        const updated = await updateAnnouncement(
+          client,
+          req.params.id,
+          {
+            title: body.title,
+            body: body.body,
+            translations: body.translations,
+            notifyUsers: body.notifyUsers,
+            screenPlacement: body.screenPlacement,
+            publishAt: body.publishAt,
+            expiresAt: body.expiresAt,
+            audiences: body.audiences,
+            channels: body.channels,
+            recipientUserIds: body.recipientUserIds,
+          },
+          req.userId as number,
+        );
         await audit(client, {
           actorId: req.userId as number,
           entityType: "announcement",
@@ -261,7 +271,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const deleted = await withTransaction(async (client) => {
-        const deleted = await deleteAnnouncement(client, req.params.id);
+        const deleted = await deleteAnnouncement(client, req.params.id, req.userId as number);
         await audit(client, {
           actorId: req.userId as number,
           entityType: "announcement",

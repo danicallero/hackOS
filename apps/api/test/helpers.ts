@@ -47,6 +47,50 @@ export async function createUserWithCapabilities(capabilities: string[]): Promis
   return userId;
 }
 
+/**
+ * Return the immutable snapshot for an application, creating the current
+ * snapshot when the application was inserted directly by a test. Production
+ * writes create this row alongside an application; direct SQL fixtures need
+ * to preserve the same response invariant explicitly (H54).
+ */
+export async function ensureApplicationFormVersion(applicationId: number): Promise<number> {
+  const { rows: existing } = await pool.query(
+    `SELECT fv.id
+       FROM application_form_versions fv
+       JOIN applications a ON a.id = fv.application_id
+      WHERE fv.application_id = $1
+        AND fv.version = a.current_form_version
+      LIMIT 1`,
+    [applicationId],
+  );
+  if (existing[0]?.id != null) return existing[0].id;
+
+  const { rows } = await pool.query(
+    `INSERT INTO application_form_versions (application_id, version, template, sections)
+     SELECT id, current_form_version, template, sections
+       FROM applications
+      WHERE id = $1
+     ON CONFLICT (application_id, version) DO NOTHING
+     RETURNING id`,
+    [applicationId],
+  );
+  if (rows[0]?.id != null) return rows[0].id;
+
+  const { rows: afterConflict } = await pool.query(
+    `SELECT fv.id
+       FROM application_form_versions fv
+       JOIN applications a ON a.id = fv.application_id
+      WHERE fv.application_id = $1
+        AND fv.version = a.current_form_version
+      LIMIT 1`,
+    [applicationId],
+  );
+  if (afterConflict[0]?.id == null) {
+    throw new Error(`Expected application ${applicationId} before creating its form snapshot`);
+  }
+  return afterConflict[0].id;
+}
+
 /** Auth header for app.inject() — resolved by the test-mode auth context. */
 export function asUser(userId: number): Record<string, string> {
   return { "x-test-user-id": String(userId) };

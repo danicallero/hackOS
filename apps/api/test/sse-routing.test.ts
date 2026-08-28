@@ -28,6 +28,7 @@ describe("public SSE invalidation routing", () => {
     });
     for (const source of [
       SSE_TOPICS.LOGISTICS,
+      SSE_TOPICS.QUEUE_FIXTURE,
       SSE_TOPICS.EXPORTS,
       SSE_TOPICS.APPLICATIONS,
       SSE_TOPICS.PROJECTS,

@@ -6,6 +6,7 @@ import { observeParticipantInvalidation } from "../../lib/metrics.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { broadcast } from "../../lib/sse.js";
 import { notify, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
+import { broadcastQueueEventWithMarker, queueFixtureMarker } from "./broadcast.js";
 import { roomChallengeIds } from "./groups.js";
 import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 
@@ -14,10 +15,18 @@ import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
  * Devpost fallback keeps notifications correct during or after an import even
  * if a legacy participant row has not yet gained its submission.
  */
-export async function repoMemberIds(client: Queryable, repoId: number): Promise<number[]> {
+export async function repoMemberIds(
+  client: Queryable,
+  repoId: number,
+  fixtureMarker?: boolean,
+): Promise<number[]> {
   const { rows } = await client.query(
-    `SELECT DISTINCT user_id FROM (${REPO_MEMBER_RELATION_SQL}) m WHERE repo_id = $1`,
-    [repoId],
+    `SELECT DISTINCT m.user_id
+       FROM (${REPO_MEMBER_RELATION_SQL}) m
+       JOIN users u ON u.id = m.user_id
+      WHERE m.repo_id = $1
+        ${fixtureMarker === undefined ? "" : "AND u.is_test_account = $2"}`,
+    fixtureMarker === undefined ? [repoId] : [repoId, fixtureMarker],
   );
   return rows.map((r: { user_id: number }) => r.user_id);
 }
@@ -67,7 +76,9 @@ export async function notifyTeamCalled(
     roomLocation?: string | null;
   },
 ): Promise<void> {
-  const memberIds = await repoMemberIds(client, params.repoId);
+  const fixtureMarker = await queueFixtureMarker(client, "entry", params.entryId);
+  if (fixtureMarker === null) return;
+  const memberIds = await repoMemberIds(client, params.repoId, fixtureMarker);
   if (memberIds.length === 0) return;
 
   const { challengeName, teamName, nameById } = await loadNotifyContext(client, {
@@ -97,6 +108,7 @@ export async function notifyTeamCalled(
           roomName: params.roomName,
         },
       },
+      fixtureMarker,
     });
   }
   // Broadcast after the rows are durably queued but still inside the caller's
@@ -107,7 +119,10 @@ export async function notifyTeamCalled(
   }
   // Operator-facing echo on the shared queue topic, carrying the team name so
   // the queue-ops screen can hint "team X should arrive at room Y" (opt-in).
-  await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_TEAM_CALLED, { ...payload, teamName });
+  await broadcastQueueEventWithMarker(fixtureMarker, EVENTS.QUEUE_TEAM_CALLED, {
+    ...payload,
+    teamName,
+  });
   // H29: same opt-in staff push used by notify-enter (queue.staff), so
   // operators with a backgrounded app still get a device notification the
   // moment a team is called, not just the live SSE echo above.
@@ -116,8 +131,9 @@ export async function notifyTeamCalled(
        FROM notification_preferences np
        JOIN users u ON u.id = np.user_id
       WHERE np.category = $1 AND np.channel = 'push' AND np.enabled = true
-        AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
-    [QUEUE_STAFF_CATEGORY],
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL
+        AND u.is_test_account = $2`,
+    [QUEUE_STAFF_CATEGORY, fixtureMarker],
   );
   for (const row of staffRows as { user_id: number }[]) {
     await notify(client, {
@@ -130,6 +146,7 @@ export async function notifyTeamCalled(
         template: "queue.staff.called",
         vars: { teamName, challengeName, roomName: params.roomName },
       },
+      fixtureMarker,
     });
   }
 }
@@ -139,7 +156,9 @@ export async function notifyTeamPreCall(
   client: Queryable,
   params: { entryId: number; challengeId: number; repoId: number; etaMinutes: number },
 ): Promise<void> {
-  const memberIds = await repoMemberIds(client, params.repoId);
+  const fixtureMarker = await queueFixtureMarker(client, "entry", params.entryId);
+  if (fixtureMarker === null) return;
+  const memberIds = await repoMemberIds(client, params.repoId, fixtureMarker);
   if (memberIds.length === 0) return;
 
   const { challengeName, teamName, nameById } = await loadNotifyContext(client, {
@@ -170,6 +189,7 @@ export async function notifyTeamPreCall(
           etaMinutes: String(params.etaMinutes),
         },
       },
+      fixtureMarker,
     });
     await broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_QUEUE_PRECALL, payload);
   }
@@ -226,12 +246,15 @@ const participantInvalidationJobsInFlight = new Set<string>();
 
 /** H38 (#544): worker-side fan-out, deliberately outside queue transition requests. */
 export async function publishChallengeQueueInvalidation(challengeId: number): Promise<void> {
+  const fixtureMarker = await queueFixtureMarker(pool, "challenge", challengeId);
+  if (fixtureMarker === null) return;
   const { rows } = await pool.query(
     `SELECT DISTINCT members.user_id
        FROM queue_entries qe
        JOIN (${REPO_MEMBER_RELATION_SQL}) members ON members.repo_id = qe.repo_id
-      WHERE qe.challenge_id = $1`,
-    [challengeId],
+       JOIN users u ON u.id = members.user_id
+      WHERE qe.challenge_id = $1 AND u.is_test_account = $2`,
+    [challengeId, fixtureMarker],
   );
   const results = await Promise.all(
     rows.map((row: { user_id: number }) =>
@@ -268,7 +291,9 @@ export async function notifyTeamMessage(
     message: string;
   },
 ): Promise<number> {
-  const memberIds = await repoMemberIds(client, params.repoId);
+  const fixtureMarker = await queueFixtureMarker(client, "entry", params.entryId);
+  if (fixtureMarker === null) return 0;
+  const memberIds = await repoMemberIds(client, params.repoId, fixtureMarker);
   if (memberIds.length === 0) return 0;
 
   const { challengeName, teamName, nameById } = await loadNotifyContext(client, {
@@ -298,6 +323,7 @@ export async function notifyTeamMessage(
           message: params.message,
         },
       },
+      fixtureMarker,
     });
     await broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_QUEUE_MESSAGE, payload);
   }

@@ -28,6 +28,35 @@ const syncStates = new Map<number, SyncState>();
 /** Matches apps/api/src/modules/logistics/activities.ts BadRequestError text. */
 const TIMESTAMP_FUTURE_ERROR = "Offline scan timestamp must be in the past";
 
+type ReplayFailure = "retryable" | "terminal";
+
+function classifyReplayFailure(error: unknown): ReplayFailure {
+  if (!(error instanceof ApiError)) return "retryable";
+  if (error instanceof ApiError && error.message.includes("still in flight")) {
+    return "retryable";
+  }
+  if (
+    error instanceof ApiError &&
+    (error.status >= 500 || [401, 403, 408, 429].includes(error.status))
+  ) {
+    return "retryable";
+  }
+  return "terminal";
+}
+
+function isStaleCredentialRejection(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    [
+      "not_found",
+      "badge_revoked",
+      "badge_unknown",
+      "ticket_revoked",
+      "badge_scan_before_assignment",
+    ].includes(error.code ?? "")
+  );
+}
+
 async function replay(scan: PendingScan, sessionCookie: string): Promise<void> {
   const request = requestForPendingScan(scan);
   const isDelete = request.method === "DELETE";
@@ -55,10 +84,10 @@ async function attemptClockSkewCorrection(
   scan: PendingScan,
   ownerUserId: number,
   sessionCookie: string,
-): Promise<boolean> {
-  if (scan.clockCorrected || !("scannedAt" in scan.payload)) return false;
+): Promise<"not_attempted" | "acknowledged" | "retryable" | "terminal"> {
+  if (scan.clockCorrected || !("scannedAt" in scan.payload)) return "not_attempted";
   const skewMs = getClockSkewMs();
-  if (skewMs === null || Math.abs(skewMs) <= CLOCK_SKEW_TOLERANCE_MS) return false;
+  if (skewMs === null || Math.abs(skewMs) <= CLOCK_SKEW_TOLERANCE_MS) return "not_attempted";
   const corrected = {
     ...scan.payload,
     scannedAt: new Date(Date.parse(scan.payload.scannedAt) + skewMs).toISOString(),
@@ -67,11 +96,31 @@ async function attemptClockSkewCorrection(
   try {
     await replay({ ...scan, payload: corrected }, sessionCookie);
     await acknowledgeScan(scan.id, corrected, ownerUserId);
-  } catch {
-    // Correction didn't resolve it; fall through to normal handling on the
-    // next sync pass (clockCorrected is now set, so it won't loop).
+    return "acknowledged";
+  } catch (error) {
+    // The corrected retry is a real replay attempt and must use the same
+    // terminal/retryable contract as the original attempt. Previously every
+    // corrected failure returned `true`, which silently left the scan pending
+    // on terminal errors and allowed transient failures to advance the queue.
+    if (classifyReplayFailure(error) === "retryable") {
+      await noteRetryableError(
+        scan.id,
+        error instanceof Error ? error.message : "Network error",
+        ownerUserId,
+      );
+      return "retryable";
+    }
+    if (isStaleCredentialRejection(error)) {
+      await deleteScan(scan.id, ownerUserId);
+      return "terminal";
+    }
+    await failScan(
+      scan.id,
+      error instanceof Error ? error.message : "Request rejected",
+      ownerUserId,
+    );
+    return "terminal";
   }
-  return true;
 }
 
 /**
@@ -91,16 +140,17 @@ export async function replayPendingScans(
       await replay(scan, sessionCookie);
       await acknowledgeScan(scan.id, scan.payload, ownerUserId);
     } catch (error) {
-      if (error instanceof ApiError && error.message.includes("still in flight")) {
-        await noteRetryableError(scan.id, error.message, ownerUserId);
-        break;
-      }
+      const failure = classifyReplayFailure(error);
       // Auth hiccups (expired session) and throttling are NOT verdicts on the
       // scan: failing them permanently silently loses every queued meal,
       // activity and presence log until someone finds the retry button. Only
       // genuine business rejections (400/404/409…) are final.
-      if (error instanceof ApiError && [401, 403, 408, 429].includes(error.status)) {
-        await noteRetryableError(scan.id, error.message, ownerUserId);
+      if (failure === "retryable") {
+        await noteRetryableError(
+          scan.id,
+          error instanceof Error ? error.message : "Network error",
+          ownerUserId,
+        );
         break;
       }
       // A 404 is terminal for a queued identity-bearing scan: the participant
@@ -109,24 +159,18 @@ export async function replayPendingScans(
       // condition, including the tombstone response after anonymization.
       // Delete the encrypted local payload instead of retaining it forever in
       // a failed queue entry.
-      if (
-        error instanceof ApiError &&
-        (error.code === "not_found" ||
-          error.code === "badge_revoked" ||
-          error.code === "badge_unknown" ||
-          error.code === "ticket_revoked" ||
-          error.code === "badge_scan_before_assignment")
-      ) {
+      if (isStaleCredentialRejection(error)) {
         await deleteScan(scan.id, ownerUserId);
         continue;
       }
       if (
         error instanceof ApiError &&
         error.status === 400 &&
-        error.message.includes(TIMESTAMP_FUTURE_ERROR) &&
-        (await attemptClockSkewCorrection(scan, ownerUserId, sessionCookie))
+        error.message.includes(TIMESTAMP_FUTURE_ERROR)
       ) {
-        continue;
+        const correction = await attemptClockSkewCorrection(scan, ownerUserId, sessionCookie);
+        if (correction === "acknowledged" || correction === "terminal") continue;
+        if (correction === "retryable") break;
       }
       if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
         await failScan(scan.id, error.message, ownerUserId);
@@ -150,7 +194,7 @@ async function doSync(ownerUserId: number, sessionCookie: string): Promise<void>
   const snapshot = await apiFetch<ScannerSnapshot>("/api/scanner/snapshot", {
     sessionCookie,
   });
-  await applyScannerSnapshot(snapshot);
+  await applyScannerSnapshot(snapshot, ownerUserId);
 }
 
 /**

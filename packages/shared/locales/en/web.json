@@ -2534,6 +2534,7 @@
   "accountRemovalExpiry": "Recovery window: {time}",
   "accountRemovalExpiryHint": "You can cancel before your exit is recorded or this timer expires.",
   "accountRemovalExpiryUnknown": "Checking expiry…",
+  "accountRemovalRefreshError": "We couldn't refresh your account-removal status. Check your connection and try again.",
   "accountRemovalCancel": "Cancel anonymization",
   "accountRemovalCancelTitle": "Cancel anonymization?",
   "accountRemovalCancelBody": "You can cancel while your exit has not been recorded and the recovery window is open. Your HackUDC access will be restored.",

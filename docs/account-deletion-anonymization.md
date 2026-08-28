@@ -44,8 +44,9 @@ does not, by itself, turn the account into a permanent anonymous-audit case.
 Acceptance, applications, tickets, wallet passes, permissions, and
 notifications alone do not force anonymous retention.
 
-After anonymization the `users` row, credentials, service relationships,
-personal files, direct identifiers, and raw operational scan rows are deleted.
+After anonymization the `users` row, credentials, identity-bearing service
+relationships, personal files, direct identifiers, and raw operational scan
+rows are deleted or detached as applicable.
 Before those rows are destroyed, the verified attendance total is calculated
 and stored on a new `anonymous_participants.id` generated with
 `crypto.randomUUID()`; no deterministic input and no mapping table is used.
@@ -168,7 +169,7 @@ scan alone is therefore insufficient.
 | --- | --- | --- | --- |
 | F01 | Critical | confirmed code problem; privacy/security risk | The previous in-place anonymizer retained the `users` row and identity-shaped foreign keys. H54 now creates a random anonymous subject, migrates only the attendance evidence, scrubs direct/denormalized relationships, and deletes the user. |
 | F02 | Critical | confirmed code problem; privacy/security risk | Self-service uses `/me` routes and active-session authorization; admin operations require `ADMIN_ALL`; request IDs are not accepted as target identity for self-service. This closes the original IDOR risk. |
-| F03 | High | confirmed code problem; privacy/security risk; operational risk | Removal must race check-in, presence, notification, wallet and invite writes. The pending state, user-row locks, active-state filters, and migrations `0733`/`0736` reject new direct user references after pending begins. The event-end closer was additionally changed to lock and re-check each candidate so one removal cannot abort the whole worker tick. |
+| F03 | High | confirmed code problem; privacy/security risk; operational risk | Removal must race check-in, presence, notification, wallet and invite writes. The pending state, user-row locks, active-state filters, and the final `0730` reference triggers reject new direct user references after pending begins. The event-end closer locks and re-checks each candidate so one removal cannot abort the whole worker tick. |
 | F04 | High | requires legal/product confirmation; operational risk | `check_in_logs` is the canonical accreditation boundary. Door/activity/badge history without accreditation is reported as an inconsistency and follows full deletion with a warning; confirm the reconciliation procedure for legacy records rather than turning artifacts into permanent retention. |
 | F05 | High | confirmed code problem; operational risk | Object deletion and final DB deletion are separate phases. A storage or final-transaction failure leaves access revoked and `removal_pending`, with bounded retry. Operators must monitor and replay pending rows if the queue is unavailable. |
 | F06 | High | confirmed code problem fixed in this follow-up; privacy/security risk; operational risk | Staff offline meal queues contain badge credentials and must be encrypted, owner-bound, cleared on closure, and rejected when stale. Native scanner records are encrypted and tombstoned; an offline staff device can still retain encrypted data until it reconnects and is wiped or retired. The central permanent denylist prevents a stale credential from resolving to a replacement participant, but it cannot remotely erase an unreachable device. The pre-H54 combined native database had ownerless plaintext payloads, so it cannot be safely assigned to the first authenticated operator; the current migration retires the app-owned file and its SQLite sidecars, blocks the queue if retirement fails, and requires any lost pre-upgrade scans to be re-recorded. Presence/activity/meal replay now also rejects an event timestamp earlier than the current badge assignment boundary, so a late scan cannot be accepted under a replacement owner. |
@@ -177,11 +178,11 @@ scan alone is therefore insufficient.
 | F09 | High | confirmed code problem fixed in this follow-up; privacy/security risk; operational risk | Self-service destructive routes require the current authenticated session. A verified primary email requires a short-lived one-time PIN sent to that address; an unverified real account that cannot receive that code must re-enter its current password. Synthetic fixtures may use the configured fixture PIN. The password is verified against the credential account and is never placed in retry jobs, audit rows, or responses. |
 | F10 | Medium | confirmed code improvement; privacy/security risk | Anonymous application retention is now driven by each submitted response's immutable form-version fields (`retention_mode = anonymous_audit`) and optional open semantic dimension. Labels, translations, and the mutable current form do not grant retention. |
 | F11 | Medium | privacy/security risk; requires legal/product confirmation | Age, gender, university, degree, graduation year and origin city can identify a person in a rare cohort. Small-cell suppression/aggregation is intentionally outside this implementation; the audit owner must make any reporting decision before publishing combinations. |
-| F12 | Medium | confirmed code problem; privacy/security risk | The first H54 implementation retained raw check-in/door rows under the anonymous UUID, exceeding the approved minimum. Corrective migration `0734` deletes converted raw rows and removes the anonymous FK columns; finalization retains only the calculated guaranteed minutes plus explicitly retained application values. |
+| F12 | Medium | confirmed code problem; privacy/security risk | The first H54 implementation retained raw check-in/door rows under the anonymous UUID, exceeding the approved minimum. The final fresh-schema `0730` state has no anonymous raw-presence foreign keys; finalization retains only calculated guaranteed minutes plus explicitly retained application values. |
 | F13 | Medium | confirmed code problem fixed in this follow-up; operational risk; privacy/security risk | Self-service destructive requests now require a non-empty `Idempotency-Key`; a missing key is rejected instead of entering a path that cannot safely replay a lost response. Supported mobile/web clients already send a high-entropy key, and the no-production-database assumption allows the old no-key compatibility path to be removed. |
 | F14 | Medium | confirmed code problem; operational risk | Offline stale submissions can reach the server after anonymization. Permanent unlinked keyed-digest badge/ticket tombstones and active lookups reject them, and clients remove terminal stale queue items. Devices that never reconnect cannot be remotely wiped; device management/reinstall remains the operational control for the residual local copy. |
 | F15 | Medium | confirmed code improvement; privacy/security risk; requires legal/product confirmation | Shared public repositories, Devpost content and external documents can contain a person's identity independently of hackOS rows. The service removes the subject's personal submission/member link and deletes solo projects, but preserves a shared project for remaining members. The participant Privacy Policy now explains that forms/project records may request links to independent external sites with their own policies and no GPUL affiliation; confirm that this wording matches the event's external-content policy. |
-| F16 | Medium | confirmed code problem fixed in this follow-up; privacy/security risk; operational risk | The fresh-schema migration `0733` installs `time_logs_kind_check` as a strict domain from the start, and unversioned application responses now fail closed instead of falling back to mutable form data. Invalid presence events and unversioned response policies are not supported compatibility states; retained calculations rely on the database domain (`in`/`out`) and submitted form-version policy. |
+| F16 | Medium | confirmed code problem fixed in this follow-up; privacy/security risk; operational risk | The fresh-schema migration `0730` installs `time_logs_kind_check` and versioned response integrity from the start. Invalid presence events and unversioned response policies are not supported compatibility states; retained calculations rely on the database domain (`in`/`out`) and submitted form-version policy. |
 | F17 | Medium | App Store review risk; confirmed code improvement | The prior mobile flow did not expose a direct, truthful account action. The current Account/Data control is visible in-app, remains available while inside, distinguishes full deletion from irreversible anonymization/pending exit, links the Privacy Policy, and explains the consequences. Reviewer access instructions must provide an accepted test account that can reach it. |
 | F18 | Medium | App Store review risk; requires legal/product confirmation | “Delete” is reserved for full deletion; “anonymize” names the irreversible alternative. Privacy policy and App Store privacy disclosures must match actual operational retention and external-cache limitations. |
 | F19 | Low | optional hardening | The branch has focused regression tests and a documented matrix, but provider deletion, lost-response, offline-device, backup and rare-cohort tests require deployment fixtures outside this repository. |
@@ -343,66 +344,24 @@ correct it.
 | Idempotency | Clients send keys; self completion is moved to an identity-free scope before deleting `users`; pending-exit scanner responses omit target identity; completion writes cannot be regressed by a late `202`; stale in-flight records can be reclaimed. |
 | Storage | Exact subject upload path, response-derived upload prefixes, DSR export prefixes and known storage keys are deleted; S3 deletion errors are surfaced and retried. |
 | External identity | Google Wallet objects are expired where configured; Apple Wallet push invalidation is attempted; unregistered passes are already gone. |
-| Writers | `0733` installs active-user reference triggers for every direct FK to `users`; domain writers also use active filters and row locks. |
+| Writers | `0730` installs active-user reference triggers for every final direct FK to `users`; domain writers also use active filters and row locks. |
 | Audit | Removal deletes identity-bearing subject/actor audit rows rather than preserving a hidden identity bridge. The final anonymous event has no IP/user-agent. |
 
 ## 10. Database and migration changes
 
-- `0730_account_deletion_anonymization.sql` adds lifecycle columns, the
-  anonymous table, nullable subject/actor references and identity cleanup.
-- `0731_account_removal_scanner_tombstones.sql` adds the detached badge/ticket
-  revocation set used by disconnected scanners.
-- `0732_account_removal_meal_inbox.sql` makes meal inbox `badge_id` nullable so
-  terminal results can be minimized.
-- `0733_account_removal_reference_guards.sql` adds active-user FK triggers and
-  installs the strict `time_logs` kind check. This branch has no production
-  database and does not preserve malformed presence data for compatibility.
-- `0745_badge_assignment_timestamp.sql` records the server-side current badge
-  assignment boundary. Stale offline presence/activity/meal timestamps before
-  a replacement are rejected without exposing that boundary to clients.
-- `0735_schema_driven_anonymous_retention.sql` snapshots each application
-  schema, adds the extensible `retention_mode`/dimension metadata, creates the
-  normalized anonymous field table, migrates the initial HackUDC configured
-  dimensions, and removes fixed anonymous demographic columns.
-- `0736_account_removal_pending_exit.sql` adds the pending-exit marker,
-  permits only the valid pending `out` transition, and recreates the time-log
-  trigger for `kind` updates.
-- `0737_permanent_scanner_credential_tombstones.sql` makes detached scanner
-  credential revocations permanent and non-reusable; they have no participant
-  or anonymous-subject foreign key and are security metadata, not audit data.
-- `0738_application_response_form_version_integrity.sql` adds a composite
-  application/version foreign key so a response cannot select another form's
-  retention policy.
-- `0739_pending_exit_event_close.sql` permits the exact system-generated
-  event-end `out` to complete a pending exit without allowing arbitrary
-  backdated identity-bearing writes.
-- `0740_account_removal_email_pin.sql` stores only transient HMAC PIN
-  challenges; raw PINs are delivered through the existing notification outbox
-  and never enter the database.
-- `0741_keyed_scanner_credential_tombstones.sql` replaces the raw central
-  scanner tombstone columns with stable HMAC-SHA256 digests and clears the
-  pre-digest development rows. The digest is security metadata only; ordinary
-  badge reuse is protected by the current-assignment timestamp fence from
-  `0745`, while credentials retired with an account remain non-reusable.
-- `0743_review_fixture_accounts.sql` marks synthetic QA identities and stores
-  only the replaceable fixture registry pointer/generation.
-- `0744_review_fixture_queues.sql` marks the synthetic queue graph and stores
-  its cleanup pointers. Fixture projects/challenges/queue rows are isolated
-  from ordinary operations and are purged on regeneration or fixture closure;
-  they are not anonymous-audit data.
-- `0746_permanent_scanner_tombstones.sql` removes the old expiring-tombstone
-  compatibility column. Account-retired credentials are permanently denied;
-  ordinary badge rotation uses the assignment timestamp fence.
-Migration policy is checksum-enforced by `apps/api/scripts/migrate.ts`. There
-is no production database in scope for this branch, so the H54 migrations
-`0730–0746` are validated as a fresh install. The raw-presence correction is
-explicitly represented by `0734`; the keyed-tombstone migration deliberately
-clears only pre-production development rows that cannot be converted without
-the deployment secret. Runtime code does not read the removed expiry or
-unversioned-form compatibility shapes.
-Before the first production deployment, the release owner may publish a
-single flattened baseline from this complete chain; after that point, applied
-checksums are preserved and every correction uses a new migration (A18).
+`0730_account_deletion_anonymization.sql` is the single fresh-schema H54
+baseline. It contains the lifecycle gate, anonymous subject and dynamic
+retained fields, nullable operational actor references, immutable form
+versions, fixture markers, badge-assignment fence, keyed scanner denylist,
+pending-exit rules, strict presence checks, and active-user reference triggers.
+It intentionally performs no broad identity cleanup for a populated database.
+
+Migration policy is checksum-enforced by `apps/api/scripts/migrate.ts`. The
+development-only H54 chain was squashed because it has not shipped outside this
+branch. If a populated deployment ever needs H54, prepare and review a separate
+upgrade migration rather than reusing this fresh baseline. After first
+deployment, applied checksums are immutable and later corrections use a new
+migration.
 
 ## 11. Offline caches and external copies
 
@@ -480,9 +439,9 @@ The following races are covered:
 - check-in vs removal: the first transaction holding the user row wins; the
   other either becomes part of history before pending or receives an active
   state conflict;
-- door scan vs removal: presence writers lock/filter active users, `0733`/`0736`
-  reject late identity references except the pending participant's valid
-  `out`, and the exit completion rechecks the same row lock;
+- door scan vs removal: presence writers lock/filter active users, and the final
+  `0730` trigger rejects late identity references except the pending
+  participant's valid `out`; exit completion rechecks the same row lock;
 - meal scan vs removal: active badge/ticket lookup and permanent tombstones
   reject stale scans; terminal inbox data is minimized;
 - judging/teams/notifications: readers exclude closed users; direct FK writes
@@ -628,7 +587,7 @@ Implemented or updated in this branch:
 | --- | --- |
 | Deletion before check-in | `apps/api/test/identity/profile.test.ts`: accepted/unaccepted/confirmed-but-unaccredited cases. |
 | Verified-email security PIN | API profile tests cover PIN delivery, HMAC-only challenge storage, wrong/expired/correct PIN behavior, and unverified-account password reauthentication; web/mobile transport and mobile credential-modal tests cover the client flow. |
-| Deletion immediately before concurrent check-in | User-row lock plus `0733` active-FK guard; add a production-load concurrency fixture before rollout. |
+| Deletion immediately before concurrent check-in | User-row lock plus the final `0730` active-FK guard; add a production-load concurrency fixture before rollout. |
 | Anonymization after check-in | Admin and self-service profile tests. |
 | Anonymization while inside venue | Self-service request returns `202 pending_exit`, revokes access, permits a current staff `out` or exact event-end system `out`, and finalizes after a valid exit or expired H24 certainty window. |
 | Anonymization after exit | Self-service test verifies two logs are used to calculate and then delete while 60 verified minutes survive. |
@@ -639,7 +598,7 @@ Implemented or updated in this branch:
 | Meal and dietary data | Meal inbox minimization tests; dietary fields are excluded from anonymous row. |
 | Judging and team relationships | Project/queue cleanup tests and shared sponsor-anchor regression. |
 | Synthetic fixture read/write isolation | `apps/api/test/identity/review-fixtures.test.ts`, `apps/api/test/applications/files-export.test.ts` and `apps/api/test/exports/bundle-leakage.test.ts` cover ordinary-admin visibility, response/DSR target isolation, synthetic global-export exclusion, and refusal to build a personal export bundle. |
-| Venue presence calculations | `apps/api/test/logistics/estimate.test.ts` and presence tests cover secured, duplicate, expired and inconsistent paths; the strict `0733` schema constraint rejects invalid kinds before calculation. |
+| Venue presence calculations | `apps/api/test/logistics/estimate.test.ts` and presence tests cover secured, duplicate, expired and inconsistent paths; the strict `0730` schema constraint rejects invalid kinds before calculation. |
 | Anonymous record generation | Profile tests assert random UUID differs from original ID and verified minutes survive without raw subject rows. |
 | Inability to recover identity | Profile regression inserts an email-bearing audit `entity_id`, verifies it is removed, and searches anonymous JSON for original email/name/ID. |
 | ECTS/participation-document request after anonymization | No ECTS/certificate endpoint or identity bridge exists in the repository; release test must assert any future named-proof endpoint returns no subject after anonymization. |
@@ -671,14 +630,8 @@ suite alone.
   `review-fixture-queues.ts`, and `review-fixture-usage.ts`: admin-only
   synthetic account regeneration, queue-graph cleanup, marked-subject
   isolation and non-sensitive successful-sign-in telemetry.
-- `apps/api/db/migrations/0730_account_deletion_anonymization.sql`, `0731`,
-  `0732`, `0733`, `0734`, `0735`, `0736`, `0737`, `0738`, `0739`, `0740`,
-  `0741`, `0743`, `0744`, `0745`, `0746`: lifecycle, tombstones, meal
-  minimization, FK race/pending-exit guards, raw-presence minimization,
-  transient email history, immutable form versions, dynamic anonymous fields,
-  application/version integrity, synthetic fixture isolation, badge-assignment
-  timestamp fencing, strict presence-event validation, and permanent
-  credential retirement.
+- `apps/api/db/migrations/0730_account_deletion_anonymization.sql`: the
+  squashed, dependency-safe fresh H54 schema described above.
 
 ### Clients and copy
 
@@ -727,7 +680,7 @@ silently converted into a legal conclusion.
 | A23 | An `ANONYMOUS_AUDIT` → `NONE` edit affects future submissions/form versions only. Existing anonymous field rows remain until a separately approved minimization migration defines whether and how they should be removed. | Product/privacy + grant/audit owners |
 | A24 | Form administrators may explicitly mark arbitrary fields, including potentially sensitive ones; the builder warning is the current safeguard. A future product/privacy policy may add prohibited categories or small-cohort publication controls without changing the anonymous subject identity model. | Product/privacy + applications owners |
 | A25 | A pending-exit removal may complete after a valid current staff exit, the exact system-generated event-closing `out` at `event_config.event_ends_at`, or expiry of the latest H24 certainty window that invalidates the last provisional presence sum. Missing event dates remove only the live warning; they do not bypass the lifecycle boundary. | Event-operations owner |
-| A26 | Migration `0735` snapshots the best available pre-migration form configuration as version 1. The repository cannot reconstruct form edits that occurred before versioning existed; the initial HackUDC six-field retention configuration is therefore an explicit migration decision, applied only to participant forms, while other fields/forms receive the minimizing `NONE` default. | Applications + data owner |
+| A26 | The fresh `0730` baseline snapshots each application's current form configuration as version 1. The repository cannot reconstruct edits from before versioning existed; any initial retention choices are explicit migration input and must be reviewed with the data owner. | Applications + data owner |
 | A27 | A pending-exit request ends new participation but retains the existing profile, authentication, wallet and dietary artifacts only for the reversible recovery/exit window. This temporary retention lets staff complete already-started operational work safely; dietary data is cleared at irreversible finalization and is never copied to anonymous audit data. | Event-operations + privacy owner |
 | A28 | The restart marker is best-effort, device-local, and contains only the action and `pending_exit`/`processing`/`device_cleanup_pending` status. It is not an account lookup or a guarantee that an offline device has received a remote wipe. | Mobile/web + release owners |
 | A29 | Admin removal idempotency rows are deleted with the target during finalization. An admin retry after finalization receives the normal not-found result rather than a replayable completion response; this avoids retaining a target-bearing audit/replay record. | Security + operations owner |
@@ -748,9 +701,9 @@ silently converted into a legal conclusion.
 | A44 | No production database is in scope for this branch. Migrations are validated from a fresh schema; applied migration checksums remain immutable after first deployment and later corrections use a new migration. During development, a fresh flat schema may be rebuilt rather than preserving harmful legacy adaptations. | Release/DB owner |
 | A45 | The current credential-retirement denylist stores stable keyed HMAC digests, not raw badge/ticket values and has no expiry path. It prevents late offline credential replay, while ordinary physical badge reuse is governed by the server-side assignment timestamp fence. | Security + event-operations owners |
 | A46 | Legal copy may describe synthetic accounts as authorised testing/quality-assurance fixtures, but it must not name a specific review channel. The detailed fixture procedure belongs in the private/operational runbook. | GPUL/privacy + release owners |
-| A47 | The schema is authoritative for presence-event shape: only `time_logs.kind IN ('in', 'out')` is valid. Migration `0733` installs the strict check on the fresh schema; no reader-side exception or legacy repair path is retained for this branch. | Event-operations + release/DB owners |
+| A47 | The schema is authoritative for presence-event shape: only `time_logs.kind IN ('in', 'out')` is valid. The final `0730` migration installs the strict check on the fresh schema; no reader-side exception or legacy repair path is retained for this branch. | Event-operations + release/DB owners |
 | A48 | The server-side `users.badge_assigned_at` timestamp is the authoritative boundary for offline badge-event replay. Presence, activity and meal paths reject timestamps before the current assignment both at enqueue/lookup and under the locked owner row; the timestamp is not exposed to clients. | Logistics + security owners |
-| A49 | The fresh-schema final state is authoritative. Runtime paths do not preserve malformed presence kinds, expired scanner tombstones, or mutable-form fallbacks for historical responses. Earlier migration steps remain only as the development migration chain; with no production database in scope, the release owner may publish a flattened baseline before first deployment. | Release/DB + domain owners |
+| A49 | The fresh-schema final state is authoritative. Runtime paths do not preserve malformed presence kinds, expired scanner tombstones, or mutable-form fallbacks for historical responses. The H54 development chain is represented by one `0730` baseline; any populated upgrade needs a separately reviewed migration. | Release/DB + domain owners |
 
 ## Release recommendation
 

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Alert, Linking, Pressable, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Linking, Pressable, Text, useWindowDimensions, View } from "react-native";
 
 import { AuthAlert, AuthButton, AuthHeader, AuthScreen } from "@/components/auth-ui";
 import { ApiError } from "@/lib/api";
@@ -16,15 +16,21 @@ type RemovalState = Exclude<Me["removal"], null>;
 export function PendingRemovalScreen({
   removal,
   onRefresh,
+  refreshError,
 }: {
   removal: RemovalState;
   onRefresh: () => Promise<void>;
+  refreshError?: Error | null;
 }) {
   const { t } = useLocale();
+  const { fontScale } = useWindowDimensions();
   const [now, setNow] = useState(Date.now());
   const [cancelling, setCancelling] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshFailure, setRefreshFailure] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshInFlight = useRef(false);
   const expiresAt = removal.expiresAt ? Date.parse(removal.expiresAt) : Number.NaN;
   const secondsRemaining = Number.isFinite(expiresAt)
     ? Math.max(0, Math.ceil((expiresAt - now) / 1000))
@@ -38,6 +44,23 @@ export function PendingRemovalScreen({
   );
   const canCancel = removal.status === "pending_exit" && secondsRemaining !== 0;
 
+  const refresh = useCallback(async () => {
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
+    setRefreshing(true);
+    try {
+      await onRefresh();
+      setRefreshFailure(false);
+    } catch {
+      // Keep the pending-removal screen mounted and expose a retry action when
+      // a transient profile refresh cannot confirm the latest server state.
+      setRefreshFailure(true);
+    } finally {
+      refreshInFlight.current = false;
+      setRefreshing(false);
+    }
+  }, [onRefresh]);
+
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1_000);
     return () => clearInterval(timer);
@@ -45,8 +68,13 @@ export function PendingRemovalScreen({
 
   useEffect(() => {
     if (secondsRemaining !== 0) return;
-    void onRefresh();
-  }, [onRefresh, secondsRemaining]);
+    void refresh();
+  }, [refresh, secondsRemaining]);
+
+  useEffect(() => {
+    const refreshTimer = setInterval(() => void refresh(), 15_000);
+    return () => clearInterval(refreshTimer);
+  }, [refresh]);
 
   function confirmCancel() {
     Alert.alert(t("accountRemovalCancelTitle"), t("accountRemovalCancelBody"), [
@@ -62,7 +90,7 @@ export function PendingRemovalScreen({
     try {
       await cancelPendingAnonymization();
       await clearAccountRemovalProgress();
-      await onRefresh();
+      await refresh();
     } catch (cause) {
       if (
         cause instanceof ApiError &&
@@ -70,7 +98,7 @@ export function PendingRemovalScreen({
           cause.code ?? "",
         )
       ) {
-        await onRefresh();
+        await refresh();
       } else {
         setError(cause instanceof Error ? cause.message : t("accountRemovalCancelError"));
       }
@@ -95,7 +123,7 @@ export function PendingRemovalScreen({
   const processing = removal.status === "processing" || secondsRemaining === 0;
 
   return (
-    <AuthScreen scrollable={false}>
+    <AuthScreen scrollable={fontScale > 1.2}>
       <AuthHeader
         align="leading"
         context="hackOS"
@@ -121,21 +149,35 @@ export function PendingRemovalScreen({
               padding: 14,
             }}
           >
-            <Text style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}>
+            <Text style={{ color: colors.secondaryLabel, fontSize: 14 }}>
               {t("accountRemovalExpiryLabel")}
             </Text>
             <Text
               accessibilityRole="timer"
-              style={{ color: colors.label, fontSize: 24, fontWeight: "800", lineHeight: 30 }}
+              style={{ color: colors.label, fontSize: 24, fontWeight: "800" }}
             >
               {countdown}
             </Text>
-            <Text style={{ color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 }}>
+            <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
               {t("accountRemovalExpiryHint")}
             </Text>
           </View>
         ) : null}
         {error ? <AuthAlert message={error} /> : null}
+        {refreshError || refreshFailure ? (
+          <AuthAlert
+            testID="account-removal-refresh-error"
+            message={t("accountRemovalRefreshError")}
+          />
+        ) : null}
+        {refreshError || refreshFailure ? (
+          <AuthButton
+            label={t("retry")}
+            onPress={() => void refresh()}
+            busy={refreshing}
+            disabled={refreshing}
+          />
+        ) : null}
         {!processing ? (
           <AuthButton
             label={t("accountRemovalCancel")}

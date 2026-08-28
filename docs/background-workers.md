@@ -7,8 +7,9 @@
 > confirmations, scheduled reveals, room queues). Durability, retry, backoff and
 > the dead-letter state all live in **Postgres rows**, not in BullMQ. BullMQ is
 > just the cron-like heartbeat. Everything else the original brief imagined as
-> "worker jobs" (batch decisions, DNI sync, account deletion) actually runs
-> **synchronously inside the API request** — see the [event map](#event-mapping).
+> "worker jobs" (batch decisions and DNI sync) runs **synchronously inside the
+> API request**. Account deletion/anonymization starts synchronously, then uses
+> its retry/finalization path described in the [event map](#event-mapping).
 
 ## Scaffolding
 
@@ -55,7 +56,7 @@ Each tick function is **exported** (e.g. `dispatchOutboxOnce`, `pumpTick`,
 `expireDueConfirmations`) so tests invoke it directly instead of waiting on
 BullMQ timing.
 
-## Job flow — email dispatch (the one truly async path)
+## Job flow — email dispatch (an async path)
 
 This is how M5's email-verification and all decision/invite emails actually get
 delivered.

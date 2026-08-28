@@ -50,13 +50,15 @@ explicit release/security approval for the reset operation.
 
 The queue fixture is deliberately marked on its challenge and repository. It
 is visible to the corresponding synthetic participant through the participant
-queue endpoint. Ordinary admin/staff project, challenge, queue, roster,
-scanner, presence, statistics, application-file exports and data-subject
-request views exclude it. A guessed private-upload key and personal export
-bundle cannot cross that marked-subject boundary. A synthetic operator sees
-only marked subjects and marked queue resources; a guessed real or synthetic
-resource outside that boundary is rejected. Synthetic rows are excluded from
-statistics and exports and are not permanent anonymous audit data.
+queue endpoint. The generated `staff-exit-operator` currently has only
+accreditation, presence and activity capabilities, so it cannot call queue
+APIs. If queue capabilities are added to a synthetic role later, every queue
+read and write must enforce this same marker boundary. Ordinary admin/staff
+project, challenge, queue, roster, scanner, presence, statistics,
+application-file exports and data-subject request views exclude the marked
+fixture. A guessed private-upload key or personal export bundle cannot cross
+that boundary. Synthetic rows are excluded from statistics and exports and are
+not permanent anonymous audit data.
 
 ## Checking whether credentials were used
 
@@ -120,5 +122,5 @@ These are implementation assumptions, not legal conclusions:
   immutable and later corrections use a new migration.
 - The current credential-retirement implementation stores a stable keyed HMAC
   digest in an unlinked global denylist. It does not retain the raw badge or
-  ticket value; legitimate physical badge reuse still needs a separate
-  assignment-binding/product decision before production.
+  ticket value; legitimate physical badge reuse is bounded by the server-side
+  current-assignment timestamp, which rejects stale pre-replacement events.

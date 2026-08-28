@@ -1,3 +1,5 @@
+import { isOfflineQueueStorageKey, LEGACY_OFFLINE_KEY } from "@/components/logistics/offline-queue";
+
 export type AccountRemovalAction = "delete" | "anonymize";
 
 export type AccountRemovalProgressStatus = "pending_exit" | "processing" | "device_cleanup_pending";
@@ -43,6 +45,15 @@ export function clearWebAccountData(): void {
   if (typeof window === "undefined") return;
   try {
     for (const key of Object.keys(window.localStorage)) {
+      // Encrypted meal queues belong to individual staff owners. The danger
+      // zone clears the authenticated owner's queue explicitly; this generic
+      // browser cleanup must never turn an unknown owner into "all owners".
+      // The legacy plaintext key has no trustworthy owner and is safe to
+      // retire globally.
+      if (isOfflineQueueStorageKey(key)) {
+        if (key === LEGACY_OFFLINE_KEY) window.localStorage.removeItem(key);
+        continue;
+      }
       if (key.startsWith("hackos") || key.startsWith("queue-ops-")) {
         window.localStorage.removeItem(key);
       }

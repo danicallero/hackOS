@@ -472,6 +472,16 @@ export async function saveDraft(
   responses: Record<string, unknown>,
 ): Promise<ResponseRow> {
   return withTransaction(async (client) => {
+    // Removal owns the user row before it scrubs application responses. Keep
+    // the same user-first lock order here so a draft cannot be inserted or
+    // updated after the account enters removal_pending.
+    const { rows: userRows } = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!userRows[0]) throw new NotFoundError("User not found");
     const app = await requireApplication(client, applicationId);
     const currentForm = await ensureApplicationFormVersion(client, app);
     const invited = await isInvitedParticipant(client, userId);
@@ -732,14 +742,30 @@ async function lockResponse(
   responseId: number,
   actorId?: number,
 ): Promise<ResponseRow> {
+  // Resolve the owner without locking the response first. Account removal
+  // locks users before their application rows; every staff transition must do
+  // the same or it can race the lifecycle gate (and deadlock with the scrub).
+  const { rows: targetRows } = await client.query(
+    `SELECT user_id FROM application_responses WHERE id = $1`,
+    [responseId],
+  );
+  if (actorId != null) {
+    const targetUserId = Number(targetRows[0]?.user_id);
+    if (!targetRows[0]) throw new NotFoundError("Response not found");
+    const { rows: userRows } = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [targetUserId],
+    );
+    if (!userRows[0]) throw new NotFoundError("Response not found");
+    await assertFixtureSubjectScope(client, actorId, targetUserId);
+  }
   const { rows } = await client.query(
     `SELECT * FROM application_responses WHERE id = $1 FOR UPDATE`,
     [responseId],
   );
   if (!rows[0]) throw new NotFoundError("Response not found");
-  if (actorId != null) {
-    await assertFixtureSubjectScope(client, actorId, Number(rows[0].user_id));
-  }
   return rows[0];
 }
 
@@ -1032,27 +1058,43 @@ export async function sendDecisionsBatch(
   applicationId: number,
   includeRejected: boolean,
 ): Promise<{ sent: number; tokens: Array<{ responseId: number; token: string | null }> }> {
-  return withTransaction(async (client) => {
-    const app = await requireApplication(client, applicationId);
-    const statuses = includeRejected
-      ? ["accepted_internal", "rejected_internal"]
-      : ["accepted_internal"];
-    const { rows } = await client.query(
-      `SELECT application_responses.* FROM application_responses
-       JOIN users u ON u.id = application_responses.user_id
-       WHERE application_responses.application_id = $1 AND u.is_test_account = false
-         AND application_responses.status = ANY($2)
-         AND application_responses.decision_sent_at IS NULL
-       ORDER BY application_responses.id FOR UPDATE OF application_responses`,
-      [applicationId, statuses],
-    );
-    const tokens: Array<{ responseId: number; token: string | null }> = [];
-    for (const resp of rows as ResponseRow[]) {
-      const token = await sendOne(client, actorId, resp, app);
-      tokens.push({ responseId: resp.id, token });
+  // Validate the requested form before discovering candidates. Without this
+  // guard a typo/removed application looked like a successful empty batch.
+  await requireApplication(pool, applicationId);
+
+  // Do not hold response locks while discovering the batch. Each individual
+  // sendDecision() reacquires the target user first, then the response, so an
+  // account entering removal_pending is skipped safely instead of receiving a
+  // decision or an email during the race.
+  const statuses = includeRejected
+    ? ["accepted_internal", "rejected_internal"]
+    : ["accepted_internal"];
+  const { rows } = await pool.query(
+    `SELECT r.id FROM application_responses r
+       JOIN users u ON u.id = r.user_id
+      WHERE r.application_id = $1 AND u.account_state = 'active'
+        AND u.anonymized_at IS NULL AND u.is_test_account = false
+        AND r.status = ANY($2) AND r.decision_sent_at IS NULL
+      ORDER BY r.id`,
+    [applicationId, statuses],
+  );
+  const tokens: Array<{ responseId: number; token: string | null }> = [];
+  for (const row of rows as Array<{ id: number }>) {
+    try {
+      const result = await sendDecision(actorId, Number(row.id));
+      tokens.push({ responseId: Number(row.id), token: result.confirmationToken });
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        // A target can enter removal_pending (or be finalized) after the
+        // candidate read. Treat only that expected disappearance as a no-op;
+        // provider, transaction and all other business failures must reach the
+        // caller instead of silently reporting a partial batch.
+        continue;
+      }
+      throw err;
     }
-    return { sent: rows.length, tokens };
-  });
+  }
+  return { sent: tokens.length, tokens };
 }
 
 /**
@@ -1608,30 +1650,24 @@ export async function editResponse(
   responseId: number,
   responses: Record<string, unknown>,
 ): Promise<ResponseRow> {
-  const { rows } = await pool.query(
-    `SELECT fv.template, r.user_id
-     FROM application_responses r
-     JOIN applications a ON a.id = r.application_id
-     JOIN users u ON u.id = r.user_id AND u.is_test_account = false
-     JOIN application_form_versions fv
-       ON fv.id = r.application_form_version_id
-      AND fv.application_id = r.application_id
-     WHERE r.id = $1`,
-    [responseId],
-  );
-  if (!rows[0]) throw new NotFoundError("Response not found");
-  await assertFixtureSubjectScope(pool, actorId, Number(rows[0].user_id));
-  const { template } = rows[0];
-  // Validate ONLY against the form template the staff answer-edit form actually
-  // renders. Shirt size and dietary data live on the user row (managed from the
-  // profile / logistics), not this form — validating the *enriched* template
-  // here made every edit fail with "shirt_size required" whenever that logistics
-  // field was blank, a field staff can't even set in this form.
-  validateResponses(template, responses);
-  const storedResponses = stripDietaryResponses(responses);
-
   return withTransaction(async (client) => {
-    await lockResponse(client, responseId, actorId);
+    const response = await lockResponse(client, responseId, actorId);
+    const { rows: versionRows } = await client.query(
+      `SELECT fv.template
+         FROM application_form_versions fv
+        WHERE fv.id = $1 AND fv.application_id = $2`,
+      [response.application_form_version_id, response.application_id],
+    );
+    if (!versionRows[0]) {
+      throw new ConflictError("This response is missing its immutable form version", {
+        code: "form_version_required",
+      });
+    }
+    // Validate ONLY against the form template the staff answer-edit form
+    // actually renders. Shirt size and dietary data live on the user row
+    // (managed from the profile / logistics), not this form.
+    validateResponses(versionRows[0].template, responses);
+    const storedResponses = stripDietaryResponses(responses);
 
     const updated = await client.query(
       `UPDATE application_responses SET responses = $2::jsonb WHERE id = $1 RETURNING *`,
@@ -1822,7 +1858,7 @@ export async function confirmByResponseId(
     if (requireOwner != null) {
       await assertVerifiedPrimaryEmail(client, requireOwner, { forUpdate: true });
     }
-    const resp = await lockResponse(client, responseId);
+    const resp = await lockResponse(client, responseId, actorId ?? undefined);
     if (requireOwner != null && resp.user_id !== requireOwner) {
       throw new ForbiddenError("Not your application");
     }
@@ -1853,7 +1889,7 @@ export async function declineByResponseId(
     if (requireOwner != null) {
       await assertVerifiedPrimaryEmail(client, requireOwner, { forUpdate: true });
     }
-    const resp = await lockResponse(client, responseId);
+    const resp = await lockResponse(client, responseId, actorId ?? undefined);
     if (requireOwner != null && resp.user_id !== requireOwner) {
       throw new ForbiddenError("Not your application");
     }
@@ -1873,17 +1909,45 @@ export async function declineByResponseId(
  */
 export async function expireDueConfirmations(): Promise<{ expired: number }> {
   return withTransaction(async (client) => {
-    const { rows } = await client.query(
-      `SELECT * FROM application_responses r
+    // Resolve candidates without locking responses, then acquire each owner
+    // first. Removal uses user -> application_response ordering; expiring a
+    // response must follow that order too or it can race the scrub.
+    const { rows: candidates } = await client.query<{ id: number; user_id: number }>(
+      `SELECT r.id, r.user_id FROM application_responses r
+       JOIN applications a ON a.id = r.application_id
+       JOIN users u ON u.id = r.user_id
        WHERE r.status = 'accepted'
          AND r.decision_sent_at IS NOT NULL
-         AND r.decision_sent_at + make_interval(hours =>
-               (SELECT confirmation_window_hours FROM applications a WHERE a.id = r.application_id)
-             ) < now()
-       ORDER BY r.id
-       FOR UPDATE OF r SKIP LOCKED`,
+         AND r.decision_sent_at + make_interval(hours => a.confirmation_window_hours) < now()
+         AND u.account_state = 'active' AND u.anonymized_at IS NULL
+         AND u.is_test_account = false
+       ORDER BY u.id, r.id`,
     );
-    for (const resp of rows as ResponseRow[]) {
+    const rows: ResponseRow[] = [];
+    for (const candidate of candidates) {
+      const userLock = await client.query(
+        `SELECT id FROM users
+          WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+          FOR UPDATE SKIP LOCKED`,
+        [candidate.user_id],
+      );
+      if (!userLock.rows[0]) continue;
+      const responseLock = await client.query(
+        `SELECT r.* FROM application_responses r
+          WHERE r.id = $1 AND r.status = 'accepted'
+            AND r.decision_sent_at IS NOT NULL
+          FOR UPDATE`,
+        [candidate.id],
+      );
+      const resp = responseLock.rows[0] as ResponseRow | undefined;
+      if (!resp) continue;
+      const expiry = await client.query(
+        `SELECT r.decision_sent_at + make_interval(hours => a.confirmation_window_hours) AS expires_at
+           FROM application_responses r JOIN applications a ON a.id = r.application_id
+          WHERE r.id = $1`,
+        [resp.id],
+      );
+      if (!expiry.rows[0] || new Date(expiry.rows[0].expires_at) >= new Date()) continue;
       await client.query(`UPDATE application_responses SET status = 'expired' WHERE id = $1`, [
         resp.id,
       ]);
@@ -1899,6 +1963,7 @@ export async function expireDueConfirmations(): Promise<{ expired: number }> {
         before: { status: "accepted" },
         after: { status: "expired" },
       });
+      rows.push(resp);
     }
     return { expired: rows.length };
   });

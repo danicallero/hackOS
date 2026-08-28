@@ -1,4 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { readdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -96,6 +99,188 @@ describe("migration history (H53)", () => {
     );
     expect(checksums.rows).toHaveLength(applied.length);
     expect(checksums.rows.every(({ checksum }) => /^[0-9a-f]{64}$/.test(checksum))).toBe(true);
+  });
+
+  it("installs the squashed H54 schema and guards its final invariants", async () => {
+    const migrationNames = (
+      await readdir(join(dirname(fileURLToPath(import.meta.url)), "..", "db", "migrations"))
+    )
+      .filter((name) => name.endsWith(".sql"))
+      .sort();
+    expect(migrationNames.filter((name) => /^07(?:3[1-9]|4[0-6])_/.test(name))).toEqual([]);
+
+    const shape = await withMigrationClient(async (client) => {
+      const tables = await client.query<{ name: string | null }>(
+        `SELECT to_regclass(name) AS name
+           FROM unnest($1::text[]) AS names(name)`,
+        [
+          [
+            "public.anonymous_participants",
+            "public.anonymous_participant_fields",
+            "public.application_form_versions",
+            "public.scanner_revoked_badges",
+            "public.scanner_revoked_tickets",
+          ],
+        ],
+      );
+      const responseVersion = await client.query<{ not_null: boolean }>(
+        `SELECT a.attnotnull AS not_null
+           FROM pg_attribute a
+           JOIN pg_class c ON c.oid = a.attrelid
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'public' AND c.relname = 'application_responses'
+            AND a.attname = 'application_form_version_id'`,
+      );
+      const queueHistoryActor = await client.query<{ not_null: boolean }>(
+        `SELECT a.attnotnull AS not_null
+           FROM pg_attribute a
+           JOIN pg_class c ON c.oid = a.attrelid
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'public' AND c.relname = 'queue_history'
+            AND a.attname = 'actor_id'`,
+      );
+      const mealBatchMarker = await client.query<{ not_null: boolean }>(
+        `SELECT a.attnotnull AS not_null
+           FROM pg_attribute a
+           JOIN pg_class c ON c.oid = a.attrelid
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'public' AND c.relname = 'meal_scan_batches'
+            AND a.attname = 'is_test_account'`,
+      );
+      const checks = await client.query<{ conname: string }>(
+        `SELECT conname
+           FROM pg_constraint
+          WHERE conname IN ('time_logs_kind_check', 'users_badge_assignment_timestamp_check')`,
+      );
+      const triggers = await client.query<{ tgname: string; relname: string }>(
+        `SELECT t.tgname, c.relname
+           FROM pg_trigger t
+           JOIN pg_class c ON c.oid = t.tgrelid
+          WHERE NOT t.tgisinternal
+            AND t.tgname IN ('h54_active_user_user_id', 'h54_active_user_scanned_by',
+                             'h54_application_form_version_immutable')`,
+      );
+      const digestColumns = await client.query<{ relname: string; typname: string }>(
+        `SELECT c.relname, format_type(a.atttypid, a.atttypmod) AS typname
+           FROM pg_attribute a
+           JOIN pg_class c ON c.oid = a.attrelid
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'public'
+            AND c.relname IN ('scanner_revoked_badges', 'scanner_revoked_tickets')
+            AND a.attname = 'credential_digest'`,
+      );
+      return {
+        tables,
+        responseVersion,
+        queueHistoryActor,
+        mealBatchMarker,
+        checks,
+        triggers,
+        digestColumns,
+      };
+    });
+
+    expect(shape.tables.rows.map((row) => row.name)).toEqual([
+      "anonymous_participants",
+      "anonymous_participant_fields",
+      "application_form_versions",
+      "scanner_revoked_badges",
+      "scanner_revoked_tickets",
+    ]);
+    expect(shape.responseVersion.rows).toEqual([{ not_null: true }]);
+    expect(shape.queueHistoryActor.rows).toEqual([{ not_null: false }]);
+    expect(shape.mealBatchMarker.rows).toEqual([{ not_null: true }]);
+    expect(shape.checks.rows.map((row) => row.conname).sort()).toEqual([
+      "time_logs_kind_check",
+      "users_badge_assignment_timestamp_check",
+    ]);
+    const triggerNames = shape.triggers.rows.map((row) => `${row.relname}.${row.tgname}`);
+    expect(triggerNames).toEqual(
+      expect.arrayContaining([
+        "application_form_versions.h54_application_form_version_immutable",
+        "time_logs.h54_active_user_scanned_by",
+        "time_logs.h54_active_user_user_id",
+      ]),
+    );
+    expect(shape.digestColumns.rows).toHaveLength(2);
+    expect(shape.digestColumns.rows.every((row) => row.typname === "text")).toBe(true);
+  });
+
+  it("requires every response to reference an immutable snapshot from the same application (H54)", async () => {
+    await withMigrationClient(async (client) => {
+      const { rows: users } = await client.query<{ id: number }>(
+        `INSERT INTO users (email, email_verified)
+         VALUES ($1, true) RETURNING id`,
+        [`form-version-invariant-${randomUUID()}@test.local`],
+      );
+      const userId = users[0]?.id;
+      if (userId == null) throw new Error("Expected invariant test user");
+
+      const { rows: applications } = await client.query<{ id: number }>(
+        `INSERT INTO applications (name, type, template)
+         VALUES ($1, 'participant', '[]'::jsonb),
+                ($2, 'participant', '[]'::jsonb)
+         RETURNING id`,
+        [`form-version-a-${randomUUID()}`, `form-version-b-${randomUUID()}`],
+      );
+      const applicationA = applications[0]?.id;
+      const applicationB = applications[1]?.id;
+      if (applicationA == null || applicationB == null) {
+        throw new Error("Expected invariant test applications");
+      }
+
+      const { rows: versions } = await client.query<{
+        id: string;
+        application_id: number;
+      }>(
+        `INSERT INTO application_form_versions (application_id, version, template, sections)
+         VALUES ($1, 1, '[]'::jsonb, '[]'::jsonb),
+                ($2, 1, '[]'::jsonb, '[]'::jsonb)
+         RETURNING id, application_id`,
+        [applicationA, applicationB],
+      );
+      const versionA = versions.find((version) => version.application_id === applicationA)?.id;
+      if (versionA == null) throw new Error("Expected application A form snapshot");
+
+      // Keep this direct SQL: it deliberately verifies H54's database NOT
+      // NULL boundary rather than exercising a production/helper path.
+      await expect(
+        client.query(
+          `INSERT INTO application_responses (user_id, application_id, status)
+           VALUES ($1, $2, 'review')`,
+          [userId, applicationA],
+        ),
+      ).rejects.toMatchObject({ code: "23502" });
+
+      // The single-column FK accepts versionA, but H54's composite FK must
+      // reject using application A's snapshot for application B.
+      await expect(
+        client.query(
+          `INSERT INTO application_responses
+             (user_id, application_id, application_form_version_id, status)
+           VALUES ($1, $2, $3, 'review')`,
+          [userId, applicationB, versionA],
+        ),
+      ).rejects.toMatchObject({ code: "23503" });
+
+      await client.query(
+        `INSERT INTO application_responses
+           (user_id, application_id, application_form_version_id, status)
+         VALUES ($1, $2, $3, 'review')`,
+        [userId, applicationA, versionA],
+      );
+      const { rows: bound } = await client.query(
+        `SELECT response.application_id, version.application_id AS version_application_id
+           FROM application_responses response
+           JOIN application_form_versions version
+             ON version.id = response.application_form_version_id
+          WHERE response.user_id = $1`,
+        [userId],
+      );
+      expect(bound).toEqual([
+        { application_id: applicationA, version_application_id: applicationA },
+      ]);
+    });
   });
 
   it("is a no-op after the first apply", async () => {

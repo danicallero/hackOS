@@ -35,6 +35,12 @@ export async function reconcileDevpostParticipantsForUser(
         SET user_id = NULL, merge_status = 'unmatched', linked_by = NULL, linked_at = NULL
       WHERE user_id = $1
         AND merge_status = 'auto_matched'
+        AND EXISTS (
+          SELECT 1 FROM repos r
+           JOIN users u ON u.id = $1
+          WHERE r.id = devpost_participants.repo_id
+            AND r.is_test_account = u.is_test_account
+        )
         AND NOT (lower(email) = ANY($2::text[]))
       RETURNING repo_id`,
     [userId, emails],
@@ -44,14 +50,26 @@ export async function reconcileDevpostParticipantsForUser(
     `UPDATE devpost_participants
         SET user_id = $1, merge_status = 'auto_matched'
       WHERE user_id IS NULL
-        AND lower(email) = ANY($2::text[])`,
+        AND lower(email) = ANY($2::text[])
+        AND EXISTS (
+          SELECT 1 FROM repos r
+           JOIN users u ON u.id = $1
+          WHERE r.id = devpost_participants.repo_id
+            AND r.is_test_account = u.is_test_account
+        )`,
     [userId, emails],
   );
 
   const { rows: linked } = await client.query(
     `SELECT repo_id, devpost_username
        FROM devpost_participants
-      WHERE user_id = $1`,
+      WHERE user_id = $1
+        AND EXISTS (
+          SELECT 1 FROM repos r
+           JOIN users u ON u.id = $1
+          WHERE r.id = devpost_participants.repo_id
+            AND r.is_test_account = u.is_test_account
+        )`,
     [userId],
   );
   for (const row of linked as Array<{ repo_id: number; devpost_username: string | null }>) {

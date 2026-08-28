@@ -125,6 +125,7 @@
   "accountRemovalExpiry": "Plazo de recuperación: {time}",
   "accountRemovalExpiryHint": "Puedes cancelar antes de que se registre tu salida o termine este contador.",
   "accountRemovalExpiryUnknown": "Consultando el plazo…",
+  "accountRemovalRefreshError": "No se pudo actualizar el estado de la eliminación de tu cuenta. Revisa la conexión e inténtalo de nuevo.",
   "accountRemovalCancel": "Cancelar anonimización",
   "accountRemovalCancelTitle": "¿Cancelar la anonimización?",
   "accountRemovalCancelBody": "Puedes cancelar mientras no se haya registrado tu salida y el plazo de recuperación siga abierto. Se restaurará tu acceso a HackUDC.",

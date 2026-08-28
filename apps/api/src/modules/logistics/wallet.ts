@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { EVENTS } from "@hackos/shared/events";
 import {
   resolvePassFieldLabels,
   resolvePassFieldVisibility,
@@ -21,6 +21,7 @@ import {
 } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { computeDerivedRole, type DerivedRole } from "../identity/role.js";
+import { logisticsTopicForFixture } from "./active-broadcast.js";
 import {
   ensurePassRecord,
   type PassRow,
@@ -539,15 +540,34 @@ export async function appleChangedSerials(input: {
   return { lastUpdated, serialNumbers };
 }
 
-export async function appleLog(logs: string[]) {
+export async function appleLog(logs: string[], authorization?: string) {
   // Wallet reports its client-side errors here (bad webServiceURL, auth
   // failures, refused updates...) — printing them is the only visibility we
   // get into why a device isn't updating.
   for (const line of logs) console.warn("wallet: device log:", line);
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_WALLET_PASS_UPDATED, {
-    source: "apple-log",
-    count: logs.length,
-  });
+  if (!authorization) return {};
+  const token = appleAuthToken(authorization);
+  const { rows } = await pool.query<{ is_test_account: boolean }>(
+    `SELECT u.is_test_account
+       FROM wallet_passes wp
+       JOIN users u ON u.id = wp.user_id
+      WHERE wp.platform = 'apple' AND wp.authentication_token = $1
+        AND u.anonymized_at IS NULL
+      LIMIT 1`,
+    [token],
+  );
+  // The pre-handler normally guarantees a matching pass. If the account was
+  // finalized between the pre-handler and this handler, do not fall back to a
+  // global topic that could expose a synthetic batch to real operators.
+  if (!rows[0]) return {};
+  await broadcast(
+    logisticsTopicForFixture(rows[0].is_test_account === true),
+    EVENTS.LOGISTICS_WALLET_PASS_UPDATED,
+    {
+      source: "apple-log",
+      count: logs.length,
+    },
+  );
   return {};
 }
 
