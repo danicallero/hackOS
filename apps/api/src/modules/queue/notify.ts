@@ -71,6 +71,61 @@ type ParticipantInvalidationJobData = {
   challengeIds?: number[];
 };
 
+const MERGE_PARTICIPANT_INVALIDATION_COMMAND = "h54_merge_participant_invalidation";
+const MERGE_PARTICIPANT_INVALIDATION_LUA = `
+local data = redis.call("HGET", KEYS[1], "data")
+if not data then return 0 end
+
+local current = cjson.decode(data)
+local incoming = cjson.decode(ARGV[1])
+local ids = {}
+local seen = {}
+
+local function add(value)
+  if type(value) == "number" and value == math.floor(value) and not seen[value] then
+    seen[value] = true
+    table.insert(ids, value)
+  end
+end
+
+add(current.challengeId)
+if current.challengeIds then
+  for _, value in ipairs(current.challengeIds) do add(value) end
+end
+for _, value in ipairs(incoming) do add(value) end
+
+if #ids > 1 then
+  current.challengeIds = ids
+  redis.call("HSET", KEYS[1], "data", cjson.encode(current))
+end
+return #ids
+`;
+const mergeParticipantInvalidationClients = new WeakSet<object>();
+
+/**
+ * Merge topology challenge ids in Redis, rather than read/replace-writing the
+ * BullMQ job hash. Queue workers run in multiple processes, so a pair of
+ * concurrent `Job.updateData` calls can otherwise lose one side of the union.
+ */
+async function mergeDurableChallengeIds(
+  queue: ReturnType<typeof getQueue>,
+  jobId: string,
+  challengeIds: readonly number[],
+): Promise<void> {
+  const client = await queue.client;
+  if (!mergeParticipantInvalidationClients.has(client)) {
+    client.defineCommand(MERGE_PARTICIPANT_INVALIDATION_COMMAND, {
+      numberOfKeys: 1,
+      lua: MERGE_PARTICIPANT_INVALIDATION_LUA,
+    });
+    mergeParticipantInvalidationClients.add(client);
+  }
+  await client.runCommand(MERGE_PARTICIPANT_INVALIDATION_COMMAND, [
+    queue.toKey(jobId),
+    JSON.stringify(challengeIds),
+  ]);
+}
+
 /**
  * Notifications are invoked from the transition transaction, but their
  * inputs are plain ids/labels and can become stale when a helper is called
@@ -298,7 +353,7 @@ export async function notifyChallengeQueueChanged(
     // mechanism. A concurrent caller may win between getJob() and add(), but
     // that race affects the counter only, never the single-job invariant.
     const existing = locallyCoalesced || Boolean(await queue.getJob(jobId));
-    const job = await queue.add(
+    await queue.add(
       "challenge-changed",
       {
         challengeId,
@@ -320,29 +375,9 @@ export async function notifyChallengeQueueChanged(
       // ordinary queue transition may therefore already have created this
       // group's debounce job before a topology mutation contributes an
       // orphaned/source-side challenge. Merge the snapshot into that durable
-      // job or the later worker would fan out only the first payload.
-      // `Queue.add` constructs a new Job object even when the Redis script
-      // returns an existing id for a duplicate jobId, so that object's data
-      // can be only the attempted payload. Re-read the durable job before
-      // merging or a topology event could overwrite challenge ids contributed
-      // by an earlier caller.
-      const durableJob = (await queue.getJob(jobId)) ?? job;
-      const jobData = durableJob.data as ParticipantInvalidationJobData;
-      const mergedChallengeIds: number[] = [
-        ...new Set(
-          [jobData.challengeId, ...(jobData.challengeIds ?? []), ...topologyChallengeIds].filter(
-            (id): id is number => Number.isFinite(id),
-          ),
-        ),
-      ];
-      const currentChallengeIds: number[] = jobData.challengeIds ?? [];
-      if (
-        mergedChallengeIds.length > 1 &&
-        (currentChallengeIds.length !== mergedChallengeIds.length ||
-          currentChallengeIds.some((id, index) => id !== mergedChallengeIds[index]))
-      ) {
-        await durableJob.updateData({ ...jobData, challengeIds: mergedChallengeIds });
-      }
+      // job atomically or the later worker would fan out only the first
+      // payload. The script is a single Redis operation across API replicas.
+      await mergeDurableChallengeIds(queue, jobId, topologyChallengeIds);
     }
     const outcome = existing ? "coalesced" : "queued";
     observeParticipantInvalidation(outcome);

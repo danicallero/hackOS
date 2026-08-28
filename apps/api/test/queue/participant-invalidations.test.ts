@@ -79,6 +79,30 @@ describe("participant queue invalidations (H38, #544)", () => {
     expect(job?.data.challengeIds).toEqual(expect.arrayContaining(challengeIds));
   });
 
+  it("retains topology ids contributed by concurrent writers", async () => {
+    const { challengeIds } = await createEnterpriseChallenges(3);
+    const groupId = await mergeChallengesIntoOneGroup(challengeIds);
+    const { notifyChallengeQueueChanged, QUEUE_PARTICIPANT_INVALIDATIONS } = await import(
+      "../../src/modules/queue/notify.js"
+    );
+    const { getQueue } = await import("../../src/lib/queues.js");
+    const { pool } = await import("../../src/db/pool.js");
+
+    await Promise.all([
+      notifyChallengeQueueChanged(pool, challengeIds[0]!, groupId, [
+        challengeIds[0]!,
+        challengeIds[1]!,
+      ]),
+      notifyChallengeQueueChanged(pool, challengeIds[2]!, groupId, [
+        challengeIds[2]!,
+        challengeIds[1]!,
+      ]),
+    ]);
+
+    const job = await getQueue(QUEUE_PARTICIPANT_INVALIDATIONS).getJob(`group-${groupId}`);
+    expect(job?.data.challengeIds).toEqual(expect.arrayContaining(challengeIds));
+  });
+
   it("worker fan-out publishes one refresh per affected participant", async () => {
     const challengeId = await createChallenge();
     const first = await createUser();
