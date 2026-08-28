@@ -613,6 +613,9 @@ describe("bring_in / start / complete (H32)", () => {
       payload: {},
     });
 
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE queue_entries SET precalled_at = now() WHERE id = $1`, [entryId]);
+
     const bringIn = await app.inject({
       method: "POST",
       url: `/api/queue/entries/${entryId}/bring-in`,
@@ -620,8 +623,14 @@ describe("bring_in / start / complete (H32)", () => {
       payload: {},
     });
     expect(bringIn.statusCode).toBe(200);
-    expect((await getEntry(entryId)).status).toBe("in_room");
-    expect((await getEntry(entryId)).presentation_started_at).toBeNull(); // clock NOT running yet
+    let transitioned = await getEntry(entryId);
+    expect(transitioned.status).toBe("in_room");
+    expect(transitioned.presentation_started_at).toBeNull(); // clock NOT running yet
+    expect(transitioned.precalled_at).toBeNull();
+
+    // Each H32 stage must start with a fresh pre-call cycle, even if a stale
+    // marker was left behind by a worker or fixture before the transition.
+    await pool.query(`UPDATE queue_entries SET precalled_at = now() WHERE id = $1`, [entryId]);
 
     const start = await app.inject({
       method: "POST",
@@ -630,9 +639,12 @@ describe("bring_in / start / complete (H32)", () => {
       payload: {},
     });
     expect(start.statusCode).toBe(200);
-    const started = await getEntry(entryId);
-    expect(started.status).toBe("presenting");
-    expect(started.presentation_started_at).not.toBeNull();
+    transitioned = await getEntry(entryId);
+    expect(transitioned.status).toBe("presenting");
+    expect(transitioned.presentation_started_at).not.toBeNull();
+    expect(transitioned.precalled_at).toBeNull();
+
+    await pool.query(`UPDATE queue_entries SET precalled_at = now() WHERE id = $1`, [entryId]);
 
     const complete = await app.inject({
       method: "POST",
@@ -641,9 +653,10 @@ describe("bring_in / start / complete (H32)", () => {
       payload: {},
     });
     expect(complete.statusCode).toBe(200);
-    const completed = await getEntry(entryId);
-    expect(completed.status).toBe("completed");
-    expect(completed.completed_at).not.toBeNull();
+    transitioned = await getEntry(entryId);
+    expect(transitioned.status).toBe("completed");
+    expect(transitioned.completed_at).not.toBeNull();
+    expect(transitioned.precalled_at).toBeNull();
 
     const history = await historyRows(entryId);
     expect(history.map((h: { action: string }) => h.action)).toEqual([

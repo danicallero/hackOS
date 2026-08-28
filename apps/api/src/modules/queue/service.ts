@@ -476,7 +476,10 @@ export async function bringIn(entryId: number, actorId: number): Promise<QueueEn
     let updated: QueueEntryRow;
     try {
       const res = await client.query(
-        `UPDATE queue_entries SET status = 'in_room' WHERE id = $1 RETURNING *`,
+        `UPDATE queue_entries
+            SET status = 'in_room', precalled_at = NULL
+          WHERE id = $1
+          RETURNING *`,
         [entryId],
       );
       updated = res.rows[0];
@@ -505,7 +508,10 @@ export async function startPresentation(entryId: number, actorId: number): Promi
     await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, ["in_room"], "start");
     const res = await client.query(
-      `UPDATE queue_entries SET status = 'presenting', presentation_started_at = now() WHERE id = $1 RETURNING *`,
+      `UPDATE queue_entries
+          SET status = 'presenting', presentation_started_at = now(), precalled_at = NULL
+        WHERE id = $1
+        RETURNING *`,
       [entryId],
     );
     await writeQueueHistory(client, {
@@ -531,7 +537,10 @@ export async function completePresentation(
     await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, ["presenting"], "complete");
     const res = await client.query(
-      `UPDATE queue_entries SET status = 'completed', completed_at = now() WHERE id = $1 RETURNING *`,
+      `UPDATE queue_entries
+          SET status = 'completed', completed_at = now(), precalled_at = NULL
+        WHERE id = $1
+        RETURNING *`,
       [entryId],
     );
     await writeQueueHistory(client, {

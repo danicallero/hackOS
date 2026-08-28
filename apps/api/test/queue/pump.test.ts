@@ -322,6 +322,35 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
     );
     expect(after.rows[0].n).toBe(3);
   });
+
+  it("serializes concurrent merged-group claims and notifies only the canonical row", async () => {
+    const { challengeIds } = await createEnterpriseChallenges(2);
+    const groupId = await mergeChallengesIntoOneGroup(challengeIds);
+    const roomId = await createRoom({ maxInWaitingArea: 0, desiredMinutesPerTeam: 5 });
+    await assignQueueGroupToRoom(roomId, groupId);
+    const member = await createUser();
+    const { repoId } = await createRepoWithTeam([member]);
+    const canonicalId = await enqueueRepo(challengeIds[0]!, repoId, 1);
+    const siblingId = await enqueueRepo(challengeIds[1]!, repoId, 2);
+
+    // Two workers can discover the same merged group/repo at the same time.
+    // Exactly one transaction may claim the logical team and its notification
+    // must identify the best queue row, not whichever discovery row won.
+    await Promise.all([pump(), pump()]);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows: outbox } = await pool.query(
+      `SELECT payload
+         FROM notification_outbox
+        WHERE user_id = $1 AND category = 'queue'
+        ORDER BY id`,
+      [member],
+    );
+    expect(outbox).toHaveLength(3);
+    expect(new Set(outbox.map((row) => row.payload.entryId))).toEqual(new Set([canonicalId]));
+    expect((await getEntry(canonicalId)).precalled_at).not.toBeNull();
+    expect((await getEntry(siblingId)).precalled_at).not.toBeNull();
+  });
 });
 
 describe("pump interplay with operators", () => {
