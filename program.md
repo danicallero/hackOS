@@ -11,6 +11,9 @@ rate-limited review history.
 - Base: `067d783befc732fc625fd4a8bd3c0b4ad046733f`
 - Review head at intake: `5059ff81a5076c3b070c2b8d013be90f461bb0d4`
 - Checkpoint commit: `e6ce8c1d` (`fix(H54): close PR review isolation and migration gaps`)
+- Current pushed head: `6c58fdb4` (`fix(queue): isolate fixture transitions and participant reads`)
+- GitHub PR: <https://github.com/danicallero/hackOS/pull/584>; the feature branch is
+  pushed to `origin` through `6c58fdb4`.
 - Worktree policy: shared active checkout; no blind reset, force-push, or destructive history rewrite.
 - Workers: Orca orchestration with `gpt-5.6-luna` at max effort only. Worker edits were reviewed in place and committed as a checkpoint.
 - Coordinator terminal: `term_d22851bc-ee04-441c-aaa9-ff22ee0f213e`.
@@ -23,9 +26,11 @@ rate-limited review history.
 | A2 | Pending accounts retain only the short-lived exit-operational envelope; ordinary identity/domain writers are blocked and exit expiry is bounded. | Product/legal must confirm the retention boundary; no broader pending retention is implied by this code. |
 | A3 | Pending allowlist is recovery/status/cancel/sign-out plus a valid current-badge/event-end exit. Better Auth generated routes and identity writers are gated; admin-origin cancellation is rejected by policy (A7). | Keep the route-matrix and multi-session tests in the release gate. |
 | A4 | `users.badge_assigned_at` is the authoritative stale-scan fence; web/mobile retries and native roster replacement use owner/session epochs. | Do not replace the fence with client time. |
-| A5 | Fixture markers are enforced on project/challenge/repository, queue, logistics, notification, presence, Devpost, SSE, and explicit challenge-enqueue writes. | Any new capability that can read/write queue graphs must call the same marker guard. |
+| A5 | Fixture markers are enforced on project/challenge/repository, queue, logistics, notification, presence, Devpost, SSE, room/enterprise graph, participant self-queue reads, and explicit challenge-enqueue writes. Queue transitions re-check the marker inside their mutation transaction; mixed queue graphs fail closed. | Any new capability that can read/write queue graphs must call the same marker guard. The generated `staff-exit-operator` remains intentionally real-only for queue APIs; the marked participant queue is the fixture workflow. |
 | A6 | Form versions are immutable; responses are non-null and composite-FK bound to the same application. Fixtures and `seed-mock.ts` now create/select the current snapshot and update the pointer on upsert. | Keep direct SQL fixture exceptions only where a test deliberately asserts the NOT NULL error. |
 | A7 | Admin-originated pending removals have no self-service idempotency marker and are rejected by the cancellation path; self-service cancellation is deadline-locked and replay-safe. | If administrators need cancellation later, add an explicit audited policy rather than widening the current route. |
+| A8 | Migration 0410's trigger/backfill gives every challenge exactly one `queue_group_challenges` row. The participant queue read now uses that invariant rather than the legacy negative-challenge fallback; malformed/ungrouped rows are omitted instead of crossing a marker boundary. | If deployments can contain pre-0410 or manually inserted ungrouped challenges, restore an explicit nullable fallback before enabling the participant queue read. |
+| A9 | A room's marker is inherited from its complete pool/serving graph. Unassigned rooms remain neutral/real for global venue operations; once pooled or serving, room-enterprise, room-group and room state writes must remain in one marker boundary. | Mixed or markerless fixture graphs are an invariant violation and are rejected or omitted; do not broaden neutral-room access to synthetic operators without a product decision. |
 
 ## Work ledger
 
@@ -45,7 +50,13 @@ rate-limited review history.
 | T3 | Repair all direct application-response fixtures and non-test writers for H54 form-version NOT NULL | complete | Shared race-safe test helper, all fixtures, `applications/service.ts`, and `seed-mock.ts`; seed upsert updates the current snapshot pointer. |
 | T4 | Isolate queue fixture broadcasts and explicit challenge enqueue | complete | `queue:fixture` topic, marker-scoped notifications, and transactional challenge/repo guards with regression coverage. |
 | T5 | Make offline meal fixture classification stable across account scrubbing | complete | `meal_scan_batches.is_test_account` captured at enqueue; processing uses the persisted marker; migration/DBML coverage added. |
-| T6 | Final high-risk Luna audit | coordinator-reconciled | First final auditor hit the Luna usage limit before `worker_done` after reporting the enqueue gap; coordinator applied the guard. A bounded replacement audit is dispatched below. |
+| T6 | Final high-risk Luna audit | coordinator-reconciled | First final auditor hit the Luna usage limit before `worker_done` after reporting the enqueue gap; coordinator applied the guard. The bounded replacement audit reported no independent finding. |
+| T7 | Queue transition and helper isolation | complete | `6c58fdb4`; transaction-local guards cover every entry transition, call-next/manual-call, group generate/clear, room pause/resume, marker-aware top-up/notifications, and entry-history actor names; 2 focused adversarial tests pass. |
+| T8 | Room/enterprise fixture graph isolation | complete | `ba43a983`; room pool/serving markers, CRUD/state/delete and enterprise assignment are transactional; global room lists/broadcasts are scoped; runtime tests require Docker/Postgres/Valkey. |
+| T9 | Target-selected scan-log fixture isolation | complete | `4dc7f7cb`; authenticated reader marker is separated from selected staff target and subject rows; focused static checks pass, runtime suite is Valkey-blocked. |
+| T10 | Project deletion queue invalidations | complete | `fd7d0581` + `e1c6f826`; deletion snapshots entry/challenge/repo markers and emits scoped queue SSE plus participant invalidations after commit. |
+| T11 | Participant self-queue marker alignment | complete | `6c58fdb4`; `myQueueStatus`/`hasMyQueueItems` share an authenticated-marker CTE for repositories, challenges, groups, ranks, pace, rooms and called-room joins; adversarial coverage added. |
+| T12 | Final release audit and external PR metadata | in progress | Await bounded Luna max review `task_8f66d9a881b6`; then update DOC2, rerun gates, push any final commit, and close stale terminals. |
 
 ## Code/schema changes reconciled
 
@@ -71,6 +82,17 @@ rate-limited review history.
 - Added the explicit challenge enqueue marker guard: a real `QUEUE_ADMIN`
   cannot guess synthetic challenge/repository ids, and a fixture operator cannot
   cross into real graph ids.
+- Added transaction-local fixture guards for every queue entry transition and
+  room helper, marker-aware top-up/group generation/clearing, and history actor
+  identity filtering; mixed queue graphs fail closed.
+- Added authenticated-marker participant self-queue scope for membership,
+  queue groups, rank/pace, possible rooms, called-room joins and existence
+  checks. The generated synthetic staff fixture remains intentionally outside
+  queue operations; the synthetic participant owns the marked queue workflow.
+- Added room pool/serving graph marker classification and transactional room /
+  enterprise assignment, state, delete and queue-group routing checks.
+- Fixed target-selected scan-log scope and post-commit queue/participant
+  invalidations after sole-member project deletion.
 - Seed/test response writers now always bind current immutable form snapshots.
 
 ## Validation record
@@ -86,14 +108,18 @@ where noted):
 - `pnpm --filter @hackos/web test` — 40 files, 298 tests
 - `pnpm --filter @hackos/mobile test` — 44 suites, 222 tests
 - `TEST_DATABASE_URL=postgres://dani@localhost:5432/hackos_test_skipjack pnpm --filter @hackos/api exec vitest run test/migrations.test.ts` — 1 file, 9 tests
+- `TEST_DATABASE_URL=postgres://dani@localhost:5432/hackos_test_skipjack pnpm --filter @hackos/api exec vitest run test/queue/fixture-transition-isolation.test.ts` — 1 file, 2 tests
 
 Blocked/limited:
 
 - API integration suites and queue access-isolation require Valkey and the
   configured Postgres test service on localhost:5433. The Postgres proxy resets
   connections and Valkey 6379 is unresponsive; the queue isolation run failed
-  in setup at `valkey.flushdb()`, before assertions. Do not report those
-  suites as passed.
+  in setup at `valkey.flushdb()`, before assertions. A combined run of the new
+  transition suite plus reads/rooms/scan-log/project suites passed the
+  transition file (2 tests) but had 58 setup failures in the other four files.
+  Docker could not resolve the local `valkey/valkey:8-alpine` image. Do not
+  report the blocked suites as passed.
 - A temporary database applying all migrations and schema generation succeeded
   on local Postgres 5432; it was dropped after verification.
 
@@ -111,13 +137,19 @@ Blocked/limited:
 | Offline queue persistence | `task_fec6ea6fe8ba` / `ctx_ff54a849ee39` / `term_8ed39853-21ac-44ad-879b-8b5f692ceb14` | worker_done; closed |
 | Seed writer audit | `task_917eceaf4b27` / `ctx_349a9b061ef5` / `term_adb22f56-8f92-4324-a259-fbf20257d9e3` | worker_done; closed; coordinator strengthened upsert pointer |
 | First final regression audit | `task_9d1538ff7e76` / `ctx_bca828f9bd5d` / `term_c6bae4ca-c8b6-4327-a294-9aa88ae49587` | failed: Luna usage limit before worker_done; terminal closed; enqueue gap reconciled |
-| Bounded replacement audit | `task_19883aa8e94e` / `ctx_6cb71354099b` / `term_6491c35d-a808-4483-9d95-302da3bc475a` | dispatched; read-only; await worker_done |
+| Bounded replacement audit | `task_19883aa8e94e` / `ctx_6cb71354099b` / `term_6491c35d-a808-4483-9d95-302da3bc475a` | worker_done; closed; no independent P0-P2 finding |
+| Scan-log target scope | `task_a7f6280d06ab` / `ctx_4fa00becb64b` / `term_22358f0a-6ff1-440d-aaad-63e575ce52e4` | worker_done; `4dc7f7cb`; closed |
+| Queue transition scope | `task_6d398aab751e` / `ctx_faeeb0bafdb5` / `term_1e24c5d1-8100-4d4b-b931-7de30ef976a1` | worker edits reconciled by coordinator as `6c58fdb4`; worker was interrupted before worker_done; terminal pending close |
+| Room/enterprise graph scope | `task_5d3cfc85f19a` / `ctx_08b39c66a67f` / `term_7d3953ea-64ea-4c6b-a6ad-83fc4a0246fb` | worker_done; `ba43a983`; closed |
+| Project deletion invalidation | `task_f35951284cee` / `ctx_d8fcef9d3fbe` / `term_8b2432a3-5e68-4c7f-a38c-93625947a718` | worker_done; `fd7d0581` + `e1c6f826`; closed |
+| Participant self-queue scope | `task_25d84f09eb44` / `ctx_5a9369551080` / `term_4d300b63-51fd-4ad3-935d-62f1a7523a26` | worker_done; reconciled in `6c58fdb4`; closed |
+| Final queue release audit | `task_8f66d9a881b6` / `ctx_8c97ff862beb` / `term_6c3479e7-1e5a-40e0-bb3d-9c90278d58ce` | dispatched Luna max; read-only; await worker_done |
 
 ## Received-message ledger
 
 The raw first-wave archive is `/tmp/pr584-orchestration-messages.json`
 (200 messages). A live inbox snapshot added 58 messages; after de-duplication
-by message id, 238 received messages are listed below. The ledger records every
+by message id, 284 received messages are listed below. The ledger records every
 received id/type/subject/timestamp, including heartbeats and status noise so
 the rate-limited handoff is auditable. Full bodies remain in the raw archive
 where present; the most important worker_done bodies are summarized in the
@@ -362,6 +394,55 @@ work ledger above.
 - 2026-07-31 10:05:50 · status · `msg_696ed9fa29ad` · AC-1R additional route-policy correction
 - 2026-07-31 10:04:04 · status · `msg_374f9cbb5e5f` · Shared API test mutex
 
+Messages received after the prior rate-limit snapshot (seq 405–450):
+
+- 2026-08-28 00:39:47 · seq 405 · status · `msg_f720f9df6dfd` · Please finalize audit now
+- 2026-08-28 00:45:22 · seq 406 · status · `msg_23fd4d6fc180` · Coordinator applied queue guard and meal marker fix
+- 2026-08-28 08:23:38 · seq 407 · status · `msg_8023b7b1c44d` · Coordinator closed sponsor fixture scope gap
+- 2026-08-28 08:25:11 · seq 408 · heartbeat · `msg_45c643176ef0` · alive
+- 2026-08-28 08:32:58 · seq 409 · worker_done · `msg_c0f1ad7098c6` · P1 fixture-boundary findings remain
+- 2026-08-28 08:34:57 · seq 410 · heartbeat · `msg_23e35abc3cd5` · alive
+- 2026-08-28 08:34:58 · seq 411 · heartbeat · `msg_48730c53e5e2` · alive
+- 2026-08-28 08:35:06 · seq 412 · status · `msg_8d0e08ff9b7c` · Investigating scan-log fixture boundary
+- 2026-08-28 08:38:16 · seq 413 · status · `msg_ceb721bf8bf8` · Deletion gap confirmed
+- 2026-08-28 08:38:25 · seq 414 · status · `msg_8397536208ab` · Found scan-log fixture leak
+- 2026-08-28 08:38:39 · seq 415 · escalation · `msg_4454765f87c6` · Findings: queue fixture gaps
+- 2026-08-28 08:38:57 · seq 416 · status · `msg_933f497f6c44` · Include entry history and route pre-read in fixture fix
+- 2026-08-28 08:39:03 · seq 417 · status · `msg_1fe4e68097c8` · Preserve deleted-member participant invalidation
+- 2026-08-28 08:39:08 · seq 418 · status · `msg_117218231886` · Guard both assignment directions and mixed room graphs
+- 2026-08-28 08:39:13 · seq 419 · status · `msg_b97d714bedd8` · Include staff target and subject marker checks
+- 2026-08-28 08:39:43 · seq 420 · status · `msg_469d07da7a36` · Focused test blocked by test DB
+- 2026-08-28 08:43:02 · seq 421 · status · `msg_383574e4a3a2` · Implementation + test added
+- 2026-08-28 08:43:16 · seq 422 · status · `msg_732bb34d8f05` · Commit project invalidation fix
+- 2026-08-28 08:44:02 · seq 423 · status · `msg_db4d8020806c` · Also verify participant self queue marker alignment
+- 2026-08-28 08:44:42 · seq 424 · status · `msg_a6a4f20281d2` · Coordinator committed project patch
+- 2026-08-28 08:44:51 · seq 425 · heartbeat · `msg_407b904a2ae6` · alive
+- 2026-08-28 08:45:14 · seq 426 · heartbeat · `msg_039f77577452` · alive
+- 2026-08-28 08:45:44 · seq 427 · status · `msg_c3c979fb77ec` · Commit fd7d0581 present
+- 2026-08-28 08:46:10 · seq 428 · status · `msg_4c69cafc82b7` · Cancel blocked infra prompt and commit scan fix
+- 2026-08-28 08:46:24 · seq 429 · worker_done · `msg_f6d966f6a56f` · Completed project deletion queue invalidations
+- 2026-08-28 08:46:44 · seq 430 · status · `msg_15a684531a90` · Review room helper parameter mapping
+- 2026-08-28 08:47:29 · seq 431 · status · `msg_9be62115e5fd` · Overlapping uncommitted fixture edits
+- 2026-08-28 08:48:02 · seq 432 · heartbeat · `msg_4da4d71f85a3` · alive
+- 2026-08-28 08:48:52 · seq 433 · status · `msg_85f68d45cead` · Docker blocker confirmed; running static checks
+- 2026-08-28 08:50:05 · seq 434 · status · `msg_ba09cb16a3e1` · Preserve marker on room participant invalidations
+- 2026-08-28 08:50:27 · seq 435 · status · `msg_de57782cd26b` · Queue self-read audit
+- 2026-08-28 08:52:25 · seq 436 · status · `msg_edbdff3e46e2` · Cover room enterprise DELETE and state writes
+- 2026-08-28 08:52:56 · seq 437 · status · `msg_0cf62ea6c2da` · Shared service edits also appeared
+- 2026-08-28 08:54:10 · seq 438 · worker_done · `msg_6891e7ee5232` · Completed scan-log fixture boundary fix
+- 2026-08-28 08:54:59 · seq 439 · status · `msg_3ad9cdc6f687` · Preserve ungrouped queue fallback semantics
+- 2026-08-28 08:56:01 · seq 440 · status · `msg_f3e4b0ee91e6` · Cancel Docker prompt, finish static validation and commit
+- 2026-08-28 08:56:20 · seq 441 · status · `msg_9c116bbcf0ce` · Shared reads.ts overlap
+- 2026-08-28 08:57:06 · seq 442 · status · `msg_0c5999ca3f7a` · Skip infra prompt and finish queue patch
+- 2026-08-28 08:57:37 · seq 443 · status · `msg_95dd07f9796b` · Finish self-queue audit without infra
+- 2026-08-28 08:58:48 · seq 444 · worker_done · `msg_7478ee297842` · Completed room fixture isolation fix ba43a983
+- 2026-08-28 08:59:32 · seq 445 · status · `msg_526d2b1021a5` · Validation update
+- 2026-08-28 09:00:29 · seq 446 · status · `msg_4b6d39e7f535` · Filter queue-history actor identity by viewer marker
+- 2026-08-28 09:00:33 · seq 447 · status · `msg_87cf008e1510` · Filter queue-history actor identity by viewer marker
+- 2026-08-28 09:01:15 · seq 448 · status · `msg_2806d48e8e54` · Self-queue marker fix ready for review
+- 2026-08-28 09:03:12 · seq 449 · worker_done · `msg_edc9ada7012f` · Completed self-queue marker isolation
+- 2026-08-28 09:10:38 · seq 450 · heartbeat · `msg_fe1aabfe505c` · alive
+
 Messages sent by the coordinator to workers (not received by the coordinator)
 are intentionally not counted in this incoming ledger. The first final auditor
 also emitted a terminal usage-limit event rather than a protocol message; it is
@@ -373,19 +454,24 @@ Use this prompt for a future coordinator:
 
 > Continue PR #584 remediation on
 > `/Users/dani/orca/workspaces/fablehackos/skipjack`, branch
-> `danicallero/account-deletion-anonymization`. Read `AGENTS.md`,
-> `CLAUDE.md`, `plan/historias-hackos.md`, `plan/07-datos-relevantes-ers.md`,
-> `docs/README.md`, and `program.md`. Use the Orca `orchestration` skill
-> and `gpt-5.6-luna` max workers only; do not substitute Terra. Inspect
-> `orca orchestration task-list --json` and `orca terminal list --json`
-> before dispatching. Preserve the shared uncommitted worktree and never reset
-> blindly. First collect the bounded replacement audit result for
-> `task_19883aa8e94e`; if it reports a P0–P2 issue, fix it and add a focused
-> regression before merge. Then rerun `git diff --check`, `pnpm lint`, API/web/mobile
-> typechecks, web/mobile suites, and the fresh migration suite against a working
-> Postgres/Valkey pair. Update DOC2 in the external PR body/checklist. Do not
-> claim API integration coverage while localhost:5433/Valkey is unavailable.
-> After every worker_done, review the diff and close that worker terminal. At
-> the end, ensure `orca terminal list --json` contains only the coordinator,
-> close any stale panes, update this file with exact new message ids, and report
-> remaining release gates.
+> `danicallero/account-deletion-anonymization`, from pushed head
+> `6c58fdb4`. Read `AGENTS.md`, `CLAUDE.md`, `plan/historias-hackos.md`,
+> `plan/07-datos-relevantes-ers.md`, `docs/README.md`, and `program.md`. Use
+> the Orca `orchestration` skill and `gpt-5.6-luna` max workers only; do not
+> substitute Terra. Inspect `orca orchestration task-list --json` and
+> `orca terminal list --json` before dispatching. Preserve the shared worktree
+> and never reset blindly. Collect the result of bounded audit
+> `task_8f66d9a881b6` / `ctx_8c97ff862beb`; if it reports a concrete P0–P2
+> issue, fix it with a focused regression, commit, rerun static checks, and
+> push. Review the queue self-read decision in A8: migration 0410 guarantees
+> one group per challenge, but restore nullable negative-challenge fallback if
+> a deployment can contain ungrouped legacy rows. Run `git diff --check`,
+> `pnpm lint`, API/web/mobile typechecks, web/mobile suites, the fresh migration
+> suite, and the passing `test/queue/fixture-transition-isolation.test.ts`
+> against a working Postgres/Valkey pair. Do not claim API integration coverage
+> while localhost:5433/Valkey is unavailable; record setup failures separately
+> from assertions. Update DOC2 in the external PR body/checklist. After every
+> worker_done, review the diff, update the received-message ledger, and close
+> that worker terminal. At the end, verify the branch SHA on GitHub, ensure
+> `orca terminal list --json` contains only the coordinator, close stale panes,
+> commit/push any `program.md` update, and report remaining release gates.
