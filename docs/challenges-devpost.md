@@ -162,9 +162,8 @@ chosen at creation reuse the same enqueue core as the H21 hot edit
 `queue_history` row + one audit row + one `QUEUE_ENTRY_CHANGED` broadcast per
 mutation. Participant self-creation is gated by
 `event_config.participants_can_create_projects` (H19, exposed on
-`GET /api/public/event` and toggled from the event settings page), limited to
-one project per participant (advisory-locked, exactly one winner under
-concurrency), and only accepts publicly visible challenges.
+`GET /api/public/event` and toggled from the event settings page), with no
+per-participant project-count cap, and only accepts publicly visible challenges.
 
 **H19/H20 self-service (supersedes H20's "read-only" text — product decision,
 not a `plan/` edit).** `plan/historias-hackos.md` still literally says a

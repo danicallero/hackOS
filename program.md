@@ -71,6 +71,7 @@ rate-limited review history.
 | T20 | Fresh Luna-max migration/release-integrity review | in progress | Dispatched at current origin tip `1cacbe04` as `task_710d3245f178` / `ctx_edf36d553d88` to a dedicated active-worktree terminal. Review-only; migration squash and external-ledger assumption are release gates. |
 | T21 | Synchronize generated route-policy audit and ledger | complete | `apps/api/scripts/route-policy-audit.ts` now expects the live 339-row inventory (18 public, 12 token, 47 authenticated, 195 capability, 67 contextual); `NODE_ENV=test pnpm --filter @hackos/api route-policy:audit` passed and regenerated `docs/access-control-route-ledger.md`, adding the four routes that had drifted from the checked-in counts. |
 | T22 | Close pending-session identity-reassignment bypass | complete | Fresh migration review found the bounded recovery exception also matched `UPDATE sessions SET user_id = pending_user`; `0730` now permits the exception only for inserts or same-user expiry updates, and migration coverage rejects active-to-pending reassignment. Fresh migration suite remains 10/10. |
+| T23 | Remove stale one-project self-service documentation | complete | `docs/challenges-devpost.md` now matches the current H19/H20 contract: participant self-creation has no per-participant project-count cap; the former advisory-lock/one-winner wording was obsolete. |
 
 ## Code/schema changes reconciled
 
