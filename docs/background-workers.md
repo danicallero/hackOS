@@ -1,15 +1,13 @@
 # Background processing & the worker subsystem
 
-> **Read this first.** The single most important thing to understand is that
-> hackOS does **not** push per-entity jobs onto a queue and process them with
-> BullMQ retries/DLQ. It runs a small set of **repeatable "tick" workers** that
-> periodically **drain database-backed queues** (`notification_outbox`, due
-> confirmations, scheduled reveals, room queues). Durability, retry, backoff and
-> the dead-letter state all live in **Postgres rows**, not in BullMQ. BullMQ is
-> just the cron-like heartbeat. Everything else the original brief imagined as
-> "worker jobs" (batch decisions and DNI sync) runs **synchronously inside the
-> API request**. Account deletion/anonymization starts synchronously, then uses
-> its retry/finalization path described in the [event map](#event-mapping).
+The worker subsystem has two execution patterns. Repeatable BullMQ ticks drain
+durable Postgres tables (the notification outbox, due confirmations, scheduled
+reveals, and room queues). Event-driven BullMQ jobs carry an explicit payload
+for work that starts in a request, such as account-removal retries, data-subject
+requests, meal-scan batches, wallet sync, schedule reminders, and participant
+queue invalidations. The API still handles batch decisions and DNI sync
+synchronously. Each path owns its idempotency and retry policy; BullMQ is the
+dispatcher, not the durable source of truth for database state.
 
 ## Scaffolding
 
@@ -31,7 +29,7 @@
   jobs never degrade request latency. Importing `modules/index.js` has the side
   effect of registering every processor; then `startWorkers()`.
 
-## The repeatable workers (queues)
+## Repeatable workers (queues)
 
 Every worker is a repeatable job scheduled with
 `{ repeat: { every: N }, jobId: <queue>, removeOnComplete: true, removeOnFail: true }`.
@@ -42,15 +40,30 @@ queue no matter how many times scheduling runs (idempotent scheduling).
 | --- | --- | --- | --- |
 | `notifications-outbox` | `notifications/dispatcher.ts` | **5 s** | `notification_outbox` rows that are `queued AND next_attempt_at <= now()` → renders + sends via the channel adapter |
 | `announcements-publisher` | `notifications/announcements-publisher.ts` | **15 s** | announcements whose `publish_at` has passed → reveals their configured screen placement and, when selected, fans out inbox/email/push through each recipient's preferences exactly once |
-| `spot-confirmation expirer` | `applications/expirer.ts` | **60 s** | accepted responses whose confirmation window elapsed → `expired` (`expireDueConfirmations`), then scoped wallet tokens dead for over a day (`purgeExpiredWalletAccessTokens`, issue #369) |
+| `applications-expirer` | `applications/expirer.ts` | **60 s** | accepted responses whose confirmation window elapsed → `expired` (`expireDueConfirmations`), then scoped wallet tokens dead for over a day (`purgeExpiredWalletAccessTokens`, issue #369) |
 | `queue-pump` | `queue/pump.ts` | repeatable | discovers each active room, then tops up its live judging queue (`topUpRoom` → one transactional `callNextForRoom` per slot) and emits pre-call warnings through a separately locked group/repo claim |
-| `queue-participant-invalidations` | `queue/notify.ts` | event-driven, 250 ms debounce | coalesces participant H38 read-model refresh fan-out by current queue group after queue transitions commit; topology mutations snapshot old and new groups so moved, split, merged, reassigned, or deleted memberships still refresh every affected group; a merged group reaches members queued on any member challenge; called/pre-call events bypass it and remain immediate; Prometheus records `queued`, `coalesced`, `dropped` (broker unavailable) and `degraded` (partial fan-out) outcomes |
 | `tv-scheduler` | `queue/tv-scheduler.ts` | **5 s** | resolves what the venue screens should show (operator override → covering `tv_slots` window → default `rooms`), drops an override whose `expiresAt` passed, and broadcasts `tv.mode.changed` **only when the resolved state changed** — so a slot boundary reaches the fleet unattended without waking every screen every tick (H42). The public TV SSE endpoint receives only the dedicated payload-free `public-tv` invalidation mirror and refetches its sanitized projection; the operational TV event remains off the public stream. |
-| `presence-event-end-closer` | `logistics/presence-closer.ts` | **60 s** | once `event_config.event_ends_at` passes, force-closes every still-open door session with an audited `out` at that instant (`scanned_by NULL` = system actor, migration 0708), and finalizes pending account removals after that valid event-end exit or after the latest accrued H24 certainty window expires. An `out` outside the certainty window credits no hours; it restores the in/out invariant while the expiry path preserves only already-guaranteed minutes. |
+| `presence-event-end-closer` | `logistics/presence-closer.ts` | **60 s** | once `event_config.event_ends_at` passes, force-closes every still-open door session with an audited `out` at that instant (`scanned_by NULL` = system actor, migration 0710), and finalizes pending account removals after that valid event-end exit or after the latest accrued H24 certainty window expires. An `out` outside the certainty window credits no hours; it restores the in/out invariant while the expiry path preserves only already-guaranteed minutes. |
+| `schedule-reminders` | `notifications/schedule-reminders.ts` | **15 s** | finds opted-in recipients for activities starting within the reminder lead time and records `reminded_at` as it sends notifications |
+| `scheduled-visibility-publisher` | `challenges/visibility-publisher.ts` | **15 s** | reveals challenge visibility whose scheduled time has passed |
+| `schedule-visibility-publisher` | `logistics/schedule-publisher.ts` | **15 s** | reveals audience-tagged schedule items whose publish time has passed |
 
-(The table lists the workers relevant to the flows documented here; other
-modules register more tick workers the same way — grep `registerWorker(` for
-the full set.)
+Repeatable jobs use a fixed `jobId`, so scheduling the same tick more than once
+does not create duplicate schedulers.
+
+## Event-driven workers (payload jobs)
+
+These queues are added in response to a request or committed domain event. They
+are not periodic table drains, and most use BullMQ attempts/backoff in addition
+to the durable row or source record they process.
+
+| Queue | Producer | Work |
+| --- | --- | --- |
+| `account-removal-retries` | `identity/removal.ts` | retries provider/storage cleanup and H54 finalization; the pending account row remains the operator recovery record |
+| `data-subject-requests` | `exports/requests.service.ts` | builds an export or executes an administrator-requested removal for one DSR row |
+| `logistics.meal-scans` | `logistics/offline-meals.ts` | processes one persisted offline meal-scan batch, keyed by `(device_id, client_scan_id)` |
+| `logistics.wallet-sync` | `logistics/wallet-sync.ts` | sends Apple push updates or expires Google Wallet objects after pass changes |
+| `queue-participant-invalidations` | `queue/notify.ts` | debounced H38 read-model refresh fan-out by current queue group; topology changes carry old/new memberships and called/pre-call notifications remain immediate |
 
 Each tick function is **exported** (e.g. `dispatchOutboxOnce`, `pumpTick`,
 `expireDueConfirmations`) so tests invoke it directly instead of waiting on
@@ -140,17 +153,18 @@ controllers. This is the honest map:
 | **H54 account anonymize / delete** | **Two-phase request + retry worker** | Commits `removal_pending` and revokes access first; provider/object cleanup is retried, then the final user deletion or anonymous-subject migration is one transaction. Pending-exit rows are finalized by a valid current exit, the event-end automatic exit, or expired H24 certainty state. Failed jobs expire from the queue after 24 hours and remain operator-retriable from the pending row. |
 | **M5 secondary-email verification email** | **Async** | Enqueued to `notification_outbox`; delivered by the `notifications-outbox` dispatcher |
 | **Decision / invite / reset emails** | **Async** | Same outbox → dispatcher path |
-| **Spot-confirmation expiry** (H15) | **Async** | `spot-confirmation expirer` tick every 60 s |
+| **Spot-confirmation expiry** (H15) | **Async** | `applications-expirer` tick every 60 s |
 | **Scheduled announcement reveals** | **Async** | `announcements-publisher` tick every 15 s |
 | **Judging queue top-up** (H29+) | **Async** | `queue-pump` tick |
 | **Participant queue read-model invalidation** (H38) | **Async** | one delayed BullMQ job per current queue group coalesces transition bursts; topology writes carry old/new group snapshots and the worker re-resolves current membership, so stale/deleted group ids do not discard a valid refresh. It fans out personal signals to members queued on any challenge in that group. A broker failure is best-effort `dropped`, while partial SSE publication is `degraded`; called/pre-call notifications stay immediate. |
 | **TV slot boundaries / override expiry** (H42) | **Async** | `tv-scheduler` tick every 5 s |
 
-**Takeaway for future work:** if you want something processed in the background,
-write it to a durable table with a `status` + `next_attempt_at`, and either
-extend an existing tick or add a new `registerWorker`. Do not reach for BullMQ
-per-job retries/DLQ — the codebase's contract is DB-owned durability drained by
-idempotent ticks.
+**Takeaway for future work:** choose the worker pattern that matches the
+durability boundary. Use a durable table with `status`/`next_attempt_at` for a
+periodic drain; use an event-driven queue when a committed request needs an
+explicit payload or external side effect. In both cases keep the database row
+authoritative, make processing idempotent, and document the retry/dead-letter
+policy beside the processor.
 
 ## Queue and public-screen streams
 

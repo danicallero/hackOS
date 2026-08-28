@@ -10,7 +10,7 @@ again when upgrading the SDK or preparing a store release.
 
 ## Contents
 
-- [Current release readiness](#current-release-readiness)
+- [Before release](#before-release)
 - [1. Required accounts and local tools](#1-required-accounts-and-local-tools)
 - [2. Install and run the full stack](#2-install-and-run-the-full-stack)
 - [3. App identity and Expo project setup](#3-app-identity-and-expo-project-setup)
@@ -178,11 +178,11 @@ Choose and record these values with the organization that owns the stores:
 
 | Value | Example only | Where it is used |
 | --- | --- | --- |
-| Expo owner | `your-expo-org` | Expo project and EAS access control |
-| Expo slug | `hackos-mobile` | Expo project URL; already configured |
-| iOS bundle ID | `org.example.hackos` | Apple identifier, signing, App Store record, Firebase iOS app |
-| Android package | `org.example.hackos` | Android manifest, signing, Play Console record, Firebase Android app |
-| URL scheme | `hackos` | Better Auth mobile origin and deep links; already configured |
+| Expo owner | `hack-os` | Current `app.json` owner; Expo project and EAS access control |
+| Expo slug | `hackos` | Current `app.json` slug; Expo project URL |
+| iOS bundle ID | `com.hackudc.os` | Current `app.json` value; Apple identifier, signing, App Store record, Firebase iOS app |
+| Android package | `com.hackudc.os` | Current `app.json` value; Android manifest, signing, Play Console record, Firebase Android app |
+| URL scheme | `hackos` | Current `app.json` value; Better Auth mobile origin and deep links |
 | Apple team ID | `ABCDE12345` | Apple signing and EAS Submit |
 | App Store Connect app ID | numeric value such as `1234567890` | EAS Submit `ascAppId` |
 | Google Play service account | dedicated JSON key | EAS Submit / Play Developer API |
@@ -208,8 +208,8 @@ identifiers:
 ```json
 {
   "expo": {
-    "owner": "your-expo-org",
-    "slug": "hackos-mobile",
+    "owner": "hack-os",
+    "slug": "hackos",
     "scheme": "hackos",
     "ios": {
       "bundleIdentifier": "org.example.hackos"
@@ -219,7 +219,7 @@ identifiers:
     },
     "extra": {
       "eas": {
-        "projectId": "00000000-0000-0000-0000-000000000000"
+      "projectId": "67dfb15e-eb03-441d-ba61-927e7e1defab"
       }
     }
   }

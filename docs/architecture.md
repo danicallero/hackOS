@@ -456,7 +456,7 @@ back up `pgdata` + `miniodata` regardless of host.
 Full detail in [`deploy/README.md`](../deploy/README.md#security-posture); the
 load-bearing points:
 
-- **Only the api is publicly routable** to datastores; web is public but
+- **The api is the only public route into the datastores**; web is public but
   store-less; postgres and valkey have no public route at all. MinIO's sole
   public surface is the anonymous-read `enterprises/` prefix, served via a
   Cloudflare-fronted `S3_PUBLIC_URL` — its admin API and private `uploads/`

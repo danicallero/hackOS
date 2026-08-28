@@ -2,7 +2,7 @@
 
 Living documentation for how the current code implements the product. The
 normative functional source of truth remains `plan/historias-hackos.md`
-(stories H1–H55) and `plan/07-datos-relevantes-ers.md` (hard invariants);
+(stories H1–H59) and `plan/07-datos-relevantes-ers.md` (hard invariants);
 this folder explains *how* the code implements the relevant slices. If a doc
 here disagrees with `plan/`, the plan wins and the doc (or the code) is the bug.
 
@@ -44,7 +44,7 @@ Architecture & modules:
   `deploy/README.md` is the operational runbook.
 - [Database schema](./database-schema.md) — the generated DBML ERD for the
   current post-migration schema, plus the migration identity/checksum rules.
-- [Module summaries (M1–M5)](./modules-1-5.md) — schemas, hooks, UI layouts and
+- [Module summaries (M1–M8)](./modules-1-5.md) — schemas, hooks, UI layouts and
   state transitions touched by each module, with the corrections made where the
   original brief assumed something the schema contradicts.
 - [Background processing & workers](./background-workers.md) — the BullMQ +

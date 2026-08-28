@@ -11,9 +11,10 @@ rate-limited review history.
 - Base: `067d783befc732fc625fd4a8bd3c0b4ad046733f`
 - Review head at intake: `5059ff81a5076c3b070c2b8d013be90f461bb0d4`
 - Checkpoint commit: `e6ce8c1d` (`fix(H54): close PR review isolation and migration gaps`)
-- Current pushed head: `origin/danicallero/account-deletion-anonymization` (verify
-  with `git rev-parse origin/danicallero/account-deletion-anonymization` before
-  resuming; the last code-bearing checkpoint is `095a4b23`)
+- Current pushed head: verify with `git rev-parse
+  origin/danicallero/account-deletion-anonymization` before resuming; the
+  current pushed checkpoint at the last archival update was `91b6f3bb`, with
+  additional queue/docs follow-up changes in the working tree.
 - GitHub PR: <https://github.com/danicallero/hackOS/pull/584>; the feature branch is
   pushed to the origin branch above.
 - Worktree policy: shared active checkout; no blind reset, force-push, or destructive history rewrite.
@@ -67,13 +68,14 @@ rate-limited review history.
 | T16 | Queue checkpoint CI regression | complete pending replacement CI | Run `33178695481` failed only `test/projects/self-service.test.ts` because it still looked for the superseded `challenge-<id>` invalidation job. The test now captures the challenge's `queue_group_id` and asserts `group-<id>` with `{ challengeId, queueGroupId }`; pushed as `eeb47be8`. |
 | T17 | Fresh Luna residual queue review | complete | Seq 478 and seq 500–503 were reconciled. Queue fixes are committed/pushed through `095a4b23`; exact runs through the current code/metadata checkpoints are green. The bounded final audit (`/root/final_merge_audit`) found no P0/P1 and two P2 edges; both are fixed. Local focused API setup remains unavailable on Postgres 5433/Valkey, so those local setup failures are not represented as passing assertions. |
 | T18 | Fresh Luna-max code/functionality review | complete with findings | Worker found P1 mixed-fixture deletion scope in `deleteMyProject`, plus P2 queue invalidation, room-topology locking, cross-domain lock-order, and inconsistent fresh-account pending-delete edges. No P0; coordinator must reconcile each finding before merge. |
-| T19 | Fresh Luna-max documentation/contracts review | in progress | Dispatched at current origin tip `1cacbe04` as `task_f45031efa267` / `ctx_1dfd3f014be4` to a dedicated active-worktree terminal. Review-only; all modified/new Markdown plus `program.md` are in scope. |
+| T19 | Fresh Luna-max documentation/contracts review | complete-with-findings | Worker_done seq 533 reviewed all 14 modified/new Markdown files plus `program.md`; no P0. It reported P1/P2 drift candidates covering deploy topology, contextual auth, queue/worker semantics, migration references, endpoint inventories, env wiring, anchors, story/index metadata, mobile identity examples, and stale current-head metadata. Static lint/relative-link checks passed; API integration remains setup-blocked by Postgres 5433/Valkey. Coordinator must triage each candidate against current code before release. |
 | T20 | Fresh Luna-max migration/release-integrity review | complete | Worker audited the current `a7bf45ce` tree: no remaining P0–P2 migration/schema finding; fresh migration tests 10/10, 58/58 user-FK triggers, and all 24 legacy alias checksums pass. The populated external `_migrations` ledger check remains a conditional P1 release gate, and the PR body needs a final-head refresh. |
 | T21 | Synchronize generated route-policy audit and ledger | complete | `apps/api/scripts/route-policy-audit.ts` now expects the live 339-row inventory (18 public, 12 token, 47 authenticated, 195 capability, 67 contextual); `NODE_ENV=test pnpm --filter @hackos/api route-policy:audit` passed and regenerated `docs/access-control-route-ledger.md`, adding the four routes that had drifted from the checked-in counts. |
 | T22 | Close pending-session identity-reassignment bypass | complete | Fresh migration review found the bounded recovery exception also matched `UPDATE sessions SET user_id = pending_user`; `0730` now permits the exception only for inserts or same-user expiry updates, and migration coverage rejects active-to-pending reassignment. Fresh migration suite remains 10/10. |
 | T23 | Remove stale one-project self-service documentation | complete | `docs/challenges-devpost.md` now matches the current H19/H20 contract: participant self-creation has no per-participant project-count cap; the former advisory-lock/one-winner wording was obsolete. |
-| T24 | Targeted Luna follow-up for deletion and queue P2s | in progress | Dispatched at current shared tree after seq 523 as `task_01ce42a0dc1f` / `ctx_d3fc72184adf` / `term_f1dde2c5-5c92-4c7d-a551-b844ea20f201`; review-only, focused on the mixed-marker delete fix and the remaining invalidation/lock-order/pending-delete findings. |
+| T24 | Targeted Luna follow-up for deletion and queue P2s | failed/continued by coordinator | Dispatched after seq 523 as `task_01ce42a0dc1f` / `ctx_d3fc72184adf` / `term_f1dde2c5-5c92-4c7d-a551-b844ea20f201`; the Luna terminal hit its usage limit before worker_done and made no edits. Coordinator is continuing from the prior exact findings and bounded collaboration audits; terminal closed and task marked failed with that reason. |
 | T25 | Preserve auth during inconsistent pending-delete exit | complete | The fresh-account/inconsistent operational path now retains sessions, Better Auth accounts, push tokens and dietary state whenever `requiresVenueExit` is true, regardless of delete vs anonymize action; profile coverage asserts a pending delete keeps its credential. |
+| T26 | Triage fresh documentation findings | complete with fixes in progress | Seq 537 confirmed one real P1 deploy-topology correction and concrete P2 documentation drift; coordinator is applying the verified wording, endpoint, worker, env, anchor, and release-metadata fixes. |
 
 ## Code/schema changes reconciled
 
@@ -229,10 +231,11 @@ Blocked/limited:
 | Queue final malformed-read/migration checkpoint | `task_7f51b1507230` / `ctx_ab90fb331011` / `term_0055c933-d5ab-4df7-9fcf-397596b0fc0f` | worker_done seq 478; no edits; confirmed pre-call atomicity, four transition timestamp, topology invalidation, stale group-id, and challenge-only read-scope findings; terminal closed |
 | Queue state residual implementation | `task_a0e4561bfe94` / `ctx_687665ab4f57` / `term_7c70c396-f851-4a76-9646-79771798799b` | worker_done seq 492; pump/service/tests updated; targeted checks pass; focused Vitest blocked by Postgres 5433; terminal closed |
 | Queue scope/topology residual implementation | `task_1eb9b2da89c5` / `ctx_449db3463fe7` / `term_feed0274-9319-4ed1-a2db-952694e7ed36` | worker_done seq 498; topology/read/docs updates; lint/typecheck/Biome/diff checks pass; focused Vitest blocked by Postgres 5433; room routes integrated by coordinator; terminal closed |
-| Fresh code/functionality review | `task_8385dd83fa72` / `ctx_4eff2c4e09ab` / `term_08af9992-9959-46b3-8cfc-adebd9774552` | worker_done seq 523; P1/P2 findings archived; no edits; terminal pending close |
-| Fresh documentation/contracts review | `task_f45031efa267` / `ctx_1dfd3f014be4` / `term_b7f8b9a5-345f-4731-b209-6ca77d060654` | dispatched at `1cacbe04`; review-only Luna max lane in progress |
-| Fresh migration/release-integrity review | `task_710d3245f178` / `ctx_edf36d553d88` / `term_bc5e4140-593a-4af7-ad22-7bf77936bdd8` | worker_done seq 521; no P0–P2 migration/schema finding; external `_migrations` ledger remains a conditional release gate; terminal pending close |
-| Targeted deletion/queue P2 follow-up | `task_01ce42a0dc1f` / `ctx_d3fc72184adf` / `term_f1dde2c5-5c92-4c7d-a551-b844ea20f201` | dispatched; review-only Luna max lane in progress |
+| Fresh code/functionality review | `task_8385dd83fa72` / `ctx_4eff2c4e09ab` / `term_08af9992-9959-46b3-8cfc-adebd9774552` | worker_done seq 523; P1/P2 findings archived; no edits; terminal closed |
+| Fresh documentation/contracts review | `task_f45031efa267` / `ctx_1dfd3f014be4` / `term_b7f8b9a5-345f-4731-b209-6ca77d060654` | worker_done seq 533; review-only; no P0; findings triaged by bounded follow-up; terminal closed |
+| Fresh migration/release-integrity review | `task_710d3245f178` / `ctx_edf36d553d88` / `term_bc5e4140-593a-4af7-ad22-7bf77936bdd8` | worker_done seq 521; no P0–P2 migration/schema finding; external `_migrations` ledger remains a conditional release gate; terminal closed |
+| Targeted deletion/queue P2 follow-up | `task_01ce42a0dc1f` / `ctx_d3fc72184adf` / `term_f1dde2c5-5c92-4c7d-a551-b844ea20f201` | failed at 19:04 after Luna usage limit before worker_done; no files modified; terminal closed; coordinator continues the audit |
+| Bounded documentation triage | `task_32639df46b83` / `ctx_e7ab6a36a2a7` / `term_c27e4b4a-587b-4a7a-a8cc-c09a56961143` | worker_done seq 537; no files modified; P1/P2 dispositions archived; terminal closed |
 
 ## Received-message ledger (archival coordination artifact)
 
@@ -243,7 +246,7 @@ facing documentation.
 
 The raw first-wave archive is `/tmp/pr584-orchestration-messages.json`
 (200 messages). A live inbox snapshot added 58 messages; after de-duplication
-by message id, 330 received messages are listed below. The ledger records every
+by message id, 338 received messages are listed below. The ledger records every
 received id/type/subject/timestamp, including heartbeats and status noise so
 the rate-limited handoff is auditable. Full bodies remain in the raw archive
 where present; the most important worker_done bodies are summarized in the
@@ -582,6 +585,16 @@ Messages received after the prior rate-limit snapshot (seq 405–450):
 - 2026-08-28 15:31:30 · seq 506 · worker_done · `msg_acb0851e5fbc` · duplicate migration/docs audit; fresh 0730/10-test/schema checks pass, external-ledger verification remains a release condition, seed-mock wording and archival ledger caveats already reconciled
 - 2026-08-28 16:29:51 · seq 521 · worker_done · `msg_655e795ef901` · fresh migration audit on `a7bf45ce`; no P0–P2 migration/schema finding, 10/10 migration tests, 58/58 user-FK triggers and 24 legacy alias checksums pass; external `_migrations` ledger verification and PR-body final-head refresh remain release gates
 - 2026-08-28 16:32:07 · seq 523 · worker_done · `msg_f714570d68f1` · fresh code audit found P1 mixed-fixture deletion scope in `projects/service.ts:2301`; P2 queue invalidation, room-topology lock race, cross-domain lock-order, and inconsistent fresh-account pending-delete edges; no P0; focused API concurrency setup blocked by Postgres 5433
+- 2026-08-28 16:35:02 · seq 526 · heartbeat · `msg_674f862ac67d` · targeted deletion/queue follow-up alive (empty heartbeat)
+- 2026-08-28 16:38:21 · seq 527 · status · `msg_28375076cf7c` · docs audit reported deploy topology P1 plus stale ranges, contextual-auth, worker/migration, endpoint, env, anchor, mobile, and release-metadata candidates; lint/relative links passed; API setup blocked
+- 2026-08-28 16:39:19 · seq 529 · status · `msg_8226cbc91853` · targeted audit confirmed mixed-marker deletion guard and traced deletion/queue/lock/pending-account P2s; runtime probes likely setup-blocked
+- 2026-08-28 16:39:58 · seq 530 · status · `msg_223b483a8f86` · docs audit added contextual challenge/repository auth, queue-group route-count, stale event-config wording, and optional filler-style findings
+- 2026-08-28 16:40:49 · seq 531 · status · `msg_9941af084862` · docs audit added queue side-state and event-driven BullMQ wording drift plus duplicate route-count finding
+- 2026-08-28 16:43:53 · seq 532 · status · `msg_e831d06dd792` · final docs audit consolidated deploy P1 and API/background/queue/auth/endpoint/env/mobile/architecture/range drift; no P0; lint/links passed; API setup blocked
+- 2026-08-28 16:44:12 · seq 533 · worker_done · `msg_1f289508a619` · documentation audit reviewed all 14 modified/new Markdown files plus program.md; no P0; concrete P1/P2 candidates archived for coordinator triage
+- 2026-08-28 19:04:25 · orchestration task failure (no sequence) · `task_01ce42a0dc1f` / `ctx_d3fc72184adf` / `term_f1dde2c5-5c92-4c7d-a551-b844ea20f201` · targeted Luna terminal hit the account usage limit before worker_done; no files modified; terminal closed; coordinator retained ownership of the remaining deletion/queue P2 audit
+- 2026-08-28 19:05:12 · seq 535 · heartbeat · `msg_3cda2d81f15a` · bounded documentation triage alive (empty heartbeat)
+- 2026-08-28 19:14:03 · seq 537 · worker_done · `msg_42ee3df26de8` · docs triage found no P0, one real P1 deploy topology issue, and verified P2 drift; no files modified; terminal closed
 
 Coordinator-originated inbox echoes (kept for chronology, excluded from the
 received-message count) were seq 474 `msg_939f59e3d657` and seq 476

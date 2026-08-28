@@ -78,14 +78,14 @@ challenge content and judging panel under the H44/H45 rules below.
 
 | Method & path | Capability | Story | Behaviour |
 |---|---|---|---|
-| `GET /api/challenges` | `sponsors:manage` OR `queue:admin` | H44/H46 | admin-wide list |
+| `GET /api/challenges` | contextual `challenge-directory` | H44/H46 | global challenge admins see all; sponsor representatives and assigned judges see their scoped challenges |
 | `POST /api/challenges` | `sponsors:manage` OR `queue:admin` | H43/H44 | create hidden draft template bound to an enterprise |
 | `GET /api/challenges/mine` | authenticated + sponsor row | H44/H46 | challenges owned by the caller's enterprise |
-| `GET /api/challenges/:id` | ownership check | H44 | single challenge |
+| `GET /api/challenges/:id` | contextual `challenge-access` | H44/H46 | global admins, the owning sponsor enterprise, or an assigned judge |
 | `PATCH /api/challenges/:id` | ownership check | H44 | partial edit + version snapshot + audit |
 | `POST /api/challenges/:id/publish` | `sponsors:manage` OR `queue:admin` | H45 | publish immediately or schedule reveal |
 | `POST /api/challenges/:id/unpublish` | `sponsors:manage` OR `queue:admin` | H45 | hide a mistakenly published challenge |
-| `GET /api/challenges/:id/panel/preview` | ownership check | H44 | typed judging panel + lock state |
+| `GET /api/challenges/:id/panel/preview` | contextual `challenge-access` | H44/H46 | global admins, sponsor/queue/panel operators, the owning sponsor enterprise, or an assigned judge |
 | `GET /api/challenges/:id/versions` | ownership check | H44 | immutable edit history |
 
 `POST /api/challenges` resolves the supplied `enterpriseId` to the existing
@@ -137,8 +137,8 @@ sponsor; no implicit cross-challenge win is created.
 | `POST /api/devpost/imports/link-secondary` | `projects:import` | H6/H17 | request secondary verification; link activates only after verification |
 | `POST /api/devpost/imports/claim-email` | `projects:import` + idempotency | H17 | fire account-claim invite |
 | `POST /api/devpost/prizes/:prizeName/map` | `projects:import` | H16 | append prize to a challenge's `devpost_tags` |
-| `GET /api/repos` | `projects:read` | H20/queue | repos + members + prizes + mapped challenges |
-| `GET /api/repos/:id` | `projects:read` | H20/queue | one repo, same shape |
+| `GET /api/repos` | contextual `repository-list` | H20/queue | repos + members + prizes + mapped challenges within global or relationship-derived scope |
+| `GET /api/repos/:id` | contextual `repository-access` | H20/queue | one repo, same shape, after the exact repository scope check |
 | `GET /api/projects/member-candidates` | `projects:edit` | H21 | minimal account search for team editors |
 | `POST /api/repos` | `projects:edit` + idempotency | H18 | native creation: metadata + members + challenge lineup in one transaction |
 | `PATCH /api/repos/:id` | `projects:edit` | H18 | metadata edit (name, description, links), audited before/after |
@@ -318,7 +318,7 @@ Every projects, challenges, and sponsors route declares an explicit
 `RouteAccessPolicy` in the API route ledger. Named enterprise, challenge, and
 repository pre-handlers resolve the actual database resource before a handler
 runs: anonymous private calls receive `401`; authenticated callers without a
-global capability or the exact relationship receive `403`.
+global capability or the exact contextual relationship receive `403`.
 
 - `projects:read` (and the administrator wildcard) is global. Sponsor
   representatives otherwise see only repositories attached to challenges of
@@ -328,7 +328,9 @@ global capability or the exact relationship receive `403`.
 - `sponsors:manage` and `queue:admin` remain global for their challenge
   operations. A sponsor row grants access only to its enterprise's challenges;
   an `enterprise_judges(enterprise_id, user_id)` row grants read/panel access
-  to that enterprise's challenges only, never edit access.
+  to that enterprise's challenges only, never edit access. `JUDGE_PANEL` and
+  `QUEUE_OPERATE` also grant the panel preview capability where the route policy
+  allows it.
 - Enterprise profile routes resolve `:id` before authorizing. A representative
   can edit only their linked enterprise and its owner-editable fields; an
   unrelated enterprise id is forbidden. Nested project/challenge operations
@@ -336,11 +338,15 @@ global capability or the exact relationship receive `403`.
   transaction (for example, a winner repo must be entered in that challenge, or
   in one sharing its queue group — see §1.2).
 
-- Every mutating route is guarded by `requireCapability`/`requireAnyCapability`
-  by capability, never by role (H8): `projects:import` for all Devpost intake,
-  `projects:read` for the repo views, `sponsors:manage` /
-  `queue:admin` for challenges. Ownership-sensitive challenge routes additionally
-  check the challenge author's enterprise against the caller inside the handler.
+- Each route uses the guard that matches its access shape: global imports and
+  administration use `requireCapability`/`requireAnyCapability` (never roles),
+  while sponsor, judge, challenge, repository, and participant self-service
+  routes use contextual relationship, ownership, event-policy, eligibility, or
+  window checks. For example, `GET /api/repos` is `repository-list` and
+  `GET /api/repos/:id` is `repository-access`; `POST /api/me/projects` is
+  authenticated self-service with H19 policy and admission/window gates, not a
+  global capability route. Sensitive writes still record an audit row in the
+  same transaction.
 - Critical mutations carry `idempotencyGuard` (import confirm, claim-email).
 - Every sensitive mutation writes an `audit(...)` row in the same transaction as
   the domain write (H53): import confirm, manual link, claim-email, prize

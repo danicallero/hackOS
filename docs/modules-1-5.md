@@ -1,4 +1,4 @@
-# Module summaries (M1–M5)
+# Module summaries (M1–M8)
 
 High-level overview of the architectural changes per module. Each entry lists
 the **schema**, **hooks/endpoints**, **UI**, and **state transitions** touched.
@@ -269,7 +269,8 @@ credential login is the user id as text, while `sessions`/`accounts` FK on
 - `profile.ts` `PATCH /api/users/:id/email` (`USERS_WRITE`) — safe primary-email
   change: uniqueness check vs any primary / verified-secondary, single-column
   update, marks verified (admin-vouched), audited.
-- `profile.ts` exposes the H54 self-service preflight and actions, while the
+- `profile.ts` exposes the H54 self-service preflight, recovery status, cancel,
+  and actions, while the
   admin routes use the same locked boundary. A fresh account is fully deleted;
   an account with canonical `check_in_logs` accreditation is irreversibly
   anonymized. Door/activity/badge history without canonical accreditation is
@@ -282,7 +283,8 @@ credential login is the user id as text, while `sessions`/`accounts` FK on
   other identity-bearing relationships, revokes sessions/tokens/push and
   deletes the original `users` row. No mapping table or in-place anonymized
   user remains.
-- `GET /api/me/removal-eligibility`, `DELETE /api/me` and
+- `GET /api/me/removal-eligibility`, `GET /api/me/removal-status`,
+  `POST /api/me/anonymize/cancel`, `DELETE /api/me` and
   `POST /api/me/anonymize` are authenticated and capability-free. The web and
   mobile settings pages call the preflight and present the corresponding
   destructive action directly. A self-service completion audit is actor-free

@@ -198,7 +198,7 @@ room, which is admin-only regardless of caller.
 ## Merging (0412)
 
 Merging is the only thing that produces a group with more than one challenge.
-It lives in `queue/group-merge.ts` behind five routes, all gated by the same
+It lives in `queue/group-merge.ts` behind seven routes, all gated by the same
 grant as the judge roster (`assertCanManageEnterpriseJudging`: `queue:admin`,
 `sponsors:manage`, or a rep of the enterprise):
 

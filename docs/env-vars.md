@@ -106,7 +106,7 @@ need them.
 | `GOOGLE_TRANSLATE_API_KEY` | container | only if `TRANSLATE_PROVIDER=google` | Google Cloud Translation v2 API key. |
 | `LIBRETRANSLATE_URL` / `LIBRETRANSLATE_API_KEY` | container | URL required if `TRANSLATE_PROVIDER=libretranslate`, key optional | Base URL of a self-hosted LibreTranslate instance (e.g. `https://translate.example.org`) and its API key, if the instance requires one. |
 | `STACK_NAME` | compose-level | no (default) | Namespaces this instance's Traefik router names (`${STACK_NAME}-api`) so multiple hackOS instances can share one Traefik without router-name collisions. |
-| `PROXY_NETWORK` | compose-level | no (default `dokploy-network`) | The Traefik-managed edge network `api` joins to receive public traffic. |
+| `PROXY_NETWORK` | compose-level | no (default `dokploy-network`) | The Traefik-managed edge network `api` and `web` join to receive public traffic. The single-stack worker may also join it for outbound egress, but has no router. |
 | `CERT_RESOLVER` | compose-level | no (default `letsencrypt`) | Which Traefik ACME resolver issues the TLS cert for `API_DOMAIN`. |
 | `IMAGE_REPO`, `IMAGE_TAG` | compose-level | no | Which prebuilt image to pull; ignored entirely if Dokploy builds from source instead. Pin `IMAGE_TAG` to a released version in production — never `:latest`. |
 | `API_MEM_LIMIT` | compose-level | no | Memory cap, default `512m`. |
@@ -115,13 +115,15 @@ need them.
 ## worker
 
 Same image as `api`, running `node dist/worker.js` instead of `dist/server.js`
-— no HTTP listener, no `edge` network membership, so it's reachable by nothing
-and reaches out to nothing except the instance network and the open internet
-(mail provider, Apple/Google push). Container env is the **api list above
-minus** `CORS_ORIGINS`, plus `WEB_URL` generated from the compose-level
-`WEB_DOMAIN`: the worker renders transactional email HTML, including the
-browser-reachable brand mark, before sending it. It does not serve a browser or
-generate browser links itself. It also has:
+— no HTTP listener or Traefik router. In the per-service deployment it stays on
+the instance bridge; in the single-stack deployment it also joins the edge
+network so outbound mail/push traffic has a route. `WEB_URL` is generated from
+the compose-level `WEB_DOMAIN`: the worker renders transactional email HTML,
+including the browser-reachable brand mark, before sending it. It does not serve
+a browser or generate browser links itself. The per-service worker compose
+passes the shared database, storage, mail, wallet, and pool settings; API-only
+SSE and scanner-rate-limit settings are not needed. The single-stack compose
+reuses the shared app anchor, so harmless API-only values may be present there.
 
 | Variable | Kind | Required | What it does |
 |---|---|---|---|
@@ -129,13 +131,12 @@ generate browser links itself. It also has:
 | `WORKER_MEM_LIMIT` | compose-level | no | Memory cap, default `512m`. Bump this if you scale worker replicas for notification/queue throughput (dispatcher uses `SELECT ... FOR UPDATE SKIP LOCKED`, so replicas don't double-send). |
 | `NOTIFICATION_OUTBOX_BATCH_SIZE` | container | no | Rows the outbox dispatcher claims per 5s tick, default `100` — each row dispatched and committed in its own transaction, so raising this doesn't grow the duplicate-send risk of a mid-batch crash. Only the `worker` container's value matters in production (it's the one running the dispatcher). See `docs/big-event-readiness.md`. |
 
-Everything else — `DATABASE_URL`/`VALKEY_URL` inputs, `BETTER_AUTH_URL`,
-`BETTER_AUTH_SECRET`, the S3 block, the mail block, both wallet blocks, the
-`DB_*` pool/timeout block (H540) — is identical to `api` and **must use the
-same values**: the worker is what actually sends the emails and pushes
-wallet-pass updates that `api` only queues, and it holds its own `pg` pool
-sized by the same `DB_POOL_MAX` math. The `SSE_*` vars are **not** applicable
-here — the worker has no HTTP listener, so no SSE connections to budget.
+The worker must use the same `DATABASE_URL`/`VALKEY_URL` inputs,
+`BETTER_AUTH_SECRET`, S3 block, mail block, wallet blocks, and `DB_*`
+pool/timeout values as `api`: it sends the emails and wallet-pass updates that
+`api` only queues, and it holds its own `pg` pool sized by the same
+`DB_POOL_MAX` math. The `SSE_*` vars are not applicable to the worker because it
+has no HTTP listener.
 
 ## web
 

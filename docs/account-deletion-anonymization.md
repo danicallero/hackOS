@@ -343,6 +343,7 @@ correct it.
 | Surface | Implementation |
 | --- | --- |
 | Preflight | `GET /api/me/removal-eligibility`; admin `GET /api/users/:id/removal-eligibility`. |
+| Recovery status / cancel | `GET /api/me/removal-status` reports the server-authoritative pending-exit state; `POST /api/me/anonymize/cancel` cancels a self-service pending request before its exit or fixed recovery deadline. |
 | Full delete | Authenticated `DELETE /api/me`; admin `DELETE /api/users/:id`; both re-evaluate and select full deletion only without canonical accreditation. Verified-primary-email self-service calls include the one-time PIN. An inconsistent open session may return `pending_exit` before deletion. |
 | Anonymize | Authenticated `POST /api/me/anonymize` with `{confirm:true}`; admin `POST /api/users/:id/anonymize`; admin requires `ADMIN_ALL` and cannot target self. Verified-primary-email self-service calls include the one-time PIN. An open session returns `202 pending_exit`, not an error. |
 | Security PIN | Authenticated `POST /api/me/removal-pin`; the server locks the active account, invalidates older challenges, stores only an HMAC digest/nonce, and queues the six-digit code through `notification_outbox`. |
