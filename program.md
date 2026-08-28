@@ -11,9 +11,9 @@ rate-limited review history.
 - Base: `067d783befc732fc625fd4a8bd3c0b4ad046733f`
 - Review head at intake: `5059ff81a5076c3b070c2b8d013be90f461bb0d4`
 - Checkpoint commit: `e6ce8c1d` (`fix(H54): close PR review isolation and migration gaps`)
-- Current pushed head: `095a4b23` (`fix(queue): exclude paused ETA capacity`)
+- Current pushed head: `c3d50033` (`docs(review): record final queue audit`)
 - GitHub PR: <https://github.com/danicallero/hackOS/pull/584>; the feature branch is
-  pushed to `origin` through `095a4b23`.
+  pushed to `origin` through `c3d50033`.
 - Worktree policy: shared active checkout; no blind reset, force-push, or destructive history rewrite.
 - Workers: Orca orchestration with `gpt-5.6-luna` at max effort only. Worker edits were reviewed in place and committed as a checkpoint.
 - Coordinator terminal: `term_d22851bc-ee04-441c-aaa9-ff22ee0f213e`.
@@ -58,12 +58,12 @@ rate-limited review history.
 | T9 | Target-selected scan-log fixture isolation | complete | `4dc7f7cb`; authenticated reader marker is separated from selected staff target and subject rows; focused static checks pass, runtime suite is Valkey-blocked. |
 | T10 | Project deletion queue invalidations | complete | `fd7d0581` + `e1c6f826`; deletion snapshots entry/challenge/repo markers and emits scoped queue SSE plus participant invalidations after commit. |
 | T11 | Participant self-queue marker alignment | complete | `d22f7731`; authenticated-marker CTE covers repositories, challenges, groups, ranks, pace, rooms and called-room joins; malformed cross-marker rows are omitted without hiding valid same-marker rows. |
-| T12 | Final release audit and external PR metadata | complete pending PR-body refresh | Exact run `33185764618` is green on pushed head `095a4b23` across lint, typecheck, web/mobile tests, browser smoke, and API integration. PR body still needs its final checklist/count refresh before merge; keep the PR Draft unless a release owner marks it ready. |
+| T12 | Final release audit and external PR metadata | complete | Exact run `33186417443` is green on pushed head `c3d50033` across lint, typecheck, web/mobile tests, browser smoke, and API integration. The PR body template/checklist is refreshed with the final run and migration gate; keep the PR Draft unless a release owner marks it ready. |
 | T13 | Queue release follow-up from post-fix audit | complete | Coordinator reconciled the confirmed queue findings in `a0b5f144`, `222f4fda`, `5a9973e3`, and `095a4b23`: global-rank pump selection, transactional pause gating, synthetic queue-admin fail-closed group listing, topology/read marker propagation, post-lock enterprise-group re-resolution, paused-room ETA exclusion, and post-lock room-link topology re-read. |
 | T14 | Pending recovery session boundary | checkpoint committed | `159fdcb8` + `8caeceea`; independent auth-trigger review confirmed the app cap and recommended an additive migration only for populated deployments. Better Auth `databaseHooks.session.create/update.before` caps sessions, while the fresh `0730` trigger accepts only future anonymization exits whose `expires_at <= removal_expires_at`; auth-flow coverage exercises sign-in and refresh, and the migration suite now directly checks allowed/rejected INSERT/UPDATE cases. Local API typecheck/lint/fresh migration suite pass; runtime auth remains CI-gated by Valkey/Postgres setup. |
 | T15 | Queue implementation follow-up dispatch | rate-limited before edits | Two disjoint Luna-max lanes were dispatched at head `89fbe59e` (`task_3662f2c66e7d` state transitions, `task_fe7eccc78510` scope/invalidation). Both hit the account usage limit after required reads and before edits; terminals were closed. Coordinator is implementing the independently confirmed findings with the exact lane boundaries and regression goals preserved. |
 | T16 | Queue checkpoint CI regression | complete pending replacement CI | Run `33178695481` failed only `test/projects/self-service.test.ts` because it still looked for the superseded `challenge-<id>` invalidation job. The test now captures the challenge's `queue_group_id` and asserts `group-<id>` with `{ challengeId, queueGroupId }`; pushed as `eeb47be8`. |
-| T17 | Fresh Luna residual queue review | complete | Seq 478 and seq 500–503 were reconciled. Queue fixes are committed/pushed through `095a4b23`; exact CI run `33185764618` is green. The bounded final audit (`/root/final_merge_audit`) found no P0/P1 and two P2 edges; both are fixed. Local focused API setup remains unavailable on Postgres 5433/Valkey, so those local setup failures are not represented as passing assertions. |
+| T17 | Fresh Luna residual queue review | complete | Seq 478 and seq 500–503 were reconciled. Queue fixes are committed/pushed through `095a4b23`, with final archival metadata at `c3d50033`; exact CI run `33186417443` is green. The bounded final audit (`/root/final_merge_audit`) found no P0/P1 and two P2 edges; both are fixed. Local focused API setup remains unavailable on Postgres 5433/Valkey, so those local setup failures are not represented as passing assertions. |
 
 ## Code/schema changes reconciled
 
@@ -165,8 +165,8 @@ trigger to future anonymization exits, adds direct migration regression
 coverage, and corrects the authentication documentation. Full CI run
 `33165065129` is green on head `89fbe59e`; run `33184695748` is green on
 `5a9973e3` after the queue rank/pause/synthetic-scope fixes. The final audit's
-ETA/topology corrections are pushed as `095a4b23`; exact run `33185764618` is
-green across all jobs.
+ETA/topology corrections are pushed as `095a4b23`; final metadata is at
+`c3d50033`; exact run `33186417443` is green across all jobs.
 
 Blocked/limited:
 
@@ -588,7 +588,7 @@ Use this prompt for a future coordinator:
 
 > Continue PR #584 on `/Users/dani/orca/workspaces/fablehackos/skipjack`,
 > branch `danicallero/account-deletion-anonymization`, from pushed head
-> `095a4b23` (replace with the latest `origin` SHA after checking). Read
+> `c3d50033` (replace with the latest `origin` SHA after checking). Read
 > `AGENTS.md`, `CLAUDE.md`, `plan/historias-hackos.md`,
 > `plan/07-datos-relevantes-ers.md`, `docs/README.md`, and `program.md`.
 > Use the Orca `orchestration` skill and `gpt-5.6-luna` max workers only;
@@ -601,7 +601,7 @@ Use this prompt for a future coordinator:
 > room ETA exclusion, and post-lock room-link topology snapshots. Review the
 > diff and any new audit result before changing behavior.
 >
-> The exact CI run for `095a4b23` is `33185764618`, and it is green; do not
+> The exact CI run for `c3d50033` is `33186417443`, and it is green; do not
 > call any later branch SHA mergeable until its own run is green. Local API
 > integration setup is unavailable when Postgres 5433 or
 > Valkey 6379 resets/unresponsive; record such runs as setup-blocked, never as
