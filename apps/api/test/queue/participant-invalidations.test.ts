@@ -54,6 +54,31 @@ describe("participant queue invalidations (H38, #544)", () => {
     expect(metrics).toContain('hackos_queue_participant_invalidations_total{outcome="coalesced"}');
   });
 
+  it("merges topology challenge ids into an already-coalesced durable job", async () => {
+    const { challengeIds } = await createEnterpriseChallenges(2);
+    const groupId = await mergeChallengesIntoOneGroup(challengeIds);
+    const {
+      notifyChallengeQueueChanged,
+      notifyQueueTopologyChanged,
+      QUEUE_PARTICIPANT_INVALIDATIONS,
+    } = await import("../../src/modules/queue/notify.js");
+    const { getQueue } = await import("../../src/lib/queues.js");
+    const { pool } = await import("../../src/db/pool.js");
+
+    // A normal transition can create the group debounce job before a room or
+    // merge topology event contributes the full old/new challenge snapshot.
+    await notifyChallengeQueueChanged(pool, challengeIds[0]!);
+    await notifyQueueTopologyChanged(pool, {
+      oldQueueGroupIds: [groupId],
+      newQueueGroupIds: [groupId],
+      oldChallengeIds: challengeIds,
+      newChallengeIds: challengeIds,
+    });
+
+    const job = await getQueue(QUEUE_PARTICIPANT_INVALIDATIONS).getJob(`group-${groupId}`);
+    expect(job?.data.challengeIds).toEqual(expect.arrayContaining(challengeIds));
+  });
+
   it("worker fan-out publishes one refresh per affected participant", async () => {
     const challengeId = await createChallenge();
     const first = await createUser();
@@ -105,6 +130,49 @@ describe("participant queue invalidations (H38, #544)", () => {
     await publishChallengeQueueInvalidation(challengeIds[1]!, staleGroupId);
 
     expect(currentGroupId).not.toBe(staleGroupId);
+    expect(await valkey.get(`sse:seq:user:${firstMember}`)).toBe("1");
+    expect(await valkey.get(`sse:seq:user:${secondMember}`)).toBe("1");
+  });
+
+  it("retains source-group participants when a topology change leaves an orphaned challenge", async () => {
+    const { challengeIds } = await createEnterpriseChallenges(2);
+    const groupId = await mergeChallengesIntoOneGroup(challengeIds);
+    const firstMember = await createUser();
+    const secondMember = await createUser();
+    const firstRepo = await createRepoWithTeam([firstMember]);
+    const secondRepo = await createRepoWithTeam([secondMember]);
+    await enqueueRepo(challengeIds[0]!, firstRepo.repoId, 1);
+    await enqueueRepo(challengeIds[1]!, secondRepo.repoId, 2);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`DELETE FROM queue_group_challenges WHERE challenge_id = $1`, [
+      challengeIds[1],
+    ]);
+
+    const {
+      notifyQueueTopologyChanged,
+      publishChallengeQueueInvalidation,
+      QUEUE_PARTICIPANT_INVALIDATIONS,
+    } = await import("../../src/modules/queue/notify.js");
+    const { getQueue } = await import("../../src/lib/queues.js");
+    const { valkey } = await import("../../src/lib/valkey.js");
+
+    await notifyQueueTopologyChanged(pool, {
+      oldQueueGroupIds: [groupId],
+      newQueueGroupIds: [groupId],
+      oldChallengeIds: [challengeIds[1]!, challengeIds[0]!],
+      newChallengeIds: [challengeIds[0]!],
+    });
+
+    const job = await getQueue(QUEUE_PARTICIPANT_INVALIDATIONS).getJob(`group-${groupId}`);
+    expect(job?.data.challengeIds).toEqual(
+      expect.arrayContaining([challengeIds[0], challengeIds[1]]),
+    );
+    await publishChallengeQueueInvalidation(
+      job?.data.challengeId ?? challengeIds[1]!,
+      job?.data.queueGroupId ?? groupId,
+      job?.data.challengeIds,
+    );
+
     expect(await valkey.get(`sse:seq:user:${firstMember}`)).toBe("1");
     expect(await valkey.get(`sse:seq:user:${secondMember}`)).toBe("1");
   });

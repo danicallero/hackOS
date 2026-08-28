@@ -105,8 +105,8 @@ implementation is now the shared lifecycle in `removal.ts`.
    outside the database transaction. A failure returns `503
    removal_storage_pending`, keeps the account inaccessible, and queues a
    bounded retry.
-5. Once a valid staff/system exit or the fixed recovery deadline makes a
-   pending request finalizable, `finalizeAccountRemoval()` takes a new
+5. Once a valid staff/system exit, H24 certainty-window expiry, or the fixed
+   recovery deadline makes a pending request finalizable, `finalizeAccountRemoval()` takes a new
    transaction, computes the verified
    attendance total before destroying activity rows, creates the random
    anonymous subject where required, scrubs relationships, and deletes the
@@ -129,7 +129,8 @@ implementation is now the shared lifecycle in `removal.ts`.
   storage/network error may still have completed server-side. A pending-exit
   response leaves the authenticated recovery surface available: after sign-in
   it shows the expiry countdown, tells the participant to ask staff to record
-  the exit, and offers cancellation or sign-out until the exit/deadline wins.
+  the exit, and offers cancellation or sign-out until a valid exit, H24
+  certainty-window expiry, or the fixed recovery deadline wins.
 - Email is a secondary support/privacy link only; the security PIN email is
   issued by the authenticated in-app flow. Email is not the mechanism that
   starts deletion or anonymization.
@@ -271,7 +272,7 @@ then triggers finalization. Dietary values remain available only during this
 reversible transition so staff can safely complete any already-in-flight
 catering operation; they are cleared during irreversible finalization and are
 never copied to the anonymous record. Cancellation restores the active account
-before the exit/deadline race is won. Both clients state that the request ends
+before the exit, certainty-window expiry, or deadline race is won. Both clients state that the request ends
 participation before confirmation.
 Dietary data is not copied into `anonymous_participants`, audit snapshots,
 exports, notification history, or the permanent anonymous dataset by the H54
@@ -324,7 +325,7 @@ Both clients use an Account/Data danger zone and server preflight:
 | --- | --- | --- |
 | Fresh account | “Delete account” | Permanent deletion of the account, credentials, tokens, profile, files and related non-operational data; event spot/services end. |
 | Operational history | “Anonymize my data and close account” | Identity is destroyed; verified attendance and explicitly configured anonymous application values remain under a random subject without a link to the person. |
-| Live open venue session | Same action remains visible; request returns `pending_exit` | The request ends participation, permits only the recovery/exit process, and completes irreversible closure after staff records a valid exit or the fixed recovery deadline expires. |
+| Live open venue session | Same action remains visible; request returns `pending_exit` | The request ends participation, permits only the recovery/exit process, and completes irreversible closure after staff records a valid exit, the H24 certainty window expires, or the fixed recovery deadline expires. |
 | Any anonymization | Concise confirmation warning + Privacy Policy link | Identity is removed; explicitly retained anonymous audit data may remain without a link; named certificates, ECTS evidence and identity-linked participation proof cannot be issued later. |
 
 The modal is keyboard/screen-reader reachable on web, uses native confirmation
@@ -343,7 +344,7 @@ correct it.
 | Surface | Implementation |
 | --- | --- |
 | Preflight | `GET /api/me/removal-eligibility`; admin `GET /api/users/:id/removal-eligibility`. |
-| Recovery status / cancel | `GET /api/me/removal-status` reports the server-authoritative pending-exit state; `POST /api/me/anonymize/cancel` cancels a self-service pending request before its exit or fixed recovery deadline. |
+| Recovery status / cancel | `GET /api/me/removal-status` reports the server-authoritative pending-exit state; `POST /api/me/anonymize/cancel` cancels a self-service pending request before its exit, H24 certainty-window expiry, or fixed recovery deadline. |
 | Full delete | Authenticated `DELETE /api/me`; admin `DELETE /api/users/:id`; both re-evaluate and select full deletion only without canonical accreditation. Verified-primary-email self-service calls include the one-time PIN. An inconsistent open session may return `pending_exit` before deletion. |
 | Anonymize | Authenticated `POST /api/me/anonymize` with `{confirm:true}`; admin `POST /api/users/:id/anonymize`; admin requires `ADMIN_ALL` and cannot target self. Verified-primary-email self-service calls include the one-time PIN. An open session returns `202 pending_exit`, not an error. |
 | Security PIN | Authenticated `POST /api/me/removal-pin`; the server locks the active account, invalidates older challenges, stores only an HMAC digest/nonce, and queues the six-digit code through `notification_outbox`. |
@@ -365,11 +366,14 @@ pending-exit rules, strict presence checks, and active-user reference triggers.
 It intentionally performs no broad identity cleanup for a populated database.
 
 Migration policy is checksum-enforced by `apps/api/scripts/migrate.ts`. The
-development-only H54 chain was squashed because it has not shipped outside this
-branch. If a populated deployment ever needs H54, prepare and review a separate
-upgrade migration rather than reusing this fresh baseline. After first
-deployment, applied checksums are immutable and later corrections use a new
-migration.
+current repository assumes the development-only H54 chain has not shipped
+outside this branch, so it is represented by one fresh baseline here. Before a
+populated deployment, verify that `_migrations` contains neither a pre-squash
+H54 `0730` checksum nor any removed `0731`–`0746` filename; the current runner
+has no aliases for those records. If one is present, stop and prepare a
+separately reviewed additive upgrade path rather than reusing this fresh
+baseline. After first deployment, applied checksums are immutable and later
+corrections use a new migration.
 
 ## 11. Offline caches and external copies
 
@@ -525,7 +529,7 @@ synthetic identity-shaped `users` row.
 | `users`: food_intolerances, food_intolerance_notes, dietary_data_state, shirt_size | May be edited | Operational catering/badge data | Keep dietary values only during reversible `pending_exit`; clear them during finalization, then delete the remaining user row | No | Dietary data supports active/in-flight catering only and is never part of the permanent anonymous audit dataset. |
 | `users.university_id` / `universities.name` | Profile dimension | May support services | Detach/delete the subject link; catalog survives | Only an application field explicitly configured for anonymous audit may retain a university value | Profile data is not copied merely because the shared university catalog exists. |
 | `accounts`: provider/account IDs, access/refresh/ID tokens, password | Auth credential | Auth credential | Delete | No | Credentials and provider identifiers must not survive. |
-| `sessions`: token, IP, user agent, expiry | Login session | Login/session | Delete during preparation for finalizable paths; keep only the initiating/recovery session window for reversible `pending_exit`, then delete at finalization | No | Pending recovery needs authenticated status/cancel/exit guidance; session metadata is never anonymous audit data. |
+| `sessions`: token, IP, user agent, expiry | Login session | Login/session | Delete during preparation for finalizable paths; keep existing rows while reversible `pending_exit` is active, with new/refresh sessions capped at the fixed recovery deadline, then delete at finalization | No | Pending recovery needs authenticated status/cancel/exit guidance; session metadata is never anonymous audit data. |
 | `account_removal_pin_challenges`: verified email, HMAC digest, nonce, attempts, expiry | None | Short-lived self-service proof | Expire/consume and cascade-delete with the account; raw PIN is never stored | No | Transient authentication metadata is not participant audit data. |
 | `verifications`: identifier/value | Temporary email/reset state | Temporary auth state | Delete by email/ID match | No | No user FK; identifier is a hidden identity copy. |
 | `email_verification_tokens`: token, email, user_id, groups | Claim/confirmation | Acceptance/account claim | Delete | No | Token and email are direct credentials/identity. |

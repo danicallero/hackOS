@@ -4,10 +4,10 @@ The worker subsystem has two execution patterns. Repeatable BullMQ ticks drain
 durable Postgres tables (the notification outbox, due confirmations, scheduled
 reveals, and room queues). Event-driven BullMQ jobs carry an explicit payload
 for work that starts in a request, such as account-removal retries, data-subject
-requests, meal-scan batches, wallet sync, schedule reminders, and participant
-queue invalidations. The API still handles batch decisions and DNI sync
-synchronously. Each path owns its idempotency and retry policy; BullMQ is the
-dispatcher, not the durable source of truth for database state.
+requests, meal-scan batches, wallet sync, and participant queue invalidations.
+The API still handles batch decisions and DNI sync synchronously. Each path owns
+its idempotency and retry policy; BullMQ is the dispatcher, not the durable
+source of truth for database state.
 
 ## Scaffolding
 
@@ -44,7 +44,7 @@ queue no matter how many times scheduling runs (idempotent scheduling).
 | `queue-pump` | `queue/pump.ts` | repeatable | discovers each active room, then tops up its live judging queue (`topUpRoom` → one transactional `callNextForRoom` per slot) and emits pre-call warnings through a separately locked group/repo claim |
 | `tv-scheduler` | `queue/tv-scheduler.ts` | **5 s** | resolves what the venue screens should show (operator override → covering `tv_slots` window → default `rooms`), drops an override whose `expiresAt` passed, and broadcasts `tv.mode.changed` **only when the resolved state changed** — so a slot boundary reaches the fleet unattended without waking every screen every tick (H42). The public TV SSE endpoint receives only the dedicated payload-free `public-tv` invalidation mirror and refetches its sanitized projection; the operational TV event remains off the public stream. |
 | `presence-event-end-closer` | `logistics/presence-closer.ts` | **60 s** | once `event_config.event_ends_at` passes, force-closes every still-open door session with an audited `out` at that instant (`scanned_by NULL` = system actor, migration 0710), and finalizes pending account removals after that valid event-end exit or after the latest accrued H24 certainty window expires. An `out` outside the certainty window credits no hours; it restores the in/out invariant while the expiry path preserves only already-guaranteed minutes. |
-| `schedule-reminders` | `notifications/schedule-reminders.ts` | **15 s** | finds opted-in recipients for activities starting within the reminder lead time and records `reminded_at` as it sends notifications |
+| `schedule-reminders` | `notifications/schedule-reminders.ts` | **15 s** | finds opted-in recipients for activities starting within the reminder lead time and records `reminded_at` after processing each due item, even when no channel is currently enabled |
 | `scheduled-visibility-publisher` | `challenges/visibility-publisher.ts` | **15 s** | reveals challenge visibility whose scheduled time has passed |
 | `schedule-visibility-publisher` | `logistics/schedule-publisher.ts` | **15 s** | reveals audience-tagged schedule items whose publish time has passed |
 
@@ -54,8 +54,9 @@ does not create duplicate schedulers.
 ## Event-driven workers (payload jobs)
 
 These queues are added in response to a request or committed domain event. They
-are not periodic table drains, and most use BullMQ attempts/backoff in addition
-to the durable row or source record they process.
+are not periodic table drains. Some add BullMQ attempts/backoff in addition to
+the durable row or source record they process; others intentionally remain
+best-effort and rely on that source record or a later domain sync.
 
 | Queue | Producer | Work |
 | --- | --- | --- |

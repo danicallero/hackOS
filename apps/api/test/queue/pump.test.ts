@@ -176,6 +176,33 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
     expect((await getEntry(entryId)).precalled_at).toBeNull();
   });
 
+  it("does not let a paused room inflate pre-call capacity", async () => {
+    const challengeId = await createChallenge();
+    const activeRoom = await createRoom({ maxInWaitingArea: 0, desiredMinutesPerTeam: 8 });
+    const pausedRoom = await createRoom({
+      maxInWaitingArea: 0,
+      isPaused: true,
+      desiredMinutesPerTeam: 2,
+    });
+    await assignChallengeToRoom(activeRoom, challengeId);
+    await assignChallengeToRoom(pausedRoom, challengeId);
+
+    const firstMember = await createUser();
+    const secondMember = await createUser();
+    const first = await createRepoWithTeam([firstMember]);
+    const second = await createRepoWithTeam([secondMember]);
+    const firstEntryId = await enqueueRepo(challengeId, first.repoId, 1);
+    const secondEntryId = await enqueueRepo(challengeId, second.repoId, 2);
+
+    // With only the active 8-minute room contributing throughput, rank 2 is
+    // 16 minutes away and must remain above the 10-minute warning threshold.
+    // Counting the paused 2-minute room would incorrectly produce 10 minutes.
+    await pump();
+
+    expect((await getEntry(firstEntryId)).precalled_at).not.toBeNull();
+    expect((await getEntry(secondEntryId)).precalled_at).toBeNull();
+  });
+
   it("honours the H30 member-busy guard and retries the team on a later tick", async () => {
     const ch1 = await createChallenge();
     const ch2 = await createChallenge();

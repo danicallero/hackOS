@@ -82,11 +82,11 @@ challenge content and judging panel under the H44/H45 rules below.
 | `POST /api/challenges` | `sponsors:manage` OR `queue:admin` | H43/H44 | create hidden draft template bound to an enterprise |
 | `GET /api/challenges/mine` | authenticated + sponsor row | H44/H46 | challenges owned by the caller's enterprise |
 | `GET /api/challenges/:id` | contextual `challenge-access` | H44/H46 | global admins, `JUDGE_PANEL`/`QUEUE_OPERATE`, the owning sponsor enterprise, or an assigned judge |
-| `PATCH /api/challenges/:id` | ownership check | H44 | partial edit + version snapshot + audit |
+| `PATCH /api/challenges/:id` | contextual `challenge-edit` | H44 | global admins or the owning sponsor enterprise may edit within the panel/public-field locks; every edit gets a version snapshot + audit |
 | `POST /api/challenges/:id/publish` | `sponsors:manage` OR `queue:admin` | H45 | publish immediately or schedule reveal |
 | `POST /api/challenges/:id/unpublish` | `sponsors:manage` OR `queue:admin` | H45 | hide a mistakenly published challenge |
 | `GET /api/challenges/:id/panel/preview` | contextual `challenge-access` | H44/H46 | global admins, `SPONSORS_MANAGE`/`QUEUE_ADMIN`/`JUDGE_PANEL`/`QUEUE_OPERATE`, the owning sponsor enterprise, or an assigned judge |
-| `GET /api/challenges/:id/versions` | ownership check | H44 | immutable edit history |
+| `GET /api/challenges/:id/versions` | contextual `challenge-edit` | H44 | global admins or the owning sponsor enterprise may read immutable edit history |
 
 `POST /api/challenges` resolves the supplied `enterpriseId` to the existing
 `sponsors` ownership model. If the enterprise has no sponsor row yet, the service

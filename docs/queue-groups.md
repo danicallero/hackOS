@@ -142,12 +142,14 @@ Consumers: `queue/reads.ts`, `queue/rooms.routes.ts`, `queue/entries.routes.ts`,
 
 Queue-group topology is also the participant read-model boundary. Merge, split,
 group edits, and room serving changes capture the old and new group/challenge
-membership while their transaction is open; only after commit do they publish
-the affected `queueGroup` events and schedule participant invalidations. The
-delayed worker uses the current membership when it runs, so a group id carried
-by an older job may safely be stale or deleted without dropping a valid refresh
-for the challenge's surviving group. Calls and pre-call warnings remain
-immediate events and are not folded into this debounce path.
+membership while their transaction is open; room-serving replacements lock the
+current target links (including a clear-to-zero replacement) before taking
+those snapshots. Only after commit do they publish the affected `queueGroup`
+events and schedule participant invalidations. The delayed worker uses the
+current membership when it runs, so a group id carried by an older job may
+safely be stale or deleted without dropping a valid refresh for the challenge's
+surviving group. Calls and pre-call warnings remain immediate events and are
+not folded into this debounce path.
 
 ### Ordering
 
@@ -158,6 +160,12 @@ min/max across every challenge in the group. Callers still pass a
 `challengeId` — that is what a queue entry carries — and the group is resolved
 from it. For a 1:1 group the bounds select exactly the rows the per-challenge
 bounds did, so ordering is unchanged.
+
+Participant and pre-call ETA use the same live throughput boundary: they
+average `desired_minutes_per_team` and divide by the number of serving rooms
+whose queue state is not paused. A paused room contributes neither its pace nor
+capacity; when no serving room is active, the conservative eight-minute default
+is used.
 
 ### Call once
 

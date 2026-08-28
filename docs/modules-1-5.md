@@ -1,4 +1,4 @@
-# Module summaries (M1–M8)
+# Module summaries (M1–M3, M5–M8)
 
 High-level overview of the architectural changes per module. Each entry lists
 the **schema**, **hooks/endpoints**, **UI**, and **state transitions** touched.
@@ -302,10 +302,11 @@ credential login is the user id as text, while `sessions`/`accounts` FK on
 
 **State transitions.** `active → removal_pending → users row deleted`, with an
 anonymous participant created only for the anonymization branch. A pending
-account is eligible only for same-account recovery sign-in/session reads during
-a future anonymization exit window; its sessions cannot outlive the fixed
-`removal_expires_at`. Event operations remain blocked except that a validated
-`out` scan may close its already-open venue session; finalization then removes
+account may use only its recovery/status/cancel surface and the validated exit
+path during the future anonymization window. New or refreshed sessions are
+restricted to the same pending identity and cannot outlive the fixed
+`removal_expires_at`; event operations remain blocked except that a validated
+`out` scan may close its already-open venue session. Finalization then removes
 the identity.
 
 ---

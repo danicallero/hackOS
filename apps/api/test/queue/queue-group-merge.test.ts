@@ -15,6 +15,7 @@ import {
   createRepoWithTeam,
   createRoom,
   enqueueRepo,
+  poolRoomToEnterprise,
   queueGroupOf,
 } from "./fixtures.js";
 
@@ -56,7 +57,7 @@ const scale = (key: string, text: string) => ({
   max: 10,
 });
 
-async function waitForBlockedQuery(fragment: string): Promise<void> {
+async function waitForBlockedQuery(fragment: string, minimum = 1): Promise<void> {
   const { pool } = await import("../../src/db/pool.js");
   const deadline = Date.now() + 2_000;
   while (Date.now() < deadline) {
@@ -69,10 +70,10 @@ async function waitForBlockedQuery(fragment: string): Promise<void> {
           AND query LIKE $1`,
       [`%${fragment}%`],
     );
-    if (rows[0].n > 0) return;
+    if (rows[0].n >= minimum) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  throw new Error(`Timed out waiting for blocked query: ${fragment}`);
+  throw new Error(`Timed out waiting for ${minimum} blocked query(s): ${fragment}`);
 }
 
 async function merge(
@@ -740,6 +741,126 @@ describe("concurrency and idempotency", () => {
       [challengeIds],
     );
     expect(rows.map((r: { n: number }) => r.n)).toEqual([2, 2]);
+  });
+
+  it("locks every current target room before clearing its serving links", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const { setQueueGroupRooms } = await import("../../src/modules/queue/group-merge.js");
+    const { challengeIds } = await createEnterpriseChallenges(1);
+    const queueGroupId = await queueGroupOf(challengeIds[0]!);
+    const roomId = await createRoom();
+    await assignQueueGroupToRoom(roomId, queueGroupId);
+
+    // Hold the room row so the clear must wait after taking the queue-group
+    // lock. This exercises the empty-roomIds path: an existing target link is
+    // still part of the room topology and must be locked before its snapshot.
+    const blocker = await pool.connect();
+    await blocker.query("BEGIN");
+    await blocker.query(`SELECT id FROM rooms WHERE id = $1 FOR UPDATE`, [roomId]);
+    let clearing: Promise<unknown> | undefined;
+    let synchronized = false;
+    try {
+      clearing = setQueueGroupRooms({
+        queueGroupId,
+        roomIds: [],
+        actorId: adminId,
+      });
+      await waitForBlockedQuery("SELECT id FROM rooms WHERE id = ANY");
+      synchronized = true;
+    } finally {
+      try {
+        await blocker.query("ROLLBACK");
+      } finally {
+        blocker.release();
+      }
+      if (!synchronized && clearing) await Promise.allSettled([clearing]);
+    }
+
+    if (!clearing) throw new Error("Expected the queue clear to start");
+    await clearing;
+    const { rows } = await pool.query(
+      `SELECT 1 FROM room_queue_groups WHERE room_id = $1 AND queue_group_id = $2`,
+      [roomId, queueGroupId],
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it("keeps both sides of a concurrent room replacement in participant invalidations", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const { valkey } = await import("../../src/lib/valkey.js");
+    const { getQueue } = await import("../../src/lib/queues.js");
+    const { QUEUE_PARTICIPANT_INVALIDATIONS } = await import("../../src/modules/queue/notify.js");
+    const { setQueueGroupRooms } = await import("../../src/modules/queue/group-merge.js");
+    await valkey.flushdb();
+
+    const { enterpriseId, challengeIds } = await createEnterpriseChallenges(2);
+    const firstGroupId = await queueGroupOf(challengeIds[0]!);
+    const secondGroupId = await queueGroupOf(challengeIds[1]!);
+    const roomId = await createRoom();
+    // Both queues share the same enterprise pool, but the room starts
+    // unserved so both replacements can take their initial snapshot before
+    // either one commits.
+    await poolRoomToEnterprise(roomId, enterpriseId);
+
+    const blocker = await pool.connect();
+    await blocker.query("BEGIN");
+    await blocker.query(`SELECT id FROM rooms WHERE id = $1 FOR UPDATE`, [roomId]);
+    let firstAssignment: Promise<unknown> | undefined;
+    let secondAssignment: Promise<unknown> | undefined;
+    let synchronized = false;
+    try {
+      firstAssignment = setQueueGroupRooms({
+        queueGroupId: firstGroupId,
+        roomIds: [roomId],
+        actorId: adminId,
+      });
+      await waitForBlockedQuery("SELECT id FROM rooms WHERE id = ANY");
+
+      secondAssignment = setQueueGroupRooms({
+        queueGroupId: secondGroupId,
+        roomIds: [roomId],
+        actorId: adminId,
+      });
+      await waitForBlockedQuery("SELECT id FROM rooms WHERE id = ANY", 2);
+      synchronized = true;
+    } finally {
+      try {
+        await blocker.query("ROLLBACK");
+      } finally {
+        blocker.release();
+      }
+      if (!synchronized) {
+        await Promise.allSettled(
+          [firstAssignment, secondAssignment].filter(
+            (assignment): assignment is Promise<unknown> => assignment !== undefined,
+          ),
+        );
+      }
+    }
+
+    if (!firstAssignment || !secondAssignment) {
+      throw new Error("Expected both room replacements to start");
+    }
+    await Promise.all([firstAssignment, secondAssignment]);
+
+    const { rows: serving } = await pool.query(
+      `SELECT queue_group_id FROM room_queue_groups WHERE room_id = $1`,
+      [roomId],
+    );
+    // The lock order makes the replacement linearizable, but either request
+    // may be the final writer if the scheduler wakes them in the opposite
+    // order. The invariant is that exactly one of the same-enterprise queues
+    // serves the room, and both transitions invalidate their queue sides.
+    expect([firstGroupId, secondGroupId]).toContain(Number(serving[0]?.queue_group_id));
+
+    const jobs = await getQueue(QUEUE_PARTICIPANT_INVALIDATIONS).getJobs([
+      "delayed",
+      "waiting",
+      "active",
+    ]);
+    expect(jobs.map((job) => job.id)).toEqual(
+      expect.arrayContaining([`group-${firstGroupId}`, `group-${secondGroupId}`]),
+    );
   });
 
   it("replays a repeated merge from the idempotency cache", async () => {

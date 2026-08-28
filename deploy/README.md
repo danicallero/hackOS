@@ -282,9 +282,10 @@ docker compose --env-file .env.prod \
 ```
 
 In this mode the datastores + app tier sit on a Compose-managed **`private`
-network with `internal: true`** (no egress at all for datastores), and only
-`api`/`worker` also join the external `edge` (`dokploy-network`). On Dokploy this
-mode is a single Compose service containing every container.
+network with `internal: true`** (no egress at all for datastores), while `api`,
+`web`, and `worker` also join the external `edge` (`dokploy-network`); only
+`api` and `web` have Traefik routers. On Dokploy this mode is a single Compose
+service containing every container.
 
 ---
 
@@ -382,7 +383,11 @@ another.
 
 ## Operations
 
-- **Migrations**: automatic on `api` deploy. To run manually:
+- **Migrations**: automatic on `api` deploy. Before a first H54 deployment to a
+  populated database, follow the [migration identity gate](../docs/database-schema.md#migration-identity)
+  and verify that `_migrations` has no pre-squash H54 `0730` checksum or removed
+  `0731`–`0746` filename; use a separately reviewed additive upgrade path if it
+  does. To run migrations manually:
   `docker compose -f deploy/services/api/docker-compose.yml -p <proj>-api run --rm migrate`.
 - **Grant superadmin to an existing account (H8)** from the API container shell:
   `node scripts/grant-superadmin.mjs --email user@example.com`.

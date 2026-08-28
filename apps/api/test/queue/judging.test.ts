@@ -161,6 +161,33 @@ describe("collaborative review (H36)", () => {
     expect(versions.json()).toHaveLength(2);
   });
 
+  it("clears a stale pre-call marker when review submission completes a team", async () => {
+    const { challengeId, entryId } = await setupEntry();
+    const roomId = await createRoom();
+    await assignChallengeToRoom(roomId, challengeId);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE queue_entries
+          SET status = 'in_room', assigned_room_id = $2, precalled_at = now()
+        WHERE id = $1`,
+      [entryId, roomId],
+    );
+
+    const submitted = await app.inject({
+      method: "PATCH",
+      url: `/api/queue/entries/${entryId}/review`,
+      headers: asUser(judgeA),
+      payload: { scores: { innovation: 7, execution: 6 }, submit: true },
+    });
+    expect(submitted.statusCode).toBe(200);
+
+    const { rows } = await pool.query(
+      `SELECT status, precalled_at FROM queue_entries WHERE id = $1`,
+      [entryId],
+    );
+    expect(rows[0]).toMatchObject({ status: "completed", precalled_at: null });
+  });
+
   it("a no-op save writes no version row", async () => {
     const { entryId } = await setupEntry();
     await app.inject({

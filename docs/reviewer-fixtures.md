@@ -11,8 +11,9 @@ An administrator with `ADMIN_ALL` can use **Users → Regenerate review accounts
 The API creates a new generation of four marked synthetic accounts and removes
 the previous generation, including its sessions, credentials, push tokens,
 scanner data, project graph, queue graph and synthetic anonymous rows. The
-operation is transactional and audited; failed provisioning attempts clean up
-the exact accounts created by that attempt.
+registry and fixture graph update is transactional and audited; Better Auth
+signup calls commit on their own connection, so a failed provisioning attempt
+triggers best-effort cleanup of only the accounts created by that attempt.
 
 The feature uses the same API deployment and primary PostgreSQL database as
 the event. Set these API-only variables only when the deployment owner wants

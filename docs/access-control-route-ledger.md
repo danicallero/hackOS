@@ -13,7 +13,7 @@ The runtime has **339 non-HEAD application route rows** plus the single Better A
 | contextual | 67 |
 | **total** | **339** |
 
-Public/token snapshot: public rows are health, public content/announcement/TV/invalidation only; token rows are invite and reusable account-link lookup/acceptance, confirmation, verification resend, scoped wallet access, and Apple PassKit protocol flows. The sole exemption is Better Auth's generated `/api/auth/*` catch-all.
+Public/token snapshot: public rows are health, telemetry, public content/announcement/TV/invalidation only; token rows are invite and reusable account-link lookup/acceptance, confirmation, verification resend, scoped wallet access, and Apple PassKit protocol flows. The sole exemption is Better Auth's generated `/api/auth/*` catch-all.
 
 | Method | Path | Policy |
 | --- | --- | --- |

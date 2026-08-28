@@ -49,7 +49,7 @@ rate-limited review history.
 | D1–D2 | Pending-target review locks and durable DSR failure transitions | complete | API source/tests and durable retry paths; A2/A3. |
 | D3–D5 | Fixture graph isolation, logistics/SSE scope, hidden fixture visibility after scrubbing | complete | Domain and cross-layer audits; A5. |
 | DB1–DB4 | Squash H54 migrations, install final active-user triggers, versioned responses, remove temporary scanner DDL/cleanup DML | complete | Fresh migration suite: 10/10 on local Postgres 5432; schema DBML synchronized; A1/A6. |
-| DOC1 | Rewrite stale account-removal, worker, fixture, module, migration/schema claims | complete | Migration/docs audit and `pnpm lint`; no stale 0731–0746 references remain in reviewed docs. |
+| DOC1 | Rewrite stale account-removal, worker, fixture, module, migration/schema claims | complete | Migration/docs audit and `pnpm lint`; obsolete operational 0731–0746 claims were removed, while intentional external-ledger release-gate references remain. |
 | DOC2 | Update the external PR body/checklist and release/legal metadata | pending external gate | The PR description is not a tracked worktree file; update it from the final validation below before merge. |
 | T1 | Add regression coverage for races, pending allowlist, fixture scope, queue SSE, form versions, and migrations | complete | Web: 40 files/298 tests; mobile: 44 suites/222 tests; migration: 10 tests; API DB suites require Valkey/5433. |
 | T2 | Run repository gates and record infrastructure limitations | complete with blocker recorded | `pnpm lint`, API/web/mobile typechecks, web/mobile suites, diff checks, and fresh migration suite pass. Full API integration and queue DB suites cannot run against unavailable/resetting Valkey/Postgres 5433. |
@@ -79,6 +79,11 @@ rate-limited review history.
 | T26 | Triage fresh documentation findings | complete | Seq 537 confirmed one real P1 deploy-topology correction and concrete P2 documentation drift; verified wording, endpoint, worker, env, anchor, mobile, and release-metadata fixes are in `37fb433c` and subsequent checkpoints. |
 | T27 | Close public room snapshot scope gap | complete | Luna room audit seq 553 confirmed the public `/api/tv/rooms` read needed challenge, queue-group, and room-serving joins; `8a6a62f7` adds both query-branch joins and a separate-repository regression fixture. |
 | T28 | Preserve Devpost-linked shared projects during removal | complete | Luna identity audit seq 554 confirmed `REPO_MEMBER_RELATION_SQL` plus pre-delete repo-ID capture preserves a linked member with no submission; `8a6a62f7` includes the guard and profile regression. |
+| T29 | Queue ETA/topology residual implementation | complete | Luna-max worker `task_f17ab17eaad6` / seq 570 added target-current room locks (including clear-to-zero), paused-room ETA coverage, concurrent replacement invalidation coverage, and queue-group documentation; static checks passed, focused Vitest setup-blocked by Postgres 5433. |
+| T30 | Queue notification/review residual implementation | complete | Luna-max worker `task_ff303d55e8a6` / seq 572 cleared review-submit pre-call markers, locked stale call/pre-call notification inputs, and preserved source-group invalidation payloads; Biome/API typecheck/diff checks passed, focused Vitest setup-blocked by Postgres 5433. |
+| T31 | Documentation/migration audit and route-ledger integrity | complete | Luna-max worker `task_00056d998fdd` / seq 573 corrected concrete Markdown and migration-release claims; lint, diff, and relative-link checks passed. Coordinator also synchronized the generated public telemetry sentence; route audit execution is Valkey-blocked locally. |
+| T32 | Durable BullMQ topology-payload merge | complete | Coordinator re-reads `queue.getJob(jobId)` before merging topology challenge IDs, because duplicate `Queue.add` returns a fresh wrapper whose `data` is only the attempted payload; API typecheck, Biome, and diff checks pass. |
+| T33 | Final branch validation, commit, push, and CI refresh | pending | Commit the reviewed queue/docs changes, push the branch, verify the new head-specific GitHub Actions run, refresh the PR template body, and retain the populated `_migrations` verification as a release gate. |
 
 ## Code/schema changes reconciled
 
@@ -144,6 +149,11 @@ rate-limited review history.
 - Queue ETA calculations now exclude paused rooms from throughput, and room
   topology snapshots re-read serving links after room locks so concurrent room
   replacement cannot omit the prior queue from participant invalidation.
+- Participant invalidation topology jobs merge challenge snapshots from the
+  durable BullMQ job record, preserving source-side IDs when duplicate job
+  wrappers are returned during coalescing.
+- The generated route-policy ledger's public snapshot now names telemetry
+  alongside the other intentionally public endpoints.
 - Compose now defaults an unset `MAIL_LAYOUT_LOGO_URL` to the configured
   `WEB_DOMAIN` brand mark while preserving an explicit empty override.
 - Public room snapshots now require a real challenge, a queue-group link, and
@@ -169,6 +179,7 @@ where noted):
 - `TEST_DATABASE_URL=postgres://dani@localhost:5432/hackos_test_skipjack pnpm --filter @hackos/api exec vitest run test/queue/fixture-transition-isolation.test.ts` — 1 file, 2 tests
 - `TEST_DATABASE_URL=postgres://dani@localhost:5432/hackos_test_skipjack pnpm --filter @hackos/api exec vitest run test/migrations.test.ts` — 1 file, 10 tests, including active-to-pending session reassignment rejection
 - `pnpm exec biome check` on the queue changes and API typecheck pass after the final P2 fixes.
+- `pnpm lint` and `pnpm --filter @hackos/api typecheck` rerun after the final route-ledger and durable-job merge edits.
 - The focused `test/queue/room-queue-groups.test.ts` run remains setup-blocked by
   the unavailable Postgres 5433 proxy; GitHub CI is the runtime gate.
 
@@ -216,6 +227,10 @@ Blocked/limited:
 - The focused H54 auth test was attempted with Postgres 5432 but stopped in
   global setup before assertions because Valkey 6379 is unavailable; CI must
   verify both the sign-in and refresh paths.
+- The standalone route-policy audit was attempted after the generator wording
+  correction but stopped with ioredis timeouts/ECONNRESET because Valkey 6379 is
+  unavailable; the source and checked-in generated sentence are aligned, but
+  this command is not recorded as a local pass.
 
 ## Orca task/terminal ledger
 
@@ -255,6 +270,10 @@ Blocked/limited:
 | Public room snapshot scope | `task_24932195a6d5` / `ctx_76f8639ffd76` / `term_a89acd04-ef02-4a1b-8e5a-2d067fa81505` | worker_done seq 553; confirmed the two-query scope fix and corrected the regression fixture to use separate repositories; terminal closed |
 | Identity/shared-project deletion scope | `task_30b16417f697` / `ctx_7249ffae4fa4` / `term_21772a04-1dcb-4885-9b56-0d33ae8a2fcc` | worker_done seq 554; independently confirmed the relation-based orphan predicate and pre-delete capture; integration setup blocked by Postgres 5433; terminal closed |
 
+| Queue ETA/topology residual implementation | `task_f17ab17eaad6` / `ctx_774997126067` / `term_f89a097b-22bc-4089-9681-2b67e4a8edb6` | worker_done seq 570; target-room lock, paused ETA, concurrency regression and docs; focused Vitest setup-blocked by Postgres 5433; terminal closed |
+| Queue notification/review residual implementation | `task_ff303d55e8a6` / `ctx_ad98c80fc81c` / `term_76ae3d95-c763-4bd0-a433-3bf8a523b2f2` | worker_done seq 572; review marker and source-group invalidation fixes; focused Vitest setup-blocked by Postgres 5433; terminal closed |
+| Documentation/migration audit | `task_00056d998fdd` / `ctx_bbb634482897` / `term_17511d46-5c78-41ec-b16f-52cfa8d1390d` | worker_done seq 573; concrete Markdown/migration-release corrections; lint/links/diff pass; terminal closed |
+
 ## Received-message ledger (archival coordination artifact)
 
 This section is intentionally an audit log rather than product documentation:
@@ -264,7 +283,7 @@ facing documentation.
 
 The raw first-wave archive is `/tmp/pr584-orchestration-messages.json`
 (200 messages). A live inbox snapshot and post-rate-limit dispatches are
-included below; after de-duplication by message id, 357 received messages are
+included below; after de-duplication by message id, 370 received messages are
 listed below. The ledger records every
 received id/type/subject/timestamp, including heartbeats and status noise so
 the rate-limited handoff is auditable. Full bodies remain in the raw archive
@@ -632,12 +651,28 @@ Messages received after the prior rate-limit snapshot (seq 405–450):
 - 2026-08-28 20:06:27 · seq 552 · status · `msg_775ea4541f3e` · detailed public-TV scope proof and minimal two-query join recommendation; runtime Postgres setup blocked
 - 2026-08-28 20:07:32 · seq 553 · worker_done · `msg_39c4f09ebcbf` · public room audit complete; confirmed joins and separate-repository regression; terminal closed
 - 2026-08-28 20:13:07 · seq 554 · worker_done · `msg_34716e1a48f7` · identity audit confirmed Devpost-linked shared-project preservation and fail-closed marker recheck; Postgres 5433 integration blocked; terminal closed
+- 2026-08-28 20:37:56 · seq 555 · status · `msg_b680719e2133` · transition worker began H54 queue residual audit after required reads; no edits yet
+- 2026-08-28 20:38:05 · seq 556 · heartbeat · `msg_d56338bd0bf0` · docs/migration audit alive
+- 2026-08-28 20:38:24 · seq 557 · heartbeat · `msg_9fdf1769138e` · ETA/topology audit alive
+- 2026-08-28 20:45:09 · seq 558 · heartbeat · `msg_22a4441e189d` · docs/migration audit still investigating
+- 2026-08-28 20:50:10 · seq 559 · status · `msg_698d25fcdd62` · ETA/topology worker preserved concurrent notify edits, reported an intermediate undefined-index type error, and kept focused DB tests infra-blocked
+- 2026-08-28 20:51:07 · seq 561 · heartbeat · `msg_483a7e8ee7ef` · ETA/topology audit alive
+- 2026-08-28 20:52:18 · seq 562 · status · `msg_b92e6d40609e` · transition worker reported formatted/diff-clean notify/judging edits and requested a serialized API test slot
+- 2026-08-28 20:54:48 · seq 564 · heartbeat · `msg_10c142a4ee1e` · docs/migration audit alive
+- 2026-08-28 20:56:07 · seq 569 · status · `msg_603df9e78d2f` · ETA/topology worker validated target-room locking, paused-room filters, lock ordering, and Postgres 5433 setup blocker
+- 2026-08-28 20:57:05 · seq 570 · worker_done · `msg_bac3839a6da7` · target-current room locks, paused-room ETA and concurrent replacement regressions plus queue docs; static checks pass, focused Vitest setup-blocked by Postgres 5433; terminal closed
+- 2026-08-28 20:58:15 · seq 571 · heartbeat · `msg_a7dc2d507b49` · transition audit alive immediately before completion
+- 2026-08-28 21:02:32 · seq 572 · worker_done · `msg_8dab43018b8b` · review-submit marker clear, stale notification locking, source-group invalidation and durable topology IDs; static checks pass, focused Vitest setup-blocked by Postgres 5433; terminal closed
+- 2026-08-28 21:03:59 · seq 573 · worker_done · `msg_e7a4a7dee7fd` · concrete Markdown/migration-release corrections; lint/diff/relative-link checks pass, route-ledger telemetry wording needed coordinator follow-up, external migration ledger remains gated; terminal closed
 
 Coordinator-originated inbox echoes (kept for chronology, excluded from the
 received-message count) were seq 474 `msg_939f59e3d657` and seq 476
 `msg_228f9a04cd2a`, both internal queue-checkpoint status notes, plus seq 482
 `msg_1e92739a8e67`, the narrow approval for directly related route call sites,
-and seq 499 `msg_38831a688591`, the coordinator's pump-rank root-cause note.
+seq 499 `msg_38831a688591`, the coordinator's pump-rank root-cause note, and
+the fresh-worker coordination echoes seq 560 `msg_bf3b3577eccc`, seq 563
+`msg_854bf2dbd3e8`, seq 565 `msg_a3e1770e59f3`, seq 566 `msg_eeff7d1418cd`,
+seq 567 `msg_630d5cb797e7`, and seq 568 `msg_905e35124685`.
 The separate
 `/root/queue_review_checkpoint` collaboration worker also returned a final
 review message with the same residual findings; it has no Orca sequence id and

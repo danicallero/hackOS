@@ -57,6 +57,56 @@ async function loadNotifyContext(
   return { challengeName, teamName, nameById };
 }
 
+type QueueNotificationEntry = {
+  challenge_id: number;
+  repo_id: number;
+  status: string;
+  assigned_room_id: number | null;
+  precalled_at: Date | string | null;
+};
+
+type ParticipantInvalidationJobData = {
+  challengeId: number;
+  queueGroupId?: number;
+  challengeIds?: number[];
+};
+
+/**
+ * Notifications are invoked from the transition transaction, but their
+ * inputs are plain ids/labels and can become stale when a helper is called
+ * directly or reused by a future worker. Re-read and lock the entry before
+ * emitting any participant-facing side effect so a call/pre-call can never
+ * describe a row that has already moved on.
+ */
+async function lockNotificationEntry(
+  client: Queryable,
+  params: { entryId: number; challengeId: number; repoId: number },
+  expectedStatus: string,
+  requirePrecall = false,
+  expectedRoomId?: number,
+): Promise<QueueNotificationEntry | null> {
+  const { rows } = await client.query<QueueNotificationEntry>(
+    `SELECT challenge_id, repo_id, status, assigned_room_id, precalled_at
+       FROM queue_entries
+      WHERE id = $1
+      FOR UPDATE`,
+    [params.entryId],
+  );
+  const entry = rows[0];
+  if (
+    !entry ||
+    Number(entry.challenge_id) !== params.challengeId ||
+    Number(entry.repo_id) !== params.repoId ||
+    entry.status !== expectedStatus ||
+    (requirePrecall && entry.precalled_at == null) ||
+    (expectedRoomId !== undefined &&
+      (entry.assigned_room_id == null || Number(entry.assigned_room_id) !== expectedRoomId))
+  ) {
+    return null;
+  }
+  return entry;
+}
+
 /**
  * H29/H38: "ve a esperar a la sala X". Goes through the generic notify()
  * module (H51/H53) so a call reaches the recipient's inbox AND every other
@@ -76,6 +126,9 @@ export async function notifyTeamCalled(
     roomLocation?: string | null;
   },
 ): Promise<void> {
+  if (!(await lockNotificationEntry(client, params, "called", false, params.roomId))) {
+    return;
+  }
   const fixtureMarker = await queueFixtureMarker(client, "entry", params.entryId);
   if (fixtureMarker === null) return;
   const memberIds = await repoMemberIds(client, params.repoId, fixtureMarker);
@@ -156,6 +209,7 @@ export async function notifyTeamPreCall(
   client: Queryable,
   params: { entryId: number; challengeId: number; repoId: number; etaMinutes: number },
 ): Promise<void> {
+  if (!(await lockNotificationEntry(client, params, "waiting", true))) return;
   const fixtureMarker = await queueFixtureMarker(client, "entry", params.entryId);
   if (fixtureMarker === null) return;
   const memberIds = await repoMemberIds(client, params.repoId, fixtureMarker);
@@ -203,6 +257,8 @@ export async function notifyTeamPreCall(
 export async function notifyChallengeQueueChanged(
   client: Queryable,
   challengeId: number,
+  requestedGroupId?: number,
+  relatedChallengeIds: readonly number[] = [],
 ): Promise<"queued" | "coalesced" | "dropped"> {
   const queue = getQueue(QUEUE_PARTICIPANT_INVALIDATIONS);
   let queueGroupId: number | null = null;
@@ -214,6 +270,16 @@ export async function notifyChallengeQueueChanged(
       [challengeId],
     );
     queueGroupId = groupRows[0]?.queue_group_id ?? null;
+    if (queueGroupId == null && requestedGroupId != null) {
+      const { rows: requestedRows } = await client.query<{ queue_group_id: number }>(
+        `SELECT queue_group_id
+           FROM queue_group_challenges
+          WHERE queue_group_id = $1
+          LIMIT 1`,
+        [requestedGroupId],
+      );
+      queueGroupId = requestedRows[0]?.queue_group_id ?? null;
+    }
   } catch (err) {
     // Participant refresh is best effort. If the post-commit lookup is
     // unavailable, retain the old challenge-scoped debounce key instead of
@@ -221,6 +287,10 @@ export async function notifyChallengeQueueChanged(
     console.error(`[queue] unable to resolve invalidation group for challenge ${challengeId}`, err);
   }
   const jobId = queueGroupId == null ? `challenge-${challengeId}` : `group-${queueGroupId}`;
+  const topologyChallengeIds =
+    requestedGroupId == null
+      ? []
+      : [...new Set([challengeId, ...relatedChallengeIds].filter(Number.isFinite))];
   const locallyCoalesced = participantInvalidationJobsInFlight.has(jobId);
   participantInvalidationJobsInFlight.add(jobId);
   try {
@@ -228,9 +298,13 @@ export async function notifyChallengeQueueChanged(
     // mechanism. A concurrent caller may win between getJob() and add(), but
     // that race affects the counter only, never the single-job invariant.
     const existing = locallyCoalesced || Boolean(await queue.getJob(jobId));
-    await queue.add(
+    const job = await queue.add(
       "challenge-changed",
-      { challengeId, ...(queueGroupId == null ? {} : { queueGroupId }) },
+      {
+        challengeId,
+        ...(queueGroupId == null ? {} : { queueGroupId }),
+        ...(topologyChallengeIds.length > 1 ? { challengeIds: topologyChallengeIds } : {}),
+      },
       {
         // H38 (#544): one delayed job per queue group is the debounce window.
         // Repeated transitions during a burst reuse this job instead of making
@@ -241,6 +315,35 @@ export async function notifyChallengeQueueChanged(
         removeOnFail: true,
       },
     );
+    if (topologyChallengeIds.length > 1) {
+      // BullMQ returns the existing job when a duplicate jobId is added. An
+      // ordinary queue transition may therefore already have created this
+      // group's debounce job before a topology mutation contributes an
+      // orphaned/source-side challenge. Merge the snapshot into that durable
+      // job or the later worker would fan out only the first payload.
+      // `Queue.add` constructs a new Job object even when the Redis script
+      // returns an existing id for a duplicate jobId, so that object's data
+      // can be only the attempted payload. Re-read the durable job before
+      // merging or a topology event could overwrite challenge ids contributed
+      // by an earlier caller.
+      const durableJob = (await queue.getJob(jobId)) ?? job;
+      const jobData = durableJob.data as ParticipantInvalidationJobData;
+      const mergedChallengeIds: number[] = [
+        ...new Set(
+          [jobData.challengeId, ...(jobData.challengeIds ?? []), ...topologyChallengeIds].filter(
+            (id): id is number => Number.isFinite(id),
+          ),
+        ),
+      ];
+      const currentChallengeIds: number[] = jobData.challengeIds ?? [];
+      if (
+        mergedChallengeIds.length > 1 &&
+        (currentChallengeIds.length !== mergedChallengeIds.length ||
+          currentChallengeIds.some((id, index) => id !== mergedChallengeIds[index]))
+      ) {
+        await durableJob.updateData({ ...jobData, challengeIds: mergedChallengeIds });
+      }
+    }
     const outcome = existing ? "coalesced" : "queued";
     observeParticipantInvalidation(outcome);
     return outcome;
@@ -311,8 +414,9 @@ export type QueueTopologyInvalidation = {
  * deleted or whose memberships moved during the transaction.
  *
  * `notifyChallengeQueueChanged` resolves each challenge to its current group,
- * so calls for several challenges in one shared group retain the one delayed
- * BullMQ job/coalescing contract.
+ * while the source-group hint keeps an orphaned challenge's old queue from
+ * losing its invalidation. Calls for several challenges in one shared group
+ * retain the one delayed BullMQ job/coalescing contract.
  */
 export async function notifyQueueTopologyChanged(
   client: Queryable,
@@ -342,8 +446,16 @@ export async function notifyQueueTopologyChanged(
     }
   }
 
+  const allGroupIds = [...new Set([...oldQueueGroupIds, ...newQueueGroupIds])];
+  const topologyChallengeIds = [...challengeIds];
   await Promise.all(
-    [...challengeIds].map((challengeId) => notifyChallengeQueueChanged(client, challengeId)),
+    allGroupIds.length > 0
+      ? [...challengeIds].flatMap((challengeId) =>
+          allGroupIds.map((groupId) =>
+            notifyChallengeQueueChanged(client, challengeId, groupId, topologyChallengeIds),
+          ),
+        )
+      : [...challengeIds].map((challengeId) => notifyChallengeQueueChanged(client, challengeId)),
   );
 }
 
@@ -380,6 +492,7 @@ async function resolveInvalidationGroupId(
 export async function publishChallengeQueueInvalidation(
   challengeId: number,
   queueGroupId?: number,
+  relatedChallengeIds: readonly number[] = [],
 ): Promise<void> {
   // Jobs carry the group id captured when the transition committed. A merge,
   // split, room reassignment, or deletion may have made that id stale by the
@@ -397,10 +510,40 @@ export async function publishChallengeQueueInvalidation(
       [groupId],
     )
   ).rows.map((row) => Number(row.challenge_id));
+  // A topology mutation can leave the changed challenge temporarily
+  // ungrouped while its source group still serves siblings. Include that
+  // challenge's own entries in the source-group fan-out, but only when its
+  // marker and enterprise still match the validated group. This preserves
+  // the participant refresh without widening the fixture boundary.
+  const relatedIds = [
+    ...new Set([challengeId, ...relatedChallengeIds].filter(Number.isFinite)),
+  ].filter((id) => !challengeIds.includes(id));
+  if (relatedIds.length > 0) {
+    const { rows: relatedRows } = await pool.query<{ id: number }>(
+      `SELECT c.id
+         FROM challenges c
+         JOIN sponsors s ON s.id = c.author
+         JOIN queue_groups qg ON qg.id = $2
+        WHERE c.id = ANY($1::int[])
+          AND c.is_test_account = $3
+          AND s.enterprise_id = qg.enterprise_id`,
+      [relatedIds, groupId, fixtureMarker],
+    );
+    for (const row of relatedRows) {
+      const id = Number(row.id);
+      if (!challengeIds.includes(id)) challengeIds.push(id);
+    }
+  }
   if (challengeIds.length === 0) return;
   const { rows } = await pool.query(
     `SELECT DISTINCT members.user_id
        FROM queue_entries qe
+       JOIN challenges c
+         ON c.id = qe.challenge_id
+        AND c.is_test_account = $2
+       JOIN repos r
+         ON r.id = qe.repo_id
+        AND r.is_test_account = $2
        JOIN (${REPO_MEMBER_RELATION_SQL}) members ON members.repo_id = qe.repo_id
        JOIN users u ON u.id = members.user_id
       WHERE qe.challenge_id = ANY($1::int[])
@@ -426,8 +569,12 @@ export async function publishChallengeQueueInvalidation(
 
 registerWorker(
   QUEUE_PARTICIPANT_INVALIDATIONS,
-  async (job: Job<{ challengeId: number; queueGroupId?: number }>) => {
-    await publishChallengeQueueInvalidation(job.data.challengeId, job.data.queueGroupId);
+  async (job: Job<ParticipantInvalidationJobData>) => {
+    await publishChallengeQueueInvalidation(
+      job.data.challengeId,
+      job.data.queueGroupId,
+      job.data.challengeIds,
+    );
   },
 );
 

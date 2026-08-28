@@ -653,6 +653,20 @@ export async function setQueueGroupRooms(input: {
     if (!before) throw new NotFoundError("Queue group not found", { queueGroupId });
     const enterpriseId = Number(before.enterprise_id);
 
+    // H38/H46: include every room currently serving the target group, not only rooms
+    // named in this replacement. In particular, an empty `roomIds` means
+    // "clear the queue": those existing links still need the room lock before
+    // the topology snapshot, otherwise a concurrent replacement can commit
+    // while this transaction waits on the room lock and its old group would
+    // be absent from the invalidation boundary.
+    const { rows: targetServingBefore } = await client.query<{ room_id: number }>(
+      `SELECT room_id
+         FROM room_queue_groups
+        WHERE queue_group_id = $1
+        ORDER BY room_id`,
+      [queueGroupId],
+    );
+
     // Lock the rooms in id order so two enterprises claiming the same room
     // serialise rather than deadlock. When clearing every room, lock the
     // group's current links too; otherwise a concurrent replacement can
@@ -664,6 +678,7 @@ export async function setQueueGroupRooms(input: {
         ...servingBefore
           .filter((row) => Number(row.queue_group_id) === queueGroupId)
           .map((row) => Number(row.room_id)),
+        ...targetServingBefore.map((row) => Number(row.room_id)),
       ]),
     ].sort((a, b) => a - b);
     if (roomIdsToLock.length) {

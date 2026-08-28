@@ -44,7 +44,7 @@ Architecture & modules:
   `deploy/README.md` is the operational runbook.
 - [Database schema](./database-schema.md) — the generated DBML ERD for the
   current post-migration schema, plus the migration identity/checksum rules.
-- [Module summaries (M1–M8)](./modules-1-5.md) — schemas, hooks, UI layouts and
+- [Module summaries (M1–M3, M5–M8)](./modules-1-5.md) — schemas, hooks, UI layouts and
   state transitions touched by each module, with the corrections made where the
   original brief assumed something the schema contradicts.
 - [Background processing & workers](./background-workers.md) — the BullMQ +

@@ -1,11 +1,12 @@
 # Environment variables per service (isolated containers)
 
 This is the per-service breakdown for **Mode A** in
-[`deploy/README.md`](../deploy/README.md): each of the six services below runs
-as its own container on the shared private `instance` network
-(`hackos-<name>-net`), reachable by the others only through that network, with
-only `api` and `web` also joining the Traefik `edge` network. Datastores
-publish no host ports.
+[`deploy/README.md`](../deploy/README.md): each of the six service definitions
+below runs separately (the `api` definition also contains its one-shot
+`migrate` container). `postgres`, `valkey`, `minio`, `api`/`migrate`, and
+`worker` use the shared private `instance` network
+(`hackos-<name>-net`); `web` is edge-only, while `api` also joins the Traefik
+`edge` network. Datastores publish no host ports.
 
 Two different kinds of variable show up:
 
@@ -107,7 +108,7 @@ need them.
 | `LIBRETRANSLATE_URL` / `LIBRETRANSLATE_API_KEY` | container | URL required if `TRANSLATE_PROVIDER=libretranslate`, key optional | Base URL of a self-hosted LibreTranslate instance (e.g. `https://translate.example.org`) and its API key, if the instance requires one. |
 | `STACK_NAME` | compose-level | no (default) | Namespaces this instance's Traefik router names (`${STACK_NAME}-api`) so multiple hackOS instances can share one Traefik without router-name collisions. |
 | `PROXY_NETWORK` | compose-level | no (default `dokploy-network`) | The Traefik-managed edge network `api` and `web` join to receive public traffic. The single-stack worker may also join it for outbound egress, but has no router. |
-| `CERT_RESOLVER` | compose-level | no (default `letsencrypt`) | Which Traefik ACME resolver issues the TLS cert for `API_DOMAIN`. |
+| `CERT_RESOLVER` | compose-level | no (default `letsencrypt`) | Which Traefik ACME resolver issues the TLS certificates for the `API_DOMAIN` and `WEB_DOMAIN` routers. |
 | `IMAGE_REPO`, `IMAGE_TAG` | compose-level | no | Which prebuilt image to pull; ignored entirely if Dokploy builds from source instead. Pin `IMAGE_TAG` to a released version in production — never `:latest`. |
 | `API_MEM_LIMIT` | compose-level | no | Memory cap, default `512m`. |
 | `INSTANCE_NETWORK` | compose-level | no | Private network joined to reach postgres/valkey/minio by name. |

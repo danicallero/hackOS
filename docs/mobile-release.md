@@ -40,10 +40,10 @@ Resolve these items before submitting either app:
   backgrounds.
 - Add the Android notification icon: a 96×96 white PNG with transparency,
   configured through `expo-notifications`.
-- Publish the privacy policy, support, and account-deletion URLs. The mobile
-  UI now exposes the privacy policy and the authenticated in-app Account/Data
-  removal controls; keep the public support/privacy URLs available as the
-  secondary contact and App Review reference.
+- Publish the privacy policy and support URLs. The mobile UI now exposes the
+  privacy policy and the authenticated in-app Account/Data removal controls;
+  keep the public support/privacy URLs available as the secondary contact and
+  App Review reference.
 - Prepare reviewer accounts, sample QR codes, and review instructions.
 - Test camera scanning, offline queues, APNs/FCM, authenticated SSE, and Apple
   and Google Wallet on physical devices. The emulator is useful for checking
@@ -176,7 +176,7 @@ in its [development workflow overview](https://docs.expo.dev/workflow/overview/)
 
 Choose and record these values with the organization that owns the stores:
 
-| Value | Example only | Where it is used |
+| Value | Repository value or placeholder | Where it is used |
 | --- | --- | --- |
 | Expo owner | `hack-os` | Current `app.json` owner; Expo project and EAS access control |
 | Expo slug | `hackos` | Current `app.json` slug; Expo project URL |
@@ -187,8 +187,10 @@ Choose and record these values with the organization that owns the stores:
 | App Store Connect app ID | numeric value such as `1234567890` | EAS Submit `ascAppId` |
 | Google Play service account | dedicated JSON key | EAS Submit / Play Developer API |
 
-The reverse-DNS values above are examples. Replace them before using a
-production configuration.
+The Expo owner, slug, bundle IDs and scheme above mirror the repository's
+current defaults; verify that they belong to the release organization before
+production. Replace the Apple team, App Store ID and Google service-account
+placeholders with the store-owned values.
 
 From `apps/mobile`, link or create the EAS project:
 
@@ -219,7 +221,7 @@ identifiers:
     },
     "extra": {
       "eas": {
-      "projectId": "67dfb15e-eb03-441d-ba61-927e7e1defab"
+        "projectId": "67dfb15e-eb03-441d-ba61-927e7e1defab"
       }
     }
   }

@@ -4,7 +4,7 @@ import { SSE_TOPICS } from "@hackos/shared/events";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
-import { notifyTeamCalled } from "../../src/modules/queue/notify.js";
+import { notifyTeamCalled, notifyTeamPreCall } from "../../src/modules/queue/notify.js";
 import {
   asUser,
   buildTestApp,
@@ -400,6 +400,38 @@ describe("queue contextual isolation", () => {
         ORDER BY user_id`,
     );
     expect(staffAlerts.rows.map((row) => row.user_id)).toEqual([fixtureStaff]);
+
+    // Notification helpers must not trust a stale transition payload. A
+    // called notification is no longer valid after the row returns to the
+    // queue, and a pre-call notification is no longer valid while it is
+    // called; neither path may create another personal SSE event.
+    const fixtureUserAfterCalled = await broadcastCount(
+      `${SSE_TOPICS.USER_PREFIX}${fixtureMember}`,
+    );
+    const fixtureQueueAfterCalled = await broadcastCount(SSE_TOPICS.QUEUE_FIXTURE);
+    await notifyTeamPreCall(pool, {
+      entryId: fixtureEntryId,
+      challengeId: fixtureChallengeId,
+      repoId: fixtureRepoId,
+      etaMinutes: 5,
+    });
+    await pool.query(
+      `UPDATE queue_entries
+          SET status = 'waiting', assigned_room_id = NULL, precalled_at = NULL
+        WHERE id = $1`,
+      [fixtureEntryId],
+    );
+    await notifyTeamCalled(pool, {
+      entryId: fixtureEntryId,
+      challengeId: fixtureChallengeId,
+      repoId: fixtureRepoId,
+      roomId: fixtureRoomId,
+      roomName: "Synthetic room",
+    });
+    expect(await broadcastCount(`${SSE_TOPICS.USER_PREFIX}${fixtureMember}`)).toBe(
+      fixtureUserAfterCalled,
+    );
+    expect(await broadcastCount(SSE_TOPICS.QUEUE_FIXTURE)).toBe(fixtureQueueAfterCalled);
 
     const realChallengeId = await createChallenge({ title: "Real queue" });
     const { repoId: realRepoId } = await createRepoWithTeam([realMember], "Real team");

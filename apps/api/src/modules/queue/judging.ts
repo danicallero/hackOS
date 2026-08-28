@@ -223,7 +223,8 @@ export async function upsertAttemptReview(
     let completedEntry: QueueEntryRow | null = null;
     if (justSubmitted && (entryStatus === "presenting" || entryStatus === "in_room")) {
       const done = await client.query(
-        `UPDATE queue_entries SET status = 'completed', completed_at = now()
+        `UPDATE queue_entries
+            SET status = 'completed', completed_at = now(), precalled_at = NULL
           WHERE id = $1 AND status IN ('presenting', 'in_room')
           RETURNING *`,
         [entryId],
