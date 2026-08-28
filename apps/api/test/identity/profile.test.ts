@@ -995,12 +995,7 @@ describe("self-service account removal (H54)", () => {
     const user = await createUser({ email: "deadline-race@example.test", emailVerified: false });
     await pool.query(
       `UPDATE users
-          SET badge_id = 'B-DEADLINE-RACE',
-              account_state = 'removal_pending',
-              removal_action = 'anonymize',
-              removal_requires_exit = true,
-              removal_expires_at = clock_timestamp() + interval '1 millisecond',
-              removal_idempotency_key = 'deadline-race-removal'
+          SET badge_id = 'B-DEADLINE-RACE'
         WHERE id = $1`,
       [user],
     );
@@ -1012,6 +1007,19 @@ describe("self-service account removal (H54)", () => {
     await pool.query(
       `INSERT INTO time_logs (user_id, kind, scanned_at)
        VALUES ($1, 'in', now() - interval '5 minutes')`,
+      [user],
+    );
+    // H54 rejects new identity-bearing rows once removal_pending starts. Seed
+    // the operational history while the account is active, then move it to
+    // the pending lifecycle state before racing the recovery deadline.
+    await pool.query(
+      `UPDATE users
+          SET account_state = 'removal_pending',
+              removal_action = 'anonymize',
+              removal_requires_exit = true,
+              removal_expires_at = clock_timestamp() + interval '1 millisecond',
+              removal_idempotency_key = 'deadline-race-removal'
+        WHERE id = $1`,
       [user],
     );
     // Let the deadline cross before the cancellation transaction reaches its

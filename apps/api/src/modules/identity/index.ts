@@ -34,6 +34,10 @@ import { registerUiPrefsRoutes } from "./routes/ui-prefs.js";
 export async function registerIdentityModule(app: FastifyInstance): Promise<void> {
   setUserIdResolver(async (req) => {
     const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+    // Keep the verified credential on the request so lifecycle operations can
+    // bind deadlines to the exact session that authenticated this request.
+    // The token is never logged or persisted by the auth context.
+    req.sessionToken = session?.session.token ?? null;
     return session ? Number(session.user.id) : null;
   });
 

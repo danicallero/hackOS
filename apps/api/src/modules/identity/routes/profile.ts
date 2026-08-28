@@ -285,6 +285,7 @@ async function assertProfileSubjectScope(actorId: number, subjectId: number): Pr
 
 /** Read the Better Auth session credential without logging or persisting it. */
 async function sessionTokenFromRequest(req: FastifyRequest): Promise<string | null> {
+  if (req.sessionToken) return req.sessionToken;
   const authorization = req.headers.authorization;
   if (authorization?.startsWith("Bearer ")) return authorization.slice("Bearer ".length);
   const headers = new Headers();

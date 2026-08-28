@@ -668,13 +668,10 @@ WITH viewer AS (
      FROM queue_group_challenges qgc
      JOIN challenges group_challenge ON group_challenge.id = qgc.challenge_id
      JOIN queue_groups group_qg ON group_qg.id = qgc.queue_group_id
-     LEFT JOIN queue_entries group_entry ON group_entry.challenge_id = qgc.challenge_id
-     LEFT JOIN repos group_repo ON group_repo.id = group_entry.repo_id
      LEFT JOIN enterprise_markers em ON em.enterprise_id = group_qg.enterprise_id
      CROSS JOIN viewer v
     GROUP BY qgc.queue_group_id, v.is_test_account
    HAVING bool_and(group_challenge.is_test_account = v.is_test_account)
-      AND bool_and(group_repo.id IS NULL OR group_repo.is_test_account = v.is_test_account)
       AND COUNT(em.marker) > 0
       AND bool_and(em.marker = v.is_test_account)
  ), room_markers AS (

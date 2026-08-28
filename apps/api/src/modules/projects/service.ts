@@ -733,7 +733,8 @@ async function attachMembersAndPrizes(
     `SELECT p.repo_id, p.prize
        FROM repo_devpost_prizes p
        JOIN repos r ON r.id = p.repo_id AND r.is_test_account = $2
-      WHERE p.repo_id = ANY($1::int[])`,
+      WHERE p.repo_id = ANY($1::int[])
+      ORDER BY p.repo_id, p.prize ASC`,
     [ids, fixtureMarker],
   );
   const prizeNames = [...new Set(prizesRes.rows.map((r: { prize: string }) => r.prize))];
