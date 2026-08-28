@@ -4,12 +4,12 @@ import { z } from "zod";
 import { pool } from "../../db/pool.js";
 import { NotFoundError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
-import { assertFixtureQueueScope } from "../logistics/review-fixture-scope.js";
 import {
   assertCanManageEnterpriseJudging,
   requireEnterpriseJudgeManager,
 } from "../sponsors/access.js";
 import { actor } from "./actor.js";
+import { assertQueueGroupScope } from "./fixture-scope.js";
 import {
   assignableRooms,
   listEnterpriseQueueGroups,
@@ -158,10 +158,9 @@ export function registerQueueGroupRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      await assertFixtureQueueScope(
+      const fixtureMarker = await assertQueueGroupScope(
         pool,
         req.userId as number,
-        "queueGroup",
         req.params.queueGroupId,
       );
       const enterpriseId = await queueGroupEnterpriseId(pool, req.params.queueGroupId);
@@ -169,7 +168,7 @@ export function registerQueueGroupRoutes(app: FastifyInstance): void {
         throw new NotFoundError("Queue group not found", { queueGroupId: req.params.queueGroupId });
       }
       await assertCanManageEnterpriseJudging(req, enterpriseId);
-      return queueGroupQueue(req.params.queueGroupId);
+      return queueGroupQueue(req.params.queueGroupId, fixtureMarker);
     },
   );
 
@@ -192,12 +191,7 @@ export function registerQueueGroupRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      await assertFixtureQueueScope(
-        pool,
-        req.userId as number,
-        "queueGroup",
-        req.params.queueGroupId,
-      );
+      await assertQueueGroupScope(pool, req.userId as number, req.params.queueGroupId);
       const enterpriseId = await queueGroupEnterpriseId(pool, req.params.queueGroupId);
       if (enterpriseId == null) {
         throw new NotFoundError("Queue group not found", { queueGroupId: req.params.queueGroupId });
@@ -226,12 +220,7 @@ export function registerQueueGroupRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      await assertFixtureQueueScope(
-        pool,
-        req.userId as number,
-        "queueGroup",
-        req.params.queueGroupId,
-      );
+      await assertQueueGroupScope(pool, req.userId as number, req.params.queueGroupId);
       const enterpriseId = await queueGroupEnterpriseId(pool, req.params.queueGroupId);
       if (enterpriseId == null) {
         throw new NotFoundError("Queue group not found", { queueGroupId: req.params.queueGroupId });
@@ -276,12 +265,7 @@ export function registerQueueGroupRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      await assertFixtureQueueScope(
-        pool,
-        req.userId as number,
-        "queueGroup",
-        req.params.queueGroupId,
-      );
+      await assertQueueGroupScope(pool, req.userId as number, req.params.queueGroupId);
       const enterpriseId = await queueGroupEnterpriseId(pool, req.params.queueGroupId);
       if (enterpriseId == null) {
         throw new NotFoundError("Queue group not found", { queueGroupId: req.params.queueGroupId });
@@ -315,12 +299,7 @@ export function registerQueueGroupRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      await assertFixtureQueueScope(
-        pool,
-        req.userId as number,
-        "queueGroup",
-        req.params.queueGroupId,
-      );
+      await assertQueueGroupScope(pool, req.userId as number, req.params.queueGroupId);
       const enterpriseId = await queueGroupEnterpriseId(pool, req.params.queueGroupId);
       if (enterpriseId == null) {
         throw new NotFoundError("Queue group not found", { queueGroupId: req.params.queueGroupId });

@@ -8,8 +8,8 @@ split "which enterprise a room belongs to" off from "which queue it serves".
 > **Status: complete.** Rooms, queue reads, ordering, the room-assignment
 > screen and the merge action all go through queue groups. An enterprise with
 > more than one challenge can merge selected challenges into one or more shared
-> queues from its judges tab; ungrouped challenges stay 1:1 and behave exactly
-> as one-queue-per-challenge always did.
+> queues from its judges tab; each challenge starts in a 1:1 group and behaves
+> exactly as one-queue-per-challenge did until an explicit merge.
 >
 > **Room ownership is a separate decision from room serving (0413).** A room's
 > enterprise (`room_enterprises`) and a room's serving queue
@@ -92,16 +92,16 @@ room_enterprises >── rooms ──< room_queue_groups >── queue_groups
    break the same invariant from the other side; there is no product surface
    for that today, so it is deliberately not guarded.
 
-2. **Every challenge has exactly one group.** `challenges_default_queue_group`
-   (`AFTER INSERT ON challenges`) creates a 1:1 group for each new challenge,
-   with `display_name` defaulting to the challenge title. It lives in the
-   database rather than the challenges service so seeds, imports, and direct
-   SQL cannot bypass it — `0411`'s repoint of `room_challenges` onto
-   `queue_group_id` (and its `NOT NULL`) depends on the invariant holding for
-   every row created in the meantime.
+2. **Managed challenge creation gives every challenge one group.**
+   `challenges_default_queue_group` (`AFTER INSERT ON challenges`) creates a
+   1:1 group for each new challenge, with `display_name` defaulting to the
+   challenge title. The membership row is `ON DELETE CASCADE`, so a direct
+   group deletion, an interrupted reset, or hand-written legacy SQL can leave
+   an ungrouped challenge. Those malformed rows are not silently treated as a
+   real queue: marker-aware reads omit them and queue mutations fail closed;
+   release checks must repair them before serving traffic.
 
-Because of (2), "challenge without a group" is never a state the rest of the
-system has to special-case, and nothing is merged automatically: today's
+With a valid membership row, nothing is merged automatically: today's
 per-challenge queue behaviour is exactly what N separate 1:1 groups describe.
 Merging challenges into a shared group is an explicit admin action — see
 "Merging" below.

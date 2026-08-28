@@ -112,55 +112,123 @@ async function emitPreCallWarnings(): Promise<void> {
   if (!settings?.window_open) return;
   const threshold = settings?.pre_call_notification_eta_minutes ?? 10;
 
-  const { rows: challengeIds } = await pool.query(
-    `SELECT DISTINCT qe.challenge_id
-       FROM queue_entries qe
-       JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+  const { rows: queueGroups } = await pool.query<{ queue_group_id: number }>(
+    `SELECT DISTINCT qgc.queue_group_id
+       FROM queue_group_challenges qgc
        JOIN room_queue_groups rqg ON rqg.queue_group_id = qgc.queue_group_id
-       JOIN rooms r ON r.id = rqg.room_id
-       JOIN room_queue_state rqs ON rqs.room_id = r.id AND rqs.is_paused = false
-      WHERE qe.status = 'waiting'`,
+       JOIN room_queue_state rqs ON rqs.room_id = rqg.room_id AND rqs.is_paused = false`,
   );
 
-  for (const { challenge_id: challengeId } of challengeIds as { challenge_id: number }[]) {
-    const challengeMarker = await queueFixtureMarker(pool, "challenge", challengeId);
-    if (challengeMarker === null) continue;
-    const perSlot = await challengeEtaMinutesPerSlot(challengeId, challengeMarker);
-    const { rows: waiting } = await pool.query(
-      `SELECT id, repo_id, precalled_at,
-              ROW_NUMBER() OVER (ORDER BY position ASC NULLS LAST, id ASC) AS rank
-         FROM queue_entries
-        WHERE challenge_id = $1 AND status = 'waiting'`,
-      [challengeId],
-    );
-    for (const w of waiting as {
+  for (const { queue_group_id: queueGroupId } of queueGroups) {
+    // Resolve the complete graph once per shared queue. A challenge-by-
+    // challenge loop can warn the same repo twice when it applied to two
+    // challenges in one merged group, and a mixed graph must never fall back
+    // to the real notification path.
+    const groupMarker = await queueFixtureMarker(pool, "queueGroup", queueGroupId);
+    if (groupMarker === null) continue;
+    const { rows: waiting } = await pool.query<{
       id: number;
+      challenge_id: number;
       repo_id: number;
       precalled_at: string | null;
+      position: number | null;
+      rank: number;
+    }>(
+      `WITH group_waiting AS (
+         SELECT qe.id, qe.challenge_id, qe.repo_id, qe.precalled_at, qe.position,
+                ROW_NUMBER() OVER (
+                  PARTITION BY qe.repo_id
+                  ORDER BY qe.position ASC NULLS LAST, qe.id ASC
+                ) AS repo_rank
+           FROM queue_entries qe
+           JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+           JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
+           JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $2
+          WHERE qgc.queue_group_id = $1
+            AND qe.status = 'waiting'
+            AND NOT EXISTS (
+              SELECT 1
+                FROM queue_entries active
+                JOIN queue_group_challenges active_qgc
+                  ON active_qgc.challenge_id = active.challenge_id
+               WHERE active_qgc.queue_group_id = $1
+                 AND active.repo_id = qe.repo_id
+                 AND active.status IN ('called', 'in_room', 'presenting', 'completed')
+            )
+            AND NOT EXISTS (
+              SELECT 1
+                FROM queue_entries already
+                JOIN queue_group_challenges already_qgc
+                  ON already_qgc.challenge_id = already.challenge_id
+               WHERE already_qgc.queue_group_id = $1
+                 AND already.repo_id = qe.repo_id
+                 AND already.status = 'waiting'
+                 AND already.precalled_at IS NOT NULL
+            )
+       ), deduped AS (
+         SELECT id, challenge_id, repo_id, precalled_at, position
+           FROM group_waiting
+          WHERE repo_rank = 1
+       )
+       SELECT id, challenge_id, repo_id, precalled_at, position,
+              ROW_NUMBER() OVER (ORDER BY position ASC NULLS LAST, id ASC) AS rank
+         FROM deduped
+        ORDER BY position ASC NULLS LAST, id ASC`,
+      [queueGroupId, groupMarker],
+    );
+    const firstChallengeId = waiting[0]?.challenge_id;
+    if (firstChallengeId == null) continue;
+    const perSlot = await challengeEtaMinutesPerSlot(firstChallengeId, groupMarker);
+    for (const w of waiting as {
+      id: number;
+      challenge_id: number;
+      repo_id: number;
+      precalled_at: string | null;
+      position: number | null;
       rank: number;
     }[]) {
       // Re-check the full entry/group/room graph before claiming the row. A
       // stale or mixed graph must not advance its pre-call state or notify a
       // participant from the wrong fixture boundary.
-      if ((await queueFixtureMarker(pool, "entry", Number(w.id))) !== challengeMarker) {
+      if ((await queueFixtureMarker(pool, "entry", Number(w.id))) !== groupMarker) {
         continue;
       }
       const eta = w.rank * perSlot;
       if (w.precalled_at || eta > threshold) continue;
-      // Atomic claim before notifying: if a previous, still-running tick (or
-      // another worker process) already claimed this entry, the WHERE clause
-      // matches zero rows here and this tick skips the notify entirely,
-      // closing the read-then-write race that could double-send a pre-call.
+      // Atomically claim every still-waiting sibling for this repo in the
+      // group, but notify only the row at the group's best position. The
+      // status predicate closes the stale-row race where an operator calls or
+      // requeues the team between the read above and this write. If another
+      // pump instance wins first, all rows fail the predicate and no duplicate
+      // notification is sent.
       const { rows: claimed } = await pool.query(
-        `UPDATE queue_entries SET precalled_at = now()
-          WHERE id = $1 AND precalled_at IS NULL
-          RETURNING id`,
-        [w.id],
+        `WITH claimable AS (
+           SELECT qe.id,
+                  ROW_NUMBER() OVER (ORDER BY qe.position ASC NULLS LAST, qe.id ASC) AS rank
+             FROM queue_entries qe
+             JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+             JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
+             JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $2
+            WHERE qgc.queue_group_id = $1
+              AND qe.repo_id = $3
+              AND qe.status = 'waiting'
+              AND qe.precalled_at IS NULL
+         ), claimed AS (
+           UPDATE queue_entries qe
+              SET precalled_at = now()
+             FROM claimable c
+            WHERE qe.id = c.id
+              AND qe.status = 'waiting'
+              AND qe.precalled_at IS NULL
+            RETURNING qe.id, c.rank
+         )
+         SELECT id FROM claimed WHERE rank = 1`,
+        [queueGroupId, groupMarker, w.repo_id],
       );
       if (claimed.length === 0) continue;
       await notifyTeamPreCall(pool, {
         entryId: w.id,
-        challengeId,
+        challengeId: w.challenge_id,
         repoId: w.repo_id,
         etaMinutes: Math.round(eta),
       });

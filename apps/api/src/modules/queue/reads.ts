@@ -164,7 +164,7 @@ async function waitingQueueView(challengeIds: number[]) {
  * several of a shared queue's challenges is ONE line, at its best position,
  * naming every challenge it is in.
  */
-export async function queueGroupQueue(queueGroupId: number) {
+export async function queueGroupQueue(queueGroupId: number, fixtureMarker = false) {
   const group = (
     await pool.query(
       `SELECT qg.id, qg.display_name, qg.enterprise_id, e.name AS enterprise_name
@@ -176,9 +176,9 @@ export async function queueGroupQueue(queueGroupId: number) {
               FROM queue_group_challenges hidden_qgc
               JOIN challenges hidden_c ON hidden_c.id = hidden_qgc.challenge_id
              WHERE hidden_qgc.queue_group_id = qg.id
-               AND hidden_c.is_test_account = true
+               AND hidden_c.is_test_account = NOT $2::boolean
           )`,
-      [queueGroupId],
+      [queueGroupId, fixtureMarker],
     )
   ).rows[0];
   if (!group) throw new NotFoundError("Queue group not found", { queueGroupId });
@@ -187,9 +187,9 @@ export async function queueGroupQueue(queueGroupId: number) {
     `SELECT c.id, c.title
        FROM queue_group_challenges qgc
        JOIN challenges c ON c.id = qgc.challenge_id
-      WHERE qgc.queue_group_id = $1 AND c.is_test_account = false
+      WHERE qgc.queue_group_id = $1 AND c.is_test_account = $2
       ORDER BY c.id ASC`,
-    [queueGroupId],
+    [queueGroupId, fixtureMarker],
   );
   const challengeIds = challenges.map((c: { id: number }) => Number(c.id));
   if (challengeIds.length === 0) {
@@ -214,8 +214,8 @@ export async function queueGroupQueue(queueGroupId: number) {
               (ar.attempt_id IS NOT NULL) AS has_review,
               ar.status AS review_status
          FROM queue_entries qe
-         JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
-         JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
+         JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $2
+         JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
          LEFT JOIN rooms rm ON rm.id = qe.assigned_room_id
          LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
         WHERE qe.challenge_id = ANY($1)
@@ -230,7 +230,7 @@ export async function queueGroupQueue(queueGroupId: number) {
                  WHEN 'presenting' THEN 0 WHEN 'in_room' THEN 1 WHEN 'called' THEN 2
                  WHEN 'waiting' THEN 3 ELSE 4 END,
                merged.position ASC NULLS LAST, merged.id ASC`,
-    [challengeIds],
+    [challengeIds, fixtureMarker],
   );
 
   return { group, challenges, entries };

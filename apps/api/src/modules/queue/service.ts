@@ -532,7 +532,8 @@ export async function sendBackToWaiting(
     const position = await placeEntry(client, entry.challenge_id, entryId, "top");
     const res = await client.query(
       `UPDATE queue_entries
-          SET status = 'called', position = $1, called_at = now(), presentation_started_at = NULL
+          SET status = 'called', position = $1, called_at = now(), precalled_at = NULL,
+              presentation_started_at = NULL
         WHERE id = $2
         RETURNING *`,
       [position, entryId],
@@ -565,7 +566,8 @@ export async function requeue(
     const pos = await placeEntry(client, entry.challenge_id, entryId, position);
     const res = await client.query(
       `UPDATE queue_entries
-          SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL
+          SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
+              precalled_at = NULL
         WHERE id = $2
         RETURNING *`,
       [pos, entryId],
@@ -600,7 +602,7 @@ export async function reEnter(
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
-              presentation_started_at = NULL, completed_at = NULL
+              precalled_at = NULL, presentation_started_at = NULL, completed_at = NULL
         WHERE id = $2
         RETURNING *`,
       [pos, entryId],
@@ -646,7 +648,7 @@ export async function markNoShow(
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
-              presentation_started_at = NULL, call_count = call_count + 1
+              precalled_at = NULL, presentation_started_at = NULL, call_count = call_count + 1
         WHERE id = $2
         RETURNING *`,
       [position, entryId],
@@ -687,7 +689,7 @@ export async function moveToPosition(
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
-              presentation_started_at = NULL
+              precalled_at = NULL, presentation_started_at = NULL
         WHERE id = $2
         RETURNING *`,
       [position, entryId],
@@ -722,7 +724,7 @@ export async function skipToEnd(
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
-              presentation_started_at = NULL
+              precalled_at = NULL, presentation_started_at = NULL
         WHERE id = $2
         RETURNING *`,
       [position, entryId],
@@ -821,7 +823,7 @@ export async function moveToTop(
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
-              presentation_started_at = NULL
+              precalled_at = NULL, presentation_started_at = NULL
         WHERE id = $2
         RETURNING *`,
       [position, entryId],
@@ -852,7 +854,7 @@ export async function disqualify(
     await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, DISQUALIFY_FROM, "disqualify");
     const res = await client.query(
-      `UPDATE queue_entries SET status = 'disqualified' WHERE id = $1 RETURNING *`,
+      `UPDATE queue_entries SET status = 'disqualified', precalled_at = NULL WHERE id = $1 RETURNING *`,
       [entryId],
     );
     await writeQueueHistory(client, {
@@ -887,7 +889,7 @@ export async function cancelEntry(
     await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, ["waiting", "called"], "cancel");
     const res = await client.query(
-      `UPDATE queue_entries SET status = 'cancelled' WHERE id = $1 RETURNING *`,
+      `UPDATE queue_entries SET status = 'cancelled', precalled_at = NULL WHERE id = $1 RETURNING *`,
       [entryId],
     );
     await writeQueueHistory(client, {
@@ -968,14 +970,71 @@ export async function manualCall(
   reason: string | undefined,
 ): Promise<QueueEntryRow> {
   return withTransaction(async (client) => {
+    // Match structural queue mutations: lock the queue group before its
+    // entries so a concurrent merge cannot move the challenge between the
+    // entry lock and the target-room validation.
+    await lockQueueGroupForEntry(client, entryId);
     const entry = await lockEntry(client, entryId);
     const fixtureMarker = await assertEntryFixtureScope(client, actorId, entryId);
     await assertQueueRoomScope(client, actorId, roomId);
+    const entryGroup = await client.query<{ queue_group_id: number }>(
+      `SELECT queue_group_id
+         FROM queue_group_challenges
+        WHERE challenge_id = $1
+        FOR SHARE`,
+      [entry.challenge_id],
+    );
+    const targetRoom = await client.query<{
+      id: number;
+      name: string;
+      location: string | null;
+      queue_group_id: number | null;
+    }>(
+      `SELECT r.id, r.name, r.location, rqg.queue_group_id
+         FROM rooms r
+         LEFT JOIN room_queue_groups rqg ON rqg.room_id = r.id
+        WHERE r.id = $1
+        FOR UPDATE OF r`,
+      [roomId],
+    );
+    const room = targetRoom.rows[0];
+    if (!room) throw new NotFoundError("Room not found", { roomId });
+    const lockedMapping = await client.query<{ queue_group_id: number }>(
+      `SELECT queue_group_id
+         FROM room_queue_groups
+        WHERE room_id = $1
+        FOR UPDATE`,
+      [roomId],
+    );
+    room.queue_group_id = lockedMapping.rows[0]?.queue_group_id ?? null;
+    const entryGroupId = entryGroup.rows[0]?.queue_group_id ?? null;
+    if (entryGroupId == null || room.queue_group_id !== entryGroupId) {
+      throw new ConflictError("Room does not serve this queue", {
+        entryId,
+        roomId,
+        queueGroupId: entryGroupId,
+      });
+    }
     if (entry.status === targetStatus) {
       throw new ConflictError(`Entry is already ${targetStatus}`, { entryId });
     }
     if (targetStatus === "called" && entry.status !== "waiting") {
       throw new ConflictError("Only a waiting team can be sent to a waiting room", { entryId });
+    }
+    if (targetStatus === "in_room" && !["waiting", "called"].includes(entry.status)) {
+      throw new ConflictError("Only a waiting or called team can enter a room", { entryId });
+    }
+    if (
+      targetStatus === "in_room" &&
+      entry.status === "called" &&
+      entry.assigned_room_id != null &&
+      entry.assigned_room_id !== roomId
+    ) {
+      throw new ConflictError("Entry is assigned to another room", {
+        entryId,
+        assignedRoomId: entry.assigned_room_id,
+        roomId,
+      });
     }
     if (
       await isRepoBlockedByBusyMember(client, entry.repo_id, {
@@ -986,16 +1045,12 @@ export async function manualCall(
     ) {
       throw new ConflictError("Team has a member busy in another room (H30)", { entryId });
     }
-    const roomRes = await client.query(`SELECT * FROM rooms WHERE id = $1`, [roomId]);
-    const room = roomRes.rows[0];
-    if (!room) throw new NotFoundError("Room not found", { roomId });
-
     let updated: QueueEntryRow;
     try {
       const res = await client.query(
         `UPDATE queue_entries
             SET status = $1, assigned_room_id = $2,
-                called_at = COALESCE(called_at, now())
+                called_at = COALESCE(called_at, now()), precalled_at = NULL
           WHERE id = $3
           RETURNING *`,
         [targetStatus, roomId, entryId],
@@ -1412,7 +1467,8 @@ export async function pauseRoom(roomId: number, actorId: number): Promise<void> 
       for (const entry of entries) {
         await client.query(
           `UPDATE queue_entries
-              SET status = 'waiting', assigned_room_id = NULL, called_at = NULL
+              SET status = 'waiting', assigned_room_id = NULL, called_at = NULL,
+                  precalled_at = NULL
             WHERE id = $1`,
           [entry.id],
         );

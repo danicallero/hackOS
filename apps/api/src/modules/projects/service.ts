@@ -1317,7 +1317,8 @@ async function enqueueRepoOnChallenge(
     const revived = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL,
-              called_at = NULL, presentation_started_at = NULL, completed_at = NULL
+              called_at = NULL, precalled_at = NULL, presentation_started_at = NULL,
+              completed_at = NULL
         WHERE id = $2
         RETURNING *`,
       [position, entry.id],

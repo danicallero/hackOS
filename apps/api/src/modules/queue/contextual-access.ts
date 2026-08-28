@@ -3,7 +3,13 @@ import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastif
 import { pool } from "../../db/pool.js";
 import { userHasCapability } from "../../lib/capabilities.js";
 import { ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
-import { assertFixtureQueueScope, fixtureRoomIds } from "../logistics/review-fixture-scope.js";
+import { fixtureRoomIds } from "../logistics/review-fixture-scope.js";
+import {
+  assertQueueChallengeScope,
+  assertQueueEntryScope,
+  assertQueueRepoScope,
+  assertQueueRoomScope,
+} from "./fixture-scope.js";
 import { assertEntryInScope, resolveReviewScope } from "./reviews.js";
 
 type ParamName = "roomId" | "challengeId" | "entryId" | "repoId";
@@ -128,7 +134,7 @@ function denied(resource: string, details: Record<string, unknown> = {}): never 
 export function requireRoomJudgeOrCapability(...capabilities: Capability[]): preHandlerHookHandler {
   return async (req: FastifyRequest, _reply: FastifyReply) => {
     const userId = await requireUser(req);
-    await assertFixtureQueueScope(pool, userId, "room", numberParam(req, "roomId"));
+    await assertQueueRoomScope(pool, userId, numberParam(req, "roomId"));
     if (await hasAnyCapability(req, userId, capabilities)) return;
     const roomId = numberParam(req, "roomId");
     if (await judgesRoomEnterprise(userId, roomId)) return;
@@ -142,7 +148,7 @@ export function requireRoomAccessOrCapability(
 ): preHandlerHookHandler {
   return async (req: FastifyRequest, _reply: FastifyReply) => {
     const userId = await requireUser(req);
-    await assertFixtureQueueScope(pool, userId, "room", numberParam(req, "roomId"));
+    await assertQueueRoomScope(pool, userId, numberParam(req, "roomId"));
     if (await hasAnyCapability(req, userId, capabilities)) return;
     const roomId = numberParam(req, "roomId");
     if (await judgesRoomEnterprise(userId, roomId)) return;
@@ -156,7 +162,7 @@ export function requireRoomAccessOrCapability(
 /** H46 room assignments are global-admin or challenge-owner only. */
 export const requireRoomAssignmentsAccess: preHandlerHookHandler = async (req) => {
   const userId = await requireUser(req);
-  await assertFixtureQueueScope(pool, userId, "room", numberParam(req, "roomId"));
+  await assertQueueRoomScope(pool, userId, numberParam(req, "roomId"));
   if (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN, req)) return;
   const roomId = numberParam(req, "roomId");
   if (await ownsRoomEnterprise(userId, roomId)) return;
@@ -168,7 +174,7 @@ export function requireChallengeJudgeOrCapability(
 ): preHandlerHookHandler {
   return async (req: FastifyRequest, _reply: FastifyReply) => {
     const userId = await requireUser(req);
-    await assertFixtureQueueScope(pool, userId, "challenge", numberParam(req, "challengeId"));
+    await assertQueueChallengeScope(pool, userId, numberParam(req, "challengeId"));
     if (await hasAnyCapability(req, userId, capabilities)) return;
     const challengeId = numberParam(req, "challengeId");
     if (await hasChallengeRelationship(userId, challengeId)) return;
@@ -179,7 +185,7 @@ export function requireChallengeJudgeOrCapability(
 export function requireRepoJudgeOrCapability(...capabilities: Capability[]): preHandlerHookHandler {
   return async (req: FastifyRequest, _reply: FastifyReply) => {
     const userId = await requireUser(req);
-    await assertFixtureQueueScope(pool, userId, "repo", numberParam(req, "repoId"));
+    await assertQueueRepoScope(pool, userId, numberParam(req, "repoId"));
     if (await hasAnyCapability(req, userId, capabilities)) return;
     const repoId = numberParam(req, "repoId");
     const challengeIds = await repoChallengeIds(repoId);
@@ -198,7 +204,7 @@ export function requireEntryJudgeOrCapability(
 ): preHandlerHookHandler {
   return async (req: FastifyRequest, _reply: FastifyReply) => {
     const userId = await requireUser(req);
-    await assertFixtureQueueScope(pool, userId, "entry", numberParam(req, "entryId"));
+    await assertQueueEntryScope(pool, userId, numberParam(req, "entryId"));
     if (await hasAnyCapability(req, userId, capabilities)) return;
     const entryId = numberParam(req, "entryId");
     const challengeId = await entryChallengeId(entryId);
@@ -250,7 +256,7 @@ export function requireChallengeExport(): preHandlerHookHandler {
     if (!(await userHasCapability(userId, CAPABILITIES.JUDGING_EXPORT, req))) {
       denied("challenge export", { capability: CAPABILITIES.JUDGING_EXPORT });
     }
-    await assertFixtureQueueScope(pool, userId, "challenge", numberParam(req, "challengeId"));
+    await assertQueueChallengeScope(pool, userId, numberParam(req, "challengeId"));
     if (
       (await hasAnyCapability(req, userId, [
         CAPABILITIES.QUEUE_ADMIN,

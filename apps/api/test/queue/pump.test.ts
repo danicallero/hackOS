@@ -4,11 +4,14 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createUser, createUserWithCapabilities, truncateAll } from "../helpers.js";
 import {
   assignChallengeToRoom,
+  assignQueueGroupToRoom,
   createChallenge,
+  createEnterpriseChallenges,
   createRepoWithTeam,
   createRoom,
   enqueueRepo,
   getEntry,
+  mergeChallengesIntoOneGroup,
 } from "./fixtures.js";
 
 /**
@@ -277,6 +280,47 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
     await pump();
 
     expect((await getEntry(farId)).precalled_at).toBeNull();
+  });
+
+  it("pre-calls a merged repo once and claims only waiting siblings", async () => {
+    const { challengeIds } = await createEnterpriseChallenges(2);
+    const groupId = await mergeChallengesIntoOneGroup(challengeIds);
+    const roomId = await createRoom({ maxInWaitingArea: 0, desiredMinutesPerTeam: 5 });
+    await assignQueueGroupToRoom(roomId, groupId);
+    const member = await createUser();
+    const { repoId } = await createRepoWithTeam([member]);
+    const first = await enqueueRepo(challengeIds[0]!, repoId, 1);
+    const second = await enqueueRepo(challengeIds[1]!, repoId, 2);
+
+    await pump();
+
+    const { pool } = await import("../../src/db/pool.js");
+    const outbox = await pool.query(
+      `SELECT count(*)::int AS n
+         FROM notification_outbox
+        WHERE user_id = $1 AND category = 'queue'`,
+      [member],
+    );
+    expect(outbox.rows[0].n).toBe(3);
+    expect((await getEntry(first)).precalled_at).not.toBeNull();
+    expect((await getEntry(second)).precalled_at).not.toBeNull();
+
+    // An already-called sibling is not eligible for a second pre-call cycle,
+    // and the claim must never advance a non-waiting row.
+    await pool.query(
+      `UPDATE queue_entries
+          SET status = 'called', assigned_room_id = $2
+        WHERE id = $1`,
+      [first, roomId],
+    );
+    await pump();
+    const after = await pool.query(
+      `SELECT count(*)::int AS n
+         FROM notification_outbox
+        WHERE user_id = $1 AND category = 'queue'`,
+      [member],
+    );
+    expect(after.rows[0].n).toBe(3);
   });
 });
 

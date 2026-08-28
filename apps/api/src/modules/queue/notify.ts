@@ -201,11 +201,26 @@ export async function notifyTeamPreCall(
  * authenticated read model instead of receiving another team's queue data.
  */
 export async function notifyChallengeQueueChanged(
-  _client: Queryable,
+  client: Queryable,
   challengeId: number,
 ): Promise<"queued" | "coalesced" | "dropped"> {
   const queue = getQueue(QUEUE_PARTICIPANT_INVALIDATIONS);
-  const jobId = `challenge-${challengeId}`;
+  let queueGroupId: number | null = null;
+  try {
+    const { rows: groupRows } = await client.query<{ queue_group_id: number }>(
+      `SELECT queue_group_id
+         FROM queue_group_challenges
+        WHERE challenge_id = $1`,
+      [challengeId],
+    );
+    queueGroupId = groupRows[0]?.queue_group_id ?? null;
+  } catch (err) {
+    // Participant refresh is best effort. If the post-commit lookup is
+    // unavailable, retain the old challenge-scoped debounce key instead of
+    // turning a completed queue transition into a request failure.
+    console.error(`[queue] unable to resolve invalidation group for challenge ${challengeId}`, err);
+  }
+  const jobId = queueGroupId == null ? `challenge-${challengeId}` : `group-${queueGroupId}`;
   const locallyCoalesced = participantInvalidationJobsInFlight.has(jobId);
   participantInvalidationJobsInFlight.add(jobId);
   try {
@@ -215,9 +230,9 @@ export async function notifyChallengeQueueChanged(
     const existing = locallyCoalesced || Boolean(await queue.getJob(jobId));
     await queue.add(
       "challenge-changed",
-      { challengeId },
+      { challengeId, ...(queueGroupId == null ? {} : { queueGroupId }) },
       {
-        // H38 (#544): one delayed job per challenge is the debounce window.
+        // H38 (#544): one delayed job per queue group is the debounce window.
         // Repeated transitions during a burst reuse this job instead of making
         // every participant refetch once per transition.
         jobId,
@@ -245,31 +260,54 @@ export const QUEUE_PARTICIPANT_INVALIDATIONS = "queue-participant-invalidations"
 const participantInvalidationJobsInFlight = new Set<string>();
 
 /** H38 (#544): worker-side fan-out, deliberately outside queue transition requests. */
-export async function publishChallengeQueueInvalidation(challengeId: number): Promise<void> {
-  const fixtureMarker = await queueFixtureMarker(pool, "challenge", challengeId);
-  if (fixtureMarker === null) return;
-  const { rows: groupRows } = await pool.query<{ queue_group_id: number }>(
-    `SELECT queue_group_id
-       FROM queue_group_challenges
-      WHERE challenge_id = $1`,
-    [challengeId],
+export async function publishChallengeQueueInvalidation(
+  challengeId: number,
+  queueGroupId?: number,
+): Promise<void> {
+  const groupId =
+    queueGroupId ??
+    (
+      await pool.query<{ queue_group_id: number }>(
+        `SELECT queue_group_id
+           FROM queue_group_challenges
+          WHERE challenge_id = $1`,
+        [challengeId],
+      )
+    ).rows[0]?.queue_group_id;
+  const fixtureMarker = await queueFixtureMarker(
+    pool,
+    groupId == null ? "challenge" : "queueGroup",
+    groupId == null ? challengeId : groupId,
   );
-  const groupMarker = groupRows[0]
-    ? await queueFixtureMarker(pool, "queueGroup", Number(groupRows[0].queue_group_id))
-    : null;
-  if (groupMarker === null || groupMarker !== fixtureMarker) return;
+  if (fixtureMarker === null) return;
+  const challengeIds =
+    groupId == null
+      ? [challengeId]
+      : (
+          await pool.query<{ challenge_id: number }>(
+            `SELECT challenge_id
+               FROM queue_group_challenges
+              WHERE queue_group_id = $1`,
+            [groupId],
+          )
+        ).rows.map((row) => Number(row.challenge_id));
+  if (challengeIds.length === 0) return;
   const { rows } = await pool.query(
     `SELECT DISTINCT members.user_id
        FROM queue_entries qe
        JOIN (${REPO_MEMBER_RELATION_SQL}) members ON members.repo_id = qe.repo_id
        JOIN users u ON u.id = members.user_id
-      WHERE qe.challenge_id = $1 AND u.is_test_account = $2`,
-    [challengeId, fixtureMarker],
+      WHERE qe.challenge_id = ANY($1::int[])
+        AND u.is_test_account = $2
+        AND u.account_state = 'active'
+        AND u.anonymized_at IS NULL`,
+    [challengeIds, fixtureMarker],
   );
   const results = await Promise.all(
     rows.map((row: { user_id: number }) =>
       broadcast(`${SSE_TOPICS.USER_PREFIX}${row.user_id}`, EVENTS.USER_QUEUE_CHANGED, {
         challengeId,
+        ...(groupId == null ? {} : { queueGroupId: groupId }),
       }),
     ),
   );
@@ -280,9 +318,12 @@ export async function publishChallengeQueueInvalidation(challengeId: number): Pr
   }
 }
 
-registerWorker(QUEUE_PARTICIPANT_INVALIDATIONS, async (job: Job<{ challengeId: number }>) => {
-  await publishChallengeQueueInvalidation(job.data.challengeId);
-});
+registerWorker(
+  QUEUE_PARTICIPANT_INVALIDATIONS,
+  async (job: Job<{ challengeId: number; queueGroupId?: number }>) => {
+    await publishChallengeQueueInvalidation(job.data.challengeId, job.data.queueGroupId);
+  },
+);
 
 /**
  * H46: free-text message from staff / a sponsor rep to one team, sent over the
