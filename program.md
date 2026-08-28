@@ -190,6 +190,10 @@ Blocked/limited:
   report the blocked suites as passed.
 - A temporary database applying all migrations and schema generation succeeded
   on local Postgres 5432; it was dropped after verification.
+- The focused `test/projects/self-service.test.ts` run for the mixed-marker
+  deletion regression was setup-blocked before collection because the configured
+  Postgres 5433 proxy reset the connection; the regression remains in the suite
+  for the GitHub runtime gate.
 - The focused H54 auth test was attempted with Postgres 5432 but stopped in
   global setup before assertions because Valkey 6379 is unavailable; CI must
   verify both the sign-in and refresh paths.
