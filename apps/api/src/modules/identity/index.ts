@@ -33,7 +33,14 @@ import { registerUiPrefsRoutes } from "./routes/ui-prefs.js";
  */
 export async function registerIdentityModule(app: FastifyInstance): Promise<void> {
   setUserIdResolver(async (req) => {
-    const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+    // Authentication is a read here. Better Auth's normal session lookup may
+    // refresh a near-expiry session back to the configured seven-day lifetime,
+    // which would move an H54 pending-exit deadline while the request is being
+    // authorized. Read the authoritative database row without refresh/cache.
+    const session = await auth.api.getSession({
+      headers: fromNodeHeaders(req.headers),
+      query: { disableRefresh: true, disableCookieCache: true },
+    });
     // Keep the verified credential on the request so lifecycle operations can
     // bind deadlines to the exact session that authenticated this request.
     // The token is never logged or persisted by the auth context.
