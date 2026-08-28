@@ -233,6 +233,24 @@ describe("migration history (H53)", () => {
          VALUES ($1, $2, clock_timestamp() + interval '30 minutes')`,
         [userId, token],
       );
+
+      const { rows: activeUsers } = await client.query<{ id: number }>(
+        `INSERT INTO users (email, email_verified)
+         VALUES ($1, true) RETURNING id`,
+        [`active-session-owner-${randomUUID()}@test.local`],
+      );
+      const activeUserId = activeUsers[0]?.id;
+      if (activeUserId == null) throw new Error("Expected active session owner");
+      const activeToken = `active-session-${randomUUID()}`;
+      await client.query(
+        `INSERT INTO sessions (user_id, token, expires_at)
+         VALUES ($1, $2, clock_timestamp() + interval '30 minutes')`,
+        [activeUserId, activeToken],
+      );
+      await expect(
+        client.query(`UPDATE sessions SET user_id = $1 WHERE token = $2`, [userId, activeToken]),
+      ).rejects.toMatchObject({ code: "23514" });
+
       await expect(
         client.query(
           `INSERT INTO sessions (user_id, token, expires_at)

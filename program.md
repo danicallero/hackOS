@@ -70,6 +70,7 @@ rate-limited review history.
 | T19 | Fresh Luna-max documentation/contracts review | in progress | Dispatched at current origin tip `1cacbe04` as `task_f45031efa267` / `ctx_1dfd3f014be4` to a dedicated active-worktree terminal. Review-only; all modified/new Markdown plus `program.md` are in scope. |
 | T20 | Fresh Luna-max migration/release-integrity review | in progress | Dispatched at current origin tip `1cacbe04` as `task_710d3245f178` / `ctx_edf36d553d88` to a dedicated active-worktree terminal. Review-only; migration squash and external-ledger assumption are release gates. |
 | T21 | Synchronize generated route-policy audit and ledger | complete | `apps/api/scripts/route-policy-audit.ts` now expects the live 339-row inventory (18 public, 12 token, 47 authenticated, 195 capability, 67 contextual); `NODE_ENV=test pnpm --filter @hackos/api route-policy:audit` passed and regenerated `docs/access-control-route-ledger.md`, adding the four routes that had drifted from the checked-in counts. |
+| T22 | Close pending-session identity-reassignment bypass | complete | Fresh migration review found the bounded recovery exception also matched `UPDATE sessions SET user_id = pending_user`; `0730` now permits the exception only for inserts or same-user expiry updates, and migration coverage rejects active-to-pending reassignment. Fresh migration suite remains 10/10. |
 
 ## Code/schema changes reconciled
 
@@ -148,8 +149,8 @@ where noted):
 - `pnpm --filter @hackos/mobile typecheck`
 - `pnpm --filter @hackos/web test` — 40 files, 298 tests
 - `pnpm --filter @hackos/mobile test` — 44 suites, 222 tests
-- `TEST_DATABASE_URL=postgres://dani@localhost:5432/hackos_test_skipjack pnpm --filter @hackos/api exec vitest run test/migrations.test.ts` — 1 file, 10 tests
 - `TEST_DATABASE_URL=postgres://dani@localhost:5432/hackos_test_skipjack pnpm --filter @hackos/api exec vitest run test/queue/fixture-transition-isolation.test.ts` — 1 file, 2 tests
+- `TEST_DATABASE_URL=postgres://dani@localhost:5432/hackos_test_skipjack pnpm --filter @hackos/api exec vitest run test/migrations.test.ts` — 1 file, 10 tests, including active-to-pending session reassignment rejection
 - `pnpm exec biome check` on the queue changes and API typecheck pass after the final P2 fixes.
 - The focused `test/queue/room-queue-groups.test.ts` run remains setup-blocked by
   the unavailable Postgres 5433 proxy; GitHub CI is the runtime gate.

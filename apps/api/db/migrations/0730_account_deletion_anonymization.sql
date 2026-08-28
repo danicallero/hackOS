@@ -470,6 +470,7 @@ BEGIN
   -- exit, but a session must never outlive the already-captured deadline.
   IF TG_TABLE_NAME = 'sessions'
      AND TG_ARGV[0] = 'user_id'
+     AND (TG_OP <> 'UPDATE' OR old_referenced_user_id IS NOT DISTINCT FROM referenced_user_id)
      AND NULLIF(to_jsonb(NEW)->>'expires_at', '')::timestamptz <= (
        SELECT removal_expires_at
          FROM users
