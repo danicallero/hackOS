@@ -17,7 +17,8 @@ rate-limited review history.
   GitHub CI jobs in runs `33211977919` and `33212650674`, respectively. The
   branch tip may advance with this archival commit; verify `git rev-parse HEAD`
   and its latest run before resuming.
-- Current pushed review tip: `c987fac19c471cfc588613f31463681b4ada89eb`
+- Last substantive review checkpoint (before archival ledger-only commits):
+  `c987fac19c471cfc588613f31463681b4ada89eb`
   (`docs(H54): record final exact-head CI`), preceded by `7a0cbe3b`
   (`docs(H54): record CI regression and rate-limit fallback`), `10e1f054`
   (`test(H54): make wallet and review regressions deterministic`), `2f8e6c05`
@@ -207,7 +208,7 @@ where noted):
 - `TEST_DATABASE_URL=postgres://dani@localhost:5432/hackos_test_skipjack pnpm --filter @hackos/api exec vitest run test/migrations.test.ts` — 1 file, 10 tests, including active-to-pending session reassignment rejection
 - `pnpm exec biome check` on the queue changes and API typecheck pass after the final P2 fixes.
 - `pnpm lint` and `pnpm --filter @hackos/api typecheck` rerun after the final route-ledger and durable-job merge edits.
-- At pushed tip `c987fac1`, `pnpm lint`, `pnpm --filter @hackos/api typecheck`,
+- At substantive checkpoint `c987fac1`, `pnpm lint`, `pnpm --filter @hackos/api typecheck`,
   `git diff --check`, and targeted Biome checks pass. The focused profile/review
   Vitest invocation was attempted but stopped in global setup because
   `postgres://hackos:hackos@localhost:5433/hackos_test` reset with `ECONNRESET`;
@@ -774,7 +775,10 @@ Use this prompt for a future coordinator:
 > jobs, and synchronizes the generated telemetry route-ledger wording. Fresh
 > Luna worker terminals are closed; do not close unrelated historical panes.
 >
-> The current review tip is `c987fac19c471cfc588613f31463681b4ada89eb`, with
+> The last substantive review checkpoint is
+> `c987fac19c471cfc588613f31463681b4ada89eb`; later branch commits may be
+> archival ledger updates, so always verify the live `HEAD` and its exact CI
+> checks before resuming. It includes
 > wallet retry/cancellation fixes in `ab34b299`, synthetic review fixture
 > isolation in `2f8e6c05`, deterministic regression assertions in `10e1f054`,
 > and the archival review record in `c987fac1`. The final review-only dispatch
@@ -782,7 +786,8 @@ Use this prompt for a future coordinator:
 > before `worker_done` and is recorded as blocked; the coordinator completed
 > the fallback diff audit locally. Run `33216896112` on the prior tip exposed
 > only the two new test assertions; exact replacement run `33240304714` is green
-> across all seven jobs. Do not treat older green runs as evidence for this tip.
+> across all seven jobs for that checkpoint. Do not treat older green runs as
+> evidence for the live branch tip.
 >
 > The reviewed implementation `c283e24d` and archival checkpoint `84ded005` are
 > covered by successful all-job runs `33211977919` and `33212650674`. This
