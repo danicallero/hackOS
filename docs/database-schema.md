@@ -39,7 +39,10 @@ schema (whose ledger ends at `0725`):
 `0730_account_deletion_anonymization.sql`. On the populated path it converts
 legacy `anonymized_at` rows, snapshots existing forms/responses, and retires
 legacy scanner credentials using the deployment `BETTER_AUTH_SECRET` before
-installing the final constraints. The development-only `0731`–`0746` files are
+installing the final constraints. It removes detached verification rows that
+cannot belong to an active account, captures Devpost-only project roots, and
+aborts before commit when a historical badge is assigned to an active user.
+The development-only `0731`–`0746` files are
 intentionally absent. A database that already recorded those deleted files (or
 a different pre-squash `0730`) has a separate history and must stop for an
 additive compatibility migration; do not pretend it is the latest main state.

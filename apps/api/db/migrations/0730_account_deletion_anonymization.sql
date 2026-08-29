@@ -199,6 +199,28 @@ BEGIN
 END;
 $$;
 
+-- A historical badge may have been reassigned after the old account was
+-- anonymized. Retiring that value would make the current owner impossible to
+-- scan, so abort before writing any denylist rows. The deployment can resolve
+-- the collision explicitly and rerun this transaction.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+      FROM legacy_anonymized_users legacy
+      CROSS JOIN LATERAL unnest(legacy.badge_ids) AS badges(badge_id)
+      JOIN users active
+        ON active.anonymized_at IS NULL
+       AND active.badge_id = btrim(badges.badge_id)
+     WHERE NULLIF(btrim(badges.badge_id), '') IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION
+      'H54 cannot retire a legacy badge that is currently assigned to an active user; resolve the badge collision and rerun the migration'
+      USING ERRCODE = '23514';
+  END IF;
+END;
+$$;
+
 INSERT INTO scanner_revoked_badges (credential_digest, revoked_at)
 SELECT DISTINCT
        encode(
@@ -270,7 +292,11 @@ SELECT DISTINCT repos.id
 UNION
 SELECT DISTINCT submissions.repo_id
   FROM submissions
-  JOIN legacy_anonymized_users legacy ON legacy.old_user_id = submissions.user_id;
+  JOIN legacy_anonymized_users legacy ON legacy.old_user_id = submissions.user_id
+UNION
+SELECT DISTINCT devpost.repo_id
+  FROM devpost_participants devpost
+  JOIN legacy_anonymized_users legacy ON legacy.old_user_id = devpost.user_id;
 
 -- Presence rows are raw operational data, not permanent anonymous audit data.
 -- The aggregate above is the only attendance evidence carried forward.
@@ -475,12 +501,19 @@ DELETE FROM accounts
 DELETE FROM email_verification_tokens
  WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
 DELETE FROM verifications
- WHERE lower(identifier) IN (
-         SELECT lower(email) FROM legacy_anonymized_users WHERE email IS NOT NULL
-         UNION
-         SELECT lower(secondary_email) FROM legacy_anonymized_users WHERE secondary_email IS NOT NULL
-       )
-    OR identifier IN (SELECT old_user_id::text FROM legacy_anonymized_users);
+ WHERE NOT EXISTS (
+         SELECT 1
+           FROM users active
+          WHERE active.anonymized_at IS NULL
+            AND (
+              lower(active.email) = lower(verifications.identifier)
+              OR (
+                active.secondary_email IS NOT NULL
+                AND lower(active.secondary_email) = lower(verifications.identifier)
+              )
+              OR active.id::text = verifications.identifier
+            )
+       );
 DELETE FROM data_subject_requests
  WHERE subject_user_id IN (SELECT old_user_id FROM legacy_anonymized_users)
     OR requested_by IN (SELECT old_user_id FROM legacy_anonymized_users);

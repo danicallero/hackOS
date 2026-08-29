@@ -14,10 +14,13 @@ import { TEST_DATABASE_URL } from "./test-env.js";
 
 const databaseName = `hackos_migrations_${process.pid}_${randomUUID().replaceAll("-", "")}`;
 const upgradeDatabaseName = `hackos_migrations_upgrade_${process.pid}_${randomUUID().replaceAll("-", "")}`;
+const collisionDatabaseName = `hackos_migrations_collision_${process.pid}_${randomUUID().replaceAll("-", "")}`;
 const databaseUrl = new URL(TEST_DATABASE_URL);
 databaseUrl.pathname = `/${databaseName}`;
 const upgradeDatabaseUrl = new URL(TEST_DATABASE_URL);
 upgradeDatabaseUrl.pathname = `/${upgradeDatabaseName}`;
+const collisionDatabaseUrl = new URL(TEST_DATABASE_URL);
+collisionDatabaseUrl.pathname = `/${collisionDatabaseName}`;
 const adminUrl = new URL(TEST_DATABASE_URL);
 adminUrl.pathname = "/postgres";
 
@@ -27,6 +30,7 @@ beforeAll(async () => {
   try {
     await adminClient.query(`CREATE DATABASE "${databaseName}"`);
     await adminClient.query(`CREATE DATABASE "${upgradeDatabaseName}"`);
+    await adminClient.query(`CREATE DATABASE "${collisionDatabaseName}"`);
   } finally {
     await adminClient.end();
   }
@@ -68,6 +72,7 @@ afterAll(async () => {
         // retries must therefore tolerate a database that is already gone.
         await adminClient.query(`DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`);
         await adminClient.query(`DROP DATABASE IF EXISTS "${upgradeDatabaseName}" WITH (FORCE)`);
+        await adminClient.query(`DROP DATABASE IF EXISTS "${collisionDatabaseName}" WITH (FORCE)`);
       }, 20_000);
       return;
     } catch (err) {
@@ -91,6 +96,16 @@ async function withMigrationClient<T>(fn: (client: pg.Client) => Promise<T>): Pr
 
 async function withUpgradeClient<T>(fn: (client: pg.Client) => Promise<T>): Promise<T> {
   const client = new pg.Client({ connectionString: upgradeDatabaseUrl.toString() });
+  await client.connect();
+  try {
+    return await fn(client);
+  } finally {
+    await client.end();
+  }
+}
+
+async function withCollisionClient<T>(fn: (client: pg.Client) => Promise<T>): Promise<T> {
+  const client = new pg.Client({ connectionString: collisionDatabaseUrl.toString() });
   await client.connect();
   try {
     return await fn(client);
@@ -275,6 +290,20 @@ describe("migration history (H53)", () => {
       const legacyUserId = legacyUsers[0]?.id;
       if (legacyUserId == null) throw new Error("Expected legacy upgrade user");
 
+      const { rows: devpostOnlyRepos } = await client.query<{ id: number }>(
+        `INSERT INTO repos (name, source)
+         VALUES ($1, 'devpost') RETURNING id`,
+        [`main-upgrade-devpost-only-${randomUUID()}`],
+      );
+      const devpostOnlyRepoId = devpostOnlyRepos[0]?.id;
+      if (devpostOnlyRepoId == null) throw new Error("Expected Devpost-only repository");
+      await client.query(
+        `INSERT INTO devpost_participants
+           (repo_id, email, name, import_batch, user_id)
+         VALUES ($1, $2, 'Legacy', 'migration-test', $3)`,
+        [devpostOnlyRepoId, legacyEmail, legacyUserId],
+      );
+
       const inAt = new Date("2026-08-29T08:00:00.000Z");
       const outAt = new Date("2026-08-29T08:30:00.000Z");
       await client.query(
@@ -316,6 +345,12 @@ describe("migration history (H53)", () => {
          VALUES ($1, 'legacy-value', now() + interval '1 hour')`,
         [legacyEmail],
       );
+      const detachedVerificationEmail = `detached-legacy-${randomUUID()}@test.local`;
+      await client.query(
+        `INSERT INTO verifications (identifier, value, expires_at)
+         VALUES ($1, 'detached-legacy-value', now() + interval '1 hour')`,
+        [detachedVerificationEmail],
+      );
       await client.query(
         `INSERT INTO data_subject_requests
            (subject_user_id, requested_by, type)
@@ -345,6 +380,8 @@ describe("migration history (H53)", () => {
         active_response_version: string;
         legacy_tokens: string;
         legacy_verifications: string;
+        detached_verifications: string;
+        devpost_only_repos: string;
         legacy_requests: string;
         legacy_audit: string;
       }>(
@@ -361,9 +398,11 @@ describe("migration history (H53)", () => {
            (SELECT count(*) FROM application_responses WHERE user_id = $1 AND application_form_version_id IS NOT NULL)::text AS active_response_version,
            (SELECT count(*) FROM email_verification_tokens WHERE user_id = $2)::text AS legacy_tokens,
            (SELECT count(*) FROM verifications WHERE identifier = $3)::text AS legacy_verifications,
+           (SELECT count(*) FROM verifications WHERE identifier = $4)::text AS detached_verifications,
+           (SELECT count(*) FROM repos WHERE id = $5)::text AS devpost_only_repos,
            (SELECT count(*) FROM data_subject_requests WHERE subject_user_id = $2 OR requested_by = $2)::text AS legacy_requests,
            (SELECT count(*) FROM audit_log WHERE actor_id = $2)::text AS legacy_audit`,
-        [activeUserId, legacyUserId, legacyEmail],
+        [activeUserId, legacyUserId, legacyEmail, detachedVerificationEmail, devpostOnlyRepoId],
       );
       expect(state.rows[0]).toEqual({
         active_users: "1",
@@ -378,6 +417,8 @@ describe("migration history (H53)", () => {
         active_response_version: "1",
         legacy_tokens: "0",
         legacy_verifications: "0",
+        detached_verifications: "0",
+        devpost_only_repos: "0",
         legacy_requests: "0",
         legacy_audit: "0",
       });
@@ -399,6 +440,33 @@ describe("migration history (H53)", () => {
         [expectedBadgeDigest, expectedTicketDigest],
       );
       expect(digests.rows).toHaveLength(2);
+    });
+  });
+
+  it("rejects a legacy badge history value that is assigned to an active user", async () => {
+    await withCollisionClient(async (client) => {
+      await installMainSchema(client);
+      await client.query(
+        `INSERT INTO users (email, email_verified, badge_id)
+         VALUES ($1, true, 'reused-legacy-badge')`,
+        [`active-badge-owner-${randomUUID()}@test.local`],
+      );
+      await client.query(
+        `INSERT INTO users (email, email_verified, badge_id_history, anonymized_at)
+         VALUES ($1, true, ARRAY['reused-legacy-badge']::text[], now())`,
+        [`legacy-badge-owner-${randomUUID()}@test.local`],
+      );
+
+      await expect(migrate(collisionDatabaseUrl.toString())).rejects.toThrow(
+        /currently assigned to an active user/,
+      );
+
+      const state = await client.query<{ users: string; denylist: string }>(
+        `SELECT
+           (SELECT count(*) FROM users)::text AS users,
+           (SELECT count(*) FROM pg_catalog.pg_class WHERE relname = 'scanner_revoked_badges')::text AS denylist`,
+      );
+      expect(state.rows[0]).toEqual({ users: "2", denylist: "0" });
     });
   });
 

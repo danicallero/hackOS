@@ -64,8 +64,9 @@ Two containers share this file: `minio` (the S3-compatible object server) and
 Runs two containers from the same image: a one-shot `migrate` (must complete
 successfully before `api` starts — see the `depends_on: service_completed_successfully`
 gate in the compose file) and the long-running `api` server. They share the
-application/database configuration because the migration script and server use
-the same config-loading path. The optional `REVIEW_FIXTURE_*` secrets are the
+application/database configuration because both `apps/api/scripts/migrate.ts`
+and the API config load dotenv before reading `process.env`. The optional
+`REVIEW_FIXTURE_*` secrets are the
 deliberate exception: Compose passes them to `api` only because migrations never
 need them.
 

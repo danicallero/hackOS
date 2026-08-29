@@ -371,14 +371,19 @@ markers, badge-assignment fence, keyed scanner denylist, pending-exit rules,
 strict presence checks, and active-user reference triggers. On the populated
 main path it also snapshots valid presence minutes, retires legacy badge and
 ticket credentials with the deployment `BETTER_AUTH_SECRET`, removes rows left
-by the old `anonymized_at` implementation, and fails before commit if it finds
-an unhandled user reference. No user-to-anonymous mapping survives.
+by the old `anonymized_at` implementation, purges detached Better Auth
+verification rows, captures Devpost-only project memberships when deciding
+which orphan projects to remove, and fails before commit if it finds an
+unhandled user reference or a historical badge currently assigned to an active
+user. No user-to-anonymous mapping survives.
 
 Migration policy is checksum-enforced by `apps/api/scripts/migrate.ts`. The
-runner supplies the deployment secret to the one migration transaction; a
+runner loads the same environment file as the API and supplies the deployment
+secret to the one migration transaction; a
 populated upgrade that has legacy scanner credentials therefore must run with
 the same `BETTER_AUTH_SECRET` used by the API. The migration test seeds a
-main-shaped populated database and verifies the in-place conversion. A database
+main-shaped populated database and verifies the in-place conversion, including
+detached verification cleanup and badge-collision fail-closed behavior. A database
 that already recorded the deleted development-only H54 files (`0731`–`0746`,
 or a different pre-squash `0730`) is a separate history and must be stopped for
 an additive compatibility migration; this branch intentionally targets the
@@ -545,7 +550,7 @@ synthetic identity-shaped `users` row.
 | `accounts`: provider/account IDs, access/refresh/ID tokens, password | Auth credential | Auth credential | Delete | No | Credentials and provider identifiers must not survive. |
 | `sessions`: token, IP, user agent, expiry | Login session | Login/session | Delete during preparation for finalizable paths; keep existing rows while reversible `pending_exit` is active, with new/refresh sessions capped at the fixed recovery deadline, then delete at finalization | No | Pending recovery needs authenticated status/cancel/exit guidance; session metadata is never anonymous audit data. |
 | `account_removal_pin_challenges`: verified email, HMAC digest, nonce, attempts, expiry | None | Short-lived self-service proof | Expire/consume and cascade-delete with the account; raw PIN is never stored | No | Transient authentication metadata is not participant audit data. |
-| `verifications`: identifier/value | Temporary email/reset state | Temporary auth state | Delete by email/ID match | No | No user FK; identifier is a hidden identity copy. |
+| `verifications`: identifier/value | Temporary email/reset state | Temporary auth state | Preserve only rows that match a current active user's email/secondary email/ID; delete detached rows | No | No user FK; an orphan identifier can be a hidden identity copy left by the old anonymizer. |
 | `email_verification_tokens`: token, email, user_id, groups | Claim/confirmation | Acceptance/account claim | Delete | No | Token and email are direct credentials/identity. |
 | `push_tokens`: token, platform, user_id | Device delivery | Push delivery | Delete during preparation for finalizable paths; delete at pending-exit finalization | No | Delivery credential/device identifier; no new participant notifications are permitted after pending begins. |
 | `notification_preferences`: category/channel/enabled | Personal preference | Service preference | Delete | No | Not required for audit. |
@@ -587,7 +592,7 @@ synthetic identity-shaped `users` row.
 | `enterprise_invite_link_redemptions`: user/email/name | Invite history | Access provisioning | Delete by FK and normalized email | No | Denormalized invitee identity. |
 | `user_invite_link_redemptions`: user/email/name | Invite history | Access provisioning | Delete by FK and normalized email | No | Denormalized invitee identity. |
 | `enterprise_invite_links` / `user_invite_links`: creator/token | Shared invite config | Provisioning | Null subject creator; expire/revoke shared token as normal | No | Shared link survives; subject authorship does not. |
-| `devpost_participants`: repo/email/name/surname/username/user/linker | Imported project identity | Project reconciliation | Delete subject match by FK/email; shared repo may survive | No | External project snapshot is identity-bearing. |
+| `devpost_participants`: repo/email/name/surname/username/user/linker | Imported project identity | Project reconciliation | Delete subject match by FK/email; capture FK-linked Devpost-only roots before deletion; shared repo may survive | No | External project snapshot is identity-bearing. |
 | `repos`: creator/name/description/URLs | Project/team | Judging/project service | Null creator; delete solo orphan; preserve shared repo for remaining members | No | Shared project is not anonymous demographic audit. |
 | `submissions`: repo/user/inviter/external ID | Team/project relation | Judging | Delete subject membership; null subject inviter | No | No individual submission relationship needed. |
 | `repo_devpost_prizes` / `devpost_prizes`: project/prize | Shared project result | Judging/result | Survive for surviving shared repo; delete with solo orphan | No | No direct identity after member link removal. |
@@ -710,7 +715,7 @@ silently converted into a legal conclusion.
 | A27 | A pending-exit request ends new participation and retains the profile, authentication and dietary envelope only for the reversible recovery/exit window. Wallet database rows are voided and provider invalidation is attempted at preparation; cancellation does not restore the old pass, so a later issuance creates a fresh active row. Dietary data is cleared at irreversible finalization and is never copied to anonymous audit data. | Event-operations + privacy owner |
 | A28 | The restart marker is best-effort, device-local, and contains only the action and `pending_exit`/`processing`/`device_cleanup_pending` status. It is not an account lookup or a guarantee that an offline device has received a remote wipe. | Mobile/web + release owners |
 | A29 | Admin removal idempotency rows are deleted with the target during finalization. An admin retry after finalization receives the normal not-found result rather than a replayable completion response; this avoids retaining a target-bearing audit/replay record. | Security + operations owner |
-| A30 | Badge and ticket credentials permanently retired with an account are recorded in an unlinked global denylist whose central values are stable HMAC digests, not raw credentials; these rows are security metadata, not anonymous audit data. Ordinary physical badge rotation may reuse the old badge for another participant because each current assignment has a server-side timestamp boundary; offline events before that replacement are rejected. Permanently retired credentials remain non-reusable so late offline scans cannot resolve to a replacement participant. | Security + privacy + operations owners |
+| A30 | Badge and ticket credentials permanently retired with an account are recorded in an unlinked global denylist whose central values are stable HMAC digests, not raw credentials; these rows are security metadata, not anonymous audit data. Ordinary physical badge rotation may reuse the old badge for another participant because each current assignment has a server-side timestamp boundary; offline events before that replacement are rejected. The populated H54 migration fails closed if a historical badge value is already assigned to an active user, so it cannot accidentally deny the current owner. Permanently retired credentials remain non-reusable so late offline scans cannot resolve to a replacement participant. | Security + privacy + operations owners |
 | A31 | Only non-draft responses with a non-null, same-application form-version pointer are eligible for anonymous application retention. An unversioned response is excluded and the normal response lifecycle fails closed rather than evaluating it against the later mutable form; any recovery requires an explicit data decision. | Applications/data owner |
 | A32 | The API distinguishes an accepted, cancellable `pending_exit` request from `processing`. `pending_exit` lasts until a valid current staff exit, exact event-end system `out`, or fixed recovery-deadline expiry wins; only then may irreversible finalization report completion. | Privacy + operations owners |
 | A33 | A verified-primary-email self-service request must enter the six-digit PIN delivered to that email. The PIN is one-time, short-lived, attempt-limited, stored only as an HMAC digest/nonce. If a real account has no usable email code because its primary email is unverified, the request must re-enter the current credential password instead; synthetic fixtures remain eligible for the fixture-only PIN path. | Security/product owner |

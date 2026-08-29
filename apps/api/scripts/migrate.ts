@@ -8,6 +8,7 @@
  * 01xx identity, 02xx applications, 03xx projects/devpost, 04xx queue,
  * 05xx logistics, 06xx notifications, 07xx sponsors/content.
  */
+import "dotenv/config";
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
