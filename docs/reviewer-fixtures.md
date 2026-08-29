@@ -120,9 +120,10 @@ These are implementation assumptions, not legal conclusions:
 - The static deletion PIN remains synthetic-only. If a product owner requests
   a universal real-user PIN, security review must explicitly replace this
   boundary rather than silently broadening it.
-- The migration is validated from a fresh schema in this development branch;
-  no production database is in scope. Once deployed, migration checksums are
-  immutable and later corrections use a new migration.
+- `0730` is validated from both a fresh schema and a populated latest-main
+  schema whose migration ledger ends at `0725`; it also converts legacy
+  `anonymized_at` rows before installing fixture markers. Once deployed,
+  migration checksums are immutable and later corrections use a new migration.
 - The current credential-retirement implementation stores a stable keyed HMAC
   digest in an unlinked global denylist. It does not retain the raw badge or
   ticket value; legitimate physical badge reuse is bounded by the server-side
