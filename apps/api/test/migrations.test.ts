@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
-import { readdir } from "node:fs/promises";
+import { createHmac, randomUUID } from "node:crypto";
+import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
@@ -13,8 +13,11 @@ import {
 import { TEST_DATABASE_URL } from "./test-env.js";
 
 const databaseName = `hackos_migrations_${process.pid}_${randomUUID().replaceAll("-", "")}`;
+const upgradeDatabaseName = `hackos_migrations_upgrade_${process.pid}_${randomUUID().replaceAll("-", "")}`;
 const databaseUrl = new URL(TEST_DATABASE_URL);
 databaseUrl.pathname = `/${databaseName}`;
+const upgradeDatabaseUrl = new URL(TEST_DATABASE_URL);
+upgradeDatabaseUrl.pathname = `/${upgradeDatabaseName}`;
 const adminUrl = new URL(TEST_DATABASE_URL);
 adminUrl.pathname = "/postgres";
 
@@ -23,6 +26,7 @@ beforeAll(async () => {
   await adminClient.connect();
   try {
     await adminClient.query(`CREATE DATABASE "${databaseName}"`);
+    await adminClient.query(`CREATE DATABASE "${upgradeDatabaseName}"`);
   } finally {
     await adminClient.end();
   }
@@ -63,6 +67,7 @@ afterAll(async () => {
         // The server may commit the drop while the client loses the response;
         // retries must therefore tolerate a database that is already gone.
         await adminClient.query(`DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`);
+        await adminClient.query(`DROP DATABASE IF EXISTS "${upgradeDatabaseName}" WITH (FORCE)`);
       }, 20_000);
       return;
     } catch (err) {
@@ -81,6 +86,45 @@ async function withMigrationClient<T>(fn: (client: pg.Client) => Promise<T>): Pr
     return await fn(client);
   } finally {
     await client.end();
+  }
+}
+
+async function withUpgradeClient<T>(fn: (client: pg.Client) => Promise<T>): Promise<T> {
+  const client = new pg.Client({ connectionString: upgradeDatabaseUrl.toString() });
+  await client.connect();
+  try {
+    return await fn(client);
+  } finally {
+    await client.end();
+  }
+}
+
+async function installMainSchema(client: pg.Client): Promise<void> {
+  const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "db", "migrations");
+  const migrationNames = (await readdir(migrationsDir))
+    .filter((name) => name.endsWith(".sql") && name < "0730_account_deletion_anonymization.sql")
+    .sort();
+  await client.query(
+    `CREATE TABLE _migrations (
+       name text PRIMARY KEY,
+       applied_at timestamptz NOT NULL DEFAULT now(),
+       checksum text NOT NULL
+     )`,
+  );
+  for (const name of migrationNames) {
+    const sql = await readFile(join(migrationsDir, name), "utf8");
+    await client.query("BEGIN");
+    try {
+      await client.query(sql);
+      await client.query("INSERT INTO _migrations (name, checksum) VALUES ($1, $2)", [
+        name,
+        migrationChecksum(sql),
+      ]);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    }
   }
 }
 
@@ -205,6 +249,157 @@ describe("migration history (H53)", () => {
     );
     expect(shape.digestColumns.rows).toHaveLength(2);
     expect(shape.digestColumns.rows.every((row) => row.typname === "text")).toBe(true);
+  });
+
+  it("upgrades a populated latest-main database in place", async () => {
+    const secret = process.env.BETTER_AUTH_SECRET ?? "dev-only-secret-change-me";
+    await withUpgradeClient(async (client) => {
+      await installMainSchema(client);
+
+      const { rows: activeUsers } = await client.query<{ id: number }>(
+        `INSERT INTO users (email, email_verified)
+         VALUES ($1, true) RETURNING id`,
+        [`main-upgrade-active-${randomUUID()}@test.local`],
+      );
+      const activeUserId = activeUsers[0]?.id;
+      if (activeUserId == null) throw new Error("Expected active upgrade user");
+
+      const legacyEmail = `main-upgrade-legacy-${randomUUID()}@test.local`;
+      const { rows: legacyUsers } = await client.query<{ id: number }>(
+        `INSERT INTO users
+           (email, email_verified, badge_id, badge_id_history, anonymized_at)
+         VALUES ($1, true, 'legacy-badge-current', ARRAY['legacy-badge-old']::text[], now())
+         RETURNING id`,
+        [legacyEmail],
+      );
+      const legacyUserId = legacyUsers[0]?.id;
+      if (legacyUserId == null) throw new Error("Expected legacy upgrade user");
+
+      const inAt = new Date("2026-08-29T08:00:00.000Z");
+      const outAt = new Date("2026-08-29T08:30:00.000Z");
+      await client.query(
+        `INSERT INTO time_logs (user_id, kind, scanned_at, scanned_by)
+         VALUES ($1, 'in', $2, $3), ($1, 'out', $4, $3)`,
+        [legacyUserId, inAt, activeUserId, outAt],
+      );
+      await client.query(
+        `INSERT INTO check_in_logs (user_id, badge_id, staff_id)
+         VALUES ($1, 'legacy-badge-current', $2)`,
+        [legacyUserId, activeUserId],
+      );
+      await client.query(
+        `INSERT INTO tickets (user_id, token) VALUES ($1, 'legacy-ticket-token')`,
+        [legacyUserId],
+      );
+      await client.query(
+        `INSERT INTO applications (name, type, template)
+         VALUES ($1, 'participant', '{"fields":[]}'::jsonb)`,
+        [`main-upgrade-form-${randomUUID()}`],
+      );
+      const { rows: applications } = await client.query<{ id: number }>(
+        `SELECT id FROM applications ORDER BY id DESC LIMIT 1`,
+      );
+      const applicationId = applications[0]?.id;
+      if (applicationId == null) throw new Error("Expected upgrade application");
+      await client.query(
+        `INSERT INTO application_responses (user_id, application_id, status)
+         VALUES ($1, $2, 'submitted'), ($3, $2, 'submitted')`,
+        [activeUserId, applicationId, legacyUserId],
+      );
+      await client.query(
+        `INSERT INTO email_verification_tokens (token, type, email, user_id, expires_at)
+         VALUES ('legacy-upgrade-token', 'primary_email', $1, $2, now() + interval '1 hour')`,
+        [legacyEmail, legacyUserId],
+      );
+      await client.query(
+        `INSERT INTO verifications (identifier, value, expires_at)
+         VALUES ($1, 'legacy-value', now() + interval '1 hour')`,
+        [legacyEmail],
+      );
+      await client.query(
+        `INSERT INTO data_subject_requests
+           (subject_user_id, requested_by, type)
+         VALUES ($1, $1, 'deletion')`,
+        [legacyUserId],
+      );
+      await client.query(
+        `INSERT INTO audit_log (actor_id, entity_type, entity_id, action, before)
+         VALUES ($1, 'user', $2, 'legacy', jsonb_build_object('email', $3::text))`,
+        [legacyUserId, String(legacyUserId), legacyEmail],
+      );
+
+      await expect(migrate(upgradeDatabaseUrl.toString())).resolves.toContain(
+        "0730_account_deletion_anonymization.sql",
+      );
+
+      const state = await client.query<{
+        active_users: string;
+        legacy_users: string;
+        anonymous_subjects: string;
+        guaranteed_minutes: string;
+        revoked_badges: string;
+        revoked_tickets: string;
+        legacy_checkins: string;
+        legacy_time_logs: string;
+        legacy_responses: string;
+        active_response_version: string;
+        legacy_tokens: string;
+        legacy_verifications: string;
+        legacy_requests: string;
+        legacy_audit: string;
+      }>(
+        `SELECT
+           (SELECT count(*) FROM users WHERE id = $1)::text AS active_users,
+           (SELECT count(*) FROM users WHERE id = $2)::text AS legacy_users,
+           (SELECT count(*) FROM anonymous_participants)::text AS anonymous_subjects,
+           (SELECT COALESCE(sum(guaranteed_presence_minutes), 0) FROM anonymous_participants) AS guaranteed_minutes,
+           (SELECT count(*) FROM scanner_revoked_badges)::text AS revoked_badges,
+           (SELECT count(*) FROM scanner_revoked_tickets)::text AS revoked_tickets,
+           (SELECT count(*) FROM check_in_logs WHERE user_id = $2)::text AS legacy_checkins,
+           (SELECT count(*) FROM time_logs WHERE user_id = $2)::text AS legacy_time_logs,
+           (SELECT count(*) FROM application_responses WHERE user_id = $2)::text AS legacy_responses,
+           (SELECT count(*) FROM application_responses WHERE user_id = $1 AND application_form_version_id IS NOT NULL)::text AS active_response_version,
+           (SELECT count(*) FROM email_verification_tokens WHERE user_id = $2)::text AS legacy_tokens,
+           (SELECT count(*) FROM verifications WHERE identifier = $3)::text AS legacy_verifications,
+           (SELECT count(*) FROM data_subject_requests WHERE subject_user_id = $2 OR requested_by = $2)::text AS legacy_requests,
+           (SELECT count(*) FROM audit_log WHERE actor_id = $2)::text AS legacy_audit`,
+        [activeUserId, legacyUserId, legacyEmail],
+      );
+      expect(state.rows[0]).toEqual({
+        active_users: "1",
+        legacy_users: "0",
+        anonymous_subjects: "1",
+        guaranteed_minutes: "30",
+        revoked_badges: "2",
+        revoked_tickets: "1",
+        legacy_checkins: "0",
+        legacy_time_logs: "0",
+        legacy_responses: "0",
+        active_response_version: "1",
+        legacy_tokens: "0",
+        legacy_verifications: "0",
+        legacy_requests: "0",
+        legacy_audit: "0",
+      });
+
+      const expectedBadgeDigest = createHmac("sha256", secret)
+        .update("hackos:scanner-credential:v1:badge:legacy-badge-current")
+        .digest("hex");
+      const expectedTicketDigest = createHmac("sha256", secret)
+        .update("hackos:scanner-credential:v1:ticket:legacy-ticket-token")
+        .digest("hex");
+      const digests = await client.query<{ credential_digest: string }>(
+        `SELECT credential_digest
+           FROM scanner_revoked_badges
+          WHERE credential_digest = $1
+         UNION ALL
+         SELECT credential_digest
+           FROM scanner_revoked_tickets
+          WHERE credential_digest = $2`,
+        [expectedBadgeDigest, expectedTicketDigest],
+      );
+      expect(digests.rows).toHaveLength(2);
+    });
   });
 
   it("bounds pending recovery sessions at the fixed anonymization deadline (H54)", async () => {

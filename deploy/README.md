@@ -383,11 +383,14 @@ another.
 
 ## Operations
 
-- **Migrations**: automatic on `api` deploy. Before a first H54 deployment to a
-  populated database, follow the [migration identity gate](../docs/database-schema.md#migration-identity)
-  and verify that `_migrations` has no pre-squash H54 `0730` checksum or removed
-  `0731`–`0746` filename; use a separately reviewed additive upgrade path if it
-  does. To run migrations manually:
+- **Migrations**: automatic on `api` deploy. The H54 `0730` migration upgrades
+  the latest main schema in place (including populated rows) and uses the API's
+  `BETTER_AUTH_SECRET` to retire any legacy scanner credentials. Before deploy,
+  take the normal database backup and follow the [migration identity gate](../docs/database-schema.md#migration-identity).
+  A database that already records the deleted development-only H54 `0731`–`0746`
+  files or a different pre-squash `0730` is not the latest main state; stop and
+  prepare a separately reviewed additive compatibility migration. To run
+  migrations manually:
   `docker compose -f deploy/services/api/docker-compose.yml -p <proj>-api run --rm migrate`.
 - **Grant superadmin to an existing account (H8)** from the API container shell:
   `node scripts/grant-superadmin.mjs --email user@example.com`.

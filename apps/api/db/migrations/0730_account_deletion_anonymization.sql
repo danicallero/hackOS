@@ -1,4 +1,4 @@
--- 0730_account_deletion_anonymization.sql — H54 final fresh-schema state.
+-- 0730_account_deletion_anonymization.sql — H54 final schema and main upgrade.
 --
 -- DELTA(H54): account removal is a transactional lifecycle gate.  Identity
 -- rows are either deleted or replaced by an unlinked anonymous audit subject;
@@ -10,10 +10,13 @@
 -- DELTA(H23,H54): current badge assignment time fences stale offline events.
 -- DELTA(H54,F16): retired scanner credentials are keyed, unlinked digests.
 --
--- This migration is intentionally the single H54 baseline for a fresh schema.
--- It consolidates the prior development-only H54 migration work.  If a populated database
--- ever needs upgrading, that data migration must be designed and verified
--- separately; this file does not perform broad identity cleanup/backfills.
+-- This is the single H54 migration for both a fresh schema and the latest
+-- main schema (whose ledger ends at 0725). On an existing database it also
+-- converts rows left by the pre-H54 in-place anonymizer before installing the
+-- final constraints. The conversion is intentionally one-way and runs in
+-- this transaction; no user-to-anonymous mapping survives the migration.
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- ── users and lifecycle gates ──────────────────────────────────────────────
 
@@ -152,6 +155,434 @@ COMMENT ON TABLE user_email_history IS
 
 CREATE INDEX user_email_history_email
   ON user_email_history (lower(email));
+
+-- ── populated latest-main conversion ──────────────────────────────────────
+
+-- `anonymized_at` was the marker used by the old in-place anonymizer. Those
+-- rows can still be present when this migration is first deployed from main.
+-- Keep the source values only in transaction-local tables while the old user
+-- and every identity-bearing relationship are removed. The anonymous subject
+-- receives only a conservative aggregate of valid in/out pairs; the old
+-- implementation never recorded a trustworthy guaranteed-time value.
+CREATE TEMP TABLE legacy_anonymized_users ON COMMIT DROP AS
+SELECT id AS old_user_id,
+       gen_random_uuid() AS anonymous_id,
+       email,
+       secondary_email,
+       dni,
+       array_remove(array_cat(badge_id_history, ARRAY[badge_id]), NULL) AS badge_ids
+  FROM users
+ WHERE anonymized_at IS NOT NULL;
+
+DO $$
+DECLARE
+  secret text := current_setting('hackos.better_auth_secret', true);
+BEGIN
+  IF (
+    EXISTS (
+      SELECT 1
+        FROM legacy_anonymized_users legacy
+       CROSS JOIN LATERAL unnest(legacy.badge_ids) AS badges(badge_id)
+       WHERE NULLIF(btrim(badges.badge_id), '') IS NOT NULL
+    )
+    OR EXISTS (
+      SELECT 1
+        FROM tickets ticket
+        JOIN legacy_anonymized_users legacy ON legacy.old_user_id = ticket.user_id
+       WHERE NULLIF(btrim(ticket.token), '') IS NOT NULL
+    )
+  ) AND NULLIF(secret, '') IS NULL THEN
+    RAISE EXCEPTION
+      'H54 cannot retire legacy scanner credentials without BETTER_AUTH_SECRET; rerun the migration with the deployment secret configured'
+      USING ERRCODE = '22023';
+  END IF;
+END;
+$$;
+
+INSERT INTO scanner_revoked_badges (credential_digest, revoked_at)
+SELECT DISTINCT
+       encode(
+         hmac(
+           format('hackos:scanner-credential:v1:badge:%s', btrim(badges.badge_id)),
+           COALESCE(current_setting('hackos.better_auth_secret', true), ''),
+           'sha256'
+         ),
+         'hex'
+       ),
+       clock_timestamp()
+  FROM legacy_anonymized_users legacy
+ CROSS JOIN LATERAL unnest(legacy.badge_ids) AS badges(badge_id)
+ WHERE NULLIF(btrim(badges.badge_id), '') IS NOT NULL
+ON CONFLICT (credential_digest) DO NOTHING;
+
+INSERT INTO scanner_revoked_tickets (credential_digest, revoked_at)
+SELECT DISTINCT
+       encode(
+         hmac(
+           format('hackos:scanner-credential:v1:ticket:%s', btrim(ticket.token)),
+           COALESCE(current_setting('hackos.better_auth_secret', true), ''),
+           'sha256'
+         ),
+         'hex'
+       ),
+       clock_timestamp()
+  FROM tickets ticket
+  JOIN legacy_anonymized_users legacy ON legacy.old_user_id = ticket.user_id
+ WHERE NULLIF(btrim(ticket.token), '') IS NOT NULL
+ON CONFLICT (credential_digest) DO NOTHING;
+
+WITH ordered_logs AS (
+  SELECT legacy.old_user_id,
+         logs.kind,
+         logs.scanned_at,
+         lead(logs.kind) OVER (
+           PARTITION BY logs.user_id ORDER BY logs.scanned_at, logs.id
+         ) AS next_kind,
+         lead(logs.scanned_at) OVER (
+           PARTITION BY logs.user_id ORDER BY logs.scanned_at, logs.id
+         ) AS next_scanned_at
+    FROM time_logs logs
+    JOIN legacy_anonymized_users legacy ON legacy.old_user_id = logs.user_id
+   WHERE logs.kind IN ('in', 'out')
+), guaranteed_minutes AS (
+  SELECT old_user_id,
+         sum(
+           floor(extract(epoch FROM (next_scanned_at - scanned_at)) / 60)
+         )::integer AS minutes
+    FROM ordered_logs
+   WHERE kind = 'in'
+     AND next_kind = 'out'
+     AND next_scanned_at > scanned_at
+   GROUP BY old_user_id
+)
+INSERT INTO anonymous_participants (id, guaranteed_presence_minutes)
+SELECT legacy.anonymous_id, COALESCE(minutes.minutes, 0)
+  FROM legacy_anonymized_users legacy
+  LEFT JOIN guaranteed_minutes minutes ON minutes.old_user_id = legacy.old_user_id;
+
+-- Capture project roots before removing old member rows. A solo project and
+-- its queue/judging history are subject data; a shared project remains for
+-- its other members, without the departing creator.
+CREATE TEMP TABLE legacy_subject_repos ON COMMIT DROP AS
+SELECT DISTINCT repos.id
+  FROM repos
+  JOIN legacy_anonymized_users legacy ON legacy.old_user_id = repos.created_by
+UNION
+SELECT DISTINCT submissions.repo_id
+  FROM submissions
+  JOIN legacy_anonymized_users legacy ON legacy.old_user_id = submissions.user_id;
+
+-- Presence rows are raw operational data, not permanent anonymous audit data.
+-- The aggregate above is the only attendance evidence carried forward.
+DELETE FROM check_in_logs
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM time_logs
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+
+-- Remove old identities from actor/provenance columns. Subject rows are
+-- deleted below; actor columns are nullable in the final H54 schema.
+UPDATE permission_group_members SET assigned_by = NULL
+ WHERE assigned_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE universities SET proposed_by = NULL
+ WHERE proposed_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE enterprises SET director_id = NULL
+ WHERE director_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE enterprise_invite_links SET created_by = NULL
+ WHERE created_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE user_invite_links SET created_by = NULL
+ WHERE created_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE submissions SET invited_by = NULL
+ WHERE invited_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE queue_history SET actor_id = NULL
+ WHERE actor_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE attempt_review_versions SET author_id = NULL
+ WHERE author_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE judging_session SET judge_id = NULL
+ WHERE judge_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE devpost_participants SET linked_by = NULL
+ WHERE linked_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE activity_logs SET logged_by = NULL
+ WHERE logged_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE check_in_logs SET staff_id = NULL
+ WHERE staff_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE time_logs SET scanned_by = NULL
+ WHERE scanned_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE food_intolerances SET proposed_by = NULL
+ WHERE proposed_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE application_responses SET referrer_user_id = NULL
+ WHERE referrer_user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE application_responses SET referrer_application_id = NULL
+ WHERE referrer_application_id IN (
+   SELECT id FROM application_responses
+    WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users)
+ );
+UPDATE announcements SET author_id = NULL
+ WHERE author_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE meal_scan_batches SET submitted_by = NULL
+ WHERE submitted_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE audit_log SET actor_id = NULL
+ WHERE actor_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE challenge_versions SET editor_id = NULL
+ WHERE editor_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE challenge_winners SET set_by = NULL
+ WHERE set_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE room_enterprises SET assigned_by = NULL
+ WHERE assigned_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE room_queue_groups SET assigned_by = NULL
+ WHERE assigned_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE manual_attendee_roles SET assigned_by = NULL
+ WHERE assigned_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE enterprise_judges SET added_by = NULL
+ WHERE added_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE queue_groups SET created_by = NULL
+ WHERE created_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE schedule_owners SET assigned_by = NULL
+ WHERE assigned_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+
+-- Delete identity-bearing subject rows and their dependent resources.
+DELETE FROM applicant_reviews
+ WHERE response_id IN (
+   SELECT id FROM application_responses
+    WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users)
+ )
+ OR author_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM application_responses
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM submissions
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM devpost_participants
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE repos SET created_by = NULL
+ WHERE created_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+
+CREATE TEMP TABLE legacy_orphan_repos ON COMMIT DROP AS
+SELECT subject.id
+  FROM legacy_subject_repos subject
+ WHERE NOT EXISTS (
+   SELECT 1 FROM submissions submissions WHERE submissions.repo_id = subject.id
+ );
+CREATE TEMP TABLE legacy_orphan_queue_entries ON COMMIT DROP AS
+SELECT entries.id
+  FROM queue_entries entries
+  JOIN legacy_orphan_repos orphan ON orphan.id = entries.repo_id;
+DELETE FROM attempt_review_versions versions
+ USING legacy_orphan_queue_entries orphan
+ WHERE versions.attempt_id = orphan.id;
+DELETE FROM attempt_review reviews
+ USING legacy_orphan_queue_entries orphan
+ WHERE reviews.attempt_id = orphan.id;
+DELETE FROM judging_session sessions
+ USING legacy_orphan_queue_entries orphan
+ WHERE sessions.queue_entry_id = orphan.id;
+DELETE FROM queue_history history
+ USING legacy_orphan_queue_entries orphan
+ WHERE history.queue_entry_id = orphan.id;
+DELETE FROM queue_entries entries
+ USING legacy_orphan_queue_entries orphan
+ WHERE entries.id = orphan.id;
+DELETE FROM challenge_winners
+ WHERE repo_id IN (SELECT id FROM legacy_orphan_repos);
+DELETE FROM repo_devpost_prizes
+ WHERE repo_id IN (SELECT id FROM legacy_orphan_repos);
+DELETE FROM devpost_participants
+ WHERE repo_id IN (SELECT id FROM legacy_orphan_repos);
+DELETE FROM submissions
+ WHERE repo_id IN (SELECT id FROM legacy_orphan_repos);
+DELETE FROM repos
+ WHERE id IN (SELECT id FROM legacy_orphan_repos);
+
+DELETE FROM enterprise_invite_link_redemptions
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users)
+    OR lower(email) IN (
+      SELECT lower(email) FROM legacy_anonymized_users WHERE email IS NOT NULL
+      UNION
+      SELECT lower(secondary_email) FROM legacy_anonymized_users WHERE secondary_email IS NOT NULL
+    );
+DELETE FROM user_invite_link_redemptions
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users)
+    OR lower(email) IN (
+      SELECT lower(email) FROM legacy_anonymized_users WHERE email IS NOT NULL
+      UNION
+      SELECT lower(secondary_email) FROM legacy_anonymized_users WHERE secondary_email IS NOT NULL
+    );
+DELETE FROM email_verification_tokens
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users)
+    OR lower(email) IN (
+      SELECT lower(email) FROM legacy_anonymized_users WHERE email IS NOT NULL
+      UNION
+      SELECT lower(secondary_email) FROM legacy_anonymized_users WHERE secondary_email IS NOT NULL
+    );
+DELETE FROM activity_logs
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM meal_scan_batch_items item
+ USING legacy_anonymized_users legacy
+ WHERE item.badge_id = ANY(legacy.badge_ids)
+    OR coalesce(item.result::text, '') ILIKE '%"userId":' || legacy.old_user_id::text || '%'
+    OR coalesce(item.error::text, '') ILIKE '%"userId":' || legacy.old_user_id::text || '%'
+    OR (
+      legacy.email IS NOT NULL
+      AND (
+        coalesce(item.result::text, '') ILIKE '%' || legacy.email || '%'
+        OR coalesce(item.error::text, '') ILIKE '%' || legacy.email || '%'
+      )
+    )
+    OR (
+      legacy.secondary_email IS NOT NULL
+      AND (
+        coalesce(item.result::text, '') ILIKE '%' || legacy.secondary_email || '%'
+        OR coalesce(item.error::text, '') ILIKE '%' || legacy.secondary_email || '%'
+      )
+    );
+DELETE FROM enterprise_judges
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM permission_group_members
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM schedule_owners
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+UPDATE sponsors sponsors
+   SET user_id = NULL
+ WHERE sponsors.user_id IN (SELECT old_user_id FROM legacy_anonymized_users)
+   AND EXISTS (SELECT 1 FROM challenges challenges WHERE challenges.author = sponsors.id);
+DELETE FROM sponsors
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM manual_attendee_roles
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM announcement_reads
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM announcement_recipients
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM notification_preferences
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM notification_outbox
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM wallet_pass_devices
+ WHERE pass_id IN (
+   SELECT id FROM wallet_passes
+    WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users)
+ );
+DELETE FROM wallet_passes
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM tickets
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM wallet_access_tokens
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM push_tokens
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM sessions
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM accounts
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM email_verification_tokens
+ WHERE user_id IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM verifications
+ WHERE lower(identifier) IN (
+         SELECT lower(email) FROM legacy_anonymized_users WHERE email IS NOT NULL
+         UNION
+         SELECT lower(secondary_email) FROM legacy_anonymized_users WHERE secondary_email IS NOT NULL
+       )
+    OR identifier IN (SELECT old_user_id::text FROM legacy_anonymized_users);
+DELETE FROM data_subject_requests
+ WHERE subject_user_id IN (SELECT old_user_id FROM legacy_anonymized_users)
+    OR requested_by IN (SELECT old_user_id FROM legacy_anonymized_users);
+DELETE FROM idempotency_keys keys
+ USING legacy_anonymized_users legacy
+ WHERE keys.scope ~ ('(^| )u:' || legacy.old_user_id::text || '($| )')
+    OR (
+      legacy.email IS NOT NULL
+      AND coalesce(keys.response_body::text, '') ILIKE '%' || legacy.email || '%'
+    )
+    OR (
+      legacy.secondary_email IS NOT NULL
+      AND coalesce(keys.response_body::text, '') ILIKE '%' || legacy.secondary_email || '%'
+    );
+DELETE FROM audit_log audit
+ WHERE audit.actor_id IN (SELECT old_user_id FROM legacy_anonymized_users)
+    OR (
+      audit.entity_type = ANY(ARRAY['user', 'badge', 'accreditation', 'presence', 'meal', 'activity'])
+      AND audit.entity_id IN (SELECT old_user_id::text FROM legacy_anonymized_users)
+    )
+    OR EXISTS (
+      SELECT 1
+        FROM legacy_anonymized_users legacy
+       WHERE coalesce(audit.before::text, '') ~ (
+               '"(userId|user_id|subjectUserId|subject_user_id|actorId|actor_id|targetId|target_id|authorId|author_id|judgeId|judge_id|staffId|staff_id|createdBy|created_by|assignedBy|assigned_by|setBy|set_by|linkedBy|linked_by|loggedBy|logged_by|scannedBy|scanned_by|requestedBy|requested_by|submittedBy|submitted_by|referrerUserId|referrer_user_id|directorId|director_id)"[[:space:]]*:[[:space:]]*("'
+               || legacy.old_user_id::text || '"|' || legacy.old_user_id::text || ')([,}])'
+             )
+          OR coalesce(audit.after::text, '') ~ (
+               '"(userId|user_id|subjectUserId|subject_user_id|actorId|actor_id|targetId|target_id|authorId|author_id|judgeId|judge_id|staffId|staff_id|createdBy|created_by|assignedBy|assigned_by|setBy|set_by|linkedBy|linked_by|loggedBy|logged_by|scannedBy|scanned_by|requestedBy|requested_by|submittedBy|submitted_by|referrerUserId|referrer_user_id|directorId|director_id)"[[:space:]]*:[[:space:]]*("'
+               || legacy.old_user_id::text || '"|' || legacy.old_user_id::text || ')([,}])'
+             )
+          OR coalesce(audit.reason, '') ~ (
+               '(^|[^0-9])' || legacy.old_user_id::text || '([^0-9]|$)'
+             )
+          OR (
+            legacy.email IS NOT NULL
+            AND (
+              coalesce(audit.before::text, '') ILIKE '%' || legacy.email || '%'
+              OR coalesce(audit.after::text, '') ILIKE '%' || legacy.email || '%'
+              OR coalesce(audit.reason, '') ILIKE '%' || legacy.email || '%'
+              OR coalesce(audit.entity_id, '') ILIKE '%' || legacy.email || '%'
+            )
+          )
+          OR (
+            legacy.secondary_email IS NOT NULL
+            AND (
+              coalesce(audit.before::text, '') ILIKE '%' || legacy.secondary_email || '%'
+              OR coalesce(audit.after::text, '') ILIKE '%' || legacy.secondary_email || '%'
+              OR coalesce(audit.reason, '') ILIKE '%' || legacy.secondary_email || '%'
+              OR coalesce(audit.entity_id, '') ILIKE '%' || legacy.secondary_email || '%'
+            )
+          )
+          OR (
+            legacy.dni IS NOT NULL
+            AND (
+              coalesce(audit.before::text, '') ILIKE '%' || legacy.dni || '%'
+              OR coalesce(audit.after::text, '') ILIKE '%' || legacy.dni || '%'
+              OR coalesce(audit.reason, '') ILIKE '%' || legacy.dni || '%'
+              OR coalesce(audit.entity_id, '') ILIKE '%' || legacy.dni || '%'
+            )
+          )
+    );
+
+-- Any omitted non-null user reference is a migration error, not something to
+-- silently leave behind. Nullable actor references are cleared above; this
+-- check protects the populated upgrade as new main tables are added.
+DO $$
+DECLARE
+  fk record;
+  remaining bigint;
+BEGIN
+  FOR fk IN
+    SELECT c.relname AS table_name, a.attname AS column_name
+      FROM pg_constraint con
+      JOIN pg_class c ON c.oid = con.conrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      JOIN pg_class parent ON parent.oid = con.confrelid
+      JOIN LATERAL unnest(con.conkey) WITH ORDINALITY key_column(attnum, ord)
+        ON true
+      JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = key_column.attnum
+     WHERE con.contype = 'f'
+       AND parent.relname = 'users'
+       AND n.nspname = 'public'
+       AND key_column.ord = 1
+       AND c.relname <> 'users'
+  LOOP
+    EXECUTE format(
+      'SELECT count(*) FROM %I WHERE %I = ANY ($1::integer[])',
+      fk.table_name,
+      fk.column_name
+    ) INTO remaining USING ARRAY(SELECT old_user_id FROM legacy_anonymized_users);
+    IF remaining > 0 THEN
+      RAISE EXCEPTION
+        'H54 legacy conversion left % rows referencing removed users in %.%',
+        remaining, fk.table_name, fk.column_name;
+    END IF;
+  END LOOP;
+END;
+$$;
+
+DELETE FROM users
+ WHERE id IN (SELECT old_user_id FROM legacy_anonymized_users);
 
 CREATE TABLE account_removal_pin_challenges (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

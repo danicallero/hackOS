@@ -17,6 +17,8 @@ import { DEFAULT_DATABASE_URL } from "./default-database-url.js";
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "db", "migrations");
 const ADVISORY_LOCK_KEY = 815_001;
+const MIGRATION_AUTH_SECRET_GUC = "hackos.better_auth_secret";
+const DEFAULT_AUTH_SECRET = "dev-only-secret-change-me";
 
 /**
  * Files that were already applied before the 07xx sequence collision was
@@ -187,6 +189,14 @@ export async function migrate(databaseUrl?: string): Promise<string[]> {
   await client.connect();
   const applied: string[] = [];
   try {
+    // H54's populated-database conversion must retire legacy badge/ticket
+    // values with the same keyed digest the API uses at scan time. Keep the
+    // secret scoped to this migration session; it is never persisted in the
+    // database or included in migration logs.
+    await client.query("SELECT set_config($1, $2, false)", [
+      MIGRATION_AUTH_SECRET_GUC,
+      process.env.BETTER_AUTH_SECRET ?? DEFAULT_AUTH_SECRET,
+    ]);
     await client.query("SELECT pg_advisory_lock($1)", [ADVISORY_LOCK_KEY]);
     const done = await prepareMigrationLedger(client, files);
     for (const migration of migrations) {

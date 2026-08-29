@@ -34,11 +34,13 @@ The 07xx files that had duplicate prefixes were renumbered without changing
 their SQL. The runner recognizes their previous filenames as aliases, so a
 database that already applied them does not execute them again.
 
-H54 is currently represented by one fresh-schema baseline,
-`0730_account_deletion_anonymization.sql`; the development-only `0731`–`0746`
-files are intentionally absent. Before deploying to a populated database,
-inspect `_migrations` for a pre-squash H54 `0730` record/checksum or any of the
-removed `0731`–`0746` names. The current runner has no aliases for those H54
-records, so stop and prepare a separately reviewed additive upgrade path if any
-are present; do not apply this fresh baseline as a substitute. Applied
-migration names and checksums remain immutable after deployment.
+H54 is represented by one migration for both a fresh schema and the latest main
+schema (whose ledger ends at `0725`):
+`0730_account_deletion_anonymization.sql`. On the populated path it converts
+legacy `anonymized_at` rows, snapshots existing forms/responses, and retires
+legacy scanner credentials using the deployment `BETTER_AUTH_SECRET` before
+installing the final constraints. The development-only `0731`–`0746` files are
+intentionally absent. A database that already recorded those deleted files (or
+a different pre-squash `0730`) has a separate history and must stop for an
+additive compatibility migration; do not pretend it is the latest main state.
+Applied migration names and checksums remain immutable after deployment.
