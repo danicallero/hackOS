@@ -384,13 +384,14 @@ legacy scanner credentials therefore must run with the same
 `BETTER_AUTH_SECRET` used by the API. The migration tests seed a main-shaped
 database and a pre-squash H54 ledger. The latter is detected from its
 allow-listed `0731`–`0746` records or known pre-squash `0730` checksums; the
-runner skips the squashed baseline and applies
+runner validates the historical checksums (or an all-zero marker from a
+pre-checksum ledger), skips the squashed baseline, and applies
 `0747_h54_legacy_chain_compatibility.sql` automatically. That compatibility
 step preserves fixed anonymous fields as dynamic rows, converts raw scanner
 tombstones to keyed digests, binds every response to an immutable form
-snapshot, and reinstalls the final reference triggers. Unknown ledger names,
-malformed historical checksums, missing secrets for raw credentials, and active
-badge collisions fail closed. Applied checksums remain immutable after
+snapshot, and reinstalls the final reference triggers. Unknown ledger names or
+historical checksums, missing secrets for raw credentials, and active badge
+collisions fail closed. Applied checksums remain immutable after
 deployment and later corrections use a new migration.
 
 ## 11. Offline caches and external copies

@@ -62,6 +62,73 @@ const LEGACY_H54_BASELINE_CHECKSUMS = new Set([
   "af38a636dec067e3e445694cde65785cebaf0037ae96f80dc4d107a223da7d0e",
 ]);
 
+// The follow-up files were removed when H54 was squashed, so their hashes
+// cannot be recomputed from the current bundle. Keep the historical hashes
+// that were actually shipped, while accepting the all-zero marker used by
+// pre-checksum ledgers. An explicit name plus a known hash is the trust
+// boundary for the compatibility path; arbitrary ledger entries must stop.
+const LEGACY_H54_MIGRATION_CHECKSUMS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  "0731_account_removal_scanner_tombstones.sql": [
+    "faa734fc6d982eb674215513f6e6a60220b17705828bdc84ccd66677b5baea28",
+  ],
+  "0732_account_removal_meal_inbox.sql": [
+    "2ba354711790a780b4ed32d057da9ce5b399bfec994d92de18fc7000dad7d99d",
+  ],
+  "0733_account_removal_reference_guards.sql": [
+    "168300c4d9cdeb7b7dbd78dfffc1d211cb97cbbe9978fbb3fd1ad6184177653c",
+    "414668bdf132fab8a0a81f06fa41ca3dc9eac5248ffcd311ea2557cae48cddcd",
+  ],
+  "0734_account_removal_minimization.sql": [
+    "fad1150e41a5893957fa26039d0def3b6b7707ac5a41387a451ca7dfadd5f618",
+  ],
+  "0735_schema_driven_anonymous_retention.sql": [
+    "54273f852239d647deab82960951b9283df2d5288e3531fa6be4b6e088166906",
+    "e73fd4255d7956a3a1308a95318908601fa10eea18fae3e0226784aebcfbeb5a",
+  ],
+  "0736_account_removal_pending_exit.sql": [
+    "520d26edd73507ee022441149fe83394cc7ded645955033cf8baa359f1205e2f",
+  ],
+  "0737_permanent_scanner_credential_tombstones.sql": [
+    "d5ab4c87d1408b4fc9ad02613c9b5a418aa7e5210cde7f382b9ba81f75dacd04",
+  ],
+  "0738_application_response_form_version_integrity.sql": [
+    "bcbddbcff8425602606b11ee55dea990f93ef157586fcc0a86ba2cabc8e48523",
+  ],
+  "0739_pending_exit_event_close.sql": [
+    "a37830ff9774adc39409dbfad6816d332bb73a4cd9f713cdaf243634725512b9",
+  ],
+  "0740_account_removal_email_pin.sql": [
+    "f2cca9c5a86e847e921d98c192eb2c1f733cf365e093c79b4cdb8737b0dc7274",
+  ],
+  "0741_keyed_scanner_credential_tombstones.sql": [
+    "2d13b5dc68f1e68223a0cc23e70e615d3bfed1d9338f7765875ae81ed5326895",
+  ],
+  "0742_account_removal_pending_recovery.sql": [
+    "53f7c96b8f0010e7c4656157ee01a4f6e81c85fdfc9b0b00f560eacb63043961",
+  ],
+  "0743_review_fixture_accounts.sql": [
+    "2a86115829cce5ddeaea15475d5fae1aebe92deeb3d79011249973e8f739bb9f",
+    "3f5edcef61941a666eaca543e05760f282351ba63136276f2a84dba176746e91",
+  ],
+  "0744_review_fixture_queues.sql": [
+    "eb02ce2b00f8ec4fa6b107da1fccd073ad2db91ebdc89bbae88040b53c29423d",
+  ],
+  "0745_badge_assignment_timestamp.sql": [
+    "a088146036025a20e3f81960027c90c24793597a0dcd208493b47d4b66703a00",
+  ],
+  "0746_permanent_scanner_tombstones.sql": [
+    "f7e78fd7de0a9abfff949dae25d30cdc85bbc81bc10b38f318cbac1954c8c672",
+  ],
+});
+const LEGACY_H54_CHECKSUM_SENTINEL = "0".repeat(64);
+
+function isKnownLegacyH54Checksum(name: string, checksum: string): boolean {
+  if (!/^[0-9a-f]{64}$/.test(checksum)) return false;
+  if (checksum === LEGACY_H54_CHECKSUM_SENTINEL) return true;
+  if (name === H54_BASELINE_MIGRATION) return LEGACY_H54_BASELINE_CHECKSUMS.has(checksum);
+  return LEGACY_H54_MIGRATION_CHECKSUMS[name]?.includes(checksum) ?? false;
+}
+
 /**
  * Files that were already applied before the 07xx sequence collision was
  * fixed. The SQL content is unchanged; only the filename moved so every
@@ -246,12 +313,12 @@ async function prepareMigrationLedger(
           // fixed historical marker rather than pretending the current file's
           // checksum describes it. Future runs skip this allow-listed name.
           await client.query("UPDATE _migrations SET checksum = $1 WHERE name = $2", [
-            "0".repeat(64),
+            LEGACY_H54_CHECKSUM_SENTINEL,
             record.name,
           ]);
-        } else if (!/^[0-9a-f]{64}$/.test(record.checksum)) {
+        } else if (!isKnownLegacyH54Checksum(record.name, record.checksum)) {
           throw new Error(
-            `Historical H54 migration "${record.name}" has an invalid checksum; repair the ledger before deploying.`,
+            `Historical H54 migration "${record.name}" has an unknown checksum; repair the ledger before deploying.`,
           );
         }
         continue;
@@ -280,6 +347,19 @@ async function prepareMigrationLedger(
       // A historical 0730 file has the same name as the squashed baseline,
       // but its schema is repaired by 0747 instead of being run a second time.
       if (legacyH54 && currentName === H54_BASELINE_MIGRATION) {
+        if (record.checksum === null) {
+          // Some pre-checksum ledgers recorded the historical 0730 row as
+          // NULL. Normalize it before enforcing the ledger's NOT NULL
+          // invariant; the marker is deliberately not the current file hash.
+          await client.query("UPDATE _migrations SET checksum = $1 WHERE name = $2", [
+            LEGACY_H54_CHECKSUM_SENTINEL,
+            record.name,
+          ]);
+        } else if (!isKnownLegacyH54Checksum(record.name, record.checksum)) {
+          throw new Error(
+            `Historical H54 migration "${record.name}" has an unknown checksum; repair the ledger before deploying.`,
+          );
+        }
         continue;
       }
 

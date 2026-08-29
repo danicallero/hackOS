@@ -264,7 +264,7 @@ async function installLegacyH54Shape(client: pg.Client): Promise<void> {
     ].entries()) {
       await client.query("INSERT INTO _migrations (name, checksum) VALUES ($1, $2)", [
         name,
-        index === 1 ? null : "0".repeat(64),
+        index === 0 || index === 1 ? null : "0".repeat(64),
       ]);
     }
     await client.query("COMMIT");
@@ -625,6 +625,17 @@ describe("migration history (H53)", () => {
         compatibility_ledger: "1",
       });
 
+      const historicalChecksums = await client.query<{ name: string; checksum: string }>(
+        `SELECT name, checksum
+           FROM _migrations
+          WHERE name IN ('0730_account_deletion_anonymization.sql', '0731_account_removal_scanner_tombstones.sql')
+          ORDER BY name`,
+      );
+      expect(historicalChecksums.rows).toEqual([
+        { name: "0730_account_deletion_anonymization.sql", checksum: "0".repeat(64) },
+        { name: "0731_account_removal_scanner_tombstones.sql", checksum: "0".repeat(64) },
+      ]);
+
       const expectedBadgeDigest = createHmac("sha256", secret)
         .update("hackos:scanner-credential:v1:badge:legacy-compat-badge")
         .digest("hex");
@@ -642,6 +653,28 @@ describe("migration history (H53)", () => {
       expect(digests.rows).toHaveLength(2);
 
       await expect(migrate(legacyDatabaseUrl.toString())).resolves.toEqual([]);
+    });
+  });
+
+  it("rejects an unrecognized historical H54 checksum before compatibility runs", async () => {
+    await withLegacyClient(async (client) => {
+      await client.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public");
+      await installLegacyH54Shape(client);
+      await client.query(
+        `UPDATE _migrations
+            SET checksum = repeat('f', 64)
+          WHERE name = '0731_account_removal_scanner_tombstones.sql'`,
+      );
+
+      await expect(migrate(legacyDatabaseUrl.toString())).rejects.toThrow(
+        /Historical H54 migration "0731_account_removal_scanner_tombstones\.sql" has an unknown checksum/,
+      );
+      const compatibility = await client.query<{ count: string }>(
+        `SELECT count(*)::text AS count
+           FROM _migrations
+          WHERE name = '0747_h54_legacy_chain_compatibility.sql'`,
+      );
+      expect(compatibility.rows[0]?.count).toBe("0");
     });
   });
 
