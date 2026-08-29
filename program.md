@@ -29,12 +29,16 @@ rate-limited review history.
   exposed two test-only failures: Apple signing was not configured in the
   identity fixture, and one recipient legitimately produced three channel
   outbox rows; both assertions were corrected in `10e1f054`.
-- Current migration checkpoint: `7244b47a4563d776741704d189e53ce565f7773e`
-  (`fix(H54): upgrade populated main database`). `0730` now supports both a
-  fresh schema and a populated latest-main schema whose ledger ends at `0725`;
-  the migration runner supplies `BETTER_AUTH_SECRET` to the transaction and
-  the migration suite covers both paths in 11/11 tests. Exact-tip CI run
-  `33244806768` is still running; verify its final result before resuming.
+- Current migration checkpoint: `960ff051b0d825b75d8f9a4223334c5fdb3bd3a9`
+  (`fix(H54): close populated migration privacy gaps`), after
+  `7244b47a4563d776741704d189e53ce565f7773e`. `0730` supports both a fresh
+  schema and a populated latest-main schema whose ledger ends at `0725`; the
+  migration runner loads dotenv and supplies `BETTER_AUTH_SECRET` to the
+  transaction. The populated conversion now purges detached Better Auth
+  verification identifiers, captures Devpost-only roots, and fails closed on
+  historical badge values assigned to active users. The migration suite covers
+  both paths and these regressions in 12/12 tests. Exact-tip CI run
+  `33245665971` is pending; verify its final result after the ledger commit.
 - GitHub PR: <https://github.com/danicallero/hackOS/pull/584>; the feature branch is
   pushed to the origin branch above.
 - Worktree policy: shared active checkout; no blind reset, force-push, or destructive history rewrite.
@@ -56,6 +60,7 @@ rate-limited review history.
 | A9 | A room's marker is inherited from its complete pool/serving graph. Unassigned rooms remain neutral/real for global venue operations; once pooled or serving, room-enterprise, room-group and room state writes must remain in one marker boundary. | Mixed or markerless fixture graphs are an invariant violation and are rejected or omitted; do not broaden neutral-room access to synthetic operators without a product decision. |
 | A10 | Better Auth recovery sign-in and refresh may remain available while an account is `removal_pending`, but every new or refreshed session is capped at the existing `removal_expires_at`; the final H54 trigger rejects direct writes that exceed it. | The final `0730` baseline and its latest-main upgrade path both enforce the reversible recovery window. |
 | A11 | The populated latest-main path is now implemented in `0730`: legacy `anonymized_at` rows are converted transactionally, scanner credentials are HMAC-retired with `BETTER_AUTH_SECRET`, active rows are preserved, and omitted user references fail closed. | A database that already recorded the deleted development-only H54 chain is separate history; stop and prepare an additive compatibility migration rather than editing its applied checksum. |
+| A12 | The populated conversion preserves current active Better Auth verification rows, deletes detached verification identifiers left by the old anonymizer, captures Devpost-only project roots for orphan cleanup, and aborts before commit if a legacy badge history value is assigned to an active user. | Resolve any badge collision before deployment; a database with the deleted development-only H54 chain still requires a separately reviewed additive compatibility migration. |
 
 ## Work ledger
 
@@ -67,10 +72,10 @@ rate-limited review history.
 | I1–I4 | Better Auth route allowlist, signed-cookie expiry binding, cancellation race/idempotency, pending identity mutation rejection | complete | Identity worker tests/static checks; A3/A7. |
 | D1–D2 | Pending-target review locks and durable DSR failure transitions | complete | API source/tests and durable retry paths; A2/A3. |
 | D3–D5 | Fixture graph isolation, logistics/SSE scope, hidden fixture visibility after scrubbing | complete | Domain and cross-layer audits; A5. |
-| DB1–DB4 | Squash H54 migrations, install final active-user triggers, versioned responses, remove temporary scanner DDL/cleanup DML | complete | Fresh and populated-main migration suite: 11/11 on local Postgres 5432; schema DBML synchronized; A1/A6/A11. |
+| DB1–DB4 | Squash H54 migrations, install final active-user triggers, versioned responses, remove temporary scanner DDL/cleanup DML | complete | Fresh and populated-main migration suite: 12/12 on local Postgres 5432, including detached-verification cleanup, Devpost-only orphan cleanup, and badge-collision rollback; schema DBML synchronized; A1/A6/A11/A12. |
 | DOC1 | Rewrite stale account-removal, worker, fixture, module, migration/schema claims | complete | Migration/docs audit and `pnpm lint`; obsolete operational 0731–0746 claims were removed, while intentional external-ledger release-gate references remain. |
 | DOC2 | Update the external PR body/checklist and release/legal metadata | pending external gate | The PR description is not a tracked worktree file; update it from the final validation below before merge. |
-| T1 | Add regression coverage for races, pending allowlist, fixture scope, queue SSE, form versions, and migrations | complete | Web: 40 files/298 tests; mobile: 44 suites/222 tests; migration: 11 tests including populated latest-main upgrade; API DB suites require Valkey/5433. |
+| T1 | Add regression coverage for races, pending allowlist, fixture scope, queue SSE, form versions, and migrations | complete | Web: 40 files/298 tests; mobile: 44 suites/222 tests; migration: 12 tests including populated latest-main upgrade, detached-verification cleanup, Devpost-only orphan cleanup, and badge-collision rollback; API DB suites require Valkey/5433. |
 | T2 | Run repository gates and record infrastructure limitations | complete with blocker recorded | `pnpm lint`, API/web/mobile typechecks, web/mobile suites, diff checks, and fresh migration suite pass. Full API integration and queue DB suites cannot run against unavailable/resetting Valkey/Postgres 5433. |
 | T3 | Repair all direct application-response fixtures and non-test writers for H54 form-version NOT NULL | complete | Shared race-safe test helper, all fixtures, `applications/service.ts`, and `seed-mock.ts`; seed upsert updates the current snapshot pointer. |
 | T4 | Isolate queue fixture broadcasts and explicit challenge enqueue | complete | `queue:fixture` topic, marker-scoped notifications, and transactional challenge/repo guards with regression coverage. |
@@ -110,7 +115,8 @@ rate-limited review history.
 | T38 | Synthetic review fixture isolation implementation | complete | `task_5e61add2d03c` / `ctx_873377aaae01` / `term_113fb73b-9bb1-49d7-84f7-a3387c6d8c85`; worker_done seq 589. Marker-aware admin/sponsor list/detail/export/patch/message scope plus focused coverage committed/pushed as `2f8e6c05`; terminal closed. |
 | T39 | Final Luna-max wallet/review audit | blocked; coordinator fallback complete | `task_2cf7181f322e` / `ctx_88fc4bcfd58a` / `term_d918b87e-cf88-4c33-b7f2-4147c492be1f`; review-only worker hit the provider usage limit before `worker_done`, then its terminal was closed and task marked blocked. Coordinator re-read the exact wallet/review diff locally; no additional worker finding is available. |
 | T40 | Repair exact-tip CI regressions | complete | `33216896112` failed only the two newly added assertions: the identity test attempted Apple pass signing without the wallet test fixture, and the review test counted channel rows instead of distinct recipients. `10e1f054` now calls `ensurePassRecord` directly and asserts `count(DISTINCT user_id)`; exact replacement run `33239985938` on final tip `7a0cbe3b` is green across all seven jobs. |
-| T41 | Upgrade populated latest-main database | complete pending exact-tip CI | `7244b47a` makes `0730` an in-place upgrade from the main ledger through `0725`: it converts legacy `anonymized_at` users, preserves active data, snapshots forms/responses, retires legacy credentials with the deployment HMAC secret, and verifies no user references remain. Migration suite is 11/11 locally; docs, deployment guidance, and PR body are synchronized. |
+| T41 | Upgrade populated latest-main database | complete | `7244b47a` plus `960ff051` make `0730` an in-place upgrade from the main ledger through `0725`: it converts legacy `anonymized_at` users, preserves active data, snapshots forms/responses, retires legacy credentials with the deployment HMAC secret, removes detached verification identifiers, captures Devpost-only roots, fails closed on badge collisions, and verifies no user references remain. Migration suite is 12/12 locally; docs and deployment guidance are synchronized. Exact-head CI run `33245665971` remains the release gate. |
+| T42 | Close populated migration privacy/availability findings | complete pending exact-tip CI | Final migration audit found two P1s (detached Better Auth email identifiers; reused historical badge denial) and one P2 (Devpost-only roots), plus runner dotenv drift. `960ff051` adds fail-closed/cleanup behavior, regression coverage, and docs; exact current-head CI is pending. |
 
 ## Code/schema changes reconciled
 
@@ -732,6 +738,7 @@ Messages received after the prior rate-limit snapshot (seq 405–450):
 - 2026-08-28 22:18:44 · seq 588 · worker_done · `msg_25c132d8430d` · wallet implementation split provider/storage cleanup, retried by pass ids, bounded pending jobs and preserved cancellation; coordinator added tests/key guard; terminal closed
 - 2026-08-28 22:18:51 · seq 589 · worker_done · `msg_0c552e258e47` · review implementation added marker-aware scopes/guards and synthetic list/detail/patch/message/export coverage; static checks passed, runtime setup blocked; terminal closed
 - 2026-08-28 22:28:22 · seq 590 · heartbeat · `msg_749a6d4df1cf` · final Luna-max wallet/review audit alive on `2f8e6c05`
+- 2026-08-29 09:30:00 · collaboration result · `/root/migration_docs_audit` · final populated-main audit found detached-verification P1, reused-badge P1, Devpost-only-root P2, and migration-runner dotenv drift; no files edited
 
 Coordinator-originated inbox echoes (kept for chronology, excluded from the
 received-message count) were seq 474 `msg_939f59e3d657` and seq 476
@@ -758,15 +765,25 @@ the 10/10 fresh migration suite and then re-audited checkpoint `7244b47a`,
 including the 11/11 fresh plus populated-main suite and the latest-main
 upgrade/secret contract. Neither worker edited files.
 
+The follow-up migration audit identified two blockers and one cleanup gap. The
+coordinator fixed them in `960ff051`: detached Better Auth verification rows are
+removed unless they still match a current active account; historical badge
+collisions abort before denylist writes; Devpost-only roots are included in
+orphan cleanup; and the migration runner loads dotenv so its secret matches the
+API. The focused migration suite now passes 12/12. The audit's separate queue
+review message repeated already-fixed queue residuals and made no edits.
+
 User directives received after seq 590 (no Orca sequence ids) are recorded
 here because the rate-limited coordination ledger cannot assign them worker
 message ids: continue after the rate-limit loop; document all received
 messages and provide a continuation prompt; commit while working; verify why
 GitHub showed no changes; assess whether the PR is mergeable; and, most
 importantly, require migrations to upgrade a populated database from the
-latest database state on main. The latter requirement produced checkpoint
-`7244b47a`: the populated-main conversion, runner secret handoff, regression
-test, and migration/deployment documentation update.
+latest database state on main, then mark the PR ready once the exact current
+head has all required checks green. The latest migration fixes are in
+`960ff051`: populated-main conversion, runner secret handoff, detached-token
+cleanup, badge-collision fail-closed behavior, Devpost-only orphan coverage,
+regression tests, and migration/deployment documentation updates.
 
 Messages sent by the coordinator to workers (not received by the coordinator)
 are intentionally not counted in this incoming ledger. The first final auditor
@@ -798,7 +815,7 @@ Use this prompt for a future coordinator:
 > Luna worker terminals are closed; do not close unrelated historical panes.
 >
 > The latest implementation checkpoint is
-> `7244b47a4563d776741704d189e53ce565f7773e`; always verify the live `HEAD`
+> `960ff051b0d825b75d8f9a4223334c5fdb3bd3a9`; always verify the live `HEAD`
 > and its exact CI checks before resuming. It includes
 > wallet retry/cancellation fixes in `ab34b299`, synthetic review fixture
 > isolation in `2f8e6c05`, deterministic regression assertions in `10e1f054`,
@@ -819,19 +836,24 @@ Use this prompt for a future coordinator:
 > passed assertions. Local gates that have passed include `pnpm lint`, API/web/
 > mobile typechecks, web (40 files/298 tests), mobile (44 suites/222 tests),
 > `git diff --check`, and the fresh plus populated-main migration suite
-> (11 tests).
+> (12 tests, including detached-token cleanup, Devpost-only orphan cleanup,
+> and badge-collision rollback).
 >
 > The branch intentionally contains one H54 migration,
 > `apps/api/db/migrations/0730_account_deletion_anonymization.sql`; it supports
 > both a fresh schema and a populated latest-main database whose ledger ends at
-> `0725`, including legacy `anonymized_at` cleanup and keyed scanner digests.
+> `0725`, including legacy `anonymized_at` cleanup, detached verification
+> cleanup, Devpost-only orphan cleanup, badge-collision fail-closed behavior,
+> and keyed scanner digests. The runner loads dotenv before reading the shared
+> `BETTER_AUTH_SECRET`.
 > Before a production deploy, verify no populated external `_migrations` ledger
 > applied removed H54 intermediate files. If one did, stop and add an additive
 > compatibility migration rather than editing the applied baseline. The PR is
 > currently OPEN and DRAFT at <https://github.com/danicallero/hackOS/pull/584>;
-> update its template body/checklist with the exact final CI run, 11 migration
-> tests, the latest-main upgrade contract, and local setup limitations, but do
-> not mark it ready without a release-owner decision.
+> update its template body/checklist with the exact final CI run, 12 migration
+> tests, the latest-main upgrade contract, and local setup limitations. The
+> user has authorized marking it ready after the exact current-head checks are
+> green; do not merge it.
 >
 > Keep this file's archival received-message ledger complete, including every
 > Orca message id/type/subject/timestamp after rate-limit recovery and any
