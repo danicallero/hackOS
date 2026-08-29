@@ -2,7 +2,7 @@
 #   docker build -f apps/api/Dockerfile -t hackos-api .
 #
 # One image, three run modes (override `command` in compose):
-#   node dist/server.js    HTTP API           (default CMD)
+#   node dist/migrate.js && node dist/server.js  HTTP API (default CMD)
 #   node dist/worker.js    BullMQ worker       (no HTTP listener)
 #   node dist/migrate.js   one-shot migrations (advisory-locked; exits 0)
 
@@ -58,4 +58,7 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
   CMD wget -qO- http://127.0.0.1:3000/healthz || exit 1
 
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["node", "dist/server.js"]
+# Keep direct Dockerfile deployments safe too: never serve the API against an
+# unapplied schema. Compose still runs the same check in its explicit command
+# and one-shot migrate service (H10, H53, H54).
+CMD ["sh", "-c", "node dist/migrate.js && exec node dist/server.js"]

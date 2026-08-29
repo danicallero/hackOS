@@ -77,7 +77,9 @@ is the source of truth for each.
 - **Stack:** Fastify 5, `fastify-type-provider-zod` (schemas *are* the OpenAPI
   docs, served at `/documentation`), Better Auth for identity, `pg` for raw
   parameterized SQL (no ORM), `ioredis` for Valkey.
-- **Image/command:** the shared image, `node dist/server.js`.
+- **Image/command:** the shared image; `node dist/migrate.js && exec node
+  dist/server.js` is the safe default, with Compose retaining a separate
+  one-shot migration service.
 - **Networks:** `instance` **and** `edge` — the only service on both, because
   it's the only one that is both publicly reachable *and* talks to datastores.
 - **Public:** yes, via Traefik router `${STACK_NAME}-api` on `${API_DOMAIN}`.
@@ -303,7 +305,8 @@ Everything backend ships as one artifact (`apps/api/Dockerfile`,
 `node:22-alpine`, non-root `node` user under `tini` for signal handling):
 
 ```
-node dist/server.js    → api      (HTTP + SSE)     default CMD, /healthz
+node dist/migrate.js && exec node dist/server.js
+                        → api      (HTTP + SSE)     default CMD, /healthz
 node dist/worker.js     → worker   (BullMQ ticks)   no HTTP
 node dist/migrate.js    → migrate  (one-shot)       advisory-locked, exits 0
 ```

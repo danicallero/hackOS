@@ -39,7 +39,12 @@ const envSchema = z.object({
    * is accepted only for users marked is_test_account=true; real verified
    * accounts always use the one-time PIN delivered to their primary email.
    */
-  REVIEW_FIXTURE_PASSWORD: z.string().min(8).optional(),
+  REVIEW_FIXTURE_PASSWORD: z.preprocess(
+    // Deploy compose files pass unset optional vars as ""; treat that as
+    // absent so the optional fixture workspace does not prevent booting.
+    (v) => (v === "" ? undefined : v),
+    z.string().min(8).optional(),
+  ),
   REVIEW_FIXTURE_DELETION_PIN: z.preprocess(
     (v) => (v === "" ? undefined : v),
     z
