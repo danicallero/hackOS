@@ -78,7 +78,8 @@ is the source of truth for each.
   docs, served at `/documentation`), Better Auth for identity, `pg` for raw
   parameterized SQL (no ORM), `ioredis` for Valkey.
 - **Image/command:** the shared image; `node dist/migrate.js && exec node
-  dist/server.js` is the safe default, with Compose retaining a separate
+  dist/server.js` is the safe default, and the server entrypoint repeats the
+  migration check for direct launches. Compose also retains a separate
   one-shot migration service.
 - **Networks:** `instance` **and** `edge` — the only service on both, because
   it's the only one that is both publicly reachable *and* talks to datastores.
