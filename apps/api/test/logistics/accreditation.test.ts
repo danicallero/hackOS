@@ -247,6 +247,81 @@ describe("H22 accreditation lookup + check-in", () => {
     ).toBeNull();
   });
 
+  it("rejects a revoked ticket even if its token is later assigned to another user (H54)", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const formerOwner = await createUser();
+    const staleToken = await issueTicket(formerOwner, "ticket-retired");
+    await assignBadge(formerOwner, "BADGE-TICKET-RETIRED");
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id) VALUES ($1, 'BADGE-TICKET-RETIRED')`,
+      [formerOwner],
+    );
+    const admin = await createUserWithCapabilities(["*"]);
+    const removed = await app.inject({
+      method: "POST",
+      url: `/api/users/${formerOwner}/anonymize`,
+      headers: asUser(admin),
+    });
+    expect(removed.statusCode).toBe(200);
+
+    const replacement = await createUser();
+    await issueTicket(replacement, staleToken);
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/accreditation/check-in",
+      headers: asUser(staff),
+      payload: { ticketToken: staleToken, badgeId: "BADGE-NEW-OWNER", method: "qr" },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("ticket_revoked");
+    expect(
+      (await pool.query(`SELECT badge_id FROM users WHERE id = $1`, [replacement])).rows[0]
+        .badge_id,
+    ).toBeNull();
+    const retired = await pool.query<{ credential_digest: string }>(
+      `SELECT credential_digest FROM scanner_revoked_tickets`,
+    );
+    expect(retired.rows).toHaveLength(1);
+    const retiredRow = retired.rows[0];
+    if (!retiredRow) throw new Error("Expected one retired ticket digest");
+    expect(retiredRow.credential_digest).toMatch(/^[0-9a-f]{64}$/);
+    expect(retiredRow.credential_digest).not.toContain(staleToken);
+  });
+
+  it("rejects a retired ticket token when it is presented as a new badge", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const formerOwner = await createUser();
+    const staleToken = await issueTicket(formerOwner, "ticket-retired-badge");
+    await assignBadge(formerOwner, "BADGE-FORMER-TICKET");
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id) VALUES ($1, 'BADGE-FORMER-TICKET')`,
+      [formerOwner],
+    );
+    const admin = await createUserWithCapabilities(["*"]);
+    const removed = await app.inject({
+      method: "POST",
+      url: `/api/users/${formerOwner}/anonymize`,
+      headers: asUser(admin),
+    });
+    expect(removed.statusCode).toBe(200);
+
+    const replacement = await createUser();
+    await issueTicket(replacement, "ticket-replacement");
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/accreditation/check-in-user",
+      headers: asUser(staff),
+      payload: { userId: replacement, badgeId: staleToken, method: "manual" },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(
+      (await pool.query(`SELECT badge_id FROM users WHERE id = $1`, [replacement])).rows[0]
+        .badge_id,
+    ).toBeNull();
+  });
+
   it("check-in succeeds for a capability holder with no confirmed application at all (H43)", async () => {
     const admin = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_DECIDE]);
     const token = await (async () => {
@@ -465,9 +540,13 @@ describe("H23 badge rotation", () => {
     expect(res.json().voidedPasses).toBe(1);
 
     const { pool } = await import("../../src/db/pool.js");
-    const u = await pool.query(`SELECT badge_id, badge_id_history FROM users WHERE id = $1`, [uid]);
+    const u = await pool.query(
+      `SELECT badge_id, badge_id_history, badge_assigned_at FROM users WHERE id = $1`,
+      [uid],
+    );
     expect(u.rows[0].badge_id).toBe("NEW-1");
     expect(u.rows[0].badge_id_history).toContain("OLD-1");
+    expect(u.rows[0].badge_assigned_at).toBeInstanceOf(Date);
     const pass = await pool.query(`SELECT status FROM wallet_passes WHERE id = $1`, [passId]);
     expect(pass.rows[0].status).toBe("voided");
     const audits = await pool.query(

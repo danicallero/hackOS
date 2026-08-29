@@ -12,6 +12,11 @@ import { apiFetch } from "@/lib/api";
 import { signIn, signOut } from "@/lib/auth-client";
 import { EVENT_WEBSITE_DISPLAY, EVENT_WEBSITE_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
+import {
+  type AccountRemovalProgress,
+  clearAccountRemovalProgress,
+  readAccountRemovalProgress,
+} from "@/lib/removal-progress";
 import type { Me, PublicEvent } from "@/lib/types";
 import { colors } from "@/theme/colors";
 
@@ -29,6 +34,22 @@ export default function SignInScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [event, setEvent] = useState<PublicEvent | null>(null);
+  const [removalProgress, setRemovalProgress] = useState<AccountRemovalProgress | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void readAccountRemovalProgress().then((progress) => {
+      if (active) setRemovalProgress(progress);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function dismissRemovalProgress() {
+    await clearAccountRemovalProgress();
+    setRemovalProgress(null);
+  }
 
   useEffect(() => {
     if (accessDenied !== "1") return;
@@ -81,7 +102,7 @@ export default function SignInScreen() {
         return;
       }
       const me = await apiFetch<Me>("/api/me");
-      if (!me.mobileAccess) {
+      if (!me.mobileAccess && me.accountState !== "removal_pending") {
         await signOut();
         router.replace({ pathname: "/(auth)/sign-in", params: { accessDenied: "1" } });
         return;
@@ -158,6 +179,51 @@ export default function SignInScreen() {
       <AuthHeader align="leading" context={event?.name || "hackOS"} title={t("signInTitle")} />
 
       <View style={{ gap: 16 }}>
+        {removalProgress ? (
+          <View style={{ gap: 8 }}>
+            <AuthAlert
+              message={
+                removalProgress.status === "pending_exit"
+                  ? t("accountRemovalPendingExit")
+                  : removalProgress.status === "device_cleanup_pending"
+                    ? t("accountRemovalDeviceCleanupPending")
+                    : t("accountRemovalPending")
+              }
+            />
+            <View style={{ alignItems: "center", flexDirection: "row", gap: 16 }}>
+              <Pressable
+                accessibilityRole="link"
+                onPress={() => void Linking.openURL(`${EVENT_WEBSITE_URL}/privacy`)}
+                style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+              >
+                <Text
+                  style={{
+                    color: colors.interactiveText,
+                    fontSize: 13,
+                    textDecorationLine: "underline",
+                  }}
+                >
+                  {t("accountPrivacyPolicy")}
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => void dismissRemovalProgress()}
+                style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+              >
+                <Text
+                  style={{
+                    color: colors.secondaryLabel,
+                    fontSize: 13,
+                    textDecorationLine: "underline",
+                  }}
+                >
+                  {t("dismiss")}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
         {error ? <AuthAlert message={error} testID={UI_TEST_IDS.auth.error} /> : null}
         <View style={{ gap: 14 }}>
           <AuthCredentialField

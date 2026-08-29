@@ -2,7 +2,10 @@ import { type MenuAction, MenuView } from "@expo/ui/community/menu";
 import { useRouter, useScrollToTop } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Linking, ScrollView, Text, useColorScheme, View } from "react-native";
-
+import {
+  type AccountRemovalPinAction,
+  AccountRemovalPinModal,
+} from "@/components/account-removal-pin-modal";
 import {
   ActionButton,
   AndroidStatusBarScrim,
@@ -12,22 +15,30 @@ import {
   StatusPill,
 } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
-import { apiFetch } from "@/lib/api";
+import { ApiError, apiFetch } from "@/lib/api";
 import { signOut } from "@/lib/auth-client";
 import { EVENT_WEBSITE_URL } from "@/lib/env";
 import { haptic } from "@/lib/haptics";
 import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
+import {
+  type AccountRemovalProgress,
+  clearAccountRemovalProgress,
+  saveAccountRemovalProgress,
+} from "@/lib/removal-progress";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { fetchMyScanStats, type MyScanStats } from "@/lib/scan-log";
 import { SCAN_LOG_ROUTES } from "@/lib/scan-log-navigation";
 import { wipeAttendanceRoster } from "@/lib/scanner-db";
 import {
   type AccountRemovalEligibility,
+  anonymizeOwnAccount,
   deleteOwnAccount,
   fetchAccountRemovalEligibility,
+  requestAccountRemovalPin,
 } from "@/lib/self-service";
 import {
+  clearAccountData,
   clearAllCaches,
   formatBytes,
   getStorageUsage,
@@ -43,6 +54,7 @@ interface Intolerance {
 }
 
 const LANGUAGES: Lang[] = ["en", "es", "gl"];
+type AccountRemovalCredentialMode = "pin" | "password";
 
 /** Account overview with the same participant-owned profile fields exposed on web. */
 export default function AccountScreen() {
@@ -71,6 +83,15 @@ export default function AccountScreen() {
   const [removalLoading, setRemovalLoading] = useState(true);
   const [removalError, setRemovalError] = useState<Error | null>(null);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [removalPinAction, setRemovalPinAction] = useState<AccountRemovalPinAction | null>(null);
+  const [removalCredentialMode, setRemovalCredentialMode] =
+    useState<AccountRemovalCredentialMode>("pin");
+  const [removalPinStatic, setRemovalPinStatic] = useState(false);
+  const [removalPinError, setRemovalPinError] = useState<string | null>(null);
+  const [removalPinRequestAction, setRemovalPinRequestAction] =
+    useState<AccountRemovalPinAction | null>(null);
+  const [removalPinRequestError, setRemovalPinRequestError] = useState<Error | null>(null);
+  const [requestingRemovalPin, setRequestingRemovalPin] = useState(false);
 
   const loadStorageUsage = useCallback(async () => {
     setStorageUsage(await getStorageUsage());
@@ -145,6 +166,8 @@ export default function AccountScreen() {
   }
 
   async function endSession() {
+    if (!me) return;
+    const ownerUserId = me.id;
     setSigningOut(true);
     setSignOutError(null);
     try {
@@ -155,7 +178,7 @@ export default function AccountScreen() {
       // leaving it cached until the next signed-in device sync. The offline
       // scan queue is deliberately left alone: it's per-user encrypted and
       // reappears, still decryptable, if this same person signs back in.
-      await wipeAttendanceRoster();
+      await wipeAttendanceRoster(ownerUserId);
     } catch (cause) {
       setSignOutError(cause instanceof Error ? cause : new Error(t("signOutError")));
       setSigningOut(false);
@@ -189,28 +212,242 @@ export default function AccountScreen() {
     ]);
   }
 
-  async function deleteAccount() {
+  async function finishLocalAccountClosure(
+    userId: number,
+    action: AccountRemovalProgress["action"],
+    pendingMessage?: string,
+    progress?: Parameters<typeof saveAccountRemovalProgress>[0],
+  ): Promise<void> {
+    if (pendingMessage) {
+      await new Promise<void>((resolve) => {
+        Alert.alert(t("accountAnonymizePendingTitle"), pendingMessage, [
+          { text: t("confirm"), onPress: () => resolve() },
+        ]);
+      });
+    }
+    // The server revokes access before it touches object storage. Local
+    // cleanup is best-effort, but sign-out must still run if a SQLite/Secure
+    // Store operation fails so a closed account cannot keep an authenticated
+    // session on this device.
+    let localCleanupFailed = false;
+    try {
+      await clearAccountData(userId);
+    } catch {
+      localCleanupFailed = true;
+    }
+    const savedProgress =
+      progress ??
+      (localCleanupFailed ? { action, status: "device_cleanup_pending" as const } : null);
+    if (savedProgress) await saveAccountRemovalProgress(savedProgress);
+    else await clearAccountRemovalProgress();
+    if (localCleanupFailed && !pendingMessage) {
+      Alert.alert(t("accountRemovalDeviceCleanupPending"));
+    }
+    await signOut().catch(() => undefined);
+  }
+
+  async function handleRemovalFailure(
+    cause: unknown,
+    userId: number,
+    fallback: string,
+    action: AccountRemovalProgress["action"],
+  ): Promise<void> {
+    // prepareAccountRemoval revokes sessions before private-object cleanup.
+    // A 5xx can therefore mean the server has already committed closure even
+    // though the response failed; clear local identity/cache data in that case
+    // rather than leaving a closed account's PII on the device (H54).
+    const serverMayHaveRevokedAccess =
+      !(cause instanceof ApiError) ||
+      cause.code === "removal_storage_pending" ||
+      cause.status >= 500;
+    if (serverMayHaveRevokedAccess) {
+      await finishLocalAccountClosure(userId, action, undefined, { action, status: "processing" });
+      setRemovalError(new Error(t("accountRemovalPending")));
+      return;
+    }
+    setRemovalError(cause instanceof Error ? cause : new Error(fallback));
+  }
+
+  function handleRemovalPinFailure(cause: unknown, action: AccountRemovalPinAction): boolean {
+    if (!(cause instanceof ApiError)) return false;
+    if (cause.code === "removal_reauthentication_required") {
+      setRemovalCredentialMode("password");
+      setRemovalPinStatic(false);
+      setRemovalPinAction(action);
+      setRemovalPinError(t("accountRemovalPasswordRequired"));
+      return true;
+    }
+    if (cause.code === "removal_reauthentication_invalid") {
+      setRemovalCredentialMode("password");
+      setRemovalPinStatic(false);
+      setRemovalPinAction(action);
+      setRemovalPinError(t("accountRemovalPasswordInvalid"));
+      return true;
+    }
+    if (cause.code === "removal_pin_invalid") {
+      setRemovalPinError(t("accountRemovalPinInvalid"));
+      return true;
+    }
+    if (cause.code === "removal_pin_expired" || cause.code === "removal_pin_required") {
+      setRemovalPinAction(null);
+      setRemovalPinError(null);
+      setRemovalPinRequestAction(action);
+      setRemovalPinRequestError(new Error(t("accountRemovalPinExpired")));
+      return true;
+    }
+    return false;
+  }
+
+  async function deleteAccount(securityPin?: string, reauthenticationPassword?: string) {
+    if (!me) return;
     setDeletingAccount(true);
     setRemovalError(null);
     try {
-      await deleteOwnAccount();
-      await wipeAttendanceRoster();
-      await signOut();
+      const result = await deleteOwnAccount(securityPin, reauthenticationPassword);
+      const progress =
+        result.status === "completed"
+          ? undefined
+          : { action: "delete" as const, status: result.status };
+      await finishLocalAccountClosure(
+        me.id,
+        "delete",
+        result.status === "pending_exit" ? t("accountRemovalPendingExit") : undefined,
+        progress,
+      );
     } catch (cause) {
-      setRemovalError(cause instanceof Error ? cause : new Error(t("accountDeleteError")));
+      if (handleRemovalPinFailure(cause, "delete")) return;
+      await handleRemovalFailure(cause, me.id, t("accountDeleteError"), "delete");
+    } finally {
       setDeletingAccount(false);
     }
   }
 
   function confirmDeleteAccount() {
-    Alert.alert(t("accountDeleteConfirmTitle"), t("accountDeleteConfirmBody"), [
+    const body = [
+      t("accountDeleteConfirmBody"),
+      ...(removalEligibility?.requiresVenueExit ? [t("accountRemovalExitRequired")] : []),
+      ...(removalEligibility?.integrityWarning ? [t("accountRemovalIntegrityWarning")] : []),
+    ].join("\n\n");
+    Alert.alert(t("accountDeleteConfirmTitle"), body, [
       { text: t("cancel"), style: "cancel" },
       {
         text: t("accountDeleteAction"),
         style: "destructive",
-        onPress: () => void deleteAccount(),
+        onPress: () => void beginRemoval("delete"),
       },
     ]);
+  }
+
+  async function anonymizeAccount(securityPin?: string, reauthenticationPassword?: string) {
+    if (!me) return;
+    setDeletingAccount(true);
+    setRemovalError(null);
+    try {
+      const result = await anonymizeOwnAccount(securityPin, reauthenticationPassword);
+      const progress =
+        result.status === "completed"
+          ? undefined
+          : { action: "anonymize" as const, status: result.status };
+      await finishLocalAccountClosure(
+        me.id,
+        "anonymize",
+        result.status === "pending_exit" ? t("accountAnonymizePendingExit") : undefined,
+        progress,
+      );
+    } catch (cause) {
+      if (handleRemovalPinFailure(cause, "anonymize")) return;
+      await handleRemovalFailure(cause, me.id, t("accountAnonymizeError"), "anonymize");
+    } finally {
+      setDeletingAccount(false);
+    }
+  }
+
+  function confirmAnonymizeAccount() {
+    const body = [
+      t("accountAnonymizeConfirmBody"),
+      ...(removalEligibility?.activeEventConsequences ? [t("accountAnonymizeActiveEvent")] : []),
+      ...(removalEligibility?.requiresVenueExit ? [t("accountAnonymizeExitRequired")] : []),
+      ...(removalEligibility?.integrityWarning ? [t("accountRemovalIntegrityWarning")] : []),
+    ].join("\n\n");
+    Alert.alert(t("accountAnonymizeConfirmTitle"), body, [
+      { text: t("cancel"), style: "cancel" },
+      {
+        text: t("accountPrivacyPolicy"),
+        onPress: () => void Linking.openURL(`${EVENT_WEBSITE_URL}/privacy`),
+      },
+      {
+        text: t("accountAnonymizeAction"),
+        style: "destructive",
+        onPress: () => void beginRemoval("anonymize"),
+      },
+    ]);
+  }
+
+  async function beginRemoval(action: AccountRemovalPinAction): Promise<void> {
+    if (!removalEligibility) return;
+    setRemovalPinRequestAction(action);
+    setRemovalPinRequestError(null);
+    setRemovalPinError(null);
+    if (!removalEligibility.securityPinRequired) {
+      setRemovalPinRequestAction(null);
+      setRemovalPinStatic(false);
+      if (removalEligibility.reauthenticationRequired) {
+        setRemovalCredentialMode("password");
+        setRemovalPinAction(action);
+        return;
+      }
+      setRemovalCredentialMode("pin");
+      if (action === "delete") await deleteAccount();
+      else await anonymizeAccount();
+      return;
+    }
+
+    setRequestingRemovalPin(true);
+    try {
+      const result = await requestAccountRemovalPin();
+      if (result.status === "not_required") {
+        setRemovalPinRequestAction(null);
+        setRemovalPinStatic(false);
+        if (removalEligibility.reauthenticationRequired) {
+          setRemovalCredentialMode("password");
+          setRemovalPinAction(action);
+        } else {
+          setRemovalCredentialMode("pin");
+          if (action === "delete") await deleteAccount();
+          else await anonymizeAccount();
+        }
+        return;
+      }
+      setRemovalPinRequestAction(null);
+      setRemovalPinError(null);
+      setRemovalCredentialMode("pin");
+      setRemovalPinStatic(result.status === "static");
+      setRemovalPinAction(action);
+    } catch (cause) {
+      setRemovalPinRequestError(
+        cause instanceof Error ? cause : new Error(t("accountRemovalLoadError")),
+      );
+    } finally {
+      setRequestingRemovalPin(false);
+    }
+  }
+
+  async function submitRemovalCredential(credential: string): Promise<void> {
+    if (removalPinAction === "delete") {
+      if (removalCredentialMode === "password") await deleteAccount(undefined, credential);
+      else await deleteAccount(credential);
+    } else if (removalPinAction === "anonymize") {
+      if (removalCredentialMode === "password") await anonymizeAccount(undefined, credential);
+      else await anonymizeAccount(credential);
+    }
+  }
+
+  function cancelRemovalPin() {
+    if (deletingAccount) return;
+    setRemovalPinAction(null);
+    setRemovalCredentialMode("pin");
+    setRemovalPinStatic(false);
+    setRemovalPinError(null);
   }
 
   if (loading && !me) return <RequestFeedback loading />;
@@ -385,7 +622,7 @@ export default function AccountScreen() {
                 <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
                   {t("accountDietaryNotes")}
                 </Text>
-                <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 22 }}>
+                <Text selectable style={{ color: colors.label, fontSize: 16 }}>
                   {me.foodIntoleranceNotes}
                 </Text>
               </View>
@@ -497,39 +734,115 @@ export default function AccountScreen() {
                 <View style={{ padding: 16 }}>
                   <RequestFeedback
                     error={removalError}
-                    message={t("accountRemovalLoadError")}
+                    message={
+                      removalEligibility?.action === "anonymize"
+                        ? t("accountAnonymizeError")
+                        : t("accountDeleteError")
+                    }
                     onRetry={() => void loadRemovalEligibility()}
                   />
                 </View>
-              ) : removalEligibility?.action === "delete" ? (
+              ) : removalEligibility === null ? null : removalEligibility.action === "delete" ? (
                 <View style={{ gap: 12, padding: 16 }}>
-                  <Text
-                    selectable
-                    style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
-                  >
+                  {removalPinRequestError ? (
+                    <RequestFeedback
+                      error={removalPinRequestError}
+                      message={removalPinRequestError.message}
+                      onRetry={
+                        removalPinRequestAction
+                          ? () => void beginRemoval(removalPinRequestAction)
+                          : undefined
+                      }
+                      retrying={requestingRemovalPin}
+                    />
+                  ) : null}
+                  <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
                     {t("accountDeleteDescription")}
                   </Text>
+                  {removalEligibility.requiresVenueExit ? (
+                    <Text
+                      selectable
+                      accessibilityLiveRegion="polite"
+                      style={{ color: colors.warning, fontSize: 14 }}
+                    >
+                      {t("accountRemovalExitRequired")}
+                    </Text>
+                  ) : null}
+                  {removalEligibility.integrityWarning ? (
+                    <Text
+                      selectable
+                      accessibilityLiveRegion="polite"
+                      style={{ color: colors.warning, fontSize: 14 }}
+                    >
+                      {t("accountRemovalIntegrityWarning")}
+                    </Text>
+                  ) : null}
                   <ActionButton
                     label={t("accountDeleteAction")}
                     icon="trash"
                     destructive
-                    busy={deletingAccount}
+                    busy={deletingAccount || requestingRemovalPin}
                     onPress={confirmDeleteAccount}
                   />
                 </View>
               ) : (
                 <View style={{ gap: 12, padding: 16 }}>
+                  {removalPinRequestError ? (
+                    <RequestFeedback
+                      error={removalPinRequestError}
+                      message={removalPinRequestError.message}
+                      onRetry={
+                        removalPinRequestAction
+                          ? () => void beginRemoval(removalPinRequestAction)
+                          : undefined
+                      }
+                      retrying={requestingRemovalPin}
+                    />
+                  ) : null}
                   <Text
                     selectable
                     accessibilityLiveRegion="polite"
-                    style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
+                    style={{ color: colors.secondaryLabel, fontSize: 14 }}
                   >
-                    {t("accountCannotSelfDelete")}
+                    {t("accountAnonymizeDescription")}
                   </Text>
+                  <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
+                    {t("accountAnonymizeProofLoss")}
+                  </Text>
+                  {removalEligibility.activeEventConsequences ? (
+                    <Text
+                      selectable
+                      accessibilityLiveRegion="polite"
+                      style={{ color: colors.warning, fontSize: 14 }}
+                    >
+                      {t("accountAnonymizeActiveEvent")}
+                    </Text>
+                  ) : null}
+                  {removalEligibility.requiresVenueExit ? (
+                    <Text selectable style={{ color: colors.warning, fontSize: 14 }}>
+                      {t("accountAnonymizeExitRequired")}
+                    </Text>
+                  ) : null}
+                  {removalEligibility.integrityWarning ? (
+                    <Text
+                      selectable
+                      accessibilityLiveRegion="polite"
+                      style={{ color: colors.warning, fontSize: 14 }}
+                    >
+                      {t("accountRemovalIntegrityWarning")}
+                    </Text>
+                  ) : null}
                   <ActionButton
-                    label={t("accountRequestAnonymization")}
-                    icon="envelope"
-                    onPress={() => void Linking.openURL(anonymizationRequestMailto(me))}
+                    label={t("accountPrivacyPolicy")}
+                    icon="hand.raised"
+                    onPress={() => void Linking.openURL(`${EVENT_WEBSITE_URL}/privacy`)}
+                  />
+                  <ActionButton
+                    label={t("accountAnonymizeAction")}
+                    icon="person.crop.circle.badge.xmark"
+                    destructive
+                    busy={deletingAccount || requestingRemovalPin}
+                    onPress={confirmAnonymizeAccount}
                   />
                 </View>
               )}
@@ -537,16 +850,19 @@ export default function AccountScreen() {
           ) : null}
         </Section>
       </ScrollView>
+      <AccountRemovalPinModal
+        action={removalPinAction}
+        busy={deletingAccount}
+        error={removalPinError}
+        passwordMode={removalCredentialMode === "password"}
+        staticPin={removalPinStatic}
+        onCancel={cancelRemovalPin}
+        onConfirm={(credential) => void submitRemovalCredential(credential)}
+        visible={removalPinAction !== null}
+      />
       <AndroidStatusBarScrim />
     </View>
   );
-}
-
-/** Pre-filled mailto for accredited accounts that can't self-delete (H54): puts the requester's email and account id straight in front of the organisers instead of making them hunt for a contact address. */
-function anonymizationRequestMailto(me: { id: number; email: string }) {
-  const subject = "Account anonymization request";
-  const body = `Account email: ${me.email}\nAccount id: ${me.id}\n`;
-  return `mailto:hackudc@gpul.org?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 function languageName(language: string) {

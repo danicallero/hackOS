@@ -1,11 +1,12 @@
 import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { pool } from "../../db/pool.js";
 import type { Language } from "../notifications/translate/index.js";
+import { isSyntheticOperator } from "./review-fixture-scope.js";
 
 /**
  * H22-H26 scanner seed/sync payload. Native scanners keep this deliberately
  * small dataset in SQLite: identity/card data needed at the point of scan,
- * current and revoked badge mappings, scannable activities and per-person
+ * current and historical badge mappings, scannable activities and per-person
  * scan counts. Mutations still go through the existing server
  * endpoints and are replayed with Idempotency-Key headers.
  *
@@ -13,7 +14,29 @@ import type { Language } from "../notifications/translate/index.js";
  * no per-value timestamp, and treating the response as replace-all makes a
  * missed sync harmless: every successful refresh converges to server truth.
  */
-export async function scannerSnapshot() {
+export async function scannerSnapshot(actorId?: number) {
+  const fixtureOnly = actorId != null && (await isSyntheticOperator(pool, actorId));
+  // Synthetic review staff must only see the three synthetic participant
+  // fixtures. Real event scanners, however, need every active attendee type
+  // (mentors, sponsors, judges and capability holders included); the role
+  // stats read model and the mobile role filter already use that full roster.
+  const subjectScope = fixtureOnly
+    ? ` AND u.is_test_account = true
+              AND (
+                EXISTS (SELECT 1 FROM manual_attendee_roles mar
+                        WHERE mar.user_id = u.id AND mar.role = 'participant')
+                OR EXISTS (
+                  SELECT 1 FROM application_responses ar
+                  JOIN applications a ON a.id = ar.application_id
+                  WHERE ar.user_id = u.id AND a.type = 'participant' AND ar.status <> 'draft'
+                )
+              )`
+    : " AND u.is_test_account = false";
+  // The snapshot is replace-all. Retired credentials are represented by
+  // keyed digests centrally and are intentionally not sent back to every
+  // scanner as raw bearer values. A stale queued mutation is rejected by the
+  // server; the local roster still includes per-person historical badge ids
+  // for immediate operator feedback.
   const [peopleResult, activitiesResult, statesResult] = await Promise.all([
     pool.query(
       `WITH RECURSIVE effective_groups (user_id, group_id) AS (
@@ -81,7 +104,7 @@ export async function scannerSnapshot() {
             ORDER BY tl.scanned_at DESC, tl.id DESC
             LIMIT 1
          ) last_presence ON true
-        WHERE u.anonymized_at IS NULL
+        WHERE u.account_state = 'active' AND u.anonymized_at IS NULL${subjectScope}
         ORDER BY u.id`,
     ),
     pool.query(
@@ -95,7 +118,11 @@ export async function scannerSnapshot() {
     ),
     pool.query(
       `SELECT user_id, activity_id, count(*)::int AS scan_count
-         FROM activity_logs GROUP BY user_id, activity_id`,
+         FROM activity_logs al
+         JOIN users u ON u.id = al.user_id
+        WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
+          ${subjectScope}
+        GROUP BY user_id, activity_id`,
     ),
   ]);
 
@@ -143,5 +170,9 @@ export async function scannerSnapshot() {
       activityId: row.activity_id as number,
       count: row.scan_count as number,
     })),
+    // Kept as empty compatibility fields for older clients. Raw global
+    // retired credentials are never distributed by the central snapshot.
+    revokedBadgeIds: [],
+    revokedTicketTokens: [],
   };
 }

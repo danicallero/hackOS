@@ -14,10 +14,15 @@ jest.mock("./api", () => ({
   },
 }));
 
+jest.mock("./auth-client", () => ({
+  authClient: { getCookie: jest.fn(() => "session=staff-a") },
+}));
+
 jest.mock("./scanner-db", () => ({
   acknowledgeScan: jest.fn(),
   applyScannerSnapshot: jest.fn(),
   correctScanTimestamp: jest.fn(),
+  deleteScan: jest.fn(),
   failScan: jest.fn(),
   markScanAttempt: jest.fn(),
   noteRetryableError: jest.fn(),
@@ -25,10 +30,12 @@ jest.mock("./scanner-db", () => ({
 }));
 
 import { ApiError, apiFetch, getClockSkewMs } from "./api";
+import { authClient } from "./auth-client";
 import {
   acknowledgeScan,
   applyScannerSnapshot,
   correctScanTimestamp,
+  deleteScan,
   failScan,
   noteRetryableError,
   pendingScans,
@@ -44,12 +51,14 @@ const mockNoteRetryable = noteRetryableError as jest.Mock;
 const mockGetClockSkewMs = getClockSkewMs as jest.Mock;
 const mockCorrectScanTimestamp = correctScanTimestamp as jest.Mock;
 const mockAcknowledgeScan = acknowledgeScan as jest.Mock;
+const mockDeleteScan = deleteScan as jest.Mock;
+const mockGetCookie = authClient.getCookie as jest.Mock;
 const OWNER_USER_ID = 42;
 // The mocked ApiError constructor is (status, code, message).
-const apiError = (status: number, message: string) =>
+const apiError = (status: number, message: string, code = "error") =>
   new (ApiError as unknown as new (status: number, code: string, message: string) => Error)(
     status,
-    "error",
+    code,
     message,
   );
 
@@ -91,6 +100,54 @@ describe("synchronizeScanner", () => {
     mockGetClockSkewMs.mockReset().mockReturnValue(null);
     mockCorrectScanTimestamp.mockReset();
     mockAcknowledgeScan.mockReset();
+    mockDeleteScan.mockReset();
+    mockGetCookie.mockReset().mockReturnValue("session=staff-a");
+  });
+
+  it("keeps an in-flight replay bound to the session that started it", async () => {
+    const firstScan = badgeRemoval("scan-a");
+    const requests: { path: string; sessionCookie: string | undefined }[] = [];
+    let releaseFirstReplay!: () => void;
+    const firstReplayGate = new Promise<void>((resolve) => {
+      releaseFirstReplay = resolve;
+    });
+    let firstRequestStarted!: () => void;
+    const firstRequest = new Promise<void>((resolve) => {
+      firstRequestStarted = resolve;
+    });
+
+    mockPendingScans.mockImplementation(async (ownerUserId: number) =>
+      ownerUserId === OWNER_USER_ID ? [firstScan] : [],
+    );
+    mockApiFetch.mockImplementation(async (path: string, init?: { sessionCookie?: string }) => {
+      requests.push({ path, sessionCookie: init?.sessionCookie });
+      if (requests.length === 1) {
+        firstRequestStarted();
+        await firstReplayGate;
+      }
+      return path === "/api/scanner/snapshot"
+        ? { generatedAt: "t0", people: [], activities: [], activityStates: [] }
+        : {};
+    });
+
+    const firstSync = synchronizeScanner(OWNER_USER_ID);
+    await firstRequest;
+
+    // A different staff member signs in while staff A's network request is
+    // still suspended. Their sync must use B's queue and session, while the
+    // already-started A request remains pinned to A's captured cookie.
+    mockGetCookie.mockReturnValue("session=staff-b");
+    const secondSync = synchronizeScanner(7);
+    await secondSync;
+
+    releaseFirstReplay();
+    await firstSync;
+
+    expect(requests).toEqual([
+      { path: "/api/accreditation/remove", sessionCookie: "session=staff-a" },
+      { path: "/api/scanner/snapshot", sessionCookie: "session=staff-b" },
+      { path: "/api/scanner/snapshot", sessionCookie: "session=staff-a" },
+    ]);
   });
 
   it("reruns for a caller who enqueues while a sync is already in flight", async () => {
@@ -147,7 +204,7 @@ describe("synchronizeScanner", () => {
     await synchronizeScanner(OWNER_USER_ID);
 
     expect(mockFailScan).not.toHaveBeenCalled();
-    expect(mockNoteRetryable).toHaveBeenCalledWith("scan-1", "Unauthorized");
+    expect(mockNoteRetryable).toHaveBeenCalledWith("scan-1", "Unauthorized", OWNER_USER_ID);
     // The loop breaks: scan-2 is never attempted against a broken session.
     expect(mockApiFetch).not.toHaveBeenCalledWith(
       "/api/accreditation/remove",
@@ -164,8 +221,50 @@ describe("synchronizeScanner", () => {
 
     await synchronizeScanner(OWNER_USER_ID);
 
-    expect(mockFailScan).toHaveBeenCalledWith("scan-1", "No badge to remove");
+    expect(mockFailScan).toHaveBeenCalledWith("scan-1", "No badge to remove", OWNER_USER_ID);
     expect(mockApiFetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("drops a queued scan for a credential revoked while the device was offline", async () => {
+    mockPendingScans.mockResolvedValue([badgeRemoval("scan-revoked")]);
+    mockApiFetch
+      .mockRejectedValueOnce(apiError(409, "This ticket has been revoked", "ticket_revoked"))
+      .mockResolvedValueOnce({ generatedAt: "t0", people: [], activities: [], activityStates: [] });
+
+    await synchronizeScanner(OWNER_USER_ID);
+
+    expect(mockDeleteScan).toHaveBeenCalledWith("scan-revoked", OWNER_USER_ID);
+    expect(mockFailScan).not.toHaveBeenCalled();
+  });
+
+  it("drops a queued scan when anonymization makes its badge unknown", async () => {
+    mockPendingScans.mockResolvedValue([presenceScan("scan-anonymized")]);
+    mockApiFetch
+      .mockRejectedValueOnce(apiError(409, "Badge not found", "badge_unknown"))
+      .mockResolvedValueOnce({ generatedAt: "t0", people: [], activities: [], activityStates: [] });
+
+    await synchronizeScanner(OWNER_USER_ID);
+
+    expect(mockDeleteScan).toHaveBeenCalledWith("scan-anonymized", OWNER_USER_ID);
+    expect(mockFailScan).not.toHaveBeenCalled();
+  });
+
+  it("drops a queued scan recorded before a badge replacement", async () => {
+    mockPendingScans.mockResolvedValue([presenceScan("scan-before-replacement")]);
+    mockApiFetch
+      .mockRejectedValueOnce(
+        apiError(
+          409,
+          "Offline scan predates the current badge assignment",
+          "badge_scan_before_assignment",
+        ),
+      )
+      .mockResolvedValueOnce({ generatedAt: "t0", people: [], activities: [], activityStates: [] });
+
+    await synchronizeScanner(OWNER_USER_ID);
+
+    expect(mockDeleteScan).toHaveBeenCalledWith("scan-before-replacement", OWNER_USER_ID);
+    expect(mockFailScan).not.toHaveBeenCalled();
   });
 
   it("corrects a timestamp rejected as future by the measured clock skew and retries once", async () => {
@@ -189,6 +288,42 @@ describe("synchronizeScanner", () => {
     expect(mockAcknowledgeScan).toHaveBeenCalled();
   });
 
+  it("classifies a corrected terminal rejection as final instead of leaving it pending", async () => {
+    mockGetClockSkewMs.mockReturnValue(-5 * 60_000);
+    const scan = presenceScan("scan-terminal", "2026-01-01T00:05:00.000Z");
+    mockPendingScans.mockResolvedValue([scan]);
+    mockApiFetch
+      .mockRejectedValueOnce(apiError(400, "Offline scan timestamp must be in the past"))
+      .mockRejectedValueOnce(apiError(409, "No badge to remove"))
+      .mockResolvedValueOnce({ generatedAt: "t0", people: [], activities: [], activityStates: [] });
+
+    await synchronizeScanner(OWNER_USER_ID);
+
+    expect(mockCorrectScanTimestamp).toHaveBeenCalledTimes(1);
+    expect(mockFailScan).toHaveBeenCalledWith("scan-terminal", "No badge to remove", OWNER_USER_ID);
+    expect(mockNoteRetryable).not.toHaveBeenCalled();
+  });
+
+  it("stops after a corrected retryable failure and keeps the scan retryable", async () => {
+    mockGetClockSkewMs.mockReturnValue(-5 * 60_000);
+    const scan = presenceScan("scan-transient", "2026-01-01T00:05:00.000Z");
+    mockPendingScans.mockResolvedValue([scan]);
+    mockApiFetch
+      .mockRejectedValueOnce(apiError(400, "Offline scan timestamp must be in the past"))
+      .mockRejectedValueOnce(apiError(503, "Service unavailable"))
+      .mockResolvedValueOnce({ generatedAt: "t0", people: [], activities: [], activityStates: [] });
+
+    await synchronizeScanner(OWNER_USER_ID);
+
+    expect(mockNoteRetryable).toHaveBeenCalledWith(
+      "scan-transient",
+      "Service unavailable",
+      OWNER_USER_ID,
+    );
+    expect(mockFailScan).not.toHaveBeenCalled();
+    expect(mockApiFetch).toHaveBeenCalledTimes(3);
+  });
+
   it("fails a scan permanently if it's still rejected as future after a clock-skew correction", async () => {
     mockGetClockSkewMs.mockReturnValue(-5 * 60_000);
     const scan = { ...presenceScan("scan-1"), clockCorrected: true };
@@ -203,6 +338,7 @@ describe("synchronizeScanner", () => {
     expect(mockFailScan).toHaveBeenCalledWith(
       "scan-1",
       "Offline scan timestamp must be in the past",
+      OWNER_USER_ID,
     );
   });
 

@@ -12,9 +12,20 @@ import { hasMobileAccess } from "../identity/mobile-access.js";
 import { enqueueAuthEmail } from "../identity/outbox.js";
 import { computeDerivedRole } from "../identity/role.js";
 import { assertSecondaryEmailAvailable } from "../identity/routes/secondary-email.js";
+import {
+  assertFixtureQueueScope,
+  assertFixtureSubjectScope,
+  isSyntheticOperator,
+} from "../logistics/review-fixture-scope.js";
 import { notify } from "../notifications/service.js";
+import {
+  broadcastQueueEvent,
+  broadcastQueueEventWithMarker,
+  queueFixtureMarker,
+} from "../queue/broadcast.js";
+import { assertQueueChallengeScope, assertQueueRepoScope } from "../queue/fixture-scope.js";
 import { writeQueueHistory } from "../queue/history.js";
-import { notifyChallengeQueueChanged } from "../queue/notify.js";
+import { notifyChallengeQueueChanged, repoMemberIds } from "../queue/notify.js";
 import { compactQueueGroupPositions, nextBottomPosition } from "../queue/ordering.js";
 import { type RepositoryAccessScope, repositoryIdsForScope } from "./access.js";
 import { buildImportPlan, type ImportPlan, type PlannedRepo } from "./plan.js";
@@ -44,9 +55,11 @@ async function upsertRepo(
              demo_url = EXCLUDED.demo_url,
              github_url = COALESCE(EXCLUDED.github_url, repos.github_url),
              updated_at = now()
+         WHERE repos.is_test_account = false
        RETURNING id, (xmax = 0) AS was_insert`,
       [repo.title, repo.description, repo.url, repo.demoUrl, repo.githubUrl],
     );
+    if (!rows[0]) throw new ConflictError("Import cannot overwrite a review-fixture project");
     return { id: rows[0].id, wasInsert: rows[0].was_insert };
   }
 
@@ -57,7 +70,9 @@ async function upsertRepo(
   // repos (H18) are excluded: an import must never overwrite a hand-made
   // project that happens to share a title.
   const existing = await client.query(
-    `SELECT id FROM repos WHERE devpost_url IS NULL AND source = 'devpost' AND name = $1 LIMIT 1`,
+    `SELECT id FROM repos
+      WHERE devpost_url IS NULL AND source = 'devpost' AND is_test_account = false AND name = $1
+      LIMIT 1`,
     [repo.title],
   );
   if (existing.rows[0]) {
@@ -103,6 +118,11 @@ export async function confirmImport(
   participantsCsv: string,
 ): Promise<ConfirmImportResult> {
   return withTransaction(async (client) => {
+    if (await isSyntheticOperator(client, actorId)) {
+      throw new ForbiddenError("Review-fixture operators cannot run real Devpost imports", {
+        code: "review_fixture_scope",
+      });
+    }
     const plan = await buildImportPlan(client, projectsCsv, participantsCsv);
     const batchId = `dp_${randomUUID()}`;
 
@@ -235,7 +255,7 @@ export async function listUnmatchedParticipants(): Promise<UnmatchedParticipant[
     `SELECT dp.repo_id, r.name AS repo_name, dp.email, dp.name, dp.surname, dp.devpost_username,
             dp.import_batch, dp.claim_email_sent_at, dp.created_at
      FROM devpost_participants dp
-     JOIN repos r ON r.id = dp.repo_id
+     JOIN repos r ON r.id = dp.repo_id AND r.is_test_account = false
      WHERE dp.merge_status = 'unmatched'
      ORDER BY r.name, dp.email`,
   );
@@ -253,16 +273,19 @@ export interface ProjectMemberCandidate {
 export async function listProjectMemberCandidates(
   query: string,
   limit: number,
+  actorId?: number,
 ): Promise<ProjectMemberCandidate[]> {
   const filter = `%${query.trim()}%`;
+  const fixtureMarker = actorId == null ? false : await isSyntheticOperator(pool, actorId);
   const { rows } = await pool.query(
     `SELECT id, email, name, surname
        FROM users
-      WHERE anonymized_at IS NULL
+      WHERE account_state = 'active' AND anonymized_at IS NULL
+        AND is_test_account = $3
         AND (email ILIKE $1 OR name ILIKE $1 OR surname ILIKE $1)
       ORDER BY name ASC NULLS LAST, surname ASC NULLS LAST, email ASC
       LIMIT $2`,
-    [filter, limit],
+    [filter, limit, fixtureMarker],
   );
   return rows;
 }
@@ -282,6 +305,7 @@ export async function linkParticipant(
   userId: number,
 ): Promise<LinkResult> {
   return withTransaction(async (client) => {
+    await assertFixtureQueueScope(client, actorId, "repo", repoId);
     const existing = await client.query(
       `SELECT * FROM devpost_participants WHERE repo_id = $1 AND email = $2 FOR UPDATE`,
       [repoId, email],
@@ -296,8 +320,14 @@ export async function linkParticipant(
         mergeStatus: existing.rows[0].merge_status,
       });
     }
-    const user = await client.query(`SELECT id FROM users WHERE id = $1`, [userId]);
+    const user = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
     if (user.rows.length === 0) throw new NotFoundError(`User ${userId} not found`);
+    await assertFixtureSubjectScope(client, actorId, userId);
 
     const before = existing.rows[0];
     await client.query(
@@ -357,6 +387,7 @@ export async function linkParticipantSecondary(
   let secondaryEmailSent = false;
   let linked = false;
   await withTransaction(async (client) => {
+    await assertFixtureQueueScope(client, actorId, "repo", repoId);
     const participant = await client.query(
       `SELECT * FROM devpost_participants WHERE repo_id = $1 AND email = $2 FOR UPDATE`,
       [repoId, email],
@@ -372,11 +403,14 @@ export async function linkParticipantSecondary(
       });
     }
     const userRes = await client.query(
-      `SELECT id, email, name FROM users WHERE id = $1 FOR UPDATE`,
+      `SELECT id, email, name FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
       [userId],
     );
     const user = userRes.rows[0] as { id: number; email: string; name: string | null } | undefined;
     if (!user) throw new NotFoundError(`User ${userId} not found`);
+    await assertFixtureSubjectScope(client, actorId, userId);
 
     const isPrimaryEmail = user.email.toLowerCase() === email;
     secondaryEmailSent = !isPrimaryEmail;
@@ -472,6 +506,8 @@ export async function sendClaimEmail(
   email: string,
 ): Promise<ClaimEmailResult> {
   return withTransaction(async (client) => {
+    await assertFixtureQueueScope(client, actorId, "repo", repoId);
+    const fixtureMarker = await isSyntheticOperator(client, actorId);
     const participant = await client.query(
       `SELECT * FROM devpost_participants WHERE repo_id = $1 AND email = $2 FOR UPDATE`,
       [repoId, email],
@@ -486,13 +522,21 @@ export async function sendClaimEmail(
     }
 
     let userId: number;
-    const existingUser = await client.query(`SELECT id FROM users WHERE email = $1`, [email]);
+    const existingUser = await client.query(
+      `SELECT id, account_state, is_test_account FROM users WHERE email = $1 FOR UPDATE`,
+      [email],
+    );
     if (existingUser.rows[0]) {
+      if (existingUser.rows[0].account_state !== "active") {
+        throw new ConflictError("This account is already being removed", { email });
+      }
+      await assertFixtureSubjectScope(client, actorId, Number(existingUser.rows[0].id));
       userId = existingUser.rows[0].id;
     } else {
       const created = await client.query(
-        `INSERT INTO users (email, email_verified) VALUES ($1, false) RETURNING id`,
-        [email],
+        `INSERT INTO users (email, email_verified, is_test_account)
+         VALUES ($1, false, $2) RETURNING id`,
+        [email, fixtureMarker],
       );
       userId = created.rows[0].id;
     }
@@ -548,8 +592,9 @@ export async function mapPrizeToChallenge(
   challengeId: number,
 ): Promise<MapPrizeResult> {
   return withTransaction(async (client) => {
+    await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
     const challenge = await client.query(
-      `SELECT id, devpost_tags FROM challenges WHERE id = $1 FOR UPDATE`,
+      `SELECT id, devpost_tags, is_test_account FROM challenges WHERE id = $1 FOR UPDATE`,
       [challengeId],
     );
     if (challenge.rows.length === 0) throw new NotFoundError(`Challenge ${challengeId} not found`);
@@ -562,9 +607,13 @@ export async function mapPrizeToChallenge(
       );
     }
 
-    const repos = await client.query(`SELECT repo_id FROM repo_devpost_prizes WHERE prize = $1`, [
-      prizeName,
-    ]);
+    const repos = await client.query(
+      `SELECT rdp.repo_id
+         FROM repo_devpost_prizes rdp
+         JOIN repos r ON r.id = rdp.repo_id
+        WHERE rdp.prize = $1 AND r.is_test_account = $2`,
+      [prizeName, challenge.rows[0].is_test_account === true],
+    );
     const repoIds = repos.rows.map((r: { repo_id: number }) => r.repo_id);
 
     await audit(client, {
@@ -641,6 +690,7 @@ interface RepoWithExtras extends RepoRow {
 async function attachMembersAndPrizes(
   repoRows: RepoRow[],
   visibleChallengeIds: number[] | "all" = "all",
+  fixtureMarker = false,
 ): Promise<RepoWithExtras[]> {
   const ids = repoRows.map((r) => r.id);
   if (ids.length === 0) return [];
@@ -659,8 +709,9 @@ async function attachMembersAndPrizes(
        FROM devpost_participants dp
        LEFT JOIN users u ON u.id = dp.user_id
       WHERE repo_id = ANY($1::int[])
+        AND (u.id IS NULL OR (u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = $2))
       ORDER BY repo_id, name ASC NULLS LAST, surname ASC NULLS LAST, email ASC`,
-    [ids],
+    [ids, fixtureMarker],
   );
   const manualMembersRes = await pool.query(
     `SELECT s.repo_id, u.id AS user_id, u.email, u.name, u.surname
@@ -671,6 +722,8 @@ async function attachMembersAndPrizes(
         -- of the roster — it only shows up via myPendingInvites/GET
         -- /api/me/projects/invites until accepted.
         AND s.status = 'active'
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL
+        AND u.is_test_account = $2
         AND NOT EXISTS (
           SELECT 1
             FROM devpost_participants dp
@@ -678,17 +731,22 @@ async function attachMembersAndPrizes(
              AND dp.user_id = s.user_id
         )
       ORDER BY s.repo_id, u.name ASC NULLS LAST, u.surname ASC NULLS LAST, u.email ASC`,
-    [ids],
+    [ids, fixtureMarker],
   );
   const prizesRes = await pool.query(
-    `SELECT repo_id, prize FROM repo_devpost_prizes WHERE repo_id = ANY($1::int[])`,
-    [ids],
+    `SELECT p.repo_id, p.prize
+       FROM repo_devpost_prizes p
+       JOIN repos r ON r.id = p.repo_id AND r.is_test_account = $2
+      WHERE p.repo_id = ANY($1::int[])
+      ORDER BY p.repo_id, p.prize ASC`,
+    [ids, fixtureMarker],
   );
   const prizeNames = [...new Set(prizesRes.rows.map((r: { prize: string }) => r.prize))];
   const challengesRes = prizeNames.length
     ? await pool.query(
-        `SELECT id, title, devpost_tags FROM challenges WHERE devpost_tags ?| $1::text[]`,
-        [prizeNames],
+        `SELECT id, title, devpost_tags FROM challenges
+          WHERE devpost_tags ?| $1::text[] AND is_test_account = $2`,
+        [prizeNames, fixtureMarker],
       )
     : { rows: [] as Array<{ id: number; title: string; devpost_tags: string[] }> };
 
@@ -713,13 +771,14 @@ async function attachMembersAndPrizes(
             qe.assigned_room_id, r.name AS assigned_room_name,
             c.judging_panel_criteria, ar.status AS review_status, ar.scores AS review_scores
        FROM queue_entries qe
-       JOIN challenges c ON c.id = qe.challenge_id
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
+       JOIN repos repo ON repo.id = qe.repo_id AND repo.is_test_account = $2
        LEFT JOIN rooms r ON r.id = qe.assigned_room_id
        LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
       WHERE qe.repo_id = ANY($1::int[])
         AND qe.status NOT IN ('cancelled', 'disqualified')
       ORDER BY qe.repo_id, qe.position ASC NULLS LAST, qe.id ASC`,
-    [ids],
+    [ids, fixtureMarker],
   );
 
   const membersByRepo = new Map<number, RepoMember[]>();
@@ -862,30 +921,36 @@ async function attachMembersAndPrizes(
 const REPO_SELECT = `SELECT id, name, description, github_url, devpost_url, demo_url, source FROM repos`;
 
 /** PROJECTS_READ: repos with members, prizes, and mapped challenges. */
-export async function listRepos(): Promise<RepoWithExtras[]> {
-  const { rows } = await pool.query(`${REPO_SELECT} ORDER BY name`);
-  return attachMembersAndPrizes(rows);
+export async function listRepos(fixtureMarker = false): Promise<RepoWithExtras[]> {
+  const { rows } = await pool.query(`${REPO_SELECT} WHERE is_test_account = $1 ORDER BY name`, [
+    fixtureMarker,
+  ]);
+  return attachMembersAndPrizes(rows, "all", fixtureMarker);
 }
 
-export async function getRepo(id: number): Promise<RepoWithExtras> {
-  const { rows } = await pool.query(`${REPO_SELECT} WHERE id = $1`, [id]);
+export async function getRepo(id: number, fixtureMarker = false): Promise<RepoWithExtras> {
+  const { rows } = await pool.query(`${REPO_SELECT} WHERE is_test_account = $2 AND id = $1`, [
+    id,
+    fixtureMarker,
+  ]);
   if (rows.length === 0) throw new NotFoundError(`Repo ${id} not found`);
-  const [withExtras] = await attachMembersAndPrizes(rows);
+  const [withExtras] = await attachMembersAndPrizes(rows, "all", fixtureMarker);
   if (!withExtras) throw new NotFoundError(`Repo ${id} not found`);
   return withExtras;
 }
 
 /** Repos visible under the shared repository policy's resolved scope. */
 export async function listReposForScope(scope: RepositoryAccessScope): Promise<RepoWithExtras[]> {
-  if (scope.fullAccess) return listRepos();
+  if (scope.fullAccess) return listRepos(scope.fixtureMarker === true);
   const repoIds = await repositoryIdsForScope(scope);
   if (repoIds.length === 0) return [];
-  const { rows } = await pool.query(`${REPO_SELECT} WHERE id = ANY($1::int[]) ORDER BY name`, [
-    repoIds,
-  ]);
+  const { rows } = await pool.query(
+    `${REPO_SELECT} WHERE is_test_account = $2 AND id = ANY($1::int[]) ORDER BY name`,
+    [repoIds, scope.fixtureMarker === true],
+  );
   // Evaluation visibility is capped to this caller's own challenges (their
   // sponsor enterprise's, or the ones they judge) — never another sponsor's.
-  return attachMembersAndPrizes(rows, scope.challengeIds);
+  return attachMembersAndPrizes(rows, scope.challengeIds, scope.fixtureMarker === true);
 }
 
 /** A repository already authorized by the shared contextual policy. */
@@ -893,10 +958,17 @@ export async function getRepoForScope(
   id: number,
   scope: RepositoryAccessScope,
 ): Promise<RepoWithExtras> {
-  if (scope.fullAccess) return getRepo(id);
-  const { rows } = await pool.query(`${REPO_SELECT} WHERE id = $1`, [id]);
+  if (scope.fullAccess) return getRepo(id, scope.fixtureMarker === true);
+  const { rows } = await pool.query(`${REPO_SELECT} WHERE is_test_account = $2 AND id = $1`, [
+    id,
+    scope.fixtureMarker === true,
+  ]);
   if (!rows[0]) throw new NotFoundError(`Repo ${id} not found`);
-  const [repo] = await attachMembersAndPrizes(rows, scope.challengeIds);
+  const [repo] = await attachMembersAndPrizes(
+    rows,
+    scope.challengeIds,
+    scope.fixtureMarker === true,
+  );
   if (!repo) throw new NotFoundError(`Repo ${id} not found`);
   return repo;
 }
@@ -921,9 +993,16 @@ export async function getRepoForScope(
 export async function hasMyProject(userId: number): Promise<boolean> {
   const { rows } = await pool.query(
     `SELECT EXISTS (
-       SELECT 1 FROM submissions WHERE user_id = $1 AND status = 'active'
+       SELECT 1 FROM submissions s
+        JOIN repos r ON r.id = s.repo_id
+        JOIN users u ON u.id = s.user_id
+        WHERE s.user_id = $1 AND s.status = 'active'
+          AND r.is_test_account = u.is_test_account
        UNION
-       SELECT 1 FROM devpost_participants WHERE user_id = $1
+       SELECT 1 FROM devpost_participants dp
+        JOIN repos r ON r.id = dp.repo_id
+        JOIN users u ON u.id = dp.user_id
+        WHERE dp.user_id = $1 AND r.is_test_account = u.is_test_account
      ) AS exists`,
     [userId],
   );
@@ -931,10 +1010,15 @@ export async function hasMyProject(userId: number): Promise<boolean> {
 }
 
 export async function myProjects(userId: number): Promise<RepoWithExtras[]> {
+  const { rows: userRows } = await pool.query<{ is_test_account: boolean }>(
+    `SELECT is_test_account FROM users WHERE id = $1`,
+    [userId],
+  );
+  const fixtureMarker = userRows[0]?.is_test_account === true;
   const { rows } = await pool.query(
     `SELECT r.id, r.name, r.description, r.github_url, r.devpost_url, r.demo_url, r.source
      FROM repos r
-     WHERE r.id IN (
+     WHERE r.is_test_account = $2 AND r.id IN (
        -- H19/H20: a project the caller was merely invited to (status='invited')
        -- is not "my project" yet — it only shows via myPendingInvites until
        -- they accept it.
@@ -943,10 +1027,10 @@ export async function myProjects(userId: number): Promise<RepoWithExtras[]> {
        SELECT repo_id FROM devpost_participants WHERE user_id = $1
      )
      ORDER BY r.name`,
-    [userId],
+    [userId, fixtureMarker],
   );
   // H20 is read-only self-view — participants never see judging internals.
-  const repos = await attachMembersAndPrizes(rows, []);
+  const repos = await attachMembersAndPrizes(rows, [], fixtureMarker);
   // A teammate's address is not the participant's to read: only the caller's
   // own email survives the self-view (H20).
   return repos.map((repo) => ({
@@ -978,8 +1062,22 @@ export async function isActiveProjectMember(
 ): Promise<boolean> {
   const { rows } = await db.query(
     `SELECT (
-       EXISTS (SELECT 1 FROM submissions WHERE repo_id = $1 AND user_id = $2 AND status = 'active')
-       OR EXISTS (SELECT 1 FROM devpost_participants WHERE repo_id = $1 AND user_id = $2)
+       EXISTS (
+         SELECT 1 FROM submissions s
+          JOIN repos r ON r.id = s.repo_id
+          JOIN users u ON u.id = s.user_id
+          WHERE s.repo_id = $1 AND s.user_id = $2 AND s.status = 'active'
+            AND u.account_state = 'active' AND u.anonymized_at IS NULL
+            AND r.is_test_account = u.is_test_account
+       )
+       OR EXISTS (
+         SELECT 1 FROM devpost_participants dp
+          JOIN repos r ON r.id = dp.repo_id
+          JOIN users u ON u.id = dp.user_id
+          WHERE dp.repo_id = $1 AND dp.user_id = $2
+            AND u.account_state = 'active' AND u.anonymized_at IS NULL
+            AND r.is_test_account = u.is_test_account
+       )
      ) AS member`,
     [repoId, userId],
   );
@@ -990,9 +1088,19 @@ export async function isActiveProjectMember(
 export async function activeProjectMemberCount(db: Queryable, repoId: number): Promise<number> {
   const { rows } = await db.query(
     `SELECT count(*)::int AS n FROM (
-       SELECT user_id FROM submissions WHERE repo_id = $1 AND status = 'active'
+       SELECT s.user_id FROM submissions s
+        JOIN repos r ON r.id = s.repo_id
+        JOIN users u ON u.id = s.user_id
+        WHERE s.repo_id = $1 AND s.status = 'active'
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
+          AND r.is_test_account = u.is_test_account
        UNION
-       SELECT user_id FROM devpost_participants WHERE repo_id = $1 AND user_id IS NOT NULL
+       SELECT dp.user_id FROM devpost_participants dp
+        JOIN repos r ON r.id = dp.repo_id
+        JOIN users u ON u.id = dp.user_id
+        WHERE dp.repo_id = $1 AND dp.user_id IS NOT NULL
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
+          AND r.is_test_account = u.is_test_account
      ) members`,
     [repoId],
   );
@@ -1001,10 +1109,17 @@ export async function activeProjectMemberCount(db: Queryable, repoId: number): P
 
 export async function addRepoMember(actorId: number, repoId: number, userId: number) {
   return withTransaction(async (client) => {
+    const user = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!user.rows[0]) throw new NotFoundError(`User ${userId} not found`);
+    await assertFixtureSubjectScope(client, actorId, userId);
+    await assertFixtureQueueScope(client, actorId, "repo", repoId);
     const repo = await client.query(`SELECT id FROM repos WHERE id = $1 FOR UPDATE`, [repoId]);
     if (!repo.rows[0]) throw new NotFoundError(`Repo ${repoId} not found`);
-    const user = await client.query(`SELECT id FROM users WHERE id = $1`, [userId]);
-    if (!user.rows[0]) throw new NotFoundError(`User ${userId} not found`);
 
     const inserted = await client.query(
       `INSERT INTO submissions (repo_id, user_id, imported_from, external_id)
@@ -1029,6 +1144,15 @@ export async function addRepoMember(actorId: number, repoId: number, userId: num
 
 export async function removeRepoMember(actorId: number, repoId: number, userId: number) {
   return withTransaction(async (client) => {
+    const user = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!user.rows[0]) throw new NotFoundError(`User ${userId} not found`);
+    await assertFixtureSubjectScope(client, actorId, userId);
+    await assertFixtureQueueScope(client, actorId, "repo", repoId);
     const existing = await client.query(
       `SELECT * FROM submissions WHERE repo_id = $1 AND user_id = $2 FOR UPDATE`,
       [repoId, userId],
@@ -1070,6 +1194,22 @@ export async function removeRepoMember(actorId: number, repoId: number, userId: 
 
 export async function removeDevpostParticipant(actorId: number, repoId: number, email: string) {
   return withTransaction(async (client) => {
+    await assertFixtureQueueScope(client, actorId, "repo", repoId);
+    const linked = await client.query<{ user_id: number | null }>(
+      `SELECT user_id FROM devpost_participants WHERE repo_id = $1 AND email = $2`,
+      [repoId, email],
+    );
+    const linkedUserId = linked.rows[0]?.user_id;
+    if (linkedUserId != null) {
+      const user = await client.query(
+        `SELECT id FROM users
+          WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+          FOR UPDATE`,
+        [linkedUserId],
+      );
+      if (!user.rows[0]) throw new NotFoundError(`User ${linkedUserId} not found`);
+      await assertFixtureSubjectScope(client, actorId, linkedUserId);
+    }
     const existing = await client.query(
       `SELECT * FROM devpost_participants WHERE repo_id = $1 AND email = $2 FOR UPDATE`,
       [repoId, email],
@@ -1115,6 +1255,7 @@ export async function removeDevpostParticipant(actorId: number, repoId: number, 
 
 export async function removeRepoPrize(actorId: number, repoId: number, prizeName: string) {
   return withTransaction(async (client) => {
+    await assertFixtureQueueScope(client, actorId, "repo", repoId);
     const existing = await client.query(
       `SELECT * FROM repo_devpost_prizes WHERE repo_id = $1 AND prize = $2 FOR UPDATE`,
       [repoId, prizeName],
@@ -1160,6 +1301,15 @@ async function enqueueRepoOnChallenge(
   challengeId: number,
   auditSource: string,
 ): Promise<EnqueueOutcome | null> {
+  const repoMarker = await assertQueueRepoScope(client, actorId, repoId);
+  const challengeMarker = await assertQueueChallengeScope(client, actorId, challengeId);
+  if (repoMarker !== challengeMarker) {
+    throw new ConflictError("Queue fixture markers must match", {
+      code: "review_fixture_scope",
+      repoId,
+      challengeId,
+    });
+  }
   const existing = await client.query(
     `SELECT * FROM queue_entries WHERE repo_id = $1 AND challenge_id = $2 FOR UPDATE`,
     [repoId, challengeId],
@@ -1171,7 +1321,8 @@ async function enqueueRepoOnChallenge(
     const revived = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL,
-              called_at = NULL, presentation_started_at = NULL, completed_at = NULL
+              called_at = NULL, precalled_at = NULL, presentation_started_at = NULL,
+              completed_at = NULL
         WHERE id = $2
         RETURNING *`,
       [position, entry.id],
@@ -1225,6 +1376,15 @@ async function enqueueRepoOnChallenge(
 
 export async function addRepoChallenge(actorId: number, repoId: number, challengeId: number) {
   const result = await withTransaction(async (client) => {
+    const repoMarker = await assertQueueRepoScope(client, actorId, repoId);
+    const challengeMarker = await assertQueueChallengeScope(client, actorId, challengeId);
+    if (repoMarker !== challengeMarker) {
+      throw new ConflictError("Queue fixture markers must match", {
+        code: "review_fixture_scope",
+        repoId,
+        challengeId,
+      });
+    }
     const repo = await client.query(`SELECT id FROM repos WHERE id = $1 FOR UPDATE`, [repoId]);
     if (!repo.rows[0]) throw new NotFoundError(`Repo ${repoId} not found`);
     const challenge = await client.query(`SELECT id FROM challenges WHERE id = $1`, [challengeId]);
@@ -1235,7 +1395,13 @@ export async function addRepoChallenge(actorId: number, repoId: number, challeng
     return { repoId, challengeId, ...outcome };
   });
   if (result.entry) {
-    await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, result.entry);
+    await broadcastQueueEvent(
+      pool,
+      "entry",
+      result.entry.id,
+      EVENTS.QUEUE_ENTRY_CHANGED,
+      result.entry,
+    );
     await notifyChallengeQueueChanged(pool, result.entry.challenge_id);
   }
   return result;
@@ -1284,6 +1450,15 @@ async function terminateQueueEntry(
 
 export async function removeRepoChallenge(actorId: number, repoId: number, challengeId: number) {
   const result = await withTransaction(async (client) => {
+    const repoMarker = await assertQueueRepoScope(client, actorId, repoId);
+    const challengeMarker = await assertQueueChallengeScope(client, actorId, challengeId);
+    if (repoMarker !== challengeMarker) {
+      throw new ConflictError("Queue fixture markers must match", {
+        code: "review_fixture_scope",
+        repoId,
+        challengeId,
+      });
+    }
     const entryRes = await client.query(
       `SELECT * FROM queue_entries WHERE repo_id = $1 AND challenge_id = $2 FOR UPDATE`,
       [repoId, challengeId],
@@ -1299,7 +1474,13 @@ export async function removeRepoChallenge(actorId: number, repoId: number, chall
     await compactQueueGroupPositions(client, challengeId);
     return { repoId, challengeId, entry: updatedEntry, removed: true };
   });
-  await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, result.entry);
+  await broadcastQueueEvent(
+    pool,
+    "entry",
+    Number(result.entry.id),
+    EVENTS.QUEUE_ENTRY_CHANGED,
+    result.entry,
+  );
   await notifyChallengeQueueChanged(pool, result.challengeId);
   return result;
 }
@@ -1329,10 +1510,14 @@ export async function bulkAddRepoChallenge(
   challengeId: number,
 ): Promise<BulkAddResult> {
   const { outcomes, total } = await withTransaction(async (client) => {
+    await assertQueueChallengeScope(client, actorId, challengeId);
     const challenge = await client.query(`SELECT id FROM challenges WHERE id = $1`, [challengeId]);
     if (!challenge.rows[0]) throw new NotFoundError(`Challenge ${challengeId} not found`);
 
-    const repos = await client.query(`SELECT id FROM repos ORDER BY id`);
+    const repos = await client.query(
+      `SELECT id FROM repos WHERE is_test_account = $1 ORDER BY id`,
+      [await isSyntheticOperator(client, actorId)],
+    );
     const repoIds = repos.rows.map((r: { id: number }) => r.id);
 
     const outcomes: EnqueueOutcome[] = [];
@@ -1370,6 +1555,7 @@ export async function bulkRemoveRepoChallenge(
   challengeId: number,
 ): Promise<BulkRemoveResult> {
   const { updatedEntries, total } = await withTransaction(async (client) => {
+    await assertQueueChallengeScope(client, actorId, challengeId);
     const challenge = await client.query(`SELECT id FROM challenges WHERE id = $1`, [challengeId]);
     if (!challenge.rows[0]) throw new NotFoundError(`Challenge ${challengeId} not found`);
 
@@ -1403,7 +1589,7 @@ export async function bulkRemoveRepoChallenge(
   });
 
   for (const entry of updatedEntries) {
-    await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, entry);
+    await broadcastQueueEvent(pool, "entry", Number(entry.id), EVENTS.QUEUE_ENTRY_CHANGED, entry);
   }
   if (updatedEntries.length > 0) await notifyChallengeQueueChanged(pool, challengeId);
 
@@ -1437,7 +1623,13 @@ function toEnqueuedChallenge(outcome: EnqueueOutcome): EnqueuedChallenge {
 /** Enqueued entries a caller must announce (SSE + notify) after commit. */
 async function announceQueueOutcomes(outcomes: EnqueueOutcome[]): Promise<void> {
   for (const outcome of outcomes) {
-    await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, outcome.entry);
+    await broadcastQueueEvent(
+      pool,
+      "entry",
+      outcome.entry.id,
+      EVENTS.QUEUE_ENTRY_CHANGED,
+      outcome.entry,
+    );
     await notifyChallengeQueueChanged(pool, outcome.entry.challenge_id);
   }
 }
@@ -1451,12 +1643,13 @@ async function assertChallengesExist(
   client: Queryable,
   challengeIds: number[],
   visibleOnly = false,
+  fixtureMarker = false,
 ): Promise<void> {
   if (challengeIds.length === 0) return;
   const { rows } = await client.query(
-    `SELECT id FROM challenges WHERE id = ANY($1::int[])
+    `SELECT id FROM challenges WHERE id = ANY($1::int[]) AND is_test_account = $2
       ${visibleOnly ? `AND visibility = 'visible'` : ""}`,
-    [challengeIds],
+    [challengeIds, fixtureMarker],
   );
   const found = new Set(rows.map((r: { id: number }) => r.id));
   const missing = challengeIds.filter((id) => !found.has(id));
@@ -1467,12 +1660,13 @@ async function insertNativeRepo(
   client: Queryable,
   input: NativeRepoInput,
   createdBy: number,
+  fixtureMarker = false,
 ): Promise<RepoRow> {
   const { rows } = await client.query(
-    `INSERT INTO repos (name, description, github_url, demo_url, source, created_by)
-     VALUES ($1, $2, $3, $4, 'native', $5)
+    `INSERT INTO repos (name, description, github_url, demo_url, source, created_by, is_test_account)
+     VALUES ($1, $2, $3, $4, 'native', $5, $6)
      RETURNING id, name, description, github_url, devpost_url, demo_url, source`,
-    [input.name, input.description, input.githubUrl, input.demoUrl, createdBy],
+    [input.name, input.description, input.githubUrl, input.demoUrl, createdBy, fixtureMarker],
   );
   return rows[0];
 }
@@ -1490,17 +1684,26 @@ export async function createRepoNative(
   const memberUserIds = [...new Set(input.memberUserIds)];
   const challengeIds = [...new Set(input.challengeIds)];
   const { repo, outcomes } = await withTransaction(async (client) => {
+    const fixtureMarker = await isSyntheticOperator(client, actorId);
     if (memberUserIds.length > 0) {
-      const { rows } = await client.query(`SELECT id FROM users WHERE id = ANY($1::int[])`, [
-        memberUserIds,
-      ]);
+      const { rows } = await client.query(
+        `SELECT id, is_test_account FROM users
+          WHERE id = ANY($1::int[])
+            AND account_state = 'active' AND anonymized_at IS NULL
+          ORDER BY id
+          FOR UPDATE`,
+        [memberUserIds],
+      );
       const found = new Set(rows.map((r: { id: number }) => r.id));
       const missing = memberUserIds.filter((id) => !found.has(id));
       if (missing.length > 0) throw new NotFoundError(`User ${missing.join(", ")} not found`);
+      for (const userId of memberUserIds) {
+        await assertFixtureSubjectScope(client, actorId, userId);
+      }
     }
-    await assertChallengesExist(client, challengeIds);
+    await assertChallengesExist(client, challengeIds, false, fixtureMarker);
 
-    const created = await insertNativeRepo(client, input, actorId);
+    const created = await insertNativeRepo(client, input, actorId, fixtureMarker);
     for (const userId of memberUserIds) {
       await client.query(
         `INSERT INTO submissions (repo_id, user_id, imported_from, external_id)
@@ -1586,6 +1789,7 @@ function repoAuditFields(repo: RepoRow) {
 /** H18: edit a project's own metadata (title, description, links). Audited. */
 export async function updateRepo(actorId: number, repoId: number, patch: UpdateRepoPatch) {
   return withTransaction(async (client) => {
+    await assertFixtureQueueScope(client, actorId, "repo", repoId);
     const { before, after } = await applyRepoUpdate(client, repoId, patch);
     await audit(client, {
       actorId,
@@ -1612,6 +1816,15 @@ export async function updateMyProject(
   patch: UpdateRepoPatch,
 ): Promise<RepoRow> {
   return withTransaction(async (client) => {
+    const { rows: userRows } = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!userRows[0]) throw new NotFoundError("User not found");
+    await assertFixtureSubjectScope(client, userId, userId);
+    await assertFixtureQueueScope(client, userId, "repo", repoId);
     await assertWithinHackingWindow(client);
     if (!(await isActiveProjectMember(client, repoId, userId))) {
       throw new ForbiddenError("Not a member of this project");
@@ -1670,6 +1883,14 @@ export async function createMyProject(
 ): Promise<{ repo: RepoRow; challenges: EnqueuedChallenge[] }> {
   const challengeIds = [...new Set(input.challengeIds)];
   const { repo, outcomes } = await withTransaction(async (client) => {
+    const user = await client.query<{ is_test_account: boolean }>(
+      `SELECT is_test_account FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!user.rows[0]) throw new NotFoundError("User not found");
+    const fixtureMarker = user.rows[0].is_test_account === true;
     // Serialized per-user — harmless now that multiple projects are allowed,
     // kept for symmetry with the rest of this transaction's row locks.
     await client.query(`SELECT pg_advisory_xact_lock(hashtext('my_project_create'), $1)`, [userId]);
@@ -1686,9 +1907,9 @@ export async function createMyProject(
     }
     await assertWithinHackingWindow(client);
 
-    await assertChallengesExist(client, challengeIds, true);
+    await assertChallengesExist(client, challengeIds, true, fixtureMarker);
 
-    const created = await insertNativeRepo(client, input, userId);
+    const created = await insertNativeRepo(client, input, userId, fixtureMarker);
     await client.query(
       `INSERT INTO submissions (repo_id, user_id, imported_from, external_id)
        VALUES ($1, $2, 'manual', NULL)`,
@@ -1739,6 +1960,15 @@ export async function inviteProjectMember(
   email: string,
 ): Promise<{ invited: true }> {
   return withTransaction(async (client) => {
+    const inviterUser = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!inviterUser.rows[0]) throw new NotFoundError("User not found");
+    await assertFixtureSubjectScope(client, userId, userId);
+    await assertFixtureQueueScope(client, userId, "repo", repoId);
     await assertWithinHackingWindow(client);
     if (!(await isActiveProjectMember(client, repoId, userId))) {
       throw new ForbiddenError("Not a member of this project");
@@ -1748,11 +1978,16 @@ export async function inviteProjectMember(
     const repo = repoRes.rows[0] as { id: number; name: string } | undefined;
     if (!repo) throw new NotFoundError(`Repo ${repoId} not found`);
 
-    const inviteeRes = await client.query(`SELECT id FROM users WHERE lower(email) = lower($1)`, [
-      email,
-    ]);
+    const inviteeRes = await client.query(
+      `SELECT id FROM users
+        WHERE lower(email) = lower($1)
+          AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [email],
+    );
     const inviteeId = inviteeRes.rows[0]?.id as number | undefined;
     if (!inviteeId) throw new NotFoundError(`No account for ${email}`);
+    await assertFixtureSubjectScope(client, userId, inviteeId);
 
     if (!(await isAdmittedParticipant(client, inviteeId))) {
       throw new ForbiddenError(`${email} is not an admitted participant`);
@@ -1781,15 +2016,18 @@ export async function inviteProjectMember(
       source: "participant",
     });
 
-    const inviterRes = await client.query(`SELECT name, surname, email FROM users WHERE id = $1`, [
-      userId,
-    ]);
+    const inviterRes = await client.query(
+      `SELECT name, surname, email FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+      [userId],
+    );
     const inviter = inviterRes.rows[0] as
       | { name: string | null; surname: string | null; email: string }
       | undefined;
     await notify(client, {
       userId: inviteeId,
       category: "project",
+      actorId: userId,
       payload: {
         template: "project.invite",
         vars: { projectName: repo.name, inviterName: inviter ? displayName(inviter) : "" },
@@ -1809,15 +2047,21 @@ export interface PendingInvite {
 
 /** H19/H20: pending invites addressed to userId, newest first. */
 export async function myPendingInvites(userId: number): Promise<PendingInvite[]> {
+  const { rows: userRows } = await pool.query<{ is_test_account: boolean }>(
+    `SELECT is_test_account FROM users WHERE id = $1`,
+    [userId],
+  );
+  const fixtureMarker = userRows[0]?.is_test_account === true;
   const { rows } = await pool.query(
     `SELECT s.repo_id, r.name AS repo_name, u.name AS inviter_name, u.surname AS inviter_surname,
             u.email AS inviter_email, s.created_at AS invited_at
        FROM submissions s
-       JOIN repos r ON r.id = s.repo_id
+       JOIN repos r ON r.id = s.repo_id AND r.is_test_account = $2
        LEFT JOIN users u ON u.id = s.invited_by
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
       WHERE s.user_id = $1 AND s.status = 'invited'
       ORDER BY s.created_at DESC`,
-    [userId],
+    [userId, fixtureMarker],
   );
   return (
     rows as Array<{
@@ -1848,6 +2092,15 @@ export async function acceptProjectInvite(
   repoId: number,
 ): Promise<{ accepted: true }> {
   return withTransaction(async (client) => {
+    const user = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!user.rows[0]) throw new NotFoundError("User not found");
+    await assertFixtureSubjectScope(client, userId, userId);
+    await assertFixtureQueueScope(client, userId, "repo", repoId);
     await assertWithinHackingWindow(client);
     const { rows } = await client.query(
       `UPDATE submissions SET status = 'active', responded_at = now()
@@ -1874,6 +2127,15 @@ export async function declineProjectInvite(
   repoId: number,
 ): Promise<{ declined: true }> {
   return withTransaction(async (client) => {
+    const user = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!user.rows[0]) throw new NotFoundError("User not found");
+    await assertFixtureSubjectScope(client, userId, userId);
+    await assertFixtureQueueScope(client, userId, "repo", repoId);
     await assertWithinHackingWindow(client);
     const { rows } = await client.query(
       `DELETE FROM submissions WHERE repo_id = $1 AND user_id = $2 AND status = 'invited'
@@ -1900,6 +2162,15 @@ export async function declineProjectInvite(
  */
 export async function leaveMyProject(userId: number, repoId: number): Promise<{ left: true }> {
   return withTransaction(async (client) => {
+    const user = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!user.rows[0]) throw new NotFoundError("User not found");
+    await assertFixtureSubjectScope(client, userId, userId);
+    await assertFixtureQueueScope(client, userId, "repo", repoId);
     await assertWithinHackingWindow(client);
     if (!(await isActiveProjectMember(client, repoId, userId))) {
       throw new ForbiddenError("Not a member of this project");
@@ -1932,13 +2203,83 @@ export async function leaveMyProject(userId: number, repoId: number): Promise<{ 
   });
 }
 
+interface DeletedQueueEntry {
+  id: number;
+  challenge_id: number;
+  repo_id: number;
+  fixtureMarker: boolean | null;
+}
+
 /**
  * Deletes every row that transitively references repoId before the repo row
  * itself — none of the FKs onto `repos`/`queue_entries` cascade, and
  * `deleteMyProject` only ever reaches here once the caller has confirmed
  * they're the project's sole member.
+ *
+ * H19/H20 + H38/H41: queue entries and their active repo members disappear in
+ * this transaction, so ids, marker-scoped broadcast topics, and personal
+ * invalidation recipients must be captured before the delete. The caller emits
+ * those notifications only after this transaction commits; the delayed worker
+ * cannot rediscover a member from queue rows that no longer exist.
  */
-async function deleteRepoCascade(client: Queryable, repoId: number): Promise<void> {
+async function deleteRepoCascade(
+  client: Queryable,
+  repoId: number,
+  fixtureMarker: boolean,
+): Promise<{ queueEntries: DeletedQueueEntry[]; memberIds: number[] }> {
+  const memberIds = await repoMemberIds(client, repoId, fixtureMarker);
+  const queueEntriesRes = await client.query<{
+    id: number;
+    challenge_id: number;
+    repo_id: number;
+    challenge_is_test_account: boolean;
+    repo_is_test_account: boolean;
+  }>(
+    `SELECT qe.id, qe.challenge_id, qe.repo_id,
+            c.is_test_account AS challenge_is_test_account,
+            r.is_test_account AS repo_is_test_account
+       FROM queue_entries qe
+       JOIN challenges c ON c.id = qe.challenge_id
+       JOIN repos r ON r.id = qe.repo_id
+      WHERE qe.repo_id = $1
+      ORDER BY qe.id
+      FOR UPDATE OF qe`,
+    [repoId],
+  );
+  const queueEntries = queueEntriesRes.rows.map((entry) => ({
+    id: Number(entry.id),
+    challenge_id: Number(entry.challenge_id),
+    repo_id: Number(entry.repo_id),
+    // A mixed queue graph is an isolation violation; fail closed instead of
+    // putting a deleted fixture payload on the real operator stream (H54).
+    fixtureMarker:
+      entry.challenge_is_test_account === entry.repo_is_test_account
+        ? entry.challenge_is_test_account === true
+        : null,
+  }));
+
+  // The caller checked the repository graph before locking it, but a stale
+  // or direct-SQL queue row can still be introduced before this transaction
+  // acquires the entry locks. Re-resolve every locked entry's complete group
+  // and room graph before any destructive delete so self-service cannot turn
+  // a raced mixed fixture into a real-topic invalidation (H19/H20, H54).
+  for (const entry of queueEntries) {
+    let resolvedMarker: boolean | null;
+    try {
+      resolvedMarker = await queueFixtureMarker(client, "entry", entry.id);
+    } catch {
+      resolvedMarker = null;
+    }
+    if (resolvedMarker === null || resolvedMarker !== fixtureMarker) {
+      throw new ConflictError("Queue fixture markers must match", {
+        code: "review_fixture_scope",
+        resource: "repo",
+        resourceId: repoId,
+      });
+    }
+    entry.fixtureMarker = resolvedMarker;
+  }
+
   await client.query(
     `DELETE FROM attempt_review_versions WHERE attempt_id IN
        (SELECT id FROM queue_entries WHERE repo_id = $1)`,
@@ -1965,6 +2306,7 @@ async function deleteRepoCascade(client: Queryable, repoId: number): Promise<voi
   await client.query(`DELETE FROM devpost_participants WHERE repo_id = $1`, [repoId]);
   await client.query(`DELETE FROM repo_devpost_prizes WHERE repo_id = $1`, [repoId]);
   await client.query(`DELETE FROM repos WHERE id = $1`, [repoId]);
+  return { queueEntries, memberIds };
 }
 
 /**
@@ -1973,7 +2315,16 @@ async function deleteRepoCascade(client: Queryable, repoId: number): Promise<voi
  * transaction before touching anything irreversible.
  */
 export async function deleteMyProject(userId: number, repoId: number): Promise<{ deleted: true }> {
-  return withTransaction(async (client) => {
+  const { queueEntries, memberIds } = await withTransaction(async (client) => {
+    const user = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!user.rows[0]) throw new NotFoundError("User not found");
+    await assertFixtureSubjectScope(client, userId, userId);
+    await assertQueueRepoScope(client, userId, repoId);
     await assertWithinHackingWindow(client);
     if (!(await isActiveProjectMember(client, repoId, userId))) {
       throw new ForbiddenError("Not a member of this project");
@@ -1983,13 +2334,16 @@ export async function deleteMyProject(userId: number, repoId: number): Promise<{
       throw new ConflictError("Remove other members first, or ask queue management");
     }
 
-    const repoRes = await client.query(`SELECT id, name FROM repos WHERE id = $1 FOR UPDATE`, [
-      repoId,
-    ]);
-    const repo = repoRes.rows[0] as { id: number; name: string } | undefined;
+    const repoRes = await client.query(
+      `SELECT id, name, is_test_account FROM repos WHERE id = $1 FOR UPDATE`,
+      [repoId],
+    );
+    const repo = repoRes.rows[0] as
+      | { id: number; name: string; is_test_account: boolean }
+      | undefined;
     if (!repo) throw new NotFoundError(`Repo ${repoId} not found`);
 
-    await deleteRepoCascade(client, repoId);
+    const deleted = await deleteRepoCascade(client, repoId, repo.is_test_account === true);
 
     await audit(client, {
       actorId: userId,
@@ -1999,8 +2353,44 @@ export async function deleteMyProject(userId: number, repoId: number): Promise<{
       before: { name: repo.name },
       source: "participant",
     });
-    return { deleted: true };
+    return deleted;
   });
+
+  // The queue rows no longer exist, so resolve each topic from the marker
+  // captured inside the transaction. These are best-effort notifications on
+  // top of the committed deletion; they must not become part of its rollback
+  // boundary or the idempotent request response (H19/H20, H38/H41).
+  for (const entry of queueEntries) {
+    await broadcastQueueEventWithMarker(entry.fixtureMarker, EVENTS.QUEUE_ENTRY_CHANGED, {
+      id: entry.id,
+      challenge_id: entry.challenge_id,
+      repo_id: entry.repo_id,
+      deleted: true,
+    });
+  }
+
+  // Queue rows are gone by this point, so the delayed challenge worker cannot
+  // discover the deleted team's recipients. Refresh each marker-matched
+  // member directly; the payload is only the challenge id and never queue data.
+  const participantChallenges = new Set(
+    queueEntries.filter((entry) => entry.fixtureMarker !== null).map((entry) => entry.challenge_id),
+  );
+  await Promise.all(
+    [...participantChallenges].flatMap((challengeId) =>
+      memberIds.map((memberId) =>
+        broadcast(`${SSE_TOPICS.USER_PREFIX}${memberId}`, EVENTS.USER_QUEUE_CHANGED, {
+          challengeId,
+        }),
+      ),
+    ),
+  );
+
+  const affectedChallenges = [...new Set(queueEntries.map((entry) => entry.challenge_id))];
+  for (const challengeId of affectedChallenges) {
+    await notifyChallengeQueueChanged(pool, challengeId);
+  }
+
+  return { deleted: true };
 }
 
 export interface PublicChallenge {
@@ -2049,7 +2439,7 @@ export async function listPublicChallenges(): Promise<PublicChallenge[]> {
        FROM challenges c
        JOIN sponsors s ON s.id = c.author
        JOIN enterprises e ON e.id = s.enterprise_id
-      WHERE c.visibility = 'visible'
+      WHERE c.visibility = 'visible' AND c.is_test_account = false
       ORDER BY c.available_from NULLS FIRST, c.id ASC`,
   );
 

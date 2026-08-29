@@ -320,4 +320,21 @@ describe("ticket/wallet exposure follows event access", () => {
     });
     expect(ticket.json().ticketToken).not.toBeNull();
   });
+
+  it("does not expose a synthetic user's ticket to a real scanner reader", async () => {
+    const a = await getApp();
+    const fixtureUser = await createUser({ emailVerified: true });
+    const realReader = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [fixtureUser]);
+    await pool.query(`INSERT INTO tickets (user_id, token) VALUES ($1, 'synthetic-ticket')`, [
+      fixtureUser,
+    ]);
+
+    const response = await a.inject({
+      method: "GET",
+      url: `/api/users/${fixtureUser}/ticket`,
+      headers: asUser(realReader),
+    });
+    expect(response.statusCode).toBe(404);
+  });
 });

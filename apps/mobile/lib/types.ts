@@ -16,6 +16,21 @@ export interface Me {
   shirtSize: string | null;
   universityId: number | null;
   notes: string | null;
+  accountState: "active" | "removal_pending";
+  removal:
+    | {
+        status: "pending_exit";
+        action: "anonymize";
+        expiresAt: string;
+        canCancel: true;
+      }
+    | {
+        status: "processing";
+        action: "delete" | "anonymize";
+        expiresAt: string | null;
+        canCancel: false;
+      }
+    | null;
   createdAt: string;
   role: "admin" | "staff" | "sponsor" | "mentor" | "judge" | "participant" | "unassigned";
   mobileAccess: boolean;

@@ -19,6 +19,22 @@ export interface Me {
   shirtSize: string | null;
   universityId: number | null;
   notes: string | null;
+  accountState: "active" | "removal_pending";
+  isTestAccount: boolean;
+  removal:
+    | {
+        status: "pending_exit";
+        action: "anonymize";
+        expiresAt: string;
+        canCancel: true;
+      }
+    | {
+        status: "processing";
+        action: "delete" | "anonymize";
+        expiresAt: string | null;
+        canCancel: false;
+      }
+    | null;
   createdAt: string;
   role: "admin" | "judge" | "sponsor" | "staff" | "mentor" | "participant" | "unassigned";
   capabilities: Capability[];
@@ -59,6 +75,7 @@ export interface UserListItem {
   shirtSize: string | null;
   applicationStatus: string | null;
   confirmedSpot: boolean;
+  isTestAccount: boolean;
   createdAt: string;
 }
 export interface UserList {

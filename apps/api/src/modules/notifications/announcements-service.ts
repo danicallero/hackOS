@@ -1,5 +1,10 @@
 import type { Queryable } from "../../db/pool.js";
+import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
+import {
+  assertFixtureSubjectScope,
+  isSyntheticOperator,
+} from "../logistics/review-fixture-scope.js";
 import { type NotificationChannel, notify } from "./service.js";
 import type { Language } from "./translate/index.js";
 
@@ -79,7 +84,7 @@ export function normalizeAnnouncementContent(input: {
 
 export interface Announcement {
   id: number;
-  author_id: number;
+  author_id: number | null;
   title: string;
   body: string;
   translations: AnnouncementTranslations;
@@ -137,19 +142,106 @@ function assertTargetingExclusivity(
   }
 }
 
+async function announcementFixtureMarker(
+  db: Queryable,
+  authorId: number | null | undefined,
+  announcementId?: number,
+): Promise<boolean> {
+  if (authorId != null && (await isSyntheticOperator(db, authorId))) return true;
+  if (announcementId == null) return false;
+  const { rows } = await db.query(
+    `SELECT 1
+       FROM audit_log
+      WHERE entity_type = 'announcement'
+        AND entity_id = $1::text
+        AND action = 'fixture_scope_marked'
+        AND after ->> 'is_test_account' = 'true'
+      LIMIT 1`,
+    [announcementId],
+  );
+  return rows.length > 0;
+}
+
+/**
+ * The author foreign key is intentionally detached during account removal.
+ * Keep the fixture boundary in an identity-free audit marker so a synthetic
+ * announcement cannot become a normal public/admin announcement after its
+ * author is scrubbed.
+ */
+async function markAnnouncementFixture(
+  db: Queryable,
+  announcementId: number,
+  fixtureMarker: boolean,
+): Promise<void> {
+  if (!fixtureMarker) return;
+  const { rows } = await db.query(
+    `SELECT 1
+       FROM audit_log
+      WHERE entity_type = 'announcement'
+        AND entity_id = $1::text
+        AND action = 'fixture_scope_marked'
+      LIMIT 1`,
+    [announcementId],
+  );
+  if (rows[0]) return;
+  await audit(db, {
+    actorId: null,
+    entityType: "announcement",
+    entityId: announcementId,
+    action: "fixture_scope_marked",
+    source: "system",
+    after: { is_test_account: true },
+    ip: null,
+    userAgent: null,
+  });
+}
+
+function announcementFixtureMarkerSql(announcementAlias = "a", authorAlias = "author"): string {
+  return `(COALESCE(${authorAlias}.is_test_account, false)
+    OR EXISTS (
+      SELECT 1
+        FROM audit_log fixture_marker
+       WHERE fixture_marker.entity_type = 'announcement'
+         AND fixture_marker.entity_id = ${announcementAlias}.id::text
+         AND fixture_marker.action = 'fixture_scope_marked'
+         AND fixture_marker.after ->> 'is_test_account' = 'true'
+    ))`;
+}
+
 async function replaceAnnouncementRecipients(
   db: Queryable,
   announcementId: number,
   recipientUserIds: number[],
+  fixtureMarker: boolean,
+  actorId?: number,
 ): Promise<void> {
+  const ids = [...new Set(recipientUserIds)];
+  if (ids.length > 0) {
+    const { rows } = await db.query<{ id: number; is_test_account: boolean }>(
+      `SELECT id, is_test_account
+         FROM users
+        WHERE id = ANY($1::int[])
+          AND account_state = 'active' AND anonymized_at IS NULL
+        ORDER BY id
+        FOR SHARE`,
+      [ids],
+    );
+    if (rows.length !== ids.length) throw new NotFoundError("Recipient user not found");
+    for (const row of rows) {
+      if (actorId != null) await assertFixtureSubjectScope(db, actorId, Number(row.id));
+      if (row.is_test_account !== fixtureMarker) {
+        throw new NotFoundError("Recipient user not found");
+      }
+    }
+  }
   await db.query(`DELETE FROM announcement_recipients WHERE announcement_id = $1`, [
     announcementId,
   ]);
-  if (recipientUserIds.length === 0) return;
+  if (ids.length === 0) return;
   await db.query(
     `INSERT INTO announcement_recipients (announcement_id, user_id)
      SELECT $1, unnest($2::int[])`,
-    [announcementId, recipientUserIds],
+    [announcementId, ids],
   );
 }
 
@@ -176,11 +268,17 @@ export async function getAnnouncementRecipients(
   db: Queryable,
   announcementId: number,
 ): Promise<AnnouncementRecipient[]> {
+  const fixtureMarkerSql = announcementFixtureMarkerSql();
   const { rows } = await db.query(
     `SELECT u.id, u.name, u.surname, u.email
      FROM announcement_recipients ar
      JOIN users u ON u.id = ar.user_id
+     JOIN announcements a ON a.id = ar.announcement_id
+     LEFT JOIN users author ON author.id = a.author_id
      WHERE ar.announcement_id = $1
+       AND u.account_state = 'active'
+       AND u.anonymized_at IS NULL
+       AND u.is_test_account = ${fixtureMarkerSql}
      ORDER BY u.id`,
     [announcementId],
   );
@@ -192,16 +290,19 @@ export async function listAnnouncementRecipientCandidates(
   db: Queryable,
   query: string,
   limit: number,
+  actorId?: number,
 ): Promise<AnnouncementRecipient[]> {
   const filter = `%${query.trim()}%`;
+  const fixtureMarker = actorId == null ? false : await isSyntheticOperator(db, actorId);
   const { rows } = await db.query(
     `SELECT id, email, name, surname
        FROM users
-      WHERE anonymized_at IS NULL
+      WHERE account_state = 'active' AND anonymized_at IS NULL
+        AND is_test_account = $3
         AND (email ILIKE $1 OR name ILIKE $1 OR surname ILIKE $1)
       ORDER BY name ASC NULLS LAST, surname ASC NULLS LAST, email ASC
       LIMIT $2`,
-    [filter, limit],
+    [filter, limit, fixtureMarker],
   );
   return rows as AnnouncementRecipient[];
 }
@@ -210,7 +311,17 @@ export async function createAnnouncement(
   db: Queryable,
   authorId: number,
   input: AnnouncementInput,
+  actorId: number = authorId,
 ): Promise<Announcement> {
+  const author = await db.query<{ id: number; is_test_account: boolean }>(
+    `SELECT id, is_test_account FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+      FOR SHARE`,
+    [authorId],
+  );
+  if (!author.rows[0]) throw new NotFoundError("User not found");
+  await assertFixtureSubjectScope(db, actorId, authorId);
+  const fixtureMarker = author.rows[0].is_test_account === true;
   const content = normalizeAnnouncementContent(input);
   assertVisibilityWindow(
     input.screenPlacement,
@@ -238,7 +349,14 @@ export async function createAnnouncement(
     ],
   );
   const created = rows[0];
-  await replaceAnnouncementRecipients(db, created.id, input.recipientUserIds);
+  await markAnnouncementFixture(db, created.id, fixtureMarker);
+  await replaceAnnouncementRecipients(
+    db,
+    created.id,
+    input.recipientUserIds,
+    fixtureMarker,
+    actorId,
+  );
   return created;
 }
 
@@ -246,8 +364,10 @@ export async function updateAnnouncement(
   db: Queryable,
   id: number,
   input: Partial<AnnouncementInput>,
+  actorId?: number,
 ): Promise<Announcement> {
-  const existing = await getAnnouncement(db, id);
+  const existing = await getAnnouncement(db, id, actorId);
+  const fixtureMarker = await announcementFixtureMarker(db, existing.author_id, existing.id);
   const existingRecipientIds =
     input.recipientUserIds !== undefined
       ? input.recipientUserIds
@@ -301,36 +421,70 @@ export async function updateAnnouncement(
     ],
   );
   const updated = rows[0];
+  if (!updated) throw new NotFoundError("Announcement not found");
   if (input.recipientUserIds !== undefined) {
-    await replaceAnnouncementRecipients(db, id, input.recipientUserIds);
+    await replaceAnnouncementRecipients(db, id, input.recipientUserIds, fixtureMarker, actorId);
   }
   return updated;
 }
 
-export async function deleteAnnouncement(db: Queryable, id: number): Promise<Announcement> {
+export async function deleteAnnouncement(
+  db: Queryable,
+  id: number,
+  actorId?: number,
+): Promise<Announcement> {
+  if (actorId != null) await getAnnouncement(db, id, actorId);
   const { rows } = await db.query(`DELETE FROM announcements WHERE id = $1 RETURNING *`, [id]);
   if (!rows[0]) throw new NotFoundError("Announcement not found");
   return rows[0];
 }
 
-export async function getAnnouncement(db: Queryable, id: number): Promise<Announcement> {
-  const { rows } = await db.query(`SELECT * FROM announcements WHERE id = $1`, [id]);
+export async function getAnnouncement(
+  db: Queryable,
+  id: number,
+  actorId?: number,
+): Promise<Announcement> {
+  const params: unknown[] = [id];
+  const fixtureMarkerSql = announcementFixtureMarkerSql();
+  const markerClause = actorId == null ? "" : ` AND ${fixtureMarkerSql} = $2`;
+  if (actorId != null) params.push(await isSyntheticOperator(db, actorId));
+  const { rows } = await db.query(
+    `SELECT a.* FROM announcements a
+       LEFT JOIN users author ON author.id = a.author_id
+      WHERE a.id = $1${markerClause}`,
+    params,
+  );
   if (!rows[0]) throw new NotFoundError("Announcement not found");
   return rows[0];
 }
 
-export async function listAnnouncementsAdmin(db: Queryable): Promise<Announcement[]> {
-  const { rows } = await db.query(`SELECT * FROM announcements ORDER BY created_at DESC`);
+export async function listAnnouncementsAdmin(
+  db: Queryable,
+  actorId?: number,
+): Promise<Announcement[]> {
+  const fixtureMarkerSql = announcementFixtureMarkerSql();
+  const markerClause = actorId == null ? "" : ` WHERE ${fixtureMarkerSql} = $1`;
+  const params = actorId == null ? [] : [await isSyntheticOperator(db, actorId)];
+  const { rows } = await db.query(
+    `SELECT a.* FROM announcements a
+       LEFT JOIN users author ON author.id = a.author_id
+      ${markerClause}
+      ORDER BY a.created_at DESC`,
+    params,
+  );
   return rows;
 }
 
 /** Public feed (H49/H50): only announcements currently inside their vigencia window. */
 export async function listAnnouncementsPublic(db: Queryable): Promise<PublicAnnouncement[]> {
+  const fixtureMarkerSql = announcementFixtureMarkerSql();
   const { rows } = await db.query(
-    `SELECT id, title, body, translations, publish_at, expires_at, screen_placement FROM announcements
-     WHERE (publish_at IS NULL OR publish_at <= now())
-       AND (expires_at IS NULL OR expires_at > now())
-     ORDER BY publish_at DESC NULLS LAST, created_at DESC`,
+    `SELECT a.id, a.title, a.body, a.translations, a.publish_at, a.expires_at, a.screen_placement FROM announcements a
+     LEFT JOIN users author ON author.id = a.author_id
+     WHERE NOT ${fixtureMarkerSql}
+       AND (a.publish_at IS NULL OR a.publish_at <= now())
+       AND (a.expires_at IS NULL OR a.expires_at > now())
+     ORDER BY a.publish_at DESC NULLS LAST, a.created_at DESC`,
   );
   return rows.map((row) => ({
     id: Number(row.id),
@@ -348,7 +502,14 @@ export async function markAnnouncementRead(
   userId: number,
   announcementId: number,
 ): Promise<void> {
-  await getAnnouncement(db, announcementId); // 404s if missing
+  await getAnnouncement(db, announcementId, userId); // 404s if missing or cross-fixture
+  const { rows: users } = await db.query(
+    `SELECT id FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+      FOR SHARE`,
+    [userId],
+  );
+  if (!users[0]) throw new NotFoundError("User not found");
   await db.query(
     `INSERT INTO announcement_reads (announcement_id, user_id) VALUES ($1, $2)
      ON CONFLICT (announcement_id, user_id) DO NOTHING`,
@@ -366,18 +527,32 @@ export async function markAnnouncementRead(
  */
 async function resolveRecipients(
   db: Queryable,
-  announcement: Pick<Announcement, "id" | "audiences">,
+  announcement: Pick<Announcement, "id" | "audiences" | "author_id">,
 ): Promise<Array<{ id: number; language: string | null }>> {
+  const fixtureMarker = await announcementFixtureMarker(
+    db,
+    announcement.author_id,
+    announcement.id,
+  );
   const targeted = await getAnnouncementRecipientIds(db, announcement.id);
   if (targeted.length > 0) {
-    const { rows } = await db.query(`SELECT id, language FROM users WHERE id = ANY($1::int[])`, [
-      targeted,
-    ]);
+    const { rows } = await db.query(
+      `SELECT id, language FROM users
+        WHERE id = ANY($1::int[])
+          AND account_state = 'active' AND anonymized_at IS NULL
+          AND is_test_account = $2`,
+      [targeted, fixtureMarker],
+    );
     return rows as Array<{ id: number; language: string | null }>;
   }
 
   if (announcement.audiences.length === 0) {
-    const { rows } = await db.query(`SELECT id, language FROM users`);
+    const { rows } = await db.query(
+      `SELECT id, language FROM users
+        WHERE account_state = 'active' AND anonymized_at IS NULL
+          AND is_test_account = $1`,
+      [fixtureMarker],
+    );
     return rows as Array<{ id: number; language: string | null }>;
   }
 
@@ -418,10 +593,12 @@ async function resolveRecipients(
      LEFT JOIN attendee at ON at.user_id = u.id
      LEFT JOIN sponsor sp ON sp.user_id = u.id
      LEFT JOIN staff st ON st.user_id = u.id
-     WHERE at.type = ANY($1::text[])
+     WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
+       AND u.is_test_account = $2
+       AND (at.type = ANY($1::text[])
         OR (sp.user_id IS NOT NULL AND ($1::text[] && ARRAY['sponsor', 'participant']::text[]))
-        OR (st.user_id IS NOT NULL AND 'staff' = ANY($1::text[]))`,
-    [announcement.audiences],
+        OR (st.user_id IS NOT NULL AND 'staff' = ANY($1::text[])))`,
+    [announcement.audiences, fixtureMarker],
   );
   return rows as Array<{ id: number; language: string | null }>;
 }
@@ -462,6 +639,11 @@ function translatedContent(
  */
 export async function fanOutAnnouncement(db: Queryable, announcement: Announcement): Promise<void> {
   if (!announcement.notify_users) return;
+  const fixtureMarker = await announcementFixtureMarker(
+    db,
+    announcement.author_id,
+    announcement.id,
+  );
   const recipients = await resolveRecipients(db, announcement);
   for (const recipient of recipients) {
     const content = translatedContent(announcement, recipient.language);
@@ -469,6 +651,7 @@ export async function fanOutAnnouncement(db: Queryable, announcement: Announceme
       userId: recipient.id,
       category: "announcements",
       channels: announcement.channels,
+      fixtureMarker,
       payload: {
         template: "generic",
         subject: content.title,

@@ -25,7 +25,7 @@ export async function applicationStats(
 
   const statusCounts = await pool.query(
     `SELECT r.status, count(*)::int AS n FROM application_responses r
-     JOIN users u ON u.id = r.user_id AND u.anonymized_at IS NULL
+     JOIN users u ON u.id = r.user_id AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
      WHERE r.application_id = $1 GROUP BY r.status`,
     [applicationId],
   );
@@ -43,7 +43,7 @@ export async function applicationStats(
        count(*) FILTER (WHERE r.status = 'declined')::int AS declined,
        count(*) FILTER (WHERE r.status = 'confirmed')::int AS confirmed
      FROM application_responses r
-     JOIN users u ON u.id = r.user_id AND u.anonymized_at IS NULL
+     JOIN users u ON u.id = r.user_id AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
      WHERE r.application_id = $1`,
     [applicationId],
   );
@@ -52,7 +52,7 @@ export async function applicationStats(
   const submissionsByDay = await pool.query(
     `SELECT to_char(date_trunc('day', r.submitted_at), 'YYYY-MM-DD') AS bucket, count(*)::int AS n
      FROM application_responses r
-     JOIN users u ON u.id = r.user_id AND u.anonymized_at IS NULL
+     JOIN users u ON u.id = r.user_id AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
      WHERE r.application_id = $1 AND r.submitted_at IS NOT NULL
      GROUP BY bucket ORDER BY bucket`,
     [applicationId],
@@ -60,7 +60,7 @@ export async function applicationStats(
   const confirmationsByDay = await pool.query(
     `SELECT to_char(date_trunc('day', r.confirmed_at), 'YYYY-MM-DD') AS bucket, count(*)::int AS n
      FROM application_responses r
-     JOIN users u ON u.id = r.user_id AND u.anonymized_at IS NULL
+     JOIN users u ON u.id = r.user_id AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
      WHERE r.application_id = $1 AND r.confirmed_at IS NOT NULL
      GROUP BY bucket ORDER BY bucket`,
     [applicationId],
@@ -68,7 +68,7 @@ export async function applicationStats(
   const submissionsByHour = await pool.query(
     `SELECT extract(hour FROM r.submitted_at)::int AS hour, count(*)::int AS n
      FROM application_responses r
-     JOIN users u ON u.id = r.user_id AND u.anonymized_at IS NULL
+     JOIN users u ON u.id = r.user_id AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
      WHERE r.application_id = $1 AND r.submitted_at IS NOT NULL
      GROUP BY hour ORDER BY hour`,
     [applicationId],
@@ -76,7 +76,7 @@ export async function applicationStats(
   const submissionsByDow = await pool.query(
     `SELECT extract(dow FROM r.submitted_at)::int AS dow, count(*)::int AS n
      FROM application_responses r
-     JOIN users u ON u.id = r.user_id AND u.anonymized_at IS NULL
+     JOIN users u ON u.id = r.user_id AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
      WHERE r.application_id = $1 AND r.submitted_at IS NOT NULL
      GROUP BY dow ORDER BY dow`,
     [applicationId],
@@ -88,8 +88,10 @@ export async function applicationStats(
        avg(extract(epoch FROM (confirmed_at - decision_sent_at)) / 3600.0) AS avg_hours,
        percentile_cont(0.5) WITHIN GROUP
          (ORDER BY extract(epoch FROM (confirmed_at - decision_sent_at)) / 3600.0) AS median_hours
-     FROM application_responses
-     WHERE application_id = $1 AND confirmed_at IS NOT NULL AND decision_sent_at IS NOT NULL`,
+     FROM application_responses r
+     JOIN users u ON u.id = r.user_id
+     WHERE r.application_id = $1 AND r.confirmed_at IS NOT NULL AND r.decision_sent_at IS NOT NULL
+       AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false`,
     [applicationId],
   );
 
@@ -98,7 +100,7 @@ export async function applicationStats(
     `SELECT u.shirt_size AS value, count(*)::int AS n
      FROM application_responses r JOIN users u ON u.id = r.user_id
      WHERE r.application_id = $1 AND r.status = 'confirmed' AND u.shirt_size IS NOT NULL
-       AND u.anonymized_at IS NULL
+       AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
      GROUP BY u.shirt_size ORDER BY n DESC`,
     [applicationId],
   );
@@ -110,7 +112,7 @@ export async function applicationStats(
      JOIN users u ON u.id = r.user_id
      JOIN LATERAL unnest(u.food_intolerances) AS uid(id) ON true
      JOIN food_intolerances fi ON fi.id = uid.id
-     WHERE r.application_id = $1 AND r.status = 'confirmed' AND u.anonymized_at IS NULL
+     WHERE r.application_id = $1 AND r.status = 'confirmed' AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
      GROUP BY fi.id, fi.label ORDER BY n DESC`,
     [applicationId],
   );
@@ -163,17 +165,21 @@ async function fieldHistogram(
     ? await pool.query(
         `SELECT elem AS value, count(*)::int AS n
          FROM application_responses r
+         JOIN users u ON u.id = r.user_id
          JOIN LATERAL jsonb_array_elements_text(
                 CASE WHEN jsonb_typeof(r.responses -> $2) = 'array'
                      THEN r.responses -> $2 ELSE '[]'::jsonb END) AS elem ON true
          WHERE r.application_id = $1
+           AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
          GROUP BY elem ORDER BY n DESC`,
         [applicationId, field],
       )
     : await pool.query(
         `SELECT (r.responses ->> $2) AS value, count(*)::int AS n
          FROM application_responses r
+         JOIN users u ON u.id = r.user_id
          WHERE r.application_id = $1 AND r.responses ? $2
+           AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
          GROUP BY value ORDER BY n DESC`,
         [applicationId, field],
       );

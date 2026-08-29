@@ -2,10 +2,12 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { pool } from "../../db/pool.js";
 import { requireAnyCapability, requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import type { RouteAccessPolicy } from "../../lib/route-policy.js";
 import { listDevpostPrizes } from "../challenges/service.js";
+import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
 import {
   repositoryScopeFor,
   requireRepositoryAccess,
@@ -250,7 +252,9 @@ export function registerProjectRoutes(app: FastifyInstance): void {
         description: "Lists imported prize names for queue and import operators (H16).",
       },
     },
-    async () => ({ prizes: await listDevpostPrizes() }),
+    async (req) => ({
+      prizes: await listDevpostPrizes(await isSyntheticOperator(pool, req.userId as number)),
+    }),
   );
 
   // ── PROJECTS_READ views ───────────────────────────────────────────────────
@@ -318,7 +322,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => ({
-      users: await listProjectMemberCandidates(req.query.q, req.query.limit),
+      users: await listProjectMemberCandidates(req.query.q, req.query.limit, req.userId as number),
     }),
   );
 

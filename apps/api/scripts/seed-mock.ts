@@ -640,7 +640,7 @@ type FormField = {
   key: string;
   kind: string;
   label?: { en?: string; es?: string; gl?: string };
-  options?: { value: string; label?: { en?: string } }[];
+  options?: { value: string; label?: { en?: string; es?: string; gl?: string } }[];
   required?: boolean;
   validation?: { text_condition?: string };
 };
@@ -706,21 +706,70 @@ function fieldValue(
 }
 
 const FALLBACK_APPLICATION_TEMPLATE: FormField[] = [
-  { key: "major", kind: "text", label: { en: "What's your major/degree?" }, required: true },
+  {
+    key: "major",
+    kind: "text",
+    label: {
+      en: "What's your major/degree?",
+      es: "¿Cuál es tu especialidad o titulación?",
+      gl: "Cal é a túa especialidade ou titulación?",
+    },
+    required: true,
+  },
   {
     key: "location",
     kind: "text",
-    label: { en: "Where are you joining us from?" },
+    label: {
+      en: "Where are you joining us from?",
+      es: "¿Desde dónde te unes?",
+      gl: "Dende onde te unes?",
+    },
     required: true,
   },
   {
     key: "motivation",
     kind: "textarea",
-    label: { en: "What motivates you to join?" },
+    label: {
+      en: "What motivates you to join?",
+      es: "¿Qué te motiva a participar?",
+      gl: "Que che motiva a participar?",
+    },
     required: true,
   },
-  { key: "github", kind: "text", label: { en: "Github" }, validation: { text_condition: "url" } },
+  {
+    key: "github",
+    kind: "text",
+    label: { en: "GitHub", es: "GitHub", gl: "GitHub" },
+    validation: { text_condition: "url" },
+  },
 ];
+
+/** H54: every response must bind to the application's current immutable form snapshot. */
+async function ensureCurrentApplicationFormVersion(
+  applicationId: number,
+): Promise<number | string> {
+  await client.query(
+    `INSERT INTO application_form_versions (application_id, version, template, sections)
+     SELECT id, current_form_version, template, sections
+       FROM applications
+      WHERE id = $1
+     ON CONFLICT (application_id, version) DO NOTHING`,
+    [applicationId],
+  );
+  const { rows } = await client.query<{ id: number | string }>(
+    `SELECT fv.id
+       FROM application_form_versions fv
+       JOIN applications a ON a.id = fv.application_id
+      WHERE a.id = $1
+        AND fv.version = a.current_form_version
+      LIMIT 1`,
+    [applicationId],
+  );
+  if (rows[0]?.id == null) {
+    throw new Error(`Expected current form version for application ${applicationId}`);
+  }
+  return rows[0].id;
+}
 
 async function seedApplications(): Promise<void> {
   const existing = await client.query(
@@ -742,6 +791,7 @@ async function seedApplications(): Promise<void> {
     applicationId = created.rows[0].id;
     template = FALLBACK_APPLICATION_TEMPLATE;
   }
+  const formVersionId = await ensureCurrentApplicationFormVersion(applicationId);
 
   const universities = await client.query(`SELECT id, name FROM universities ORDER BY id`);
   const universityById = new Map<number, string>(universities.rows.map((r) => [r.id, r.name]));
@@ -786,10 +836,14 @@ async function seedApplications(): Promise<void> {
     const status = statuses[i % statuses.length];
     const confirmedAt = status === "confirmed" ? "now()" : "null";
     await client.query(
-      `INSERT INTO application_responses (user_id, application_id, status, responses, submitted_at, confirmed_at)
-       VALUES ($1, $2, $3, $4, now(), ${confirmedAt})
-       ON CONFLICT (user_id, application_id) DO UPDATE SET status = EXCLUDED.status, responses = EXCLUDED.responses`,
-      [row.id, applicationId, status, JSON.stringify(responses)],
+      `INSERT INTO application_responses
+         (user_id, application_id, application_form_version_id, status, responses, submitted_at, confirmed_at)
+       VALUES ($1, $2, $3, $4, $5, now(), ${confirmedAt})
+       ON CONFLICT (user_id, application_id) DO UPDATE SET
+         application_form_version_id = EXCLUDED.application_form_version_id,
+         status = EXCLUDED.status,
+         responses = EXCLUDED.responses`,
+      [row.id, applicationId, formVersionId, status, JSON.stringify(responses)],
     );
     count++;
   }

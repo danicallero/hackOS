@@ -36,6 +36,16 @@ export async function issueWalletAccessToken(
   userId: number,
   purpose: Purpose,
 ): Promise<WalletAccessGrant> {
+  // H54: the scoped token is still a credential. Serialize its issuance with
+  // account removal so a pending account cannot mint a last-minute Wallet
+  // link after its sessions and existing tokens were revoked.
+  const active = await client.query(
+    `SELECT 1 FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+      FOR SHARE`,
+    [userId],
+  );
+  if (!active.rows[0]) throw new UnauthorizedError("Account is closed or being removed");
   const token = randomBytes(32).toString("base64url");
   const { rows } = await client.query(
     `INSERT INTO wallet_access_tokens (token, user_id, purpose, expires_at)
@@ -65,8 +75,10 @@ export async function resolveWalletAccessToken(
   purpose: Purpose,
 ): Promise<{ userId: number }> {
   const { rows } = await pool.query(
-    `SELECT user_id FROM wallet_access_tokens
-      WHERE token = $1 AND purpose = $2 AND expires_at > now()`,
+    `SELECT wat.user_id FROM wallet_access_tokens wat
+       JOIN users u ON u.id = wat.user_id
+      WHERE wat.token = $1 AND wat.purpose = $2 AND wat.expires_at > now()
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
     [token, purpose],
   );
   if (!rows[0]) throw new UnauthorizedError("Wallet link is invalid or has expired");

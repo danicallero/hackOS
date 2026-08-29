@@ -7,6 +7,7 @@ import type {
   ContextualPolicyResolver,
   ContextualResourceLocator,
 } from "../../lib/route-policy.js";
+import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
 
 export interface RepositoryResource {
   id: number;
@@ -16,6 +17,7 @@ export interface RepositoryResource {
 export interface RepositoryAccessScope {
   fullAccess: boolean;
   challengeIds: number[];
+  fixtureMarker?: boolean;
 }
 
 const scopes = new WeakMap<FastifyRequest, RepositoryAccessScope>();
@@ -35,8 +37,14 @@ export async function resolveRepositoryAccessScope(
 ): Promise<RepositoryAccessScope> {
   const userId = request.userId;
   if (userId == null) throw new UnauthorizedError();
+  const { rows: activeRows } = await pool.query<{ is_test_account: boolean }>(
+    `SELECT is_test_account FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+    [userId],
+  );
+  if (!activeRows[0]) throw new UnauthorizedError("This account is closed or being removed");
+  const fixtureMarker = activeRows[0].is_test_account === true;
   if (await userHasCapability(userId, CAPABILITIES.PROJECTS_READ, request)) {
-    return { fullAccess: true, challengeIds: [] };
+    return { fullAccess: true, challengeIds: [], fixtureMarker };
   }
 
   const [judgeRows, sponsorRows] = await Promise.all([
@@ -47,16 +55,16 @@ export async function resolveRepositoryAccessScope(
          FROM enterprise_judges ej
          JOIN sponsors author ON author.enterprise_id = ej.enterprise_id
          JOIN challenges c ON c.author = author.id
-        WHERE ej.user_id = $1`,
-      [userId],
+        WHERE ej.user_id = $1 AND c.is_test_account = $2`,
+      [userId, fixtureMarker],
     ),
     pool.query(
       `SELECT DISTINCT c.id
          FROM challenges c
          JOIN sponsors author ON author.id = c.author
          JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
-        WHERE mine.user_id = $1`,
-      [userId],
+        WHERE mine.user_id = $1 AND c.is_test_account = $2`,
+      [userId, fixtureMarker],
     ),
   ]);
   const challengeIds = new Set<number>();
@@ -77,21 +85,27 @@ export async function resolveRepositoryAccessScope(
       throw new ForbiddenError(`Missing capability: ${CAPABILITIES.PROJECTS_READ}`);
     }
   }
-  return { fullAccess: false, challengeIds: [...challengeIds] };
+  return { fullAccess: false, challengeIds: [...challengeIds], fixtureMarker };
 }
 
 export async function repositoryIdsForScope(scope: RepositoryAccessScope): Promise<number[]> {
   if (scope.fullAccess || scope.challengeIds.length === 0) return [];
   const { rows } = await pool.query(
     `SELECT DISTINCT repo_id FROM (
-        SELECT repo_id FROM queue_entries WHERE challenge_id = ANY($1::int[])
+        SELECT qe.repo_id
+          FROM queue_entries qe
+          JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $2
+          JOIN challenges c ON c.id = qe.challenge_id
+         WHERE qe.challenge_id = ANY($1::int[])
+           AND c.is_test_account = $2
         UNION
         SELECT rdp.repo_id
           FROM repo_devpost_prizes rdp
           JOIN challenges c ON c.devpost_tags ? rdp.prize
-         WHERE c.id = ANY($1::int[])
-     ) visible_repos`,
-    [scope.challengeIds],
+         WHERE c.id = ANY($1::int[]) AND c.is_test_account = $2
+           AND rdp.repo_id IN (SELECT id FROM repos WHERE is_test_account = $2)
+       ) visible_repos`,
+    [scope.challengeIds, scope.fixtureMarker === true],
   );
   return rows.map((row: { repo_id: number }) => Number(row.repo_id));
 }
@@ -100,7 +114,12 @@ export const repositoryAccessPolicy: ContextualPolicyResolver<RepositoryResource
   name: "repository-access",
   async resolve(request, locator) {
     const id = repoIdFrom(request, locator);
-    const { rows } = await pool.query(`SELECT id FROM repos WHERE id = $1`, [id]);
+    const synthetic =
+      request.userId == null ? false : await isSyntheticOperator(pool, request.userId);
+    const { rows } = await pool.query(
+      `SELECT id FROM repos WHERE id = $1 AND is_test_account = $2`,
+      [id, synthetic],
+    );
     if (!rows[0]) throw new NotFoundError(`Repo ${id} not found`);
     return { id: Number(rows[0].id) };
   },

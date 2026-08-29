@@ -49,6 +49,20 @@ x-app-env: &app-env
   MAIL_PROVIDER: "${MAIL_PROVIDER:-smtp}"
   MAIL_FROM_ADDRESS: "${MAIL_FROM_ADDRESS}"
   MAIL_FROM_NAME: "${MAIL_FROM_NAME:-hackOS}"
+  MAIL_FOOTER_TEXT: "${MAIL_FOOTER_TEXT:-hackOS — this is an automated message.}"
+  MAIL_LAYOUT_BRAND_NAME: "${MAIL_LAYOUT_BRAND_NAME:-hackOS}"
+  MAIL_LAYOUT_HEADER_TEXT: "${MAIL_LAYOUT_HEADER_TEXT:-hackOS}"
+  MAIL_LAYOUT_HEADER_SUBTEXT: "${MAIL_LAYOUT_HEADER_SUBTEXT:-}"
+  MAIL_LAYOUT_LOGO_URL: "${MAIL_LAYOUT_LOGO_URL-https://${WEB_DOMAIN}/email/brand-mark.png}"
+  MAIL_LAYOUT_ACCENT_COLOR: "${MAIL_LAYOUT_ACCENT_COLOR:-#18181b}"
+  MAIL_LAYOUT_BG_COLOR: "${MAIL_LAYOUT_BG_COLOR:-#f4f4f5}"
+  MAIL_LAYOUT_CARD_COLOR: "${MAIL_LAYOUT_CARD_COLOR:-#ffffff}"
+  MAIL_LAYOUT_CARD_BORDER_COLOR: "${MAIL_LAYOUT_CARD_BORDER_COLOR:-#e4e4e7}"
+  MAIL_LAYOUT_TEXT_COLOR: "${MAIL_LAYOUT_TEXT_COLOR:-#18181b}"
+  MAIL_LAYOUT_MUTED_TEXT_COLOR: "${MAIL_LAYOUT_MUTED_TEXT_COLOR:-#71717a}"
+  MAIL_LAYOUT_FOOTER_BG_COLOR: "${MAIL_LAYOUT_FOOTER_BG_COLOR:-#fafafa}"
+  MAIL_LAYOUT_CARD_RADIUS: "${MAIL_LAYOUT_CARD_RADIUS:-8}"
+  MAIL_LAYOUT_MAX_WIDTH: "${MAIL_LAYOUT_MAX_WIDTH:-560}"
   RESEND_API_KEY: "${RESEND_API_KEY:-}"
   POSTAL_URL: "${POSTAL_URL:-}"
   POSTAL_API_KEY: "${POSTAL_API_KEY:-}"
@@ -75,6 +89,16 @@ x-app-env: &app-env
   LIBRETRANSLATE_URL: "${LIBRETRANSLATE_URL:-}"
   LIBRETRANSLATE_API_KEY: "${LIBRETRANSLATE_API_KEY:-}"
 
+# Synthetic fixture secrets are intentionally API-only. The migration
+# container does not need them; the API uses them for the marked fixture
+# workspace in this same deployment/database.
+x-review-fixture-env: &review-fixture-env
+  REVIEW_FIXTURE_PASSWORD: "${REVIEW_FIXTURE_PASSWORD:-}"
+  REVIEW_FIXTURE_DELETION_PIN: "${REVIEW_FIXTURE_DELETION_PIN:-}"
+
+x-api-env: &api-env
+  <<: [*app-env, *review-fixture-env]
+
 services:
   migrate:
     image: "${IMAGE_REPO:-hackos-api}:${IMAGE_TAG:-latest}"
@@ -97,7 +121,7 @@ services:
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
-    environment: *app-env
+    environment: *api-env
     # Deterministic external DNS — don't inherit the host's resolv.conf, which
     # can be transiently wrong at deploy time and poison outbound fetches (mail,
     # APNs, Google Wallet). Internal names still resolve via 127.0.0.11.

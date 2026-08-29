@@ -91,8 +91,10 @@ describe("H27 logistics stats", () => {
   });
 
   it("excludes anonymized profiles from accredited counts (H54)", async () => {
+    const { pool } = await import("../../src/db/pool.js");
     const a = await createUser();
     await assignBadge(a, "S-ANON");
+    await pool.query(`INSERT INTO check_in_logs (user_id, badge_id) VALUES ($1, 'S-ANON')`, [a]);
     const b = await createUser();
     await assignBadge(b, "S-KEPT");
 

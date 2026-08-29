@@ -85,11 +85,18 @@ export async function runScheduleRemindersOnce(): Promise<{ reminded: number; no
              WHERE category = $1
              GROUP BY user_id
            )
-           SELECT user_id FROM item_pref WHERE item_enabled = true
+           SELECT np.user_id
+             FROM item_pref np
+             JOIN users u ON u.id = np.user_id
+            WHERE np.item_enabled = true
+              AND u.account_state = 'active' AND u.anonymized_at IS NULL
            UNION
-           SELECT user_id FROM notification_preferences
-           WHERE $2::text IS NOT NULL AND category = $2 AND enabled = true
-             AND user_id NOT IN (SELECT user_id FROM item_pref)`,
+           SELECT p.user_id
+             FROM notification_preferences p
+             JOIN users u ON u.id = p.user_id
+            WHERE $2::text IS NOT NULL AND p.category = $2 AND p.enabled = true
+              AND p.user_id NOT IN (SELECT user_id FROM item_pref)
+              AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
           [category, kindCategory],
         );
 

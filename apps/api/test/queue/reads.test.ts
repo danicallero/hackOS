@@ -11,11 +11,14 @@ import {
 } from "../helpers.js";
 import {
   assignChallengeToRoom,
+  assignQueueGroupToRoom,
   broadcastCount,
   createChallenge,
+  createEnterpriseChallenges,
   createRepoWithTeam,
   createRoom,
   enqueueRepo,
+  mergeChallengesIntoOneGroup,
 } from "./fixtures.js";
 
 /** Read APIs: progress (H40), room/TV views (H41), participant status (H38), pace (H39), TV mode (H42). */
@@ -106,6 +109,78 @@ describe("challenge progress (H40)", () => {
       headers: asUser(rep),
     });
     expect(forbidden.statusCode).toBe(403);
+  });
+
+  it("keeps synthetic challenge progress functional when the caller carries the same marker", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const syntheticOperator = await createUserWithCapabilities([CAPABILITIES.QUEUE_OPERATE]);
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [syntheticOperator]);
+    const challengeId = await createChallenge({ title: "Synthetic progress" });
+    await pool.query(`UPDATE challenges SET is_test_account = true WHERE id = $1`, [challengeId]);
+    await pool.query(
+      `UPDATE users u
+          SET is_test_account = true
+         FROM sponsors s
+        WHERE s.user_id = u.id
+          AND s.id = (SELECT author FROM challenges WHERE id = $1)`,
+      [challengeId],
+    );
+    const { repoId, memberIds } = await createRepoWithTeam(undefined, "Synthetic team");
+    await pool.query(`UPDATE repos SET is_test_account = true WHERE id = $1`, [repoId]);
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = ANY($1::int[])`, [
+      memberIds,
+    ]);
+    await enqueueRepo(challengeId, repoId, 1);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/queue/challenges/${challengeId}/progress`,
+      headers: asUser(syntheticOperator),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ challengeId, waiting: 1 });
+  });
+
+  it("fails closed when a challenge is ungrouped or its group is mixed", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const ungroupedChallengeId = await createChallenge({ title: "Ungrouped challenge" });
+    const { repoId } = await createRepoWithTeam();
+    const entryId = await enqueueRepo(ungroupedChallengeId, repoId, 1);
+    await pool.query(`DELETE FROM queue_group_challenges WHERE challenge_id = $1`, [
+      ungroupedChallengeId,
+    ]);
+    const ungrouped = await app.inject({
+      method: "GET",
+      url: `/api/queue/challenges/${ungroupedChallengeId}/progress`,
+      headers: asUser(operatorId),
+    });
+    expect(ungrouped.statusCode).toBe(409);
+    const ungroupedEntry = await app.inject({
+      method: "GET",
+      url: `/api/queue/entries/${entryId}/history`,
+      headers: asUser(operatorId),
+    });
+    expect(ungroupedEntry.statusCode).toBe(409);
+
+    const { challengeIds } = await createEnterpriseChallenges(2);
+    await pool.query(`UPDATE challenges SET is_test_account = true WHERE id = $1`, [
+      challengeIds[1],
+    ]);
+    await pool.query(
+      `UPDATE users u
+          SET is_test_account = true
+         FROM sponsors s
+        WHERE s.user_id = u.id
+          AND s.id = (SELECT author FROM challenges WHERE id = $1)`,
+      [challengeIds[1]],
+    );
+    await mergeChallengesIntoOneGroup(challengeIds);
+    const mixed = await app.inject({
+      method: "GET",
+      url: `/api/queue/challenges/${challengeIds[0]}/progress`,
+      headers: asUser(operatorId),
+    });
+    expect(mixed.statusCode).toBe(409);
   });
 });
 
@@ -227,6 +302,128 @@ describe("participant view (H38)", () => {
     expect(room.json().active.repo_members).toEqual(
       expect.arrayContaining([expect.objectContaining({ userId: member })]),
     );
+  });
+
+  it("keeps participant queue repos, challenges and rooms inside the user's fixture marker", async () => {
+    const { hasMyQueueItems, myQueueStatus } = await import("../../src/modules/queue/reads.js");
+    const { pool } = await import("../../src/db/pool.js");
+    const realUser = await createUser({ email: "real-queue-boundary@test.local" });
+    const syntheticUser = await createUser({ email: "synthetic-queue-boundary@test.local" });
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [syntheticUser]);
+
+    const realChallengeId = await createChallenge({ title: "Real queue boundary" });
+    const syntheticChallengeId = await createChallenge({ title: "Synthetic queue boundary" });
+    await pool.query(`UPDATE challenges SET is_test_account = true WHERE id = $1`, [
+      syntheticChallengeId,
+    ]);
+    await pool.query(
+      `UPDATE users u
+          SET is_test_account = true
+         FROM sponsors s
+        WHERE s.user_id = u.id
+          AND s.id = (SELECT author FROM challenges WHERE id = $1)`,
+      [syntheticChallengeId],
+    );
+    const realRoomId = await createRoom({ name: "Real queue room" });
+    const syntheticRoomId = await createRoom({ name: "Synthetic queue room" });
+    await assignChallengeToRoom(realRoomId, realChallengeId);
+    await assignChallengeToRoom(syntheticRoomId, syntheticChallengeId);
+
+    const publicTv = await app.inject({ method: "GET", url: "/api/tv/rooms" });
+    expect(publicTv.statusCode).toBe(200);
+    expect(publicTv.json().map((view: { room: { id: number } }) => view.room.id)).not.toContain(
+      syntheticRoomId,
+    );
+
+    const { repoId: realRepoId } = await createRepoWithTeam([realUser], "Real queue project");
+    const { repoId: syntheticRepoId } = await createRepoWithTeam(
+      [syntheticUser],
+      "Synthetic queue project",
+    );
+    await pool.query(`UPDATE repos SET is_test_account = true WHERE id = $1`, [syntheticRepoId]);
+
+    // Deliberately cross-link both users to the other marker's project. A
+    // participant read must follow the persisted marker, not membership alone.
+    await pool.query(
+      `INSERT INTO submissions (repo_id, user_id, status)
+       VALUES ($1, $2, 'active'), ($3, $4, 'active')`,
+      [realRepoId, syntheticUser, syntheticRepoId, realUser],
+    );
+    const realEntryId = await enqueueRepo(realChallengeId, realRepoId, 2);
+    const syntheticEntryId = await enqueueRepo(syntheticChallengeId, syntheticRepoId, 2);
+
+    // Also seed entries whose repository and challenge markers disagree. Both
+    // sides of the mismatch are outside the authenticated user's queue.
+    await enqueueRepo(syntheticChallengeId, realRepoId, 1);
+    await enqueueRepo(realChallengeId, syntheticRepoId, 1);
+
+    const realQueue = await myQueueStatus(realUser);
+    expect(realQueue).toHaveLength(1);
+    expect(realQueue[0]).toMatchObject({
+      entryId: realEntryId,
+      challengeId: realChallengeId,
+      repoId: realRepoId,
+      position: 1,
+      rooms: [expect.objectContaining({ id: realRoomId })],
+    });
+    expect(realQueue.map((entry) => entry.challengeId)).toEqual([realChallengeId]);
+    expect(await hasMyQueueItems(realUser)).toBe(true);
+
+    const syntheticQueue = await myQueueStatus(syntheticUser);
+    expect(syntheticQueue).toHaveLength(1);
+    expect(syntheticQueue[0]).toMatchObject({
+      entryId: syntheticEntryId,
+      challengeId: syntheticChallengeId,
+      repoId: syntheticRepoId,
+      position: 1,
+      rooms: [expect.objectContaining({ id: syntheticRoomId })],
+    });
+    expect(syntheticQueue.map((entry) => entry.challengeId)).toEqual([syntheticChallengeId]);
+    expect(await hasMyQueueItems(syntheticUser)).toBe(true);
+
+    const realForeignOnly = await createUser({ email: "real-foreign-queue@test.local" });
+    const syntheticForeignOnly = await createUser({ email: "synthetic-foreign-queue@test.local" });
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [
+      syntheticForeignOnly,
+    ]);
+    await pool.query(
+      `INSERT INTO submissions (repo_id, user_id, status)
+       VALUES ($1, $2, 'active'), ($3, $4, 'active')`,
+      [syntheticRepoId, realForeignOnly, realRepoId, syntheticForeignOnly],
+    );
+    expect(await myQueueStatus(realForeignOnly)).toEqual([]);
+    expect(await hasMyQueueItems(realForeignOnly)).toBe(false);
+    expect(await myQueueStatus(syntheticForeignOnly)).toEqual([]);
+    expect(await hasMyQueueItems(syntheticForeignOnly)).toBe(false);
+  });
+
+  it("fails closed when a queue group mixes real and synthetic challenges", async () => {
+    const { hasMyQueueItems, myQueueStatus } = await import("../../src/modules/queue/reads.js");
+    const { pool } = await import("../../src/db/pool.js");
+    const realUser = await createUser({ email: "real-mixed-queue@test.local" });
+    const syntheticUser = await createUser({ email: "synthetic-mixed-queue@test.local" });
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [syntheticUser]);
+    const { challengeIds } = await createEnterpriseChallenges(2);
+    const realChallengeId = challengeIds[0]!;
+    const syntheticChallengeId = challengeIds[1]!;
+    await pool.query(`UPDATE challenges SET is_test_account = true WHERE id = $1`, [
+      syntheticChallengeId,
+    ]);
+    const groupId = await mergeChallengesIntoOneGroup(challengeIds);
+    const roomId = await createRoom({ name: "Mixed marker queue room" });
+    await assignQueueGroupToRoom(roomId, groupId);
+    const { repoId: realRepoId } = await createRepoWithTeam([realUser]);
+    const { repoId: syntheticRepoId } = await createRepoWithTeam([syntheticUser]);
+    await pool.query(`UPDATE repos SET is_test_account = true WHERE id = $1`, [syntheticRepoId]);
+    await enqueueRepo(realChallengeId, realRepoId, 1);
+    await enqueueRepo(syntheticChallengeId, syntheticRepoId, 2);
+
+    // A mixed group is not a valid real or synthetic queue boundary. It must
+    // not leak its shared ordering or room projection to either participant.
+    expect(await myQueueStatus(realUser)).toEqual([]);
+    expect(await hasMyQueueItems(realUser)).toBe(false);
+    expect(await myQueueStatus(syntheticUser)).toEqual([]);
+    expect(await hasMyQueueItems(syntheticUser)).toBe(false);
   });
 
   it("lists every room judging a multi-room challenge while waiting, and only the called room once called", async () => {

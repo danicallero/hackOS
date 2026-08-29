@@ -1,4 +1,5 @@
 import { pool } from "../../src/db/pool.js";
+import { ensureApplicationFormVersion } from "../helpers.js";
 
 let appSeq = 0;
 
@@ -82,9 +83,11 @@ export async function makeConfirmed(userId: number): Promise<void> {
     `INSERT INTO applications (name, type, template) VALUES ($1, 'participant', '{}'::jsonb) RETURNING id`,
     [`app-${appSeq}-${crypto.randomUUID()}`],
   );
+  const formVersionId = await ensureApplicationFormVersion(app.rows[0].id);
   await pool.query(
-    `INSERT INTO application_responses (user_id, application_id, status, confirmed_at)
-     VALUES ($1, $2, 'confirmed', now())`,
-    [userId, app.rows[0].id],
+    `INSERT INTO application_responses
+       (user_id, application_id, application_form_version_id, status, confirmed_at)
+     VALUES ($1, $2, $3, 'confirmed', now())`,
+    [userId, app.rows[0].id, formVersionId],
   );
 }

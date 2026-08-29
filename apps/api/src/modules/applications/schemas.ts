@@ -23,6 +23,30 @@ export const FIELD_KINDS = [
   "university",
 ] as const;
 
+/**
+ * Retention is an extensible field policy, not a collection of booleans.  A
+ * missing value is treated as `none` by the storage boundary so legacy forms
+ * remain minimised and newly-added questions are never retained by accident.
+ */
+export const RETENTION_MODES = ["none", "anonymous_audit"] as const;
+export type RetentionMode = (typeof RETENTION_MODES)[number];
+export const retentionModeSchema = z.enum(RETENTION_MODES);
+
+/**
+ * Optional stable reporting vocabulary for a retained answer.  This is
+ * deliberately an open slug rather than an enum: the initial event uses
+ * age/gender/university/degree/graduation_year/origin_city, while future
+ * events may add dimensions without changing anonymization code.
+ */
+export const anonymousAuditDimensionSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(120)
+  .regex(/^[a-zA-Z][a-zA-Z0-9_.-]*$/, "audit dimension must be a stable slug")
+  .nullable()
+  .optional();
+
 const i18nSchema = z.object({
   en: z.string(),
   es: z.string(),
@@ -86,6 +110,10 @@ export const templateFieldSchema = z
      *  types into (text/textarea/number). Falls back to a generic string. */
     placeholder: i18nSchema.optional(),
     validation: fieldValidationSchema.optional(),
+    /** Explicit field-level policy for the permanent anonymous audit record. */
+    retention_mode: retentionModeSchema.optional(),
+    /** Optional stable reporting dimension; never controls retention by itself. */
+    anonymous_audit_dimension: anonymousAuditDimensionSchema,
   })
   .refine(
     (f) => !(f.kind === "select" || f.kind === "multiselect") || (f.options?.length ?? 0) > 0,

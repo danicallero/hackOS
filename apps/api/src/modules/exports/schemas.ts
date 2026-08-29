@@ -23,8 +23,8 @@ export const listRequestsQuery = z.object({
 
 export const requestResponseSchema = z.object({
   id: z.number(),
-  subjectUserId: z.number(),
-  requestedBy: z.number(),
+  subjectUserId: z.number().nullable(),
+  requestedBy: z.number().nullable(),
   type: requestTypeSchema,
   status: requestStatusSchema,
   reason: z.string().nullable(),

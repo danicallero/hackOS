@@ -10,7 +10,7 @@ again when upgrading the SDK or preparing a store release.
 
 ## Contents
 
-- [Current release readiness](#current-release-readiness)
+- [Before release](#before-release)
 - [1. Required accounts and local tools](#1-required-accounts-and-local-tools)
 - [2. Install and run the full stack](#2-install-and-run-the-full-stack)
 - [3. App identity and Expo project setup](#3-app-identity-and-expo-project-setup)
@@ -40,8 +40,10 @@ Resolve these items before submitting either app:
   backgrounds.
 - Add the Android notification icon: a 96×96 white PNG with transparency,
   configured through `expo-notifications`.
-- Publish the privacy policy, support, and account-deletion URLs. The current
-  mobile UI still needs these links.
+- Publish the privacy policy and support URLs. The mobile UI now exposes the
+  privacy policy and the authenticated in-app Account/Data removal controls;
+  keep the public support/privacy URLs available as the secondary contact and
+  App Review reference.
 - Prepare reviewer accounts, sample QR codes, and review instructions.
 - Test camera scanning, offline queues, APNs/FCM, authenticated SSE, and Apple
   and Google Wallet on physical devices. The emulator is useful for checking
@@ -174,19 +176,21 @@ in its [development workflow overview](https://docs.expo.dev/workflow/overview/)
 
 Choose and record these values with the organization that owns the stores:
 
-| Value | Example only | Where it is used |
+| Value | Repository value or placeholder | Where it is used |
 | --- | --- | --- |
-| Expo owner | `your-expo-org` | Expo project and EAS access control |
-| Expo slug | `hackos-mobile` | Expo project URL; already configured |
-| iOS bundle ID | `org.example.hackos` | Apple identifier, signing, App Store record, Firebase iOS app |
-| Android package | `org.example.hackos` | Android manifest, signing, Play Console record, Firebase Android app |
-| URL scheme | `hackos` | Better Auth mobile origin and deep links; already configured |
+| Expo owner | `hack-os` | Current `app.json` owner; Expo project and EAS access control |
+| Expo slug | `hackos` | Current `app.json` slug; Expo project URL |
+| iOS bundle ID | `com.hackudc.os` | Current `app.json` value; Apple identifier, signing, App Store record, Firebase iOS app |
+| Android package | `com.hackudc.os` | Current `app.json` value; Android manifest, signing, Play Console record, Firebase Android app |
+| URL scheme | `hackos` | Current `app.json` value; Better Auth mobile origin and deep links |
 | Apple team ID | `ABCDE12345` | Apple signing and EAS Submit |
 | App Store Connect app ID | numeric value such as `1234567890` | EAS Submit `ascAppId` |
 | Google Play service account | dedicated JSON key | EAS Submit / Play Developer API |
 
-The reverse-DNS values above are examples. Replace them before using a
-production configuration.
+The Expo owner, slug, bundle IDs and scheme above mirror the repository's
+current defaults; verify that they belong to the release organization before
+production. Replace the Apple team, App Store ID and Google service-account
+placeholders with the store-owned values.
 
 From `apps/mobile`, link or create the EAS project:
 
@@ -206,18 +210,18 @@ identifiers:
 ```json
 {
   "expo": {
-    "owner": "your-expo-org",
-    "slug": "hackos-mobile",
+    "owner": "hack-os",
+    "slug": "hackos",
     "scheme": "hackos",
     "ios": {
-      "bundleIdentifier": "org.example.hackos"
+      "bundleIdentifier": "com.hackudc.os"
     },
     "android": {
-      "package": "org.example.hackos"
+      "package": "com.hackudc.os"
     },
     "extra": {
       "eas": {
-        "projectId": "00000000-0000-0000-0000-000000000000"
+        "projectId": "67dfb15e-eb03-441d-ba61-927e7e1defab"
       }
     }
   }
@@ -1064,9 +1068,16 @@ decide the final declarations. At minimum:
   event-end wipe procedures. Expo SQLite is not automatically an encrypted
   database; assess whether platform file protection is sufficient for the
   organization's risk model.
-- Provide an external account-deletion/request URL. Even though mobile account
-  creation is intentionally absent, the service has user accounts created via
-  web onboarding, so deletion and retention behavior must be clear.
+- Provide a privacy/support URL as a secondary contact. Even though mobile
+  account creation is intentionally absent, the service has user accounts
+  created via web onboarding; the primary deletion mechanism remains the
+  visible in-app Account/Data action below.
+- Keep a visible in-app Account/Data or Danger zone action in the reviewer
+  account. It must call the authenticated backend removal flow, explain the
+  difference between full deletion and irreversible anonymisation, disclose
+  active-event/venue-exit and named-proof consequences, and sign out/clear
+  local app data after success or an ambiguous network result. Do not make an
+  email request the primary path.
 - Complete Apple age rating, export-compliance encryption questions, content
   rights, and regional trader/compliance fields where applicable.
 - Complete Google ads declaration, app access instructions, target audience,

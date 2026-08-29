@@ -6,7 +6,7 @@ humans and agents: every section opens with a one-line summary, tokens carry
 their intent and boundaries (not just values), and components come with the
 decision logic for when to use them.
 
-Product behaviour stays owned by `plan/historias-hackos.md` (H1–H55). This doc
+Product behaviour stays owned by `plan/historias-hackos.md` (H1–H59). This doc
 owns *how things look, read, and feel*.
 
 ## Product brief

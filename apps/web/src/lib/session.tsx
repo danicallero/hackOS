@@ -1,7 +1,15 @@
 "use client";
 
 import { CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ApiError, api } from "./api";
 import type { Me } from "./types";
 
@@ -10,6 +18,8 @@ type SessionStatus = "loading" | "authenticated" | "unauthenticated";
 interface SessionContextValue {
   me: Me | null;
   status: SessionStatus;
+  /** Last refresh failure, retained so pending-removal can offer retry without redirecting. */
+  error: Error | null;
   /** Re-fetch /api/me (after profile edits, permission changes, login). */
   refresh: () => Promise<void>;
   /** True if the user holds `capability` (or the `*` admin wildcard). H8. */
@@ -30,19 +40,38 @@ const SessionContext = createContext<SessionContextValue | null>(null);
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const [status, setStatus] = useState<SessionStatus>("loading");
+  const [error, setError] = useState<Error | null>(null);
+  const meRef = useRef<Me | null>(null);
+  const requestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const currentRequest = ++requestId.current;
     try {
       const data = await api.get<Me>("/api/me");
+      if (currentRequest !== requestId.current) return;
+      meRef.current = data;
       setMe(data);
       setStatus("authenticated");
+      setError(null);
     } catch (err) {
+      if (currentRequest !== requestId.current) return;
       if (err instanceof ApiError && err.status === 401) {
+        meRef.current = null;
         setMe(null);
         setStatus("unauthenticated");
+        setError(null);
         return;
       }
-      // Network/other error: treat as unauthenticated but keep it non-fatal.
+      // A pending-removal session must remain on the authoritative screen
+      // while /api/me has a transient network/5xx failure. Clearing `me`
+      // here would make AuthGuard redirect to login and hide the retry path.
+      setError(err instanceof Error ? err : new Error("Failed to refresh session"));
+      if (meRef.current) {
+        setStatus("authenticated");
+        return;
+      }
+      // Before the first successful profile fetch there is no safe identity
+      // to render, so preserve the existing unauthenticated gate behavior.
       setMe(null);
       setStatus("unauthenticated");
     }
@@ -61,13 +90,14 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     return {
       me,
       status,
+      error,
       refresh,
       can,
       canAny: (...capabilities: Capability[]) => capabilities.some(can),
       isPureApplicant:
         !!me && !me.hasEventAccess && !me.isEnterpriseJudge && !me.isSponsorRep && caps.size === 0,
     };
-  }, [me, status, refresh]);
+  }, [me, status, error, refresh]);
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

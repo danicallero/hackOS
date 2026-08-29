@@ -4,7 +4,7 @@ import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { PasswordInput } from "@/components/common/password-input";
@@ -23,6 +23,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { signIn } from "@/lib/auth-client";
 import { type Translate, useLocale } from "@/lib/i18n";
+import {
+  type AccountRemovalProgress,
+  clearAccountRemovalProgress,
+  readAccountRemovalProgress,
+} from "@/lib/privacy-removal";
 import { safeReturnPath, withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 
@@ -53,6 +58,7 @@ function LoginInner() {
   const next = safeReturnPath(rawNext);
   const { status, refresh } = useSessionContext();
   const { t } = useLocale();
+  const [removalProgress, setRemovalProgress] = useState<AccountRemovalProgress | null>(null);
   const form = useForm<Values>({
     resolver: zodResolver(
       z.object({
@@ -70,6 +76,15 @@ function LoginInner() {
   useEffect(() => {
     if (status === "authenticated") router.replace(next);
   }, [status, next, router]);
+
+  useEffect(() => {
+    setRemovalProgress(readAccountRemovalProgress());
+  }, []);
+
+  function dismissRemovalProgress() {
+    clearAccountRemovalProgress();
+    setRemovalProgress(null);
+  }
 
   if (status === "loading" || status === "authenticated") {
     return (
@@ -106,6 +121,31 @@ function LoginInner() {
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {removalProgress ? (
+              <Alert>
+                <AlertDescription>
+                  <p>
+                    {removalProgress.status === "pending_exit"
+                      ? t("accountRemovalPendingExit")
+                      : removalProgress.status === "device_cleanup_pending"
+                        ? t("accountRemovalDeviceCleanupPending")
+                        : t("accountRemovalPending")}
+                  </p>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    <Link href="/privacy" className="underline underline-offset-2">
+                      {t("privacyPolicy")}
+                    </Link>
+                    <button
+                      type="button"
+                      className="underline underline-offset-2"
+                      onClick={dismissRemovalProgress}
+                    >
+                      {t("dismiss")}
+                    </button>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            ) : null}
             {form.formState.errors.root && (
               <Alert data-testid={UI_TEST_IDS.auth.error} variant="destructive">
                 <AlertDescription>{form.formState.errors.root.message}</AlertDescription>

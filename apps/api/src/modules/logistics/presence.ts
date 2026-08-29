@@ -3,9 +3,10 @@ import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { isImplausiblyFuture } from "../../lib/clock.js";
-import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
-import { broadcast } from "../../lib/sse.js";
-import { resolveByBadge } from "./badge.js";
+import { AppError, BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
+import { type AccountRemovalAction, runAccountRemoval } from "../identity/removal.js";
+import { broadcastForActiveUser } from "./active-broadcast.js";
+import { assertBadgeScanTimestamp, resolveByBadge } from "./badge.js";
 import { loadPersonCard } from "./cards.js";
 import {
   buildCertaintyWindows,
@@ -15,16 +16,120 @@ import {
   type PresenceEvent,
   totalPresenceMs,
 } from "./estimate.js";
+import {
+  assertFixtureSubjectScope,
+  fixtureReadFilter,
+  isSyntheticOperator,
+} from "./review-fixture-scope.js";
 
 const MS_PER_HOUR = 3_600_000;
 // Advisory-lock namespace for presence writes; -1 can't collide with a real
 // activityId (see activities.ts's per-(user, activity) lock).
 const PRESENCE_LOCK_NS = -1;
 
+type PendingDoorRemoval = {
+  action: AccountRemovalAction;
+  startedAt: Date;
+};
+
+type LockedDoorParticipant = {
+  badgeId: string | null;
+  badgeAssignedAt: Date | null;
+  pendingRemoval: PendingDoorRemoval | null;
+};
+
 /** PostgreSQL timestamps presence signals, so live cutoffs must use its clock too. */
 async function databaseNow(client: Queryable = pool): Promise<Date> {
   const { rows } = await client.query(`SELECT clock_timestamp() AS now`);
   return rows[0].now as Date;
+}
+
+/**
+ * Presence writes must serialize with H54 account closure.  The lock is
+ * deliberately on the user row, not just on a badge or advisory key: an
+ * offline/stale scanner may have resolved the badge before anonymization
+ * started.
+ */
+async function lockActiveParticipant(client: Queryable, userId: number): Promise<void> {
+  const { rows } = await client.query(
+    `SELECT id FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+      FOR UPDATE`,
+    [userId],
+  );
+  if (!rows[0]) throw new NotFoundError("Participant is no longer active");
+}
+
+async function lockDoorParticipant(
+  client: Queryable,
+  userId: number,
+  kind: "in" | "out",
+): Promise<LockedDoorParticipant> {
+  const { rows } = await client.query<{
+    id: number;
+    badge_id: string | null;
+    badge_assigned_at: Date | null;
+    account_state: "active" | "removal_pending";
+    removal_action: string | null;
+    removal_requires_exit: boolean;
+    removal_started_at: Date | null;
+  }>(
+    `SELECT id, badge_id, badge_assigned_at, account_state, removal_action,
+            removal_requires_exit, removal_started_at
+       FROM users
+      WHERE id = $1 AND anonymized_at IS NULL
+        AND (
+          account_state = 'active'
+          OR ($2::text = 'out'
+              AND account_state = 'removal_pending'
+              AND removal_requires_exit = true)
+        )
+      FOR UPDATE`,
+    [userId, kind],
+  );
+  const user = rows[0];
+  if (!user) throw new NotFoundError("Participant is no longer active");
+  if (user.account_state !== "removal_pending") {
+    return {
+      badgeId: user.badge_id,
+      badgeAssignedAt: user.badge_assigned_at,
+      pendingRemoval: null,
+    };
+  }
+  if (user.removal_action !== "delete" && user.removal_action !== "anonymize") {
+    throw new ConflictError("This account-removal request is missing its action.");
+  }
+  if (!user.removal_started_at) {
+    throw new ConflictError("This account-removal request is missing its start time.");
+  }
+  return {
+    badgeId: user.badge_id,
+    badgeAssignedAt: user.badge_assigned_at,
+    pendingRemoval: { action: user.removal_action, startedAt: user.removal_started_at },
+  };
+}
+
+function assertPendingExitTimestamp(scannedAt: Date, startedAt: Date): void {
+  if (scannedAt.getTime() < startedAt.getTime()) {
+    throw new ConflictError("The exit must be recorded after account removal was requested.", {
+      code: "pending_exit_before_removal",
+    });
+  }
+}
+
+async function completePendingRemoval(userId: number, action: AccountRemovalAction): Promise<void> {
+  try {
+    await runAccountRemoval({
+      targetId: userId,
+      actorId: null,
+      source: "presence_exit_completion",
+      requestedAction: action,
+    });
+  } catch {
+    // The exit is already committed. Removal retries remain safe because the
+    // account is still removal_pending and no new participant writes can pass
+    // the account-state gate.
+  }
 }
 
 async function certaintyWindowMs(): Promise<number> {
@@ -53,7 +158,7 @@ async function openSessionAsOf(
 ): Promise<{ open: boolean; since: Date | null }> {
   const { rows } = await client.query(
     `SELECT kind, scanned_at FROM time_logs
-      WHERE user_id = $1 AND scanned_at <= $2
+      WHERE user_id = $1 AND kind IN ('in', 'out') AND scanned_at <= $2
       ORDER BY scanned_at DESC, id DESC LIMIT 1`,
     [userId, asOf],
   );
@@ -70,17 +175,26 @@ async function openSessionAsOf(
  * accepted or needs reconciliation first — mirrors the accreditation lookup
  * UX. Never a mutation.
  */
-export async function presenceLookup(badgeId: string) {
-  const userId = await resolveByBadge(pool, badgeId);
-  const card = await loadPersonCard(pool, userId);
+export async function presenceLookup(badgeId: string, actorId?: number) {
+  const userId = await resolveByBadge(pool, badgeId, { allowPendingExit: true });
+  if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
+  const card = await loadPersonCard(pool, userId, {
+    allowPendingExit: true,
+    includePendingExitMarker: true,
+  });
   const events = (await loadEvents(userId)).get(userId) ?? [];
   const now = await databaseNow();
   const session = await openSessionAsOf(pool, userId, now);
   const suspiciousGapMs = await certaintyWindowMs();
+  const { userId: _userId, pendingExit, ...sanitizedCard } = card;
   return {
-    ...card,
+    ...(pendingExit ? sanitizedCard : { userId: _userId, ...sanitizedCard }),
     badgeId,
-    present: isPresentAt(events, now.getTime(), { suspiciousGapMs }),
+    ...(pendingExit ? { pendingExit: true } : {}),
+    // Pending-exit rows are intentionally omitted from normal event reads, but
+    // the raw open door session remains the authoritative operational state
+    // until staff record the exit.
+    present: session.open || isPresentAt(events, now.getTime(), { suspiciousGapMs }),
     openSince: session.since?.toISOString() ?? null,
   };
 }
@@ -104,12 +218,22 @@ export async function presenceScan(
   actorId: number,
   input: { badgeId: string; kind: "in" | "out"; scannedAt?: Date },
 ) {
-  const userId = await resolveByBadge(pool, input.badgeId);
+  const userId = await resolveByBadge(pool, input.badgeId, {
+    allowPendingExit: input.kind === "out",
+  });
   const manual = input.scannedAt != null;
 
   const result = await withTransaction(async (client) => {
     // Serialize concurrent scans for the same person (H24 concurrency).
     await client.query(`SELECT pg_advisory_xact_lock($1, $2)`, [PRESENCE_LOCK_NS, userId]);
+    const lockedParticipant = await lockDoorParticipant(client, userId, input.kind);
+    if (lockedParticipant.badgeId !== input.badgeId) {
+      throw new AppError(409, "badge_revoked", "This badge has been revoked");
+    }
+    assertBadgeScanTimestamp(input.scannedAt, lockedParticipant.badgeAssignedAt);
+    const pendingDoorRemoval = lockedParticipant.pendingRemoval;
+    await assertFixtureSubjectScope(client, actorId, userId);
+    const pendingRemovalAction = pendingDoorRemoval?.action ?? null;
 
     // Resolve live scan time after taking the lock. clock_timestamp(), unlike
     // transaction-stable now(), cannot predate a scan whose transaction just
@@ -118,6 +242,9 @@ export async function presenceScan(
     const scannedAt = input.scannedAt ?? dbNow;
     if (manual && isImplausiblyFuture(scannedAt, dbNow.getTime())) {
       throw new BadRequestError("Backdated scan must be in the past");
+    }
+    if (pendingDoorRemoval) {
+      assertPendingExitTimestamp(scannedAt, pendingDoorRemoval.startedAt);
     }
 
     if (input.kind === "in") {
@@ -164,10 +291,37 @@ export async function presenceScan(
       kind: input.kind,
       scannedAt: r.rows[0].scanned_at,
       manual,
+      pendingRemovalAction,
     };
   });
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_PRESENCE_SCAN, result);
-  return result;
+  if (result.pendingRemovalAction && result.kind === "out") {
+    await completePendingRemoval(result.userId, result.pendingRemovalAction);
+  }
+  // The scanner's idempotency response is persisted after this function
+  // returns. Once a pending participant has exited, do not let that response
+  // become another identity-bearing copy of the user id. The user row and raw
+  // time log are removed by completePendingRemoval; the scanner only needs a
+  // successful, identity-free acknowledgement.
+  const publicResult =
+    result.pendingRemovalAction && result.kind === "out"
+      ? {
+          logged: result.logged,
+          kind: result.kind,
+          scannedAt: result.scannedAt,
+          manual: result.manual,
+        }
+      : (() => {
+          const { pendingRemovalAction: _ignored, ...rest } = result;
+          void _ignored;
+          return rest;
+        })();
+  await broadcastForActiveUser(
+    result.userId,
+    SSE_TOPICS.LOGISTICS,
+    EVENTS.LOGISTICS_PRESENCE_SCAN,
+    publicResult,
+  );
+  return publicResult;
 }
 
 // ── H24: staff reconciliation — open sessions with no recent signal ───────
@@ -181,16 +335,17 @@ export async function presenceScan(
  * genuinely open until staff record a real `out`, or until the event-end
  * closer force-closes it at event_ends_at (presence-closer.ts).
  */
-export async function openSessions(at?: number) {
+export async function openSessions(at?: number, actorId?: number) {
   const now = at ?? (await databaseNow()).getTime();
   const windowMs = await certaintyWindowMs();
+  const fixtureFilter = await fixtureReadFilter(pool, actorId, "u");
   const { rows } = await pool.query(
-    `SELECT tl.user_id, tl.scanned_at AS since, u.name, u.surname,
+    `SELECT tl.id AS session_id, tl.user_id, tl.scanned_at AS since, u.name, u.surname, u.account_state,
             GREATEST(tl.scanned_at, COALESCE(la.last_activity, tl.scanned_at)) AS last_signal
        FROM (
-         SELECT DISTINCT ON (user_id) user_id, kind, scanned_at
+         SELECT DISTINCT ON (user_id) id, user_id, kind, scanned_at
            FROM time_logs
-          WHERE scanned_at <= now()
+      WHERE scanned_at <= now() AND kind IN ('in', 'out')
           ORDER BY user_id, scanned_at DESC, id DESC
        ) tl
        JOIN users u ON u.id = tl.user_id
@@ -199,25 +354,36 @@ export async function openSessions(at?: number) {
           WHERE user_id = tl.user_id AND logged_at >= tl.scanned_at
        ) la ON true
       WHERE tl.kind = 'in'
+        AND (
+          u.account_state = 'active'
+          OR (u.account_state = 'removal_pending' AND u.removal_requires_exit = true)
+        )
+        AND u.anonymized_at IS NULL${fixtureFilter}
       ORDER BY last_signal ASC`,
   );
   return (
     rows as {
+      session_id: number;
       user_id: number;
       since: Date;
       name: string | null;
       surname: string | null;
+      account_state: "active" | "removal_pending";
       last_signal: Date;
     }[]
   ).map((r) => {
     const staleMs = now - r.last_signal.getTime();
     return {
-      userId: r.user_id,
+      // This is the latest time-log row, not a user identity. It keeps
+      // identity-free pending rows stable and distinct in clients.
+      sessionId: r.session_id,
+      ...(r.account_state === "removal_pending" ? {} : { userId: r.user_id }),
       name: r.name,
       surname: r.surname,
       since: r.since.toISOString(),
       lastSignal: r.last_signal.toISOString(),
       stale: staleMs > windowMs,
+      ...(r.account_state === "removal_pending" ? { pendingExit: true } : {}),
     };
   });
 }
@@ -228,15 +394,38 @@ export async function openSessions(at?: number) {
  * Load raw presence signals (door in/out + activity scans) grouped per user.
  * Passing a userId scopes to that user.
  */
-async function loadEvents(userId?: number): Promise<Map<number, PresenceEvent[]>> {
+async function loadEvents(
+  userId?: number,
+  options: { accountScope?: "real" | "synthetic" | "all" } = {},
+): Promise<Map<number, PresenceEvent[]>> {
   const scoped = userId != null;
-  const filter = scoped ? "WHERE user_id = $1" : "";
+  const testAccountFilter =
+    options.accountScope === "real"
+      ? " AND u.is_test_account = false"
+      : options.accountScope === "synthetic"
+        ? " AND u.is_test_account = true"
+        : "";
+  const timeFilter = scoped
+    ? `WHERE tl.user_id = $1
+         AND EXISTS (SELECT 1 FROM users u WHERE u.id = tl.user_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL${testAccountFilter})`
+    : `WHERE tl.user_id IS NOT NULL
+         AND EXISTS (SELECT 1 FROM users u WHERE u.id = tl.user_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL${testAccountFilter})`;
+  const activityFilter = scoped
+    ? `WHERE al.user_id = $1
+         AND EXISTS (SELECT 1 FROM users u WHERE u.id = al.user_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL${testAccountFilter})`
+    : `WHERE al.user_id IS NOT NULL
+         AND EXISTS (SELECT 1 FROM users u WHERE u.id = al.user_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL${testAccountFilter})`;
   const params = scoped ? [userId] : [];
   const { rows } = await pool.query(
-    `SELECT user_id, extract(epoch from scanned_at) * 1000 AS t, kind FROM time_logs ${filter}
+    `SELECT tl.user_id, extract(epoch from tl.scanned_at) * 1000 AS t, tl.kind
+       FROM time_logs tl ${timeFilter} AND tl.kind IN ('in', 'out')
      UNION ALL
-     SELECT user_id, extract(epoch from logged_at) * 1000 AS t, 'activity' AS kind
-       FROM activity_logs ${filter}`,
+     SELECT al.user_id, extract(epoch from al.logged_at) * 1000 AS t, 'activity' AS kind
+       FROM activity_logs al ${activityFilter}`,
     params,
   );
 
@@ -250,9 +439,12 @@ async function loadEvents(userId?: number): Promise<Map<number, PresenceEvent[]>
 }
 
 /** H24/H27: how many people are estimated to be in the venue right now. */
-export async function occupancyEstimate(cutoff?: number) {
+export async function occupancyEstimate(cutoff?: number, actorId?: number) {
   const at = cutoff ?? (await databaseNow()).getTime();
-  const map = await loadEvents();
+  const syntheticOperator = actorId != null && (await isSyntheticOperator(pool, actorId));
+  const map = await loadEvents(undefined, {
+    accountScope: syntheticOperator ? "synthetic" : "real",
+  });
   const suspiciousGapMs = await certaintyWindowMs();
   const present: number[] = [];
   for (const [userId, events] of map) {
@@ -263,7 +455,8 @@ export async function occupancyEstimate(cutoff?: number) {
 }
 
 /** H24: estimated attendance hours for one user (e.g. university-credit minimum). */
-export async function userHours(userId: number, cutoff?: number) {
+export async function userHours(userId: number, cutoff?: number, actorId?: number) {
+  if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
   const now = cutoff ?? (await databaseNow()).getTime();
   const events = (await loadEvents(userId)).get(userId) ?? [];
   const suspiciousGapMs = await certaintyWindowMs();
@@ -280,15 +473,21 @@ export async function userHours(userId: number, cutoff?: number) {
 }
 
 /** H24: estimated hours for every user with presence signals (bulk, admin display). */
-export async function allHours(cutoff?: number) {
+export async function allHours(cutoff?: number, actorId?: number) {
   const now = cutoff ?? (await databaseNow()).getTime();
-  const map = await loadEvents();
+  const syntheticOperator = actorId != null && (await isSyntheticOperator(pool, actorId));
+  const map = await loadEvents(undefined, {
+    accountScope: syntheticOperator ? "synthetic" : "real",
+  });
   const suspiciousGapMs = await certaintyWindowMs();
   const userIds = [...map.keys()];
   if (userIds.length === 0) return [];
 
+  const fixtureFilter = await fixtureReadFilter(pool, actorId, "u");
   const { rows: people } = await pool.query(
-    `SELECT id, name, surname FROM users WHERE id = ANY($1)`,
+    `SELECT u.id, u.name, u.surname FROM users u
+      WHERE u.id = ANY($1) AND u.account_state = 'active' AND u.anonymized_at IS NULL
+        ${syntheticOperator ? fixtureFilter : "AND u.is_test_account = false"}`,
     [userIds],
   );
   const nameById = new Map(
@@ -318,13 +517,19 @@ function round2(n: number): number {
 // ── raw scan admin — view/correct individual time_logs (H24 usability) ─────
 
 /** List every raw door scan for a user, oldest first, for admin review/edit. */
-export async function listTimeLogs(userId: number) {
+export async function listTimeLogs(userId: number, actorId?: number) {
+  if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
   const { rows } = await pool.query(
     `SELECT tl.id, tl.kind, tl.scanned_at, tl.scanned_by, tl.notes,
             u.name AS scanned_by_name, u.surname AS scanned_by_surname
        FROM time_logs tl
        LEFT JOIN users u ON u.id = tl.scanned_by
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL
       WHERE tl.user_id = $1
+        AND EXISTS (SELECT 1 FROM users subject
+                     WHERE subject.id = tl.user_id
+                       AND subject.account_state = 'active'
+                       AND subject.anonymized_at IS NULL)
       ORDER BY tl.scanned_at ASC, tl.id ASC`,
     [userId],
   );
@@ -362,10 +567,38 @@ export async function updateTimeLog(
     );
     const before = rows[0];
     if (!before) throw new NotFoundError("Time log not found");
-
+    if (before.user_id == null) throw new NotFoundError("Time log participant is no longer active");
+    await assertFixtureSubjectScope(client, actorId, before.user_id as number);
     const kind = input.kind ?? before.kind;
+    let pendingDoorRemoval: PendingDoorRemoval | null = null;
+    if (kind === "out") {
+      pendingDoorRemoval = (await lockDoorParticipant(client, before.user_id as number, "out"))
+        .pendingRemoval;
+    } else {
+      await lockActiveParticipant(client, before.user_id as number);
+    }
+    const pendingRemovalAction = pendingDoorRemoval?.action ?? null;
     const scannedAt = input.scannedAt ?? before.scanned_at;
     const notes = input.notes === undefined ? before.notes : input.notes;
+    if (pendingDoorRemoval) {
+      assertPendingExitTimestamp(scannedAt, pendingDoorRemoval.startedAt);
+      // A correction may close only the current open session, not an
+      // arbitrary historical `in` row.  This keeps a stale/manual edit from
+      // satisfying the pending-exit transition without a valid exit event.
+      const session = await openSessionAsOf(client, before.user_id as number, scannedAt);
+      const { rows: latestDoorRows } = await client.query<{ id: number }>(
+        `SELECT id FROM time_logs
+          WHERE user_id = $1 AND kind IN ('in', 'out') AND scanned_at <= $2
+          ORDER BY scanned_at DESC, id DESC
+          LIMIT 1`,
+        [before.user_id, scannedAt],
+      );
+      if (!session.open || before.kind !== "in" || latestDoorRows[0]?.id !== before.id) {
+        throw new ConflictError("This correction is not the participant's current open exit.", {
+          code: "pending_exit_requires_latest_open_session",
+        });
+      }
+    }
 
     const { rows: updated } = await client.query(
       `UPDATE time_logs SET kind = $1, scanned_at = $2, notes = $3
@@ -387,21 +620,40 @@ export async function updateTimeLog(
       source: "admin",
     });
 
-    return updated[0];
+    return { ...updated[0], pendingRemovalAction };
   });
 
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_PRESENCE_SCAN, {
-    edited: true,
-    timeLogId: result.id,
-    userId: result.user_id,
-  });
-  return {
-    id: result.id as number,
-    userId: result.user_id as number,
-    kind: result.kind as "in" | "out",
-    scannedAt: (result.scanned_at as Date).toISOString(),
-    notes: (result.notes as string | null) ?? null,
-  };
+  if (result.pendingRemovalAction && result.kind === "out") {
+    await completePendingRemoval(result.user_id as number, result.pendingRemovalAction);
+  }
+
+  const pendingExit = result.pendingRemovalAction && result.kind === "out";
+  const publicResult = pendingExit
+    ? {
+        id: result.id as number,
+        kind: result.kind as "in" | "out",
+        scannedAt: (result.scanned_at as Date).toISOString(),
+        notes: (result.notes as string | null) ?? null,
+      }
+    : {
+        id: result.id as number,
+        userId: result.user_id as number,
+        kind: result.kind as "in" | "out",
+        scannedAt: (result.scanned_at as Date).toISOString(),
+        notes: (result.notes as string | null) ?? null,
+      };
+
+  await broadcastForActiveUser(
+    result.user_id as number,
+    SSE_TOPICS.LOGISTICS,
+    EVENTS.LOGISTICS_PRESENCE_SCAN,
+    {
+      edited: true,
+      timeLogId: result.id,
+      ...(pendingExit ? {} : { userId: result.user_id }),
+    },
+  );
+  return publicResult;
 }
 
 export async function createPresenceSignal(
@@ -415,8 +667,25 @@ export async function createPresenceSignal(
     throw new BadRequestError("Presence signals cannot be in the future");
   }
   const result = await withTransaction(async (client) => {
-    const user = await client.query(`SELECT 1 FROM users WHERE id = $1`, [userId]);
-    if (!user.rows[0]) throw new NotFoundError("User not found");
+    await assertFixtureSubjectScope(client, actorId, userId);
+    let pendingDoorRemoval: PendingDoorRemoval | null = null;
+    if (input.kind === "activity") {
+      await lockActiveParticipant(client, userId);
+    } else {
+      pendingDoorRemoval = (await lockDoorParticipant(client, userId, input.kind)).pendingRemoval;
+    }
+    const pendingRemovalAction = pendingDoorRemoval?.action ?? null;
+    if (pendingDoorRemoval && input.kind === "out") {
+      assertPendingExitTimestamp(input.occurredAt, pendingDoorRemoval.startedAt);
+      // A pending account may record exactly one thing: the exit that closes
+      // the session which was open when removal was requested.  The database
+      // trigger rejects other pending-user time logs, but this service-level
+      // check also rejects a fabricated/manual `out` when no session exists.
+      const session = await openSessionAsOf(client, userId, input.occurredAt);
+      if (!session.open) {
+        throw new ConflictError("This person has no open presence session to close.", { userId });
+      }
+    }
     if (input.kind === "activity") {
       const activity = await client.query(`SELECT id FROM activities WHERE id = $1`, [
         input.activityId,
@@ -435,7 +704,11 @@ export async function createPresenceSignal(
         after: { userId, activityId: input.activityId, occurredAt: input.occurredAt },
         source: "admin",
       });
-      return { source: "activity" as const, id: rows[0].id as number };
+      return {
+        source: "activity" as const,
+        id: rows[0].id as number,
+        pendingRemovalAction: null,
+      };
     }
     const { rows } = await client.query(
       `INSERT INTO time_logs (user_id, kind, scanned_at, scanned_by, notes)
@@ -450,14 +723,29 @@ export async function createPresenceSignal(
       after: { id: rows[0].id, kind: input.kind, occurredAt: input.occurredAt },
       source: "admin",
     });
-    return { source: "door" as const, id: rows[0].id as number };
+    return {
+      source: "door" as const,
+      id: rows[0].id as number,
+      pendingRemovalAction,
+    };
   });
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_PRESENCE_SCAN, {
+  if (result.pendingRemovalAction && result.source === "door") {
+    await completePendingRemoval(userId, result.pendingRemovalAction);
+  }
+  const pendingExit = result.pendingRemovalAction && result.source === "door";
+  const publicResult = pendingExit
+    ? { source: result.source as "door" }
+    : (() => {
+        const { pendingRemovalAction: _ignored, ...rest } = result;
+        void _ignored;
+        return rest;
+      })();
+  await broadcastForActiveUser(userId, SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_PRESENCE_SCAN, {
     created: true,
-    userId,
-    ...result,
+    ...(pendingExit ? {} : { userId }),
+    ...publicResult,
   });
-  return result;
+  return publicResult;
 }
 
 export async function updatePresenceActivity(
@@ -475,6 +763,10 @@ export async function updatePresenceActivity(
     );
     const before = rows[0];
     if (!before) throw new NotFoundError("Activity log not found");
+    if (before.user_id == null)
+      throw new NotFoundError("Activity log participant is no longer active");
+    await assertFixtureSubjectScope(client, actorId, before.user_id as number);
+    await lockActiveParticipant(client, before.user_id as number);
     const activityId = input.activityId ?? before.activity_id;
     const exists = await client.query(`SELECT 1 FROM activities WHERE id = $1`, [activityId]);
     if (!exists.rows[0]) throw new NotFoundError("Activity not found");
@@ -500,11 +792,16 @@ export async function updatePresenceActivity(
     });
     return updated[0] as { id: number; user_id: number };
   });
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_ACTIVITY_SCAN, {
-    edited: true,
-    activityLogId: result.id,
-    userId: result.user_id,
-  });
+  await broadcastForActiveUser(
+    result.user_id,
+    SSE_TOPICS.LOGISTICS,
+    EVENTS.LOGISTICS_ACTIVITY_SCAN,
+    {
+      edited: true,
+      activityLogId: result.id,
+      userId: result.user_id,
+    },
+  );
   return { id: result.id, userId: result.user_id };
 }
 
@@ -516,6 +813,10 @@ export async function deletePresenceActivity(actorId: number, id: number) {
     );
     const before = rows[0];
     if (!before) throw new NotFoundError("Activity log not found");
+    if (before.user_id == null)
+      throw new NotFoundError("Activity log participant is no longer active");
+    await assertFixtureSubjectScope(client, actorId, before.user_id as number);
+    await lockActiveParticipant(client, before.user_id as number);
     await client.query(`DELETE FROM activity_logs WHERE id = $1`, [id]);
     await audit(client, {
       actorId,
@@ -527,15 +828,21 @@ export async function deletePresenceActivity(actorId: number, id: number) {
     });
     return { id, userId: before.user_id as number };
   });
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_ACTIVITY_SCAN, {
-    deleted: true,
-    activityLogId: id,
-    userId: result.userId,
-  });
+  await broadcastForActiveUser(
+    result.userId,
+    SSE_TOPICS.LOGISTICS,
+    EVENTS.LOGISTICS_ACTIVITY_SCAN,
+    {
+      deleted: true,
+      activityLogId: id,
+      userId: result.userId,
+    },
+  );
   return { deleted: true as const };
 }
 
-export async function presenceTimeline(userId: number, cutoff?: number) {
+export async function presenceTimeline(userId: number, cutoff?: number, actorId?: number) {
+  if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
   const now = cutoff ?? (await databaseNow()).getTime();
   const suspiciousGapMs = await certaintyWindowMs();
   const [{ rows }, { rows: activityRows }] = await Promise.all([
@@ -544,13 +851,26 @@ export async function presenceTimeline(userId: number, cutoff?: number) {
             NULL::integer AS activity_id, NULL::text AS activity_name,
             NULL::text AS category, tl.notes, tl.scanned_by AS recorded_by,
             u.name AS recorded_by_name, u.surname AS recorded_by_surname
-       FROM time_logs tl LEFT JOIN users u ON u.id = tl.scanned_by WHERE tl.user_id = $1
+       FROM time_logs tl
+       LEFT JOIN users u ON u.id = tl.scanned_by
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL
+      WHERE tl.user_id = $1
+        AND EXISTS (SELECT 1 FROM users subject
+                     WHERE subject.id = tl.user_id
+                       AND subject.account_state = 'active'
+                       AND subject.anonymized_at IS NULL)
      UNION ALL
      SELECT al.id, 'activity', 'activity', al.logged_at, a.id, a.name, a.category,
             al.notes, al.logged_by, u.name, u.surname
        FROM activity_logs al
        JOIN activities a ON a.id = al.activity_id
-       JOIN users u ON u.id = al.logged_by WHERE al.user_id = $1
+       LEFT JOIN users u ON u.id = al.logged_by
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL
+      WHERE al.user_id = $1
+        AND EXISTS (SELECT 1 FROM users subject
+                     WHERE subject.id = al.user_id
+                       AND subject.account_state = 'active'
+                       AND subject.anonymized_at IS NULL)
      ORDER BY occurred_at ASC, id ASC`,
       [userId],
     ),
@@ -643,6 +963,9 @@ export async function deleteTimeLog(actorId: number, id: number) {
     );
     const before = rows[0];
     if (!before) throw new NotFoundError("Time log not found");
+    if (before.user_id == null) throw new NotFoundError("Time log participant is no longer active");
+    await assertFixtureSubjectScope(client, actorId, before.user_id as number);
+    await lockActiveParticipant(client, before.user_id as number);
 
     await client.query(`DELETE FROM time_logs WHERE id = $1`, [id]);
 
@@ -662,7 +985,7 @@ export async function deleteTimeLog(actorId: number, id: number) {
     return before.user_id as number;
   });
 
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_PRESENCE_SCAN, {
+  await broadcastForActiveUser(userId, SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_PRESENCE_SCAN, {
     deleted: true,
     timeLogId: id,
     userId,

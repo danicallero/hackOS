@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCertaintyWindows,
   buildPresenceIntervals,
+  guaranteedPresenceMs,
   isPresentAt,
   type PresenceEvent,
   totalPresenceMs,
@@ -22,6 +23,8 @@ const H = 3_600_000;
 const base = Date.UTC(2026, 6, 4, 0, 0, 0); // Sat 2026-07-04 00:00 UTC
 const at = (hour: number) => base + hour * H;
 const hours = (events: PresenceEvent[], cutoff: number) => totalPresenceMs(events, cutoff) / H;
+const guaranteedHours = (events: PresenceEvent[], cutoff: number) =>
+  guaranteedPresenceMs(events, cutoff) / H;
 
 describe("presence estimation (H24)", () => {
   it("door in→out is a full continuous session even with no scans between", () => {
@@ -114,6 +117,45 @@ describe("presence estimation (H24)", () => {
 });
 
 describe("rolling certainty windows", () => {
+  it("carries only secured time into the anonymous audit record", () => {
+    expect(
+      guaranteedHours(
+        [
+          { t: at(9), kind: "in" },
+          { t: at(18), kind: "out" },
+        ],
+        at(24),
+      ),
+    ).toBe(9);
+    expect(guaranteedHours([{ t: at(9), kind: "in" }], at(24))).toBe(0);
+  });
+
+  it("does not credit malformed duplicate entries, but keeps the valid later session", () => {
+    expect(
+      guaranteedHours(
+        [
+          { t: at(9), kind: "in" },
+          { t: at(10), kind: "in" },
+          { t: at(12), kind: "out" },
+        ],
+        at(24),
+      ),
+    ).toBe(2);
+  });
+
+  it("deduplicates repeated exits and does not extend time past the first exit", () => {
+    expect(
+      guaranteedHours(
+        [
+          { t: at(9), kind: "in" },
+          { t: at(12), kind: "out" },
+          { t: at(12), kind: "out" },
+        ],
+        at(24),
+      ),
+    ).toBe(3);
+  });
+
   it("secures entry-to-activity and opens a fresh window at the activity", () => {
     const windows = buildCertaintyWindows(
       [

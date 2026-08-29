@@ -1,15 +1,17 @@
-import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { EVENTS } from "@hackos/shared/events";
 import type { Question } from "@hackos/shared/questions";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
-import { broadcast } from "../../lib/sse.js";
+import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
+import { broadcastQueueEvent } from "./broadcast.js";
 import { challengePanels, mergeJudgingPanels } from "./criteria-merge.js";
 import {
   anyEvaluationStarted,
   lockEvaluationEntriesForChallenges,
   lockEvaluationEntriesForGroup,
 } from "./evaluation-lock.js";
+import { notifyQueueTopologyChanged } from "./notify.js";
 import { compactQueueGroupPositions } from "./ordering.js";
 
 /**
@@ -29,9 +31,10 @@ import { compactQueueGroupPositions } from "./ordering.js";
  *   renumbered into one key space and the judging form is replaced, neither
  *   of which is safe once an answer has been given, and both of which
  *   organisers legitimately do minutes before the first team walks in.
- * - Rooms follow their challenges: a room serving a group that is merged away
- *   is repointed at the target group rather than silently unassigned (the FK
- *   is `ON DELETE CASCADE`).
+ * - Rooms follow their challenges only when a source group is emptied. A room
+ *   serving a source group that still has unselected challenges stays there;
+ *   rooms from an emptied group are repointed at the target rather than
+ *   silently unassigned (the FK is `ON DELETE CASCADE`).
  */
 
 export interface QueueGroupSummary {
@@ -77,16 +80,68 @@ const GROUP_SUMMARY_SQL = `
          (SELECT count(DISTINCT qe.repo_id)::int
             FROM queue_group_challenges qgc
             JOIN queue_entries qe ON qe.challenge_id = qgc.challenge_id
+            JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
            WHERE qgc.queue_group_id = qg.id
              AND qe.status NOT IN ('cancelled', 'disqualified')) AS teams,
          EXISTS (SELECT 1
                    FROM queue_group_challenges qgc
                    JOIN queue_entries qe ON qe.challenge_id = qgc.challenge_id
+                   JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
                    LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
                   WHERE qgc.queue_group_id = qg.id
                     AND (qe.status = 'completed' OR ar.status = 'submitted')) AS evaluation_started
     FROM queue_groups qg
-    JOIN enterprises e ON e.id = qg.enterprise_id`;
+    JOIN enterprises e ON e.id = qg.enterprise_id
+   WHERE NOT EXISTS (
+     SELECT 1
+       FROM queue_group_challenges hidden_qgc
+       JOIN challenges hidden_c ON hidden_c.id = hidden_qgc.challenge_id
+      WHERE hidden_qgc.queue_group_id = qg.id
+        AND hidden_c.is_test_account = true
+   )`;
+
+type QueueTopologySnapshot = {
+  queueGroupIds: number[];
+  challengeIds: number[];
+};
+type QueueTopologyPair = [QueueTopologySnapshot, QueueTopologySnapshot];
+
+/** Capture both sides of a queue-group graph while its mutation is open. */
+async function captureQueueTopology(
+  client: Queryable,
+  queueGroupIds: readonly number[],
+): Promise<QueueTopologySnapshot> {
+  const normalizedGroupIds = [...new Set(queueGroupIds)].filter(Number.isFinite);
+  if (normalizedGroupIds.length === 0) {
+    return { queueGroupIds: [], challengeIds: [] };
+  }
+  const { rows } = await client.query<{ queue_group_id: number; challenge_id: number }>(
+    `SELECT queue_group_id, challenge_id
+       FROM queue_group_challenges
+      WHERE queue_group_id = ANY($1::int[])`,
+    [normalizedGroupIds],
+  );
+  return {
+    // Preserve ids whose memberships are about to disappear. The post-commit
+    // notifier can then re-resolve their snapshot challenges to their current
+    // group instead of losing a participant refresh on a stale id.
+    queueGroupIds: normalizedGroupIds,
+    challengeIds: [...new Set(rows.map((row) => Number(row.challenge_id)))],
+  };
+}
+
+async function broadcastQueueTopology(topology: QueueTopologySnapshot[]): Promise<void> {
+  const queueGroupIds = [...new Set(topology.flatMap((snapshot) => snapshot.queueGroupIds))].filter(
+    Number.isFinite,
+  );
+  await Promise.all(
+    queueGroupIds.map((queueGroupId) =>
+      broadcastQueueEvent(pool, "queueGroup", queueGroupId, EVENTS.QUEUE_ROOM_CHANGED, {
+        queueGroupId,
+      }),
+    ),
+  );
+}
 
 function toSummary(row: {
   id: number;
@@ -124,7 +179,7 @@ export async function listEnterpriseQueueGroups(
   enterpriseId: number,
 ): Promise<QueueGroupSummary[]> {
   const { rows } = await pool.query(
-    `${GROUP_SUMMARY_SQL} WHERE qg.enterprise_id = $1 ORDER BY qg.display_name ASC, qg.id ASC`,
+    `${GROUP_SUMMARY_SQL} AND qg.enterprise_id = $1 ORDER BY qg.display_name ASC, qg.id ASC`,
     [enterpriseId],
   );
   return rows.map(toSummary);
@@ -140,11 +195,17 @@ export async function listManageableQueueGroups(
   userId: number,
   isAdmin: boolean,
 ): Promise<QueueGroupSummary[]> {
+  // The management summary is intentionally the real-event projection (its
+  // counts and hidden-group predicate are not marker-parameterized). A future
+  // synthetic queue-admin must not receive that projection by guessing this
+  // endpoint, so fail closed until a dedicated marker-scoped summary exists.
+  if (await isSyntheticOperator(pool, userId)) return [];
   const { rows } = await pool.query(
     `${GROUP_SUMMARY_SQL}
-      WHERE $1::boolean
+      AND ($1::boolean
          OR EXISTS (SELECT 1 FROM sponsors s
                      WHERE s.enterprise_id = qg.enterprise_id AND s.user_id = $2)
+      )
       ORDER BY e.name ASC, qg.display_name ASC, qg.id ASC`,
     [isAdmin, userId],
   );
@@ -152,7 +213,7 @@ export async function listManageableQueueGroups(
 }
 
 export async function getQueueGroup(queueGroupId: number): Promise<QueueGroupSummary> {
-  const { rows } = await pool.query(`${GROUP_SUMMARY_SQL} WHERE qg.id = $1`, [queueGroupId]);
+  const { rows } = await pool.query(`${GROUP_SUMMARY_SQL} AND qg.id = $1`, [queueGroupId]);
   if (!rows[0]) throw new NotFoundError("Queue group not found", { queueGroupId });
   return toSummary(rows[0]);
 }
@@ -186,6 +247,7 @@ async function assertEnterpriseChallenges(
        JOIN sponsors s ON s.id = c.author
        LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = c.id
       WHERE c.id = ANY($1::int[])
+        AND c.is_test_account = false
       FOR SHARE OF c, s`,
     [challengeIds],
   );
@@ -260,8 +322,9 @@ export async function mergeQueueGroups(
           .filter((id) => Number.isFinite(id) && id !== targetGroupId),
       ),
     ];
+    const beforeTopology = await captureQueueTopology(client, [targetGroupId, ...sourceGroupIds]);
 
-    const before = (await client.query(`${GROUP_SUMMARY_SQL} WHERE qg.id = $1`, [targetGroupId]))
+    const before = (await client.query(`${GROUP_SUMMARY_SQL} AND qg.id = $1`, [targetGroupId]))
       .rows[0];
 
     await client.query(
@@ -269,31 +332,42 @@ export async function mergeQueueGroups(
       [targetGroupId, unique],
     );
 
-    // Rooms follow their challenges. A room already serving the target keeps
-    // it (UNIQUE(room_id) — the DO NOTHING branch), and a source group that
-    // still has other rooms hands them all over: after this the source groups
-    // are empty and get dropped, and the FK is ON DELETE CASCADE, so skipping
-    // this would quietly unassign those rooms.
+    // A source group can contain challenges that were not selected for this
+    // merge. Keep its rooms with that surviving queue; only move rooms from a
+    // source group that is empty after the selected challenge links move.
     if (sourceGroupIds.length) {
-      await client.query(
-        `UPDATE room_queue_groups SET queue_group_id = $1, assigned_at = now()
+      const { rows: emptiedSourceRows } = await client.query<{ id: number }>(
+        `SELECT id
+           FROM queue_groups qg
+          WHERE qg.id = ANY($1::int[])
+            AND NOT EXISTS (
+              SELECT 1 FROM queue_group_challenges qgc
+               WHERE qgc.queue_group_id = qg.id
+            )
+          ORDER BY id
+          FOR UPDATE`,
+        [sourceGroupIds],
+      );
+      const emptiedSourceGroupIds = emptiedSourceRows.map((row) => Number(row.id));
+      if (emptiedSourceGroupIds.length) {
+        await client.query(
+          `UPDATE room_queue_groups SET queue_group_id = $1, assigned_at = now()
           WHERE queue_group_id = ANY($2::int[])
             AND room_id NOT IN (SELECT room_id FROM room_queue_groups WHERE queue_group_id = $1)`,
-        [targetGroupId, sourceGroupIds],
-      );
-      // Anything left pointing at a source group is a room that already serves
-      // the target; drop the stale row before the group goes.
-      await client.query(`DELETE FROM room_queue_groups WHERE queue_group_id = ANY($1::int[])`, [
-        sourceGroupIds,
-      ]);
-      // Only groups that the merge actually emptied — a source group holding
-      // challenges the admin did not select stays exactly as it is.
+          [targetGroupId, emptiedSourceGroupIds],
+        );
+        // Anything left pointing at an emptied source group already serves the
+        // target; drop the stale duplicate before removing that source group.
+        await client.query(`DELETE FROM room_queue_groups WHERE queue_group_id = ANY($1::int[])`, [
+          emptiedSourceGroupIds,
+        ]);
+      }
       await client.query(
         `DELETE FROM queue_groups qg
           WHERE qg.id = ANY($1::int[])
             AND NOT EXISTS (SELECT 1 FROM queue_group_challenges qgc
                              WHERE qgc.queue_group_id = qg.id)`,
-        [sourceGroupIds],
+        [emptiedSourceGroupIds],
       );
     }
 
@@ -310,7 +384,9 @@ export async function mergeQueueGroups(
       [displayName, JSON.stringify(merged.questions), targetGroupId],
     );
 
-    const after = (await client.query(`${GROUP_SUMMARY_SQL} WHERE qg.id = $1`, [targetGroupId]))
+    const afterTopology = await captureQueueTopology(client, [targetGroupId, ...sourceGroupIds]);
+
+    const after = (await client.query(`${GROUP_SUMMARY_SQL} AND qg.id = $1`, [targetGroupId]))
       .rows[0];
 
     await audit(client, {
@@ -324,10 +400,20 @@ export async function mergeQueueGroups(
       userAgent: input.request?.userAgent,
     });
 
-    return { summary: toSummary(after), duplicatesDropped: merged.duplicatesDropped };
+    return {
+      summary: toSummary(after),
+      duplicatesDropped: merged.duplicatesDropped,
+      topology: [beforeTopology, afterTopology] as QueueTopologyPair,
+    };
   });
 
-  await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ROOM_CHANGED, { queueGroupId: result.summary.id });
+  await broadcastQueueTopology(result.topology);
+  await notifyQueueTopologyChanged(pool, {
+    oldQueueGroupIds: result.topology[0].queueGroupIds,
+    newQueueGroupIds: result.topology[1].queueGroupIds,
+    oldChallengeIds: result.topology[0].challengeIds,
+    newChallengeIds: result.topology[1].challengeIds,
+  });
   return { ...result.summary, mergedPanel: { duplicatesDropped: result.duplicatesDropped } };
 }
 
@@ -345,9 +431,9 @@ export async function splitQueueGroup(input: {
 }): Promise<QueueGroupSummary[]> {
   const { enterpriseId, queueGroupId, actorId } = input;
 
-  const groups = await withTransaction(async (client) => {
+  const result = await withTransaction(async (client) => {
     await lockEnterpriseGroups(client, enterpriseId);
-    const before = (await client.query(`${GROUP_SUMMARY_SQL} WHERE qg.id = $1`, [queueGroupId]))
+    const before = (await client.query(`${GROUP_SUMMARY_SQL} AND qg.id = $1`, [queueGroupId]))
       .rows[0];
     if (!before) throw new NotFoundError("Queue group not found", { queueGroupId });
     if (Number(before.enterprise_id) !== enterpriseId) {
@@ -363,6 +449,7 @@ export async function splitQueueGroup(input: {
         queueGroupId,
       });
     }
+    const beforeTopology = await captureQueueTopology(client, [queueGroupId]);
 
     // The lowest challenge id keeps the existing group; the rest each get a
     // fresh 1:1 group named after their own title, matching what 0410's
@@ -407,16 +494,29 @@ export async function splitQueueGroup(input: {
 
     const { rows: after } = await client.query(
       `${GROUP_SUMMARY_SQL}
-        WHERE qg.id IN (SELECT queue_group_id FROM queue_group_challenges
+        AND qg.id IN (SELECT queue_group_id FROM queue_group_challenges
                          WHERE challenge_id = ANY($1::int[]))
         ORDER BY qg.display_name ASC, qg.id ASC`,
       [memberIds],
     );
-    return after.map(toSummary);
+    const afterTopology = await captureQueueTopology(client, [
+      queueGroupId,
+      ...after.map((row) => Number(row.id)),
+    ]);
+    return {
+      groups: after.map(toSummary),
+      topology: [beforeTopology, afterTopology] as QueueTopologyPair,
+    };
   });
 
-  await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ROOM_CHANGED, { queueGroupId });
-  return groups;
+  await broadcastQueueTopology(result.topology);
+  await notifyQueueTopologyChanged(pool, {
+    oldQueueGroupIds: result.topology[0].queueGroupIds,
+    newQueueGroupIds: result.topology[1].queueGroupIds,
+    oldChallengeIds: result.topology[0].challengeIds,
+    newChallengeIds: result.topology[1].challengeIds,
+  });
+  return result.groups;
 }
 
 /**
@@ -433,14 +533,14 @@ export async function updateQueueGroup(input: {
 }): Promise<QueueGroupSummary> {
   const { queueGroupId, displayName, criteria, actorId } = input;
 
-  const summary = await withTransaction(async (client) => {
+  const result = await withTransaction(async (client) => {
     const locked = await client.query(`SELECT id FROM queue_groups WHERE id = $1 FOR UPDATE`, [
       queueGroupId,
     ]);
     if (!locked.rowCount) throw new NotFoundError("Queue group not found", { queueGroupId });
     if (criteria !== undefined) await lockEvaluationEntriesForGroup(client, queueGroupId);
 
-    const before = (await client.query(`${GROUP_SUMMARY_SQL} WHERE qg.id = $1`, [queueGroupId]))
+    const before = (await client.query(`${GROUP_SUMMARY_SQL} AND qg.id = $1`, [queueGroupId]))
       .rows[0];
     if (!before) throw new NotFoundError("Queue group not found", { queueGroupId });
     const shared = (before.challenges as unknown[]).length > 1;
@@ -455,6 +555,7 @@ export async function updateQueueGroup(input: {
         code: "panel_locked",
       });
     }
+    const beforeTopology = await captureQueueTopology(client, [queueGroupId]);
 
     await client.query(
       `UPDATE queue_groups
@@ -464,7 +565,7 @@ export async function updateQueueGroup(input: {
       [displayName ?? null, criteria ? JSON.stringify(criteria) : null, queueGroupId],
     );
 
-    const after = (await client.query(`${GROUP_SUMMARY_SQL} WHERE qg.id = $1`, [queueGroupId]))
+    const after = (await client.query(`${GROUP_SUMMARY_SQL} AND qg.id = $1`, [queueGroupId]))
       .rows[0];
     await audit(client, {
       actorId,
@@ -476,11 +577,21 @@ export async function updateQueueGroup(input: {
       ip: input.request?.ip,
       userAgent: input.request?.userAgent,
     });
-    return toSummary(after);
+    const afterTopology = await captureQueueTopology(client, [queueGroupId]);
+    return {
+      summary: toSummary(after),
+      topology: [beforeTopology, afterTopology] as QueueTopologyPair,
+    };
   });
 
-  await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ROOM_CHANGED, { queueGroupId });
-  return summary;
+  await broadcastQueueTopology(result.topology);
+  await notifyQueueTopologyChanged(pool, {
+    oldQueueGroupIds: result.topology[0].queueGroupIds,
+    newQueueGroupIds: result.topology[1].queueGroupIds,
+    oldChallengeIds: result.topology[0].challengeIds,
+    newChallengeIds: result.topology[1].challengeIds,
+  });
+  return result.summary;
 }
 
 /**
@@ -506,18 +617,96 @@ export async function setQueueGroupRooms(input: {
   const { queueGroupId, actorId } = input;
   const roomIds = [...new Set(input.roomIds)];
 
-  const summary = await withTransaction(async (client) => {
-    const before = (await client.query(`${GROUP_SUMMARY_SQL} WHERE qg.id = $1`, [queueGroupId]))
+  const result = await withTransaction(async (client) => {
+    const initial = (await client.query(`${GROUP_SUMMARY_SQL} AND qg.id = $1`, [queueGroupId]))
+      .rows[0];
+    if (!initial) throw new NotFoundError("Queue group not found", { queueGroupId });
+
+    // Lock all groups currently serving the named rooms before changing the
+    // unique room links. This keeps the old group snapshot stable and follows
+    // the same group-before-room lock order as merge/split operations.
+    const { rows: servingBefore } = await client.query<{
+      room_id: number;
+      queue_group_id: number;
+    }>(
+      `SELECT rqg.room_id, rqg.queue_group_id
+         FROM room_queue_groups rqg
+        WHERE rqg.room_id = ANY($1::int[])
+        ORDER BY rqg.queue_group_id, rqg.room_id`,
+      [roomIds],
+    );
+    const affectedGroupIds = [
+      ...new Set([queueGroupId, ...servingBefore.map((row) => Number(row.queue_group_id))]),
+    ]
+      .filter(Number.isFinite)
+      .sort((a, b) => a - b);
+    await client.query(
+      `SELECT id
+         FROM queue_groups
+        WHERE id = ANY($1::int[])
+        ORDER BY id
+        FOR UPDATE`,
+      [affectedGroupIds],
+    );
+    const before = (await client.query(`${GROUP_SUMMARY_SQL} AND qg.id = $1`, [queueGroupId]))
       .rows[0];
     if (!before) throw new NotFoundError("Queue group not found", { queueGroupId });
     const enterpriseId = Number(before.enterprise_id);
 
-    if (roomIds.length) {
-      // Lock the rooms in id order so two enterprises claiming the same room
-      // serialise rather than deadlock.
+    // H38/H46: include every room currently serving the target group, not only rooms
+    // named in this replacement. In particular, an empty `roomIds` means
+    // "clear the queue": those existing links still need the room lock before
+    // the topology snapshot, otherwise a concurrent replacement can commit
+    // while this transaction waits on the room lock and its old group would
+    // be absent from the invalidation boundary.
+    const { rows: targetServingBefore } = await client.query<{ room_id: number }>(
+      `SELECT room_id
+         FROM room_queue_groups
+        WHERE queue_group_id = $1
+        ORDER BY room_id`,
+      [queueGroupId],
+    );
+
+    // Lock the rooms in id order so two enterprises claiming the same room
+    // serialise rather than deadlock. When clearing every room, lock the
+    // group's current links too; otherwise a concurrent replacement can
+    // commit while we wait and its former group would be absent from the
+    // invalidation snapshot.
+    const roomIdsToLock = [
+      ...new Set([
+        ...roomIds,
+        ...servingBefore
+          .filter((row) => Number(row.queue_group_id) === queueGroupId)
+          .map((row) => Number(row.room_id)),
+        ...targetServingBefore.map((row) => Number(row.room_id)),
+      ]),
+    ].sort((a, b) => a - b);
+    if (roomIdsToLock.length) {
       await client.query(`SELECT id FROM rooms WHERE id = ANY($1::int[]) ORDER BY id FOR UPDATE`, [
-        roomIds,
+        roomIdsToLock,
       ]);
+    }
+    // The room lock is the point at which serving links stop changing. Re-read
+    // them before the mutation so a group that replaced the pre-lock snapshot
+    // is still included in the old-side topology invalidation.
+    const { rows: servingAtLock } = await client.query<{
+      room_id: number;
+      queue_group_id: number;
+    }>(
+      `SELECT rqg.room_id, rqg.queue_group_id
+         FROM room_queue_groups rqg
+        WHERE rqg.room_id = ANY($1::int[])
+        ORDER BY rqg.queue_group_id, rqg.room_id`,
+      [roomIdsToLock],
+    );
+    const topologyGroupIds = [
+      ...new Set([...affectedGroupIds, ...servingAtLock.map((row) => Number(row.queue_group_id))]),
+    ]
+      .filter(Number.isFinite)
+      .sort((a, b) => a - b);
+    const beforeTopology = await captureQueueTopology(client, topologyGroupIds);
+
+    if (roomIds.length) {
       const { rows: found } = await client.query(`SELECT id FROM rooms WHERE id = ANY($1::int[])`, [
         roomIds,
       ]);
@@ -563,7 +752,7 @@ export async function setQueueGroupRooms(input: {
       );
     }
 
-    const after = (await client.query(`${GROUP_SUMMARY_SQL} WHERE qg.id = $1`, [queueGroupId]))
+    const after = (await client.query(`${GROUP_SUMMARY_SQL} AND qg.id = $1`, [queueGroupId]))
       .rows[0];
     await audit(client, {
       actorId,
@@ -575,11 +764,21 @@ export async function setQueueGroupRooms(input: {
       ip: input.request?.ip,
       userAgent: input.request?.userAgent,
     });
-    return toSummary(after);
+    const afterTopology = await captureQueueTopology(client, topologyGroupIds);
+    return {
+      summary: toSummary(after),
+      topology: [beforeTopology, afterTopology] as QueueTopologyPair,
+    };
   });
 
-  await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ROOM_CHANGED, { queueGroupId });
-  return summary;
+  await broadcastQueueTopology(result.topology);
+  await notifyQueueTopologyChanged(pool, {
+    oldQueueGroupIds: result.topology[0].queueGroupIds,
+    newQueueGroupIds: result.topology[1].queueGroupIds,
+    oldChallengeIds: result.topology[0].challengeIds,
+    newChallengeIds: result.topology[1].challengeIds,
+  });
+  return result.summary;
 }
 
 /**

@@ -17,10 +17,6 @@ interface PushTokenRow {
   platform: string | null;
 }
 
-function tokenLabel(token: string): string {
-  return token.length > 10 ? `…${token.slice(-8)}` : token;
-}
-
 /**
  * Expo Push adapter (H51, H55). Sends to every registered push_token of the
  * user in one batched request. A user with zero tokens is a no-op success —
@@ -43,12 +39,19 @@ export async function dispatchPush(
   category?: string,
 ): Promise<void> {
   const { rows: tokenRows } = await db.query(
-    `SELECT token, platform FROM push_tokens WHERE user_id = $1`,
+    `SELECT pt.token, pt.platform
+       FROM push_tokens pt
+       JOIN users u ON u.id = pt.user_id
+      WHERE pt.user_id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
     [userId],
   );
   if (tokenRows.length === 0) return;
 
-  const { rows: userRows } = await db.query(`SELECT language FROM users WHERE id = $1`, [userId]);
+  const { rows: userRows } = await db.query(
+    `SELECT language FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+    [userId],
+  );
   const language = normalizeLanguage((userRows[0] as { language?: string } | undefined)?.language);
   const rendered = renderPushTemplate(payload, language);
 
@@ -85,10 +88,10 @@ export async function dispatchPush(
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify(messages),
   }).catch((err: unknown) => {
-    const cause = err instanceof Error ? err.cause : undefined;
-    const detail =
-      cause instanceof Error ? cause.message : cause ? String(cause) : (err as Error)?.message;
-    throw new Error(`Expo push request failed: ${detail ?? "unknown network error"}`);
+    // The error is persisted by the outbox dispatcher. Do not copy a provider
+    // exception, token, URL, or request body into that durable history.
+    void err;
+    throw new Error("Expo push request failed");
   });
   await assertOkResponse(res, "Expo push");
 
@@ -107,15 +110,13 @@ export async function dispatchPush(
       await db.query(`DELETE FROM push_tokens WHERE token = $1`, [tokens[i]]);
       continue;
     }
-    const error = ticket.message ?? ticket.details?.error ?? "unknown expo push error";
+    const errorCode = ticket.details?.error ?? "provider_error";
     console.warn("Expo push ticket failed", {
-      userId,
       category,
       platform: typedTokenRows[i]?.platform ?? "unknown",
-      token: tokenLabel(tokens[i] ?? "unknown"),
-      error,
+      errorCode,
     });
-    firstError ??= error;
+    firstError ??= errorCode;
   }
   // The outbox retries a failed row by resending to every current token
   // again (no per-token retry tracking), so a batch counts as delivered as

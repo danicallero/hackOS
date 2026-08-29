@@ -3,7 +3,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { pool } from "../../db/pool.js";
+import { pool, withTransaction } from "../../db/pool.js";
 import { requireAuth, userHasCapability } from "../../lib/capabilities.js";
 import {
   BadRequestError,
@@ -13,6 +13,7 @@ import {
 } from "../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { getObject, putObject } from "../../lib/storage.js";
+import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
 import type { TemplateField } from "./schemas.js";
 
 const uploadParamsSchema = z.object({
@@ -37,6 +38,11 @@ const requireApplicationUploadAccess: preHandlerHookHandler = async (req) => {
   if (!Number.isInteger(ownerId)) throw new BadRequestError("Malformed file key");
 
   const userId = req.userId as number;
+  // H54: a stale or guessed upload key must not let ordinary reviewers read
+  // synthetic fixture files, and synthetic operators must not cross into real
+  // participant data. This check also fails closed if the encoded owner no
+  // longer exists.
+  await assertFixtureSubjectScope(pool, userId, ownerId);
   if (
     userId === ownerId ||
     (await userHasCapability(userId, CAPABILITIES.APPLICATIONS_REVIEW, req))
@@ -81,53 +87,70 @@ export function registerUploadRoutes(app: FastifyInstance): void {
       const { applicationId, fieldKey } = req.params;
       const userId = req.userId as number;
 
-      // Look up the application template to find the field definition
-      const { rows: appRows } = await pool.query(
-        `SELECT template, type FROM applications WHERE id = $1`,
-        [applicationId],
-      );
-      if (!appRows[0]) throw new NotFoundError("Application not found");
-
-      const template = appRows[0].template as TemplateField[];
-      const field = template.find((f) => f.key === fieldKey);
-      if (field?.kind !== "file") {
-        throw new BadRequestError("No file field found with that key");
-      }
-
-      const allowedTypes = field.allowed_file_types ?? [
-        ".pdf",
-        ".doc",
-        ".docx",
-        ".png",
-        ".jpg",
-        ".jpeg",
-      ];
-      const maxSizeMb = field.max_file_size_mb ?? 10;
-      const maxSizeBytes = maxSizeMb * 1024 * 1024;
-
       const file = await req.file();
       if (!file) throw new BadRequestError("No file uploaded");
 
       const name = file.filename ?? "upload";
       const ext = `.${(name.split(".").pop() ?? "").toLowerCase()}`;
-      if (!allowedTypes.includes(ext)) {
-        throw new BadRequestError(
-          `File type ${ext} is not allowed. Allowed: ${allowedTypes.join(", ")}`,
-        );
-      }
-
       const bytes = await file.toBuffer();
-      if (bytes.length > maxSizeBytes) {
-        throw new BadRequestError(`File exceeds maximum size of ${maxSizeMb}MB`);
-      }
 
       // Key: uploads/<appId>/<userId>/<fieldKey>/<ts>/<original-name>. The unique
       // timestamp is a hidden path segment so the LAST segment is the clean
       // original filename (shown in the UI); the userId segment drives authz.
       const key = `uploads/${applicationId}/${userId}/${fieldKey}/${Date.now()}/${safeFilename(name)}`;
-      // The bucket's uploads/ prefix is private (H12): store the KEY in the
-      // response, not a URL. Reads are proxied by the owner-or-staff route below.
-      await putObject(key, bytes, file.mimetype);
+      await withTransaction(async (client) => {
+        // H54: lock the active user while validating and storing the object.
+        // Removal takes the same user's row lock, so it cannot delete the
+        // account between this check and putObject. The field definition must
+        // come from the response's pinned form version; an unversioned response
+        // fails closed instead of consulting a later mutable template.
+        const { rows: responseRows } = await client.query<{ template: unknown }>(
+          `SELECT fv.template
+             FROM application_responses r
+             JOIN applications a ON a.id = r.application_id
+             JOIN users u ON u.id = r.user_id
+             JOIN application_form_versions fv
+               ON fv.id = r.application_form_version_id
+              AND fv.application_id = r.application_id
+            WHERE r.user_id = $1 AND r.application_id = $2
+              AND u.account_state = 'active' AND u.anonymized_at IS NULL
+            LIMIT 1
+            FOR UPDATE OF u, r`,
+          [userId, applicationId],
+        );
+        if (!responseRows[0]) {
+          throw new ForbiddenError("Create the application response before uploading a file");
+        }
+
+        const template = Array.isArray(responseRows[0].template)
+          ? (responseRows[0].template as TemplateField[])
+          : [];
+        const field = template.find((candidate) => candidate.key === fieldKey);
+        if (field?.kind !== "file") {
+          throw new BadRequestError("No file field found with that key");
+        }
+        const allowedTypes = field.allowed_file_types ?? [
+          ".pdf",
+          ".doc",
+          ".docx",
+          ".png",
+          ".jpg",
+          ".jpeg",
+        ];
+        if (!allowedTypes.includes(ext)) {
+          throw new BadRequestError(
+            `File type ${ext} is not allowed. Allowed: ${allowedTypes.join(", ")}`,
+          );
+        }
+        const maxSizeMb = field.max_file_size_mb ?? 10;
+        if (bytes.length > maxSizeMb * 1024 * 1024) {
+          throw new BadRequestError(`File exceeds maximum size of ${maxSizeMb}MB`);
+        }
+
+        // The bucket's uploads/ prefix is private (H12): store the KEY in the
+        // response, not a URL. Reads are proxied by the owner-or-staff route below.
+        await putObject(key, bytes, file.mimetype);
+      });
 
       return { key, filename: safeFilename(name) };
     },

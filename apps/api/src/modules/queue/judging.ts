@@ -4,8 +4,10 @@ import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
+import { broadcastQueueEvent } from "./broadcast.js";
 import { resolveChallengePanel } from "./criteria-merge.js";
 import { lockQueueGroupForEntry } from "./evaluation-lock.js";
+import { assertQueueChallengeReadScope } from "./fixture-scope.js";
 import { writeQueueHistory } from "./history.js";
 import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 import { notifyChallengeQueueChanged } from "./notify.js";
@@ -63,7 +65,14 @@ export interface AttemptReviewPatch {
 }
 
 export async function getAttemptReview(entryId: number) {
-  const entryRes = await pool.query(`SELECT id FROM queue_entries WHERE id = $1`, [entryId]);
+  const entryRes = await pool.query(
+    `SELECT qe.id
+       FROM queue_entries qe
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
+      WHERE qe.id = $1`,
+    [entryId],
+  );
   if (entryRes.rowCount === 0) throw new NotFoundError("Queue entry not found", { entryId });
   const { rows } = await pool.query(`SELECT * FROM attempt_review WHERE attempt_id = $1`, [
     entryId,
@@ -93,7 +102,12 @@ export async function upsertAttemptReview(
     // Lock the entry row: a submit may complete the presentation (below), so
     // its status must be stable for the duration of the transaction.
     const entryRes = await client.query(
-      `SELECT id, challenge_id, status FROM queue_entries WHERE id = $1 FOR UPDATE`,
+      `SELECT qe.id, qe.challenge_id, qe.status
+         FROM queue_entries qe
+         JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
+         JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
+        WHERE qe.id = $1
+        FOR UPDATE OF qe`,
       [entryId],
     );
     if (entryRes.rowCount === 0) throw new NotFoundError("Queue entry not found", { entryId });
@@ -209,7 +223,8 @@ export async function upsertAttemptReview(
     let completedEntry: QueueEntryRow | null = null;
     if (justSubmitted && (entryStatus === "presenting" || entryStatus === "in_room")) {
       const done = await client.query(
-        `UPDATE queue_entries SET status = 'completed', completed_at = now()
+        `UPDATE queue_entries
+            SET status = 'completed', completed_at = now(), precalled_at = NULL
           WHERE id = $1 AND status IN ('presenting', 'in_room')
           RETURNING *`,
         [entryId],
@@ -238,7 +253,13 @@ export async function upsertAttemptReview(
   // One queue transition -> one broadcast (plan/07 invariant 5). The judging
   // panel's live query drops the completed team from the room on this event.
   if (completedEntry) {
-    await broadcast(SSE_TOPICS.QUEUE, EVENTS.QUEUE_ENTRY_CHANGED, completedEntry);
+    await broadcastQueueEvent(
+      pool,
+      "entry",
+      completedEntry.id,
+      EVENTS.QUEUE_ENTRY_CHANGED,
+      completedEntry,
+    );
     await notifyChallengeQueueChanged(pool, completedEntry.challenge_id);
   }
 
@@ -249,7 +270,10 @@ export async function listAttemptReviewVersions(entryId: number) {
   const { rows } = await pool.query(
     `SELECT v.*, u.name, u.surname
        FROM attempt_review_versions v
+       JOIN queue_entries qe ON qe.id = v.attempt_id
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
        JOIN users u ON u.id = v.author_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
       WHERE v.attempt_id = $1
       ORDER BY v.created_at ASC`,
     [entryId],
@@ -299,7 +323,10 @@ export async function listActiveJudgingSessions(entryId: number) {
   const { rows } = await pool.query(
     `SELECT js.*, u.name, u.surname
        FROM judging_session js
+       JOIN queue_entries qe ON qe.id = js.queue_entry_id
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
        JOIN users u ON u.id = js.judge_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
       WHERE js.queue_entry_id = $1 AND js.ended_at IS NULL
       ORDER BY js.started_at ASC`,
     [entryId],
@@ -309,7 +336,8 @@ export async function listActiveJudgingSessions(entryId: number) {
 
 // ── H37: manual search ───────────────────────────────────────────────────────
 
-export async function searchChallengeQueue(challengeId: number, q: string) {
+export async function searchChallengeQueue(challengeId: number, q: string, fixtureMarker: boolean) {
+  await assertQueueChallengeReadScope(pool, challengeId, fixtureMarker);
   const like = `%${q}%`;
   const { rows } = await pool.query(
     `SELECT qe.*, r.name AS repo_name,
@@ -319,17 +347,22 @@ export async function searchChallengeQueue(challengeId: number, q: string) {
             busy.team_name AS blocked_by_team_name,
             busy.status AS blocked_by_status
        FROM queue_entries qe
-       JOIN repos r ON r.id = qe.repo_id
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $4
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $4
        LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
        LEFT JOIN LATERAL (
          SELECT br.id AS room_id, br.name AS room_name, brepo.name AS team_name, bqe.status
            FROM (${REPO_MEMBER_RELATION_SQL}) s1
            JOIN (${REPO_MEMBER_RELATION_SQL}) s2 ON s2.user_id = s1.user_id
+           JOIN users scoped_member
+             ON scoped_member.id = s1.user_id AND scoped_member.is_test_account = $4
            JOIN queue_entries bqe ON bqe.repo_id = s2.repo_id
                                   AND bqe.status IN ('called', 'in_room', 'presenting')
                                   AND bqe.id <> qe.id
+           JOIN challenges bchallenge
+             ON bchallenge.id = bqe.challenge_id AND bchallenge.is_test_account = $4
            JOIN rooms br ON br.id = bqe.assigned_room_id
-           JOIN repos brepo ON brepo.id = bqe.repo_id
+           JOIN repos brepo ON brepo.id = bqe.repo_id AND brepo.is_test_account = $4
           WHERE s1.repo_id = qe.repo_id
           ORDER BY bqe.id
           LIMIT 1
@@ -338,7 +371,7 @@ export async function searchChallengeQueue(challengeId: number, q: string) {
         AND (r.name ILIKE $2 OR CAST(r.id AS text) = $3 OR CAST(qe.id AS text) = $3)
       ORDER BY qe.position ASC NULLS LAST, qe.id ASC
       LIMIT 25`,
-    [challengeId, like, q],
+    [challengeId, like, q, fixtureMarker],
   );
   return rows;
 }

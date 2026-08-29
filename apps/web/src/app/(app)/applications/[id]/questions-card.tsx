@@ -134,6 +134,7 @@ export function newField(index: number): EditableField {
     label: { ...EMPTY_I18N },
     kind: "text",
     required: false,
+    retention_mode: "none",
   };
 }
 
@@ -305,6 +306,8 @@ export function QuestionsCard({
       const copy: EditableField = {
         ...original,
         _id: mkId(),
+        retention_mode: "none",
+        anonymous_audit_dimension: undefined,
         key: generatedFieldKey(
           `${original.label[language] || original.key}_copy`,
           prev.map((f) => f.key),
@@ -507,6 +510,10 @@ export function QuestionsCard({
           ...(hasI18nText(f.help_text) ? { help_text: f.help_text } : {}),
           ...(hasI18nText(f.placeholder) ? { placeholder: f.placeholder } : {}),
           ...(f.validation && VALIDATABLE_KINDS.has(f.kind) ? { validation: f.validation } : {}),
+          retention_mode: f.retention_mode ?? "none",
+          ...(f.retention_mode === "anonymous_audit" && f.anonymous_audit_dimension
+            ? { anonymous_audit_dimension: f.anonymous_audit_dimension.trim() }
+            : {}),
         })),
         sections: sections.map((s) => ({
           key: s.key.trim(),
@@ -1038,6 +1045,57 @@ export function FieldEditor({
               {t("generatedAutomatically")}
             </p>
           </div>
+        </div>
+      </details>
+
+      <details className="rounded-lg border p-4">
+        <summary className="cursor-pointer text-sm font-medium">
+          {t("advancedFieldSettings")}
+        </summary>
+        <div className="mt-4 space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor={`retention-mode-${uid}`}>{t("anonymousAuditRetentionLabel")}</Label>
+            <Select
+              value={field.retention_mode ?? "none"}
+              onValueChange={(value) =>
+                onChange({
+                  retention_mode: value as "none" | "anonymous_audit",
+                  ...(value === "none" ? { anonymous_audit_dimension: undefined } : {}),
+                })
+              }
+            >
+              <SelectTrigger id={`retention-mode-${uid}`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">{t("anonymousAuditRetentionOff")}</SelectItem>
+                <SelectItem value="anonymous_audit">{t("anonymousAuditRetentionOn")}</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-muted-foreground text-xs">{t("anonymousAuditRetentionHint")}</p>
+          </div>
+          {field.retention_mode === "anonymous_audit" && (
+            <>
+              <p role="alert" className="text-destructive text-pretty text-sm">
+                {t("anonymousAuditRetentionWarning")}
+              </p>
+              <div className="space-y-1.5">
+                <Label htmlFor={`audit-dimension-${uid}`}>
+                  {t("anonymousAuditDimensionLabel")}
+                </Label>
+                <Input
+                  id={`audit-dimension-${uid}`}
+                  value={field.anonymous_audit_dimension ?? ""}
+                  onChange={(e) => onChange({ anonymous_audit_dimension: e.target.value || null })}
+                  placeholder={t("anonymousAuditDimensionPlaceholder")}
+                  aria-describedby={`audit-dimension-hint-${uid}`}
+                />
+                <p id={`audit-dimension-hint-${uid}`} className="text-muted-foreground text-xs">
+                  {t("anonymousAuditDimensionHint")}
+                </p>
+              </div>
+            </>
+          )}
         </div>
       </details>
 

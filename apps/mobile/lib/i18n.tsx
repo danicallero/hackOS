@@ -21,6 +21,7 @@ export type Lang = Language;
 export const isSupportedLanguage = isLanguage;
 
 type Key = keyof typeof mobileEn | keyof typeof commonEn;
+export type MessageKey = Key;
 
 const instance = i18next.createInstance();
 instance.use(initReactI18next);

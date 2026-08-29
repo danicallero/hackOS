@@ -1,5 +1,6 @@
 import type { Queryable } from "../../db/pool.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
 import { type EmailPayload, normalizeLanguage, renderEmailTemplate } from "./templates.js";
 
 /**
@@ -39,6 +40,10 @@ export interface NotifyOptions {
   category: string;
   channels?: NotificationChannel[];
   payload: unknown;
+  /** Optional actor boundary for staff-triggered notifications. */
+  actorId?: number;
+  /** Explicit fixture marker for system/queue fan-out without an actor. */
+  fixtureMarker?: boolean;
 }
 
 /** Expands `candidates` per H51 preferences: no explicit row = default enabled; explicit row governs. */
@@ -79,7 +84,11 @@ async function withInboxRendering(
   if (typeof payload !== "object" || payload === null) return payload;
   const p = payload as EmailPayload & Record<string, unknown>;
   if (typeof p.subject === "string" || !p.template) return payload;
-  const { rows } = await db.query(`SELECT language FROM users WHERE id = $1`, [userId]);
+  const { rows } = await db.query(
+    `SELECT language FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+    [userId],
+  );
   const language = normalizeLanguage((rows[0] as { language?: string } | undefined)?.language);
   const rendered = renderEmailTemplate(p, language);
   return { ...p, subject: rendered.subject, body: rendered.text };
@@ -87,6 +96,23 @@ async function withInboxRendering(
 
 /** Enqueues outbox rows for `opts.userId`, one per resolved channel. Returns the inserted row ids. */
 export async function notify(db: Queryable, opts: NotifyOptions): Promise<number[]> {
+  // Removal takes the same row lock before changing account_state. This share
+  // lock prevents a caller that is already in a transaction from enqueueing a
+  // new identity-bearing notification after closure has committed (H54).
+  const active = await db.query<{ id: number; is_test_account: boolean }>(
+    `SELECT id, is_test_account FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+      FOR SHARE`,
+    [opts.userId],
+  );
+  if (!active.rows[0]) throw new NotFoundError("User not found", { userId: opts.userId });
+  const targetIsSynthetic = active.rows[0].is_test_account === true;
+  if (opts.fixtureMarker !== undefined && targetIsSynthetic !== opts.fixtureMarker) {
+    throw new NotFoundError("User not found", { userId: opts.userId });
+  }
+  if (opts.actorId != null) {
+    await assertFixtureSubjectScope(db, opts.actorId, opts.userId);
+  }
   const candidates = opts.channels ?? DEFAULT_CHANNELS;
   const channels = await resolveChannels(db, opts.userId, opts.category, candidates);
   const ids: number[] = [];
@@ -148,6 +174,13 @@ export async function setPreferences(
   userId: number,
   items: PreferenceRow[],
 ): Promise<void> {
+  const { rows: activeRows } = await db.query(
+    `SELECT id FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+      FOR UPDATE`,
+    [userId],
+  );
+  if (!activeRows[0]) throw new NotFoundError("User not found", { userId });
   for (const item of items) {
     if (item.category === QUEUE_CATEGORY) {
       throw new BadRequestError(

@@ -3,10 +3,11 @@ import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { isImplausiblyFuture } from "../../lib/clock.js";
-import { BadRequestError, NotFoundError } from "../../lib/errors.js";
-import { broadcast } from "../../lib/sse.js";
-import { resolveByBadge } from "./badge.js";
+import { AppError, BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { broadcastForActiveUser } from "./active-broadcast.js";
+import { assertBadgeScanTimestamp, resolveByBadge } from "./badge.js";
 import { loadPersonCard, type PersonCard } from "./cards.js";
+import { assertFixtureSubjectScope } from "./review-fixture-scope.js";
 
 interface ScanResult {
   status: number;
@@ -37,7 +38,7 @@ interface ScanResult {
  * scanners so two simultaneous first-time scans produce exactly one row.
  */
 export async function activityScan(
-  actorId: number,
+  actorId: number | null,
   activityId: number,
   input: {
     badgeId: string;
@@ -64,6 +65,30 @@ export async function activityScan(
   const result = await withTransaction(async (client) => {
     // Serialize concurrent scans of the same person+activity (H25 concurrency).
     await client.query(`SELECT pg_advisory_xact_lock($1, $2)`, [userId, activityId]);
+
+    // Serialize with account removal. The badge lookup happened before the
+    // transaction, so the row lock/state check is the authoritative decision
+    // for a stale or offline scan that races anonymization.
+    const activeUser = await client.query<{
+      id: number;
+      badge_id: string | null;
+      badge_assigned_at: Date | null;
+    }>(
+      `SELECT id, badge_id, badge_assigned_at FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    const lockedUser = activeUser.rows[0];
+    if (!lockedUser) throw new NotFoundError("Badge not recognized");
+    // resolveByBadge ran before this transaction and can race a staff badge
+    // rotation. Re-check the current assignment while the user row is locked
+    // so an already-resolved old badge cannot write a post-rotation activity.
+    if (lockedUser.badge_id !== input.badgeId) {
+      throw new AppError(409, "badge_revoked", "This badge has been revoked");
+    }
+    assertBadgeScanTimestamp(input.scannedAt, lockedUser.badge_assigned_at);
+    if (actorId != null) await assertFixtureSubjectScope(client, actorId, userId);
 
     const card = await loadPersonCard(client, userId);
 
@@ -157,7 +182,7 @@ export async function activityScan(
   });
 
   if (result.status === 200) {
-    await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_ACTIVITY_SCAN, {
+    await broadcastForActiveUser(userId, SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_ACTIVITY_SCAN, {
       activityId,
       userId,
       firstTime: result.body.firstTime,

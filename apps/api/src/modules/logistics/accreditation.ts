@@ -2,10 +2,12 @@ import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type pg from "pg";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
-import { broadcast } from "../../lib/sse.js";
+import { AppError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { hasEventAccess } from "../identity/role.js";
+import { broadcastForActiveUser } from "./active-broadcast.js";
 import { loadPersonCard } from "./cards.js";
+import { scannerCredentialDigest } from "./credential-tombstones.js";
+import { assertFixtureSubjectScope } from "./review-fixture-scope.js";
 import { issueTicket } from "./tickets.js";
 import { enqueueWalletSync } from "./wallet-sync.js";
 
@@ -21,6 +23,21 @@ async function voidBadgePasses(client: pg.PoolClient, userId: number): Promise<v
   );
 }
 
+async function assertTicketNotRevoked(
+  client: pg.Pool | pg.PoolClient,
+  token: string,
+): Promise<void> {
+  const revoked = await client.query(
+    `SELECT 1 FROM scanner_revoked_tickets
+      WHERE credential_digest = $1
+      LIMIT 1`,
+    [scannerCredentialDigest("ticket", token)],
+  );
+  if (revoked.rows[0]) {
+    throw new AppError(409, "ticket_revoked", "This ticket has been revoked");
+  }
+}
+
 export type CheckInMethod = "qr" | "manual" | "nfc";
 
 // ── H22: lookup by ticket ─────────────────────────────────────────────────
@@ -30,20 +47,23 @@ export type CheckInMethod = "qr" | "manual" | "nfc";
  * accredit: name, confirmed-spot flag, intolerances, notes, and whether they
  * are already accredited (with the current badge). Never a mutation.
  */
-export async function lookupByTicket(token: string) {
+export async function lookupByTicket(token: string, actorId?: number) {
+  await assertTicketNotRevoked(pool, token);
   const t = await pool.query(`SELECT user_id FROM tickets WHERE token = $1`, [token]);
   if (!t.rows[0]) throw new NotFoundError("Ticket not recognized"); // names no personal data
-  return lookupByUserId(t.rows[0].user_id as number);
+  return lookupByUserId(t.rows[0].user_id as number, actorId);
 }
 
-export async function lookupByUserId(userId: number) {
+export async function lookupByUserId(userId: number, actorId?: number) {
+  if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
   const card = await loadPersonCard(pool, userId);
   // Identity-verification fields staff needs at the door (H22): the badge is
   // handed to a physical person, so the card carries DNI, email and shirt
   // size on top of the shared scanner card.
   const u = await pool.query(
     `SELECT badge_id, email, dni, shirt_size, secondary_email, secondary_email_verified_at
-       FROM users WHERE id = $1`,
+       FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
     [userId],
   );
   const row = u.rows[0] ?? {};
@@ -93,6 +113,7 @@ export async function checkIn(
   actorId: number,
   input: { ticketToken: string; badgeId: string; method: CheckInMethod },
 ) {
+  await assertTicketNotRevoked(pool, input.ticketToken);
   const t = await pool.query(`SELECT user_id FROM tickets WHERE token = $1`, [input.ticketToken]);
   if (!t.rows[0]) throw new NotFoundError("Ticket not recognized");
   return checkInUser(actorId, {
@@ -104,9 +125,34 @@ export async function checkIn(
 
 /** A ticket QR must never become a badge id — they identify different physical items (H22/H23). */
 async function assertNotTicketToken(client: pg.PoolClient, badgeId: string): Promise<void> {
-  const ticket = await client.query(`SELECT 1 FROM tickets WHERE token = $1`, [badgeId]);
+  const ticket = await client.query(
+    `SELECT 1
+       FROM tickets
+      WHERE token = $1
+     UNION ALL
+     SELECT 1
+       FROM scanner_revoked_tickets
+      WHERE credential_digest = $2
+      LIMIT 1`,
+    [badgeId, scannerCredentialDigest("ticket", badgeId)],
+  );
   if (ticket.rows.length > 0) {
     throw new ConflictError("A ticket cannot be used as a badge", { badgeId });
+  }
+}
+
+/** A credential retired with an account must not be assigned again. Ordinary
+ * badge rotation is allowed through the current assignment timestamp fence
+ * before account retirement (H54/F07). */
+async function assertBadgeNotRevoked(client: pg.PoolClient, badgeId: string): Promise<void> {
+  const revoked = await client.query(
+    `SELECT 1 FROM scanner_revoked_badges
+      WHERE credential_digest = $1
+      LIMIT 1`,
+    [scannerCredentialDigest("badge", badgeId)],
+  );
+  if (revoked.rows.length > 0) {
+    throw new AppError(409, "badge_revoked", "This badge has been revoked");
   }
 }
 
@@ -121,11 +167,15 @@ export async function checkInUser(
 ) {
   const result = await withTransaction(async (client) => {
     const u = await client.query(
-      `SELECT id, badge_id, name, surname FROM users WHERE id = $1 FOR UPDATE`,
+      `SELECT id, badge_id, name, surname
+         FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
       [input.userId],
     );
     const user = u.rows[0];
     if (!user) throw new NotFoundError("User not found");
+    await assertFixtureSubjectScope(client, actorId, input.userId);
     if (input.attendeeRole) {
       const { rows: existingRole } = await client.query(
         `WITH RECURSIVE effective_groups(group_id) AS (
@@ -184,6 +234,7 @@ export async function checkInUser(
     }
 
     await assertNotTicketToken(client, input.badgeId);
+    await assertBadgeNotRevoked(client, input.badgeId);
 
     const owner = await client.query(`SELECT id FROM users WHERE badge_id = $1`, [input.badgeId]);
     if (owner.rows[0] && owner.rows[0].id !== input.userId) {
@@ -244,11 +295,17 @@ export async function checkInUser(
       surname: user.surname,
     };
   });
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_ACCREDITED, result);
+  await broadcastForActiveUser(
+    result.userId,
+    SSE_TOPICS.LOGISTICS,
+    EVENTS.LOGISTICS_ACCREDITED,
+    result,
+  );
   // H28: the participant's own wallet screen only refetches on this event —
   // without it, a first-time badge assignment silently never reaches their
   // device until they happen to reopen the wallet tab.
-  await broadcast(
+  await broadcastForActiveUser(
+    result.userId,
     `${SSE_TOPICS.USER_PREFIX}${result.userId}`,
     EVENTS.LOGISTICS_WALLET_PASS_UPDATED,
     {
@@ -275,22 +332,29 @@ export async function rotateBadge(
   const result = await withTransaction(async (client) => {
     let userId = input.userId ?? null;
     if (userId == null) {
-      const r = await client.query(`SELECT id FROM users WHERE badge_id = $1`, [
-        input.currentBadgeId,
-      ]);
+      const r = await client.query(
+        `SELECT id FROM users
+          WHERE badge_id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+        [input.currentBadgeId],
+      );
       if (!r.rows[0]) throw new NotFoundError("No user holds that badge");
       userId = r.rows[0].id as number;
     }
 
     const u = await client.query(
-      `SELECT id, badge_id, badge_id_history FROM users WHERE id = $1 FOR UPDATE`,
+      `SELECT id, badge_id, badge_id_history
+         FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
       [userId],
     );
     if (!u.rows[0]) throw new NotFoundError("User not found");
     const user = u.rows[0];
     const oldBadge = user.badge_id as string | null;
+    await assertFixtureSubjectScope(client, actorId, userId);
 
     await assertNotTicketToken(client, input.newBadgeId);
+    await assertBadgeNotRevoked(client, input.newBadgeId);
 
     const owner = await client.query(`SELECT id FROM users WHERE badge_id = $1`, [
       input.newBadgeId,
@@ -347,8 +411,14 @@ export async function rotateBadge(
       voidedPasses: voided.rowCount ?? 0,
     };
   });
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_BADGE_ROTATED, result);
-  await broadcast(
+  await broadcastForActiveUser(
+    result.userId,
+    SSE_TOPICS.LOGISTICS,
+    EVENTS.LOGISTICS_BADGE_ROTATED,
+    result,
+  );
+  await broadcastForActiveUser(
+    result.userId,
     `${SSE_TOPICS.USER_PREFIX}${result.userId}`,
     EVENTS.LOGISTICS_WALLET_PASS_UPDATED,
     {
@@ -365,10 +435,14 @@ export async function removeBadge(actorId: number, input: { userId: number; reas
   let voidedPassIds: number[] = [];
   const result = await withTransaction(async (client) => {
     const found = await client.query(
-      `SELECT badge_id, badge_id_history FROM users WHERE id = $1 FOR UPDATE`,
+      `SELECT badge_id, badge_id_history
+         FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
       [input.userId],
     );
     if (!found.rows[0]) throw new NotFoundError("User not found");
+    await assertFixtureSubjectScope(client, actorId, input.userId);
     const oldBadge = (found.rows[0].badge_id ?? null) as string | null;
     if (!oldBadge) throw new ConflictError("User has no active badge", { userId: input.userId });
     const history = [...(found.rows[0].badge_id_history ?? []), oldBadge];
@@ -394,8 +468,14 @@ export async function removeBadge(actorId: number, input: { userId: number; reas
     });
     return { userId: input.userId, oldBadge, voidedPasses: voidedPassIds.length };
   });
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_BADGE_ROTATED, result);
-  await broadcast(
+  await broadcastForActiveUser(
+    result.userId,
+    SSE_TOPICS.LOGISTICS,
+    EVENTS.LOGISTICS_BADGE_ROTATED,
+    result,
+  );
+  await broadcastForActiveUser(
+    result.userId,
     `${SSE_TOPICS.USER_PREFIX}${result.userId}`,
     EVENTS.LOGISTICS_WALLET_PASS_UPDATED,
     {

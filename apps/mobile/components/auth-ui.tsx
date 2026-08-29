@@ -136,7 +136,6 @@ export function AuthHeader({
               color: colors.interactiveText,
               fontSize: 15,
               fontWeight: "600",
-              lineHeight: 20,
               textAlign: leading ? "left" : "center",
             }}
           >
@@ -161,7 +160,6 @@ export function AuthHeader({
             style={{
               color: colors.secondaryLabel,
               fontSize: 16,
-              lineHeight: 22,
               textAlign: leading ? "left" : "center",
             }}
           >
@@ -290,7 +288,7 @@ export function AuthAlert({ message, testID }: { message: string; testID?: strin
         padding: 12,
       }}
     >
-      <Text selectable style={{ color: colors.onDestructiveSurface, fontSize: 14, lineHeight: 20 }}>
+      <Text selectable style={{ color: colors.onDestructiveSurface, fontSize: 14 }}>
         {message}
       </Text>
     </View>

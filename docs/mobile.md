@@ -90,8 +90,9 @@ route below. No migration needed.
   scan counts, and last door state needed by H22-H26. A full snapshot
   is deliberate: badge-history values have no individual timestamp, and a
   complete replacement guarantees convergence after any missed refresh.
-  Anonymized accounts (H54, `users.anonymized_at`) are excluded, so an
-  erased profile never syncs to a scanner and never resolves through
+  Accounts in `removal_pending` and deleted/anonymized accounts (H54,
+  `users.account_state`) are excluded, so an erased profile never syncs to a
+  scanner and never resolves through
   `/api/logistics/people/search` — even by a still-active badge or ticket.
 - `GET /api/logistics/scan-log` (`apps/api/src/modules/logistics/scan-log.ts`)
   — paginated, most-recent-first feed unioning accreditation check-ins,
@@ -266,8 +267,11 @@ distributed to other Expo Router apps without importing hackOS code.
   provides a confirmed sign-out action for the device session. Its collapsed
   danger zone reads `GET /api/me/removal-eligibility`: eligible accounts can
   call `DELETE /api/me` after a native destructive confirmation, while
-  accounts with retained operational history see the anonymization/retention
-  explanation and a link to the web privacy policy (H54). For operators
+  accounts with canonical accreditation see the concise irreversible
+  anonymization explanation and direct action (H54). The action remains
+  available while the participant is inside; the API returns a pending-exit
+  state, revokes access, and allows only the validated staff exit before
+  finalization. For operators
   (any scan capability, `lib/tabs.ts`'s `isOperator`) it also shows a "My
   stats" section (`/api/me/logistics/stats`) and a link to the scan-history
   screen (`app/(tabs)/others/scan-log.tsx`, `/api/logistics/scan-log`, grouped by
@@ -579,10 +583,10 @@ when `sameActivities` says the data is unchanged.
 
 Staff/scanner devices carry two distinct local caches, split into separate
 SQLite files with different lifetimes, encryption keys, and OS backup
-treatment (`lib/scanner-crypto.ts`, `lib/scanner-db.native.ts`). Both
-caches' actual on-device behavior (SecureStore-backed native AES,
-cache-directory backup exclusion, the legacy-file migration) has been
-verified against real iOS/Android hardware and EAS builds.
+treatment (`lib/scanner-crypto.ts`, `lib/scanner-db.native.ts`). The
+repository has focused adapter tests for the encryption/isolation paths;
+physical iOS/Android and EAS verification remains a release-gate task in
+`docs/mobile-release.md`.
 
 - **Attendance roster** (`hackos-scanner-roster.db`, `scanner_people` +
   badges/activities/scan-count tables) — every field beyond the plaintext
@@ -604,8 +608,9 @@ verified against real iOS/Android hardware and EAS builds.
   filters/sorts in JS instead.
 - **Offline scan queue** (`hackos-scanner-queue.db`, `pending_scans`) — the
   only record of a not-yet-synced transaction, so it stays in the default
-  (non-cache, backed-up) document directory and is **never** wiped on
-  sign-out or by the account screen's "Clear cache" action. Every row is
+  (non-cache, backed-up) document directory and is not wiped on ordinary
+  sign-out or by the account screen's "Clear cache" action. It is wiped for
+  the signed-in account during account closure. Every row is
   encrypted with its own `created_by_user_id`'s key
   (a distinct `expo-crypto` key per staff member, also in `expo-secure-store`,
   marked `WHEN_UNLOCKED_THIS_DEVICE_ONLY` on iOS so a restored backup can't
@@ -616,10 +621,20 @@ verified against real iOS/Android hardware and EAS builds.
   queued scans (replaying under the wrong session would also misattribute
   the action server-side). The same user signing back in later recovers
   their own queue, conflicts included, exactly as they left it — the queue
-  is keyed by owner, not by session. Devices upgrading from the pre-split
-  single-file schema have their legacy `pending_scans` rows migrated once
-  (attributed to a sentinel "unknown owner", `userId 0`) rather than
-  silently dropped; the old file is then deleted.
+  is keyed by owner, not by session. The pre-split `hackos-scanner.db` cannot
+  be safely migrated: its plaintext pending rows have no owner column, and
+  assigning them to the first authenticated operator could misattribute a
+  scan. On first authenticated queue access the app retires that app-owned
+  file and its SQLite `-wal`, `-shm`, and `-journal` sidecars without importing
+  any row; staff must re-record scans that existed only in the old queue. If
+  the OS refuses deletion, queue initialization fails closed and retries on a
+  later authenticated call. A scan recorded before the server's current badge
+  assignment boundary is a terminal stale-credential result: API enqueue and
+  locked processing reject it, and the mobile queue deletes the encrypted
+  payload rather than retrying it under the replacement participant. Devices
+  that remain offline can still retain a stale identity until reconnect/expiry
+  or a device wipe; central tombstones prevent permanently retired credentials
+  from being accepted or re-uploaded.
 
 ## Realtime & notifications infrastructure
 

@@ -6,14 +6,14 @@ export const privacyCopy: Record<Language, LegalDocumentCopy> = {
     title: "Política de privacidad",
     description:
       "Aquí explicamos qué datos trata GPUL a través de hackOS, para qué los utiliza y cómo puedes ejercer tus derechos.",
-    updatedAt: "26 de agosto de 2026",
+    updatedAt: "27 de agosto de 2026",
     body: `## 1. Responsable del tratamiento
 
 Esta política se aplica únicamente a la instancia de hackOS operada por GPUL. Una instalación desplegada por otra persona o entidad es una instancia independiente: su operador será responsable del tratamiento y deberá facilitar su propia política de privacidad. GPUL no controla ni trata los datos almacenados en instancias de terceros.
 
 La Asociación Universitaria Grupo de Programadores y Usuarios de Linux (**GPUL**), con NIF G15659220 y domicilio en la Facultad de Informática, Campus de Elviña S/N, 15071 A Coruña, es la responsable del tratamiento de tus datos personales.
 
-hackOS es la plataforma que GPUL utiliza para gestionar el registro, las solicitudes y la participación en HackUDC; su uso es obligatorio para participar en el evento. Esta política complementa, sin sustituir, la [política de privacidad general de HackUDC](https://hackudc.gpul.org/privacy), que describe el tratamiento de datos del evento en su conjunto.
+hackOS es el sistema oficial de operaciones de GPUL para el evento HackUDC. La inscripción se realiza en una plataforma web externa y no concede por sí sola acceso a hackOS: el acceso se habilita a participantes aceptados y a personal autorizado para gestionar la acreditación, los servicios del evento y la participación. Esta política complementa, sin sustituir, la [política de privacidad general del evento HackUDC, publicada por GPUL](https://hackudc.gpul.org/privacy), que describe el tratamiento de datos del evento en su conjunto.
 
 Puedes contactar con GPUL en esa dirección o mediante [hackudc@gpul.org](mailto:hackudc@gpul.org) para cualquier consulta relacionada con la privacidad.
 
@@ -29,6 +29,8 @@ Según cómo utilices hackOS, podremos tratar las siguientes categorías:
 - **Comunicaciones:** mensajes, solicitudes de soporte y preferencias de notificación.
 
 Los datos proceden directamente de ti, de personas autorizadas de tu equipo o entidad y de la actividad generada al utilizar hackOS.
+
+Algunos formularios o registros de proyectos pueden pedirte que proporciones enlaces a sitios web externos, como repositorios, demostraciones o portafolios. Esos sitios son independientes de hackOS y GPUL, tienen sus propias políticas de privacidad y no están operados, vinculados ni afiliados con GPUL. Cuando visites esos sitios o les envíes datos, se aplicarán sus propias políticas y condiciones.
 
 ## 3. Finalidades y bases jurídicas
 
@@ -62,9 +64,9 @@ La información principal de hackOS —incluidas las cuentas, solicitudes, bases
 
 Conservaremos tus datos mientras tu cuenta o relación con GPUL permanezca activa y, después, durante los plazos necesarios para atender responsabilidades legales. Cuando finalicen, los datos serán eliminados o anonimizados.
 
-Si tu cuenta nunca llegó a ser aceptada ni acreditada en el evento, puedes eliminarla tú mismo/a desde los ajustes de tu cuenta («Zona de peligro»); esa eliminación borra también las solicitudes que hayas presentado.
+Puedes iniciar el cierre de la cuenta desde los ajustes («Zona de peligro»). El servidor comprueba la acreditación canónica en el momento de la solicitud: sin acreditación, la cuenta se elimina por completo cuando es posible; después de la acreditación, se anonimiza de forma irreversible.
 
-Si has sido acreditado/a en el evento, no siempre podemos eliminar tus datos de inmediato: GPUL recibe subvenciones públicas que exigen justificar la participación real —incluyendo registros de acceso y datos demográficos— ante la administración y la universidad durante el plazo legal de rendición de cuentas. Mientras dure ese plazo, el tratamiento se basa en el cumplimiento de esa obligación legal y, en lugar de eliminarlos, aplicaremos una limitación del tratamiento anonimizando tus datos personales (nombre, contacto, documento identificativo…) y conservando únicamente los datos agregados necesarios para la justificación. Puedes solicitar esta anonimización en cualquier momento escribiendo a [hackudc@gpul.org](mailto:hackudc@gpul.org); no es una acción que puedas ejecutar tú mismo/a desde la aplicación.
+Si solicitas la anonimización mientras constas dentro del recinto, la solicitud se acepta como una salida pendiente: se detienen los servicios de participación y los datos de identidad y alimentación existentes solo se conservan durante la breve transición necesaria para que el personal registre la salida o finalice el plazo de recuperación; puedes cancelarla antes de que ocurra. Después, la anonimización irreversible revoca el acceso y elimina los identificadores directos, credenciales, entradas, datos de autenticación de Wallet, archivos y la información alimentaria. Se crea un nuevo registro aleatorio de participante anónimo sin tabla de consulta ni otra correspondencia con la identidad. Solo pueden permanecer las respuestas de solicitudes que un administrador autorizado haya marcado expresamente para auditoría anónima en la versión del formulario que utilizó la persona, junto con el tiempo verificado de presencia generado por las operaciones del evento. Las respuestas no marcadas y los identificadores directos se eliminan. Las combinaciones de datos anónimos pueden crear riesgo de reidentificación en grupos muy pequeños, por lo que GPUL debería agrupar u ocultar combinaciones poco frecuentes al publicar estadísticas. La anonimización impide emitir más adelante justificantes nominales de participación o documentación ECTS. [hackudc@gpul.org](mailto:hackudc@gpul.org) sigue disponible como canal secundario de privacidad y asistencia.
 
 ## 7. Cookies y almacenamiento local
 
@@ -90,14 +92,14 @@ Para cualquier consulta sobre privacidad, escribe a [hackudc@gpul.org](mailto:ha
     title: "Política de privacidade",
     description:
       "Aquí explicamos que datos trata GPUL a través de hackOS, para que os utiliza e como podes exercer os teus dereitos.",
-    updatedAt: "26 de agosto de 2026",
+    updatedAt: "27 de agosto de 2026",
     body: `## 1. Responsable do tratamento
 
 Esta política aplícase unicamente á instancia de hackOS operada por GPUL. Unha instalación despregada por outra persoa ou entidade é unha instancia independente: o seu operador será responsable do tratamento e deberá facilitar a súa propia política de privacidade. GPUL non controla nin trata os datos almacenados en instancias de terceiros.
 
 A Asociación Universitaria Grupo de Programadores y Usuarios de Linux (**GPUL**), con NIF G15659220 e domicilio na Facultade de Informática, Campus de Elviña S/N, 15071 A Coruña, é a responsable do tratamento dos teus datos persoais.
 
-hackOS é a plataforma que GPUL utiliza para xestionar o rexistro, as solicitudes e a participación en HackUDC; o seu uso é obrigatorio para participar no evento. Esta política complementa, sen substituír, a [política de privacidade xeral de HackUDC](https://hackudc.gpul.org/privacy), que describe o tratamento de datos do evento no seu conxunto.
+hackOS é o sistema oficial de operacións de GPUL para o evento HackUDC. A inscrición faise nunha plataforma web externa e non concede por si soa acceso a hackOS: o acceso habilítase para participantes aceptados e persoal autorizado que xestiona a acreditación, os servizos do evento e a participación. Esta política complementa, sen substituír, a [política de privacidade xeral do evento HackUDC, publicada por GPUL](https://hackudc.gpul.org/privacy), que describe o tratamento de datos do evento no seu conxunto.
 
 Podes contactar con GPUL nese enderezo ou mediante [hackudc@gpul.org](mailto:hackudc@gpul.org) para calquera consulta relacionada coa privacidade.
 
@@ -113,6 +115,8 @@ Segundo como utilices hackOS, poderemos tratar as seguintes categorías:
 - **Comunicacións:** mensaxes, solicitudes de soporte e preferencias de notificación.
 
 Os datos proceden directamente de ti, de persoas autorizadas do teu equipo ou entidade e da actividade xerada ao utilizar hackOS.
+
+Algúns formularios ou rexistros de proxectos poden pedirche que proporciones ligazóns a sitios web externos, como repositorios, demostracións ou portafolios. Eses sitios son independentes de hackOS e GPUL, teñen as súas propias políticas de privacidade e non están operados, vinculados nin afiliados con GPUL. Cando visites eses sitios ou lles envíes datos, aplicaranse as súas propias políticas e condicións.
 
 ## 3. Finalidades e bases xurídicas
 
@@ -146,9 +150,9 @@ A información principal de hackOS —incluídas as contas, solicitudes, bases d
 
 Conservaremos os teus datos mentres a túa conta ou relación con GPUL permaneza activa e, despois, durante os prazos necesarios para atender responsabilidades legais. Cando finalicen, os datos serán eliminados ou anonimizados.
 
-Se a túa conta nunca chegou a ser aceptada nin acreditada no evento, podes eliminala ti mesmo/a desde os axustes da túa conta («Zona de perigo»); esa eliminación borra tamén as solicitudes que presentases.
+Podes iniciar o peche da conta desde os axustes («Zona de perigo»). O servidor comproba a acreditación canónica no momento da solicitude: sen acreditación, a conta elimínase por completo cando é posible; despois da acreditación, anonimízase de forma irreversible.
 
-Se fuches acreditado/a no evento, non sempre podemos eliminar os teus datos de inmediato: GPUL recibe subvencións públicas que esixen xustificar a participación real —incluíndo rexistros de acceso e datos demográficos— ante a administración e a universidade durante o prazo legal de rendición de contas. Mentres dure ese prazo, o tratamento baséase no cumprimento desa obriga legal e, no canto de eliminalos, aplicaremos unha limitación do tratamento anonimizando os teus datos persoais (nome, contacto, documento identificativo…) e conservando unicamente os datos agregados necesarios para a xustificación. Podes solicitar esta anonimización en calquera momento escribindo a [hackudc@gpul.org](mailto:hackudc@gpul.org); non é unha acción que poidas executar ti mesmo/a desde a aplicación.
+Se solicitas a anonimización mentres constas dentro do recinto, a solicitude acéptase como unha saída pendente: detéñense os servizos de participación e os datos de identidade e alimentación existentes só se conservan durante a breve transición necesaria para que o persoal rexistre a saída ou remate o prazo de recuperación; podes cancelala antes de que ocorra. Despois, a anonimización irreversible revoga o acceso e elimina os identificadores directos, credenciais, entradas, datos de autenticación de Wallet, ficheiros e a información alimentaria. Créase un novo rexistro aleatorio de participante anónimo sen táboa de consulta nin outra correspondencia coa identidade. Só poden permanecer as respostas de solicitudes que unha persoa administradora autorizada marcase expresamente para auditoría anónima na versión do formulario utilizada pola persoa participante, xunto co tempo verificado de presenza xerado polas operacións do evento. As respostas non marcadas e os identificadores directos elimínanse. As combinacións de datos anónimos poden crear risco de reidentificación en grupos moi pequenos, polo que GPUL debería agrupar ou ocultar combinacións pouco frecuentes ao publicar estatísticas. A anonimización impide emitir máis adiante xustificantes nominais de participación ou documentación ECTS. [hackudc@gpul.org](mailto:hackudc@gpul.org) segue dispoñible como canle secundaria de privacidade e asistencia.
 
 ## 7. Cookies e almacenamento local
 
@@ -174,14 +178,14 @@ Para calquera consulta sobre privacidade, escribe a [hackudc@gpul.org](mailto:ha
     title: "Privacy policy",
     description:
       "This policy explains what data GPUL processes through hackOS, why it is used and how you can exercise your rights.",
-    updatedAt: "26 August 2026",
+    updatedAt: "27 August 2026",
     body: `## 1. Data controller
 
 This policy applies only to the hackOS instance operated by GPUL. An installation deployed by another person or organisation is an independent instance: its operator is the data controller and must provide its own privacy policy. GPUL does not control or process data stored in third-party instances.
 
 The Asociación Universitaria Grupo de Programadores y Usuarios de Linux (**GPUL**), tax ID G15659220, with its address at Facultad de Informática, Campus de Elviña S/N, 15071 A Coruña, Spain, is the controller of your personal data.
 
-hackOS is the platform GPUL uses to manage registration, applications and participation in HackUDC; using it is mandatory to take part in the event. This policy complements, and does not replace, [HackUDC's general privacy policy](https://hackudc.gpul.org/privacy), which describes data processing for the event as a whole.
+hackOS is GPUL's official operations system for the HackUDC event. Registration takes place on an external web platform and does not by itself grant hackOS access: access is enabled for accepted participants and authorised staff who manage accreditation, event services and participation. This policy complements, and does not replace, [the general privacy policy for the HackUDC event, published by GPUL](https://hackudc.gpul.org/privacy), which describes data processing for the event as a whole.
 
 You may contact GPUL at that address or at [hackudc@gpul.org](mailto:hackudc@gpul.org) with any privacy-related query.
 
@@ -197,6 +201,8 @@ Depending on how you use hackOS, we may process the following categories:
 - **Communications:** messages, support requests and notification preferences.
 
 The data comes directly from you, authorised members of your team or organisation, and activity generated when you use hackOS.
+
+Some forms or project records may ask you to provide links to external websites, such as repositories, demos or portfolios. Those sites are independent of hackOS and GPUL, have their own privacy policies, and are not operated by, connected to or affiliated with GPUL. Their own policies and terms apply when you visit them or send them data.
 
 ## 3. Purposes and legal bases
 
@@ -230,9 +236,9 @@ Core hackOS information —including accounts, applications, databases and files
 
 We retain your data while your account or relationship with GPUL remains active and afterwards for the periods necessary to address legal liabilities. Once those periods end, the data is deleted or anonymised.
 
-If your account was never accepted or accredited at the event, you can delete it yourself from your account settings ("Danger zone"); that deletion also removes any applications you submitted.
+You can start account closure from the account settings ("Danger zone"). The server checks canonical accreditation at the time of the request: without accreditation, the account is fully deleted where possible; after accreditation, it is irreversibly anonymised instead.
 
-If you were accredited at the event, we cannot always delete your data immediately: GPUL receives public grants that require justifying real participation — including access records and demographic data — to the administration and the university during the legal accountability period. While that period lasts, processing is based on compliance with that legal obligation and, instead of deletion, we will restrict processing by anonymising your personal data (name, contact details, identity document…) while keeping only the aggregate data needed for justification purposes. You can request this anonymisation at any time by emailing [hackudc@gpul.org](mailto:hackudc@gpul.org); it is not an action you can carry out yourself from the application.
+If you request anonymisation while you are recorded as inside the venue, the request is accepted as a pending exit: participation services stop, and existing identity and dietary data are retained only for the short transition needed for staff to record your exit or for the recovery deadline to expire; you can cancel before that happens. The subsequent irreversible anonymisation revokes access and removes direct identifiers, credentials, tickets, wallet authentication data, files and dietary information. It creates a new random anonymous participant record with no lookup table or other identity mapping. Only application answers that an authorised form administrator explicitly marked for anonymous audit in the form version used by that participant may remain, together with verified venue-presence time generated by event operations. Unmarked answers and direct identifiers are removed. Combinations of anonymous data may create re-identification risk in a very small cohort, so GPUL should aggregate or suppress unusual combinations when publishing statistics. Anonymisation cannot later support named participation proof or ECTS documentation. A mailto link to [hackudc@gpul.org](mailto:hackudc@gpul.org) remains available as a secondary privacy/support channel.
 
 ## 7. Cookies and local storage
 

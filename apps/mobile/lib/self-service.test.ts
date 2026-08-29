@@ -1,5 +1,11 @@
 import { apiFetch } from "./api";
-import { declineOwnSpot, deleteOwnAccount, fetchAccountRemovalEligibility } from "./self-service";
+import {
+  anonymizeOwnAccount,
+  declineOwnSpot,
+  deleteOwnAccount,
+  fetchAccountRemovalEligibility,
+  requestAccountRemovalPin,
+} from "./self-service";
 
 jest.mock("./api", () => ({ apiFetch: jest.fn() }));
 
@@ -21,7 +27,93 @@ describe("mobile self-service account actions (H15, H54)", () => {
 
     await deleteOwnAccount();
 
-    expect(mockedApiFetch).toHaveBeenCalledWith("/api/me", { method: "DELETE" });
+    expect(mockedApiFetch).toHaveBeenCalledWith("/api/me", {
+      method: "DELETE",
+      headers: { "Idempotency-Key": expect.stringMatching(/^account-delete-/) },
+    });
+  });
+
+  it("sends the removal PIN request through the authenticated endpoint", async () => {
+    mockedApiFetch.mockResolvedValueOnce({ status: "sent", expiresAt: "2026-08-27T12:00:00.000Z" });
+
+    await requestAccountRemovalPin();
+
+    expect(mockedApiFetch).toHaveBeenCalledWith("/api/me/removal-pin", { method: "POST" });
+  });
+
+  it("sends a security PIN when deleting a verified account", async () => {
+    mockedApiFetch.mockResolvedValueOnce({ deleted: true });
+
+    await deleteOwnAccount("123456");
+
+    expect(mockedApiFetch).toHaveBeenCalledWith("/api/me", {
+      method: "DELETE",
+      headers: {
+        "content-type": "application/json",
+        "Idempotency-Key": expect.stringMatching(/^account-delete-/),
+      },
+      body: JSON.stringify({ securityPin: "123456" }),
+    });
+  });
+
+  it("sends the current password when deleting an unverified account", async () => {
+    mockedApiFetch.mockResolvedValueOnce({ deleted: true });
+
+    await deleteOwnAccount(undefined, "current-password");
+
+    expect(mockedApiFetch).toHaveBeenCalledWith("/api/me", {
+      method: "DELETE",
+      headers: {
+        "content-type": "application/json",
+        "Idempotency-Key": expect.stringMatching(/^account-delete-/),
+      },
+      body: JSON.stringify({ reauthenticationPassword: "current-password" }),
+    });
+  });
+
+  it("confirms irreversible anonymization through the own-account endpoint", async () => {
+    mockedApiFetch.mockResolvedValueOnce({ anonymized: true });
+
+    await anonymizeOwnAccount();
+
+    expect(mockedApiFetch).toHaveBeenCalledWith("/api/me/anonymize", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "Idempotency-Key": expect.stringMatching(/^account-anonymize-/),
+      },
+      body: JSON.stringify({ confirm: true }),
+    });
+  });
+
+  it("sends a security PIN when anonymizing a verified account", async () => {
+    mockedApiFetch.mockResolvedValueOnce({ anonymized: true });
+
+    await anonymizeOwnAccount("123456");
+
+    expect(mockedApiFetch).toHaveBeenCalledWith("/api/me/anonymize", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "Idempotency-Key": expect.stringMatching(/^account-anonymize-/),
+      },
+      body: JSON.stringify({ confirm: true, securityPin: "123456" }),
+    });
+  });
+
+  it("sends the current password when anonymizing an unverified account", async () => {
+    mockedApiFetch.mockResolvedValueOnce({ anonymized: true });
+
+    await anonymizeOwnAccount(undefined, "current-password");
+
+    expect(mockedApiFetch).toHaveBeenCalledWith("/api/me/anonymize", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "Idempotency-Key": expect.stringMatching(/^account-anonymize-/),
+      },
+      body: JSON.stringify({ confirm: true, reauthenticationPassword: "current-password" }),
+    });
   });
 
   it("declines the selected response with its stable idempotency key", async () => {

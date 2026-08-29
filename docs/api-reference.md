@@ -14,7 +14,7 @@ is the layer above individual routes: which module owns what, and the rules
 every module follows so a change in one reads predictably next to the others.
 
 Functional source of truth: [`plan/historias-hackos.md`](../plan/historias-hackos.md)
-(stories H1–H55). Hard invariants: [`plan/07-datos-relevantes-ers.md`](../plan/07-datos-relevantes-ers.md).
+(stories H1–H59). Hard invariants: [`plan/07-datos-relevantes-ers.md`](../plan/07-datos-relevantes-ers.md).
 If this page disagrees with either, they win.
 
 ## Where to start
@@ -72,8 +72,13 @@ invitations including reusable enterprise and account links (H9/H10/H43), and th
 permission-group graph: capability groups, groups-of-groups with cycle
 rejection, and the `ADMIN_ALL` wildcard's "at least one active holder"
 invariant (`permission-graph.ts`). Account removal (H54) branches to hard
-delete or field-level anonymization depending on whether the account has any
-retained activity. A generic per-account UI-preference store (`GET/PATCH
+delete or irreversible migration to a random `anonymous_participants` subject
+depending on canonical accreditation. Legacy door/activity/badge references
+without accreditation are integrity warnings, not an automatic retention rule.
+The original user row and identity bridge are removed; only application answers
+explicitly retained by the submitted form version and the system-generated
+verified presence total survive. A generic per-account UI-preference store
+(`GET/PATCH
 /api/me/ui-prefs`, H59) namespaces one jsonb column by view (e.g.
 `scheduleTable` holds the Manage Schedule table's column visibility/order) —
 a thin merge-patch, not a table per view; the browser also keeps a
@@ -119,8 +124,10 @@ sponsor reps (via a `sponsors` row on their enterprise, not necessarily an
 explicit capability) edit their own challenge's content and judging panel.
 
 ### queue (H29–H42)
-The judging queue state machine — `waiting → called → in_room → presenting →
-completed/disqualified`, one queue entry per repo per challenge, hard
+The judging queue state machine's common path is `waiting → called → in_room →
+presenting → completed/disqualified`. It also supports `returned_to_queue`,
+`no_show`, `skipped`, and `cancelled`, plus re-entry branches. There is one queue
+entry per repo per challenge and a hard
 guarantee that a team is never called into two rooms while a member is
 occupied elsewhere. Rooms, the auto-call pump tick, judge evaluation (1:1
 with a queue entry), and the data behind the venue TV screens (mode
@@ -156,9 +163,10 @@ moment an item ends up with no audience (not a validation error — removing
 the last audience tag is a normal edit); the bulk `POST /api/schedule/visibility`
 (`shown`) and `POST /api/schedule/publish-at` (non-null) routes silently skip
 any staff-only item in their batch rather than fail it. A DB constraint,
-`schedule_visibility_requires_audience` (0720), backstops this at the data
-layer: `array_length(audiences,1) > 0 OR (visibility = 'hidden' AND publish_at
-IS NULL)`. There is no separate `public` audience — the anonymous web/TV feed
+`schedule_visibility_requires_audience` (0722), with the nullable-array
+ expression normalized by `COALESCE` in 0723, backstops this at the data layer:
+ `COALESCE(array_length(audiences,1), 0) > 0 OR (visibility = 'hidden' AND
+ publish_at IS NULL)`. There is no separate `public` audience — the anonymous web/TV feed
 is served exactly the `participant` slice. Items also carry an optional
 staff-only `notes`
 free-text field (the run-of-show's "observations" column), an optional
@@ -197,8 +205,9 @@ publication window), per-user notification preferences, multi-channel
 delivery (email, push, Discord, in-app) driven entirely by the durable
 `notification_outbox` table, and the read-only audit-trail query surface
 (H53). See [`background-workers.md`](./background-workers.md) for the
-dispatcher's retry/backoff and dead-letter model — there is no BullMQ-native
-retry queue here on purpose.
+dispatcher's retry/backoff and dead-letter model. The notification outbox has
+no BullMQ-native retry queue: its durable row state owns retry and parking;
+other event-driven workers are listed separately in `background-workers.md`.
 
 ### sponsors (H43–H45, H58)
 Enterprises, sponsor (rep) membership on an enterprise, and the
@@ -345,14 +354,13 @@ and `background-workers.md`'s "Queue and public-screen streams" section for
 exactly which stream sees what.
 
 ### Background work
-Everything asynchronous is a **repeatable tick worker** draining a
-Postgres-backed table (`notification_outbox`, due confirmations, scheduled
-reveals, room queues) — not a per-job BullMQ queue with its own retry/DLQ.
-Durability, retry/backoff (exponential, capped, dead-lettered into
-`status='failed'` after `MAX_ATTEMPTS`) and the "exactly one winner" guarantee
-all live in Postgres rows; BullMQ is just the clock. Full detail, including
-which module events are synchronous-in-request vs. background, is in
-[`background-workers.md`](./background-workers.md).
+Background work uses two patterns. Repeatable BullMQ ticks drain durable
+Postgres tables such as `notification_outbox`, due confirmations, scheduled
+reveals, room queues, and schedule reminders. Event-driven BullMQ jobs carry
+explicit payloads for account-removal retries, data-subject requests, meal-scan
+batches, wallet sync, and queue participant invalidations. Each processor
+defines its own idempotency/retry behavior; see
+[`background-workers.md`](./background-workers.md) for the complete map.
 
 ### Trilingual copy (i18n)
 Anything a user reads — UI strings and outbound notification templates alike

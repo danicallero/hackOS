@@ -162,6 +162,8 @@ export const languageSchema = z.enum(["es", "gl", "en"]);
 
 export const scannerSnapshotResponse = z.object({
   generatedAt: z.string().datetime(),
+  revokedBadgeIds: z.array(z.string()),
+  revokedTicketTokens: z.array(z.string()),
   people: z.array(scannerPersonCard),
   activities: z.array(
     z.object({

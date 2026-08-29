@@ -562,6 +562,16 @@ describe("H8 permission groups", () => {
     const a = await getApp();
     const activeWildcard = await wildcardAdmin();
     const formerWildcard = await wildcardAdmin();
+    const staff = await createUser();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE users SET badge_id = 'B-FORMER-WILDCARD' WHERE id = $1`, [
+      formerWildcard,
+    ]);
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, staff_id)
+       VALUES ($1, 'B-FORMER-WILDCARD', $2)`,
+      [formerWildcard, staff],
+    );
 
     const anonymized = await a.inject({
       method: "POST",
@@ -592,7 +602,9 @@ describe("H8 permission groups", () => {
       headers: asUser(formerWildcard),
       payload: { name: "anonymized-wildcard-attempt", capabilities: [CAPABILITIES.ADMIN_ALL] },
     });
-    expect(escalation.statusCode).toBe(403);
+    // The request is rejected by the verification guard before capability
+    // resolution because the anonymized user no longer exists.
+    expect(escalation.statusCode).toBe(404);
   });
 
   it("serializes opposite includes so concurrent requests cannot create a cycle", async () => {

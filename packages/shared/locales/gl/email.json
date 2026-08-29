@@ -17,6 +17,10 @@
         "subject": "Restablece o teu contrasinal de hackOS",
         "body": "Ola {{name}},\n\nUsa este botón para fixar un contrasinal novo:\n\n[Restablecer contrasinal]({{resetUrl}})\n\nCaemos en spam? Move esta mensaxe á caixa de entrada e engade {{fromAddress}} aos teus contactos para non perder ningunha mensaxe.\n\nSe non o pediches ti, podes ignorar este correo — o teu contrasinal non cambiou."
       },
+      "accountRemovalPin": {
+        "subject": "Confirma a eliminación da túa conta de hackOS",
+        "body": "Ola {{name}},\n\nO teu PIN de seguridade para eliminar a túa conta de hackOS é:\n\n{{pin}}\n\nEste PIN caduca en {{expiresMinutes}} minutos. Se non o pediches ti, podes ignorar este correo."
+      },
       "invite": {
         "subject": "Convidáronte a hackOS",
         "body": "Ola,\n\nCrea a túa conta para continuar:\n\n[Crear conta]({{claimUrl}})\n\nCaemos en spam? Move esta mensaxe á caixa de entrada e engade {{fromAddress}} aos teus contactos para non perder ningunha mensaxe.\n\nDende alí fixa o teu contrasinal, nome e o resto dos teus datos."

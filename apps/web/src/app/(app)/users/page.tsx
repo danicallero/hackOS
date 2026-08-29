@@ -37,6 +37,7 @@ import type { Tone } from "@/lib/tones";
 import type { DerivedRole, UserList, UserListItem } from "@/lib/types";
 import { ActiveInvitationsModal } from "./active-invitations-modal";
 import { InviteUserDialog } from "./invite-dialog";
+import { ReviewFixturesDialog } from "./review-fixtures-dialog";
 
 function initials(u: UserListItem): string {
   const a = u.name?.trim()?.[0];
@@ -181,11 +182,16 @@ function buildColumns(presentIds: Set<number> | null, t: Translate): Column<User
       header: t("name"),
       sortValue: (u) => `${u.surname ?? ""} ${u.name ?? ""}`.trim().toLowerCase(),
       cell: (u) => (
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Avatar size="sm">
             <AvatarFallback>{initials(u)}</AvatarFallback>
           </Avatar>
           <span className="font-medium">{fullName(u)}</span>
+          {u.isTestAccount && (
+            <StatusBadge tone="warning" dot={false}>
+              {t("reviewFixture")}
+            </StatusBadge>
+          )}
         </div>
       ),
     },
@@ -448,10 +454,15 @@ export default function UsersPage() {
         }
         description={total > users.length ? t("showingFirst", { shown: users.length }) : undefined}
         actions={
-          <CapabilityGate capability={CAPABILITIES.INVITES_MANAGE}>
-            <ActiveInvitationsModal />
-            <InviteUserDialog />
-          </CapabilityGate>
+          <>
+            <CapabilityGate capability={CAPABILITIES.INVITES_MANAGE}>
+              <ActiveInvitationsModal />
+              <InviteUserDialog />
+            </CapabilityGate>
+            <CapabilityGate capability={CAPABILITIES.ADMIN_ALL}>
+              <ReviewFixturesDialog />
+            </CapabilityGate>
+          </>
         }
       />
 

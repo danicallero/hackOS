@@ -1,6 +1,9 @@
 import { pool } from "../../db/pool.js";
 import { NotFoundError } from "../../lib/errors.js";
+import { queueFixtureMarker } from "./broadcast.js";
+import { assertQueueChallengeReadScope, assertQueueEntryScope } from "./fixture-scope.js";
 import {
+  CHALLENGE_ROOM_IDS_FOR_MARKER_SQL,
   CHALLENGE_ROOM_IDS_SQL,
   QUEUE_GROUP_LABEL_JOIN,
   QUEUE_GROUP_LABEL_SQL,
@@ -33,6 +36,7 @@ const QUEUE_ENTRY_SELECT = `qe.*, r.name AS repo_name, r.description AS repo_des
             FROM devpost_participants dp
             LEFT JOIN users u ON u.id = dp.user_id
            WHERE dp.repo_id = qe.repo_id
+             AND (u.id IS NULL OR (u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false))
           UNION ALL
           -- A submission without a Devpost identity is an operator-added row.
           SELECT jsonb_build_object(
@@ -43,6 +47,8 @@ const QUEUE_ENTRY_SELECT = `qe.*, r.name AS repo_name, r.description AS repo_des
             JOIN users u ON u.id = s.user_id
            WHERE s.repo_id = qe.repo_id
              AND s.status = 'active'
+             AND u.account_state = 'active' AND u.anonymized_at IS NULL
+             AND u.is_test_account = false
              AND NOT EXISTS (
                SELECT 1 FROM devpost_participants dp
                 WHERE dp.repo_id = s.repo_id AND dp.user_id = s.user_id
@@ -74,12 +80,19 @@ async function roomQueueLabel(roomId: number) {
        LEFT JOIN LATERAL (
          SELECT ch.id, ch.title, ch.judging_panel_criteria
            FROM queue_group_challenges qgc
-           JOIN challenges ch ON ch.id = qgc.challenge_id
+           JOIN challenges ch ON ch.id = qgc.challenge_id AND ch.is_test_account = false
           WHERE qgc.queue_group_id = qg.id
           ORDER BY ch.id ASC
           LIMIT 1
        ) c ON true
       WHERE rqg.room_id = $1
+        AND NOT EXISTS (
+          SELECT 1
+            FROM queue_group_challenges hidden_qgc
+            JOIN challenges hidden_c ON hidden_c.id = hidden_qgc.challenge_id
+           WHERE hidden_qgc.queue_group_id = qg.id
+             AND hidden_c.is_test_account = true
+        )
       LIMIT 1`,
     [roomId],
   );
@@ -119,7 +132,7 @@ async function waitingQueueView(challengeIds: number[]) {
                 WHERE o.repo_id = qe.repo_id
                   AND o.challenge_id = ANY($1)
                   AND o.status = 'waiting') AS queued_challenge_ids
-         FROM queue_entries qe JOIN repos r ON r.id = qe.repo_id
+         FROM queue_entries qe JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
         WHERE qe.challenge_id = ANY($1) AND qe.status = 'waiting'
           -- Same filter callNextForRoom applies: a team already called or
           -- judged for another of the group's challenges is done with the
@@ -151,14 +164,21 @@ async function waitingQueueView(challengeIds: number[]) {
  * several of a shared queue's challenges is ONE line, at its best position,
  * naming every challenge it is in.
  */
-export async function queueGroupQueue(queueGroupId: number) {
+export async function queueGroupQueue(queueGroupId: number, fixtureMarker = false) {
   const group = (
     await pool.query(
       `SELECT qg.id, qg.display_name, qg.enterprise_id, e.name AS enterprise_name
          FROM queue_groups qg
          JOIN enterprises e ON e.id = qg.enterprise_id
-        WHERE qg.id = $1`,
-      [queueGroupId],
+        WHERE qg.id = $1
+          AND NOT EXISTS (
+            SELECT 1
+              FROM queue_group_challenges hidden_qgc
+              JOIN challenges hidden_c ON hidden_c.id = hidden_qgc.challenge_id
+             WHERE hidden_qgc.queue_group_id = qg.id
+               AND hidden_c.is_test_account = NOT $2::boolean
+          )`,
+      [queueGroupId, fixtureMarker],
     )
   ).rows[0];
   if (!group) throw new NotFoundError("Queue group not found", { queueGroupId });
@@ -167,9 +187,9 @@ export async function queueGroupQueue(queueGroupId: number) {
     `SELECT c.id, c.title
        FROM queue_group_challenges qgc
        JOIN challenges c ON c.id = qgc.challenge_id
-      WHERE qgc.queue_group_id = $1
+      WHERE qgc.queue_group_id = $1 AND c.is_test_account = $2
       ORDER BY c.id ASC`,
-    [queueGroupId],
+    [queueGroupId, fixtureMarker],
   );
   const challengeIds = challenges.map((c: { id: number }) => Number(c.id));
   if (challengeIds.length === 0) {
@@ -194,8 +214,8 @@ export async function queueGroupQueue(queueGroupId: number) {
               (ar.attempt_id IS NOT NULL) AS has_review,
               ar.status AS review_status
          FROM queue_entries qe
-         JOIN repos r ON r.id = qe.repo_id
-         JOIN challenges c ON c.id = qe.challenge_id
+         JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $2
+         JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
          LEFT JOIN rooms rm ON rm.id = qe.assigned_room_id
          LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
         WHERE qe.challenge_id = ANY($1)
@@ -210,17 +230,23 @@ export async function queueGroupQueue(queueGroupId: number) {
                  WHEN 'presenting' THEN 0 WHEN 'in_room' THEN 1 WHEN 'called' THEN 2
                  WHEN 'waiting' THEN 3 ELSE 4 END,
                merged.position ASC NULLS LAST, merged.id ASC`,
-    [challengeIds],
+    [challengeIds, fixtureMarker],
   );
 
   return { group, challenges, entries };
 }
 
 /** H40: counts by status for the challenge progress panel. */
-export async function challengeProgress(challengeId: number) {
+export async function challengeProgress(challengeId: number, fixtureMarker: boolean) {
+  await assertQueueChallengeReadScope(pool, challengeId, fixtureMarker);
   const { rows } = await pool.query(
-    `SELECT status, COUNT(*)::int AS count FROM queue_entries WHERE challenge_id = $1 GROUP BY status`,
-    [challengeId],
+    `SELECT qe.status, COUNT(*)::int AS count
+       FROM queue_entries qe
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $2
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
+      WHERE qe.challenge_id = $1
+      GROUP BY qe.status`,
+    [challengeId, fixtureMarker],
   );
   const counts: Record<string, number> = {};
   for (const r of rows as { status: string; count: number }[]) counts[r.status] = r.count;
@@ -233,11 +259,13 @@ export async function challengeProgress(challengeId: number) {
   // Shared across every room judging this challenge (multi-room challenges
   // share one logical queue), so this is a challenge-wide average, not per-room.
   const { rows: avgRows } = await pool.query(
-    `SELECT AVG(EXTRACT(EPOCH FROM (completed_at - presentation_started_at)) / 60) AS avg_minutes
-       FROM queue_entries
-      WHERE challenge_id = $1 AND status = 'completed'
-        AND completed_at IS NOT NULL AND presentation_started_at IS NOT NULL`,
-    [challengeId],
+    `SELECT AVG(EXTRACT(EPOCH FROM (qe.completed_at - qe.presentation_started_at)) / 60) AS avg_minutes
+       FROM queue_entries qe
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $2
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
+      WHERE qe.challenge_id = $1 AND qe.status = 'completed'
+        AND qe.completed_at IS NOT NULL AND qe.presentation_started_at IS NOT NULL`,
+    [challengeId, fixtureMarker],
   );
   const avgEvaluationMinutes =
     avgRows[0].avg_minutes != null ? Number(avgRows[0].avg_minutes) : null;
@@ -271,7 +299,13 @@ export async function roomView(roomId: number, opts: { includeCrossRoomSkips?: b
     (
       await pool.query(
         `SELECT ${QUEUE_ENTRY_SELECT}
-         FROM queue_entries qe JOIN repos r ON r.id = qe.repo_id
+         FROM queue_entries qe
+         JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
+         JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
+         JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+         JOIN room_queue_groups rqg
+           ON rqg.room_id = qe.assigned_room_id
+          AND rqg.queue_group_id = qgc.queue_group_id
         WHERE qe.assigned_room_id = $1 AND qe.status IN ('in_room', 'presenting')
         LIMIT 1`,
         [roomId],
@@ -281,7 +315,13 @@ export async function roomView(roomId: number, opts: { includeCrossRoomSkips?: b
   const called = (
     await pool.query(
       `SELECT ${QUEUE_ENTRY_SELECT}
-         FROM queue_entries qe JOIN repos r ON r.id = qe.repo_id
+         FROM queue_entries qe
+         JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
+         JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
+         JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+         JOIN room_queue_groups rqg
+           ON rqg.room_id = qe.assigned_room_id
+          AND rqg.queue_group_id = qgc.queue_group_id
         WHERE qe.assigned_room_id = $1 AND qe.status = 'called'
         ORDER BY qe.called_at ASC NULLS LAST, qe.id ASC`,
       [roomId],
@@ -420,7 +460,14 @@ export async function roomAssignments(roomId: number) {
            JOIN queue_groups qg ON qg.id = rqg.queue_group_id
            JOIN enterprises e ON e.id = qg.enterprise_id
            LEFT JOIN users u ON u.id = rqg.assigned_by
-          WHERE rqg.room_id = $1`,
+          WHERE rqg.room_id = $1
+            AND NOT EXISTS (
+              SELECT 1
+                FROM queue_group_challenges hidden_qgc
+                JOIN challenges hidden_c ON hidden_c.id = hidden_qgc.challenge_id
+               WHERE hidden_qgc.queue_group_id = qg.id
+                 AND hidden_c.is_test_account = true
+            )`,
         [roomId],
       )
     ).rows[0] ?? null;
@@ -435,7 +482,7 @@ export async function roomAssignments(roomId: number) {
        FROM room_queue_groups rqg
        JOIN queue_groups qg ON qg.id = rqg.queue_group_id
        JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
-       JOIN challenges c ON c.id = qgc.challenge_id
+       JOIN challenges c ON c.id = qgc.challenge_id AND c.is_test_account = false
        LEFT JOIN users u ON u.id = rqg.assigned_by
       WHERE rqg.room_id = $1
       ORDER BY c.title ASC, qgc.challenge_id ASC`,
@@ -454,6 +501,8 @@ export async function roomAssignments(roomId: number) {
        JOIN queue_groups qg ON qg.id = rqg.queue_group_id
        JOIN enterprise_judges ej ON ej.enterprise_id = qg.enterprise_id
        JOIN users u ON u.id = ej.user_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
+          AND u.is_test_account = false
        LEFT JOIN users a ON a.id = ej.added_by
       WHERE rqg.room_id = $1
       ORDER BY u.name ASC NULLS LAST, u.surname ASC NULLS LAST, u.email ASC`,
@@ -482,7 +531,17 @@ export async function allRoomViews() {
  * separately mapped so a new operational field cannot leak by accident.
  */
 export async function publicRoomViews() {
-  const views = await allRoomViews();
+  // Public TV is the real-venue projection. Synthetic and mixed room graphs
+  // are omitted entirely rather than appearing as empty room shells after
+  // `roomView` filters their queue contents.
+  const { rows: rooms } = await pool.query<{ id: number }>(`SELECT id FROM rooms ORDER BY id ASC`);
+  const realRoomIds: number[] = [];
+  for (const room of rooms) {
+    if ((await queueFixtureMarker(pool, "room", Number(room.id))) === false) {
+      realRoomIds.push(Number(room.id));
+    }
+  }
+  const views = await Promise.all(realRoomIds.map((roomId) => roomView(roomId)));
   const entry = (value: Record<string, unknown> | null) =>
     value
       ? {
@@ -521,13 +580,21 @@ export async function publicRoomViews() {
   }));
 }
 
-export async function challengeEtaMinutesPerSlot(challengeId: number): Promise<number> {
+export async function challengeEtaMinutesPerSlot(
+  challengeId: number,
+  fixtureMarker = false,
+): Promise<number> {
+  const servingRoomsSql = fixtureMarker
+    ? CHALLENGE_ROOM_IDS_FOR_MARKER_SQL
+    : CHALLENGE_ROOM_IDS_SQL;
   const { rows } = await pool.query(
     // Every room working this challenge's queue_group shares its pace.
     `SELECT COALESCE(AVG(rqs.desired_minutes_per_team), 8) AS avg, COUNT(*)::int AS rooms
-       FROM (${CHALLENGE_ROOM_IDS_SQL}) serving
-       JOIN room_queue_state rqs ON rqs.room_id = serving.room_id`,
-    [challengeId],
+       FROM (${servingRoomsSql}) serving
+       JOIN room_queue_state rqs
+         ON rqs.room_id = serving.room_id
+        AND rqs.is_paused = false`,
+    fixtureMarker ? [challengeId, fixtureMarker] : [challengeId],
   );
   const avg = Number(rows[0].avg);
   const roomCount = Math.max(1, Number(rows[0].rooms));
@@ -557,26 +624,147 @@ async function withEtaMinutes<T extends { challenge_id: number; position: number
 }
 
 /**
+ * H38/H55/H54: shared participant scope for both self-queue reads. The
+ * authenticated user's persisted fixture marker selects repositories and
+ * challenges; a queue group is usable only when every challenge it contains
+ * carries that same marker. This keeps queue ordering and room projections
+ * from crossing the real/synthetic boundary even when a stale graph is mixed.
+ */
+const PARTICIPANT_QUEUE_SCOPE_SQL = `
+WITH viewer AS (
+   SELECT is_test_account
+     FROM users
+    WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+ ), my_repos AS (
+   SELECT s.repo_id
+     FROM submissions s
+     JOIN users su ON su.id = s.user_id
+     JOIN repos sr ON sr.id = s.repo_id
+     CROSS JOIN viewer v
+    WHERE s.user_id = $1 AND s.status = 'active'
+      AND su.account_state = 'active' AND su.anonymized_at IS NULL
+      AND su.is_test_account = v.is_test_account
+      AND sr.is_test_account = v.is_test_account
+   UNION
+   SELECT dp.repo_id
+     FROM devpost_participants dp
+     JOIN users du ON du.id = dp.user_id
+     JOIN repos dr ON dr.id = dp.repo_id
+     CROSS JOIN viewer v
+    WHERE dp.user_id = $1
+      AND du.account_state = 'active' AND du.anonymized_at IS NULL
+      AND du.is_test_account = v.is_test_account
+      AND dr.is_test_account = v.is_test_account
+   UNION
+   SELECT dp.repo_id
+     FROM devpost_participants dp
+     JOIN users u ON u.id = $1
+     JOIN repos er ON er.id = dp.repo_id
+     CROSS JOIN viewer v
+    WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
+      AND u.is_test_account = v.is_test_account
+      AND er.is_test_account = v.is_test_account
+      AND (lower(dp.email) = lower(u.email)
+       OR (u.secondary_email_verified_at IS NOT NULL
+           AND lower(dp.email) = lower(u.secondary_email)))
+ ), enterprise_markers AS (
+   SELECT s.enterprise_id, u.is_test_account AS marker
+     FROM sponsors s
+     JOIN users u ON u.id = s.user_id
+   UNION ALL
+   SELECT s.enterprise_id, c.is_test_account AS marker
+     FROM sponsors s
+     JOIN challenges c ON c.author = s.id
+ ), visible_queue_groups AS (
+   SELECT qgc.queue_group_id
+     FROM queue_group_challenges qgc
+     JOIN challenges group_challenge ON group_challenge.id = qgc.challenge_id
+     JOIN queue_groups group_qg ON group_qg.id = qgc.queue_group_id
+     LEFT JOIN enterprise_markers em ON em.enterprise_id = group_qg.enterprise_id
+     CROSS JOIN viewer v
+    GROUP BY qgc.queue_group_id, v.is_test_account
+   HAVING bool_and(group_challenge.is_test_account = v.is_test_account)
+      AND COUNT(em.marker) > 0
+      AND bool_and(em.marker = v.is_test_account)
+ ), room_markers AS (
+   SELECT re.room_id, u.is_test_account AS marker
+     FROM room_enterprises re
+     JOIN sponsors s ON s.enterprise_id = re.enterprise_id
+     JOIN users u ON u.id = s.user_id
+   UNION ALL
+   SELECT re.room_id, c.is_test_account AS marker
+     FROM room_enterprises re
+     JOIN sponsors s ON s.enterprise_id = re.enterprise_id
+     JOIN challenges c ON c.author = s.id
+   UNION ALL
+   SELECT rqg.room_id, u.is_test_account AS marker
+     FROM room_queue_groups rqg
+     JOIN queue_groups qg ON qg.id = rqg.queue_group_id
+     JOIN sponsors s ON s.enterprise_id = qg.enterprise_id
+     JOIN users u ON u.id = s.user_id
+   UNION ALL
+   SELECT rqg.room_id, c.is_test_account AS marker
+     FROM room_queue_groups rqg
+     JOIN queue_groups qg ON qg.id = rqg.queue_group_id
+     JOIN sponsors s ON s.enterprise_id = qg.enterprise_id
+     JOIN challenges c ON c.author = s.id
+   UNION ALL
+   SELECT rqg.room_id, c.is_test_account AS marker
+     FROM room_queue_groups rqg
+     JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
+     JOIN challenges c ON c.id = qgc.challenge_id
+ UNION ALL
+   -- A malformed cross-marker entry is excluded from the room marker; the
+   -- entry itself is filtered below, while transition paths reject the graph.
+   SELECT rqg.room_id, r.is_test_account AS marker
+     FROM room_queue_groups rqg
+     JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
+     JOIN challenges c ON c.id = qgc.challenge_id
+     JOIN queue_entries qe ON qe.challenge_id = qgc.challenge_id
+     JOIN repos r ON r.id = qe.repo_id
+    WHERE r.is_test_account = c.is_test_account
+ ), room_scopes AS (
+   SELECT r.id AS room_id,
+          EXISTS (
+            SELECT 1 FROM room_enterprises re WHERE re.room_id = r.id
+            UNION ALL
+            SELECT 1 FROM room_queue_groups rqg WHERE rqg.room_id = r.id
+          ) AS has_graph,
+          COUNT(rm.marker) > 0 AS has_marker,
+          COALESCE(bool_or(rm.marker IS TRUE), false) AS has_synthetic,
+          COALESCE(bool_or(rm.marker IS FALSE), false) AS has_real
+     FROM rooms r
+     LEFT JOIN room_markers rm ON rm.room_id = r.id
+    GROUP BY r.id
+ ), visible_rooms AS (
+   SELECT rs.room_id
+     FROM room_scopes rs
+     CROSS JOIN viewer v
+    WHERE (NOT rs.has_graph)
+       OR (rs.has_marker
+           AND NOT (rs.has_synthetic AND rs.has_real)
+           AND rs.has_synthetic = v.is_test_account)
+ )`;
+
+/**
  * H55/nav: cheap existence check backing the "My queue" nav item — same repo
  * resolution and status filter as {@link myQueueStatus}, without the join.
  */
 export async function hasMyQueueItems(userId: number): Promise<boolean> {
   const { rows } = await pool.query(
-    `SELECT EXISTS (
-       SELECT 1 FROM queue_entries qe
+    `${PARTICIPANT_QUEUE_SCOPE_SQL}
+     SELECT EXISTS (
+       SELECT 1
+         FROM queue_entries qe
+         JOIN my_repos mr ON mr.repo_id = qe.repo_id
+         JOIN repos r ON r.id = qe.repo_id
+         JOIN challenges c ON c.id = qe.challenge_id
+         JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+         JOIN visible_queue_groups vq ON vq.queue_group_id = qgc.queue_group_id
+         CROSS JOIN viewer v
         WHERE qe.status NOT IN ('cancelled', 'disqualified')
-          AND qe.repo_id IN (
-            SELECT repo_id FROM submissions WHERE user_id = $1 AND status = 'active'
-            UNION
-            SELECT repo_id FROM devpost_participants WHERE user_id = $1
-            UNION
-            SELECT dp.repo_id
-              FROM devpost_participants dp
-              JOIN users u ON u.id = $1
-             WHERE lower(dp.email) = lower(u.email)
-                OR (u.secondary_email_verified_at IS NOT NULL
-                    AND lower(dp.email) = lower(u.secondary_email))
-          )
+          AND r.is_test_account = v.is_test_account
+          AND c.is_test_account = v.is_test_account
      ) AS exists`,
     [userId],
   );
@@ -597,35 +785,36 @@ export async function myQueueStatus(userId: number) {
   // `repo_occurrence` lets the window count each team once across a shared
   // queue while preserving the historical rank of sibling entries.
   const { rows: entries } = await pool.query(
-    `WITH my_repos AS (
-       SELECT repo_id FROM submissions WHERE user_id = $1 AND status = 'active'
-       UNION
-       SELECT repo_id FROM devpost_participants WHERE user_id = $1
-       UNION
-       SELECT dp.repo_id
-         FROM devpost_participants dp
-         JOIN users u ON u.id = $1
-        WHERE lower(dp.email) = lower(u.email)
-           OR (u.secondary_email_verified_at IS NOT NULL
-               AND lower(dp.email) = lower(u.secondary_email))
-     ), my_entries AS (
+    `${PARTICIPANT_QUEUE_SCOPE_SQL}, my_entries AS (
        SELECT qe.id, qe.challenge_id,
-              COALESCE(qgc.queue_group_id, -qe.challenge_id) AS queue_key
+              qgc.queue_group_id AS queue_key
          FROM queue_entries qe
          JOIN my_repos mr ON mr.repo_id = qe.repo_id
-         LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+         JOIN repos repo ON repo.id = qe.repo_id
+         JOIN challenges challenge ON challenge.id = qe.challenge_id
+         JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+         JOIN visible_queue_groups vq ON vq.queue_group_id = qgc.queue_group_id
+         CROSS JOIN viewer v
         WHERE qe.status NOT IN ('cancelled', 'disqualified')
+          AND repo.is_test_account = v.is_test_account
+          AND challenge.is_test_account = v.is_test_account
      ), waiting_order AS (
        SELECT qe.id, qe.repo_id, qe.position,
-              COALESCE(qgc.queue_group_id, -qe.challenge_id) AS queue_key,
+              qgc.queue_group_id AS queue_key,
               ROW_NUMBER() OVER (
-                PARTITION BY COALESCE(qgc.queue_group_id, -qe.challenge_id), qe.repo_id
+                PARTITION BY qgc.queue_group_id, qe.repo_id
                 ORDER BY qe.position ASC, qe.id ASC
               ) AS repo_occurrence
          FROM queue_entries qe
-         LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+         JOIN repos repo ON repo.id = qe.repo_id
+         JOIN challenges challenge ON challenge.id = qe.challenge_id
+         JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+         JOIN visible_queue_groups vq ON vq.queue_group_id = qgc.queue_group_id
+         CROSS JOIN viewer v
         WHERE qe.status = 'waiting'
-          AND COALESCE(qgc.queue_group_id, -qe.challenge_id) IN (
+          AND repo.is_test_account = v.is_test_account
+          AND challenge.is_test_account = v.is_test_account
+          AND qgc.queue_group_id IN (
             SELECT DISTINCT queue_key FROM my_entries
           )
      ), waiting_ranks AS (
@@ -643,10 +832,14 @@ export async function myQueueStatus(userId: number) {
               COALESCE(AVG(rqs.desired_minutes_per_team), 8) /
                 GREATEST(1, COUNT(rqs.room_id)) AS minutes_per_slot
          FROM queue_group_challenges qgc
+         JOIN visible_queue_groups vq ON vq.queue_group_id = qgc.queue_group_id
          JOIN (SELECT DISTINCT challenge_id FROM my_entries) mine
            ON mine.challenge_id = qgc.challenge_id
          LEFT JOIN room_queue_groups rqg ON rqg.queue_group_id = qgc.queue_group_id
-         LEFT JOIN room_queue_state rqs ON rqs.room_id = rqg.room_id
+         JOIN visible_rooms vr ON vr.room_id = rqg.room_id
+         LEFT JOIN room_queue_state rqs
+           ON rqs.room_id = rqg.room_id
+          AND rqs.is_paused = false
         GROUP BY qgc.challenge_id
      )
      SELECT qe.*, ${QUEUE_GROUP_LABEL_SQL} AS challenge_title, r.name AS repo_name,
@@ -659,7 +852,9 @@ export async function myQueueStatus(userId: number) {
                         ORDER BY rm.name ASC
                       )
                  FROM queue_group_challenges self
+                 JOIN visible_queue_groups vq ON vq.queue_group_id = self.queue_group_id
                  JOIN room_queue_groups rqg ON rqg.queue_group_id = self.queue_group_id
+                 JOIN visible_rooms vr ON vr.room_id = rqg.room_id
                  JOIN rooms rm ON rm.id = rqg.room_id
                 WHERE self.challenge_id = qe.challenge_id),
               '[]'::jsonb
@@ -669,10 +864,20 @@ export async function myQueueStatus(userId: number) {
       ${QUEUE_GROUP_LABEL_JOIN}
       JOIN repos r ON r.id = qe.repo_id
       JOIN my_entries mine ON mine.id = qe.id
-      LEFT JOIN rooms ar ON ar.id = qe.assigned_room_id
+      JOIN viewer v ON v.is_test_account = r.is_test_account
+      LEFT JOIN room_queue_groups called_rqg
+        ON called_rqg.room_id = qe.assigned_room_id
+       AND called_rqg.queue_group_id = qgc_label.queue_group_id
+      LEFT JOIN visible_rooms called_vr ON called_vr.room_id = called_rqg.room_id
+      LEFT JOIN rooms ar ON ar.id = called_vr.room_id
       LEFT JOIN waiting_ranks wr ON wr.id = qe.id
       LEFT JOIN queue_pace qp ON qp.challenge_id = qe.challenge_id
       WHERE qe.status NOT IN ('cancelled', 'disqualified')
+        AND c.is_test_account = v.is_test_account
+        AND EXISTS (
+          SELECT 1 FROM visible_queue_groups vq
+           WHERE vq.queue_group_id = qgc_label.queue_group_id
+        )
       ORDER BY r.name ASC, challenge_title ASC, qe.id ASC`,
     [userId],
   );
@@ -746,13 +951,14 @@ export async function roomPace(roomId: number) {
   // every team the group calls.
   const primaryChallenge = (
     await pool.query(
-      `SELECT MIN(qgc.challenge_id)::int AS id,
-              MIN(c.max_presentation_seconds)::int AS max_presentation_seconds
+      `SELECT qgc.challenge_id::int AS id,
+              c.max_presentation_seconds::int AS max_presentation_seconds
          FROM room_queue_groups rqg
          JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
-         JOIN challenges c ON c.id = qgc.challenge_id
-        WHERE rqg.room_id = $1
-       HAVING COUNT(*) > 0`,
+         JOIN challenges c ON c.id = qgc.challenge_id AND c.is_test_account = false
+         WHERE rqg.room_id = $1
+         ORDER BY qgc.challenge_id ASC
+         LIMIT 1`,
       [roomId],
     )
   ).rows[0] as { id: number; max_presentation_seconds: number | null } | undefined;
@@ -765,7 +971,8 @@ export async function roomPace(roomId: number) {
     ? (
         await pool.query(
           `SELECT COUNT(DISTINCT repo_id)::int AS n FROM queue_entries
-            WHERE challenge_id = ANY($1) AND status IN ('waiting', 'called')`,
+            WHERE challenge_id = ANY($1) AND status IN ('waiting', 'called')
+              AND repo_id IN (SELECT id FROM repos WHERE is_test_account = false)`,
           [challengeIds],
         )
       ).rows[0].n
@@ -779,7 +986,11 @@ export async function roomPace(roomId: number) {
         1,
         (
           await pool.query(
-            `SELECT COUNT(DISTINCT room_id)::int AS n FROM (${CHALLENGE_ROOM_IDS_SQL}) serving`,
+            `SELECT COUNT(DISTINCT serving.room_id)::int AS n
+               FROM (${CHALLENGE_ROOM_IDS_SQL}) serving
+               JOIN room_queue_state rqs
+                 ON rqs.room_id = serving.room_id
+                AND rqs.is_paused = false`,
             [primaryChallenge.id],
           )
         ).rows[0].n,
@@ -858,7 +1069,8 @@ export async function repoChallenges(repoId: number) {
               '[]'::jsonb
             ) AS judging_rooms
        FROM queue_entries qe
-       JOIN challenges c ON c.id = qe.challenge_id
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
+       JOIN repos repo ON repo.id = qe.repo_id AND repo.is_test_account = false
        LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
        LEFT JOIN queue_groups qg ON qg.id = qgc.queue_group_id
        LEFT JOIN rooms r ON r.id = qe.assigned_room_id
@@ -887,14 +1099,21 @@ export async function repoChallenges(repoId: number) {
   );
 }
 
-export async function entryHistory(entryId: number) {
+export async function entryHistory(entryId: number, actorId?: number) {
+  const fixtureMarker =
+    actorId == null ? false : await assertQueueEntryScope(pool, actorId, entryId);
   const { rows } = await pool.query(
     `SELECT h.*, u.name AS actor_name, u.surname AS actor_surname
        FROM queue_history h
-       LEFT JOIN users u ON u.id = h.actor_id
+       JOIN queue_entries qe ON qe.id = h.queue_entry_id
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
+       JOIN repos repo ON repo.id = qe.repo_id AND repo.is_test_account = $2
+       LEFT JOIN users u
+         ON u.id = h.actor_id
+        AND u.is_test_account = $2
       WHERE h.queue_entry_id = $1
       ORDER BY h.created_at ASC`,
-    [entryId],
+    [entryId, fixtureMarker],
   );
   return rows;
 }

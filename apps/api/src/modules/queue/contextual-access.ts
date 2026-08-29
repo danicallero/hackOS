@@ -3,6 +3,13 @@ import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastif
 import { pool } from "../../db/pool.js";
 import { userHasCapability } from "../../lib/capabilities.js";
 import { ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
+import { fixtureRoomIds } from "../logistics/review-fixture-scope.js";
+import {
+  assertQueueChallengeScope,
+  assertQueueEntryScope,
+  assertQueueRepoScope,
+  assertQueueRoomScope,
+} from "./fixture-scope.js";
 import { assertEntryInScope, resolveReviewScope } from "./reviews.js";
 
 type ParamName = "roomId" | "challengeId" | "entryId" | "repoId";
@@ -127,6 +134,7 @@ function denied(resource: string, details: Record<string, unknown> = {}): never 
 export function requireRoomJudgeOrCapability(...capabilities: Capability[]): preHandlerHookHandler {
   return async (req: FastifyRequest, _reply: FastifyReply) => {
     const userId = await requireUser(req);
+    await assertQueueRoomScope(pool, userId, numberParam(req, "roomId"));
     if (await hasAnyCapability(req, userId, capabilities)) return;
     const roomId = numberParam(req, "roomId");
     if (await judgesRoomEnterprise(userId, roomId)) return;
@@ -140,6 +148,7 @@ export function requireRoomAccessOrCapability(
 ): preHandlerHookHandler {
   return async (req: FastifyRequest, _reply: FastifyReply) => {
     const userId = await requireUser(req);
+    await assertQueueRoomScope(pool, userId, numberParam(req, "roomId"));
     if (await hasAnyCapability(req, userId, capabilities)) return;
     const roomId = numberParam(req, "roomId");
     if (await judgesRoomEnterprise(userId, roomId)) return;
@@ -153,6 +162,7 @@ export function requireRoomAccessOrCapability(
 /** H46 room assignments are global-admin or challenge-owner only. */
 export const requireRoomAssignmentsAccess: preHandlerHookHandler = async (req) => {
   const userId = await requireUser(req);
+  await assertQueueRoomScope(pool, userId, numberParam(req, "roomId"));
   if (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN, req)) return;
   const roomId = numberParam(req, "roomId");
   if (await ownsRoomEnterprise(userId, roomId)) return;
@@ -164,6 +174,7 @@ export function requireChallengeJudgeOrCapability(
 ): preHandlerHookHandler {
   return async (req: FastifyRequest, _reply: FastifyReply) => {
     const userId = await requireUser(req);
+    await assertQueueChallengeScope(pool, userId, numberParam(req, "challengeId"));
     if (await hasAnyCapability(req, userId, capabilities)) return;
     const challengeId = numberParam(req, "challengeId");
     if (await hasChallengeRelationship(userId, challengeId)) return;
@@ -174,6 +185,7 @@ export function requireChallengeJudgeOrCapability(
 export function requireRepoJudgeOrCapability(...capabilities: Capability[]): preHandlerHookHandler {
   return async (req: FastifyRequest, _reply: FastifyReply) => {
     const userId = await requireUser(req);
+    await assertQueueRepoScope(pool, userId, numberParam(req, "repoId"));
     if (await hasAnyCapability(req, userId, capabilities)) return;
     const repoId = numberParam(req, "repoId");
     const challengeIds = await repoChallengeIds(repoId);
@@ -192,6 +204,7 @@ export function requireEntryJudgeOrCapability(
 ): preHandlerHookHandler {
   return async (req: FastifyRequest, _reply: FastifyReply) => {
     const userId = await requireUser(req);
+    await assertQueueEntryScope(pool, userId, numberParam(req, "entryId"));
     if (await hasAnyCapability(req, userId, capabilities)) return;
     const entryId = numberParam(req, "entryId");
     const challengeId = await entryChallengeId(entryId);
@@ -205,12 +218,14 @@ export function requireEntryJudgeOrCapability(
 /** Lists are centrally filtered; an association never turns into global room access. */
 export async function accessibleRoomIds(req: FastifyRequest): Promise<number[] | null> {
   const userId = await requireUser(req);
+  const scopedRoomIds = await fixtureRoomIds(pool, userId);
   if (
     (await userHasCapability(userId, CAPABILITIES.QUEUE_OPERATE, req)) ||
     (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN, req))
   ) {
-    return null;
+    return scopedRoomIds;
   }
+  if (scopedRoomIds.length === 0) return [];
   // Every room linked to a queue_group whose enterprise this user judges for
   // or reps — the room's enterprise is now read straight off the group, with
   // no challenge hop.
@@ -221,9 +236,10 @@ export async function accessibleRoomIds(req: FastifyRequest): Promise<number[] |
        LEFT JOIN enterprise_judges ej
               ON ej.enterprise_id = qg.enterprise_id AND ej.user_id = $1
        LEFT JOIN sponsors mine ON mine.enterprise_id = qg.enterprise_id
-      WHERE ej.user_id = $1 OR mine.user_id = $1
+      WHERE (ej.user_id = $1 OR mine.user_id = $1)
+        AND rqg.room_id = ANY($2::int[])
       ORDER BY rqg.room_id ASC`,
-    [userId],
+    [userId, scopedRoomIds],
   );
   return rows.map((row: { room_id: number }) => row.room_id);
 }
@@ -240,6 +256,7 @@ export function requireChallengeExport(): preHandlerHookHandler {
     if (!(await userHasCapability(userId, CAPABILITIES.JUDGING_EXPORT, req))) {
       denied("challenge export", { capability: CAPABILITIES.JUDGING_EXPORT });
     }
+    await assertQueueChallengeScope(pool, userId, numberParam(req, "challengeId"));
     if (
       (await hasAnyCapability(req, userId, [
         CAPABILITIES.QUEUE_ADMIN,
@@ -255,10 +272,20 @@ export function requireChallengeExport(): preHandlerHookHandler {
 
 /** H46 review lists/details/exports use the same sponsor-or-admin scope. */
 export const requireReviewScopeAccess: preHandlerHookHandler = async (req) => {
-  await resolveReviewScope(await requireUser(req));
+  const userId = await requireUser(req);
+  await resolveReviewScope(userId);
+  const query = req.query as Partial<{ challengeId: number; roomId: number }>;
+  if (query.challengeId != null) {
+    await assertQueueChallengeScope(pool, userId, query.challengeId);
+  }
+  if (query.roomId != null) {
+    await assertQueueRoomScope(pool, userId, query.roomId);
+  }
 };
 
 export const requireReviewEntryAccess: preHandlerHookHandler = async (req) => {
   const userId = await requireUser(req);
-  await assertEntryInScope(await resolveReviewScope(userId), numberParam(req, "entryId"));
+  const entryId = numberParam(req, "entryId");
+  await assertQueueEntryScope(pool, userId, entryId);
+  await assertEntryInScope(await resolveReviewScope(userId), entryId);
 };

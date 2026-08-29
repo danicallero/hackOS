@@ -1,9 +1,11 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
+import { pool } from "../../db/pool.js";
 import { requireAnyCapability, requireAuth } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessOption as access } from "../../lib/route-policy.js";
+import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
 import {
   challengeEditAccessFor,
   isChallengeAdmin,
@@ -68,7 +70,11 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
     async (req) => {
       const userId = req.userId as number;
       const canListAll = await isChallengeAdmin(userId);
-      if (canListAll) return { challenges: await listAllChallenges() };
+      if (canListAll) {
+        return {
+          challenges: await listAllChallenges(await isSyntheticOperator(pool, userId)),
+        };
+      }
       const [owned, assigned] = await Promise.all([
         listOwnedChallenges(userId),
         listAssignedJudgeChallenges(userId),
@@ -135,7 +141,7 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      return getChallenge(req.params.id);
+      return getChallenge(req.params.id, await isSyntheticOperator(pool, req.userId as number));
     },
   );
 
@@ -149,7 +155,7 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
         body: updateChallengeBody,
         summary: "Update a challenge",
         description:
-          "Partially updates challenge content, prizes, judging configuration, timing and visibility. Organization admins with sponsors:manage, queue:admin or the admin wildcard may update any editable field; a sponsor representative may edit only their own challenge, and public content is locked after reveal. Judging panel criteria remain locked once judging starts. Every successful edit is versioned and audited (H44, H45, H53).",
+          "Partially updates challenge content, prizes, judging configuration, timing and visibility. Organization admins with sponsors:manage, queue:admin or the admin wildcard may update any editable field; a sponsor representative may edit only their own challenge, and public content is locked after reveal. Judging panel criteria remain locked after the first submitted evaluation or completed queue entry in the challenge's queue group. Every successful edit is versioned and audited (H44, H45, H53).",
       },
     },
     async (req) => {
@@ -228,7 +234,7 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      return previewPanel(req.params.id);
+      return previewPanel(req.params.id, await isSyntheticOperator(pool, req.userId as number));
     },
   );
 

@@ -1,11 +1,12 @@
 # Environment variables per service (isolated containers)
 
 This is the per-service breakdown for **Mode A** in
-[`deploy/README.md`](../deploy/README.md): each of the six services below runs
-as its own container on the shared private `instance` network
-(`hackos-<name>-net`), reachable by the others only through that network, with
-only `api` and `web` also joining the Traefik `edge` network. Datastores
-publish no host ports.
+[`deploy/README.md`](../deploy/README.md): each of the six service definitions
+below runs separately (the `api` definition also contains its one-shot
+`migrate` container). `postgres`, `valkey`, `minio`, `api`/`migrate`, and
+`worker` use the shared private `instance` network
+(`hackos-<name>-net`); `web` is edge-only, while `api` also joins the Traefik
+`edge` network. Datastores publish no host ports.
 
 Two different kinds of variable show up:
 
@@ -62,9 +63,12 @@ Two containers share this file: `minio` (the S3-compatible object server) and
 
 Runs two containers from the same image: a one-shot `migrate` (must complete
 successfully before `api` starts — see the `depends_on: service_completed_successfully`
-gate in the compose file) and the long-running `api` server. Both get
-identical container env, because the migration script and the server share
-the same `DATABASE_URL`/config-loading code path.
+gate in the compose file) and the long-running `api` server. They share the
+application/database configuration because both `apps/api/scripts/migrate.ts`
+and the API config load dotenv before reading `process.env`. The optional
+`REVIEW_FIXTURE_*` secrets are the
+deliberate exception: Compose passes them to `api` only because migrations never
+need them.
 
 | Variable | Kind | Required | What it does |
 |---|---|---|---|
@@ -75,6 +79,8 @@ the same `DATABASE_URL`/config-loading code path.
 | `BETTER_AUTH_SECRET` | container | yes 🔒 | Signs and encrypts Better Auth sessions/tokens. Rotating it invalidates every existing session — everyone gets logged out — so treat it as a "break glass" secret, not something to rotate casually. |
 | `CORS_ORIGINS` | container | no | Comma-separated browser origins allowed to make credentialed requests. In production this is the *only* CORS allowlist (no wildcard fallback, since credentials are always on); it must include `https://${WEB_DOMAIN}` or the web app's authenticated calls get blocked by the browser before they reach the API. |
 | `MOBILE_APP_SCHEME` | container | no | Custom URL scheme of the Expo mobile app (default `hackos`), added to Better Auth's `trustedOrigins` for the `expo()` plugin (H4, H55). Only worth changing if `apps/mobile`'s `app.json` `scheme` is renamed from the default. |
+| `REVIEW_FIXTURE_PASSWORD` | container (api only) | no; same-deployment fixture workspace | Password assigned to the marked synthetic accounts returned by the admin fixture-regeneration route. Leave unset when the fixture workspace is not needed. It is intentionally not passed to `migrate` or `worker`, and must be supplied to reviewers out-of-band rather than returned by the API. |
+| `REVIEW_FIXTURE_DELETION_PIN` | container (api only) | no; same-deployment fixture workspace | Six-digit static deletion PIN accepted only for `users.is_test_account = true` synthetic fixtures. It is not a universal PIN for real participants, is not returned by the API, and enabling it on a live event requires explicit release/security approval because fixture regeneration is destructive to prior synthetic rows. |
 | `LOG_LEVEL` | container | no | Pino log level (`info` by default). Turning it to `debug` in production is noisy but harmless; there's no separate audit-log toggle — sensitive-mutation auditing (H53) happens in Postgres regardless of this setting. |
 | `DB_POOL_MAX` | container | no (default 20, 5 in tests) | Max size of this process's `pg` pool (H540). Per-process — api and worker each hold their own, and every replica of each multiplies it: `(api replicas × DB_POOL_MAX) + (worker replicas × DB_POOL_MAX)` must stay under Postgres's own `max_connections` (default 100), with headroom for `migrate`'s one-shot connections and admin/superuser use. Raise it for big-event load — see `docs/architecture.md` and `docs/big-event-readiness.md`. |
 | `DB_IDLE_TIMEOUT_MS` | container | no (default 30000) | How long an idle pooled connection is kept before being closed. |
@@ -102,8 +108,8 @@ the same `DATABASE_URL`/config-loading code path.
 | `GOOGLE_TRANSLATE_API_KEY` | container | only if `TRANSLATE_PROVIDER=google` | Google Cloud Translation v2 API key. |
 | `LIBRETRANSLATE_URL` / `LIBRETRANSLATE_API_KEY` | container | URL required if `TRANSLATE_PROVIDER=libretranslate`, key optional | Base URL of a self-hosted LibreTranslate instance (e.g. `https://translate.example.org`) and its API key, if the instance requires one. |
 | `STACK_NAME` | compose-level | no (default) | Namespaces this instance's Traefik router names (`${STACK_NAME}-api`) so multiple hackOS instances can share one Traefik without router-name collisions. |
-| `PROXY_NETWORK` | compose-level | no (default `dokploy-network`) | The Traefik-managed edge network `api` joins to receive public traffic. |
-| `CERT_RESOLVER` | compose-level | no (default `letsencrypt`) | Which Traefik ACME resolver issues the TLS cert for `API_DOMAIN`. |
+| `PROXY_NETWORK` | compose-level | no (default `dokploy-network`) | The Traefik-managed edge network `api` and `web` join to receive public traffic. The single-stack worker may also join it for outbound egress, but has no router. |
+| `CERT_RESOLVER` | compose-level | no (default `letsencrypt`) | Which Traefik ACME resolver issues the TLS certificates for the `API_DOMAIN` and `WEB_DOMAIN` routers. |
 | `IMAGE_REPO`, `IMAGE_TAG` | compose-level | no | Which prebuilt image to pull; ignored entirely if Dokploy builds from source instead. Pin `IMAGE_TAG` to a released version in production — never `:latest`. |
 | `API_MEM_LIMIT` | compose-level | no | Memory cap, default `512m`. |
 | `INSTANCE_NETWORK` | compose-level | no | Private network joined to reach postgres/valkey/minio by name. |
@@ -111,13 +117,15 @@ the same `DATABASE_URL`/config-loading code path.
 ## worker
 
 Same image as `api`, running `node dist/worker.js` instead of `dist/server.js`
-— no HTTP listener, no `edge` network membership, so it's reachable by nothing
-and reaches out to nothing except the instance network and the open internet
-(mail provider, Apple/Google push). Container env is the **api list above
-minus** `CORS_ORIGINS`, plus `WEB_URL` generated from the compose-level
-`WEB_DOMAIN`: the worker renders transactional email HTML, including the
-browser-reachable brand mark, before sending it. It does not serve a browser or
-generate browser links itself. It also has:
+— no HTTP listener or Traefik router. In the per-service deployment it stays on
+the instance bridge; in the single-stack deployment it also joins the edge
+network so outbound mail/push traffic has a route. `WEB_URL` is generated from
+the compose-level `WEB_DOMAIN`: the worker renders transactional email HTML,
+including the browser-reachable brand mark, before sending it. It does not serve
+a browser or generate browser links itself. The per-service worker compose
+passes the shared database, storage, mail, wallet, and pool settings; API-only
+SSE and scanner-rate-limit settings are not needed. The single-stack compose
+reuses the shared app anchor, so harmless API-only values may be present there.
 
 | Variable | Kind | Required | What it does |
 |---|---|---|---|
@@ -125,13 +133,12 @@ generate browser links itself. It also has:
 | `WORKER_MEM_LIMIT` | compose-level | no | Memory cap, default `512m`. Bump this if you scale worker replicas for notification/queue throughput (dispatcher uses `SELECT ... FOR UPDATE SKIP LOCKED`, so replicas don't double-send). |
 | `NOTIFICATION_OUTBOX_BATCH_SIZE` | container | no | Rows the outbox dispatcher claims per 5s tick, default `100` — each row dispatched and committed in its own transaction, so raising this doesn't grow the duplicate-send risk of a mid-batch crash. Only the `worker` container's value matters in production (it's the one running the dispatcher). See `docs/big-event-readiness.md`. |
 
-Everything else — `DATABASE_URL`/`VALKEY_URL` inputs, `BETTER_AUTH_URL`,
-`BETTER_AUTH_SECRET`, the S3 block, the mail block, both wallet blocks, the
-`DB_*` pool/timeout block (H540) — is identical to `api` and **must use the
-same values**: the worker is what actually sends the emails and pushes
-wallet-pass updates that `api` only queues, and it holds its own `pg` pool
-sized by the same `DB_POOL_MAX` math. The `SSE_*` vars are **not** applicable
-here — the worker has no HTTP listener, so no SSE connections to budget.
+The worker must use the same `DATABASE_URL`/`VALKEY_URL` inputs,
+`BETTER_AUTH_SECRET`, S3 block, mail block, wallet blocks, and `DB_*`
+pool/timeout values as `api`: it sends the emails and wallet-pass updates that
+`api` only queues, and it holds its own `pg` pool sized by the same
+`DB_POOL_MAX` math. The `SSE_*` vars are not applicable to the worker because it
+has no HTTP listener.
 
 ## web
 

@@ -69,6 +69,10 @@ export interface ScannerActivityState {
 
 export interface ScannerSnapshot {
   generatedAt: string;
+  /** Short-lived H54 revocations with no participant/user relationship. */
+  revokedBadgeIds?: string[];
+  /** Short-lived H54 ticket revocations with no participant/user relationship. */
+  revokedTicketTokens?: string[];
   people: ScannerPerson[];
   activities: ScannerActivity[];
   activityStates: ScannerActivityState[];

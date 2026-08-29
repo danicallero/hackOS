@@ -12,7 +12,7 @@ import {
   TriangleAlertIcon,
   UsersIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
 import { EntityCombobox } from "@/components/common/entity-combobox";
@@ -27,11 +27,13 @@ import { useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { type ActivityScanResult, logisticsApi, type PersonSearchResult } from "@/lib/logistics";
+import { useSessionContext } from "@/lib/session";
 import {
+  isStaleOfflineScanError,
   loadOfflineQueue,
   OfflineQueue,
   type OfflineScan,
-  saveOfflineQueue,
+  updateOfflineQueue,
 } from "./offline-queue";
 import { PersonSearchResults } from "./person-search-results";
 import { ScanResult } from "./scan-result";
@@ -47,7 +49,20 @@ const SCAN_EVENTS = [EVENTS.LOGISTICS_ACTIVITY_SCAN, EVENTS.LOGISTICS_MEAL_SCAN_
  */
 export function ActivityScannerCard({ category }: { category: "meal" | "activity" }) {
   const { t } = useLocale();
+  const { me } = useSessionContext();
   const isMeal = category === "meal";
+  const ownerId = me?.id ?? null;
+  const ownerRef = useRef(ownerId);
+  ownerRef.current = ownerId;
+  // A queued load/save may resolve after the session has switched accounts.
+  // Increment synchronously during render so even work started between the
+  // new render and its effect cleanup is fenced from the new owner's UI.
+  const ownerEpochRef = useRef(0);
+  const previousOwnerRef = useRef(ownerId);
+  if (previousOwnerRef.current !== ownerId) {
+    previousOwnerRef.current = ownerId;
+    ownerEpochRef.current += 1;
+  }
   const activities = useLiveQuery(
     () => logisticsApi.scannableActivities(category),
     "/api/logistics/stream",
@@ -62,11 +77,44 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
   const [result, setResult] = useState<ActivityScanResult | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [offline, setOffline] = useState<OfflineScan[]>(() => (isMeal ? loadOfflineQueue() : []));
+  const [offline, setOffline] = useState<OfflineScan[]>([]);
+  const [queueReady, setQueueReady] = useState(!isMeal);
   const [transactionState, setTransactionState] = useState<
     "ready" | "saved" | "confirmed" | "attention"
   >("ready");
   const selected = items.find((a) => String(a.activityId) === activityId) ?? null;
+
+  useEffect(() => {
+    let active = true;
+    const epoch = ownerEpochRef.current;
+    setOffline([]);
+    if (!isMeal || ownerId === null) {
+      setQueueReady(!isMeal);
+      return () => {
+        active = false;
+      };
+    }
+    setQueueReady(false);
+    void loadOfflineQueue(ownerId)
+      .then((items) => {
+        if (active && ownerRef.current === ownerId && ownerEpochRef.current === epoch) {
+          setOffline(items);
+        }
+      })
+      .catch(() => {
+        if (active && ownerRef.current === ownerId && ownerEpochRef.current === epoch) {
+          setOffline([]);
+        }
+      })
+      .finally(() => {
+        if (active && ownerRef.current === ownerId && ownerEpochRef.current === epoch) {
+          setQueueReady(true);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [isMeal, ownerId]);
 
   const [findOpen, setFindOpen] = useState(false);
   const [findQuery, setFindQuery] = useState("");
@@ -102,9 +150,44 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
     setFindError("");
   };
 
-  const persistOffline = (next: OfflineScan[]) => {
+  const isCurrentOwner = (capturedOwnerId: number, capturedEpoch: number) =>
+    ownerRef.current === capturedOwnerId && ownerEpochRef.current === capturedEpoch;
+
+  const updateQueue = async (
+    update: (items: OfflineScan[]) => OfflineScan[] | Promise<OfflineScan[]>,
+    capturedOwnerId = ownerId,
+    capturedEpoch = ownerEpochRef.current,
+  ): Promise<OfflineScan[]> => {
+    if (capturedOwnerId === null || !isCurrentOwner(capturedOwnerId, capturedEpoch)) {
+      throw new Error("The authenticated staff owner changed");
+    }
+    const next = await updateOfflineQueue(capturedOwnerId, update);
+    if (!isCurrentOwner(capturedOwnerId, capturedEpoch)) {
+      throw new Error("The authenticated staff owner changed");
+    }
     setOffline(next);
-    saveOfflineQueue(next);
+    return next;
+  };
+
+  const persistSyncedQueue = async (
+    update: (items: OfflineScan[]) => OfflineScan[] | Promise<OfflineScan[]>,
+    capturedOwnerId: number,
+    capturedEpoch: number,
+  ): Promise<OfflineScan[] | null> => {
+    if (!isCurrentOwner(capturedOwnerId, capturedEpoch)) return null;
+    try {
+      return await updateQueue(update, capturedOwnerId, capturedEpoch);
+    } catch {
+      // Keep the last durable snapshot: clearing it here would also discard
+      // later unsynced scans. Replaying an acknowledged batch item is safe
+      // because clientScanId is idempotent; stale-credential rejections still
+      // use the filtered update above when persistence is available (H25, H54).
+      if (isCurrentOwner(capturedOwnerId, capturedEpoch)) {
+        setTransactionState("attention");
+        setError(t("offlineSyncFailed"));
+      }
+      return null;
+    }
   };
 
   const scanNow = async (allowRepeat = false) => {
@@ -140,78 +223,129 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
     }
   };
 
-  const queueOffline = () => {
-    if (!selected) return;
-    persistOffline([
-      ...offline,
-      {
-        clientScanId: crypto.randomUUID(),
-        activityId: selected.activityId,
-        activityName: selected.name,
-        badgeId: badgeId.trim(),
-        allowRepeat: false,
-        scannedAt: new Date().toISOString(),
-        status: "pending",
-      },
-    ]);
-    setBadgeId("");
-    setTransactionState("saved");
-    toast.success(t("scanQueuedLocally"));
+  const queueOffline = async () => {
+    if (!selected || ownerId === null || ownerRef.current !== ownerId || !queueReady) return;
+    const capturedOwnerId = ownerId;
+    const capturedEpoch = ownerEpochRef.current;
+    try {
+      await updateQueue(
+        (current) => [
+          ...current,
+          {
+            clientScanId: crypto.randomUUID(),
+            activityId: selected.activityId,
+            activityName: selected.name,
+            badgeId: badgeId.trim(),
+            allowRepeat: false,
+            scannedAt: new Date().toISOString(),
+            status: "pending",
+          },
+        ],
+        capturedOwnerId,
+        capturedEpoch,
+      );
+      setBadgeId("");
+      setTransactionState("saved");
+      toast.success(t("scanQueuedLocally"));
+    } catch {
+      if (isCurrentOwner(capturedOwnerId, capturedEpoch)) {
+        setTransactionState("attention");
+        setError(t("offlineSyncFailed"));
+      }
+    }
   };
 
   const syncOffline = async () => {
-    const queued = offline.filter((scan) => scan.status !== "syncing");
+    if (ownerId === null || ownerRef.current !== ownerId || !queueReady) return;
+    const capturedOwnerId = ownerId;
+    const capturedEpoch = ownerEpochRef.current;
+    const queued = (await loadOfflineQueue(capturedOwnerId)).filter(
+      (scan) => scan.status !== "syncing",
+    );
+    if (!isCurrentOwner(capturedOwnerId, capturedEpoch)) return;
     if (queued.length === 0) return;
     setBusy(true);
-    let next = [...offline];
-    // Replay in capture order. A transient failure stops the queue; a server
-    // business rejection is inspectable and does not block later operations.
-    for (const scan of queued) {
-      next = next.map((item) =>
-        item.clientScanId === scan.clientScanId
-          ? { ...item, status: "syncing", error: undefined, failureKind: undefined }
-          : item,
-      );
-      persistOffline(next);
-      try {
-        await logisticsApi.mealBatch(scan.activityId, {
-          deviceId: "web-scanner",
-          scans: [
-            {
-              clientScanId: scan.clientScanId,
-              badgeId: scan.badgeId,
-              allowRepeat: scan.allowRepeat,
-              scannedAt: scan.scannedAt,
-            },
-          ],
-        });
-        next = next.filter((item) => item.clientScanId !== scan.clientScanId);
-        setTransactionState("confirmed");
-      } catch (err) {
-        const message = errorMessage(err, t("offlineSyncFailed"));
-        const businessRejection =
-          err instanceof ApiError &&
-          err.status >= 400 &&
-          err.status < 500 &&
-          ![401, 403, 408, 429].includes(err.status);
-        next = next.map((item) =>
-          item.clientScanId === scan.clientScanId
-            ? {
-                ...item,
-                status: businessRejection ? "failed" : "pending",
-                error: message,
-                failureKind: businessRejection ? "rejected" : "offline",
-              }
-            : item,
+    try {
+      // Replay in capture order. A transient failure stops the queue; a server
+      // business rejection is inspectable and does not block later operations.
+      for (const scan of queued) {
+        if (!isCurrentOwner(capturedOwnerId, capturedEpoch)) break;
+        const syncing = await persistSyncedQueue(
+          (current) =>
+            current.map((item) =>
+              item.clientScanId === scan.clientScanId
+                ? { ...item, status: "syncing", error: undefined, failureKind: undefined }
+                : item,
+            ),
+          capturedOwnerId,
+          capturedEpoch,
         );
-        persistOffline(next);
-        setTransactionState(businessRejection ? "attention" : "saved");
-        if (!businessRejection) break;
+        if (syncing === null) break;
+        try {
+          await logisticsApi.mealBatch(scan.activityId, {
+            deviceId: "web-scanner",
+            scans: [
+              {
+                clientScanId: scan.clientScanId,
+                badgeId: scan.badgeId,
+                allowRepeat: scan.allowRepeat,
+                scannedAt: scan.scannedAt,
+              },
+            ],
+          });
+          if (!isCurrentOwner(capturedOwnerId, capturedEpoch)) break;
+          const removed = await persistSyncedQueue(
+            (current) => current.filter((item) => item.clientScanId !== scan.clientScanId),
+            capturedOwnerId,
+            capturedEpoch,
+          );
+          if (removed === null) break;
+          setTransactionState("confirmed");
+        } catch (err) {
+          // A participant may have been deleted/anonymized while this browser
+          // was offline. Keeping the raw badge in a permanent "failed" row
+          // would retain a credential the server has deliberately revoked.
+          const staleIdentityRejection = isStaleOfflineScanError(err);
+          if (staleIdentityRejection) {
+            const removed = await persistSyncedQueue(
+              (current) => current.filter((item) => item.clientScanId !== scan.clientScanId),
+              capturedOwnerId,
+              capturedEpoch,
+            );
+            if (removed === null) break;
+            setTransactionState("attention");
+            continue;
+          }
+          const message = errorMessage(err, t("offlineSyncFailed"));
+          const businessRejection =
+            err instanceof ApiError &&
+            err.status >= 400 &&
+            err.status < 500 &&
+            ![401, 403, 408, 429].includes(err.status);
+          const updated = await persistSyncedQueue(
+            (current) =>
+              current.map((item) =>
+                item.clientScanId === scan.clientScanId
+                  ? {
+                      ...item,
+                      status: businessRejection ? "failed" : "pending",
+                      error: message,
+                      failureKind: businessRejection ? "rejected" : "offline",
+                    }
+                  : item,
+              ),
+            capturedOwnerId,
+            capturedEpoch,
+          );
+          if (updated === null) break;
+          setTransactionState(businessRejection ? "attention" : "saved");
+          if (!businessRejection) break;
+        }
       }
-      persistOffline(next);
+    } finally {
+      setBusy(false);
+      if (isCurrentOwner(capturedOwnerId, capturedEpoch)) activities.refetch();
     }
-    setBusy(false);
-    activities.refetch();
   };
 
   return (
@@ -423,7 +557,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
                   <Button
                     variant="outline"
                     onClick={queueOffline}
-                    disabled={!activityId || !badgeId.trim()}
+                    disabled={!queueReady || !activityId || !badgeId.trim()}
                   >
                     {t("queueLocally")}
                   </Button>

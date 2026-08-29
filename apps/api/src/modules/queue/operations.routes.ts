@@ -26,7 +26,9 @@ export function registerOperationsRoutes(app: FastifyInstance): void {
       const actorId = actor(req.userId);
 
       const { rows: challenges } = await pool.query(
-        `SELECT id, devpost_tags FROM challenges ORDER BY id`,
+        `SELECT id, devpost_tags FROM challenges
+          WHERE is_test_account = false
+          ORDER BY id`,
       );
       const eligible = challenges.filter(
         (challenge: { id: number; devpost_tags?: string[] | null }) =>

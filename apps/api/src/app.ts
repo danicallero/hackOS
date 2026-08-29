@@ -61,7 +61,8 @@ function docsTagFor(url: string): keyof typeof TAG_DESCRIPTIONS {
   if (
     url.startsWith("/api/me") ||
     url.startsWith("/api/users") ||
-    url.startsWith("/api/permissions")
+    url.startsWith("/api/permissions") ||
+    url.startsWith("/api/admin/review-fixtures")
   )
     return "identity";
   if (url.startsWith("/api/invites") || url.startsWith("/api/profile")) return "identity";

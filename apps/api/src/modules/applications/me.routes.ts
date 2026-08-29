@@ -52,10 +52,14 @@ export function registerMeRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const { rows } = await pool.query(
-        `SELECT a.template, a.type, a.ask_shirt_size, a.ask_food_intolerances,
+        `SELECT fv.template,
+                a.type, a.ask_shirt_size, a.ask_food_intolerances,
                 r.*, t.expires_at AS confirmation_expires_at
          FROM application_responses r
          JOIN applications a ON a.id = r.application_id
+         JOIN application_form_versions fv
+           ON fv.id = r.application_form_version_id
+          AND fv.application_id = r.application_id
          LEFT JOIN email_verification_tokens t ON t.id = r.confirmation_token_id
          WHERE r.user_id = $1 AND r.application_id = $2`,
         [req.userId, req.params.id],
@@ -65,7 +69,8 @@ export function registerMeRoutes(app: FastifyInstance): void {
       const enriched = await enrichTemplate({ ask_shirt_size, ask_food_intolerances }, template);
       const { rows: userRows } = await pool.query(
         `SELECT shirt_size, food_intolerances, food_intolerance_notes, dietary_data_state
-         FROM users WHERE id = $1`,
+         FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
         [req.userId],
       );
       return {

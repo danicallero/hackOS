@@ -1,29 +1,35 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
 import {
+  assertActiveAuthenticatedUser,
+  assertAuthenticatedProfileUser,
   getEffectiveCapabilities,
   invalidateCapabilities,
   requireAuth,
   requireCapability,
 } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
+import { idempotencyGuard, replayCompletedIdempotency } from "../../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
+import { assertFixtureSubjectScope } from "../../logistics/review-fixture-scope.js";
 import { issueTicket } from "../../logistics/tickets.js";
 import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliation.js";
 import { canCreateMyProject, hasMyProject, myProjects } from "../../projects/service.js";
 import { hasMyQueueItems } from "../../queue/reads.js";
-import { anonymizeUser } from "../anonymize.js";
+import { getBetterAuthSessionToken } from "../auth.js";
 import { hasMobileAccess } from "../mobile-access.js";
 import {
-  assertActiveWildcardHolder,
-  lockPermissionGraph,
-  userHasWildcard,
-} from "../permission-graph.js";
-import { clearOwnUnretainedReferences, getAccountRemovalEligibility } from "../removal.js";
+  cancelPendingAccountRemoval,
+  getAccountRemovalEligibility,
+  getPendingAccountRemovalStatus,
+  type PendingAccountRemovalStatus,
+  runAccountRemoval,
+} from "../removal.js";
+import { issueRemovalPin } from "../removal-pin.js";
 import { computeDerivedRole, computeMembershipFlags, hasEventAccess } from "../role.js";
 
 /**
@@ -89,10 +95,66 @@ const COLUMN_BY_FIELD: Record<string, string> = {
 
 const removalEligibilityResponseSchema = z.object({
   action: z.enum(["delete", "anonymize"]),
-  reasonCode: z.enum(["fresh_account", "operational_history"]),
+  reasonCode: z.enum([
+    "fresh_account",
+    "operational_history",
+    "inconsistent_operational_reference",
+  ]),
   accessRevoked: z.literal(true),
   operationalHistoryRetained: z.boolean(),
+  activeEventConsequences: z.boolean(),
+  requiresVenueExit: z.boolean(),
+  integrityWarning: z.boolean(),
+  securityPinRequired: z.boolean(),
+  reauthenticationRequired: z.boolean(),
 });
+
+const removalCompletedResponseSchema = z.union([
+  z.object({ status: z.literal("completed"), deleted: z.literal(true) }),
+  z.object({ status: z.literal("completed"), anonymized: z.literal(true) }),
+]);
+const removalPendingResponseSchema = z.union([
+  z.object({
+    status: z.literal("pending_exit"),
+    pendingExit: z.literal(true),
+    accessRevoked: z.literal(true),
+  }),
+  z.object({ status: z.literal("processing"), accessRevoked: z.literal(true) }),
+]);
+const accountRemovalProfileStateSchema = z.union([
+  z.object({
+    status: z.literal("pending_exit"),
+    action: z.literal("anonymize"),
+    expiresAt: z.string(),
+    canCancel: z.literal(true),
+  }),
+  z.object({
+    status: z.literal("processing"),
+    action: z.enum(["delete", "anonymize"]),
+    expiresAt: z.string().nullable(),
+    canCancel: z.literal(false),
+  }),
+]);
+const accountRemovalStatusResponseSchema = z.union([
+  z.object({ status: z.literal("active") }),
+  accountRemovalProfileStateSchema,
+]);
+const removalPinResponseSchema = z.union([
+  z.object({ status: z.literal("sent"), expiresAt: z.string() }),
+  z.object({ status: z.literal("static") }),
+  z.object({ status: z.literal("not_required") }),
+]);
+const optionalRemovalPinBodySchema = z
+  .object({
+    securityPin: z
+      .string()
+      .regex(/^\d{6}$/)
+      .optional(),
+    reauthenticationPassword: z.string().min(1).max(128).optional(),
+  })
+  .strict()
+  .nullable()
+  .optional();
 
 const userResponseSchema = z.object({
   id: z.number(),
@@ -112,6 +174,9 @@ const userResponseSchema = z.object({
   shirtSize: z.string().nullable(),
   universityId: z.number().nullable(),
   notes: z.string().nullable(),
+  accountState: z.enum(["active", "removal_pending"]),
+  isTestAccount: z.boolean(),
+  removal: accountRemovalProfileStateSchema.nullable(),
   createdAt: z.string(),
 });
 
@@ -149,10 +214,33 @@ interface UserRow {
   shirt_size: string | null;
   university_id: number | null;
   notes: string | null;
+  account_state: "active" | "removal_pending";
+  is_test_account: boolean;
+  removal_action: "delete" | "anonymize" | null;
+  removal_requires_exit: boolean;
+  removal_expires_at: Date | null;
   created_at: Date;
 }
 
-function serializeUser(row: UserRow) {
+function serializeUser(row: UserRow, removalStatus?: PendingAccountRemovalStatus) {
+  const removal =
+    removalStatus && removalStatus.status !== "active"
+      ? removalStatus
+      : row.account_state === "removal_pending"
+        ? row.removal_action === "anonymize" && row.removal_requires_exit
+          ? {
+              status: "pending_exit" as const,
+              action: "anonymize" as const,
+              expiresAt: row.removal_expires_at?.toISOString() ?? new Date(0).toISOString(),
+              canCancel: true as const,
+            }
+          : {
+              status: "processing" as const,
+              action: row.removal_action ?? "anonymize",
+              expiresAt: row.removal_expires_at?.toISOString() ?? null,
+              canCancel: false as const,
+            }
+        : null;
   return {
     id: row.id,
     email: row.email,
@@ -171,14 +259,41 @@ function serializeUser(row: UserRow) {
     shirtSize: row.shirt_size,
     universityId: row.university_id,
     notes: row.notes,
+    accountState: row.account_state,
+    isTestAccount: row.is_test_account,
+    removal,
     createdAt: row.created_at.toISOString(),
   };
 }
 
-async function fetchUser(userId: number): Promise<UserRow> {
-  const { rows } = await pool.query(`SELECT * FROM users WHERE id = $1`, [userId]);
+async function fetchUser(userId: number, allowPending = false): Promise<UserRow> {
+  const { rows } = await pool.query(
+    `SELECT * FROM users
+      WHERE id = $1
+        AND ${allowPending ? "account_state IN ('active', 'removal_pending')" : "account_state = 'active'"}
+        AND anonymized_at IS NULL`,
+    [userId],
+  );
   if (!rows[0]) throw new NotFoundError("User not found", { userId });
   return rows[0] as UserRow;
+}
+
+/** Ordinary staff surfaces must not discover synthetic reviewer subjects. */
+async function assertProfileSubjectScope(actorId: number, subjectId: number): Promise<void> {
+  await assertFixtureSubjectScope(pool, actorId, subjectId);
+}
+
+/** Read the Better Auth session credential without logging or persisting it. */
+async function sessionTokenFromRequest(req: FastifyRequest): Promise<string | null> {
+  if (req.sessionToken) return req.sessionToken;
+  const authorization = req.headers.authorization;
+  if (authorization?.startsWith("Bearer ")) return authorization.slice("Bearer ".length);
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (value === undefined) continue;
+    headers.set(key, Array.isArray(value) ? value.join(", ") : String(value));
+  }
+  return getBetterAuthSessionToken(headers);
 }
 
 // H7: once any application has been accepted, a participant can no longer
@@ -208,7 +323,9 @@ async function applyUserPatch(
 
   return withTransaction(async (client) => {
     const { rows: beforeRows } = await client.query(
-      `SELECT * FROM users WHERE id = $1 FOR UPDATE`,
+      `SELECT * FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
       [targetId],
     );
     if (!beforeRows[0]) throw new NotFoundError("User not found", { userId: targetId });
@@ -272,11 +389,59 @@ async function applyUserPatch(
 
 export function registerProfileRoutes(app: FastifyInstance): void {
   const api = app.withTypeProvider<ZodTypeProvider>();
+  const selfRemovalPreHandler =
+    (completionScope: string) =>
+    async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+      const idempotencyKey = req.headers["idempotency-key"];
+      if (typeof idempotencyKey !== "string" || idempotencyKey.trim().length === 0) {
+        throw new BadRequestError("Idempotency-Key is required for account removal.", {
+          code: "idempotency_key_required",
+        });
+      }
+      // Use the identity-free completion scope from the first insert. The
+      // request may revoke the session before Fastify's onSend hook runs; a
+      // later storage failure must therefore be retryable under the same
+      // scope, without leaving a stale user-scoped row behind.
+      req.idempotencyScope = completionScope;
+      if (await replayCompletedIdempotency(req, reply, completionScope)) return;
+      await assertActiveAuthenticatedUser(req);
+      await idempotencyGuard(req, reply);
+      if (req.idempotency) req.idempotency.preserveOnFailure = true;
+    };
+  const selfRemovalCancellationPreHandler = async (
+    req: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const idempotencyKey = req.headers["idempotency-key"];
+    // Keep cancellation replay rows user-scoped just like every other
+    // mutation when a client supplies a key. The request may be retried after
+    // the account returns to `active`, so the guard must replay before the
+    // state check in the route. Keep the key optional for existing recovery
+    // clients; keyed callers receive the stronger replay guarantee.
+    if (typeof idempotencyKey === "string" && idempotencyKey.trim().length > 0) {
+      req.idempotencyScope = `POST /api/me/anonymize/cancel u:${req.userId ?? "anon"}`;
+    }
+    await assertAuthenticatedProfileUser(req);
+    await idempotencyGuard(req, reply);
+  };
+  const adminRemovalIdempotency = async (
+    req: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    // Keep target-bearing admin idempotency rows addressable for scrubbing.
+    // The normal guard uses the route template for compatibility with other
+    // mutations; these account-removal rows are deleted with the target.
+    req.idempotencyScope = `${req.method} ${req.url} u:${req.userId ?? "anon"}`;
+    await idempotencyGuard(req, reply);
+  };
 
   api.get(
     "/api/me",
     {
-      preHandler: requireAuth,
+      // A pending-exit account can sign in only to recover/cancel the
+      // request or sign out. All event operations still require an active
+      // account/capability; this route exposes the recovery state itself.
+      preHandler: assertAuthenticatedProfileUser,
       config: routeAccess({ kind: "authenticated" }),
       schema: {
         description:
@@ -322,7 +487,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const userId = req.userId as number;
-      const row = await fetchUser(userId);
+      const row = await fetchUser(userId, true);
       const [
         role,
         capabilities,
@@ -332,6 +497,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         hasQueueItems,
         canCreateProject,
         profileLocked,
+        removalStatus,
       ] = await Promise.all([
         computeDerivedRole(pool, userId),
         getEffectiveCapabilities(userId),
@@ -341,10 +507,12 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         hasMyQueueItems(userId),
         canCreateMyProject(userId),
         hasAcceptedApplication(userId),
+        getPendingAccountRemovalStatus(pool, userId),
       ]);
-      const mobileAccess = await hasMobileAccess(pool, userId, role);
+      const mobileAccess =
+        row.account_state === "active" && (await hasMobileAccess(pool, userId, role));
       return {
-        ...serializeUser(row),
+        ...serializeUser(row, removalStatus),
         role,
         mobileAccess,
         capabilities: [...capabilities],
@@ -438,75 +606,159 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => getAccountRemovalEligibility(pool, req.userId as number),
   );
 
-  // Self-service deletion (H54) — accreditation at check-in is the retention
-  // boundary, not acceptance or even a confirmed spot: a participant who
-  // hasn't been badged in yet (no role, or a confirmed ticket they never used)
-  // has no operational history worth retaining, so they can delete their own
-  // account outright (danger-zone UI), forfeiting the spot in the process.
-  // Anyone with retained history (accreditation, scans, submissions…) can't
-  // self-serve: only an admin can anonymize on request (privacy policy §6) —
-  // this route 409s for them.
+  api.get(
+    "/api/me/removal-status",
+    {
+      preHandler: assertAuthenticatedProfileUser,
+      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      schema: {
+        summary: "Get my account-removal recovery status",
+        description:
+          "Returns the server-authoritative pending-exit state used by the login recovery surface. A pending request can be cancelled only before the exit or fixed recovery deadline.",
+        response: { 200: accountRemovalStatusResponseSchema },
+      },
+    },
+    async (req) => getPendingAccountRemovalStatus(pool, req.userId as number),
+  );
+
+  api.post(
+    "/api/me/anonymize/cancel",
+    {
+      preHandler: selfRemovalCancellationPreHandler,
+      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      schema: {
+        summary: "Cancel my pending account anonymization",
+        description:
+          "Restores an in-venue anonymization request while its participant has not exited and its fixed recovery deadline has not passed.",
+        response: { 200: z.object({ status: z.literal("cancelled") }) },
+      },
+    },
+    async (req) =>
+      withTransaction((client) =>
+        cancelPendingAccountRemoval(client, req.userId as number, req.userId as number),
+      ),
+  );
+
+  api.post(
+    "/api/me/removal-pin",
+    {
+      preHandler: assertActiveAuthenticatedUser,
+      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      schema: {
+        summary: "Send my account-removal security PIN",
+        description:
+          "H54 sends a short-lived one-time PIN to a real verified primary email. Synthetic review fixtures may use the deployment's configured static review PIN; an unverified real account must re-enter its current password.",
+        response: { 200: removalPinResponseSchema },
+      },
+    },
+    async (req) => withTransaction((client) => issueRemovalPin(client, req.userId as number)),
+  );
+
+  // Self-service deletion (H54). The server chooses the mode from the locked
+  // operational-history boundary; the mobile client never infers it from a
+  // badge flag or cached profile. A fresh account is fully deleted.
   api.delete(
     "/api/me",
     {
-      preHandler: requireAuth,
+      preHandler: selfRemovalPreHandler("DELETE /api/me removal-complete"),
       // Account removal is a security/privacy lifecycle action, not an event
-      // transaction, so an unverified account may still use it (H1, H54).
+      // transaction, so an unverified account may still use it (H1, H54) after
+      // proving possession of its current credential.
       config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
       schema: {
         description:
-          "H54 self-service account deletion. Only allowed when the account has no retained " +
-          "operational history; otherwise 409 — the privacy policy points accredited " +
-          "participants to requesting anonymization from an administrator instead.",
+          "H54 self-service full deletion. The server chooses this only before canonical accreditation; an inconsistent open door record may wait for a valid exit. Unverified real accounts must re-enter their current password.",
         summary: "Delete my account",
-        response: { 200: z.object({ deleted: z.literal(true) }) },
+        body: optionalRemovalPinBodySchema,
+        response: { 200: removalCompletedResponseSchema, 202: removalPendingResponseSchema },
       },
     },
-    async (req) => {
+    async (req, reply) => {
       const userId = req.userId as number;
-      const eligibility = await getAccountRemovalEligibility(pool, userId);
-      if (eligibility.action === "anonymize") {
+      const result = await runAccountRemoval({
+        targetId: userId,
+        actorId: userId,
+        source: "self_service",
+        requestedAction: "delete",
+        securityPin: req.body?.securityPin,
+        reauthenticationPassword: req.body?.reauthenticationPassword,
+        sessionToken: await sessionTokenFromRequest(req),
+        preserveIdempotency: req.idempotency
+          ? {
+              key: req.idempotency.key,
+              scope: req.idempotency.scope,
+              completionScope: "DELETE /api/me removal-complete",
+            }
+          : undefined,
+      });
+      if (req.idempotency) req.idempotency.scope = "DELETE /api/me removal-complete";
+      await invalidateCapabilities(userId);
+      if (result.status !== "completed") {
+        reply.code(202);
+        return result;
+      }
+      if (!result.deleted) {
         throw new ConflictError(
-          "This account has retained history and can't self-delete — request anonymization from an administrator instead.",
-          { userId, reasonCode: eligibility.reasonCode },
+          "This account must be anonymized because it has operational history.",
         );
       }
-      try {
-        await withTransaction(async (client) => {
-          await lockPermissionGraph(client);
-          const wasWildcardHolder = await userHasWildcard(client, userId);
-          const target = await fetchUser(userId);
-          // actorId: null — actor and target are the same row, which is
-          // about to be deleted in this transaction; audit_log.actor_id
-          // references users(id), so pointing it at the row being removed
-          // would self-block the DELETE below with a FK violation.
-          await audit(client, {
-            actorId: null,
-            entityType: "user",
-            entityId: userId,
-            action: "delete",
-            source: "web",
-            before: { email: target.email },
-          });
-          await clearOwnUnretainedReferences(client, userId);
-          await client.query(`DELETE FROM users WHERE id = $1`, [userId]);
-          if (wasWildcardHolder) await assertActiveWildcardHolder(client);
-        });
-      } catch (err) {
-        if (
-          typeof err === "object" &&
-          err !== null &&
-          (err as { code?: string }).code === "23503"
-        ) {
-          throw new ConflictError(
-            "This account has retained history and can't self-delete — request anonymization from an administrator instead.",
-            { userId },
-          );
-        }
-        throw err;
-      }
+      return result;
+    },
+  );
+
+  // Irreversible participant self-service anonymization (H54). The explicit
+  // confirmation body keeps a replayed/malformed request from becoming a
+  // destructive action, while the authenticated /me path prevents IDOR.
+  api.post(
+    "/api/me/anonymize",
+    {
+      preHandler: selfRemovalPreHandler("POST /api/me/anonymize removal-complete"),
+      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      schema: {
+        summary: "Anonymize my data and close my account",
+        description:
+          "H54 irreversible self-service anonymization. The request is accepted immediately; when the participant is inside, finalization waits for a valid exit. Unverified real accounts must re-enter their current password.",
+        body: z
+          .object({
+            confirm: z.literal(true),
+            securityPin: z
+              .string()
+              .regex(/^\d{6}$/)
+              .optional(),
+            reauthenticationPassword: z.string().min(1).max(128).optional(),
+          })
+          .strict(),
+        response: { 200: removalCompletedResponseSchema, 202: removalPendingResponseSchema },
+      },
+    },
+    async (req, reply) => {
+      const userId = req.userId as number;
+      const result = await runAccountRemoval({
+        targetId: userId,
+        actorId: userId,
+        source: "self_service",
+        requestedAction: "anonymize",
+        securityPin: req.body.securityPin,
+        reauthenticationPassword: req.body.reauthenticationPassword,
+        sessionToken: await sessionTokenFromRequest(req),
+        preserveIdempotency: req.idempotency
+          ? {
+              key: req.idempotency.key,
+              scope: req.idempotency.scope,
+              completionScope: "POST /api/me/anonymize removal-complete",
+            }
+          : undefined,
+      });
+      if (req.idempotency) req.idempotency.scope = "POST /api/me/anonymize removal-complete";
       await invalidateCapabilities(userId);
-      return { deleted: true as const };
+      if (result.status !== "completed") {
+        reply.code(202);
+        return result;
+      }
+      if (!result.anonymized) {
+        throw new ConflictError("This account has no operational history to anonymize.");
+      }
+      return result;
     },
   );
 
@@ -536,6 +788,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                 shirtSize: z.string().nullable(),
                 applicationStatus: z.string().nullable(),
                 confirmedSpot: z.boolean(),
+                isTestAccount: z.boolean(),
                 createdAt: z.string(),
               }),
             ),
@@ -547,11 +800,17 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => {
       const { q, limit, offset } = req.query;
       const filter = q?.trim() ? `%${q.trim()}%` : null;
-      const where = filter ? `WHERE name ILIKE $1 OR surname ILIKE $1 OR email ILIKE $1` : "";
+      const where = filter
+        ? `WHERE account_state = 'active' AND anonymized_at IS NULL
+             AND is_test_account = false
+             AND (name ILIKE $1 OR surname ILIKE $1 OR email ILIKE $1)`
+        : `WHERE account_state = 'active' AND anonymized_at IS NULL
+             AND is_test_account = false`;
       const args = filter ? [filter, limit, offset] : [limit, offset];
       const p = filter ? 2 : 1;
       const { rows } = await pool.query(
-        `SELECT id, email, email_verified, name, surname, badge_id, language, shirt_size, created_at
+        `SELECT id, email, email_verified, name, surname, badge_id, language, shirt_size,
+                is_test_account, created_at
            FROM users ${where}
            ORDER BY created_at DESC LIMIT $${p} OFFSET $${p + 1}`,
         args,
@@ -601,6 +860,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           shirtSize: r.shirt_size,
           applicationStatus: statusByUser.get(r.id) ?? null,
           confirmedSpot: statusByUser.get(r.id) === "confirmed",
+          isTestAccount: r.is_test_account,
           createdAt: r.created_at.toISOString(),
         })),
       );
@@ -629,6 +889,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
+      await assertProfileSubjectScope(req.userId as number, req.params.id);
       const row = await fetchUser(req.params.id);
       const [role, capabilities, groups] = await Promise.all([
         computeDerivedRole(pool, req.params.id),
@@ -657,6 +918,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
+      await assertProfileSubjectScope(req.userId as number, req.params.id);
       await fetchUser(req.params.id);
       return { projects: await myProjects(req.params.id) };
     },
@@ -674,6 +936,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
+      await assertProfileSubjectScope(req.userId as number, req.params.id);
       const after = await applyUserPatch(req.params.id, req.userId as number, req.body, "admin");
       return serializeUser(after);
     },
@@ -695,11 +958,15 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         },
       },
     },
-    async (req) =>
-      withTransaction(async (client) => {
-        const { rows } = await client.query(`SELECT id FROM users WHERE id = $1 FOR UPDATE`, [
-          req.params.id,
-        ]);
+    async (req) => {
+      await assertProfileSubjectScope(req.userId as number, req.params.id);
+      return withTransaction(async (client) => {
+        const { rows } = await client.query(
+          `SELECT id FROM users
+            WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+            FOR UPDATE`,
+          [req.params.id],
+        );
         if (!rows[0]) throw new NotFoundError("User not found", { userId: req.params.id });
         await client.query(
           `INSERT INTO manual_attendee_roles (user_id, role, assigned_by)
@@ -718,7 +985,8 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           after: { role: req.body.role },
         });
         return { role: req.body.role, ticketIssued: true as const };
-      }),
+      });
+    },
   );
 
   api.get(
@@ -736,6 +1004,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const targetId = req.params.id;
+      await assertProfileSubjectScope(req.userId as number, targetId);
       if (targetId === req.userId) {
         throw new BadRequestError("You can't remove your own account");
       }
@@ -744,69 +1013,40 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
   );
 
-  // Hard-delete an account — superadmin only (ADMIN_ALL). Most references to
-  // users have no ON DELETE CASCADE (audit trail, scans, evaluations…), so a
-  // user who has *done* anything cannot be hard-deleted without corrupting
-  // history: we surface a clear 409 in that case (H54 anonymization is the
-  // proper path for those). Fresh/inactive accounts delete cleanly (sessions,
-  // accounts and group memberships cascade); an unaccepted applicant with no
-  // ticket/role also deletes cleanly — clearOwnUnretainedReferences removes
-  // their own application_responses/applicant_reviews and account-claim
-  // token, since none of that is operational history worth retaining (H54).
+  // Admin hard-delete (H54). The same locked server-side boundary is used as
+  // for /api/me; this endpoint is only the staff form of the fresh-account
+  // action and cannot be used to bypass anonymous retention.
   api.delete(
     "/api/users/:id",
     {
-      preHandler: requireCapability(CAPABILITIES.ADMIN_ALL),
+      preHandler: [requireCapability(CAPABILITIES.ADMIN_ALL), adminRemovalIdempotency],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.ADMIN_ALL }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
-        response: { 200: z.object({ deleted: z.literal(true) }) },
+        response: { 200: removalCompletedResponseSchema, 202: removalPendingResponseSchema },
       },
     },
-    async (req) => {
+    async (req, reply) => {
       const targetId = req.params.id;
+      await assertProfileSubjectScope(req.userId as number, targetId);
       if (targetId === req.userId) {
         throw new BadRequestError("You can't delete your own account");
       }
-      const target = await fetchUser(targetId);
-      const eligibility = await getAccountRemovalEligibility(pool, targetId);
-      if (eligibility.action === "anonymize") {
-        throw new ConflictError(
-          "This account has activity (audit, scans, evaluations…) and can't be hard-deleted. Anonymize its personal data instead.",
-          { userId: targetId, reasonCode: eligibility.reasonCode },
-        );
-      }
-      try {
-        await withTransaction(async (client) => {
-          await lockPermissionGraph(client);
-          const wasWildcardHolder = await userHasWildcard(client, targetId);
-          await audit(client, {
-            actorId: req.userId,
-            entityType: "user",
-            entityId: targetId,
-            action: "delete",
-            source: "admin",
-            before: { email: target.email },
-          });
-          await clearOwnUnretainedReferences(client, targetId);
-          await client.query(`DELETE FROM users WHERE id = $1`, [targetId]);
-          if (wasWildcardHolder) await assertActiveWildcardHolder(client);
-        });
-      } catch (err) {
-        if (
-          typeof err === "object" &&
-          err !== null &&
-          (err as { code?: string }).code === "23503"
-        ) {
-          throw new ConflictError(
-            "This account has activity (audit, scans, evaluations…) and can't be hard-deleted. Anonymize its personal data instead.",
-            { userId: targetId },
-          );
-        }
-        throw err;
-      }
+      const result = await runAccountRemoval({
+        targetId,
+        actorId: req.userId as number,
+        source: "admin",
+        requestedAction: "delete",
+      });
       await invalidateCapabilities(targetId);
-      return { deleted: true as const };
+      if (result.status !== "completed") {
+        reply.code(202);
+        return result;
+      }
+      if (!result.deleted) {
+        throw new ConflictError("This account has operational history; anonymize it instead.");
+      }
+      return result;
     },
   );
 
@@ -830,10 +1070,13 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const targetId = req.params.id;
+      await assertProfileSubjectScope(req.userId as number, targetId);
       const email = req.body.email.trim().toLowerCase();
       const after = await withTransaction(async (client) => {
         const { rows: beforeRows } = await client.query(
-          `SELECT * FROM users WHERE id = $1 FOR UPDATE`,
+          `SELECT * FROM users
+            WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+            FOR UPDATE`,
           [targetId],
         );
         if (!beforeRows[0]) throw new NotFoundError("User not found", { userId: targetId });
@@ -881,29 +1124,39 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
   );
 
-  // Anonymize an account — H54 "borrado de datos personales". This is the path
-  // the DELETE 409 above points to: accounts that have done things (audit,
-  // scans, evaluations…) can't be hard-deleted without corrupting history, so
-  // instead we scrub every PII column in place (keeping the row + its FK
-  // references intact) and revoke all access (sessions + credential accounts).
-  // Superadmin only (ADMIN_ALL); irreversible; audited (H53).
+  // Admin anonymization (H54). It uses the same transaction as self-service;
+  // there is no in-place synthetic user row and no identity lookup table.
   api.post(
     "/api/users/:id/anonymize",
     {
-      preHandler: requireCapability(CAPABILITIES.ADMIN_ALL),
+      preHandler: [requireCapability(CAPABILITIES.ADMIN_ALL), adminRemovalIdempotency],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.ADMIN_ALL }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
-        response: { 200: z.object({ anonymized: z.literal(true) }) },
+        response: { 200: removalCompletedResponseSchema, 202: removalPendingResponseSchema },
       },
     },
-    async (req) => {
+    async (req, reply) => {
       const targetId = req.params.id;
-      await withTransaction((client) =>
-        anonymizeUser(client, { targetId, actorId: req.userId, source: "admin" }),
-      );
+      await assertProfileSubjectScope(req.userId as number, targetId);
+      if (targetId === req.userId) {
+        throw new BadRequestError("Use the self-service account action for your own account");
+      }
+      const result = await runAccountRemoval({
+        targetId,
+        actorId: req.userId as number,
+        source: "admin",
+        requestedAction: "anonymize",
+      });
       await invalidateCapabilities(targetId);
-      return { anonymized: true as const };
+      if (result.status !== "completed") {
+        reply.code(202);
+        return result;
+      }
+      if (!result.anonymized) {
+        throw new ConflictError("This account has no operational history to anonymize.");
+      }
+      return result;
     },
   );
 
@@ -941,7 +1194,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
               z.object({
                 id: z.number(),
                 kind: z.string(),
-                location: z.string().nullable(),
                 scannedAt: z.string(),
               }),
             ),
@@ -951,6 +1203,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const id = req.params.id;
+      await assertProfileSubjectScope(req.userId as number, id);
       await fetchUser(id); // 404 if the user doesn't exist
       const [passes, checkIns, doorScans] = await Promise.all([
         pool
@@ -1000,19 +1253,16 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           ),
         pool
           .query(
-            `SELECT id, kind, location, scanned_at
+            `SELECT id, kind, scanned_at
                FROM time_logs WHERE user_id = $1 ORDER BY scanned_at DESC LIMIT 200`,
             [id],
           )
           .then((r) =>
-            r.rows.map(
-              (x: { id: number; kind: string; location: string | null; scanned_at: Date }) => ({
-                id: x.id,
-                kind: x.kind,
-                location: x.location,
-                scannedAt: x.scanned_at.toISOString(),
-              }),
-            ),
+            r.rows.map((x: { id: number; kind: string; scanned_at: Date }) => ({
+              id: x.id,
+              kind: x.kind,
+              scannedAt: x.scanned_at.toISOString(),
+            })),
           ),
       ]);
       return { passes, checkIns, doorScans };
@@ -1059,6 +1309,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const userId = req.params.id;
+      await assertProfileSubjectScope(req.userId as number, userId);
       // Verify user exists
       await fetchUser(userId);
 

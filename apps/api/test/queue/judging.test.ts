@@ -161,6 +161,33 @@ describe("collaborative review (H36)", () => {
     expect(versions.json()).toHaveLength(2);
   });
 
+  it("clears a stale pre-call marker when review submission completes a team", async () => {
+    const { challengeId, entryId } = await setupEntry();
+    const roomId = await createRoom();
+    await assignChallengeToRoom(roomId, challengeId);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE queue_entries
+          SET status = 'in_room', assigned_room_id = $2, precalled_at = now()
+        WHERE id = $1`,
+      [entryId, roomId],
+    );
+
+    const submitted = await app.inject({
+      method: "PATCH",
+      url: `/api/queue/entries/${entryId}/review`,
+      headers: asUser(judgeA),
+      payload: { scores: { innovation: 7, execution: 6 }, submit: true },
+    });
+    expect(submitted.statusCode).toBe(200);
+
+    const { rows } = await pool.query(
+      `SELECT status, precalled_at FROM queue_entries WHERE id = $1`,
+      [entryId],
+    );
+    expect(rows[0]).toMatchObject({ status: "completed", precalled_at: null });
+  });
+
   it("a no-op save writes no version row", async () => {
     const { entryId } = await setupEntry();
     await app.inject({
@@ -442,6 +469,59 @@ describe("manual search (H37)", () => {
       headers: asUser(rep),
     });
     expect(forbidden.statusCode).toBe(403);
+  });
+
+  it("keeps synthetic search and CSV reads inside the synthetic queue scope", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const syntheticOperator = await createUserWithCapabilities([
+      CAPABILITIES.JUDGE_PANEL,
+      CAPABILITIES.JUDGING_EXPORT,
+      CAPABILITIES.QUEUE_ADMIN,
+    ]);
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [syntheticOperator]);
+    const challengeId = await createChallenge({
+      title: "Synthetic judging challenge",
+      judgingPanelCriteria: CRITERIA,
+    });
+    await pool.query(`UPDATE challenges SET is_test_account = true WHERE id = $1`, [challengeId]);
+    await pool.query(
+      `UPDATE users u
+          SET is_test_account = true
+         FROM sponsors s
+        WHERE s.user_id = u.id
+          AND s.id = (SELECT author FROM challenges WHERE id = $1)`,
+      [challengeId],
+    );
+    const { repoId, memberIds } = await createRepoWithTeam(undefined, "Synthetic search team");
+    await pool.query(`UPDATE repos SET is_test_account = true WHERE id = $1`, [repoId]);
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = ANY($1::int[])`, [
+      memberIds,
+    ]);
+    await enqueueRepo(challengeId, repoId, 1);
+
+    const search = await app.inject({
+      method: "GET",
+      url: `/api/queue/challenges/${challengeId}/search?q=Synthetic`,
+      headers: asUser(syntheticOperator),
+    });
+    expect(search.statusCode).toBe(200);
+    expect(search.json()).toMatchObject([{ repo_id: repoId, repo_name: "Synthetic search team" }]);
+
+    const queueCsv = await app.inject({
+      method: "GET",
+      url: `/api/queue/challenges/${challengeId}/export/queue.csv`,
+      headers: asUser(syntheticOperator),
+    });
+    expect(queueCsv.statusCode).toBe(200);
+    expect(queueCsv.body).toContain("Synthetic search team");
+
+    const evaluationsCsv = await app.inject({
+      method: "GET",
+      url: `/api/queue/challenges/${challengeId}/export/evaluations.csv`,
+      headers: asUser(syntheticOperator),
+    });
+    expect(evaluationsCsv.statusCode).toBe(200);
+    expect(evaluationsCsv.body).toContain("repo_name,status,innovation,execution,notes");
   });
 });
 

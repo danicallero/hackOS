@@ -33,3 +33,24 @@ lock; future edits then fail loudly.
 The 07xx files that had duplicate prefixes were renumbered without changing
 their SQL. The runner recognizes their previous filenames as aliases, so a
 database that already applied them does not execute them again.
+
+H54 is represented by the squashed
+`0730_account_deletion_anonymization.sql` for a fresh schema and a latest-main
+schema whose ledger ends at `0725`. On the populated path it converts legacy
+`anonymized_at` rows, snapshots existing forms/responses, and retires legacy
+scanner credentials using the deployment `BETTER_AUTH_SECRET` before
+installing the final constraints. It removes detached verification rows that
+cannot belong to an active account, captures Devpost-only project roots, and
+aborts before commit when a historical badge is assigned to an active user.
+
+The runner also recognizes the deleted development-only `0731`–`0746` names and
+the known checksums for those historical files plus pre-squash `0730` (an
+all-zero marker is accepted only for a ledger that predates checksums). It
+skips the squashed file for that history and applies
+`0747_h54_legacy_chain_compatibility.sql` in the same transactional runner,
+preserving fixed anonymous fields as dynamic rows and keying any raw scanner
+tombstones with `BETTER_AUTH_SECRET`. Fresh/current schemas skip this
+compatibility-only file. Unknown ledger names or historical checksums, missing
+secrets for raw credentials, and unresolved active-badge collisions still fail
+closed. Applied migration names and checksums remain immutable after
+deployment.

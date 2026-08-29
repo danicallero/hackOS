@@ -58,7 +58,8 @@ export async function queryAuditLog(
   if (filters.dateTo) addCondition("al.created_at <= ?", filters.dateTo);
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  const from = "FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id";
+  const from =
+    "FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id AND u.account_state = 'active' AND u.anonymized_at IS NULL";
 
   const limitParamIdx = params.length + 1;
   const offsetParamIdx = params.length + 2;
@@ -81,7 +82,9 @@ export async function queryAuditLog(
 export async function queryAuditLogById(db: Queryable, id: number): Promise<unknown | null> {
   const { rows } = await db.query(
     `SELECT al.*, u.name AS actor_name, u.surname AS actor_surname, u.email AS actor_email
-     FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
+     FROM audit_log al
+     LEFT JOIN users u ON u.id = al.actor_id
+       AND u.account_state = 'active' AND u.anonymized_at IS NULL
      WHERE al.id = $1`,
     [id],
   );

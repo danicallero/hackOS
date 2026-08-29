@@ -1,4 +1,5 @@
 import { pool } from "../../src/db/pool.js";
+import { ensureApplicationFormVersion } from "../helpers.js";
 
 /** H54 export-suite fixtures. Direct SQL inserts — other modules' routes are out of scope. */
 
@@ -16,12 +17,15 @@ export async function createApplicationResponse(
     [overrides.appName ?? `app-${crypto.randomUUID()}`, overrides.appType ?? "participant"],
   );
   const applicationId = app.rows[0].id;
+  const formVersionId = await ensureApplicationFormVersion(applicationId);
   const resp = await pool.query(
-    `INSERT INTO application_responses (user_id, application_id, status, responses, submitted_at)
-     VALUES ($1, $2, $3, $4::jsonb, now()) RETURNING id`,
+    `INSERT INTO application_responses
+       (user_id, application_id, application_form_version_id, status, responses, submitted_at)
+     VALUES ($1, $2, $3, $4, $5::jsonb, now()) RETURNING id`,
     [
       userId,
       applicationId,
+      formVersionId,
       overrides.status ?? "submitted",
       JSON.stringify(overrides.responses ?? {}),
     ],

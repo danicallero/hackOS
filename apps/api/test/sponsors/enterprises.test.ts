@@ -448,4 +448,84 @@ describe("enterprise membership (M4)", () => {
     expect(namesAfter).not.toContain("Bulk One");
     expect(namesAfter).toContain("Bulk Two");
   });
+
+  it("keeps synthetic sponsor graphs scoped to synthetic operators", async () => {
+    const a = await getApp();
+    const realAdmin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
+    const fixtureAdmin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
+    const fixtureMember = await createUser();
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id IN ($1, $2)`, [
+      fixtureAdmin,
+      fixtureMember,
+    ]);
+    const enterprise = await pool.query(
+      `INSERT INTO enterprises (name, visibility) VALUES ('Synthetic Sponsor', 'visible') RETURNING id`,
+    );
+    const enterpriseId = Number(enterprise.rows[0].id);
+    await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2), ($1, $3)`, [
+      enterpriseId,
+      fixtureAdmin,
+      fixtureMember,
+    ]);
+
+    const realList = await a.inject({
+      method: "GET",
+      url: "/api/enterprises",
+      headers: asUser(realAdmin),
+    });
+    expect(realList.statusCode).toBe(200);
+    expect(realList.json().enterprises.map((row: { id: number }) => row.id)).not.toContain(
+      enterpriseId,
+    );
+
+    const fixtureList = await a.inject({
+      method: "GET",
+      url: "/api/enterprises",
+      headers: asUser(fixtureAdmin),
+    });
+    expect(fixtureList.statusCode).toBe(200);
+    expect(fixtureList.json().enterprises.map((row: { id: number }) => row.id)).toContain(
+      enterpriseId,
+    );
+
+    expect(
+      (
+        await a.inject({
+          method: "GET",
+          url: `/api/enterprises/${enterpriseId}`,
+          headers: asUser(realAdmin),
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await a.inject({
+          method: "GET",
+          url: `/api/enterprises/${enterpriseId}`,
+          headers: asUser(fixtureAdmin),
+        })
+      ).statusCode,
+    ).toBe(200);
+
+    const candidates = await a.inject({
+      method: "GET",
+      url: `/api/enterprises/${enterpriseId}/judge-candidates`,
+      headers: asUser(realAdmin),
+    });
+    expect(candidates.statusCode).toBe(404);
+    const fixtureCandidates = await a.inject({
+      method: "GET",
+      url: `/api/enterprises/${enterpriseId}/judge-candidates`,
+      headers: asUser(fixtureAdmin),
+    });
+    expect(fixtureCandidates.statusCode).toBe(200);
+    expect(fixtureCandidates.json().users.map((row: { id: number }) => row.id)).toContain(
+      fixtureMember,
+    );
+
+    const publicSponsors = await a.inject({ method: "GET", url: "/api/public/sponsors" });
+    expect(
+      publicSponsors.json().items.map((row: { enterpriseId: number }) => row.enterpriseId),
+    ).not.toContain(enterpriseId);
+  });
 });

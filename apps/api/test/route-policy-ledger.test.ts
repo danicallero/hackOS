@@ -13,11 +13,11 @@ describe("final route-policy ledger", () => {
   it("has the exact classified rows, allowlists, and sole Better Auth exemption", async () => {
     app = await buildTestApp();
     const rows = app.routePolicyLedger.filter((row) => row.method !== "HEAD");
-    expect(rows).toHaveLength(333);
+    expect(rows).toHaveLength(339);
     expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(18);
     expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(12);
-    expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(43);
-    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(193);
+    expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(47);
+    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(195);
     expect(rows.filter((row) => row.policy.kind === "contextual")).toHaveLength(67);
     expect(app.routePolicyExemptions).toEqual([
       { url: "/api/auth/*", exemption: "better-auth-generated" },
@@ -83,5 +83,8 @@ describe("final route-policy ledger", () => {
     expect(
       rows.find((row) => row.method === "POST" && row.url === "/api/applications/decline")?.policy,
     ).toMatchObject({ emailVerification: "target" });
+    expect(
+      rows.find((row) => row.method === "POST" && row.url === "/api/me/removal-pin")?.policy,
+    ).toMatchObject({ kind: "authenticated", emailVerification: "none" });
   });
 });

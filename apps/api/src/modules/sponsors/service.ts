@@ -1,6 +1,11 @@
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { ConflictError, NotFoundError } from "../../lib/errors.js";
+import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import {
+  assertFixtureEnterpriseScope,
+  assertFixtureSubjectScope,
+  isSyntheticOperator,
+} from "../logistics/review-fixture-scope.js";
 import { issueTicket } from "../logistics/tickets.js";
 import type { CreateEnterpriseBody, FaqItem, UpdateEnterpriseBody } from "./schemas.js";
 
@@ -20,6 +25,44 @@ const COLUMN_FOR: Record<string, string> = {
   availableFrom: "available_from",
 };
 
+// Enterprises have no marker column of their own. A marker is inherited from
+// their sponsor users or authored challenges; mixed graphs fail closed in
+// assertFixtureEnterpriseScope. Keep the list/public queries on the same
+// boundary so a global operator cannot discover a fixture by id or visibility.
+const ENTERPRISE_HAS_SYNTHETIC = `(
+  EXISTS (
+    SELECT 1 FROM sponsors marker_sponsor
+    JOIN users marker_user ON marker_user.id = marker_sponsor.user_id
+    WHERE marker_sponsor.enterprise_id = e.id AND marker_user.is_test_account = true
+  )
+  OR EXISTS (
+    SELECT 1 FROM sponsors marker_author
+    JOIN challenges marker_challenge ON marker_challenge.author = marker_author.id
+    WHERE marker_author.enterprise_id = e.id AND marker_challenge.is_test_account = true
+  )
+)`;
+
+const ENTERPRISE_HAS_REAL = `(
+  EXISTS (
+    SELECT 1 FROM sponsors marker_sponsor
+    JOIN users marker_user ON marker_user.id = marker_sponsor.user_id
+    WHERE marker_sponsor.enterprise_id = e.id AND marker_user.is_test_account = false
+  )
+  OR EXISTS (
+    SELECT 1 FROM sponsors marker_author
+    JOIN challenges marker_challenge ON marker_challenge.author = marker_author.id
+    WHERE marker_author.enterprise_id = e.id AND marker_challenge.is_test_account = false
+  )
+)`;
+
+async function assertEnterpriseScope(
+  db: Queryable,
+  actorId: number | null,
+  enterpriseId: number,
+): Promise<void> {
+  if (actorId != null) await assertFixtureEnterpriseScope(db, actorId, enterpriseId);
+}
+
 function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: string }).code === "23505";
 }
@@ -30,24 +73,39 @@ export async function getEnterprise(id: number) {
   return rows[0];
 }
 
-export async function listEnterprises() {
-  const { rows } = await pool.query(`SELECT ${COLUMNS} FROM enterprises ORDER BY name`);
+export async function listEnterprises(actorId: number) {
+  const syntheticOperator = await isSyntheticOperator(pool, actorId);
+  const { rows } = await pool.query(
+    `SELECT ${COLUMNS} FROM enterprises e
+      WHERE (($1::boolean AND ${ENTERPRISE_HAS_SYNTHETIC} AND NOT ${ENTERPRISE_HAS_REAL})
+         OR (NOT $1::boolean AND NOT ${ENTERPRISE_HAS_SYNTHETIC}))
+      ORDER BY name`,
+    [syntheticOperator],
+  );
   return rows;
 }
 
 /** The enterprise `userId` is a sponsor rep of (H44 "mi empresa"). */
 export async function myEnterprise(userId: number) {
+  const syntheticOperator = await isSyntheticOperator(pool, userId);
   const { rows } = await pool.query(
     `SELECT ${COLUMNS}
-       FROM enterprises
-      WHERE id = (SELECT enterprise_id FROM sponsors WHERE user_id = $1 ORDER BY id LIMIT 1)`,
-    [userId],
+       FROM enterprises e
+      WHERE id = (SELECT enterprise_id FROM sponsors WHERE user_id = $1 ORDER BY id LIMIT 1)
+        AND (($2::boolean AND ${ENTERPRISE_HAS_SYNTHETIC} AND NOT ${ENTERPRISE_HAS_REAL})
+          OR (NOT $2::boolean AND NOT ${ENTERPRISE_HAS_SYNTHETIC}))`,
+    [userId, syntheticOperator],
   );
   if (!rows[0]) throw new NotFoundError("You are not linked to an enterprise", { userId });
   return rows[0];
 }
 
 export async function createEnterprise(input: CreateEnterpriseBody, actorId: number | null) {
+  if (actorId != null && (await isSyntheticOperator(pool, actorId))) {
+    throw new ForbiddenError("Synthetic operators cannot create real sponsor enterprises.", {
+      code: "review_fixture_scope",
+    });
+  }
   try {
     return await withTransaction(async (client) => {
       const { rows } = await client.query(
@@ -136,6 +194,11 @@ export async function setEnterprisesVisibility(
 ) {
   if (ids.length === 0) return { updated: [] as number[] };
   return withTransaction(async (client) => {
+    const existing = await client.query<{ id: number }>(
+      `SELECT id FROM enterprises WHERE id = ANY($1::int[])`,
+      [ids],
+    );
+    for (const row of existing.rows) await assertEnterpriseScope(client, actorId, Number(row.id));
     const visibility = visible ? "visible" : "hidden";
     const { rows } = await client.query(
       `UPDATE enterprises
@@ -165,6 +228,7 @@ export async function setEnterpriseLogo(
 ) {
   const column = variant === "negative" ? "logo_negative_url" : "logo_url";
   return withTransaction(async (client) => {
+    await assertEnterpriseScope(client, actorId, id);
     const { rows } = await client.query(
       `UPDATE enterprises SET ${column} = $1 WHERE id = $2 RETURNING ${COLUMNS}`,
       [logoUrl, id],
@@ -192,13 +256,18 @@ export interface EnterpriseMember {
 }
 
 /** Users affiliated with an enterprise (its `sponsors` rows joined to users). */
-export async function listEnterpriseMembers(enterpriseId: number): Promise<EnterpriseMember[]> {
+export async function listEnterpriseMembers(
+  enterpriseId: number,
+  actorId: number | null,
+): Promise<EnterpriseMember[]> {
+  await assertEnterpriseScope(pool, actorId, enterpriseId);
   await getEnterprise(enterpriseId); // 404 if it doesn't exist
   const { rows } = await pool.query(
     `SELECT s.id AS sponsor_id, s.user_id, u.name, u.email, s.joined_at
        FROM sponsors s
        JOIN users u ON u.id = s.user_id
       WHERE s.enterprise_id = $1
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL
       ORDER BY u.name NULLS LAST, u.email`,
     [enterpriseId],
   );
@@ -212,12 +281,23 @@ export async function listEnterpriseMembers(enterpriseId: number): Promise<Enter
 }
 
 /** Enterprises a user is affiliated with (for the profile's Enterprise view). */
-export async function listUserEnterprises(userId: number) {
+export async function listUserEnterprises(userId: number, actorId: number | null) {
+  let markerFilter = "";
+  const params: unknown[] = [userId];
+  if (actorId != null) {
+    await assertFixtureSubjectScope(pool, actorId, userId);
+    const syntheticOperator = await isSyntheticOperator(pool, actorId);
+    params.push(syntheticOperator);
+    markerFilter = `
+        AND (($2::boolean AND ${ENTERPRISE_HAS_SYNTHETIC} AND NOT ${ENTERPRISE_HAS_REAL})
+          OR (NOT $2::boolean AND NOT ${ENTERPRISE_HAS_SYNTHETIC}))`;
+  }
   const { rows } = await pool.query(
-    `SELECT ${COLUMNS} FROM enterprises
+    `SELECT ${COLUMNS} FROM enterprises e
       WHERE id IN (SELECT enterprise_id FROM sponsors WHERE user_id = $1)
+        ${markerFilter}
       ORDER BY name`,
-    [userId],
+    params,
   );
   return rows;
 }
@@ -228,21 +308,30 @@ export async function addEnterpriseMember(
   userId: number,
   actorId: number | null,
 ): Promise<EnterpriseMember> {
+  await assertEnterpriseScope(pool, actorId, enterpriseId);
   await getEnterprise(enterpriseId); // 404 if the enterprise is missing
-  const { rows: userRows } = await pool.query(`SELECT id FROM users WHERE id = $1`, [userId]);
-  if (!userRows[0]) throw new NotFoundError("User not found", { userId });
-
-  const { rows: existing } = await pool.query(
-    `SELECT id FROM sponsors WHERE enterprise_id = $1 AND user_id = $2`,
-    [enterpriseId, userId],
-  );
-  if (existing[0]) {
-    throw new ConflictError("User is already affiliated with this enterprise", {
-      enterpriseId,
-      userId,
-    });
-  }
   const { member, user } = await withTransaction(async (client) => {
+    // Serialize the target against H54 removal. A pending account must not
+    // receive a new sponsor relation, ticket, or audit row while its
+    // identity-bearing graph is being scrubbed.
+    const { rows: userRows } = await client.query(
+      `SELECT id, name, email FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!userRows[0]) throw new NotFoundError("User not found", { userId });
+    if (actorId != null) await assertFixtureSubjectScope(client, actorId, userId);
+    const { rows: existing } = await client.query(
+      `SELECT id FROM sponsors WHERE enterprise_id = $1 AND user_id = $2`,
+      [enterpriseId, userId],
+    );
+    if (existing[0]) {
+      throw new ConflictError("User is already affiliated with this enterprise", {
+        enterpriseId,
+        userId,
+      });
+    }
     const { rows } = await client.query(
       `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id, joined_at`,
       [enterpriseId, userId],
@@ -255,10 +344,7 @@ export async function addEnterpriseMember(
       action: "member_added",
       after: { userId },
     });
-    const { rows: users } = await client.query(`SELECT name, email FROM users WHERE id = $1`, [
-      userId,
-    ]);
-    return { member: rows[0], user: users[0] };
+    return { member: rows[0], user: userRows[0] };
   });
   return {
     sponsorId: Number(member.id),
@@ -275,6 +361,8 @@ export async function removeEnterpriseMember(
   userId: number,
   actorId: number | null,
 ): Promise<void> {
+  await assertEnterpriseScope(pool, actorId, enterpriseId);
+  if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
   await withTransaction(async (client) => {
     const { rowCount } = await client.query(
       `DELETE FROM sponsors WHERE enterprise_id = $1 AND user_id = $2`,
@@ -319,13 +407,18 @@ function judgeRow(r: Record<string, unknown>): EnterpriseJudge {
 }
 
 /** The enterprise's judge roster: any user, not only its sponsor reps. */
-export async function listEnterpriseJudges(enterpriseId: number): Promise<EnterpriseJudge[]> {
+export async function listEnterpriseJudges(
+  enterpriseId: number,
+  actorId: number | null,
+): Promise<EnterpriseJudge[]> {
+  await assertEnterpriseScope(pool, actorId, enterpriseId);
   await getEnterprise(enterpriseId); // 404 if it doesn't exist
   const { rows } = await pool.query(
     `SELECT ej.user_id, u.name, u.surname, u.email, ej.added_at, ej.added_by
        FROM enterprise_judges ej
        JOIN users u ON u.id = ej.user_id
       WHERE ej.enterprise_id = $1
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL
       ORDER BY u.name NULLS LAST, u.surname NULLS LAST, u.email`,
     [enterpriseId],
   );
@@ -342,11 +435,17 @@ export async function addEnterpriseJudge(
   userId: number,
   actorId: number | null,
 ): Promise<EnterpriseJudge> {
+  await assertEnterpriseScope(pool, actorId, enterpriseId);
   await getEnterprise(enterpriseId);
-  const { rows: userRows } = await pool.query(`SELECT id FROM users WHERE id = $1`, [userId]);
-  if (!userRows[0]) throw new NotFoundError("User not found", { userId });
-
   return withTransaction(async (client) => {
+    const { rows: userRows } = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!userRows[0]) throw new NotFoundError("User not found", { userId });
+    if (actorId != null) await assertFixtureSubjectScope(client, actorId, userId);
     const { rows } = await client.query(
       `INSERT INTO enterprise_judges (enterprise_id, user_id, added_by)
        VALUES ($1, $2, $3)
@@ -371,7 +470,8 @@ export async function addEnterpriseJudge(
       `SELECT ej.user_id, u.name, u.surname, u.email, ej.added_at, ej.added_by
          FROM enterprise_judges ej
          JOIN users u ON u.id = ej.user_id
-        WHERE ej.enterprise_id = $1 AND ej.user_id = $2`,
+        WHERE ej.enterprise_id = $1 AND ej.user_id = $2
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
       [enterpriseId, userId],
     );
     return judgeRow(judges[0]);
@@ -384,6 +484,8 @@ export async function removeEnterpriseJudge(
   userId: number,
   actorId: number | null,
 ): Promise<void> {
+  await assertEnterpriseScope(pool, actorId, enterpriseId);
+  if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
   await withTransaction(async (client) => {
     const { rowCount } = await client.query(
       `DELETE FROM enterprise_judges WHERE enterprise_id = $1 AND user_id = $2`,
@@ -406,12 +508,16 @@ export async function removeEnterpriseJudge(
  * Candidate pool for the judge picker: every account, unscoped — an enterprise
  * may add judges who are neither its reps nor event participants.
  */
-export async function listJudgeCandidates() {
+export async function listJudgeCandidates(actorId: number) {
+  const syntheticOperator = await isSyntheticOperator(pool, actorId);
   const { rows } = await pool.query(
     `SELECT id, email, name, surname
        FROM users
+      WHERE account_state = 'active' AND anonymized_at IS NULL
+        AND is_test_account = $1
       ORDER BY name ASC NULLS LAST, surname ASC NULLS LAST, email ASC
       LIMIT 500`,
+    [syntheticOperator],
   );
   return rows;
 }
@@ -439,6 +545,7 @@ export async function listPublicSponsors(client: Queryable = pool): Promise<Publ
       FROM enterprises e
        LEFT JOIN sponsor_tiers st ON st.id = e.tier_id
       WHERE e.visibility = 'visible'
+        AND NOT ${ENTERPRISE_HAS_SYNTHETIC}
       ORDER BY priority ASC, e.name ASC`,
   );
   return rows.map((r: Record<string, unknown>) => ({

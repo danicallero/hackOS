@@ -1,7 +1,9 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { hashPassword } from "better-auth/crypto";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { App } from "../../src/app.js";
+import { pool } from "../../src/db/pool.js";
 import {
   asUser,
   buildTestApp,
@@ -13,13 +15,24 @@ import { assignBadge, createMeal } from "./fixtures.js";
 
 let app: App;
 let doorStaff: number;
+let accreditStaff: number;
 let statsStaff: number;
+const PRESENCE_REMOVAL_PASSWORD = "presence-removal-password";
+
+async function addUnverifiedCredential(userId: number): Promise<void> {
+  await pool.query(
+    `INSERT INTO accounts (user_id, account_id, provider_id, password)
+     VALUES ($1, $2, 'credential', $3)`,
+    [userId, String(userId), await hashPassword(PRESENCE_REMOVAL_PASSWORD)],
+  );
+}
 
 beforeEach(async () => {
   await truncateAll();
   const { valkey } = await import("../../src/lib/valkey.js");
   await valkey.flushdb();
   doorStaff = await createUserWithCapabilities([CAPABILITIES.PRESENCE_SCAN]);
+  accreditStaff = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
   statsStaff = await createUserWithCapabilities([CAPABILITIES.LOGISTICS_STATS]);
   app ??= await buildTestApp();
 });
@@ -68,10 +81,58 @@ describe("H24 presence scan + estimation", () => {
     expect(res.json().error.code).toBe("badge_unknown");
   });
 
+  it("rejects a backdated scan recorded before the current badge assignment", async () => {
+    const uid = await createUser();
+    await assignBadge(uid, "P-REPLACED-OLD");
+    const rotated = await app.inject({
+      method: "POST",
+      url: "/api/accreditation/rotate",
+      headers: asUser(accreditStaff),
+      payload: { userId: uid, newBadgeId: "P-REPLACED-NEW", reason: "lost" },
+    });
+    expect(rotated.statusCode).toBe(200);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query<{ badge_assigned_at: Date }>(
+      `SELECT badge_assigned_at FROM users WHERE id = $1`,
+      [uid],
+    );
+    const assignment = rows[0]?.badge_assigned_at;
+    expect(assignment).toBeInstanceOf(Date);
+    if (!assignment) throw new Error("Expected a badge assignment timestamp");
+
+    const stale = await app.inject({
+      method: "POST",
+      url: "/api/presence/scan",
+      headers: asUser(doorStaff),
+      payload: {
+        badgeId: "P-REPLACED-NEW",
+        kind: "in",
+        scannedAt: new Date(assignment.getTime() - 1_000).toISOString(),
+      },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().error.code).toBe("badge_scan_before_assignment");
+    expect((await pool.query(`SELECT 1 FROM time_logs WHERE user_id = $1`, [uid])).rowCount).toBe(
+      0,
+    );
+  });
+
   it("accepts a backdated manual entry and audits it; rejects a future one", async () => {
     const uid = await createUser();
     await assignBadge(uid, "P-2");
-    const past = new Date(Date.now() - 3_600_000).toISOString();
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows: assignmentRows } = await pool.query<{ badge_assigned_at: Date }>(
+      `SELECT badge_assigned_at FROM users WHERE id = $1`,
+      [uid],
+    );
+    const assignment = assignmentRows[0]?.badge_assigned_at;
+    expect(assignment).toBeInstanceOf(Date);
+    if (!assignment) throw new Error("Expected a badge assignment timestamp");
+    // F06 rejects timestamps before the current badge assignment. This is a
+    // valid delayed/manual signal that occurred after the current badge was
+    // issued, unlike the stale credential test above.
+    const past = new Date(assignment.getTime() + 1_000).toISOString();
 
     const ok = await app.inject({
       method: "POST",
@@ -82,7 +143,6 @@ describe("H24 presence scan + estimation", () => {
     expect(ok.statusCode).toBe(200);
     expect(ok.json().manual).toBe(true);
 
-    const { pool } = await import("../../src/db/pool.js");
     const audits = await pool.query(
       `SELECT * FROM audit_log WHERE entity_type = 'presence' AND action = 'manual_time_log' AND entity_id = $1`,
       [String(uid)],
@@ -236,12 +296,14 @@ describe("H24 presence scan + estimation", () => {
     const stale = await createUser();
     await assignBadge(stale, "P-7");
     const longAgo = new Date(Date.now() - 20 * 3_600_000).toISOString();
-    await app.inject({
-      method: "POST",
-      url: "/api/presence/scan",
-      headers: asUser(doorStaff),
-      payload: { badgeId: "P-7", kind: "in", scannedAt: longAgo },
-    });
+    // F06 correctly rejects a scan timestamp before the current badge was
+    // assigned. Seed this reconciliation fixture directly so the test covers
+    // the stale-session read without pretending the current credential made
+    // that historical scan.
+    await pool.query(`INSERT INTO time_logs (user_id, kind, scanned_at) VALUES ($1, 'in', $2)`, [
+      stale,
+      longAgo,
+    ]);
 
     const closed = await createUser();
     await assignBadge(closed, "P-8");
@@ -633,5 +695,95 @@ describe("H24 event-end automatic exit (product override: the one system-closed 
     );
     const run = await runPresenceEventEndCloserOnce();
     expect(run.closed).toEqual([]);
+  });
+
+  it("finalizes a pending removal from the automatic event-end exit", async () => {
+    const uid = await createUser({ emailVerified: false });
+    await addUnverifiedCredential(uid);
+    const { pool } = await import("../../src/db/pool.js");
+    const endedAt = new Date(Date.now() - 3_600_000);
+    const enteredAt = new Date(endedAt.getTime() - 3_600_000);
+    await pool.query(`UPDATE users SET badge_id = 'P-EVENT-END-REMOVAL' WHERE id = $1`, [uid]);
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, check_in_method)
+       VALUES ($1, 'P-EVENT-END-REMOVAL', 'scan')`,
+      [uid],
+    );
+    await pool.query(
+      `INSERT INTO time_logs (user_id, kind, scanned_at)
+       VALUES ($1, 'in', $2)`,
+      [uid, enteredAt],
+    );
+    await pool.query(
+      `INSERT INTO event_config (id, event_starts_at, event_ends_at)
+       VALUES (1, NULL, $1)
+       ON CONFLICT (id) DO UPDATE SET event_starts_at = NULL, event_ends_at = EXCLUDED.event_ends_at`,
+      [endedAt],
+    );
+
+    const removal = await app.inject({
+      method: "POST",
+      url: "/api/me/anonymize",
+      headers: { ...asUser(uid), "idempotency-key": "event-end-removal" },
+      payload: { confirm: true, reauthenticationPassword: PRESENCE_REMOVAL_PASSWORD },
+    });
+    expect(removal.statusCode).toBe(202);
+    expect(removal.json().status).toBe("pending_exit");
+
+    const { runPresenceEventEndCloserOnce } = await import(
+      "../../src/modules/logistics/presence-closer.js"
+    );
+    const first = await runPresenceEventEndCloserOnce();
+    expect(first.closed).toEqual([uid]);
+    expect(first.finalized).toEqual([uid]);
+    expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [uid])).rowCount).toBe(0);
+    const { rows: anonymous } = await pool.query(
+      `SELECT guaranteed_presence_minutes FROM anonymous_participants`,
+    );
+    expect(anonymous).toEqual([{ guaranteed_presence_minutes: 60 }]);
+    expect((await pool.query(`SELECT 1 FROM time_logs WHERE user_id = $1`, [uid])).rowCount).toBe(
+      0,
+    );
+
+    const again = await runPresenceEventEndCloserOnce();
+    expect(again.closed).toEqual([]);
+    expect(again.finalized).toEqual([]);
+  });
+
+  it("finalizes from an expired certainty window and preserves only accrued activity time", async () => {
+    const uid = await createUser({ emailVerified: false });
+    await addUnverifiedCredential(uid);
+    const activity = await createMeal("Accrued presence meal");
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE users SET badge_id = 'P-EXPIRED-REMOVAL' WHERE id = $1`, [uid]);
+    await pool.query(
+      `INSERT INTO check_in_logs (user_id, badge_id, check_in_method)
+       VALUES ($1, 'P-EXPIRED-REMOVAL', 'scan')`,
+      [uid],
+    );
+    await pool.query(
+      `INSERT INTO time_logs (user_id, kind, scanned_at)
+       VALUES ($1, 'in', now() - interval '24 hours')`,
+      [uid],
+    );
+    await pool.query(
+      `INSERT INTO activity_logs (user_id, activity_id, logged_by, logged_at)
+       VALUES ($1, $2, $3, now() - interval '13 hours')`,
+      [uid, activity, doorStaff],
+    );
+
+    const removal = await app.inject({
+      method: "POST",
+      url: "/api/me/anonymize",
+      headers: { ...asUser(uid), "idempotency-key": "expired-removal" },
+      payload: { confirm: true, reauthenticationPassword: PRESENCE_REMOVAL_PASSWORD },
+    });
+    expect(removal.statusCode).toBe(200);
+    expect(removal.json().anonymized).toBe(true);
+    const { rows: anonymous } = await pool.query(
+      `SELECT guaranteed_presence_minutes FROM anonymous_participants`,
+    );
+    expect(anonymous).toEqual([{ guaranteed_presence_minutes: 660 }]);
+    expect((await pool.query(`SELECT 1 FROM users WHERE id = $1`, [uid])).rowCount).toBe(0);
   });
 });

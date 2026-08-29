@@ -3,6 +3,11 @@ import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import {
+  assertFixtureEnterpriseScope,
+  assertFixtureQueueScope,
+  isSyntheticOperator,
+} from "../logistics/review-fixture-scope.js";
 import { challengePanelLocked } from "../queue/evaluation-lock.js";
 import type { ChallengeAccess } from "./access.js";
 import {
@@ -94,24 +99,27 @@ export function panelIsLocked(challengeId: number): Promise<boolean> {
   return challengePanelLocked(challengeId);
 }
 
-export async function getChallenge(challengeId: number) {
-  const { rows } = await pool.query(`SELECT ${EDITABLE_COLUMNS} FROM challenges WHERE id = $1`, [
-    challengeId,
-  ]);
+export async function getChallenge(challengeId: number, fixtureMarker = false) {
+  const { rows } = await pool.query(
+    `SELECT ${EDITABLE_COLUMNS} FROM challenges WHERE id = $1 AND is_test_account = $2`,
+    [challengeId, fixtureMarker],
+  );
   if (!rows[0]) throw new NotFoundError("Challenge not found", { challengeId });
   return challengeReadModel(rows[0]);
 }
 
-export async function listDevpostPrizes() {
+export async function listDevpostPrizes(fixtureMarker = false) {
   const { rows } = await pool.query(
-    `SELECT dp.name, dp.last_batch, COUNT(rdp.repo_id)::int AS repo_count,
+    `SELECT dp.name, dp.last_batch, COUNT(DISTINCT r.id)::int AS repo_count,
             MIN(c.id) FILTER (WHERE c.id IS NOT NULL) AS mapped_challenge_id,
             MIN(c.title) FILTER (WHERE c.id IS NOT NULL) AS mapped_challenge_title
        FROM devpost_prizes dp
        LEFT JOIN repo_devpost_prizes rdp ON rdp.prize = dp.name
-       LEFT JOIN challenges c ON c.devpost_tags ? dp.name
+       LEFT JOIN repos r ON r.id = rdp.repo_id AND r.is_test_account = $1
+       LEFT JOIN challenges c ON c.devpost_tags ? dp.name AND c.is_test_account = $1
       GROUP BY dp.name, dp.last_batch
       ORDER BY dp.name ASC`,
+    [fixtureMarker],
   );
   return rows.map(
     (row: {
@@ -132,41 +140,45 @@ export async function listDevpostPrizes() {
 
 /** Challenges owned by the enterprise `userId` is a sponsor of (H44/H46). */
 export async function listOwnedChallenges(userId: number) {
+  const fixtureMarker = await isSyntheticOperator(pool, userId);
   const { rows } = await pool.query(
     `SELECT ${EDITABLE_COLUMNS_FROM_CHALLENGE}, ent.name AS enterprise_name
        FROM challenges c
        JOIN sponsors author ON author.id = c.author
        JOIN enterprises ent ON ent.id = author.enterprise_id
        JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
-      WHERE mine.user_id = $1
+      WHERE mine.user_id = $1 AND c.is_test_account = $2
       ORDER BY c.id`,
-    [userId],
+    [userId, fixtureMarker],
   );
   return rows.map(challengeReadModel);
 }
 
 /** Challenges a user judges through `enterprise_judges` (H46 contextual judge access). */
 export async function listAssignedJudgeChallenges(userId: number) {
+  const fixtureMarker = await isSyntheticOperator(pool, userId);
   const { rows } = await pool.query(
     `SELECT DISTINCT ${EDITABLE_COLUMNS_FROM_CHALLENGE}, ent.name AS enterprise_name
        FROM enterprise_judges ej
        JOIN sponsors author ON author.enterprise_id = ej.enterprise_id
        JOIN challenges c ON c.author = author.id
        JOIN enterprises ent ON ent.id = author.enterprise_id
-      WHERE ej.user_id = $1
+      WHERE ej.user_id = $1 AND c.is_test_account = $2
       ORDER BY c.id`,
-    [userId],
+    [userId, fixtureMarker],
   );
   return rows.map(challengeReadModel);
 }
 
-export async function listAllChallenges() {
+export async function listAllChallenges(fixtureMarker = false) {
   const { rows } = await pool.query(
     `SELECT ${EDITABLE_COLUMNS_FROM_CHALLENGE}, ent.name AS enterprise_name
        FROM challenges c
        JOIN sponsors author ON author.id = c.author
        JOIN enterprises ent ON ent.id = author.enterprise_id
+      WHERE c.is_test_account = $1
       ORDER BY c.id`,
+    [fixtureMarker],
   );
   return rows.map(challengeReadModel);
 }
@@ -195,6 +207,8 @@ async function ensureEnterpriseSponsorAnchor(db: Queryable, enterpriseId: number
 /** Admin-created challenge template bound to an enterprise (H43/H44). */
 export async function createChallenge(input: CreateChallengeBody, actorId: number) {
   return withTransaction(async (client) => {
+    await assertFixtureEnterpriseScope(client, actorId, input.enterpriseId);
+    const fixtureMarker = await isSyntheticOperator(client, actorId);
     const authorId = await ensureEnterpriseSponsorAnchor(client, input.enterpriseId);
     // title/criteria stay in sync with their i18n .en so plain-string consumers
     // (queue, projects, exports) keep working.
@@ -209,9 +223,9 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
       `INSERT INTO challenges
          (author, title, title_i18n, description, description_i18n, criteria, criteria_i18n,
           prizes, devpost_tags, judging_panel_criteria, max_presentation_seconds, max_in_waiting_area,
-          visibility, available_from)
+          visibility, available_from, is_test_account)
        VALUES ($1, $2, $3::jsonb, $4, $5::jsonb, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12,
-               'hidden', $13)
+               'hidden', $13, $14)
        RETURNING ${CREATE_RETURNING_COLUMNS}`,
       [
         authorId,
@@ -229,6 +243,7 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
         input.maxPresentationSeconds ?? null,
         input.maxInWaitingArea ?? 2,
         input.availableFrom ?? null,
+        fixtureMarker,
       ],
     );
     const created = rows[0];
@@ -266,6 +281,7 @@ export async function publishChallenge(
   input: PublishChallengeBody,
 ) {
   return withTransaction(async (client) => {
+    await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
     const beforeRes = await client.query(
       `SELECT ${EDITABLE_COLUMNS} FROM challenges WHERE id = $1 FOR UPDATE`,
       [challengeId],
@@ -311,6 +327,7 @@ export async function publishChallenge(
  */
 export async function unpublishChallenge(challengeId: number, actorId: number) {
   return withTransaction(async (client) => {
+    await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
     const beforeRes = await client.query(
       `SELECT ${EDITABLE_COLUMNS} FROM challenges WHERE id = $1 FOR UPDATE`,
       [challengeId],
@@ -360,6 +377,9 @@ export async function setChallengesVisibility(
 ) {
   if (challengeIds.length === 0) return { updated: [] as number[] };
   return withTransaction(async (client) => {
+    for (const challengeId of challengeIds) {
+      await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
+    }
     const visibility = visible ? "visible" : "hidden";
     const { rows } = await client.query(
       `UPDATE challenges
@@ -394,6 +414,7 @@ export async function updateChallenge(
   patch: UpdateChallengeBody,
   access: ChallengeAccess = "owner",
 ) {
+  await assertFixtureQueueScope(pool, editorId, "challenge", challengeId);
   if (patch.judgingPanelCriteria !== undefined && (await panelIsLocked(challengeId))) {
     throw new ConflictError("Judging panel is locked: a team has already been evaluated", {
       code: "panel_locked",
@@ -401,6 +422,7 @@ export async function updateChallenge(
   }
 
   return withTransaction(async (client) => {
+    await assertFixtureQueueScope(client, editorId, "challenge", challengeId);
     const { rows: currentRows } = await client.query(
       `SELECT ${EDITABLE_COLUMNS} FROM challenges WHERE id = $1 FOR UPDATE`,
       [challengeId],
@@ -552,6 +574,7 @@ export async function listVersions(challengeId: number) {
     `SELECT v.id, v.editor_id, v.snapshot, v.created_at, u.name, u.surname
        FROM challenge_versions v
        LEFT JOIN users u ON u.id = v.editor_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
       WHERE v.challenge_id = $1
       ORDER BY v.created_at DESC, v.id DESC`,
     [challengeId],
@@ -563,10 +586,10 @@ export async function listVersions(challengeId: number) {
  * Render the judging panel for preview (H44). Returns the typed questions plus
  * whether the panel is still editable and when it freezes.
  */
-export async function previewPanel(challengeId: number) {
+export async function previewPanel(challengeId: number, fixtureMarker = false) {
   const { rows } = await pool.query(
-    `SELECT title, judging_panel_criteria FROM challenges WHERE id = $1`,
-    [challengeId],
+    `SELECT title, judging_panel_criteria FROM challenges WHERE id = $1 AND is_test_account = $2`,
+    [challengeId, fixtureMarker],
   );
   const challenge = rows[0];
   if (!challenge) throw new NotFoundError("Challenge not found", { challengeId });

@@ -653,9 +653,12 @@ export function registerPermissionGroupRoutes(app: FastifyInstance): void {
         await lockPermissionGraph(client);
         await requireGroupMutationAuthority(client, req.userId as number, groupId);
         await loadGroup(client, groupId);
-        const { rows: userRows } = await client.query(`SELECT id FROM users WHERE id = $1`, [
-          userId,
-        ]);
+        const { rows: userRows } = await client.query(
+          `SELECT id FROM users
+            WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+            FOR UPDATE`,
+          [userId],
+        );
         if (userRows.length === 0) throw new NotFoundError("User not found", { userId });
         await client.query(
           `INSERT INTO permission_group_members (user_id, group_id, assigned_by)

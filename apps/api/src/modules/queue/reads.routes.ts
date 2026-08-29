@@ -3,6 +3,7 @@ import { SSE_TOPICS } from "@hackos/shared/events";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { pool } from "../../db/pool.js";
 import {
   requireAnyCapability,
   requireAuth,
@@ -11,6 +12,9 @@ import {
 } from "../../lib/capabilities.js";
 import { ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { subscribe } from "../../lib/sse.js";
+import { logisticsTopicForFixture } from "../logistics/active-broadcast.js";
+import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
+import { queueTopicForFixture } from "./broadcast.js";
 import {
   requireChallengeJudgeOrCapability,
   requireRepoJudgeOrCapability,
@@ -106,7 +110,8 @@ export function registerReadsRoutes(app: FastifyInstance): void {
       },
       schema: { params: challengeIdParam },
     },
-    async (req) => challengeProgress(req.params.challengeId),
+    async (req) =>
+      challengeProgress(req.params.challengeId, await isSyntheticOperator(pool, req.userId!)),
   );
 
   typed.get(
@@ -226,7 +231,8 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           "Authenticated operational SSE stream for global queue operators, judging administrators and global judging-panel holders. Assigned relationship-only judges use scoped reads; raw queue events are never public.",
       },
     },
-    async (req, reply) => subscribe("queue", req, reply),
+    async (req, reply) =>
+      subscribe(queueTopicForFixture(await isSyntheticOperator(pool, req.userId!)), req, reply),
   );
 
   typed.get(
@@ -267,7 +273,13 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           "Payload-free, domain-scoped refresh stream for signed-in clients. The topic is required; sensitive audit and logistics streams retain their capability boundary, while domain events disclose no mutation payload.",
       },
     },
-    async (req, reply) => subscribe(req.query.topic, req, reply),
+    async (req, reply) => {
+      const topic =
+        req.query.topic === SSE_TOPICS.LOGISTICS
+          ? logisticsTopicForFixture(await isSyntheticOperator(pool, req.userId!))
+          : req.query.topic;
+      return subscribe(topic, req, reply);
+    },
   );
 
   typed.get(

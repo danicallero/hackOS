@@ -123,6 +123,141 @@ describe("GET /api/queue/reviews (confidentiality)", () => {
     expect(filtered.json().reviews[0].repoName).toBe("Team B1");
   });
 
+  it("keeps a synthetic QUEUE_ADMIN inside the synthetic review graph", async () => {
+    const server = await getApp();
+    const fixtureAdmin = await createUserWithCapabilities([
+      CAPABILITIES.QUEUE_ADMIN,
+      CAPABILITIES.NOTIFICATIONS_SEND,
+    ]);
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [fixtureAdmin]);
+
+    const realChallenge = await createOwnedChallenge(await createUser(), "Real challenge");
+    const realEntry = await createEntry(realChallenge, null, "Real team", "submitted", 8);
+
+    const fixtureChallenge = await createOwnedChallenge(fixtureAdmin, "Synthetic challenge");
+    await pool.query(`UPDATE challenges SET is_test_account = true WHERE id = $1`, [
+      fixtureChallenge,
+    ]);
+    const fixtureEntry = await createEntry(fixtureChallenge, null, "Synthetic team", "draft", 4);
+    const { rows: fixtureRepoRows } = await pool.query<{ repo_id: number }>(
+      `SELECT repo_id FROM queue_entries WHERE id = $1`,
+      [fixtureEntry],
+    );
+    const fixtureRepoId = fixtureRepoRows[0]?.repo_id;
+    if (!fixtureRepoId) throw new Error("Expected synthetic review repo");
+    const fixtureMember = await createUser();
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [fixtureMember]);
+    await pool.query(`UPDATE repos SET is_test_account = true WHERE id = $1`, [fixtureRepoId]);
+    await pool.query(`INSERT INTO submissions (repo_id, user_id) VALUES ($1, $2)`, [
+      fixtureRepoId,
+      fixtureMember,
+    ]);
+
+    const listed = await server.inject({
+      method: "GET",
+      url: "/api/queue/reviews",
+      headers: asUser(fixtureAdmin),
+    });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json().reviews).toEqual([
+      expect.objectContaining({ entryId: fixtureEntry, repoName: "Synthetic team" }),
+    ]);
+    expect(listed.body).not.toContain("Real team");
+
+    const realChallengeList = await server.inject({
+      method: "GET",
+      url: `/api/queue/reviews?challengeId=${realChallenge}`,
+      headers: asUser(fixtureAdmin),
+    });
+    expect(realChallengeList.statusCode).toBe(403);
+    expect(realChallengeList.json().error.details.code).toBe("review_fixture_scope");
+
+    const fixtureDetail = await server.inject({
+      method: "GET",
+      url: `/api/queue/reviews/${fixtureEntry}`,
+      headers: asUser(fixtureAdmin),
+    });
+    expect(fixtureDetail.statusCode).toBe(200);
+    expect(fixtureDetail.json().project.name).toBe("Synthetic team");
+    expect(fixtureDetail.json().project.members.map((m: { id: number }) => m.id)).toEqual([
+      fixtureMember,
+    ]);
+
+    const realDetail = await server.inject({
+      method: "GET",
+      url: `/api/queue/reviews/${realEntry}`,
+      headers: asUser(fixtureAdmin),
+    });
+    expect(realDetail.statusCode).toBe(403);
+    expect(realDetail.json().error.details.code).toBe("review_fixture_scope");
+
+    const realPatch = await server.inject({
+      method: "PATCH",
+      url: `/api/queue/reviews/${realEntry}`,
+      headers: asUser(fixtureAdmin),
+      payload: { scores: { score: 1 } },
+    });
+    expect(realPatch.statusCode).toBe(403);
+    expect(realPatch.json().error.details.code).toBe("review_fixture_scope");
+
+    const realMessage = await server.inject({
+      method: "POST",
+      url: `/api/queue/reviews/${realEntry}/message`,
+      headers: asUser(fixtureAdmin),
+      payload: { message: "This must not reach a real team." },
+    });
+    expect(realMessage.statusCode).toBe(403);
+
+    const fixtureMessage = await server.inject({
+      method: "POST",
+      url: `/api/queue/reviews/${fixtureEntry}/message`,
+      headers: { ...asUser(fixtureAdmin), "idempotency-key": crypto.randomUUID() },
+      payload: { message: "Synthetic callback" },
+    });
+    expect(fixtureMessage.statusCode).toBe(200);
+    expect(fixtureMessage.json()).toEqual({ recipients: 1 });
+    const fixtureOutbox = await pool.query<{ recipients: number }>(
+      `SELECT count(DISTINCT user_id)::int AS recipients
+         FROM notification_outbox
+        WHERE user_id = $1 AND payload->>'template' = 'queue.message'`,
+      [fixtureMember],
+    );
+    expect(fixtureOutbox.rows[0]?.recipients).toBe(1);
+    const realOutbox = await pool.query(
+      `SELECT 1 FROM notification_outbox WHERE payload->>'vars' LIKE '%real team%'`,
+    );
+    expect(realOutbox.rowCount).toBe(0);
+
+    const exported = await server.inject({
+      method: "GET",
+      url: "/api/queue/reviews/export.csv",
+      headers: asUser(fixtureAdmin),
+    });
+    expect(exported.statusCode).toBe(200);
+    expect(exported.body).toContain("Synthetic team");
+    expect(exported.body).not.toContain("Real team");
+
+    const realExport = await server.inject({
+      method: "GET",
+      url: `/api/queue/reviews/export.csv?challengeId=${realChallenge}`,
+      headers: asUser(fixtureAdmin),
+    });
+    expect(realExport.statusCode).toBe(403);
+
+    // A real QUEUE_ADMIN remains global over real event data, while marked
+    // fixtures stay out of the ordinary administrative view (H54).
+    const realAdmin = await createUserWithCapabilities([CAPABILITIES.QUEUE_ADMIN]);
+    const realAdminList = await server.inject({
+      method: "GET",
+      url: "/api/queue/reviews",
+      headers: asUser(realAdmin),
+    });
+    expect(realAdminList.statusCode).toBe(200);
+    expect(realAdminList.json().reviews).toEqual([
+      expect.objectContaining({ entryId: realEntry, repoName: "Real team" }),
+    ]);
+  });
+
   it("scopes a sponsor rep to only their own enterprise's reviews, even unfiltered", async () => {
     const server = await getApp();
     const ownerA = await createUser();

@@ -97,10 +97,12 @@ is the source of truth for each.
   APNs) but no ingress, so it stays off the proxy network. Egress rides the
   instance bridge's NAT; external DNS is pinned (§3, §8) so it never depends on
   the host's transient `resolv.conf`.
-- **What it does:** repeatable BullMQ "tick" jobs that drain DB-backed queues —
-  see [`background-workers.md`](./background-workers.md). Durability, retry,
-  backoff and dead-letter all live in Postgres rows; BullMQ is just the
-  heartbeat.
+- **What it does:** repeatable BullMQ ticks drain DB-backed tables, while
+  event-driven jobs carry explicit payloads for request-started work such as
+  account-removal cleanup, meal scans, wallet sync and queue invalidations —
+  see [`background-workers.md`](./background-workers.md). Domain state remains
+  authoritative in Postgres; the event-driven jobs own their own idempotency
+  and retry policy, while BullMQ provides the dispatch and repeatable timing.
 - **Health:** disabled (serves no HTTP); liveness is process-based via
   `restart: unless-stopped`.
 - **Scale:** replicas are safe — the outbox claim uses `FOR UPDATE SKIP LOCKED`,
@@ -277,9 +279,11 @@ only by #540's connection budgets and write backpressure. Monitor
 `hackos_http_request_admission_queue_size` by lane, plus
 `hackos_sse_local_connections` by lane and normalized topic family.
 
-Participant queue invalidations are one delayed BullMQ job per challenge;
-called and pre-call notifications remain immediate. Their scheduling and
-fan-out outcomes are exposed as
+Participant queue invalidations are one delayed BullMQ job per current queue
+group, coalescing all affected challenge transitions in that shared queue;
+topology writes snapshot old and new groups and the worker re-resolves current
+membership when a queued group id has gone stale. Called and pre-call
+notifications remain immediate. Their scheduling and fan-out outcomes are exposed as
 `hackos_queue_participant_invalidations_total{outcome="queued|coalesced|dropped|degraded"}`.
 For browser-only refetch storms the optional
 `POST /api/telemetry/refetch-storm` contract accepts only bounded enum fields
@@ -325,9 +329,13 @@ replicas via Valkey (§5), and `/readyz` gating keeps initializing replicas out
 of rotation. The only shared state is Postgres/Valkey, both reached by name.
 
 **worker — scale by replica count.** The outbox claim is
-`FOR UPDATE SKIP LOCKED`, so N workers split the load with no double-send;
-state-machine ticks (queue pump, expirer) mutate under `SELECT … FOR UPDATE`
-with an "exactly one winner per transition" invariant. More replicas = more
+`FOR UPDATE SKIP LOCKED`, so N workers split the load with no double-send.
+The queue pump discovers active rooms outside a transaction, then each
+`callNextForRoom` runs as its own `withTransaction` with the transition locks;
+pre-call discovery is likewise outside a transaction and `claimPreCall`
+reacquires the queue-group lock and atomically claims one repo cycle. This
+per-transition boundary preserves the "exactly one winner" invariant while
+allowing replicas to process independent rooms. More replicas = more
 throughput on notification dispatch and queue processing, safely. (Tick cadence,
 not replica count, bounds latency for the periodic drains — tune `every: N` if a
 5 s notification lag is too much before adding replicas.)
@@ -388,7 +396,7 @@ it with naive writable replicas.
 | Decision | Why |
 |---|---|
 | **Raw SQL, no ORM** | Full control over the concurrency primitives the domain needs (`FOR UPDATE`, `SKIP LOCKED`, advisory locks); the "exactly one winner per transition" invariant is explicit, not hidden behind an ORM. |
-| **Durability in Postgres, BullMQ as a clock** | Keeps the single source of truth authoritative; Valkey stays disposable. Retryable work survives a Valkey wipe. |
+| **Postgres-owned state, BullMQ for dispatch** | Keeps domain state authoritative while allowing explicit event-driven jobs alongside repeatable drains; Valkey remains disposable, and each processor documents how it retries or recovers after a broker loss. |
 | **No global read cache; scoped SSE refresh** (H41-H55, issue #533) | A versioned cache invalidated by every write collapses under event load and is not a correctness boundary. Postgres reads stay authoritative; domain topics wake only related screens, while public mirrors remain payload-free. |
 | **Permissions by capability, never role** (H8) | Routes guard on `requireCapability(CAPABILITIES.X)`; the mobile app derives its tabs the same way, so a permission change applies without a reinstall (H55). |
 | **One image, three commands** | One build, one version, zero enqueue/drain drift. |
@@ -450,7 +458,7 @@ back up `pgdata` + `miniodata` regardless of host.
 Full detail in [`deploy/README.md`](../deploy/README.md#security-posture); the
 load-bearing points:
 
-- **Only the api is publicly routable** to datastores; web is public but
+- **The api is the only public route into the datastores**; web is public but
   store-less; postgres and valkey have no public route at all. MinIO's sole
   public surface is the anonymous-read `enterprises/` prefix, served via a
   Cloudflare-fronted `S3_PUBLIC_URL` — its admin API and private `uploads/`

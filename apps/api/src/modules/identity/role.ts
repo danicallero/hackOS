@@ -19,6 +19,11 @@ export type DerivedRole =
   | "unassigned";
 
 export async function computeDerivedRole(db: Queryable, userId: number): Promise<DerivedRole> {
+  const { rows: activeRows } = await db.query(
+    `SELECT 1 FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+    [userId],
+  );
+  if (!activeRows[0]) return "unassigned";
   const capabilities = await getEffectiveCapabilities(userId);
   if (capabilities.has(CAPABILITIES.ADMIN_ALL)) return "admin";
 
@@ -46,6 +51,11 @@ export async function mentorOrParticipantType(
   db: Queryable,
   userId: number,
 ): Promise<"mentor" | "participant" | null> {
+  const { rows: activeRows } = await db.query(
+    `SELECT 1 FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+    [userId],
+  );
+  if (!activeRows[0]) return null;
   const manual = await db.query(`SELECT role FROM manual_attendee_roles WHERE user_id = $1`, [
     userId,
   ]);
@@ -79,8 +89,20 @@ export async function computeMembershipFlags(
   userId: number,
 ): Promise<{ isEnterpriseJudge: boolean; isSponsorRep: boolean }> {
   const [{ rows: judgeRows }, { rows: sponsorRows }] = await Promise.all([
-    db.query(`SELECT 1 FROM enterprise_judges WHERE user_id = $1 LIMIT 1`, [userId]),
-    db.query(`SELECT 1 FROM sponsors WHERE user_id = $1 LIMIT 1`, [userId]),
+    db.query(
+      `SELECT 1 FROM enterprise_judges ej
+        JOIN users u ON u.id = ej.user_id
+       WHERE ej.user_id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
+       LIMIT 1`,
+      [userId],
+    ),
+    db.query(
+      `SELECT 1 FROM sponsors s
+        JOIN users u ON u.id = s.user_id
+       WHERE s.user_id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
+       LIMIT 1`,
+      [userId],
+    ),
   ]);
   return { isEnterpriseJudge: judgeRows.length > 0, isSponsorRep: sponsorRows.length > 0 };
 }
@@ -101,13 +123,15 @@ export async function computeMembershipFlags(
  */
 export async function hasEventAccess(db: Queryable, userId: number): Promise<boolean> {
   const { rows } = await db.query(
-    `SELECT 1 WHERE EXISTS (
+    `SELECT 1 FROM users u WHERE u.id = $1
+      AND u.account_state = 'active' AND u.anonymized_at IS NULL
+      AND (EXISTS (
         SELECT 1 FROM application_responses WHERE user_id = $1 AND status = 'confirmed'
       ) OR EXISTS (
         SELECT 1 FROM manual_attendee_roles WHERE user_id = $1
       ) OR EXISTS (
         SELECT 1 FROM sponsors WHERE user_id = $1
-      )`,
+      ))`,
     [userId],
   );
   if (rows.length > 0) return true;

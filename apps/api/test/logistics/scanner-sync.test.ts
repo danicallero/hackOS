@@ -112,8 +112,12 @@ describe("H22-H26 native scanner snapshot", () => {
   });
 
   it("excludes anonymized profiles from the snapshot (H54)", async () => {
+    const { pool } = await import("../../src/db/pool.js");
     const userId = await createUser({ name: "Ada" });
     await assignBadge(userId, "BADGE-ANON");
+    await pool.query(`INSERT INTO check_in_logs (user_id, badge_id) VALUES ($1, 'BADGE-ANON')`, [
+      userId,
+    ]);
 
     const admin = await createUserWithCapabilities(["*"]);
     const anon = await app.inject({
@@ -131,6 +135,47 @@ describe("H22-H26 native scanner snapshot", () => {
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.people.some((p: { userId: number }) => p.userId === userId)).toBe(false);
+  });
+
+  it("rejects a revoked badge even after it is reassigned to another person (H54)", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const formerOwner = await createUser();
+    await assignBadge(formerOwner, "BADGE-RETIRED");
+    await pool.query(`INSERT INTO check_in_logs (user_id, badge_id) VALUES ($1, 'BADGE-RETIRED')`, [
+      formerOwner,
+    ]);
+    const admin = await createUserWithCapabilities(["*"]);
+    const removed = await app.inject({
+      method: "POST",
+      url: `/api/users/${formerOwner}/anonymize`,
+      headers: asUser(admin),
+    });
+    expect(removed.statusCode).toBe(200);
+
+    const retired = await pool.query<{ credential_digest: string }>(
+      `SELECT credential_digest FROM scanner_revoked_badges`,
+    );
+    expect(retired.rows).toHaveLength(1);
+    const retiredRow = retired.rows[0];
+    if (!retiredRow) throw new Error("Expected one retired badge digest");
+    expect(retiredRow.credential_digest).toMatch(/^[0-9a-f]{64}$/);
+    expect(retiredRow.credential_digest).not.toContain("BADGE-RETIRED");
+
+    const replacement = await createUser();
+    await assignBadge(replacement, "BADGE-RETIRED");
+    const meal = await createMeal("Stale badge fixture");
+    const staleScan = await app.inject({
+      method: "POST",
+      url: `/api/activities/${meal}/scan`,
+      headers: asUser(scanner),
+      payload: { badgeId: "BADGE-RETIRED" },
+    });
+
+    expect(staleScan.statusCode).toBe(409);
+    expect(staleScan.json().error.code).toBe("badge_revoked");
+    expect(
+      (await pool.query(`SELECT 1 FROM activity_logs WHERE user_id = $1`, [replacement])).rowCount,
+    ).toBe(0);
   });
 
   it("requires a scanner or logistics capability", async () => {

@@ -5,14 +5,18 @@ import { audit } from "../../lib/audit.js";
 import { userHasCapability } from "../../lib/capabilities.js";
 import { toCsv } from "../../lib/csv.js";
 import { ForbiddenError, NotFoundError, UnauthorizedError } from "../../lib/errors.js";
+import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
 import { RESOLVED_PANEL_SQL } from "./criteria-merge.js";
+import { assertQueueEntryScope } from "./fixture-scope.js";
 import { QUEUE_GROUP_LABEL_JOIN, QUEUE_GROUP_LABEL_SQL } from "./groups.js";
 import { notifyTeamMessage } from "./notify.js";
 
 /**
  * H46 + confidentiality requirement: the reviews overview is NOT "anyone with
  * an export capability sees everything". Two strictly separate audiences:
- *  - admin (QUEUE_ADMIN): sees every challenge's reviews, no restriction.
+ *  - admin (QUEUE_ADMIN): sees every review in the caller's fixture boundary;
+ *    real admins see the real event graph and synthetic operators see only
+ *    the marked review graph.
  *  - sponsor rep: sees ONLY their own enterprise's challenges — even with no
  *    challengeId filter, the query is always scoped to their own challenges,
  *    and an explicit filter for a challenge they don't own 403s. There is no
@@ -21,15 +25,19 @@ import { notifyTeamMessage } from "./notify.js";
  * staff/sponsor tool, not part of the judging UI itself.
  */
 export interface ReviewScope {
+  actorId: number;
   isAdmin: boolean;
   /** Sponsor's own challenge ids. Irrelevant when isAdmin. */
   ownChallengeIds: number[];
+  /** Synthetic callers may only see and mutate the marked review graph. */
+  fixtureMarker: boolean;
 }
 
 export async function resolveReviewScope(userId: number | null): Promise<ReviewScope> {
   if (userId == null) throw new UnauthorizedError();
+  const fixtureMarker = await isSyntheticOperator(pool, userId);
   if (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN)) {
-    return { isAdmin: true, ownChallengeIds: [] };
+    return { actorId: userId, isAdmin: true, ownChallengeIds: [], fixtureMarker };
   }
 
   const isSponsor =
@@ -39,12 +47,17 @@ export async function resolveReviewScope(userId: number | null): Promise<ReviewS
   const { rows } = await pool.query(
     `SELECT DISTINCT c.id
        FROM challenges c
-       JOIN sponsors author ON author.id = c.author
-       JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
-      WHERE mine.user_id = $1`,
-    [userId],
+      JOIN sponsors author ON author.id = c.author
+      JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
+      WHERE mine.user_id = $1 AND c.is_test_account = $2`,
+    [userId, fixtureMarker],
   );
-  return { isAdmin: false, ownChallengeIds: rows.map((r: { id: number }) => r.id) };
+  return {
+    actorId: userId,
+    isAdmin: false,
+    ownChallengeIds: rows.map((r: { id: number }) => r.id),
+    fixtureMarker,
+  };
 }
 
 export interface ReviewFilters {
@@ -91,8 +104,8 @@ export async function listReviews(
   const challengeIds = resolveChallengeFilter(scope, filters.challengeId);
   if (challengeIds !== null && challengeIds.length === 0) return [];
 
-  const conditions: string[] = [];
-  const params: unknown[] = [];
+  const conditions: string[] = ["c.is_test_account = $1", "r.is_test_account = $1"];
+  const params: unknown[] = [scope.fixtureMarker];
   if (challengeIds !== null) {
     params.push(challengeIds);
     conditions.push(`qe.challenge_id = ANY($${params.length}::int[])`);
@@ -117,19 +130,21 @@ export async function listReviews(
             ar.status, ar.scores, ar.updated_at,
             COALESCE(judges.names, '{}') AS judges
        FROM queue_entries qe
-       JOIN challenges c ON c.id = qe.challenge_id
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $1
        ${QUEUE_GROUP_LABEL_JOIN}
-       JOIN repos r ON r.id = qe.repo_id
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $1
        LEFT JOIN rooms room ON room.id = qe.assigned_room_id
        LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
        LEFT JOIN LATERAL (
          SELECT array_agg(DISTINCT trim(concat(u.name, ' ', u.surname))) AS names
            FROM attempt_review_versions v
            JOIN users u ON u.id = v.author_id
+              AND u.account_state = 'active' AND u.anonymized_at IS NULL
+              AND u.is_test_account = $1
           WHERE v.attempt_id = qe.id
        ) judges ON true
        ${where}
-      ORDER BY challenge_title, r.name`,
+       ORDER BY challenge_title, r.name`,
     params,
   );
 
@@ -172,16 +187,26 @@ export async function listReviews(
 
 /**
  * Same scoping as listReviews, but for a single entry: an admin reaches any
- * entry, a sponsor rep only entries of their own enterprise's challenges.
+ * entry in the caller's fixture boundary, a sponsor rep only entries of their
+ * own enterprise's challenges.
  * Returns the row's context so callers don't re-query it.
  */
 export async function assertEntryInScope(
   scope: ReviewScope,
   entryId: number,
 ): Promise<{ challengeId: number; repoId: number }> {
+  // Review routes are also queue-resource routes: validate the complete
+  // challenge/repository/group graph before loading any review projection.
+  // This prevents a synthetic QUEUE_ADMIN from using a real entry id to
+  // bypass the marker boundary (H54).
+  await assertQueueEntryScope(pool, scope.actorId, entryId);
   const { rows } = await pool.query(
-    `SELECT challenge_id, repo_id FROM queue_entries WHERE id = $1`,
-    [entryId],
+    `SELECT qe.challenge_id, qe.repo_id
+       FROM queue_entries qe
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $2
+      WHERE qe.id = $1`,
+    [entryId, scope.fixtureMarker],
   );
   if (rows.length === 0) throw new NotFoundError("Queue entry not found", { entryId });
   const challengeId: number = rows[0].challenge_id;
@@ -234,13 +259,13 @@ export async function getReviewDetail(scope: ReviewScope, entryId: number): Prom
             room.id AS room_id, room.name AS room_name, room.location AS room_location,
             ar.status AS review_status, ar.scores, ar.notes, ar.updated_at
        FROM queue_entries qe
-       JOIN challenges c ON c.id = qe.challenge_id
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
        ${QUEUE_GROUP_LABEL_JOIN}
-       JOIN repos r ON r.id = qe.repo_id
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $2
        LEFT JOIN rooms room ON room.id = qe.assigned_room_id
        LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
       WHERE qe.id = $1`,
-    [entryId],
+    [entryId, scope.fixtureMarker],
   );
   const row = rows[0];
 
@@ -250,25 +275,31 @@ export async function getReviewDetail(scope: ReviewScope, entryId: number): Prom
     `SELECT u.id, trim(concat(u.name, ' ', u.surname)) AS name, u.email
        FROM submissions s JOIN users u ON u.id = s.user_id
       WHERE s.repo_id = $1
-      UNION
-     SELECT u.id, trim(concat(u.name, ' ', u.surname)) AS name, u.email
+        AND s.status = 'active' AND u.account_state = 'active' AND u.anonymized_at IS NULL
+        AND u.is_test_account = $2
+       UNION
+       SELECT u.id, trim(concat(u.name, ' ', u.surname)) AS name, u.email
        FROM devpost_participants dp JOIN users u ON u.id = dp.user_id
       WHERE dp.repo_id = $1
-      UNION
-     SELECT NULL::int AS id, trim(concat(dp.name, ' ', dp.surname)) AS name, dp.email
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL
+        AND u.is_test_account = $2
+       UNION
+       SELECT NULL::int AS id, trim(concat(dp.name, ' ', dp.surname)) AS name, dp.email
        FROM devpost_participants dp
       WHERE dp.repo_id = $1 AND dp.user_id IS NULL
       ORDER BY name`,
-    [row.repo_id],
+    [row.repo_id, scope.fixtureMarker],
   );
 
   const { rows: versionRows } = await pool.query(
     `SELECT v.id, v.changed_fields, v.created_at, trim(concat(u.name, ' ', u.surname)) AS author_name
        FROM attempt_review_versions v
        JOIN users u ON u.id = v.author_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
+          AND u.is_test_account = $2
       WHERE v.attempt_id = $1
       ORDER BY v.created_at ASC`,
-    [entryId],
+    [entryId, scope.fixtureMarker],
   );
 
   const criteria = Array.isArray(row.judging_panel_criteria)
@@ -336,7 +367,8 @@ export async function sendReviewMessage(
 
   return withTransaction(async (client) => {
     const { rows } = await client.query(
-      `SELECT trim(concat(name, ' ', surname)) AS full_name FROM users WHERE id = $1`,
+      `SELECT trim(concat(name, ' ', surname)) AS full_name
+         FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
       [actorId],
     );
     const senderName: string = rows[0]?.full_name?.trim() || "";

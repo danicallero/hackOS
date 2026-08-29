@@ -1,6 +1,7 @@
 import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { pool } from "../../db/pool.js";
 import { occupancyEstimate } from "./presence.js";
+import { isSyntheticOperator } from "./review-fixture-scope.js";
 
 export interface ActivityAggregate {
   activityId: number;
@@ -31,10 +32,12 @@ async function aggregateActivities(
 ): Promise<ActivityAggregate[]> {
   const { rows } = await pool.query(
     `SELECT a.id, a.name, a.category, a.primary_language, a.name_i18n, a.description_i18n,
-            count(al.id)::int AS count,
-            count(DISTINCT al.user_id)::int AS distinct_people
+            count(u.id)::int AS count,
+            count(DISTINCT u.id)::int AS distinct_people
        FROM activities a
        LEFT JOIN activity_logs al ON al.activity_id = a.id
+       LEFT JOIN users u ON u.id = al.user_id
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
        LEFT JOIN schedule s ON s.id = a.schedule_id
       WHERE ${where}
       GROUP BY a.id, a.name, a.category, a.primary_language, a.name_i18n, a.description_i18n, s.starts_at
@@ -121,7 +124,8 @@ export async function accreditationCountsByRole() {
                 ELSE 'unassigned'
               END AS role
          FROM users u
-        WHERE u.badge_id IS NOT NULL AND u.anonymized_at IS NULL
+        WHERE u.badge_id IS NOT NULL AND u.account_state = 'active' AND u.anonymized_at IS NULL
+          AND u.is_test_account = false
      )
      SELECT role, count(*)::int AS count
        FROM classified GROUP BY role ORDER BY role`,
@@ -137,9 +141,11 @@ export async function accreditationCountsByRole() {
  */
 export async function logisticsStats() {
   const accredited = await pool.query(
-    `SELECT count(*)::int AS n FROM users WHERE badge_id IS NOT NULL AND anonymized_at IS NULL`,
+    `SELECT count(*)::int AS n FROM users
+      WHERE badge_id IS NOT NULL AND account_state = 'active' AND anonymized_at IS NULL
+        AND is_test_account = false`,
   );
-  const occ = await occupancyEstimate();
+  const occ = await occupancyEstimate(undefined, undefined);
   const meals = await scannableActivities("meal");
   const activities = await scannableActivities("activity");
   const accreditedByRole = await accreditationCountsByRole();
@@ -184,9 +190,22 @@ export type ScannerRole =
   | "participant"
   | "unassigned";
 
-export async function scannerRoleStats(): Promise<
-  Array<{ role: ScannerRole; eligible: number; accredited: number; inside: number }>
-> {
+export async function scannerRoleStats(
+  actorId?: number,
+): Promise<Array<{ role: ScannerRole; eligible: number; accredited: number; inside: number }>> {
+  const fixtureOnly = actorId != null && (await isSyntheticOperator(pool, actorId));
+  const subjectScope = fixtureOnly
+    ? `AND u.is_test_account = true
+          AND (
+            EXISTS (SELECT 1 FROM manual_attendee_roles mar
+                    WHERE mar.user_id = u.id AND mar.role = 'participant')
+            OR EXISTS (
+              SELECT 1 FROM application_responses ar
+              JOIN applications a ON a.id = ar.application_id
+              WHERE ar.user_id = u.id AND a.type = 'participant' AND ar.status <> 'draft'
+            )
+          )`
+    : "AND u.is_test_account = false";
   const { rows } = await pool.query<{
     role: ScannerRole;
     eligible: number;
@@ -231,7 +250,7 @@ export async function scannerRoleStats(): Promise<
               ) AS confirmed
          FROM users u
          LEFT JOIN user_caps uc ON uc.user_id = u.id
-        WHERE u.anonymized_at IS NULL
+        WHERE u.account_state = 'active' AND u.anonymized_at IS NULL ${subjectScope}
      )
      SELECT role,
             count(*) FILTER (WHERE role IN ('staff', 'admin', 'sponsor') OR confirmed)::int AS eligible,
@@ -242,7 +261,7 @@ export async function scannerRoleStats(): Promise<
       ORDER BY role`,
   );
 
-  const occ = await occupancyEstimate();
+  const occ = await occupancyEstimate(undefined, actorId);
   const present = new Set(occ.present);
 
   return rows.map((row) => ({

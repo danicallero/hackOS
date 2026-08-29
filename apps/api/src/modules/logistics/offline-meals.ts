@@ -1,11 +1,14 @@
 import { isMealActivityKind } from "@hackos/shared/activity-kinds";
-import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { EVENTS } from "@hackos/shared/events";
 import type { Job } from "bullmq";
 import { pool, withTransaction } from "../../db/pool.js";
 import { AppError, BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { broadcast } from "../../lib/sse.js";
+import { logisticsTopicForFixture } from "./active-broadcast.js";
 import { activityScan } from "./activities.js";
+import { assertBadgeScanTimestamp, resolveByBadge } from "./badge.js";
+import { assertFixtureSubjectScope } from "./review-fixture-scope.js";
 
 const QUEUE_NAME = "logistics.meal-scans";
 
@@ -33,11 +36,50 @@ export async function enqueueMealScanBatch(
   }
 
   const batch = await withTransaction(async (client) => {
+    const actor = await client.query<{ is_test_account: boolean }>(
+      `SELECT is_test_account FROM users WHERE id = $1 FOR SHARE`,
+      [actorId],
+    );
+    if (!actor.rows[0]) throw new NotFoundError("User not found");
+    const fixtureMarker = actor.rows[0].is_test_account;
+
+    // H54: validate and share-lock every badge before persisting the offline
+    // inbox row. Removal takes the same user row lock, so a stale device
+    // cannot create a new identifying batch item after closure begins.
+    const owners = new Map<string, { userId: number; badgeAssignedAt: Date | null }>();
+    for (const badgeId of [...new Set(input.scans.map((scan) => scan.badgeId))].sort()) {
+      const userId = await resolveByBadge(client, badgeId);
+      const owner = await client.query<{
+        id: number;
+        badge_id: string | null;
+        badge_assigned_at: Date | null;
+      }>(
+        `SELECT id, badge_id, badge_assigned_at FROM users
+          WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+          FOR SHARE`,
+        [userId],
+      );
+      const lockedOwner = owner.rows[0];
+      if (!lockedOwner || lockedOwner.badge_id !== badgeId) {
+        throw new AppError(409, "badge_revoked", "This badge has been revoked");
+      }
+      await assertFixtureSubjectScope(client, actorId, userId);
+      owners.set(badgeId, {
+        userId,
+        badgeAssignedAt: lockedOwner.badge_assigned_at,
+      });
+    }
+    for (const scan of input.scans) {
+      const owner = owners.get(scan.badgeId);
+      if (!owner) throw new NotFoundError("Badge not recognized");
+      assertBadgeScanTimestamp(scan.scannedAt, owner.badgeAssignedAt);
+    }
+
     const b = await client.query(
-      `INSERT INTO meal_scan_batches (activity_id, device_id, submitted_by)
-       VALUES ($1, $2, $3)
+      `INSERT INTO meal_scan_batches (activity_id, device_id, submitted_by, is_test_account)
+       VALUES ($1, $2, $3, $4)
        RETURNING id, status`,
-      [activityId, input.deviceId, actorId],
+      [activityId, input.deviceId, actorId, fixtureMarker],
     );
     const batchId = b.rows[0].id as number;
 
@@ -74,10 +116,17 @@ export async function enqueueMealScanBatch(
 export async function processMealScanBatch(job: Job<MealScanJob>) {
   const batchId = job.data.batchId;
   const batch = await pool.query(
-    `SELECT activity_id, submitted_by FROM meal_scan_batches WHERE id = $1`,
+    `SELECT b.activity_id, b.submitted_by, b.is_test_account
+       FROM meal_scan_batches b
+      WHERE b.id = $1`,
     [batchId],
   );
   if (!batch.rows[0]) throw new NotFoundError("Meal scan batch not found");
+
+  // Batch notifications are identity-bearing through their batch id even
+  // though the payload contains only counters. The marker is captured at
+  // enqueue so scrubbing submitted_by cannot reclassify the batch as real.
+  const fixtureMarker = batch.rows[0].is_test_account === true;
 
   const rows = await withTransaction(async (client) => {
     await client.query(`UPDATE meal_scan_batches SET status = 'processing' WHERE id = $1`, [
@@ -114,28 +163,55 @@ export async function processMealScanBatch(job: Job<MealScanJob>) {
     scanned_at: Date | null;
   }>) {
     try {
-      const result = await activityScan(Number(batch.rows[0].submitted_by), row.activity_id, {
-        badgeId: row.badge_id,
-        allowRepeat: row.allow_repeat,
-        scannedAt: row.scanned_at ?? undefined,
-        sourceDeviceId: row.device_id,
-        sourceScanId: row.client_scan_id,
-      });
+      const result = await activityScan(
+        batch.rows[0].submitted_by as number | null,
+        row.activity_id,
+        {
+          badgeId: row.badge_id,
+          allowRepeat: row.allow_repeat,
+          scannedAt: row.scanned_at ?? undefined,
+          sourceDeviceId: row.device_id,
+          sourceScanId: row.client_scan_id,
+        },
+      );
+      // The response card is useful to the live scanner but is not an audit
+      // field. Storing it here would retain the participant's name and
+      // dietary information in the offline inbox after processing.
+      const storedResult = {
+        registered: result.body.registered,
+        firstTime: result.body.firstTime,
+        repeat: result.body.repeat,
+        timesEaten: result.body.timesEaten,
+        ...(result.body.message ? { message: result.body.message } : {}),
+      };
       await pool.query(
         `UPDATE meal_scan_batch_items
-            SET status = 'processed', result = $2::jsonb, processed_at = now()
+            SET status = 'processed', badge_id = NULL, result = $2::jsonb, processed_at = now()
           WHERE id = $1`,
-        [row.id, JSON.stringify(result.body)],
+        [row.id, JSON.stringify(storedResult)],
       );
       processed += 1;
     } catch (err) {
+      // A stale offline badge must not remain in the central inbox after the
+      // account was closed. There is no audit value in keeping an unprocessed
+      // raw badge identifier once it can no longer resolve to a participant.
+      if (
+        err instanceof AppError &&
+        ["badge_revoked", "badge_unknown", "badge_scan_before_assignment", "not_found"].includes(
+          err.code,
+        )
+      ) {
+        await pool.query(`DELETE FROM meal_scan_batch_items WHERE id = $1`, [row.id]);
+        failed += 1;
+        continue;
+      }
       const error =
         err instanceof AppError
           ? { code: err.code, message: err.message, details: err.details ?? null }
           : { code: "internal", message: "Meal scan processing failed" };
       await pool.query(
         `UPDATE meal_scan_batch_items
-            SET status = 'failed', error = $2::jsonb, processed_at = now()
+            SET status = 'failed', badge_id = NULL, error = $2::jsonb, processed_at = now()
           WHERE id = $1`,
         [row.id, JSON.stringify(error)],
       );
@@ -146,7 +222,11 @@ export async function processMealScanBatch(job: Job<MealScanJob>) {
   const status = failed === 0 ? "processed" : processed === 0 ? "failed" : "partial";
   await pool.query(`UPDATE meal_scan_batches SET status = $2 WHERE id = $1`, [batchId, status]);
   const payload = { batchId, status, processed, failed };
-  await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.LOGISTICS_MEAL_SCAN_BATCH, payload);
+  await broadcast(
+    logisticsTopicForFixture(fixtureMarker),
+    EVENTS.LOGISTICS_MEAL_SCAN_BATCH,
+    payload,
+  );
   return payload;
 }
 

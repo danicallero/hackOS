@@ -78,15 +78,15 @@ challenge content and judging panel under the H44/H45 rules below.
 
 | Method & path | Capability | Story | Behaviour |
 |---|---|---|---|
-| `GET /api/challenges` | `sponsors:manage` OR `queue:admin` | H44/H46 | admin-wide list |
+| `GET /api/challenges` | contextual `challenge-directory` | H44/H46 | global challenge admins see all; sponsor representatives and assigned judges see their scoped challenges |
 | `POST /api/challenges` | `sponsors:manage` OR `queue:admin` | H43/H44 | create hidden draft template bound to an enterprise |
 | `GET /api/challenges/mine` | authenticated + sponsor row | H44/H46 | challenges owned by the caller's enterprise |
-| `GET /api/challenges/:id` | ownership check | H44 | single challenge |
-| `PATCH /api/challenges/:id` | ownership check | H44 | partial edit + version snapshot + audit |
+| `GET /api/challenges/:id` | contextual `challenge-access` | H44/H46 | global admins, `JUDGE_PANEL`/`QUEUE_OPERATE`, the owning sponsor enterprise, or an assigned judge |
+| `PATCH /api/challenges/:id` | contextual `challenge-edit` | H44 | global admins or the owning sponsor enterprise may edit within the panel/public-field locks; every edit gets a version snapshot + audit |
 | `POST /api/challenges/:id/publish` | `sponsors:manage` OR `queue:admin` | H45 | publish immediately or schedule reveal |
 | `POST /api/challenges/:id/unpublish` | `sponsors:manage` OR `queue:admin` | H45 | hide a mistakenly published challenge |
-| `GET /api/challenges/:id/panel/preview` | ownership check | H44 | typed judging panel + lock state |
-| `GET /api/challenges/:id/versions` | ownership check | H44 | immutable edit history |
+| `GET /api/challenges/:id/panel/preview` | contextual `challenge-access` | H44/H46 | global admins, `SPONSORS_MANAGE`/`QUEUE_ADMIN`/`JUDGE_PANEL`/`QUEUE_OPERATE`, the owning sponsor enterprise, or an assigned judge |
+| `GET /api/challenges/:id/versions` | contextual `challenge-edit` | H44 | global admins or the owning sponsor enterprise may read immutable edit history |
 
 `POST /api/challenges` resolves the supplied `enterpriseId` to the existing
 `sponsors` ownership model. If the enterprise has no sponsor row yet, the service
@@ -98,16 +98,15 @@ same enterprise.
 **Edit safety (H44).** `updateChallenge` runs `SELECT … FOR UPDATE`, writes one
 immutable `challenge_versions` snapshot and one `audit` row inside the same
 transaction as the `UPDATE` (per CLAUDE.md invariants 3, 6). The **judging panel
-is frozen once judging starts**: `panelIsLocked()` compares now against
-`queue_settings.schedule_start_at`, and any patch touching
-`judging_panel_criteria` after that instant is rejected with a `ConflictError`
-(`code: panel_locked`). This is the "restrict editing critical evaluation
-criteria once paired with judging" rule from the brief — realised through the
-judging clock, which is the deadline the stories actually name, not through a
-"has submissions" heuristic. Once a challenge is published or archived, sponsor
-owners can still update the judging panel and presentation duration until that
-judging deadline, but the public/general fields (`title`, `description`,
-`criteria`, `prizes`) are admin-only.
+is frozen after the first submitted evaluation**: `panelIsLocked()` uses
+`queue/evaluation-lock.ts` to check for a submitted review or completed queue
+entry in the challenge's queue group, and any later patch touching
+`judging_panel_criteria` is rejected with a `ConflictError` (`code:
+panel_locked`). A scheduled judging start or a generated queue alone does not
+freeze the form. Once a challenge is published or archived, sponsor owners can
+still update the judging panel and presentation duration until that first
+evaluation, but the public/general fields (`title`, `description`, `criteria`,
+`prizes`) are admin-only.
 
 **Winner eligibility is queue-group scoped (H46).** `winners.ts` records each
 win against the exact `challenge_id` the sponsor is picking for —
@@ -116,15 +115,14 @@ win against the exact `challenge_id` the sponsor is picking for —
 a repo qualifies if it has a `queue_entries` row (or a `repo_devpost_prizes` ↔
 `challenges.devpost_tags` match, for enterprises that opted out of the queue)
 against **any challenge in the target challenge's `queue_group`**, not only the
-target challenge itself. Since `0410_queue_groups.sql` gives every challenge its
-own 1:1 group, that set is today exactly `{challengeId}` and the rule is
-indistinguishable from the pre-group behaviour; it only widens once an
-enterprise merges several of its challenges into one shared judging queue, at
-which point a repo judged once through that queue is a legitimate candidate for
-every prize the queue feeds. When a repo qualifies through more than one
-challenge in a group, choosing which `challenge_id` the win is attributed to is
-a UI decision deferred to the PR that ships queue-group merging — no group
-holds more than one challenge yet, so there is nothing ambiguous to resolve.
+target challenge itself. A newly created challenge starts in a 1:1 group, so
+the set is initially exactly `{challengeId}` and the rule is indistinguishable
+from the pre-group behaviour. It widens only after an enterprise explicitly
+merges several challenges into one shared judging queue, at which point a repo
+judged once through that queue is a legitimate candidate for every prize the
+queue feeds. When a repo qualifies through more than one challenge in a group,
+the selected prize still records the exact `challenge_id` chosen by the
+sponsor; no implicit cross-challenge win is created.
 
 ### 1.3 Projects module (`apps/api/src/modules/projects/`)
 
@@ -138,8 +136,8 @@ holds more than one challenge yet, so there is nothing ambiguous to resolve.
 | `POST /api/devpost/imports/link-secondary` | `projects:import` | H6/H17 | request secondary verification; link activates only after verification |
 | `POST /api/devpost/imports/claim-email` | `projects:import` + idempotency | H17 | fire account-claim invite |
 | `POST /api/devpost/prizes/:prizeName/map` | `projects:import` | H16 | append prize to a challenge's `devpost_tags` |
-| `GET /api/repos` | `projects:read` | H20/queue | repos + members + prizes + mapped challenges |
-| `GET /api/repos/:id` | `projects:read` | H20/queue | one repo, same shape |
+| `GET /api/repos` | contextual `repository-list` | H20/queue | repos + members + prizes + mapped challenges within global or relationship-derived scope |
+| `GET /api/repos/:id` | contextual `repository-access` | H20/queue | one repo, same shape, after the exact repository scope check |
 | `GET /api/projects/member-candidates` | `projects:edit` | H21 | minimal account search for team editors |
 | `POST /api/repos` | `projects:edit` + idempotency | H18 | native creation: metadata + members + challenge lineup in one transaction |
 | `PATCH /api/repos/:id` | `projects:edit` | H18 | metadata edit (name, description, links), audited before/after |
@@ -163,9 +161,8 @@ chosen at creation reuse the same enqueue core as the H21 hot edit
 `queue_history` row + one audit row + one `QUEUE_ENTRY_CHANGED` broadcast per
 mutation. Participant self-creation is gated by
 `event_config.participants_can_create_projects` (H19, exposed on
-`GET /api/public/event` and toggled from the event settings page), limited to
-one project per participant (advisory-locked, exactly one winner under
-concurrency), and only accepts publicly visible challenges.
+`GET /api/public/event` and toggled from the event settings page), with no
+per-participant project-count cap, and only accepts publicly visible challenges.
 
 **H19/H20 self-service (supersedes H20's "read-only" text — product decision,
 not a `plan/` edit).** `plan/historias-hackos.md` still literally says a
@@ -211,7 +208,10 @@ membership and the sole-member count inside its own transaction, then cascades
 every FK-referencing row (`queue_entries`, `queue_history`, `attempt_review`,
 `attempt_review_versions`, `judging_session`, `submissions`,
 `devpost_participants`, `repo_devpost_prizes`, `challenge_winners` — none of
-those FKs cascade at the schema level) before deleting the repo itself.
+those FKs cascade at the schema level) before deleting the repo itself. Queue
+entry ids and fixture markers are captured before that delete; after commit,
+each affected entry emits a marker-scoped queue invalidation and each affected
+challenge queues a participant read-model refresh (H38/H41).
 
 The self-view is still the only read that redacts the roster: `myProjects()`
 nulls every member `email` except the caller's own, so teammates are listed by
@@ -317,7 +317,7 @@ Every projects, challenges, and sponsors route declares an explicit
 `RouteAccessPolicy` in the API route ledger. Named enterprise, challenge, and
 repository pre-handlers resolve the actual database resource before a handler
 runs: anonymous private calls receive `401`; authenticated callers without a
-global capability or the exact relationship receive `403`.
+global capability or the exact contextual relationship receive `403`.
 
 - `projects:read` (and the administrator wildcard) is global. Sponsor
   representatives otherwise see only repositories attached to challenges of
@@ -327,7 +327,9 @@ global capability or the exact relationship receive `403`.
 - `sponsors:manage` and `queue:admin` remain global for their challenge
   operations. A sponsor row grants access only to its enterprise's challenges;
   an `enterprise_judges(enterprise_id, user_id)` row grants read/panel access
-  to that enterprise's challenges only, never edit access.
+  to that enterprise's challenges only, never edit access. `JUDGE_PANEL` and
+  `QUEUE_OPERATE` also grant the panel preview capability where the route policy
+  allows it.
 - Enterprise profile routes resolve `:id` before authorizing. A representative
   can edit only their linked enterprise and its owner-editable fields; an
   unrelated enterprise id is forbidden. Nested project/challenge operations
@@ -335,11 +337,15 @@ global capability or the exact relationship receive `403`.
   transaction (for example, a winner repo must be entered in that challenge, or
   in one sharing its queue group — see §1.2).
 
-- Every mutating route is guarded by `requireCapability`/`requireAnyCapability`
-  by capability, never by role (H8): `projects:import` for all Devpost intake,
-  `projects:read` for the repo views, `sponsors:manage` /
-  `queue:admin` for challenges. Ownership-sensitive challenge routes additionally
-  check the challenge author's enterprise against the caller inside the handler.
+- Each route uses the guard that matches its access shape: global imports and
+  administration use `requireCapability`/`requireAnyCapability` (never roles),
+  while sponsor, judge, challenge, repository, and participant self-service
+  routes use contextual relationship, ownership, event-policy, eligibility, or
+  window checks. For example, `GET /api/repos` is `repository-list` and
+  `GET /api/repos/:id` is `repository-access`; `POST /api/me/projects` is
+  authenticated self-service with H19 policy and admission/window gates, not a
+  global capability route. Sensitive writes still record an audit row in the
+  same transaction.
 - Critical mutations carry `idempotencyGuard` (import confirm, claim-email).
 - Every sensitive mutation writes an `audit(...)` row in the same transaction as
   the domain write (H53): import confirm, manual link, claim-email, prize

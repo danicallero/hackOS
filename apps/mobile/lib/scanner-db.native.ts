@@ -1,10 +1,11 @@
-import { Paths } from "expo-file-system";
+import { File, Paths } from "expo-file-system";
 import * as SQLite from "expo-sqlite";
 import {
   decryptJson,
   encryptJson,
   getQueueKey,
   getRosterKey,
+  resetQueueKey,
   resetRosterKey,
 } from "./scanner-crypto";
 import { revokedBadgesFromSnapshot } from "./scanner-model";
@@ -35,6 +36,12 @@ import type {
 
 let rosterDatabase: Promise<SQLite.SQLiteDatabase> | null = null;
 let queueDatabase: Promise<SQLite.SQLiteDatabase> | null = null;
+let legacyQueueMigration: Promise<void> | null = null;
+// The roster is shared by all staff accounts on a device, but its contents
+// are session-bound. A late snapshot from account A must not replace the
+// wiped/new account B roster after sign-out or an account switch (H54/C6).
+let rosterGeneration = 0;
+let rosterOwnerUserId: number | null = null;
 
 interface PersonPayload {
   email: string;
@@ -85,6 +92,7 @@ async function rosterDb(): Promise<SQLite.SQLiteDatabase> {
           encrypted_payload TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS revoked_badges (badge_id TEXT PRIMARY KEY);
+        CREATE TABLE IF NOT EXISTS revoked_tickets (ticket_token TEXT PRIMARY KEY);
         CREATE TABLE IF NOT EXISTS scanner_activities (
           id INTEGER PRIMARY KEY,
           name TEXT NOT NULL,
@@ -107,7 +115,7 @@ async function rosterDb(): Promise<SQLite.SQLiteDatabase> {
   return rosterDatabase;
 }
 
-async function queueDb(): Promise<SQLite.SQLiteDatabase> {
+async function queueDb(ownerUserId?: number): Promise<SQLite.SQLiteDatabase> {
   if (!queueDatabase) {
     queueDatabase = SQLite.openDatabaseAsync("hackos-scanner-queue.db").then(async (opened) => {
       await opened.execAsync(`
@@ -128,67 +136,71 @@ async function queueDb(): Promise<SQLite.SQLiteDatabase> {
         CREATE INDEX IF NOT EXISTS pending_scans_owner_status
           ON pending_scans(created_by_user_id, status, created_at);
       `);
-      await migrateLegacyQueue(opened);
       return opened;
     });
   }
-  return queueDatabase;
+  const database = await queueDatabase;
+  if (ownerUserId !== undefined && legacyQueueMigration === null) {
+    legacyQueueMigration = retireLegacyScannerDatabase().catch((error) => {
+      // Keep the migration retryable if the OS refuses to remove the legacy
+      // identity-bearing file. Until it succeeds, the current queue is not
+      // used, so no stale payload can be replayed or assigned to this owner.
+      legacyQueueMigration = null;
+      throw error;
+    });
+  }
+  if (legacyQueueMigration) await legacyQueueMigration;
+  return database;
 }
 
 /**
- * One-time upgrade path for devices that synced before the roster/queue
- * split and per-user queue encryption. The old combined `hackos-scanner.db`
- * kept pending_scans as plaintext JSON with no owner column; any such rows
- * are attributed to a sentinel "unknown owner" (userId 0) rather than
- * silently dropped, then the legacy file is deleted. Devices that never had
- * the old file (fresh installs) hit this as a harmless no-op.
+ * Retire the pre-H54 combined scanner database.
+ *
+ * That file contained an identity-bearing roster and plaintext pending scan
+ * payloads without an owner column. There is no trustworthy way to determine
+ * which staff account created an old row, so importing it into the current
+ * per-owner queue would be an attribution and privacy bug. The old filename
+ * is app-owned and is no longer read by any current scanner path; delete the
+ * database and all SQLite journal sidecars before the new queue is used.
+ *
+ * This is deliberately a breaking local migration: offline scans left only
+ * in the old file must be recorded again after the app upgrade. If the OS
+ * refuses deletion, reject queue initialization and retry on the next
+ * authenticated call rather than exposing or replaying the legacy data.
  */
-async function migrateLegacyQueue(target: SQLite.SQLiteDatabase): Promise<void> {
+async function retireLegacyScannerDatabase(): Promise<void> {
   let legacy: SQLite.SQLiteDatabase | null = null;
+  let openError: unknown = null;
   try {
     legacy = await SQLite.openDatabaseAsync("hackos-scanner.db");
-    const columns = await legacy.getAllAsync<{ name: string }>(`PRAGMA table_info(pending_scans)`);
-    const hasLegacyShape = columns.some((c) => c.name === "payload_json");
-    if (!hasLegacyShape) return;
-    const rows = await legacy.getAllAsync<{
-      id: string;
-      kind: PendingScan["kind"];
-      payload_json: string;
-      status: PendingScan["status"];
-      attempts: number;
-      last_error: string | null;
-      created_at: string;
-      acknowledged_at: string | null;
-      clock_corrected: number;
-    }>(`SELECT * FROM pending_scans`);
-    if (rows.length > 0) {
-      const key = await getQueueKey(0);
-      for (const row of rows) {
-        const encrypted = await encryptJson(JSON.parse(row.payload_json), key);
-        await target.runAsync(
-          `INSERT OR IGNORE INTO pending_scans
-            (id, kind, created_by_user_id, encrypted_payload, status, attempts, last_error, created_at, acknowledged_at, clock_corrected)
-           VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`,
-          row.id,
-          row.kind,
-          encrypted,
-          row.status,
-          row.attempts,
-          row.last_error,
-          row.created_at,
-          row.acknowledged_at,
-          row.clock_corrected,
-        );
-      }
-    }
-  } catch {
-    // No legacy database, or it's already in the new shape — nothing to do.
+  } catch (error) {
+    // A corrupt legacy file still contains untrusted identity-bearing data;
+    // continue to the file retirement attempt and report the open failure if
+    // cleanup itself succeeds.
+    openError = error;
   } finally {
     if (legacy) {
       await legacy.closeAsync();
-      await SQLite.deleteDatabaseAsync("hackos-scanner.db").catch(() => undefined);
     }
   }
+
+  const databaseDirectory = SQLite.defaultDatabaseDirectory as string;
+  const sidecars = ["hackos-scanner.db-wal", "hackos-scanner.db-shm", "hackos-scanner.db-journal"];
+  for (const filename of sidecars) {
+    const sidecar = new File(databaseDirectory, filename);
+    if (sidecar.exists) sidecar.delete();
+  }
+
+  const legacyFile = new File(databaseDirectory, "hackos-scanner.db");
+  if (legacyFile.exists) await SQLite.deleteDatabaseAsync("hackos-scanner.db");
+
+  if (
+    legacyFile.exists ||
+    sidecars.some((filename) => new File(databaseDirectory, filename).exists)
+  ) {
+    throw new Error("Unable to retire the legacy scanner database");
+  }
+  if (openError) throw openError;
 }
 
 let rosterTransactionChain: Promise<unknown> = Promise.resolve();
@@ -233,7 +245,15 @@ const queueChainRef = {
   },
 };
 
-export async function applyScannerSnapshot(snapshot: ScannerSnapshot): Promise<void> {
+export async function applyScannerSnapshot(
+  snapshot: ScannerSnapshot,
+  ownerUserId?: number,
+): Promise<void> {
+  const generation =
+    ownerUserId !== undefined && rosterOwnerUserId !== ownerUserId
+      ? ++rosterGeneration
+      : rosterGeneration;
+  if (ownerUserId !== undefined) rosterOwnerUserId = ownerUserId;
   const database = await rosterDb();
   const key = await getRosterKey();
   const encryptedPeople = await Promise.all(
@@ -258,10 +278,20 @@ export async function applyScannerSnapshot(snapshot: ScannerSnapshot): Promise<v
     })),
   );
   await withSerializedTransaction(rosterChainRef, database, async () => {
+    // Sign-out/wipe and a newer owner's snapshot advance the generation before
+    // their database transaction is queued. Do not let this stale operation
+    // clear or repopulate the roster when it finally reaches SQLite.
+    if (
+      generation !== rosterGeneration ||
+      (ownerUserId !== undefined && rosterOwnerUserId !== ownerUserId)
+    ) {
+      return;
+    }
     const statements = [
       `
       DELETE FROM scanner_people;
       DELETE FROM revoked_badges;
+      DELETE FROM revoked_tickets;
       DELETE FROM scanner_activities;
       DELETE FROM scanner_activity_states;
     `,
@@ -274,6 +304,11 @@ export async function applyScannerSnapshot(snapshot: ScannerSnapshot): Promise<v
     }
     for (const revoked of revokedBadgesFromSnapshot(snapshot)) {
       statements.push(`INSERT INTO revoked_badges (badge_id) VALUES (${sqlLiteral(revoked)});`);
+    }
+    for (const revoked of snapshot.revokedTicketTokens ?? []) {
+      statements.push(
+        `INSERT INTO revoked_tickets (ticket_token) VALUES (${sqlLiteral(revoked)});`,
+      );
     }
     for (const activity of snapshot.activities) {
       statements.push(`INSERT INTO scanner_activities
@@ -303,18 +338,40 @@ export async function applyScannerSnapshot(snapshot: ScannerSnapshot): Promise<v
  * roster is shared, event-wide data with no reason to survive a session
  * boundary, and a fresh snapshot rebuilds it in full on the next sign-in.
  */
-export async function wipeAttendanceRoster(): Promise<void> {
+export async function wipeAttendanceRoster(ownerUserId?: number): Promise<void> {
+  // If a newer session has already installed its owner fence, an older
+  // sign-out must not wipe that session's roster. This matters when the auth
+  // transition and SQLite cleanup resolve in opposite orders.
+  if (
+    ownerUserId !== undefined &&
+    rosterOwnerUserId !== null &&
+    rosterOwnerUserId !== ownerUserId
+  ) {
+    return;
+  }
+  const targetOwner = ownerUserId ?? rosterOwnerUserId;
+  // Advance the fence before awaiting database/key operations so an already
+  // started snapshot cannot commit after this session boundary.
+  const generation = ++rosterGeneration;
+  rosterOwnerUserId = null;
   const database = await rosterDb();
   await withSerializedTransaction(rosterChainRef, database, async () => {
+    if (
+      generation !== rosterGeneration ||
+      (targetOwner !== null && rosterOwnerUserId !== null && rosterOwnerUserId !== targetOwner)
+    ) {
+      return;
+    }
     await database.execAsync(`
       DELETE FROM scanner_people;
       DELETE FROM revoked_badges;
+      DELETE FROM revoked_tickets;
       DELETE FROM scanner_activities;
       DELETE FROM scanner_activity_states;
       DELETE FROM scanner_metadata;
     `);
   });
-  await resetRosterKey();
+  if (generation === rosterGeneration && rosterOwnerUserId === null) await resetRosterKey();
 }
 
 function sqlLiteral(value: string | number | boolean | Date | null): string {
@@ -372,7 +429,13 @@ async function updatePersonPayload(
 }
 
 export async function findPersonByTicket(ticketToken: string): Promise<ScannerPerson | null> {
-  const row = await (await rosterDb()).getFirstAsync<PersonRow>(
+  const database = await rosterDb();
+  const revoked = await database.getFirstAsync<{ ticket_token: string }>(
+    `SELECT ticket_token FROM revoked_tickets WHERE ticket_token = ?`,
+    ticketToken,
+  );
+  if (revoked) return null;
+  const row = await database.getFirstAsync<PersonRow>(
     `SELECT * FROM scanner_people WHERE ticket_token = ?`,
     ticketToken,
   );
@@ -415,16 +478,16 @@ export async function findPersonByBadge(
   badgeId: string,
 ): Promise<{ person: ScannerPerson | null; revoked: boolean }> {
   const database = await rosterDb();
-  const row = await database.getFirstAsync<PersonRow>(
-    `SELECT * FROM scanner_people WHERE badge_id = ?`,
-    badgeId,
-  );
-  if (row) return { person: await personFromRow(row), revoked: false };
   const revoked = await database.getFirstAsync<{ badge_id: string }>(
     `SELECT badge_id FROM revoked_badges WHERE badge_id = ?`,
     badgeId,
   );
   if (revoked) return { person: null, revoked: true };
+  const row = await database.getFirstAsync<PersonRow>(
+    `SELECT * FROM scanner_people WHERE badge_id = ?`,
+    badgeId,
+  );
+  if (row) return { person: await personFromRow(row), revoked: false };
   return { person: null, revoked: false };
 }
 
@@ -483,7 +546,7 @@ function makeId(): string {
  * even usefully list it — pendingScans() always filters by owner.
  */
 export async function enqueueLocalScan(payload: ScanPayload, ownerUserId: number): Promise<string> {
-  const database = await queueDb();
+  const database = await queueDb(ownerUserId);
   const id = makeId();
   const now = new Date().toISOString();
   const key = await getQueueKey(ownerUserId);
@@ -597,30 +660,40 @@ export async function pendingScans(
   const where = onlyPending
     ? `WHERE created_by_user_id = ? AND status = 'pending'`
     : `WHERE created_by_user_id = ?`;
-  const rows = await (await queueDb()).getAllAsync<PendingScanRow>(
+  const rows = await (await queueDb(ownerUserId)).getAllAsync<PendingScanRow>(
     `SELECT * FROM pending_scans ${where} ORDER BY created_at ASC`,
     ownerUserId,
   );
   return Promise.all(rows.map(pendingScanFromRow));
 }
 
-export async function markScanAttempt(id: string): Promise<void> {
-  await (await queueDb()).runAsync(
-    `UPDATE pending_scans SET attempts = attempts + 1, last_error = NULL WHERE id = ?`,
+export async function markScanAttempt(id: string, ownerUserId: number): Promise<void> {
+  await (await queueDb(ownerUserId)).runAsync(
+    `UPDATE pending_scans SET attempts = attempts + 1, last_error = NULL
+      WHERE id = ? AND created_by_user_id = ?`,
     id,
+    ownerUserId,
   );
 }
 
-export async function acknowledgeScan(id: string, payload: ScanPayload): Promise<void> {
-  const database = await queueDb();
+export async function acknowledgeScan(
+  id: string,
+  payload: ScanPayload,
+  ownerUserId: number,
+): Promise<void> {
+  const database = await queueDb(ownerUserId);
+  let acknowledged = false;
   await withSerializedTransaction(queueChainRef, database, async () => {
-    await database.runAsync(
+    const result = await database.runAsync(
       `UPDATE pending_scans SET status = 'acknowledged', acknowledged_at = ?, last_error = NULL
-        WHERE id = ?`,
+        WHERE id = ? AND created_by_user_id = ?`,
       new Date().toISOString(),
       id,
+      ownerUserId,
     );
+    acknowledged = result.changes > 0;
   });
+  if (!acknowledged) return;
   if (payload.kind === "accreditation") {
     await (await rosterDb()).runAsync(
       `UPDATE scanner_people SET badge_id = ? WHERE ticket_token = ?`,
@@ -636,19 +709,27 @@ export async function acknowledgeScan(id: string, payload: ScanPayload): Promise
   }
 }
 
-export async function failScan(id: string, message: string): Promise<void> {
-  await (await queueDb()).runAsync(
-    `UPDATE pending_scans SET status = 'failed', last_error = ? WHERE id = ?`,
+export async function failScan(id: string, message: string, ownerUserId: number): Promise<void> {
+  await (await queueDb(ownerUserId)).runAsync(
+    `UPDATE pending_scans SET status = 'failed', last_error = ?
+      WHERE id = ? AND created_by_user_id = ?`,
     message,
     id,
+    ownerUserId,
   );
 }
 
-export async function noteRetryableError(id: string, message: string): Promise<void> {
-  await (await queueDb()).runAsync(
-    `UPDATE pending_scans SET last_error = ? WHERE id = ?`,
+export async function noteRetryableError(
+  id: string,
+  message: string,
+  ownerUserId: number,
+): Promise<void> {
+  await (await queueDb(ownerUserId)).runAsync(
+    `UPDATE pending_scans SET last_error = ?
+      WHERE id = ? AND created_by_user_id = ?`,
     message,
     id,
+    ownerUserId,
   );
 }
 
@@ -666,15 +747,17 @@ export async function correctScanTimestamp(
 ): Promise<void> {
   const key = await getQueueKey(ownerUserId);
   const encrypted = await encryptJson(payload, key);
-  await (await queueDb()).runAsync(
-    `UPDATE pending_scans SET encrypted_payload = ?, clock_corrected = 1, last_error = NULL WHERE id = ?`,
+  await (await queueDb(ownerUserId)).runAsync(
+    `UPDATE pending_scans SET encrypted_payload = ?, clock_corrected = 1, last_error = NULL
+      WHERE id = ? AND created_by_user_id = ?`,
     encrypted,
     id,
+    ownerUserId,
   );
 }
 
 export async function retryFailedScans(ownerUserId: number): Promise<void> {
-  await (await queueDb()).runAsync(
+  await (await queueDb(ownerUserId)).runAsync(
     `UPDATE pending_scans SET status = 'pending', last_error = NULL
       WHERE status = 'failed' AND created_by_user_id = ?`,
     ownerUserId,
@@ -682,11 +765,12 @@ export async function retryFailedScans(ownerUserId: number): Promise<void> {
 }
 
 /** Same as retryFailedScans, scoped to a single scan the operator picked from the queue. */
-export async function retryScan(id: string): Promise<void> {
-  await (await queueDb()).runAsync(
+export async function retryScan(id: string, ownerUserId: number): Promise<void> {
+  await (await queueDb(ownerUserId)).runAsync(
     `UPDATE pending_scans SET status = 'pending', last_error = NULL
-      WHERE id = ? AND status = 'failed'`,
+      WHERE id = ? AND status = 'failed' AND created_by_user_id = ?`,
     id,
+    ownerUserId,
   );
 }
 
@@ -696,8 +780,21 @@ export async function retryScan(id: string): Promise<void> {
  * explicit operator action — never called automatically, since a queued
  * scan is the only record of that transaction until it's acknowledged.
  */
-export async function deleteScan(id: string): Promise<void> {
-  await (await queueDb()).runAsync(`DELETE FROM pending_scans WHERE id = ?`, id);
+export async function deleteScan(id: string, ownerUserId: number): Promise<void> {
+  await (await queueDb(ownerUserId)).runAsync(
+    `DELETE FROM pending_scans WHERE id = ? AND created_by_user_id = ?`,
+    id,
+    ownerUserId,
+  );
+}
+
+/** H54: remove every encrypted offline scan owned by an account being closed. */
+export async function wipeOfflineScanQueue(ownerUserId: number): Promise<void> {
+  const database = await queueDb(ownerUserId);
+  await withSerializedTransaction(queueChainRef, database, async () => {
+    await database.runAsync(`DELETE FROM pending_scans WHERE created_by_user_id = ?`, ownerUserId);
+  });
+  await resetQueueKey(ownerUserId);
 }
 
 export async function getScannerMeta(
@@ -706,7 +803,7 @@ export async function getScannerMeta(
   const sync = await (await rosterDb()).getFirstAsync<{ value: string }>(
     `SELECT value FROM scanner_metadata WHERE key = 'last_sync'`,
   );
-  const pending = await (await queueDb()).getFirstAsync<{ count: number }>(
+  const pending = await (await queueDb(ownerUserId)).getFirstAsync<{ count: number }>(
     `SELECT count(*) AS count FROM pending_scans WHERE status = 'pending' AND created_by_user_id = ?`,
     ownerUserId,
   );

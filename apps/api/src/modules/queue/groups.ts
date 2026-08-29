@@ -13,31 +13,45 @@ import type { Queryable } from "../../db/pool.js";
  */
 
 /**
- * Every challenge sharing a queue_group with `$1`, always including `$1`
- * itself. The `UNION` self-row is a safety net, not decoration: a challenge
- * with no group row (impossible today, but only because of a trigger) must
- * still order and read as its own single-challenge queue rather than silently
- * resolving to the empty set.
+ * Every challenge sharing a queue_group with `$1`. A missing membership is a
+ * malformed queue graph and must resolve to no rows; callers that mutate or
+ * read queue state validate the complete group scope before reaching here.
  */
 export const GROUP_SIBLING_CHALLENGE_IDS_SQL = `
   SELECT sibling.challenge_id
     FROM queue_group_challenges self
     JOIN queue_group_challenges sibling ON sibling.queue_group_id = self.queue_group_id
-   WHERE self.challenge_id = $1
-   UNION
-  SELECT $1::int`;
+   WHERE self.challenge_id = $1`;
 
 /** Every challenge the room currently serves, via its queue_group. */
 export const ROOM_CHALLENGE_IDS_SQL = `
   SELECT qgc.challenge_id
     FROM room_queue_groups rqg
     JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
+    JOIN challenges c ON c.id = qgc.challenge_id AND c.is_test_account = false
+   WHERE rqg.room_id = $1`;
+
+/** Every challenge a marker-scoped operator's room currently serves. */
+export const ROOM_CHALLENGE_IDS_FOR_MARKER_SQL = `
+  SELECT qgc.challenge_id
+    FROM room_queue_groups rqg
+    JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
+    JOIN challenges c ON c.id = qgc.challenge_id AND c.is_test_account = $2
    WHERE rqg.room_id = $1`;
 
 /** Every room currently serving the queue_group that `$1` belongs to. */
 export const CHALLENGE_ROOM_IDS_SQL = `
   SELECT rqg.room_id
     FROM queue_group_challenges self
+    JOIN challenges c ON c.id = self.challenge_id AND c.is_test_account = false
+    JOIN room_queue_groups rqg ON rqg.queue_group_id = self.queue_group_id
+   WHERE self.challenge_id = $1`;
+
+/** Every room serving a marker-scoped challenge queue. */
+export const CHALLENGE_ROOM_IDS_FOR_MARKER_SQL = `
+  SELECT rqg.room_id
+    FROM queue_group_challenges self
+    JOIN challenges c ON c.id = self.challenge_id AND c.is_test_account = $2
     JOIN room_queue_groups rqg ON rqg.queue_group_id = self.queue_group_id
    WHERE self.challenge_id = $1`;
 
@@ -54,10 +68,14 @@ export const QUEUE_GROUP_LABEL_JOIN = `
   LEFT JOIN queue_groups qg_label ON qg_label.id = qgc_label.queue_group_id`;
 export const QUEUE_GROUP_LABEL_SQL = `COALESCE(qg_label.display_name, c.title)`;
 
-export async function roomChallengeIds(client: Queryable, roomId: number): Promise<number[]> {
-  const { rows } = await client.query(`${ROOM_CHALLENGE_IDS_SQL} ORDER BY qgc.challenge_id ASC`, [
-    roomId,
-  ]);
+export async function roomChallengeIds(
+  client: Queryable,
+  roomId: number,
+  fixtureMarker = false,
+): Promise<number[]> {
+  const sql = fixtureMarker ? ROOM_CHALLENGE_IDS_FOR_MARKER_SQL : ROOM_CHALLENGE_IDS_SQL;
+  const params = fixtureMarker ? [roomId, fixtureMarker] : [roomId];
+  const { rows } = await client.query(`${sql} ORDER BY qgc.challenge_id ASC`, params);
   return rows.map((row: { challenge_id: number }) => Number(row.challenge_id));
 }
 

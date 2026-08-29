@@ -27,9 +27,11 @@ export function PersonCardView({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="font-medium">{personName(card)}</p>
-          <p className="text-muted-foreground text-sm">
-            {t("userNumberFallback", { id: card.userId })}
-          </p>
+          {card.userId != null && (
+            <p className="text-muted-foreground text-sm">
+              {t("userNumberFallback", { id: card.userId })}
+            </p>
+          )}
         </div>
         {"confirmed" in card && (
           <div className="flex flex-wrap gap-2">

@@ -7,6 +7,7 @@ import {
   buildTestApp,
   createUser,
   createUserWithCapabilities,
+  ensureApplicationFormVersion,
   truncateAll,
 } from "../helpers.js";
 import { assignBadge, makeConfirmed } from "./fixtures.js";
@@ -82,9 +83,12 @@ describe("scanner role stats", () => {
       `INSERT INTO applications (name, type, template) VALUES ('participant-app', 'participant', '{}'::jsonb)`,
     );
     const app_ = await pool.query(`SELECT id FROM applications WHERE name = 'participant-app'`);
+    const formVersionId = await ensureApplicationFormVersion(app_.rows[0].id);
     await pool.query(
-      `INSERT INTO application_responses (user_id, application_id, status) VALUES ($1, $2, 'submitted')`,
-      [unconfirmed, app_.rows[0].id],
+      `INSERT INTO application_responses
+         (user_id, application_id, application_form_version_id, status)
+       VALUES ($1, $2, $3, 'submitted')`,
+      [unconfirmed, app_.rows[0].id, formVersionId],
     );
 
     const byRole = await getStats(app, scanner);

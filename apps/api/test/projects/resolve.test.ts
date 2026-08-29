@@ -8,6 +8,7 @@ import {
   createUserWithCapabilities,
   truncateAll,
 } from "../helpers.js";
+import { assignChallengeToRoom } from "../queue/fixtures.js";
 import {
   createChallenge,
   EMAILS,
@@ -268,6 +269,7 @@ describe("POST /api/devpost/imports/link-secondary (H16/H17)", () => {
     );
     const roomId = room.rows[0].id;
     await pool.query(`INSERT INTO room_queue_state (room_id) VALUES ($1)`, [roomId]);
+    await assignChallengeToRoom(roomId, challengeId);
     await pool.query(
       `UPDATE queue_entries SET assigned_room_id = $1, status = 'presenting' WHERE repo_id = $2`,
       [roomId, repoId],

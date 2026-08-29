@@ -8,8 +8,8 @@ split "which enterprise a room belongs to" off from "which queue it serves".
 > **Status: complete.** Rooms, queue reads, ordering, the room-assignment
 > screen and the merge action all go through queue groups. An enterprise with
 > more than one challenge can merge selected challenges into one or more shared
-> queues from its judges tab; ungrouped challenges stay 1:1 and behave exactly
-> as one-queue-per-challenge always did.
+> queues from its judges tab; each challenge starts in a 1:1 group and behaves
+> exactly as one-queue-per-challenge did until an explicit merge.
 >
 > **Room ownership is a separate decision from room serving (0413).** A room's
 > enterprise (`room_enterprises`) and a room's serving queue
@@ -92,16 +92,16 @@ room_enterprises >── rooms ──< room_queue_groups >── queue_groups
    break the same invariant from the other side; there is no product surface
    for that today, so it is deliberately not guarded.
 
-2. **Every challenge has exactly one group.** `challenges_default_queue_group`
-   (`AFTER INSERT ON challenges`) creates a 1:1 group for each new challenge,
-   with `display_name` defaulting to the challenge title. It lives in the
-   database rather than the challenges service so seeds, imports, and direct
-   SQL cannot bypass it — `0411`'s repoint of `room_challenges` onto
-   `queue_group_id` (and its `NOT NULL`) depends on the invariant holding for
-   every row created in the meantime.
+2. **Managed challenge creation gives every challenge one group.**
+   `challenges_default_queue_group` (`AFTER INSERT ON challenges`) creates a
+   1:1 group for each new challenge, with `display_name` defaulting to the
+   challenge title. The membership row is `ON DELETE CASCADE`, so a direct
+   group deletion, an interrupted reset, or hand-written legacy SQL can leave
+   an ungrouped challenge. Those malformed rows are not silently treated as a
+   real queue: marker-aware reads omit them and queue mutations fail closed;
+   release checks must repair them before serving traffic.
 
-Because of (2), "challenge without a group" is never a state the rest of the
-system has to special-case, and nothing is merged automatically: today's
+With a valid membership row, nothing is merged automatically: today's
 per-challenge queue behaviour is exactly what N separate 1:1 groups describe.
 Merging challenges into a shared group is an explicit admin action — see
 "Merging" below.
@@ -131,12 +131,25 @@ hops. The shared SQL fragments and helpers live in
 |---|---|
 | `ROOM_CHALLENGE_IDS_SQL` / `roomChallengeIds` | which challenges a room can call from |
 | `CHALLENGE_ROOM_IDS_SQL` | which rooms serve a challenge's queue |
-| `GROUP_SIBLING_CHALLENGE_IDS_SQL` | which challenges share a challenge's queue (always includes itself) |
+| `GROUP_SIBLING_CHALLENGE_IDS_SQL` | which challenges share a challenge's queue (includes itself only when the challenge has a group) |
 | `roomEnterpriseId` / `queueGroupEnterpriseId` | which enterprise a room/group belongs to |
 
 Consumers: `queue/reads.ts`, `queue/rooms.routes.ts`, `queue/entries.routes.ts`,
 `queue/notify.ts`, `queue/service.ts`, `queue/contextual-access.ts` and
 `challenges/service.ts`.
+
+### Topology invalidation
+
+Queue-group topology is also the participant read-model boundary. Merge, split,
+group edits, and room serving changes capture the old and new group/challenge
+membership while their transaction is open; room-serving replacements lock the
+current target links (including a clear-to-zero replacement) before taking
+those snapshots. Only after commit do they publish the affected `queueGroup`
+events and schedule participant invalidations. The delayed worker uses the
+current membership when it runs, so a group id carried by an older job may
+safely be stale or deleted without dropping a valid refresh for the challenge's
+surviving group. Calls and pre-call warnings remain immediate events and are
+not folded into this debounce path.
 
 ### Ordering
 
@@ -147,6 +160,12 @@ min/max across every challenge in the group. Callers still pass a
 `challengeId` — that is what a queue entry carries — and the group is resolved
 from it. For a 1:1 group the bounds select exactly the rows the per-challenge
 bounds did, so ordering is unchanged.
+
+Participant and pre-call ETA use the same live throughput boundary: they
+average `desired_minutes_per_team` and divide by the number of serving rooms
+whose queue state is not paused. A paused room contributes neither its pace nor
+capacity; when no serving room is active, the conservative eight-minute default
+is used.
 
 ### Call once
 
@@ -187,7 +206,7 @@ room, which is admin-only regardless of caller.
 ## Merging (0412)
 
 Merging is the only thing that produces a group with more than one challenge.
-It lives in `queue/group-merge.ts` behind five routes, all gated by the same
+It lives in `queue/group-merge.ts` behind seven routes, all gated by the same
 grant as the judge roster (`assertCanManageEnterpriseJudging`: `queue:admin`,
 `sponsors:manage`, or a rep of the enterprise):
 
@@ -254,7 +273,8 @@ match. Keys are preserved wherever possible, since `attempt_review.scores` is
 keyed by them; only a key claimed by two genuinely different questions is
 renamed (`nota` → `nota-2`). Nothing semantic is attempted — the admin's
 review step is what catches near-misses, and the merge is refused after
-judging starts precisely so no existing answer can be orphaned by a rename.
+the first evaluation is submitted precisely so no existing answer can be
+orphaned by a rename.
 
 Everything that reads a panel resolves through the group: `judging.ts`'s
 answer validation, `reviews.ts`'s overview and detail, `exports.ts`'s CSV

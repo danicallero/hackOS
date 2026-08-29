@@ -1,13 +1,18 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { pool } from "../../db/pool.js";
+import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireAnyCapability, requireCapability } from "../../lib/capabilities.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { createApplicationSchema, idParamSchema, updateApplicationSchema } from "./schemas.js";
-import { isInvitedParticipant, isWindowOpen } from "./service.js";
+import {
+  anonymousRetentionConfiguration,
+  isInvitedParticipant,
+  isWindowOpen,
+  normalizeTemplateForStorage,
+} from "./service.js";
 
 /**
  * H11 (APPLICATIONS_MANAGE): define application forms, open/close windows,
@@ -25,7 +30,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
 
   const COLUMNS = `id, name, type, template, sections, description, active, open_at, close_at,
                    capacity, confirmation_window_hours, ask_shirt_size, ask_food_intolerances,
-                   created_at`;
+                   current_form_version, created_at`;
 
   // ── public: open forms with their template ──────────────────────────────────
   // A late invited participant (H10) can also discover/fetch a closed form —
@@ -131,36 +136,52 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     },
     async (req, reply) => {
       const b = req.body;
-      const { rows } = await pool.query(
-        `INSERT INTO applications
-           (name, type, template, sections, description, active, open_at, close_at, capacity,
-            confirmation_window_hours, ask_shirt_size, ask_food_intolerances)
-         VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12)
-         RETURNING ${COLUMNS}`,
-        [
-          b.name,
-          b.type,
-          JSON.stringify(b.template),
-          JSON.stringify(b.sections),
-          b.description ?? null,
-          b.active,
-          b.open_at ?? null,
-          b.close_at ?? null,
-          b.capacity ?? null,
-          b.confirmation_window_hours,
-          b.ask_shirt_size,
-          b.ask_food_intolerances,
-        ],
-      );
-      await audit(pool, {
-        actorId: req.userId,
-        entityType: "application",
-        entityId: rows[0].id,
-        action: "created",
-        after: { name: b.name, type: b.type },
+      const row = await withTransaction(async (client) => {
+        const template = normalizeTemplateForStorage(b.template);
+        const { rows } = await client.query(
+          `INSERT INTO applications
+             (name, type, template, sections, description, active, open_at, close_at, capacity,
+              confirmation_window_hours, ask_shirt_size, ask_food_intolerances, current_form_version)
+           VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, 1)
+           RETURNING ${COLUMNS}`,
+          [
+            b.name,
+            b.type,
+            JSON.stringify(template),
+            JSON.stringify(b.sections),
+            b.description ?? null,
+            b.active,
+            b.open_at ?? null,
+            b.close_at ?? null,
+            b.capacity ?? null,
+            b.confirmation_window_hours,
+            b.ask_shirt_size,
+            b.ask_food_intolerances,
+          ],
+        );
+        const application = rows[0];
+        await client.query(
+          `INSERT INTO application_form_versions
+             (application_id, version, template, sections, created_by)
+           VALUES ($1, 1, $2::jsonb, $3::jsonb, $4)`,
+          [application.id, JSON.stringify(template), JSON.stringify(b.sections), req.userId],
+        );
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "application",
+          entityId: application.id,
+          action: "created",
+          after: {
+            name: b.name,
+            type: b.type,
+            formVersion: 1,
+            anonymousRetention: anonymousRetentionConfiguration(template),
+          },
+        });
+        return application;
       });
       reply.code(201);
-      return rows[0];
+      return row;
     },
   );
 
@@ -179,50 +200,89 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const b = req.body;
-      const sets: string[] = [];
-      const values: unknown[] = [];
-      let i = 1;
-      const put = (col: string, val: unknown, cast = "") => {
-        sets.push(`${col} = $${i}${cast}`);
-        values.push(val);
-        i += 1;
-      };
-      if (b.name !== undefined) put("name", b.name);
-      if (b.type !== undefined) put("type", b.type);
-      if (b.template !== undefined) put("template", JSON.stringify(b.template), "::jsonb");
-      if (b.sections !== undefined) put("sections", JSON.stringify(b.sections), "::jsonb");
-      if (b.description !== undefined) put("description", b.description ?? null);
-      if (b.active !== undefined) put("active", b.active);
-      if (b.open_at !== undefined) put("open_at", b.open_at ?? null);
-      if (b.close_at !== undefined) put("close_at", b.close_at ?? null);
-      if (b.capacity !== undefined) put("capacity", b.capacity ?? null);
-      if (b.confirmation_window_hours !== undefined)
-        put("confirmation_window_hours", b.confirmation_window_hours);
-      if (b.ask_shirt_size !== undefined) put("ask_shirt_size", b.ask_shirt_size);
-      if (b.ask_food_intolerances !== undefined)
-        put("ask_food_intolerances", b.ask_food_intolerances);
+      return withTransaction(async (client) => {
+        const { rows: currentRows } = await client.query(
+          `SELECT ${COLUMNS} FROM applications WHERE id = $1 FOR UPDATE`,
+          [req.params.id],
+        );
+        const current = currentRows[0];
+        if (!current) throw new NotFoundError("Application not found");
 
-      if (sets.length === 0) {
-        const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications WHERE id = $1`, [
-          req.params.id,
-        ]);
+        const schemaChanged = b.template !== undefined || b.sections !== undefined;
+        const nextTemplate = schemaChanged
+          ? normalizeTemplateForStorage(b.template ?? current.template)
+          : current.template;
+        const nextSections = b.sections ?? current.sections ?? [];
+        const nextVersion = Number(current.current_form_version ?? 1) + (schemaChanged ? 1 : 0);
+
+        const sets: string[] = [];
+        const values: unknown[] = [];
+        let i = 1;
+        const put = (col: string, val: unknown, cast = "") => {
+          sets.push(`${col} = $${i}${cast}`);
+          values.push(val);
+          i += 1;
+        };
+        if (b.name !== undefined) put("name", b.name);
+        if (b.type !== undefined) put("type", b.type);
+        if (schemaChanged) {
+          put("template", JSON.stringify(nextTemplate), "::jsonb");
+          put("sections", JSON.stringify(nextSections), "::jsonb");
+          put("current_form_version", nextVersion);
+        }
+        if (b.description !== undefined) put("description", b.description ?? null);
+        if (b.active !== undefined) put("active", b.active);
+        if (b.open_at !== undefined) put("open_at", b.open_at ?? null);
+        if (b.close_at !== undefined) put("close_at", b.close_at ?? null);
+        if (b.capacity !== undefined) put("capacity", b.capacity ?? null);
+        if (b.confirmation_window_hours !== undefined)
+          put("confirmation_window_hours", b.confirmation_window_hours);
+        if (b.ask_shirt_size !== undefined) put("ask_shirt_size", b.ask_shirt_size);
+        if (b.ask_food_intolerances !== undefined)
+          put("ask_food_intolerances", b.ask_food_intolerances);
+
+        if (sets.length === 0) return current;
+        values.push(req.params.id);
+        const { rows } = await client.query(
+          `UPDATE applications SET ${sets.join(", ")} WHERE id = $${i} RETURNING ${COLUMNS}`,
+          values,
+        );
         if (!rows[0]) throw new NotFoundError("Application not found");
+
+        if (schemaChanged) {
+          await client.query(
+            `INSERT INTO application_form_versions
+               (application_id, version, template, sections, created_by)
+             VALUES ($1, $2, $3::jsonb, $4::jsonb, $5)`,
+            [
+              req.params.id,
+              nextVersion,
+              JSON.stringify(nextTemplate),
+              JSON.stringify(nextSections),
+              req.userId,
+            ],
+          );
+        }
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "application",
+          entityId: req.params.id,
+          action: "updated",
+          before: schemaChanged
+            ? {
+                formVersion: Number(current.current_form_version ?? 1),
+                anonymousRetention: anonymousRetentionConfiguration(current.template ?? []),
+              }
+            : undefined,
+          after: schemaChanged
+            ? {
+                formVersion: nextVersion,
+                anonymousRetention: anonymousRetentionConfiguration(nextTemplate),
+              }
+            : b,
+        });
         return rows[0];
-      }
-      values.push(req.params.id);
-      const { rows } = await pool.query(
-        `UPDATE applications SET ${sets.join(", ")} WHERE id = $${i} RETURNING ${COLUMNS}`,
-        values,
-      );
-      if (!rows[0]) throw new NotFoundError("Application not found");
-      await audit(pool, {
-        actorId: req.userId,
-        entityType: "application",
-        entityId: req.params.id,
-        action: "updated",
-        after: b,
       });
-      return rows[0];
     },
   );
 
@@ -239,6 +299,16 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       },
     },
     async (req, reply) => {
+      const { rows: anonymousRefs } = await pool.query(
+        `SELECT 1 FROM anonymous_participant_fields WHERE application_id = $1 LIMIT 1`,
+        [req.params.id],
+      );
+      if (anonymousRefs.length > 0) {
+        throw new ConflictError(
+          "Cannot delete a form referenced by an anonymous audit record; deactivate it instead",
+          { code: "anonymous_audit_references" },
+        );
+      }
       const { rows: refs } = await pool.query(
         `SELECT 1 FROM application_responses WHERE application_id = $1 LIMIT 1`,
         [req.params.id],

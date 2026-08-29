@@ -30,6 +30,14 @@ afterAll(async () => {
 });
 
 describe("buildExportBundle (H54)", () => {
+  it("does not create a personal export bundle for a synthetic fixture", async () => {
+    const subject = await createUser({ email: "synthetic@example.test" });
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [subject]);
+
+    await expect(buildExportBundle(subject)).rejects.toMatchObject({ statusCode: 404 });
+  });
+
   it("excludes another user's applications/projects entirely", async () => {
     const a = await createUser({ email: "a@example.test", name: "Alice" });
     const b = await createUser({ email: "b@example.test", name: "Bob" });

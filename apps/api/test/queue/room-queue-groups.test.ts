@@ -138,6 +138,20 @@ describe("1:1 group parity", () => {
     expect(status.position).toBe(1);
   });
 
+  it("excludes paused rooms from ETA throughput", async () => {
+    const { challengeEtaMinutesPerSlot, roomPace } = await import(
+      "../../src/modules/queue/reads.js"
+    );
+    const challengeId = await createChallenge();
+    const activeRoom = await createRoom({ desiredMinutesPerTeam: 8 });
+    const pausedRoom = await createRoom({ isPaused: true, desiredMinutesPerTeam: 2 });
+    await assignChallengeToRoom(activeRoom, challengeId);
+    await assignChallengeToRoom(pausedRoom, challengeId);
+
+    expect(await challengeEtaMinutesPerSlot(challengeId)).toBe(8);
+    expect((await roomPace(activeRoom)).roomCount).toBe(1);
+  });
+
   it("ranks the back of a one-challenge queue exactly as before", async () => {
     const { pool } = await import("../../src/db/pool.js");
     const { nextBottomPosition } = await import("../../src/modules/queue/ordering.js");
@@ -212,6 +226,27 @@ describe("merged N>1 group", () => {
 
     // ...and counted once as pending work.
     expect((await roomPace(roomId)).pendingCount).toBe(2);
+  });
+
+  it("uses the limit belonging to the lowest challenge id in a merged group", async () => {
+    const { roomPace } = await import("../../src/modules/queue/reads.js");
+    const { pool } = await import("../../src/db/pool.js");
+    const { challengeIds } = await createEnterpriseChallenges(2);
+    const first = challengeIds[0]!;
+    const second = challengeIds[1]!;
+    const groupId = await mergeChallengesIntoOneGroup(challengeIds);
+    const roomId = await createRoom();
+    await assignQueueGroupToRoom(roomId, groupId);
+    await pool.query(`UPDATE challenges SET max_presentation_seconds = $2 WHERE id = $1`, [
+      first,
+      600,
+    ]);
+    await pool.query(`UPDATE challenges SET max_presentation_seconds = $2 WHERE id = $1`, [
+      second,
+      120,
+    ]);
+
+    expect((await roomPace(roomId)).challengeMaxMinutes).toBe(10);
   });
 
   it("calls the merged team once, not once per entry", async () => {

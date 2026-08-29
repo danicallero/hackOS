@@ -4,11 +4,14 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createUser, createUserWithCapabilities, truncateAll } from "../helpers.js";
 import {
   assignChallengeToRoom,
+  assignQueueGroupToRoom,
   createChallenge,
+  createEnterpriseChallenges,
   createRepoWithTeam,
   createRoom,
   enqueueRepo,
   getEntry,
+  mergeChallengesIntoOneGroup,
 } from "./fixtures.js";
 
 /**
@@ -173,6 +176,33 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
     expect((await getEntry(entryId)).precalled_at).toBeNull();
   });
 
+  it("does not let a paused room inflate pre-call capacity", async () => {
+    const challengeId = await createChallenge();
+    const activeRoom = await createRoom({ maxInWaitingArea: 0, desiredMinutesPerTeam: 8 });
+    const pausedRoom = await createRoom({
+      maxInWaitingArea: 0,
+      isPaused: true,
+      desiredMinutesPerTeam: 2,
+    });
+    await assignChallengeToRoom(activeRoom, challengeId);
+    await assignChallengeToRoom(pausedRoom, challengeId);
+
+    const firstMember = await createUser();
+    const secondMember = await createUser();
+    const first = await createRepoWithTeam([firstMember]);
+    const second = await createRepoWithTeam([secondMember]);
+    const firstEntryId = await enqueueRepo(challengeId, first.repoId, 1);
+    const secondEntryId = await enqueueRepo(challengeId, second.repoId, 2);
+
+    // With only the active 8-minute room contributing throughput, rank 2 is
+    // 16 minutes away and must remain above the 10-minute warning threshold.
+    // Counting the paused 2-minute room would incorrectly produce 10 minutes.
+    await pump();
+
+    expect((await getEntry(firstEntryId)).precalled_at).not.toBeNull();
+    expect((await getEntry(secondEntryId)).precalled_at).toBeNull();
+  });
+
   it("honours the H30 member-busy guard and retries the team on a later tick", async () => {
     const ch1 = await createChallenge();
     const ch2 = await createChallenge();
@@ -277,6 +307,76 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
     await pump();
 
     expect((await getEntry(farId)).precalled_at).toBeNull();
+  });
+
+  it("pre-calls a merged repo once and claims only waiting siblings", async () => {
+    const { challengeIds } = await createEnterpriseChallenges(2);
+    const groupId = await mergeChallengesIntoOneGroup(challengeIds);
+    const roomId = await createRoom({ maxInWaitingArea: 0, desiredMinutesPerTeam: 5 });
+    await assignQueueGroupToRoom(roomId, groupId);
+    const member = await createUser();
+    const { repoId } = await createRepoWithTeam([member]);
+    const first = await enqueueRepo(challengeIds[0]!, repoId, 1);
+    const second = await enqueueRepo(challengeIds[1]!, repoId, 2);
+
+    await pump();
+
+    const { pool } = await import("../../src/db/pool.js");
+    const outbox = await pool.query(
+      `SELECT count(*)::int AS n
+         FROM notification_outbox
+        WHERE user_id = $1 AND category = 'queue'`,
+      [member],
+    );
+    expect(outbox.rows[0].n).toBe(3);
+    expect((await getEntry(first)).precalled_at).not.toBeNull();
+    expect((await getEntry(second)).precalled_at).not.toBeNull();
+
+    // An already-called sibling is not eligible for a second pre-call cycle,
+    // and the claim must never advance a non-waiting row.
+    await pool.query(
+      `UPDATE queue_entries
+          SET status = 'called', assigned_room_id = $2
+        WHERE id = $1`,
+      [first, roomId],
+    );
+    await pump();
+    const after = await pool.query(
+      `SELECT count(*)::int AS n
+         FROM notification_outbox
+        WHERE user_id = $1 AND category = 'queue'`,
+      [member],
+    );
+    expect(after.rows[0].n).toBe(3);
+  });
+
+  it("serializes concurrent merged-group claims and notifies only the canonical row", async () => {
+    const { challengeIds } = await createEnterpriseChallenges(2);
+    const groupId = await mergeChallengesIntoOneGroup(challengeIds);
+    const roomId = await createRoom({ maxInWaitingArea: 0, desiredMinutesPerTeam: 5 });
+    await assignQueueGroupToRoom(roomId, groupId);
+    const member = await createUser();
+    const { repoId } = await createRepoWithTeam([member]);
+    const canonicalId = await enqueueRepo(challengeIds[0]!, repoId, 1);
+    const siblingId = await enqueueRepo(challengeIds[1]!, repoId, 2);
+
+    // Two workers can discover the same merged group/repo at the same time.
+    // Exactly one transaction may claim the logical team and its notification
+    // must identify the best queue row, not whichever discovery row won.
+    await Promise.all([pump(), pump()]);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows: outbox } = await pool.query(
+      `SELECT payload
+         FROM notification_outbox
+        WHERE user_id = $1 AND category = 'queue'
+        ORDER BY id`,
+      [member],
+    );
+    expect(outbox).toHaveLength(3);
+    expect(new Set(outbox.map((row) => row.payload.entryId))).toEqual(new Set([canonicalId]));
+    expect((await getEntry(canonicalId)).precalled_at).not.toBeNull();
+    expect((await getEntry(siblingId)).precalled_at).not.toBeNull();
   });
 });
 

@@ -41,6 +41,20 @@ x-app-env: &app-env
   MAIL_PROVIDER: "${MAIL_PROVIDER:-smtp}"
   MAIL_FROM_ADDRESS: "${MAIL_FROM_ADDRESS}"
   MAIL_FROM_NAME: "${MAIL_FROM_NAME:-hackOS}"
+  MAIL_FOOTER_TEXT: "${MAIL_FOOTER_TEXT:-hackOS — this is an automated message.}"
+  MAIL_LAYOUT_BRAND_NAME: "${MAIL_LAYOUT_BRAND_NAME:-hackOS}"
+  MAIL_LAYOUT_HEADER_TEXT: "${MAIL_LAYOUT_HEADER_TEXT:-hackOS}"
+  MAIL_LAYOUT_HEADER_SUBTEXT: "${MAIL_LAYOUT_HEADER_SUBTEXT:-}"
+  MAIL_LAYOUT_LOGO_URL: "${MAIL_LAYOUT_LOGO_URL-https://${WEB_DOMAIN}/email/brand-mark.png}"
+  MAIL_LAYOUT_ACCENT_COLOR: "${MAIL_LAYOUT_ACCENT_COLOR:-#18181b}"
+  MAIL_LAYOUT_BG_COLOR: "${MAIL_LAYOUT_BG_COLOR:-#f4f4f5}"
+  MAIL_LAYOUT_CARD_COLOR: "${MAIL_LAYOUT_CARD_COLOR:-#ffffff}"
+  MAIL_LAYOUT_CARD_BORDER_COLOR: "${MAIL_LAYOUT_CARD_BORDER_COLOR:-#e4e4e7}"
+  MAIL_LAYOUT_TEXT_COLOR: "${MAIL_LAYOUT_TEXT_COLOR:-#18181b}"
+  MAIL_LAYOUT_MUTED_TEXT_COLOR: "${MAIL_LAYOUT_MUTED_TEXT_COLOR:-#71717a}"
+  MAIL_LAYOUT_FOOTER_BG_COLOR: "${MAIL_LAYOUT_FOOTER_BG_COLOR:-#fafafa}"
+  MAIL_LAYOUT_CARD_RADIUS: "${MAIL_LAYOUT_CARD_RADIUS:-8}"
+  MAIL_LAYOUT_MAX_WIDTH: "${MAIL_LAYOUT_MAX_WIDTH:-560}"
   RESEND_API_KEY: "${RESEND_API_KEY:-}"
   POSTAL_URL: "${POSTAL_URL:-}"
   POSTAL_API_KEY: "${POSTAL_API_KEY:-}"
@@ -61,6 +75,16 @@ x-app-env: &app-env
   GOOGLE_WALLET_ISSUER_ID: "${GOOGLE_WALLET_ISSUER_ID:-}"
   GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL: "${GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL:-}"
   GOOGLE_WALLET_PRIVATE_KEY_PEM: "${GOOGLE_WALLET_PRIVATE_KEY_PEM:-}"
+
+# Synthetic fixture secrets are API-only. Do not pass them to migrate or
+# worker; the API uses them for the marked fixture workspace in this same
+# deployment/database.
+x-review-fixture-env: &review-fixture-env
+  REVIEW_FIXTURE_PASSWORD: "${REVIEW_FIXTURE_PASSWORD:-}"
+  REVIEW_FIXTURE_DELETION_PIN: "${REVIEW_FIXTURE_DELETION_PIN:-}"
+
+x-api-env: &api-env
+  <<: [*app-env, *review-fixture-env]
 
 x-security: &hardening
   security_opt:
@@ -176,7 +200,11 @@ services:
     # H10/H53: repeat the advisory-locked migration check here as a guard for
     # redeploys that reuse an already-completed one-shot `migrate` container.
     command: ["sh", "-c", "node dist/migrate.js && exec node dist/server.js"]
-    environment: *app-env
+    environment: *api-env
+    # Deterministic external DNS — do not inherit a host resolver that may be
+    # transiently wrong during deploys; internal service names still use the
+    # Docker resolver on the attached networks.
+    dns: ["1.1.1.1", "8.8.8.8"]
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -267,6 +295,9 @@ services:
     environment:
       <<: *app-env
       WORKERS_INLINE: "false"
+    # Keep outbound mail/push resolution independent of the host resolver,
+    # matching the split-stack service definitions.
+    dns: ["1.1.1.1", "8.8.8.8"]
     depends_on:
       migrate:
         condition: service_completed_successfully

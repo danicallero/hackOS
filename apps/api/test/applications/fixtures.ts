@@ -1,5 +1,6 @@
 import { pool } from "../../src/db/pool.js";
 import type { TemplateField } from "../../src/modules/applications/schemas.js";
+import { ensureApplicationFormVersion } from "../helpers.js";
 
 /** A minimal 2-field template: a required text field and an optional select. */
 export function sampleTemplate(): TemplateField[] {
@@ -38,6 +39,10 @@ export async function createApplication(
   }> = {},
 ): Promise<number> {
   const type = overrides.type ?? "participant";
+  const template = (overrides.template ?? sampleTemplate()).map((field) => ({
+    ...field,
+    retention_mode: field.retention_mode ?? "none",
+  }));
   // Mirrors the old hardcoded SHIRT_TYPES default, now admin-configurable —
   // keeps every existing test's implicit "participant/mentor asks" assumption.
   const asksByDefault = type === "participant" || type === "mentor";
@@ -49,7 +54,7 @@ export async function createApplication(
     [
       overrides.name ?? "Participant form",
       type,
-      JSON.stringify(overrides.template ?? sampleTemplate()),
+      JSON.stringify(template),
       overrides.active ?? true,
       overrides.open_at ?? null,
       overrides.close_at ?? null,
@@ -59,10 +64,11 @@ export async function createApplication(
       overrides.ask_food_intolerances ?? asksByDefault,
     ],
   );
+  await ensureApplicationFormVersion(rows[0].id);
   return rows[0].id;
 }
 
-/** Insert a response row directly at a given status (test setup shortcut). */
+/** Insert a response row directly at a given status, bound to its H54 snapshot. */
 export async function createResponse(
   userId: number,
   applicationId: number,
@@ -72,12 +78,15 @@ export async function createResponse(
     decision_sent_at: string | null;
   }> = {},
 ): Promise<number> {
+  const formVersionId = await ensureApplicationFormVersion(applicationId);
   const { rows } = await pool.query(
-    `INSERT INTO application_responses (user_id, application_id, status, responses, decision_sent_at)
-     VALUES ($1, $2, $3, $4::jsonb, $5) RETURNING id`,
+    `INSERT INTO application_responses
+       (user_id, application_id, application_form_version_id, status, responses, decision_sent_at)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6) RETURNING id`,
     [
       userId,
       applicationId,
+      formVersionId,
       overrides.status ?? "draft",
       JSON.stringify(overrides.responses ?? {}),
       overrides.decision_sent_at ?? null,

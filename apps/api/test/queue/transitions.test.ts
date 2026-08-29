@@ -613,6 +613,9 @@ describe("bring_in / start / complete (H32)", () => {
       payload: {},
     });
 
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE queue_entries SET precalled_at = now() WHERE id = $1`, [entryId]);
+
     const bringIn = await app.inject({
       method: "POST",
       url: `/api/queue/entries/${entryId}/bring-in`,
@@ -620,8 +623,14 @@ describe("bring_in / start / complete (H32)", () => {
       payload: {},
     });
     expect(bringIn.statusCode).toBe(200);
-    expect((await getEntry(entryId)).status).toBe("in_room");
-    expect((await getEntry(entryId)).presentation_started_at).toBeNull(); // clock NOT running yet
+    let transitioned = await getEntry(entryId);
+    expect(transitioned.status).toBe("in_room");
+    expect(transitioned.presentation_started_at).toBeNull(); // clock NOT running yet
+    expect(transitioned.precalled_at).toBeNull();
+
+    // Each H32 stage must start with a fresh pre-call cycle, even if a stale
+    // marker was left behind by a worker or fixture before the transition.
+    await pool.query(`UPDATE queue_entries SET precalled_at = now() WHERE id = $1`, [entryId]);
 
     const start = await app.inject({
       method: "POST",
@@ -630,9 +639,12 @@ describe("bring_in / start / complete (H32)", () => {
       payload: {},
     });
     expect(start.statusCode).toBe(200);
-    const started = await getEntry(entryId);
-    expect(started.status).toBe("presenting");
-    expect(started.presentation_started_at).not.toBeNull();
+    transitioned = await getEntry(entryId);
+    expect(transitioned.status).toBe("presenting");
+    expect(transitioned.presentation_started_at).not.toBeNull();
+    expect(transitioned.precalled_at).toBeNull();
+
+    await pool.query(`UPDATE queue_entries SET precalled_at = now() WHERE id = $1`, [entryId]);
 
     const complete = await app.inject({
       method: "POST",
@@ -641,9 +653,10 @@ describe("bring_in / start / complete (H32)", () => {
       payload: {},
     });
     expect(complete.statusCode).toBe(200);
-    const completed = await getEntry(entryId);
-    expect(completed.status).toBe("completed");
-    expect(completed.completed_at).not.toBeNull();
+    transitioned = await getEntry(entryId);
+    expect(transitioned.status).toBe("completed");
+    expect(transitioned.completed_at).not.toBeNull();
+    expect(transitioned.precalled_at).toBeNull();
 
     const history = await historyRows(entryId);
     expect(history.map((h: { action: string }) => h.action)).toEqual([
@@ -1021,6 +1034,8 @@ describe("manual call (H37)", () => {
     const { repoId: r2 } = await createRepoWithTeam();
     await enqueueRepo(challengeId, r1, 1);
     const e2 = await enqueueRepo(challengeId, r2, 99); // way down the queue
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE queue_entries SET precalled_at = now() WHERE id = $1`, [e2]);
 
     const res = await app.inject({
       method: "POST",
@@ -1032,13 +1047,69 @@ describe("manual call (H37)", () => {
     const entry = await getEntry(e2);
     expect(entry.status).toBe("in_room");
     expect(entry.assigned_room_id).toBe(roomId);
+    expect(entry.precalled_at).toBeNull();
 
-    const { pool } = await import("../../src/db/pool.js");
     const auditRows = await pool.query(
       `SELECT * FROM audit_log WHERE entity_type = 'queue_entry' AND entity_id = $1 AND action = 'manual_call'`,
       [String(e2)],
     );
     expect(auditRows.rows).toHaveLength(1);
+  });
+
+  it("rejects a room from another queue and invalid source states", async () => {
+    const { challengeId, roomId } = await setup();
+    const foreignChallenge = await createChallenge();
+    const foreignRoom = await createRoom();
+    await assignChallengeToRoom(foreignRoom, foreignChallenge);
+    const { repoId } = await createRepoWithTeam();
+    const entryId = await enqueueRepo(challengeId, repoId, 1);
+    const { pool } = await import("../../src/db/pool.js");
+
+    const wrongRoom = await app.inject({
+      method: "POST",
+      url: `/api/queue/entries/${entryId}/manual-call`,
+      headers: asUser(judgeId),
+      payload: { targetStatus: "called", roomId: foreignRoom },
+    });
+    expect(wrongRoom.statusCode).toBe(409);
+    expect((await getEntry(entryId)).status).toBe("waiting");
+
+    await pool.query(
+      `UPDATE queue_entries SET status = 'completed', completed_at = now() WHERE id = $1`,
+      [entryId],
+    );
+    const terminal = await app.inject({
+      method: "POST",
+      url: `/api/queue/entries/${entryId}/manual-call`,
+      headers: asUser(judgeId),
+      payload: { targetStatus: "in_room", roomId },
+    });
+    expect(terminal.statusCode).toBe(409);
+  });
+
+  it("does not bring a called team into a different room", async () => {
+    const { challengeId, roomId } = await setup();
+    const otherRoom = await createRoom();
+    await assignChallengeToRoom(otherRoom, challengeId);
+    const { repoId } = await createRepoWithTeam();
+    const entryId = await enqueueRepo(challengeId, repoId, 1);
+
+    const called = await app.inject({
+      method: "POST",
+      url: `/api/queue/entries/${entryId}/manual-call`,
+      headers: asUser(judgeId),
+      payload: { targetStatus: "called", roomId },
+    });
+    expect(called.statusCode).toBe(200);
+
+    const moved = await app.inject({
+      method: "POST",
+      url: `/api/queue/entries/${entryId}/manual-call`,
+      headers: asUser(judgeId),
+      payload: { targetStatus: "in_room", roomId: otherRoom },
+    });
+    expect(moved.statusCode).toBe(409);
+    expect((await getEntry(entryId)).assigned_room_id).toBe(roomId);
   });
 
   it("manual call to in_room respects one-active-per-room and the H30 guard", async () => {

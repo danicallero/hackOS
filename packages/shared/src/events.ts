@@ -12,6 +12,8 @@
 export const SSE_TOPICS = {
   /** everything queue/judging: entry transitions, room state (H29-H35, H41) */
   QUEUE: "queue",
+  /** synthetic review-fixture queue events; never mirrored to public TV */
+  QUEUE_FIXTURE: "queue:fixture",
   /** collaborative review changes for one queue entry (H36) */
   QUEUE_REVIEW_PREFIX: "queue-review:",
   /** TV mode switches (H42) */

@@ -1,15 +1,16 @@
 # Deploying hackOS
 
-hackOS runs as a small set of containers built from one image (`apps/api/Dockerfile`)
-plus three datastores. This directory gives you **two ways** to deploy, both
-tuned for [Dokploy](https://dokploy.com) but usable with plain `docker compose`:
+hackOS runs as a small set of containers built from the API image
+(`apps/api/Dockerfile`) and web image (`apps/web/Dockerfile`), plus three
+datastores. This directory gives you **two ways** to deploy, both tuned for
+[Dokploy](https://dokploy.com) but usable with plain `docker compose`:
 
 | Mode | Files | You get | Use when |
 |---|---|---|---|
-| **A — per-service** (recommended for Dokploy) | `deploy/services/<svc>/docker-compose.yml` | Each service (postgres, valkey, minio, api, worker) is its **own** Dokploy service: deploy, roll back, scale, and read logs independently. | You want to manage/scale services separately — the normal Dokploy workflow. |
+| **A — per-service** (recommended for Dokploy) | `deploy/services/<svc>/docker-compose.yml` | Each service (postgres, valkey, minio, api, web, worker) is its **own** Dokploy service: deploy, roll back, scale, and read logs independently. | You want to manage/scale services separately — the normal Dokploy workflow. |
 | **B — single stack** | `deploy/docker-compose.yml` | All containers in **one** Compose project/service. | A quick single-unit deploy, a non-Dokploy host, or local prod smoke-testing. |
 
-Both modes share the same image, the same env variables, and the same security
+Both modes share the same application contract, env variables, and security
 posture. Pick one per instance — don't mix them for the same instance.
 
 > **One instance = one hackathon/tenant.** Everything below is per-instance and
@@ -28,13 +29,18 @@ posture. Pick one per instance — don't mix them for the same instance.
                     │   Traefik    │  (Dokploy-managed reverse proxy)
                     │ dokploy-network (edge)
                     └──────┬───────┘
-                           │  http :3000
-                    ┌──────▼───────┐        ┌──────────┐
-                    │     api      │        │  worker  │   BullMQ jobs
-                    │ (HTTP + SSE) │        │ (no HTTP)│   mail·pump·expirer
-                    └──────┬───────┘        └────┬─────┘
-   hackos-<instance>-net   │  (private, no host ports)  │
-        (instance) ────────┼───────────────┬────────────┘
+                           │  HTTPS routes
+              ┌────────────▼───────────┐  ┌──────────────▼────────────┐
+              │ api (HTTP + SSE)       │  │ web (Next.js UI)           │
+              │ public API route       │  │ public UI route            │
+              └────────────┬───────────┘  └──────────────┬────────────┘
+                           │                             │
+                    ┌──────▼───────┐                     │
+                    │    worker    │  BullMQ jobs         │
+                    │   (no HTTP)  │  mail·pump·expirer   │
+                    └──────┬───────┘                     │
+   hackos-<instance>-net   │  (private, no host ports)   │
+        (instance) ────────┼─────────────────────────────┘
                     ┌───────▼──┐   ┌────────▼─┐   ┌────────┐
                     │ postgres │   │  valkey  │   │  minio │
                     └──────────┘   └──────────┘   └────────┘
@@ -43,11 +49,12 @@ posture. Pick one per instance — don't mix them for the same instance.
 - **Two networks.** The **instance** network (`hackos-<name>-net`, private) carries
   all inter-service traffic; datastores publish **no host ports**, so they're
   reachable only by services on that network — never from the host or the
-  internet. The **edge** network (`dokploy-network`) is Traefik's; **only the
-  api** joins it, and it's the only service with a public route.
-- **Egress.** The instance network is a normal bridge, so `api` and `worker`
-  still reach the internet (mail provider, Expo push). Datastores don't need to
-  and, having no route out, effectively can't.
+  internet. The **edge** network (`dokploy-network`) is Traefik's; **api and
+  web** join it and receive separate public API and UI routes. In the single-stack
+  compose, the worker also joins edge for outbound mail/push egress but has no
+  Traefik router; the per-service worker stays on its normal bridge network.
+- **Egress.** The app tier reaches the internet for mail, Expo push, and wallet
+  providers. Datastores don't need egress and have no public route.
 - **Hostnames.** Services find each other by name on the instance network:
   `postgres:5432`, `valkey:6379`, `minio:9000`. Those names are baked into
   `DATABASE_URL` / `VALKEY_URL` / `S3_ENDPOINT`.
@@ -275,9 +282,10 @@ docker compose --env-file .env.prod \
 ```
 
 In this mode the datastores + app tier sit on a Compose-managed **`private`
-network with `internal: true`** (no egress at all for datastores), and only
-`api`/`worker` also join the external `edge` (`dokploy-network`). On Dokploy this
-mode is a single Compose service containing every container.
+network with `internal: true`** (no egress at all for datastores), while `api`,
+`web`, and `worker` also join the external `edge` (`dokploy-network`); only
+`api` and `web` have Traefik routers. On Dokploy this mode is a single Compose
+service containing every container.
 
 ---
 
@@ -355,7 +363,8 @@ another.
 - **Datastores are never exposed.** No `ports:` mappings; reachable only inside
   the instance network. Postgres and Valkey are password-protected; Valkey uses
   `requirepass`.
-- **Only `api` is public**, via Traefik on `dokploy-network`. It sets HSTS,
+- **`api` and `web` are public**, via separate Traefik routers on
+  `dokploy-network`; only `api` can reach the instance datastores. The API sets HSTS,
   `X-Content-Type-Options`, `X-Frame-Options: DENY`, and a strict referrer
   policy (Traefik middleware), and trusts `X-Forwarded-*` (`TRUST_PROXY=true`)
   so the audit trail records real client IPs (H53).
@@ -374,7 +383,16 @@ another.
 
 ## Operations
 
-- **Migrations**: automatic on `api` deploy. To run manually:
+- **Migrations**: automatic on `api` deploy. The H54 `0730` migration upgrades
+  the latest main schema in place (including populated rows) and uses the API's
+  `BETTER_AUTH_SECRET` to retire any legacy scanner credentials. The runner
+  recognizes the allow-listed pre-squash `0731`–`0746` ledger (and known old
+  `0730` checksums), skips the immutable squashed baseline, and applies the
+  transactional `0747` compatibility normalizer automatically. Before deploy,
+  take the normal database backup and follow the [migration identity gate](../docs/database-schema.md#migration-identity).
+  Unknown ledger names, malformed historical checksums, missing secrets for raw
+  credentials, and active-badge collisions stop the deploy. To run migrations
+  manually:
   `docker compose -f deploy/services/api/docker-compose.yml -p <proj>-api run --rm migrate`.
 - **Grant superadmin to an existing account (H8)** from the API container shell:
   `node scripts/grant-superadmin.mjs --email user@example.com`.

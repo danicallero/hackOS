@@ -3,6 +3,7 @@ import type pg from "pg";
 import { pool } from "../../db/pool.js";
 import { NotFoundError } from "../../lib/errors.js";
 import { hasEventAccess } from "../identity/role.js";
+import { assertFixtureSubjectScope } from "./review-fixture-scope.js";
 import { PASS_TYPE_IDENTIFIER } from "./wallet.js";
 
 /**
@@ -10,6 +11,16 @@ import { PASS_TYPE_IDENTIFIER } from "./wallet.js";
  * unique user key makes repeated role transitions safe (plan/07 invariant 10).
  */
 export async function issueTicket(client: pg.PoolClient, userId: number): Promise<string> {
+  // H54: ticket issuance is an identity-bearing credential mutation. The
+  // caller may have resolved eligibility earlier, so re-check while sharing
+  // the user row lock with account removal immediately before minting.
+  const active = await client.query(
+    `SELECT 1 FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+      FOR SHARE`,
+    [userId],
+  );
+  if (!active.rows[0]) throw new NotFoundError("User not found");
   const token = randomBytes(32).toString("base64url");
   const { rows } = await client.query(
     `INSERT INTO tickets (user_id, token) VALUES ($1, $2)
@@ -22,14 +33,15 @@ export async function issueTicket(client: pg.PoolClient, userId: number): Promis
   return existing.rows[0].token as string;
 }
 
-export async function ticketQrPayload(userId: number) {
+export async function ticketQrPayload(userId: number, actorId?: number) {
+  if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
   const [{ rows }, { rows: acceptedRows }, { rows: applePassRows }, eventAccess] =
     await Promise.all([
       pool.query(
         `SELECT u.id, u.badge_id, t.token
        FROM users u
        LEFT JOIN tickets t ON t.user_id = u.id
-      WHERE u.id = $1`,
+      WHERE u.id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
         [userId],
       ),
       pool.query(
