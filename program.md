@@ -17,6 +17,15 @@ rate-limited review history.
   GitHub CI jobs in runs `33211977919` and `33212650674`, respectively. The
   branch tip may advance with this archival commit; verify `git rev-parse HEAD`
   and its latest run before resuming.
+- Current pushed review tip: `10e1f0540c1c99b9f88ccd94d872663f5694350`
+  (`test(H54): make wallet and review regressions deterministic`), preceded by
+  `2f8e6c05` (`fix(H54): isolate review fixture scope`) and `ab34b299`
+  (`fix(H54): make wallet removal retries cancellation-safe`). These commits
+  are pushed to the PR branch; replacement CI run `33239936801` is pending.
+  The preceding exact-tip run `33216896112` exposed two test-only failures:
+  Apple signing was not configured in the identity fixture, and one recipient
+  legitimately produced three channel outbox rows. Both assertions were
+  corrected in `10e1f054`; do not attribute any older green run to this tip.
 - GitHub PR: <https://github.com/danicallero/hackOS/pull/584>; the feature branch is
   pushed to the origin branch above.
 - Worktree policy: shared active checkout; no blind reset, force-push, or destructive history rewrite.
@@ -85,6 +94,13 @@ rate-limited review history.
 | T31 | Documentation/migration audit and route-ledger integrity | complete | Luna-max worker `task_00056d998fdd` / seq 573 corrected concrete Markdown and migration-release claims; lint, diff, and relative-link checks passed. Coordinator also synchronized the generated public telemetry sentence; route audit execution is Valkey-blocked locally. |
 | T32 | Durable BullMQ topology-payload merge | complete | Coordinator re-reads `queue.getJob(jobId)` before merging topology challenge IDs, because duplicate `Queue.add` returns a fresh wrapper whose `data` is only the attempted payload; API typecheck, Biome, and diff checks pass. |
 | T33 | Final branch validation, commit, push, and CI refresh | complete | Reviewed implementation `c283e24d` and archival checkpoint `84ded005` are green across all seven jobs (`33211977919`, `33212650674`); this handoff update is archival-only. The PR template body is refreshed; retain the populated `_migrations` verification as a release gate. |
+| T34 | Fresh Luna-max queue coalescing/review-scope audit | complete-with-findings | `task_3f49bb5404bf` / `ctx_d17194f7bd53` / `term_65adad0f-ee20-4c12-b719-d13f0b7e8a52`; worker_done seq 583 found the distributed BullMQ lost-update P1, synthetic review-admin scope P1, room-pace P2, and conditional orphan invalidation gap. The atomic merge, paired pace query, and marker-aware review fixes are now committed; terminal closed. |
+| T35 | Fresh Luna-max docs/migration/release audit | complete-with-findings | `task_09ee8a2888f5` / `ctx_992b73f2d3ad` / `term_523d7398-8495-4a9c-a893-c78033346a06`; worker_done seq 580 found the conditional Mode-B DNS gap, populated `_migrations` release gate, stale judging-lock wording, seed fallback copy, and archival metadata. DNS, wording, fallback labels, and this ledger were reconciled; terminal closed. |
+| T36 | Fresh Luna-max release audit | complete-with-findings | `task_363c9994f207` / `ctx_54103d7b696b` / `term_23bee9f1-7df6-4964-9679-3aa0e7ac47a6`; worker_done seq 578 confirmed 7/7 green on the then-current `9d04b09e` but held a conditional no-go for stale evidence, wallet cancellation semantics, external migration ledger, and orchestration closure. Wallet semantics are now documented/tested; terminal closed. |
+| T37 | Wallet provider invalidation and retry identity implementation | complete | `task_b6cbb74ac42f` / `ctx_29bd0744d744` / `term_2b5eba69-1907-4af2-bc5b-c500a47a92b5`; worker_done seq 588. Coordinator added lifecycle-key matching for pending-only retries, cancellation/reissue coverage, and corrected H54 wallet documentation; committed/pushed as `ab34b299`; terminal closed. |
+| T38 | Synthetic review fixture isolation implementation | complete | `task_5e61add2d03c` / `ctx_873377aaae01` / `term_113fb73b-9bb1-49d7-84f7-a3387c6d8c85`; worker_done seq 589. Marker-aware admin/sponsor list/detail/export/patch/message scope plus focused coverage committed/pushed as `2f8e6c05`; terminal closed. |
+| T39 | Final Luna-max wallet/review audit | blocked; coordinator fallback complete | `task_2cf7181f322e` / `ctx_88fc4bcfd58a` / `term_d918b87e-cf88-4c33-b7f2-4147c492be1f`; review-only worker hit the provider usage limit before `worker_done`, then its terminal was closed and task marked blocked. Coordinator re-read the exact wallet/review diff locally; no additional worker finding is available. |
+| T40 | Repair exact-tip CI regressions | complete; replacement CI pending | `33216896112` failed only the two newly added assertions: the identity test attempted Apple pass signing without the wallet test fixture, and the review test counted channel rows instead of distinct recipients. `10e1f054` now calls `ensurePassRecord` directly and asserts `count(DISTINCT user_id)`; pushed for run `33239936801`. |
 
 ## Code/schema changes reconciled
 
@@ -164,6 +180,14 @@ rate-limited review history.
   relationship scrubbing and treats active submission or matched Devpost
   membership as shared ownership; queue cascade also rechecks every entry's
   complete fixture marker and fails closed on a mismatch.
+- Wallet provider invalidation now runs for pending-exit requests as its own
+  retryable phase. Retry jobs carry original pass-row ids and the original
+  self-service lifecycle key, so cancellation can leave old passes voided and
+  reissue a fresh active row without a stale job finalizing the replacement.
+- Review list/detail/export/patch/message routes now derive the caller's
+  synthetic marker and enforce it through the complete queue-entry graph;
+  synthetic queue admins cannot use global review capabilities to read or
+  mutate real entries.
 
 ## Validation record
 
@@ -181,6 +205,15 @@ where noted):
 - `TEST_DATABASE_URL=postgres://dani@localhost:5432/hackos_test_skipjack pnpm --filter @hackos/api exec vitest run test/migrations.test.ts` — 1 file, 10 tests, including active-to-pending session reassignment rejection
 - `pnpm exec biome check` on the queue changes and API typecheck pass after the final P2 fixes.
 - `pnpm lint` and `pnpm --filter @hackos/api typecheck` rerun after the final route-ledger and durable-job merge edits.
+- At pushed tip `10e1f054`, `pnpm lint`, `pnpm --filter @hackos/api typecheck`,
+  `git diff --check`, and targeted Biome checks pass. The focused profile/review
+  Vitest invocation was attempted but stopped in global setup because
+  `postgres://hackos:hackos@localhost:5433/hackos_test` reset with `ECONNRESET`;
+  no test assertion from that run is counted as passed. GitHub run
+  `33216896112` on the preceding `2f8e6c05` tip failed only the two newly added
+  assertions; `10e1f054` repairs them and run `33239936801` is the replacement
+  runtime gate.
+- The focused `test/queue/room-queue-groups.test.ts` run remains setup-blocked by
 - The focused `test/queue/room-queue-groups.test.ts` run remains setup-blocked by
   the unavailable Postgres 5433 proxy; GitHub CI is the runtime gate.
 
@@ -285,8 +318,8 @@ facing documentation.
 
 The raw first-wave archive is `/tmp/pr584-orchestration-messages.json`
 (200 messages). A live inbox snapshot and post-rate-limit dispatches are
-included below; after de-duplication by message id, 370 received messages are
-listed below. The ledger records every
+included below; after de-duplication by message id, 385 received messages are
+listed below through seq 590. The ledger records every
 received id/type/subject/timestamp, including heartbeats and status noise so
 the rate-limited handoff is auditable. Full bodies remain in the raw archive
 where present; the most important worker_done bodies are summarized in the
@@ -666,6 +699,23 @@ Messages received after the prior rate-limit snapshot (seq 405–450):
 - 2026-08-28 20:58:15 · seq 571 · heartbeat · `msg_a7dc2d507b49` · transition audit alive immediately before completion
 - 2026-08-28 21:02:32 · seq 572 · worker_done · `msg_8dab43018b8b` · review-submit marker clear, stale notification locking, source-group invalidation and durable topology IDs; static checks pass, focused Vitest setup-blocked by Postgres 5433; terminal closed
 - 2026-08-28 21:03:59 · seq 573 · worker_done · `msg_e7a4a7dee7fd` · concrete Markdown/migration-release corrections; lint/diff/relative-link checks pass, route-ledger telemetry wording needed coordinator follow-up, external migration ledger remains gated; terminal closed
+- 2026-08-28 21:47:22 · seq 574 · heartbeat · `msg_80e3152eb939` · final fresh-wave queue audit alive
+- 2026-08-28 21:54:39 · seq 575 · heartbeat · `msg_08165127c8f3` · final fresh-wave docs audit alive
+- 2026-08-28 21:55:15 · seq 576 · heartbeat · `msg_cee2b8f1e0fa` · final fresh-wave queue audit reviewing
+- 2026-08-28 21:57:54 · seq 577 · status · `msg_50e3e7c0521a` · release audit confirmed 9d04b09e/33213269563, identified stale PR/program evidence and wallet cancellation contract; Orca closure was then restored
+- 2026-08-28 21:58:15 · seq 578 · worker_done · `msg_432b9c3739b3` · conditional release no-go on then-current 9d04b09e: external `_migrations`, stale metadata, wallet cancellation contract, and orchestration closure; terminal closed
+- 2026-08-28 22:04:59 · seq 579 · status · `msg_02bc9ad224c8` · detailed docs/migration report: conditional Mode-B DNS, populated-ledger gate, judging-lock/seed fallback/archive drift, no P0; static checks passed and runtime was unavailable
+- 2026-08-28 22:05:13 · seq 580 · worker_done · `msg_16d955f8efae` · docs/migration audit complete: 18 Markdown files, no unconditional P0/P1, same conditional DNS/ledger/P2 findings; terminal closed
+- 2026-08-28 22:05:47 · seq 581 · status · `msg_0f134508c773` · coordinator instructed docs worker to stop exploring and send one complete worker_done
+- 2026-08-28 22:05:47 · seq 582 · status · `msg_d00570443367` · coordinator instructed queue worker to stop exploring and send one complete worker_done
+- 2026-08-28 22:06:59 · seq 583 · worker_done · `msg_9a409094f139` · code audit found P1 distributed BullMQ lost update, conditional synthetic review scope P1, room-pace P2, and orphan invalidation edge; terminal closed
+- 2026-08-28 22:08:21 · seq 584 · heartbeat · `msg_e08b8629a970` · wallet worker completed required reads and mapped provider/removal paths
+- 2026-08-28 22:11:23 · seq 585 · status · `msg_1dc01ed67229` · wallet worker confirmed pending provider-invalidation omission and planned split provider/storage phases with pending-only retry
+- 2026-08-28 22:12:07 · seq 586 · status · `msg_710fcd39497e` · review worker confirmed hardcoded real-only review scope and traced marker-aware list/detail/mutation coverage
+- 2026-08-28 22:12:28 · seq 587 · status · `msg_3a697a27aade` · review worker reported concurrent reads/room-test edits and left them untouched
+- 2026-08-28 22:18:44 · seq 588 · worker_done · `msg_25c132d8430d` · wallet implementation split provider/storage cleanup, retried by pass ids, bounded pending jobs and preserved cancellation; coordinator added tests/key guard; terminal closed
+- 2026-08-28 22:18:51 · seq 589 · worker_done · `msg_0c552e258e47` · review implementation added marker-aware scopes/guards and synthetic list/detail/patch/message/export coverage; static checks passed, runtime setup blocked; terminal closed
+- 2026-08-28 22:28:22 · seq 590 · heartbeat · `msg_749a6d4df1cf` · final Luna-max wallet/review audit alive on `2f8e6c05`
 
 Coordinator-originated inbox echoes (kept for chronology, excluded from the
 received-message count) were seq 474 `msg_939f59e3d657` and seq 476
@@ -675,6 +725,12 @@ seq 499 `msg_38831a688591`, the coordinator's pump-rank root-cause note, and
 the fresh-worker coordination echoes seq 560 `msg_bf3b3577eccc`, seq 563
 `msg_854bf2dbd3e8`, seq 565 `msg_a3e1770e59f3`, seq 566 `msg_eeff7d1418cd`,
 seq 567 `msg_630d5cb797e7`, and seq 568 `msg_905e35124685`.
+The fresh-worker coordination echoes seq 581 `msg_0f134508c773` and seq 582
+`msg_d00570443367` instructed the docs and queue workers to close with one
+complete report. The final Luna-max worker then hit the provider usage limit
+after seq 590 and emitted no `worker_done`; its terminal was closed and T39
+was marked blocked, with the coordinator completing the fallback review
+locally.
 The separate
 `/root/queue_review_checkpoint` collaboration worker also returned a final
 review message with the same residual findings; it has no Orca sequence id and
@@ -715,6 +771,16 @@ Use this prompt for a future coordinator:
 > notification rows, preserves source-group challenge IDs in durable BullMQ
 > jobs, and synchronizes the generated telemetry route-ledger wording. Fresh
 > Luna worker terminals are closed; do not close unrelated historical panes.
+>
+> The current review tip is `10e1f0540c1c99b9f88ccd94d872663f5694350`, with
+> wallet retry/cancellation fixes in `ab34b299`, synthetic review fixture
+> isolation in `2f8e6c05`, and deterministic regression assertions in
+> `10e1f054`. The final review-only dispatch
+> (`task_2cf7181f322e` / `ctx_88fc4bcfd58a`) hit the Luna provider usage limit
+> before `worker_done` and is recorded as blocked; the coordinator completed
+> the fallback diff audit locally. Run `33216896112` on the prior tip exposed
+> only the two new test assertions; run `33239936801` is the exact replacement
+> run. Do not treat older green runs as evidence for this tip.
 >
 > The reviewed implementation `c283e24d` and archival checkpoint `84ded005` are
 > covered by successful all-job runs `33211977919` and `33212650674`. This
