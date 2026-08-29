@@ -17,15 +17,16 @@ rate-limited review history.
   GitHub CI jobs in runs `33211977919` and `33212650674`, respectively. The
   branch tip may advance with this archival commit; verify `git rev-parse HEAD`
   and its latest run before resuming.
-- Current pushed review tip: `10e1f0540c1c99b9f88ccd94d872663f5694350`
-  (`test(H54): make wallet and review regressions deterministic`), preceded by
-  `2f8e6c05` (`fix(H54): isolate review fixture scope`) and `ab34b299`
-  (`fix(H54): make wallet removal retries cancellation-safe`). These commits
-  are pushed to the PR branch; replacement CI run `33239936801` is pending.
-  The preceding exact-tip run `33216896112` exposed two test-only failures:
+- Current pushed review tip: `7a0cbe3bccc643c01e4ea50e1539c32effba9668`
+  (`docs(H54): record CI regression and rate-limit fallback`), preceded by
+  `10e1f054` (`test(H54): make wallet and review regressions deterministic`),
+  `2f8e6c05` (`fix(H54): isolate review fixture scope`), and `ab34b299`
+  (`fix(H54): make wallet removal retries cancellation-safe`). The exact-tip
+  replacement CI run `33239985938` is green across all seven jobs, including
+  API integration. The preceding `33216896112` exposed two test-only failures:
   Apple signing was not configured in the identity fixture, and one recipient
-  legitimately produced three channel outbox rows. Both assertions were
-  corrected in `10e1f054`; do not attribute any older green run to this tip.
+  legitimately produced three channel outbox rows; both assertions were
+  corrected in `10e1f054`.
 - GitHub PR: <https://github.com/danicallero/hackOS/pull/584>; the feature branch is
   pushed to the origin branch above.
 - Worktree policy: shared active checkout; no blind reset, force-push, or destructive history rewrite.
@@ -100,7 +101,7 @@ rate-limited review history.
 | T37 | Wallet provider invalidation and retry identity implementation | complete | `task_b6cbb74ac42f` / `ctx_29bd0744d744` / `term_2b5eba69-1907-4af2-bc5b-c500a47a92b5`; worker_done seq 588. Coordinator added lifecycle-key matching for pending-only retries, cancellation/reissue coverage, and corrected H54 wallet documentation; committed/pushed as `ab34b299`; terminal closed. |
 | T38 | Synthetic review fixture isolation implementation | complete | `task_5e61add2d03c` / `ctx_873377aaae01` / `term_113fb73b-9bb1-49d7-84f7-a3387c6d8c85`; worker_done seq 589. Marker-aware admin/sponsor list/detail/export/patch/message scope plus focused coverage committed/pushed as `2f8e6c05`; terminal closed. |
 | T39 | Final Luna-max wallet/review audit | blocked; coordinator fallback complete | `task_2cf7181f322e` / `ctx_88fc4bcfd58a` / `term_d918b87e-cf88-4c33-b7f2-4147c492be1f`; review-only worker hit the provider usage limit before `worker_done`, then its terminal was closed and task marked blocked. Coordinator re-read the exact wallet/review diff locally; no additional worker finding is available. |
-| T40 | Repair exact-tip CI regressions | complete; replacement CI pending | `33216896112` failed only the two newly added assertions: the identity test attempted Apple pass signing without the wallet test fixture, and the review test counted channel rows instead of distinct recipients. `10e1f054` now calls `ensurePassRecord` directly and asserts `count(DISTINCT user_id)`; pushed for run `33239936801`. |
+| T40 | Repair exact-tip CI regressions | complete | `33216896112` failed only the two newly added assertions: the identity test attempted Apple pass signing without the wallet test fixture, and the review test counted channel rows instead of distinct recipients. `10e1f054` now calls `ensurePassRecord` directly and asserts `count(DISTINCT user_id)`; exact replacement run `33239985938` on final tip `7a0cbe3b` is green across all seven jobs. |
 
 ## Code/schema changes reconciled
 
@@ -205,14 +206,14 @@ where noted):
 - `TEST_DATABASE_URL=postgres://dani@localhost:5432/hackos_test_skipjack pnpm --filter @hackos/api exec vitest run test/migrations.test.ts` — 1 file, 10 tests, including active-to-pending session reassignment rejection
 - `pnpm exec biome check` on the queue changes and API typecheck pass after the final P2 fixes.
 - `pnpm lint` and `pnpm --filter @hackos/api typecheck` rerun after the final route-ledger and durable-job merge edits.
-- At pushed tip `10e1f054`, `pnpm lint`, `pnpm --filter @hackos/api typecheck`,
+- At pushed tip `7a0cbe3b`, `pnpm lint`, `pnpm --filter @hackos/api typecheck`,
   `git diff --check`, and targeted Biome checks pass. The focused profile/review
   Vitest invocation was attempted but stopped in global setup because
   `postgres://hackos:hackos@localhost:5433/hackos_test` reset with `ECONNRESET`;
   no test assertion from that run is counted as passed. GitHub run
   `33216896112` on the preceding `2f8e6c05` tip failed only the two newly added
-  assertions; `10e1f054` repairs them and run `33239936801` is the replacement
-  runtime gate.
+  assertions; `10e1f054` repairs them and run `33239985938` on final tip
+  `7a0cbe3b` is green across all seven jobs.
 - The focused `test/queue/room-queue-groups.test.ts` run remains setup-blocked by
 - The focused `test/queue/room-queue-groups.test.ts` run remains setup-blocked by
   the unavailable Postgres 5433 proxy; GitHub CI is the runtime gate.
@@ -772,15 +773,15 @@ Use this prompt for a future coordinator:
 > jobs, and synchronizes the generated telemetry route-ledger wording. Fresh
 > Luna worker terminals are closed; do not close unrelated historical panes.
 >
-> The current review tip is `10e1f0540c1c99b9f88ccd94d872663f5694350`, with
+> The current review tip is `7a0cbe3bccc643c01e4ea50e1539c32effba9668`, with
 > wallet retry/cancellation fixes in `ab34b299`, synthetic review fixture
-> isolation in `2f8e6c05`, and deterministic regression assertions in
-> `10e1f054`. The final review-only dispatch
+> isolation in `2f8e6c05`, deterministic regression assertions in `10e1f054`,
+> and the archival review record in `7a0cbe3b`. The final review-only dispatch
 > (`task_2cf7181f322e` / `ctx_88fc4bcfd58a`) hit the Luna provider usage limit
 > before `worker_done` and is recorded as blocked; the coordinator completed
 > the fallback diff audit locally. Run `33216896112` on the prior tip exposed
-> only the two new test assertions; run `33239936801` is the exact replacement
-> run. Do not treat older green runs as evidence for this tip.
+> only the two new test assertions; exact replacement run `33239985938` is green
+> across all seven jobs. Do not treat older green runs as evidence for this tip.
 >
 > The reviewed implementation `c283e24d` and archival checkpoint `84ded005` are
 > covered by successful all-job runs `33211977919` and `33212650674`. This
