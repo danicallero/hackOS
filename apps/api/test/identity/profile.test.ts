@@ -1025,18 +1025,16 @@ describe("self-service account removal (H54)", () => {
         WHERE id = $1`,
       [user],
     );
-    const firstPass = await a.inject({
-      method: "GET",
-      url: "/api/me/wallet/apple/badge.pkpass",
-      headers: asUser(user),
-    });
-    expect(firstPass.statusCode).toBe(200);
+    // Exercise the transactional pass issuance without requiring Apple
+    // signing credentials in this identity-focused suite.
+    const { ensurePassRecord } = await import("../../src/modules/logistics/wallet-passes.js");
+    const firstPass = await ensurePassRecord(user, "badge", "apple");
     const { rows: issuedPasses } = await pool.query<{ id: number }>(
       `SELECT id FROM wallet_passes WHERE user_id = $1 AND purpose = 'badge' AND platform = 'apple'`,
       [user],
     );
     expect(issuedPasses).toHaveLength(1);
-    const oldPassId = issuedPasses[0]!.id;
+    const oldPassId = firstPass.id;
     await pool.query(
       `INSERT INTO check_in_logs (user_id, badge_id, check_in_method)
        VALUES ($1, 'B-CANCEL-PENDING', 'scan')`,
@@ -1086,12 +1084,7 @@ describe("self-service account removal (H54)", () => {
 
     // Cancellation never restores the old serial: a later issuance is a new
     // active row, while the already-installed pass remains revoked.
-    const replacementPass = await a.inject({
-      method: "GET",
-      url: "/api/me/wallet/apple/badge.pkpass",
-      headers: asUser(user),
-    });
-    expect(replacementPass.statusCode).toBe(200);
+    const replacementPass = await ensurePassRecord(user, "badge", "apple");
     const { rows: passStates } = await pool.query<{ id: number; status: string }>(
       `SELECT id, status
          FROM wallet_passes
@@ -1103,6 +1096,7 @@ describe("self-service account removal (H54)", () => {
       { id: oldPassId, status: "voided" },
       { id: expect.any(Number), status: "active" },
     ]);
+    expect(passStates[1]!.id).toBe(replacementPass.id);
     expect(passStates[1]!.id).not.toBe(oldPassId);
 
     const replay = await a.inject({

@@ -216,11 +216,13 @@ describe("GET /api/queue/reviews (confidentiality)", () => {
     });
     expect(fixtureMessage.statusCode).toBe(200);
     expect(fixtureMessage.json()).toEqual({ recipients: 1 });
-    const fixtureOutbox = await pool.query(
-      `SELECT 1 FROM notification_outbox WHERE user_id = $1 AND payload->>'template' = 'queue.message'`,
+    const fixtureOutbox = await pool.query<{ recipients: number }>(
+      `SELECT count(DISTINCT user_id)::int AS recipients
+         FROM notification_outbox
+        WHERE user_id = $1 AND payload->>'template' = 'queue.message'`,
       [fixtureMember],
     );
-    expect(fixtureOutbox.rowCount).toBe(1);
+    expect(fixtureOutbox.rows[0]?.recipients).toBe(1);
     const realOutbox = await pool.query(
       `SELECT 1 FROM notification_outbox WHERE payload->>'vars' LIKE '%real team%'`,
     );
