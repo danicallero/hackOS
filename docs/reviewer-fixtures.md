@@ -122,8 +122,10 @@ These are implementation assumptions, not legal conclusions:
   boundary rather than silently broadening it.
 - `0730` is validated from both a fresh schema and a populated latest-main
   schema whose migration ledger ends at `0725`; it also converts legacy
-  `anonymized_at` rows before installing fixture markers. Once deployed,
-  migration checksums are immutable and later corrections use a new migration.
+  `anonymized_at` rows before installing fixture markers. A database that
+  already recorded the pre-squash H54 chain is detected by the runner and
+  normalized transactionally by `0747`. Once deployed, migration checksums are
+  immutable and later corrections use a new migration.
 - The current credential-retirement implementation stores a stable keyed HMAC
   digest in an unlinked global denylist. It does not retain the raw badge or
   ticket value; legitimate physical badge reuse is bounded by the server-side

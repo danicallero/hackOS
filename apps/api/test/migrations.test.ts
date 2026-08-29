@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  LEGACY_H54_MIGRATION_NAMES,
   LEGACY_MIGRATION_RENAMES,
   migrate,
   migrationChecksum,
@@ -15,12 +16,15 @@ import { TEST_DATABASE_URL } from "./test-env.js";
 const databaseName = `hackos_migrations_${process.pid}_${randomUUID().replaceAll("-", "")}`;
 const upgradeDatabaseName = `hackos_migrations_upgrade_${process.pid}_${randomUUID().replaceAll("-", "")}`;
 const collisionDatabaseName = `hackos_migrations_collision_${process.pid}_${randomUUID().replaceAll("-", "")}`;
+const legacyDatabaseName = `hackos_migrations_legacy_${process.pid}_${randomUUID().replaceAll("-", "")}`;
 const databaseUrl = new URL(TEST_DATABASE_URL);
 databaseUrl.pathname = `/${databaseName}`;
 const upgradeDatabaseUrl = new URL(TEST_DATABASE_URL);
 upgradeDatabaseUrl.pathname = `/${upgradeDatabaseName}`;
 const collisionDatabaseUrl = new URL(TEST_DATABASE_URL);
 collisionDatabaseUrl.pathname = `/${collisionDatabaseName}`;
+const legacyDatabaseUrl = new URL(TEST_DATABASE_URL);
+legacyDatabaseUrl.pathname = `/${legacyDatabaseName}`;
 const adminUrl = new URL(TEST_DATABASE_URL);
 adminUrl.pathname = "/postgres";
 
@@ -31,6 +35,7 @@ beforeAll(async () => {
     await adminClient.query(`CREATE DATABASE "${databaseName}"`);
     await adminClient.query(`CREATE DATABASE "${upgradeDatabaseName}"`);
     await adminClient.query(`CREATE DATABASE "${collisionDatabaseName}"`);
+    await adminClient.query(`CREATE DATABASE "${legacyDatabaseName}"`);
   } finally {
     await adminClient.end();
   }
@@ -73,6 +78,7 @@ afterAll(async () => {
         await adminClient.query(`DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`);
         await adminClient.query(`DROP DATABASE IF EXISTS "${upgradeDatabaseName}" WITH (FORCE)`);
         await adminClient.query(`DROP DATABASE IF EXISTS "${collisionDatabaseName}" WITH (FORCE)`);
+        await adminClient.query(`DROP DATABASE IF EXISTS "${legacyDatabaseName}" WITH (FORCE)`);
       }, 20_000);
       return;
     } catch (err) {
@@ -114,6 +120,16 @@ async function withCollisionClient<T>(fn: (client: pg.Client) => Promise<T>): Pr
   }
 }
 
+async function withLegacyClient<T>(fn: (client: pg.Client) => Promise<T>): Promise<T> {
+  const client = new pg.Client({ connectionString: legacyDatabaseUrl.toString() });
+  await client.connect();
+  try {
+    return await fn(client);
+  } finally {
+    await client.end();
+  }
+}
+
 async function installMainSchema(client: pg.Client): Promise<void> {
   const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "db", "migrations");
   const migrationNames = (await readdir(migrationsDir))
@@ -140,6 +156,121 @@ async function installMainSchema(client: pg.Client): Promise<void> {
       await client.query("ROLLBACK");
       throw error;
     }
+  }
+}
+
+/** Recreates the shape left by the pre-squash 0730 before its follow-ups. */
+async function installLegacyH54Shape(client: pg.Client): Promise<void> {
+  await installMainSchema(client);
+  await client.query("BEGIN");
+  try {
+    await client.query(`
+      ALTER TABLE users
+        ADD COLUMN account_state text NOT NULL DEFAULT 'active'
+          CHECK (account_state IN ('active', 'removal_pending')),
+        ADD COLUMN removal_action text
+          CHECK (removal_action IS NULL OR removal_action IN ('delete', 'anonymize')),
+        ADD COLUMN removal_started_at timestamptz;
+
+      CREATE TABLE anonymous_participants (
+        id uuid PRIMARY KEY,
+        age integer CHECK (age IS NULL OR age BETWEEN 0 AND 150),
+        gender text,
+        university text,
+        degree text,
+        graduation_year smallint CHECK (
+          graduation_year IS NULL OR graduation_year BETWEEN 1900 AND 2200
+        ),
+        origin_city text,
+        guaranteed_presence_minutes integer NOT NULL DEFAULT 0
+          CHECK (guaranteed_presence_minutes >= 0),
+        created_at timestamptz NOT NULL DEFAULT now()
+      );
+
+      CREATE TABLE scanner_revoked_badges (
+        badge_id text PRIMARY KEY,
+        revoked_at timestamptz NOT NULL DEFAULT now(),
+        expires_at timestamptz NOT NULL
+      );
+      CREATE TABLE scanner_revoked_tickets (
+        ticket_token text PRIMARY KEY,
+        revoked_at timestamptz NOT NULL DEFAULT now(),
+        expires_at timestamptz NOT NULL
+      );
+
+      ALTER TABLE check_in_logs
+        ALTER COLUMN user_id DROP NOT NULL,
+        ALTER COLUMN staff_id DROP NOT NULL,
+        ADD COLUMN anonymous_participant_id uuid REFERENCES anonymous_participants(id);
+      ALTER TABLE time_logs
+        ALTER COLUMN user_id DROP NOT NULL,
+        ADD COLUMN anonymous_participant_id uuid REFERENCES anonymous_participants(id);
+      ALTER TABLE meal_scan_batches ALTER COLUMN submitted_by DROP NOT NULL;
+      ALTER TABLE data_subject_requests
+        ALTER COLUMN subject_user_id DROP NOT NULL,
+        ALTER COLUMN requested_by DROP NOT NULL;
+      ALTER TABLE universities ALTER COLUMN proposed_by DROP NOT NULL;
+      ALTER TABLE food_intolerances ALTER COLUMN proposed_by DROP NOT NULL;
+      ALTER TABLE queue_history ALTER COLUMN actor_id DROP NOT NULL;
+      ALTER TABLE attempt_review_versions ALTER COLUMN author_id DROP NOT NULL;
+      ALTER TABLE judging_session ALTER COLUMN judge_id DROP NOT NULL;
+      ALTER TABLE announcements ALTER COLUMN author_id DROP NOT NULL;
+      ALTER TABLE activity_logs ALTER COLUMN logged_by DROP NOT NULL;
+      ALTER TABLE challenge_winners ALTER COLUMN set_by DROP NOT NULL;
+      ALTER TABLE meal_scan_batch_items ALTER COLUMN badge_id DROP NOT NULL;
+      ALTER TABLE check_in_logs ADD CONSTRAINT check_in_logs_subject_check
+        CHECK ((user_id IS NULL) <> (anonymous_participant_id IS NULL));
+      ALTER TABLE time_logs ADD CONSTRAINT time_logs_subject_check
+        CHECK ((user_id IS NULL) <> (anonymous_participant_id IS NULL));
+    `);
+    const anonymousId = randomUUID();
+    await client.query(
+      `INSERT INTO anonymous_participants
+         (id, age, gender, university, degree, graduation_year, origin_city, guaranteed_presence_minutes)
+       VALUES ($1, 29, 'non-binary', 'Universidade', 'Computer Science', 2024, 'A Coruña', 42)`,
+      [anonymousId],
+    );
+    await client.query(
+      `INSERT INTO scanner_revoked_badges (badge_id, expires_at)
+       VALUES ('legacy-compat-badge', clock_timestamp() + interval '1 day')`,
+    );
+    await client.query(
+      `INSERT INTO scanner_revoked_tickets (ticket_token, expires_at)
+       VALUES ('legacy-compat-ticket', clock_timestamp() + interval '1 day')`,
+    );
+    const { rows: users } = await client.query<{ id: number }>(
+      `INSERT INTO users (email, email_verified)
+       VALUES ($1, true) RETURNING id`,
+      [`legacy-compat-user-${randomUUID()}@test.local`],
+    );
+    const userId = users[0]?.id;
+    if (userId == null) throw new Error("Expected legacy compatibility user");
+    const { rows: applications } = await client.query<{ id: number }>(
+      `INSERT INTO applications (name, type, template)
+       VALUES ($1, 'participant', '[]'::jsonb) RETURNING id`,
+      [`legacy-compat-form-${randomUUID()}`],
+    );
+    const applicationId = applications[0]?.id;
+    if (applicationId == null) throw new Error("Expected legacy compatibility application");
+    await client.query(
+      `INSERT INTO application_responses (user_id, application_id, status)
+       VALUES ($1, $2, 'submitted')`,
+      [userId, applicationId],
+    );
+    await client.query("ALTER TABLE _migrations ALTER COLUMN checksum DROP NOT NULL");
+    for (const [index, name] of [
+      "0730_account_deletion_anonymization.sql",
+      ...LEGACY_H54_MIGRATION_NAMES,
+    ].entries()) {
+      await client.query("INSERT INTO _migrations (name, checksum) VALUES ($1, $2)", [
+        name,
+        index === 1 ? null : "0".repeat(64),
+      ]);
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
   }
 }
 
@@ -440,6 +571,77 @@ describe("migration history (H53)", () => {
         [expectedBadgeDigest, expectedTicketDigest],
       );
       expect(digests.rows).toHaveLength(2);
+    });
+  });
+
+  it("normalizes a populated pre-squash H54 ledger without a manual compatibility step", async () => {
+    const secret = process.env.BETTER_AUTH_SECRET ?? "dev-only-secret-change-me";
+    await withLegacyClient(async (client) => {
+      await installLegacyH54Shape(client);
+
+      const applied = await migrate(legacyDatabaseUrl.toString());
+      expect(applied).toContain("0747_h54_legacy_chain_compatibility.sql");
+      expect(applied).not.toContain("0730_account_deletion_anonymization.sql");
+
+      const columns = await client.query<{ table_name: string; column_name: string }>(
+        `SELECT table_name, column_name
+           FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND (
+              (table_name = 'anonymous_participants' AND column_name IN ('age', 'gender', 'university', 'degree', 'graduation_year', 'origin_city'))
+              OR (table_name = 'scanner_revoked_badges' AND column_name IN ('badge_id', 'expires_at'))
+              OR (table_name = 'scanner_revoked_tickets' AND column_name IN ('ticket_token', 'expires_at'))
+              OR (table_name = 'check_in_logs' AND column_name = 'anonymous_participant_id')
+              OR (table_name = 'time_logs' AND column_name = 'anonymous_participant_id')
+            )
+          ORDER BY table_name, column_name`,
+      );
+      expect(columns.rows).toEqual([]);
+
+      const state = await client.query<{
+        anonymous_fields: string;
+        badge_digests: string;
+        ticket_digests: string;
+        response_versions: string;
+        meal_marker_not_null: boolean;
+        compatibility_ledger: string;
+      }>(
+        `SELECT
+           (SELECT count(*) FROM anonymous_participant_fields
+             WHERE field_key IN ('age', 'gender', 'university', 'degree', 'graduation_year', 'origin_city'))::text AS anonymous_fields,
+           (SELECT count(*) FROM scanner_revoked_badges)::text AS badge_digests,
+           (SELECT count(*) FROM scanner_revoked_tickets)::text AS ticket_digests,
+           (SELECT count(*) FROM application_responses WHERE application_form_version_id IS NOT NULL)::text AS response_versions,
+           (SELECT attnotnull FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid
+             WHERE c.relname = 'meal_scan_batches' AND a.attname = 'is_test_account') AS meal_marker_not_null,
+           (SELECT count(*) FROM _migrations WHERE name = '0747_h54_legacy_chain_compatibility.sql')::text AS compatibility_ledger`,
+      );
+      expect(state.rows[0]).toEqual({
+        anonymous_fields: "6",
+        badge_digests: "1",
+        ticket_digests: "1",
+        response_versions: "1",
+        meal_marker_not_null: true,
+        compatibility_ledger: "1",
+      });
+
+      const expectedBadgeDigest = createHmac("sha256", secret)
+        .update("hackos:scanner-credential:v1:badge:legacy-compat-badge")
+        .digest("hex");
+      const expectedTicketDigest = createHmac("sha256", secret)
+        .update("hackos:scanner-credential:v1:ticket:legacy-compat-ticket")
+        .digest("hex");
+      const digests = await client.query<{ credential_digest: string }>(
+        `SELECT credential_digest FROM scanner_revoked_badges
+          WHERE credential_digest = $1
+         UNION ALL
+         SELECT credential_digest FROM scanner_revoked_tickets
+          WHERE credential_digest = $2`,
+        [expectedBadgeDigest, expectedTicketDigest],
+      );
+      expect(digests.rows).toHaveLength(2);
+
+      await expect(migrate(legacyDatabaseUrl.toString())).resolves.toEqual([]);
     });
   });
 

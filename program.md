@@ -50,7 +50,7 @@ rate-limited review history.
 
 | ID | Current decision/evidence | Release implication |
 |---|---|---|
-| A1 | H54 files `0730`–`0746` were development-only; the chain is now one final `0730_account_deletion_anonymization.sql` that handles both fresh installs and populated latest-main databases whose ledger ends at `0725`. Fresh and populated-main migration tests pass on local Postgres 5432. | Release owner must still stop if an external database has recorded any deleted H54 filename/checksum; that separate history needs an additive compatibility migration. |
+| A1 | H54 files `0730`–`0746` were development-only. The squashed `0730_account_deletion_anonymization.sql` handles fresh installs and populated latest-main databases whose ledger ends at `0725`; the runner now detects the allow-listed pre-squash ledger and applies `0747_h54_legacy_chain_compatibility.sql` automatically. Fresh, populated-main, and pre-squash migration tests pass on local Postgres 5432. | Release owner must still stop on unknown ledger names, malformed historical checksums, missing secrets for raw credentials, or an unresolved active-badge collision. |
 | A2 | Pending accounts retain only the short-lived exit-operational envelope; ordinary identity/domain writers are blocked and exit expiry is bounded. | Product/legal must confirm the retention boundary; no broader pending retention is implied by this code. |
 | A3 | Pending allowlist is recovery/status/cancel/sign-out plus a valid current-badge/event-end exit. Better Auth generated routes and identity writers are gated; admin-origin cancellation is rejected by policy (A7). | Keep the route-matrix and multi-session tests in the release gate. |
 | A4 | `users.badge_assigned_at` is the authoritative stale-scan fence; web/mobile retries and native roster replacement use owner/session epochs. | Do not replace the fence with client time. |
@@ -60,8 +60,8 @@ rate-limited review history.
 | A8 | Migration 0410's trigger/backfill gives every challenge exactly one `queue_group_challenges` row. The participant queue read now uses that invariant rather than the legacy negative-challenge fallback; malformed/ungrouped rows are omitted instead of crossing a marker boundary. | If deployments can contain pre-0410 or manually inserted ungrouped challenges, restore an explicit nullable fallback before enabling the participant queue read. |
 | A9 | A room's marker is inherited from its complete pool/serving graph. Unassigned rooms remain neutral/real for global venue operations; once pooled or serving, room-enterprise, room-group and room state writes must remain in one marker boundary. | Mixed or markerless fixture graphs are an invariant violation and are rejected or omitted; do not broaden neutral-room access to synthetic operators without a product decision. |
 | A10 | Better Auth recovery sign-in and refresh may remain available while an account is `removal_pending`, but every new or refreshed session is capped at the existing `removal_expires_at`; the final H54 trigger rejects direct writes that exceed it. | The final `0730` baseline and its latest-main upgrade path both enforce the reversible recovery window. |
-| A11 | The populated latest-main path is now implemented in `0730`: legacy `anonymized_at` rows are converted transactionally, scanner credentials are HMAC-retired with `BETTER_AUTH_SECRET`, active rows are preserved, and omitted user references fail closed. | A database that already recorded the deleted development-only H54 chain is separate history; stop and prepare an additive compatibility migration rather than editing its applied checksum. |
-| A12 | The populated conversion preserves current active Better Auth verification rows, deletes detached verification identifiers left by the old anonymizer, captures Devpost-only project roots for orphan cleanup, and aborts before commit if a legacy badge history value is assigned to an active user. | Resolve any badge collision before deployment; a database with the deleted development-only H54 chain still requires a separately reviewed additive compatibility migration. |
+| A11 | The populated latest-main path is implemented in `0730`: legacy `anonymized_at` rows are converted transactionally, scanner credentials are HMAC-retired with `BETTER_AUTH_SECRET`, active rows are preserved, and omitted user references fail closed. The automatic `0747` path normalizes the earlier H54 schema without rerunning the immutable baseline. | Resolve any raw-credential secret or active-badge collision before deployment; unknown ledger histories still stop. |
+| A12 | The populated conversion preserves current active Better Auth verification rows, deletes detached verification identifiers left by the old anonymizer, captures Devpost-only project roots for orphan cleanup, and aborts before commit if a legacy badge history value is assigned to an active user. The compatibility path applies the same detached-verification cleanup and final trigger boundary. | Resolve any badge collision before deployment; historical H54 names are accepted only through the explicit compatibility allowlist. |
 
 ## Work ledger
 
@@ -73,8 +73,8 @@ rate-limited review history.
 | I1–I4 | Better Auth route allowlist, signed-cookie expiry binding, cancellation race/idempotency, pending identity mutation rejection | complete | Identity worker tests/static checks; A3/A7. |
 | D1–D2 | Pending-target review locks and durable DSR failure transitions | complete | API source/tests and durable retry paths; A2/A3. |
 | D3–D5 | Fixture graph isolation, logistics/SSE scope, hidden fixture visibility after scrubbing | complete | Domain and cross-layer audits; A5. |
-| DB1–DB4 | Squash H54 migrations, install final active-user triggers, versioned responses, remove temporary scanner DDL/cleanup DML | complete | Fresh and populated-main migration suite: 12/12 on local Postgres 5432, including detached-verification cleanup, Devpost-only orphan cleanup, and badge-collision rollback; schema DBML synchronized; A1/A6/A11/A12. |
-| DOC1 | Rewrite stale account-removal, worker, fixture, module, migration/schema claims | complete | Migration/docs audit and `pnpm lint`; obsolete operational 0731–0746 claims were removed, while intentional external-ledger release-gate references remain. |
+| DB1–DB4 | Squash H54 migrations, install final active-user triggers, versioned responses, remove temporary scanner DDL/cleanup DML | complete | Fresh, populated-main, and pre-squash compatibility migration suite: 13/13 on local Postgres 5432, including detached-verification cleanup, Devpost-only orphan cleanup, badge-collision rollback, raw tombstone keying, and fixed-field normalization; schema DBML synchronized; A1/A6/A11/A12. |
+| DOC1 | Rewrite stale account-removal, worker, fixture, module, migration/schema claims | complete | Migration/docs audit and `pnpm lint`; obsolete operational 0731–0746 claims now describe the automatic `0747` compatibility path and its fail-closed boundaries. |
 | DOC2 | Update the external PR body/checklist and release/legal metadata | complete | PR #584 body/checklist now names final head `144e0a43`, exact green run `33245745000`, 12 migration tests, and the latest-main upgrade contract. |
 | T1 | Add regression coverage for races, pending allowlist, fixture scope, queue SSE, form versions, and migrations | complete | Web: 40 files/298 tests; mobile: 44 suites/222 tests; migration: 12 tests including populated latest-main upgrade, detached-verification cleanup, Devpost-only orphan cleanup, and badge-collision rollback; API DB suites require Valkey/5433. |
 | T2 | Run repository gates and record infrastructure limitations | complete with blocker recorded | `pnpm lint`, API/web/mobile typechecks, web/mobile suites, diff checks, and fresh migration suite pass. Full API integration and queue DB suites cannot run against unavailable/resetting Valkey/Postgres 5433. |
@@ -116,8 +116,9 @@ rate-limited review history.
 | T38 | Synthetic review fixture isolation implementation | complete | `task_5e61add2d03c` / `ctx_873377aaae01` / `term_113fb73b-9bb1-49d7-84f7-a3387c6d8c85`; worker_done seq 589. Marker-aware admin/sponsor list/detail/export/patch/message scope plus focused coverage committed/pushed as `2f8e6c05`; terminal closed. |
 | T39 | Final Luna-max wallet/review audit | blocked; coordinator fallback complete | `task_2cf7181f322e` / `ctx_88fc4bcfd58a` / `term_d918b87e-cf88-4c33-b7f2-4147c492be1f`; review-only worker hit the provider usage limit before `worker_done`, then its terminal was closed and task marked blocked. Coordinator re-read the exact wallet/review diff locally; no additional worker finding is available. |
 | T40 | Repair exact-tip CI regressions | complete | `33216896112` failed only the two newly added assertions: the identity test attempted Apple pass signing without the wallet test fixture, and the review test counted channel rows instead of distinct recipients. `10e1f054` now calls `ensurePassRecord` directly and asserts `count(DISTINCT user_id)`; exact replacement run `33239985938` on final tip `7a0cbe3b` is green across all seven jobs. |
-| T41 | Upgrade populated latest-main database | complete | `7244b47a` plus `960ff051` make `0730` an in-place upgrade from the main ledger through `0725`: it converts legacy `anonymized_at` users, preserves active data, snapshots forms/responses, retires legacy credentials with the deployment HMAC secret, removes detached verification identifiers, captures Devpost-only roots, fails closed on badge collisions, and verifies no user references remain. Migration suite is 12/12 locally; docs and deployment guidance are synchronized. Exact-head CI run `33245745000` is green. |
-| T42 | Close populated migration privacy/availability findings | complete | Final migration audit found two P1s (detached Better Auth email identifiers; reused historical badge denial) and one P2 (Devpost-only roots), plus runner dotenv drift. `960ff051` adds fail-closed/cleanup behavior, regression coverage, and docs; exact current-head CI run `33245745000` is green. |
+| T41 | Upgrade populated latest-main database | complete | `7244b47a` plus `960ff051` make `0730` an in-place upgrade from the main ledger through `0725`: it converts legacy `anonymized_at` users, preserves active data, snapshots forms/responses, retires legacy credentials with the deployment HMAC secret, removes detached verification identifiers, captures Devpost-only roots, fails closed on badge collisions, and verifies no user references remain. |
+| T42 | Close populated migration privacy/availability findings | complete | Final migration audit found two P1s (detached Better Auth email identifiers; reused historical badge denial) and one P2 (Devpost-only roots), plus runner dotenv drift; `960ff051` closes them. The follow-up `0747` path now normalizes recorded pre-squash H54 histories automatically, with 13/13 focused migration tests passing locally. |
+| T43 | Automatic pre-squash migration compatibility | in progress | Added the allow-listed H54 ledger plan, transactional `0747` schema normalizer, populated raw/fixed-shape regression, and synchronized deployment/schema/account docs. Focused migration tests are 13/13 on local Postgres 5432; exact-head CI and final PR-body refresh remain. |
 
 ## Code/schema changes reconciled
 
@@ -143,6 +144,11 @@ rate-limited review history.
 - Added the explicit challenge enqueue marker guard: a real `QUEUE_ADMIN`
   cannot guess synthetic challenge/repository ids, and a fixture operator cannot
   cross into real graph ids.
+- Added automatic pre-squash H54 migration compatibility: the runner
+  recognizes the allow-listed `0731`–`0746` ledger and known historical `0730`
+  checksums, skips the immutable squashed baseline, and transactionally applies
+  `0747` to normalize fixed anonymous fields, scanner credentials, form
+  pointers, fixture markers, and final reference triggers.
 - Added transaction-local fixture guards for every queue entry transition and
   room helper, marker-aware top-up/group generation/clearing, and history actor
   identity filtering; mixed queue graphs fail closed.
@@ -740,6 +746,7 @@ Messages received after the prior rate-limit snapshot (seq 405–450):
 - 2026-08-28 22:18:51 · seq 589 · worker_done · `msg_0c552e258e47` · review implementation added marker-aware scopes/guards and synthetic list/detail/patch/message/export coverage; static checks passed, runtime setup blocked; terminal closed
 - 2026-08-28 22:28:22 · seq 590 · heartbeat · `msg_749a6d4df1cf` · final Luna-max wallet/review audit alive on `2f8e6c05`
 - 2026-08-29 09:30:00 · collaboration result · `/root/migration_docs_audit` · final populated-main audit found detached-verification P1, reused-badge P1, Devpost-only-root P2, and migration-runner dotenv drift; no files edited
+- 2026-08-29 13:09:54 +0200 · user directive · no Orca sequence id · requested that databases with the prior H54 migration history be upgraded automatically rather than requiring a separate manual compatibility migration; coordinator added the allow-listed runner plan, transactional `0747` normalizer, regression coverage, and synchronized documentation
 
 Coordinator-originated inbox echoes (kept for chronology, excluded from the
 received-message count) were seq 474 `msg_939f59e3d657` and seq 476
@@ -815,7 +822,7 @@ Use this prompt for a future coordinator:
 > jobs, and synchronizes the generated telemetry route-ledger wording. Fresh
 > Luna worker terminals are closed; do not close unrelated historical panes.
 >
-> The latest implementation checkpoint is
+> The latest implementation checkpoint before the compatibility follow-up is
 > `960ff051b0d825b75d8f9a4223334c5fdb3bd3a9`; always verify the live `HEAD`
 > and its exact CI checks before resuming. It includes
 > wallet retry/cancellation fixes in `ab34b299`, synthetic review fixture
@@ -838,23 +845,25 @@ Use this prompt for a future coordinator:
 > mobile typechecks, web (40 files/298 tests), mobile (44 suites/222 tests),
 > `git diff --check`, and the fresh plus populated-main migration suite
 > (12 tests, including detached-token cleanup, Devpost-only orphan cleanup,
-> and badge-collision rollback).
+> and badge-collision rollback). The compatibility follow-up adds a 13th
+> migration test for the pre-squash history.
 >
-> The branch intentionally contains one H54 migration,
-> `apps/api/db/migrations/0730_account_deletion_anonymization.sql`; it supports
-> both a fresh schema and a populated latest-main database whose ledger ends at
-> `0725`, including legacy `anonymized_at` cleanup, detached verification
-> cleanup, Devpost-only orphan cleanup, badge-collision fail-closed behavior,
-> and keyed scanner digests. The runner loads dotenv before reading the shared
-> `BETTER_AUTH_SECRET`.
-> Before a production deploy, verify no populated external `_migrations` ledger
-> applied removed H54 intermediate files. If one did, stop and add an additive
-> compatibility migration rather than editing the applied baseline. The PR is
-> currently OPEN and DRAFT at <https://github.com/danicallero/hackOS/pull/584>;
-> update its template body/checklist with the exact final CI run, 12 migration
-> tests, the latest-main upgrade contract, and local setup limitations. The
-> user has authorized marking it ready after the exact current-head checks are
-> green; do not merge it.
+> The H54 migrations are
+> `apps/api/db/migrations/0730_account_deletion_anonymization.sql` plus the
+> compatibility-only `0747_h54_legacy_chain_compatibility.sql`. The squashed
+> baseline supports a fresh schema and a populated latest-main database whose
+> ledger ends at `0725`, including legacy `anonymized_at` cleanup, detached
+> verification cleanup, Devpost-only orphan cleanup, badge-collision fail-closed
+> behavior, and keyed scanner digests. The runner recognizes the explicit
+> historical `0731`–`0746` names and known pre-squash `0730` checksums, skips
+> the immutable baseline, and applies `0747` transactionally; raw credentials
+> require the deployment `BETTER_AUTH_SECRET`. Unknown ledger histories still
+> stop. The PR is currently OPEN at
+> <https://github.com/danicallero/hackOS/pull/584>;
+> update its template body/checklist with the exact final CI run, 13 migration
+> tests, the latest-main and pre-squash upgrade contracts, and local setup
+> limitations. The user has authorized marking it ready after the exact
+> current-head checks are green; do not merge it.
 >
 > Keep this file's archival received-message ledger complete, including every
 > Orca message id/type/subject/timestamp after rate-limit recovery and any
@@ -862,5 +871,6 @@ Use this prompt for a future coordinator:
 > review the diff, update the ledger, close the worker terminal, commit/push
 > changes, and verify the remote SHA and checks. Preserve the coordinator/server
 > terminals and close only the worker panes owned by this review at the end.
-> The external release gate remains: verify no populated `_migrations` ledger
-> contains removed H54 files before deploy.
+> The release gate remains: verify the external `_migrations` ledger contains
+> only the known H54 history or the recorded `0747` compatibility row, and
+> resolve any raw-credential secret or active-badge collision before deploy.

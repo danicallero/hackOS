@@ -385,12 +385,14 @@ another.
 
 - **Migrations**: automatic on `api` deploy. The H54 `0730` migration upgrades
   the latest main schema in place (including populated rows) and uses the API's
-  `BETTER_AUTH_SECRET` to retire any legacy scanner credentials. Before deploy,
+  `BETTER_AUTH_SECRET` to retire any legacy scanner credentials. The runner
+  recognizes the allow-listed pre-squash `0731`–`0746` ledger (and known old
+  `0730` checksums), skips the immutable squashed baseline, and applies the
+  transactional `0747` compatibility normalizer automatically. Before deploy,
   take the normal database backup and follow the [migration identity gate](../docs/database-schema.md#migration-identity).
-  A database that already records the deleted development-only H54 `0731`–`0746`
-  files or a different pre-squash `0730` is not the latest main state; stop and
-  prepare a separately reviewed additive compatibility migration. To run
-  migrations manually:
+  Unknown ledger names, malformed historical checksums, missing secrets for raw
+  credentials, and active-badge collisions stop the deploy. To run migrations
+  manually:
   `docker compose -f deploy/services/api/docker-compose.yml -p <proj>-api run --rm migrate`.
 - **Grant superadmin to an existing account (H8)** from the API container shell:
   `node scripts/grant-superadmin.mjs --email user@example.com`.

@@ -193,7 +193,7 @@ scan alone is therefore insufficient.
 | F13 | Medium | confirmed code problem fixed in this follow-up; operational risk; privacy/security risk | Self-service destructive requests now require a non-empty `Idempotency-Key`; a missing key is rejected instead of entering a path that cannot safely replay a lost response. Supported mobile/web clients already send a high-entropy key, and the no-production-database assumption allows the old no-key compatibility path to be removed. |
 | F14 | Medium | confirmed code problem; operational risk | Offline stale submissions can reach the server after anonymization. Permanent unlinked keyed-digest badge/ticket tombstones and active lookups reject them, and clients remove terminal stale queue items. Devices that never reconnect cannot be remotely wiped; device management/reinstall remains the operational control for the residual local copy. |
 | F15 | Medium | confirmed code improvement; privacy/security risk; requires legal/product confirmation | Shared public repositories, Devpost content and external documents can contain a person's identity independently of hackOS rows. The service removes the subject's personal submission/member link and deletes solo projects, but preserves a shared project for remaining members. The participant Privacy Policy now explains that forms/project records may request links to independent external sites with their own policies and no GPUL affiliation; confirm that this wording matches the event's external-content policy. |
-| F16 | Medium | confirmed code problem fixed in this follow-up; privacy/security risk; operational risk | The `0730` migration installs `time_logs_kind_check` and versioned response integrity while upgrading the latest main schema. Invalid presence events and unversioned response policies are not supported compatibility states; retained calculations rely on the database domain (`in`/`out`) and submitted form-version policy. |
+| F16 | Medium | confirmed code problem fixed in this follow-up; privacy/security risk; operational risk | The `0730` migration installs `time_logs_kind_check` and versioned response integrity while upgrading the latest main schema. The `0747` compatibility path applies those same final constraints to the allow-listed pre-squash H54 shape. Invalid presence events and unversioned response policies fail closed; retained calculations rely on the database domain (`in`/`out`) and submitted form-version policy. |
 | F17 | Medium | App Store review risk; confirmed code improvement | The prior mobile flow did not expose a direct, truthful account action. The current Account/Data control is visible in-app, remains available while inside, distinguishes full deletion from irreversible anonymization/pending exit, links the Privacy Policy, and explains the consequences. Reviewer access instructions must provide an accepted test account that can reach it. |
 | F18 | Medium | App Store review risk; requires legal/product confirmation | “Delete” is reserved for full deletion; “anonymize” names the irreversible alternative. Privacy policy and App Store privacy disclosures must match actual operational retention and external-cache limitations. |
 | F19 | Low | optional hardening | The branch has focused regression tests and a documented matrix, but provider deletion, lost-response, offline-device, backup and rare-cohort tests require deployment fixtures outside this repository. |
@@ -363,7 +363,7 @@ correct it.
 
 ## 10. Database and migration changes
 
-`0730_account_deletion_anonymization.sql` is the single H54 migration for both
+`0730_account_deletion_anonymization.sql` is the squashed H54 baseline for both
 a fresh schema and the latest main database (the main ledger ends at `0725`).
 It installs the lifecycle gate, anonymous subject and dynamic retained fields,
 nullable operational actor references, immutable form versions, fixture
@@ -379,16 +379,19 @@ user. No user-to-anonymous mapping survives.
 
 Migration policy is checksum-enforced by `apps/api/scripts/migrate.ts`. The
 runner loads the same environment file as the API and supplies the deployment
-secret to the one migration transaction; a
-populated upgrade that has legacy scanner credentials therefore must run with
-the same `BETTER_AUTH_SECRET` used by the API. The migration test seeds a
-main-shaped populated database and verifies the in-place conversion, including
-detached verification cleanup and badge-collision fail-closed behavior. A database
-that already recorded the deleted development-only H54 files (`0731`–`0746`,
-or a different pre-squash `0730`) is a separate history and must be stopped for
-an additive compatibility migration; this branch intentionally targets the
-latest main ledger. Applied checksums remain immutable after deployment and
-later corrections use a new migration.
+secret to each H54 migration transaction; a populated upgrade that has raw
+legacy scanner credentials therefore must run with the same
+`BETTER_AUTH_SECRET` used by the API. The migration tests seed a main-shaped
+database and a pre-squash H54 ledger. The latter is detected from its
+allow-listed `0731`–`0746` records or known pre-squash `0730` checksums; the
+runner skips the squashed baseline and applies
+`0747_h54_legacy_chain_compatibility.sql` automatically. That compatibility
+step preserves fixed anonymous fields as dynamic rows, converts raw scanner
+tombstones to keyed digests, binds every response to an immutable form
+snapshot, and reinstalls the final reference triggers. Unknown ledger names,
+malformed historical checksums, missing secrets for raw credentials, and active
+badge collisions fail closed. Applied checksums remain immutable after
+deployment and later corrections use a new migration.
 
 ## 11. Offline caches and external copies
 
@@ -663,6 +666,9 @@ suite alone.
   isolation and non-sensitive successful-sign-in telemetry.
 - `apps/api/db/migrations/0730_account_deletion_anonymization.sql`: the
   squashed, dependency-safe H54 schema and populated-main upgrade described above.
+- `apps/api/db/migrations/0747_h54_legacy_chain_compatibility.sql`: the
+  automatic transactional normalizer for databases that already recorded the
+  pre-squash H54 history.
 
 ### Clients and copy
 
@@ -703,7 +709,7 @@ silently converted into a legal conclusion.
 | A15 | Anonymous application-data retention is schema-driven and version-aware. Authorized form administrators explicitly configure `retention_mode = ANONYMOUS_AUDIT` and an optional open semantic dimension through the Form Builder Advanced settings. Unmarked fields default to `NONE`; labels and translations do not control retention. | Applications/data owner |
 | A16 | Meal/activity/judging/project records are operational or shared content, not permanent personal audit requirements, unless the table's row is explicitly listed above. | Domain owners |
 | A17 | “Irreversible” means no identity mapping in the hackOS database after the transaction; it does not overclaim deletion from external systems or prevent statistical inference. | Privacy/security owner |
-| A18 | The first H54 deployment starts from the latest main schema (`_migrations` through `0725`). `0730` is validated both from a fresh schema and from a populated main-shaped database; after deployment, preserve applied checksums and use a new corrective migration for later changes. | Release/DB owner |
+| A18 | The first H54 deployment starts from the latest main schema (`_migrations` through `0725`). `0730` is validated both from a fresh schema and from a populated main-shaped database; a database with the allow-listed pre-squash H54 ledger is normalized automatically by `0747`. After deployment, preserve applied checksums and use a new corrective migration for later changes. | Release/DB owner |
 | A19 | No current ECTS, certificate or named participation-proof endpoint exists in this repository; any future implementation must not use a hidden anonymous-to-user map. | Product/academic-services owner |
 | A20 | App Review can access a seeded accepted participant/staff account and reach Settings → Account & Data without external registration. | iOS release owner |
 | A21 | The anonymizer uses the retention configuration attached to the submitted application/form version, not the later mutable form. New audit dimensions and custom retained fields work without anonymization-service code changes. A `NONE` → `ANONYMOUS_AUDIT` edit is not retroactive; any retroactive expansion requires a separate explicit product/privacy decision. | Applications + grant/audit owners |
@@ -729,12 +735,12 @@ silently converted into a legal conclusion.
 | A41 | A synthetic operator has ordinary capability checks plus a marked-subject boundary and may act only on synthetic accounts. Real administrators and staff cannot discover or mutate those subjects by changing an ID in a normal endpoint. | Security + operations owners |
 | A42 | The configured static deletion PIN is accepted only for marked synthetic accounts. Verified real accounts require an emailed one-time PIN; no universal real-user bypass is implemented. | Security/product owner |
 | A43 | The admin fixture status signal records only the current generation, synthetic email and last successful sign-in time. It is not proof of scenario completion and does not retain secrets, failed-attempt details, IPs, user agents or participant answers. | Security + release owners |
-| A44 | The H54 migration must upgrade the latest main schema in place, including populated rows and the existing `_migrations` ledger. Its legacy conversion is transactional and one-way; applied migration checksums remain immutable after deployment and later corrections use a new migration. | Release/DB owner |
+| A44 | The H54 migrations must upgrade the latest main schema in place, including populated rows and the existing `_migrations` ledger. The squashed baseline and the allow-listed pre-squash compatibility path are transactional and one-way; applied migration checksums remain immutable after deployment and later corrections use a new migration. | Release/DB owner |
 | A45 | The current credential-retirement denylist stores stable keyed HMAC digests, not raw badge/ticket values and has no expiry path. It prevents late offline credential replay, while ordinary physical badge reuse is governed by the server-side assignment timestamp fence. | Security + event-operations owners |
 | A46 | Legal copy may describe synthetic accounts as authorised testing/quality-assurance fixtures, but it must not name a specific review channel. The detailed fixture procedure belongs in the private/operational runbook. | GPUL/privacy + release owners |
 | A47 | The schema is authoritative for presence-event shape: only `time_logs.kind IN ('in', 'out')` is valid. The `0730` migration installs the strict check while upgrading latest main; malformed rows fail the transaction rather than being silently reinterpreted. | Event-operations + release/DB owners |
 | A48 | The server-side `users.badge_assigned_at` timestamp is the authoritative boundary for offline badge-event replay. Presence, activity and meal paths reject timestamps before the current assignment both at enqueue/lookup and under the locked owner row; the timestamp is not exposed to clients. | Logistics + security owners |
-| A49 | The final state is authoritative for both fresh installs and latest-main upgrades. Runtime paths do not preserve malformed presence kinds, expired scanner tombstones, or mutable-form fallbacks for historical responses. The H54 development chain is represented by one `0730` migration; databases that already applied its deleted intermediate files need a separately reviewed additive migration. | Release/DB + domain owners |
+| A49 | The final state is authoritative for fresh installs and latest-main upgrades. Runtime paths do not preserve malformed presence kinds, expired scanner tombstones, or mutable-form fallbacks for historical responses. The runner recognizes the allow-listed H54 development chain and applies `0747` automatically, while unknown or malformed ledger histories still fail closed. | Release/DB + domain owners |
 
 ## Release recommendation
 

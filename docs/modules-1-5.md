@@ -298,7 +298,9 @@ credential login is the user id as text, while `sessions`/`accounts` FK on
   recovery deadline are the only identity-bearing exceptions. It also
   permanently retires disconnected scanner credentials without a participant
   foreign key and prevents a response from selecting another form's retention
-  snapshot.
+  snapshot. A database that recorded the pre-squash H54 chain is normalized by
+  the runner's transactional `0747` compatibility migration before those same
+  final triggers are used.
 
 **State transitions.** `active → removal_pending → users row deleted`, with an
 anonymous participant created only for the anonymization branch. A pending

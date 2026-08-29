@@ -20,6 +20,47 @@ const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "db",
 const ADVISORY_LOCK_KEY = 815_001;
 const MIGRATION_AUTH_SECRET_GUC = "hackos.better_auth_secret";
 const DEFAULT_AUTH_SECRET = "dev-only-secret-change-me";
+const H54_BASELINE_MIGRATION = "0730_account_deletion_anonymization.sql";
+const H54_LEGACY_COMPAT_MIGRATION = "0747_h54_legacy_chain_compatibility.sql";
+
+/**
+ * H54 was developed as a sequence of migrations before it was squashed into
+ * 0730. These names are historical ledger entries, not aliases to current
+ * files: the compatibility migration normalizes their already-applied schema.
+ */
+export const LEGACY_H54_MIGRATION_NAMES = Object.freeze([
+  "0731_account_removal_scanner_tombstones.sql",
+  "0732_account_removal_meal_inbox.sql",
+  "0733_account_removal_reference_guards.sql",
+  "0734_account_removal_minimization.sql",
+  "0735_schema_driven_anonymous_retention.sql",
+  "0736_account_removal_pending_exit.sql",
+  "0737_permanent_scanner_credential_tombstones.sql",
+  "0738_application_response_form_version_integrity.sql",
+  "0739_pending_exit_event_close.sql",
+  "0740_account_removal_email_pin.sql",
+  "0741_keyed_scanner_credential_tombstones.sql",
+  "0742_account_removal_pending_recovery.sql",
+  "0743_review_fixture_accounts.sql",
+  "0744_review_fixture_queues.sql",
+  "0745_badge_assignment_timestamp.sql",
+  "0746_permanent_scanner_tombstones.sql",
+] as const);
+const LEGACY_H54_MIGRATION_NAME_SET = new Set<string>(LEGACY_H54_MIGRATION_NAMES);
+
+// These are the checksums of the pre-squash 0730 file in the commits that
+// shipped the historical chain. The current 0730 checksum is intentionally
+// not listed; its normal checksum validation must remain strict.
+const LEGACY_H54_BASELINE_CHECKSUMS = new Set([
+  "0135c0855974a0947571c223419c6c384d0aab552c815b6f938c4cc1534bd754",
+  "c34950dd2be110c80df5adce504e07e363c721357c36c7591844d93db0aef49f",
+  "2efab5b1d3a05af2daebc8653966d5dfd3355906ce04e00ab5f534a885fb0407",
+  "f8d47272325bd865a074c7611876ee18d6f786d5b07aafd2ac7eb47ff0a8ea64",
+  "800b1eed3be5ecc80868faee207f79824706bb79378d8b5077e46113a46ef384",
+  "7180641cecdbb41b193a309deacba17600189d81c32b48094904bc15f7f1e9cd",
+  "125e5103a0f0cddb202ffe8e543ba069ffe2ad96d677c4ca87476862d8209544",
+  "af38a636dec067e3e445694cde65785cebaf0037ae96f80dc4d107a223da7d0e",
+]);
 
 /**
  * Files that were already applied before the 07xx sequence collision was
@@ -114,10 +155,69 @@ function currentMigrationName(
   return LEGACY_MIGRATION_RENAMES[recordedName];
 }
 
+type MigrationPlan = {
+  done: Set<string>;
+  legacyH54: boolean;
+};
+
+function isLegacyH54Name(name: string): boolean {
+  return LEGACY_H54_MIGRATION_NAME_SET.has(name);
+}
+
+async function hasLegacyH54Schema(
+  client: pg.Client,
+  records: readonly MigrationRecord[],
+): Promise<boolean> {
+  const baseline = records.find((record) => record.name === H54_BASELINE_MIGRATION);
+  if (!baseline) return false;
+  if (baseline.checksum !== null && LEGACY_H54_BASELINE_CHECKSUMS.has(baseline.checksum)) {
+    return true;
+  }
+
+  // A pre-checksum ledger may contain the old 0730 name without enough
+  // metadata to identify its file. Structural markers make that case safe to
+  // recognize without weakening checksum validation for an otherwise-current
+  // 0730 schema.
+  const result = await client.query<{ legacy: boolean }>(
+    `SELECT (
+       EXISTS (
+         SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'anonymous_participants'
+            AND column_name IN ('age', 'gender', 'university', 'degree', 'graduation_year', 'origin_city')
+       )
+       OR EXISTS (
+         SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'scanner_revoked_badges'
+            AND column_name IN ('badge_id', 'expires_at')
+       )
+       OR EXISTS (
+         SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'scanner_revoked_tickets'
+            AND column_name IN ('ticket_token', 'expires_at')
+       )
+       OR EXISTS (
+         SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name IN ('check_in_logs', 'time_logs')
+            AND column_name = 'anonymous_participant_id'
+       )
+       OR NOT EXISTS (
+         SELECT 1 FROM information_schema.tables
+          WHERE table_schema = 'public'
+            AND table_name = 'application_form_versions'
+       )
+     ) AS legacy`,
+  );
+  return result.rows[0]?.legacy ?? false;
+}
+
 async function prepareMigrationLedger(
   client: pg.Client,
   files: ReadonlyMap<string, MigrationFile>,
-): Promise<Set<string>> {
+): Promise<MigrationPlan> {
   await client.query("BEGIN");
   try {
     await client.query(
@@ -134,8 +234,28 @@ async function prepareMigrationLedger(
     const records = (
       await client.query<MigrationRecord>("SELECT name, checksum FROM _migrations ORDER BY name")
     ).rows;
+    const legacyH54 =
+      records.some((record) => isLegacyH54Name(record.name)) ||
+      (await hasLegacyH54Schema(client, records));
     const done = new Set<string>();
     for (const record of records) {
+      if (isLegacyH54Name(record.name)) {
+        if (record.checksum === null) {
+          // The old chain predates the checksum column in some development
+          // databases. Its file is intentionally no longer shipped, so use a
+          // fixed historical marker rather than pretending the current file's
+          // checksum describes it. Future runs skip this allow-listed name.
+          await client.query("UPDATE _migrations SET checksum = $1 WHERE name = $2", [
+            "0".repeat(64),
+            record.name,
+          ]);
+        } else if (!/^[0-9a-f]{64}$/.test(record.checksum)) {
+          throw new Error(
+            `Historical H54 migration "${record.name}" has an invalid checksum; repair the ledger before deploying.`,
+          );
+        }
+        continue;
+      }
       const currentName = currentMigrationName(record.name, files);
       if (!currentName) {
         throw new Error(
@@ -157,6 +277,12 @@ async function prepareMigrationLedger(
       }
       done.add(currentName);
 
+      // A historical 0730 file has the same name as the squashed baseline,
+      // but its schema is repaired by 0747 instead of being run a second time.
+      if (legacyH54 && currentName === H54_BASELINE_MIGRATION) {
+        continue;
+      }
+
       if (record.checksum === null) {
         await client.query("UPDATE _migrations SET checksum = $1 WHERE name = $2", [
           migration.checksum,
@@ -173,9 +299,11 @@ async function prepareMigrationLedger(
       }
     }
 
+    if (legacyH54) done.add(H54_BASELINE_MIGRATION);
+
     await client.query("ALTER TABLE _migrations ALTER COLUMN checksum SET NOT NULL");
     await client.query("COMMIT");
-    return done;
+    return { done, legacyH54 };
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
     throw err;
@@ -199,9 +327,14 @@ export async function migrate(databaseUrl?: string): Promise<string[]> {
       process.env.BETTER_AUTH_SECRET ?? DEFAULT_AUTH_SECRET,
     ]);
     await client.query("SELECT pg_advisory_lock($1)", [ADVISORY_LOCK_KEY]);
-    const done = await prepareMigrationLedger(client, files);
+    const plan = await prepareMigrationLedger(client, files);
     for (const migration of migrations) {
-      if (done.has(migration.name)) continue;
+      if (
+        plan.done.has(migration.name) ||
+        (migration.name === H54_LEGACY_COMPAT_MIGRATION && !plan.legacyH54)
+      ) {
+        continue;
+      }
       await client.query("BEGIN");
       try {
         await client.query(migration.sql);
