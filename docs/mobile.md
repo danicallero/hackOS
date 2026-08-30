@@ -265,9 +265,10 @@ distributed to other Expo Router apps without importing hackOS code.
   the first correction. They stay fixed at standard text sizes and become
   scrollable only for accessibility text sizes.
 - `app/_layout.tsx` keeps a neutral background while the authenticated profile
-  restores. It only announces and renders the session progress state after a
-  500 ms grace period, so a normal fast restore does not flash an intermediate
-  screen; a persistent recovery error still shows retry and sign-out actions.
+  restores. It only announces and renders the session progress state
+  (`components/session-state.tsx`) after a 500 ms grace period, so a normal
+  fast restore does not flash an intermediate screen; a persistent recovery
+  error still shows retry and sign-out actions.
 
 ## Participant screens
 
@@ -317,7 +318,9 @@ distributed to other Expo Router apps without importing hackOS code.
   renders ticket/badge QR codes. After an eligible session is restored, a
   best-effort startup warmup stores the `/api/me/ticket` payload under an
   account-scoped cache key; the screen still refreshes online and falls back to
-  that payload with a stale-data banner when the connection fails. Accepted
+  that payload with a stale-data banner (`components/stale-data-banner.tsx`,
+  reused across 7 screens for this offline pattern) when the connection
+  fails. Accepted
   spots also expose the existing authenticated decline endpoint after a final,
   destructive confirmation; success refreshes both ticket and profile state
   (H15). When an existing Apple pass is opened, the app

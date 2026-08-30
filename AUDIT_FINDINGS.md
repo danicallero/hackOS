@@ -132,4 +132,92 @@ Overall: unusually well-maintained. Expo Router tree in `app/` matches `lib/tabs
 
 - ~1,020+ LOC removed across mobile + web dead files
 - 3 npm dependencies removed (`@react-native-masked-view/masked-view`, `expo-linear-gradient`, `recharts`, `input-otp` — actually 4)
+
+---
+---
+
+# Round 2 — Deep audit (post-cleanup)
+
+**Status: COMPLETE.** Round 1 above (dead code + reuse/simplification/efficiency/altitude) is applied and merged into this branch (PRs/commits `203dc203` deletions, `c182dddb` refactors — see `git log`). This round is a deeper, research-only pass (no edits made) against the current branch state, covering complexity, legacy code, DB/API efficiency at depth, dependency/config health, and documentation-vs-plan drift. Findings below do **not** repeat anything already fixed in Round 1.
+
+## 1. Executive summary
+
+hackOS is a well-disciplined codebase for its size — no orphaned modules, no dead routes, capability-based auth is applied consistently, and documentation is largely in sync with code. After Round 1's deletions, remaining technical debt is concentrated in three places: (a) two real N+1/serial-broadcast patterns in `apps/api/src/modules/projects/service.ts`'s bulk-enrollment path (the highest-value fix — H21's "enroll ALL projects" is precisely the large-N case), (b) five near-identical hand-rolled clipboard-copy implementations and one more missed `initials()` duplicate in `apps/web`, and (c) one oversized multi-concern component in `apps/mobile` (`team-operations-screen.tsx`, 1700 lines / 23 `useState`s) that would benefit from the same local-hook extraction pattern already proven in Round 1. Dependency hygiene has one real gap (`apps/web` pinned to TypeScript 5 while the rest of the monorepo is on 6) and one doc gap (`CLAUDE.md` says stories run H1–H55; `plan/historias-hackos.md` actually goes to H59). Nothing found in this round rises to "architectural" — nothing in Phase 5.
+
+## 2. Highest-value cleanup opportunities
+
+Ranked by impact × safety:
+
+1. **`projects/service.ts` bulk-enroll N+1** (`bulkAddRepoChallenge`/`bulkRemoveRepoChallenge`, lines 1508-1543, 1553-1580) — per-repo redundant scope checks plus a locked-read-per-row inside a transaction holding row locks. Directly hits H21's bulk path at its largest N. See §7.
+2. **`announceQueueOutcomes` sequential broadcast loop** (`projects/service.ts:1624-1635`) — the exact anti-pattern Round 1 already fixed in `queue/service.ts`, left untouched here; `notifyChallengeQueueChanged` re-queries the same `challenge_id` once per outcome instead of once per call. See §7.
+3. **Clipboard-copy duplicated 5×** in `apps/web` (`invite-links-card.tsx`, `active-invitations-modal.tsx`, `user-invite-links-section.tsx`, `invite-dialog.tsx`, `qr-code.tsx`) — one of the five (`invite-dialog.tsx`) has no error handling at all, a real (small) UX gap the duplication caused. See §5.
+4. **`user-menu.tsx` `initials()` reimplementation** — Round 1 consolidated `initials()` in `users/page.tsx` but missed this higher-traffic surface (every authed page's top bar). See §5.
+5. **`apps/web` pinned to TypeScript 5** while api/mobile/shared are on 6 — a real semantic-drift risk since `@hackos/shared` is consumed raw via `transpilePackages`. See §6.
+
+## 3. Safe deletion list
+
+Nothing new. Round 1 already deleted everything in the codebase that was verifiably unreferenced (mobile: `scan-screen.tsx` + Expo template boilerplate; web: chart/OTP/scroll-area components). This round's research-only pass found no additional dead files, exports, or components.
+
+## 4. Verify-before-deletion list
+
+- **`CAPABILITIES.SPONSOR_PORTAL`** (`packages/shared/src/capabilities.ts:48`) — confirmed still intentional: it's a deprecated compatibility no-op, never checked as an authorization grant anywhere in `apps/api`, explicitly excluded from permission templates (`identity/routes/permissions.ts:166`, `apps/web/.../permissions/helpers.ts:51`), and exists to support `docs/access-control-audit-plan.md`'s legacy-grant reporting. **Not dead code — do not delete without a product decision to fully retire sponsor-portal history.** Carried over from Round 1, reconfirmed this round.
+- **`eslint` + `eslint-config-next` + `apps/web/eslint.config.mjs`** — none of the checked scripts (root `lint`, web's own `lint`) invoke eslint; only `biome check .` is wired in. Whether Next 16's `next build` still auto-invokes eslint by default was not independently confirmed. **Verify with a real `next build` run (check for an eslint pass in the output) before removing** — if it's a no-op leftover, drop both the devDependencies and the config file; if `next build` still uses it, keep it and document why two linters coexist.
+
+## 5. Consolidation/refactoring opportunities
+
+**apps/web:**
+- Add a `useCopyToClipboard()` hook (or a plain `copyToClipboard(value, t)` helper) and replace all 5 call sites: `enterprises/[id]/invite-links-card.tsx:126-133`, `users/active-invitations-modal.tsx:141-148`, `users/user-invite-links-section.tsx:153-160`, `users/invite-dialog.tsx:122-125` (currently has no error toast — this fixes a real gap), `components/common/qr-code.tsx:52-55`.
+- `components/layout/user-menu.tsx:19-23` reimplements `initials()` with a different (positional-args) signature and a `"?"` fallback the canonical version lacks. Point it at the shared `initials()` in `app/(app)/users/[id]/shared.ts:34-38` instead.
+
+**apps/mobile:**
+- `components/team-operations-screen.tsx` (1700 lines, 23 `useState` + 5 `useEffect` in one component) — extract the "add challenge" state/handlers and the "link participant" state/handlers into two local hooks (`useChallengeEnrollment`, `useMemberLinking`), following the exact pattern Round 1 already used for `useMemberCandidateSearch` in the same file.
+- `components/schedule-form-modal.tsx:702-729` and `components/announcement-form-modal.tsx:760-786` define byte-identical `ToggleRow` components (both files' own comments say they're meant to mirror field-for-field). Move `ToggleRow` into `components/native-ui.tsx` alongside the other shared row primitives (`InfoRow`/`Section`).
+- `components/general-scanner-screen.tsx:82-97` — four nearly identical `useEffect`s subscribing to four logistics SSE events, each calling the same `loadRoleStats`. Collapse into one effect iterating an event array. Cosmetic, low priority.
+
+**apps/api:**
+- No new consolidation opportunities beyond the DB/API items in §7 — `projects/service.ts`/`applications/service.ts`/`queue/service.ts` are long but the length is mostly repeated raw-SQL CRUD/audit/broadcast boilerplate inherent to the module pattern (per `CLAUDE.md`), not accidental duplication. `runBatch` (`applications/service.ts:1374-1390`) looks parallelizable at a glance but each op does its own capacity check inside its own transaction — the sequential loop is required for correctness, not a smell.
+
+## 6. Dependency cleanup
+
+- **`apps/web/package.json` — `typescript: "^5"`** vs. `^6.0.3` everywhere else (root, `apps/api`, `apps/mobile`, `packages/shared`). Bump to match; verify no TS6-only diagnostics break the web build.
+- **`apps/web/package.json` — `@types/node: "^20"`** vs. `apps/api`'s `^26.1.0`, and the repo-wide `engines.node: ">=22"`. Bump to `^22`+ to match the actual runtime.
+- **`eslint` / `eslint-config-next`** in `apps/web` — see §4, verify-before-deleting.
+- Nothing else flagged: all other dependencies across `apps/api`, `apps/mobile`, `packages/shared`, and root `package.json` were checked against usage and script wiring with no further findings (extends Round 1's clean result for apps/api and shared/deploy).
+
+## 7. Database/API efficiency improvements
+
+- **`apps/api/src/modules/projects/service.ts:1508-1580` — `bulkAddRepoChallenge`/`bulkRemoveRepoChallenge`.** Per repo in the loop, `enqueueRepoOnChallenge` (line 1297) re-runs `assertQueueChallengeScope` (2-3 queries) even though `challengeId` is invariant across the whole loop, plus a per-row `SELECT ... FOR UPDATE` via `nextBottomPosition`/`lockedGroupOrder` while holding transaction locks the entire time. Fix: hoist `assertQueueChallengeScope` above the loop; replace the per-row locked read with one locked read of the current max position before the loop, then increment an in-memory counter per insert.
+- **`apps/api/src/modules/projects/service.ts:1624-1635` — `announceQueueOutcomes`.** Sequential `await broadcastQueueEvent(...)` + `await notifyChallengeQueueChanged(...)` per outcome — the same pattern Round 1 fixed in `queue/service.ts` but missed here. For the bulk-enroll callers, every outcome shares one `challenge_id`, so `notifyChallengeQueueChanged`'s internal `SELECT queue_group_id FROM queue_group_challenges WHERE challenge_id = $1` plus its BullMQ enqueue runs N times instead of once. Fix: `Promise.all` the broadcasts, call `notifyChallengeQueueChanged` once per distinct `challenge_id` after the loop.
+- No other N+1s, redundant queries, or missing-batching patterns were found in this round's per-module read of `apps/api` beyond what Round 1 already fixed (`wallet-sync.ts`, `queue/service.ts` broadcasts).
+
+## 8. Documentation/comment cleanup
+
+- **`CLAUDE.md:7`** says the functional source of truth covers "user stories H1-H55" — `plan/historias-hackos.md` actually contains stories through **H59** (verified: real H56-H59 headers present). `docs/README.md` already correctly says "H1–H59." Since `plan/` is the read-only source of truth per `CLAUDE.md`'s own rule, this is `CLAUDE.md` that needs the one-line fix (H55 → H59).
+- **`docs/DESIGN.md` §3** claims the only raw (non-`SectionCard`) `Card` usages left in `app/(app)` are the auth-style confirmation card and the my-queue ticket stub. Two more exist and aren't listed: `app/(app)/schedule/page.tsx:33,366` (a titled search/filter panel — exactly `SectionCard`'s use case) and `app/(app)/verify-secondary-email/page.tsx:9,97` (a full auth-style confirmation card living under `(app)` instead of `(auth)`). Either update the doc's exception list to name both, or migrate `schedule/page.tsx`'s card to `SectionCard` and reconsider whether `verify-secondary-email` belongs under `(auth)`.
+- **`docs/mobile.md`** doesn't name two real, widely-used shared components by name even though it describes their behavior in prose: `components/stale-data-banner.tsx` (used in 7 places for offline-UX fallback) and `components/session-state.tsx` (renders the auth-flow "session progress" screen described in the doc's Auth section). Minor discoverability gap, not an inaccuracy — add a one-line component-name reference in each relevant section.
+- No stale `TODO`/`FIXME`/`HACK` comments were found anywhere in `apps/api`, `apps/web`, or `apps/mobile` in this round (all grep hits were legitimate prose comments or H21 Spanish-language doc comments, not markers of incomplete work).
+
+## 9. Suggested cleanup sequence
+
+**Phase 1 — zero/very-low-risk deletions:** none remaining; Round 1 already completed this phase (see above).
+
+**Phase 2 — dependency and duplicate cleanup:**
+- Bump `apps/web`'s `typescript` to `^6.0.3` and `@types/node` to `^22`+ to match the rest of the monorepo; run full typecheck/build afterward.
+- Add `useCopyToClipboard()` in web and replace all 5 call sites (§5).
+- Point `user-menu.tsx`'s `initials()` at the shared helper (§5).
+- Move `ToggleRow` into `components/native-ui.tsx` in mobile (§5).
+- Fix `CLAUDE.md`'s H55→H59 story-count reference (§8).
+
+**Phase 3 — simplification refactors:**
+- Extract `useChallengeEnrollment`/`useMemberLinking` hooks out of `team-operations-screen.tsx` (§5).
+- Collapse the four logistics-event effects in `general-scanner-screen.tsx` into one (§5).
+- Verify whether `eslint`/`eslint-config-next` in `apps/web` is actually invoked by `next build`; remove if not (§4/§6).
+
+**Phase 4 — database/API optimization:**
+- Fix the bulk-enroll N+1 in `projects/service.ts` (§7, item 1) — highest-value item in this whole round.
+- Fix `announceQueueOutcomes`'s sequential broadcast loop (§7, item 2).
+
+**Phase 5 — larger architectural technical debt:**
+- Nothing found in this round rises to this level. The one open architectural/product question carried from Round 1 remains: whether to fully retire `SPONSOR_PORTAL`'s compatibility shim (§4) — a product decision, not a code-quality finding.
+- Fix `docs/DESIGN.md`'s raw-`Card` exception list and `docs/mobile.md`'s missing component references (§8) — low effort, can be folded into Phase 2 if preferred; separated here only because it's pure documentation, not code.
 - No API surface, route, or user-facing behavior changes — every deleted file is unreferenced

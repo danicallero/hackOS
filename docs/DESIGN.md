@@ -103,8 +103,10 @@ elevated `Overlay` — replacing the overloaded generic "card".**
 
 `Card` remains only as a compatibility wrapper over `Surface`; new domain
 sections use `Section`/`SectionCard` so their responsibility is explicit. In
-`app/(app)` the only remaining raw `Card`s are deliberately *not* page
-sections — the centered confirmation/auth card and the my-queue ticket stub.
+`app/(app)` the raw `Card`s that are deliberately *not* page sections are the
+centered confirmation/auth cards (`verify-secondary-email/page.tsx`) and the
+my-queue ticket stub. `schedule/page.tsx`'s search/filter bar is a known
+exception still pending migration to `SectionCard`.
 Every dashboard-style panel is a `SectionCard` (#300); a panel that re-builds
 title/description/action out of `CardHeader` also re-invents the spacing and
 re-introduces the description-restates-the-title pattern.

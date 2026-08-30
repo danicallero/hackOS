@@ -4,7 +4,7 @@
 > writing code. This file contains the conventions themselves.
 
 Hackathon management platform: one API replacing four legacy tools. **Functional
-source of truth: `plan/historias-hackos.md`** (user stories H1-H55). If docs
+source of truth: `plan/historias-hackos.md`** (user stories H1-H59). If docs
 conflict, that file wins. Hard invariants live in `plan/07-datos-relevantes-ers.md`.
 
 ## Layout
