@@ -34,6 +34,7 @@ const ANDROID_SYMBOL_NAMES = {
   calendar: "calendar_month",
   "calendar.badge.clock": "event_upcoming",
   "calendar.badge.exclamationmark": "event_busy",
+  "chart.bar.xaxis": "bar_chart",
   "camera.fill": "camera_alt",
   "character.book.closed": "translate",
   checkmark: "check",

@@ -2,6 +2,7 @@ import { Stack } from "expo-router/stack";
 
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { useLocale } from "@/lib/i18n";
+import { transparentDetailHeaderOptions } from "@/lib/navigation";
 import { colors } from "@/theme/colors";
 
 export default function ActivitiesLayout() {
@@ -54,19 +55,11 @@ export default function ActivitiesLayout() {
           },
         }}
       />
-      {/* Kept as a direct child of this Stack (not a nested one) so the
-          detail route shares the same navigation chrome as `[id]` above.
-          A second Stack would create a duplicate native header. */}
-      <Stack.Screen
-        name="person/[id]"
-        options={{
-          headerShown: process.env.EXPO_OS === "ios",
-          headerTransparent: true,
-          headerShadowVisible: false,
-          headerTitle: "",
-          headerBackVisible: false,
-        }}
-      />
+      {/* Keep detail routes in this Stack so their native Back action remains
+          attached to the activity directory. The transparent native header
+          provides navigation only. */}
+      <Stack.Screen name="person/[id]" options={transparentDetailHeaderOptions} />
+      <Stack.Screen name="person/presence/[id]" options={transparentDetailHeaderOptions} />
     </Stack>
   );
 }

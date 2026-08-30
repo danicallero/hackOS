@@ -3,6 +3,7 @@ import {
   useFocusEffect,
   useLocalSearchParams,
   useNavigation,
+  usePathname,
   useRouter,
   useScrollToTop,
 } from "expo-router";
@@ -21,6 +22,7 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { emitManualActivityScan } from "@/lib/manual-activity-scan";
+import { safeBack } from "@/lib/navigation";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { listScannerPeople } from "@/lib/scanner-db";
 import type { ScannerPerson } from "@/lib/scanner-types";
@@ -32,6 +34,7 @@ import { colors } from "@/theme/colors";
 export function PeopleDirectoryScreen() {
   const { activityId } = useLocalSearchParams<{ activityId?: string }>();
   const router = useRouter();
+  const pathname = usePathname();
   const navigation = useNavigation();
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
@@ -173,11 +176,16 @@ export function PeopleDirectoryScreen() {
     if (activityId) {
       // Guaranteed by the `filtered` list above.
       emitManualActivityScan(Number(activityId), person.badgeId!);
-      router.back();
+      safeBack(router, {
+        pathname: "/(tabs)/activities/[id]",
+        params: { id: activityId },
+      });
       return;
     }
     router.push({
-      pathname: "/(tabs)/scan/person/[id]",
+      pathname: pathname.includes("/others/")
+        ? "/(tabs)/others/person/[id]"
+        : "/(tabs)/scan/person/[id]",
       params: { id: String(person.userId) },
     });
   }
@@ -240,7 +248,16 @@ export function PeopleDirectoryScreen() {
         <LegacyHeaderIconButton
           icon="chevron.left"
           accessibilityLabel={t("back")}
-          onPress={() => router.back()}
+          onPress={() =>
+            safeBack(
+              router,
+              pathname.includes("/others/")
+                ? "/(tabs)/others/account"
+                : pathname.includes("/activities/")
+                  ? "/(tabs)/activities"
+                  : "/(tabs)/scan",
+            )
+          }
         />
       }
       onCloseSearch={() => {

@@ -101,12 +101,23 @@ route below. No migration needed.
   scans; a scan-capable operator without `LOGISTICS_STATS` may only request
   their own `staffId`. Backs the mobile "scan history" screen
   (`components/scan-log-screen.tsx`), reachable through a route in the stack
-  that launched it: `app/(tabs)/others/scan-log.tsx` from Account and
+  that launched it: `app/(tabs)/others/scan-log.tsx` from Statistics and
   `app/(tabs)/scan/scan-log.tsx` from the device-queue popup. Keeping both
   thin routes prevents Account from switching to the Scanner tab and leaves
-  each history screen with a working native back action (issue #574).
+  each history screen with a working native back action (issue #574). Each
+  entry includes the person, exact timestamp, scan source, badge/method,
+  activity/category, door direction, and operator notes where available.
+  Tapping an activity or door entry opens that person's presence timeline with
+  the exact log highlighted, where an operator with `presence:scan` can edit or
+  delete it. The profile automatically scrolls the matching signal into view.
+  The shared person screen is mounted in the stack that owns the
+  history (`others/person/[id]` or `scan/person/[id]`), so Back returns to the
+  filtered history instead of switching tabs.
 - `GET /api/me/logistics/stats` — the caller's own accreditation/presence/
-  activity scan counts, shown on Account for operators. `GET
+  activity scan counts plus total, distinct people, and most recent scan,
+  shown in the operator Statistics operations hub. That hub also links to the
+  full scan history. Local queue reconciliation has its own dedicated
+  operations screen. `GET
   /api/logistics/stats/by-staff` is the `LOGISTICS_STATS`-gated cross-staff
   ranking (web `/logistics/stats`, "Staff ranking" section), and `GET
   /api/exports/staff-scan-stats.csv` (`exports:run`) exports the same data.
@@ -263,20 +274,41 @@ distributed to other Expo Router apps without importing hackOS code.
 - `app/(tabs)/schedule.tsx`, `queue.tsx`, `wallet.tsx`, `notifications.tsx`,
   `account.tsx` — the five participant screens. API-backed screens expose
   loading, retryable error, and empty states without leaking rejected promises.
-  The account screen displays the shared `/api/me` profile, refreshes it, and
-  provides a confirmed sign-out action for the device session. Its collapsed
-  danger zone reads `GET /api/me/removal-eligibility`: eligible accounts can
-  call `DELETE /api/me` after a native destructive confirmation, while
-  accounts with canonical accreditation see the concise irreversible
-  anonymization explanation and direct action (H54). The action remains
-  available while the participant is inside; the API returns a pending-exit
-  state, revokes access, and allows only the validated staff exit before
-  finalization. For operators
-  (any scan capability, `lib/tabs.ts`'s `isOperator`) it also shows a "My
-  stats" section (`/api/me/logistics/stats`) and a link to the scan-history
-  screen (`app/(tabs)/others/scan-log.tsx`, `/api/logistics/scan-log`, grouped by
-  day into `Section`s with a native list look). It also carries a "Storage"
-  section (`lib/storage-usage.ts`) showing the size of the offline API
+  The account screen displays the shared `/api/me` profile and keeps the
+  participant-facing overview short. Pulling down refreshes `/api/me` and the
+  food-intolerance labels. The overview is grouped into Profile, Contact, Event
+  details, App, Account, and Session; staff with personal logistics-statistics
+  access also see a Staff section. Its Storage row opens
+  `app/(tabs)/others/storage.tsx`, which contains storage controls only. Staff
+  Statistics opens `app/(tabs)/others/statistics.tsx`, with personal scan
+  counts and a link to scan history; Legal opens
+  `app/(tabs)/others/legal.tsx`, which keeps the privacy policy and terms links
+  together. Sign out is the final action on the main account screen. Its Delete
+  account row opens a
+  dedicated page that reads `GET /api/me/removal-eligibility`: the page has a
+  consequence screen and an inline verification screen, with no progress
+  indicator or verification modal. It keeps the server-selected distinction
+  between full account deletion and account closure with anonymous audit-data
+  retention (H54), while the user-facing action remains "Delete my account".
+  The first screen discloses the possible retained audit fields; the second
+  uses a native six-digit code field, a cooldown-protected resend action, and
+  high-contrast inline errors for incorrect, expired, and failed requests. Its
+  verification layout is intentionally fixed and non-scrollable: the input
+  stays anchored below the native header, keyboard avoidance resizes the lower
+  action area, and the destructive warning/button reserve space above the
+  floating tab bar.
+  Each new visit starts at the consequence screen, even when a previous visit
+  sent a code. The action remains available while the participant is inside;
+  the API returns a pending-exit state, revokes access, and allows only the
+  validated staff exit before finalization. For staff with a scan capability or
+  `LOGISTICS_STATS`, the Statistics screen shows a "My stats" section
+  (`/api/me/logistics/stats`) with totals, a type breakdown, the searchable
+  scan-history screen (`app/(tabs)/others/scan-log.tsx`,
+  `/api/logistics/scan-log`, grouped by day into `Section`s with a native list
+  look). The full sync-queue reconciliation screen
+  (`app/(tabs)/others/sync-queue.tsx`) is kept separate from Statistics. The
+  Storage screen carries the
+  "App storage" section (`lib/storage-usage.ts`) showing the size of the offline API
   fallback cache (`lib/offline-cache.ts`) and of downloaded files sitting in
   the OS cache directory (wallet passes, and for operators the attendance
   roster), plus a confirmed "Clear cache" action. Clearing never touches the
@@ -555,6 +587,15 @@ center-style — the row's `GestureHandlerRootView` wrapper lives in
 `app/_layout.tsx`) reveals a delete action that discards it (`deleteScan`
 in `lib/scanner-db.ts`) on the follow-up tap — always a manual, per-scan
 gesture, never automatic or triggered by attempt count alone.
+The dedicated sync-queue screen reconciles waiting, confirmed, and
+attention-needed scans and exposes the complete local replay-error journal.
+Retryable errors remain attached to their queue item until the next attempt;
+permanently rejected errors remain visible until an operator explicitly
+discards that scan, so a transient or business failure is never silently lost.
+Failed queue rows retain the operation, person or user ID, badge when it was
+available, log ID, timestamp, source, activity/direction, and notes needed to
+reconcile the original action even when the local roster can no longer resolve
+the person.
 
 ### Activities
 
@@ -599,10 +640,10 @@ physical iOS/Android and EAS verification remains a release-gate task in
   iCloud/Google auto-backups by default — no config plugin or native code
   needed. The whole roster is disposable: `wipeAttendanceRoster()` deletes
   every table and retires the roster key, called from
-  `components/account-screen.tsx`'s sign-out handler and its "Storage" →
-  "Clear cache" action (`lib/storage-usage.ts`'s `clearAllCaches`, operators
-  only), and a fresh `GET /api/scanner/snapshot` fully reconstructs it on
-  next sign-in. Since
+  `components/account-screen.tsx`'s sign-out handler and the
+  `storage-screen.tsx` "Storage" → "Clear cache" action
+  (`lib/storage-usage.ts`'s `clearAllCaches`, operators only), and a fresh
+  `GET /api/scanner/snapshot` fully reconstructs it on next sign-in. Since
   encrypting `name`/`surname`/`email` rules out pushing search into SQL,
   `listScannerPeople` decrypts the (event-sized) roster once per call and
   filters/sorts in JS instead.

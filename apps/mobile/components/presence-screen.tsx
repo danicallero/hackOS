@@ -1,74 +1,98 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { ScrollView, Text, View } from "react-native";
+import { useLocalSearchParams, useNavigation } from "expo-router";
+import { useEffect, useLayoutEffect, useState } from "react";
+import { ScrollView, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AdaptiveBackButton } from "@/components/native-ui";
 import { PresenceManagement } from "@/components/presence-management";
-import { useLocale } from "@/lib/i18n";
+import { transparentDetailHeaderOptions } from "@/lib/navigation";
+import { findPersonById } from "@/lib/scanner-db";
 import { colors } from "@/theme/colors";
 
 const CONTENT_PADDING = 16;
-// The floating back button sits at `topInset + 12` with a 44pt diameter —
-// the page title has to clear that whole row.
-const BUTTON_ROW_HEIGHT = 20;
-// Android has no native nav bar here and ignores `contentInsetAdjustmentBehavior`
-// (an iOS-only prop), so the title has to clear the status bar and the whole
-// floating button row (12pt above it, 44pt tall, 12pt below) on its own.
-const ANDROID_BUTTON_ROW_HEIGHT = 68;
+// Android has no automatic content inset for a transparent native header, so
+// the title has to clear the status bar and native header on its own.
+const ANDROID_HEADER_CLEARANCE = 68;
 
 export function PresenceScreen() {
-  const { id, draftKind, draftAt } = useLocalSearchParams<{
+  const { id, draftKind, draftAt, focusLogId, focusSource } = useLocalSearchParams<{
     id: string;
     draftKind?: string;
     draftAt?: string;
+    focusLogId?: string;
+    focusSource?: string;
   }>();
   const userId = Number(id);
-  const router = useRouter();
-  const { t } = useLocale();
+  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const [personName, setPersonName] = useState<string | null>(null);
+  const [personBadgeId, setPersonBadgeId] = useState<string | null>(null);
   const draftKindValid: "in" | "out" | null =
     draftKind === "in" || draftKind === "out" ? draftKind : null;
   const initialDraft = draftKindValid
     ? { kind: draftKindValid, occurredAt: draftAt ? new Date(draftAt) : new Date() }
     : undefined;
+  const focusLogIdNumber = focusLogId ? Number(focusLogId) : NaN;
+  const focusSignal: { id: number; source: "door" | "activity" } | undefined =
+    Number.isInteger(focusLogIdNumber) && focusLogIdNumber > 0
+      ? focusSource === "door"
+        ? { id: focusLogIdNumber, source: "door" }
+        : focusSource === "activity"
+          ? { id: focusLogIdNumber, source: "activity" }
+          : undefined
+      : undefined;
+
+  // Presence is reachable from several stacks. Keep the native navigation
+  // chrome transparent and title-less in each one, leaving only its back
+  // action visible.
+  useLayoutEffect(() => {
+    navigation.setOptions(transparentDetailHeaderOptions);
+  }, [navigation]);
+
+  useEffect(() => {
+    let active = true;
+    void findPersonById(userId).then((person) => {
+      if (!active || !person) return;
+      setPersonName([person.name, person.surname].filter(Boolean).join(" ") || person.email);
+      setPersonBadgeId(person.badgeId);
+    });
+    return () => {
+      active = false;
+    };
+  }, [userId]);
 
   return (
-    <>
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{
-          gap: 22,
-          paddingBottom: 40,
-          paddingHorizontal: CONTENT_PADDING,
-          // On iOS, not `insets.top + BUTTON_ROW_HEIGHT`: this screen is a
-          // flat sibling of the profile screen in the same shared Stack
-          // (`(tabs)/scan/_layout.tsx`), with its own invisible native nav
-          // bar, and `automatic` above already pushes content below its
-          // real height — adding `insets.top` again double-counts it.
-          paddingTop:
-            process.env.EXPO_OS === "ios"
-              ? BUTTON_ROW_HEIGHT
-              : insets.top + ANDROID_BUTTON_ROW_HEIGHT,
-        }}
-        style={{ backgroundColor: colors.background }}
-      >
-        <View>
-          <Text
-            selectable
-            accessibilityRole="header"
-            style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}
-          >
-            {t("presenceTimeline")}
-          </Text>
-        </View>
+    <ScrollView
+      contentInsetAdjustmentBehavior="automatic"
+      contentContainerStyle={{
+        gap: 22,
+        paddingBottom: 40,
+        paddingHorizontal: CONTENT_PADDING,
+        // On iOS the transparent native header is handled by `automatic`;
+        // adding `insets.top` again would double-count the safe area.
+        paddingTop: process.env.EXPO_OS === "ios" ? 0 : insets.top + ANDROID_HEADER_CLEARANCE,
+      }}
+      style={{ backgroundColor: colors.background }}
+    >
+      {personName ? (
+        <Text
+          selectable
+          accessibilityRole="header"
+          style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}
+        >
+          {personName}
+        </Text>
+      ) : null}
 
-        {/* This subpage always shows the summary + timeline, unlike the
+      {/* This subpage always shows the summary + timeline, unlike the
             compact link on the profile which hides for an unaccredited
             person with no signals yet — reaching here already implies
             there's something to look at. */}
-        <PresenceManagement accredited initialDraft={initialDraft} userId={userId} />
-      </ScrollView>
-
-      <AdaptiveBackButton top={insets.top + 12} onPress={() => router.back()} />
-    </>
+      <PresenceManagement
+        accredited
+        badgeId={personBadgeId}
+        focusSignal={focusSignal}
+        initialDraft={initialDraft}
+        userId={userId}
+      />
+    </ScrollView>
   );
 }

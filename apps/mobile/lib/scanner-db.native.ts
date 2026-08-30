@@ -15,6 +15,7 @@ import type {
   ScannerActivityState,
   ScannerPerson,
   ScannerSnapshot,
+  ScannerSyncErrorEntry,
   ScanPayload,
 } from "./scanner-types";
 
@@ -135,6 +136,17 @@ async function queueDb(ownerUserId?: number): Promise<SQLite.SQLiteDatabase> {
         );
         CREATE INDEX IF NOT EXISTS pending_scans_owner_status
           ON pending_scans(created_by_user_id, status, created_at);
+        CREATE TABLE IF NOT EXISTS scanner_sync_errors (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          scan_id TEXT NOT NULL,
+          created_by_user_id INTEGER NOT NULL,
+          kind TEXT NOT NULL,
+          error_type TEXT NOT NULL,
+          message TEXT NOT NULL,
+          occurred_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS scanner_sync_errors_owner_time
+          ON scanner_sync_errors(created_by_user_id, occurred_at, id);
       `);
       return opened;
     });
@@ -710,13 +722,30 @@ export async function acknowledgeScan(
 }
 
 export async function failScan(id: string, message: string, ownerUserId: number): Promise<void> {
-  await (await queueDb(ownerUserId)).runAsync(
-    `UPDATE pending_scans SET status = 'failed', last_error = ?
-      WHERE id = ? AND created_by_user_id = ?`,
-    message,
-    id,
-    ownerUserId,
-  );
+  const database = await queueDb(ownerUserId);
+  await withSerializedTransaction(queueChainRef, database, async () => {
+    const result = await database.runAsync(
+      `UPDATE pending_scans SET status = 'failed', last_error = ?
+        WHERE id = ? AND created_by_user_id = ?
+          AND (last_error IS NULL OR last_error <> ? OR status <> 'failed')`,
+      message,
+      id,
+      ownerUserId,
+      message,
+    );
+    if (result.changes === 0) return;
+    await database.runAsync(
+      `INSERT INTO scanner_sync_errors
+        (scan_id, created_by_user_id, kind, error_type, message, occurred_at)
+       SELECT id, created_by_user_id, kind, 'rejected', ?, ?
+         FROM pending_scans
+        WHERE id = ? AND created_by_user_id = ?`,
+      message,
+      new Date().toISOString(),
+      id,
+      ownerUserId,
+    );
+  });
 }
 
 export async function noteRetryableError(
@@ -724,13 +753,30 @@ export async function noteRetryableError(
   message: string,
   ownerUserId: number,
 ): Promise<void> {
-  await (await queueDb(ownerUserId)).runAsync(
-    `UPDATE pending_scans SET last_error = ?
-      WHERE id = ? AND created_by_user_id = ?`,
-    message,
-    id,
-    ownerUserId,
-  );
+  const database = await queueDb(ownerUserId);
+  await withSerializedTransaction(queueChainRef, database, async () => {
+    const result = await database.runAsync(
+      `UPDATE pending_scans SET last_error = ?
+        WHERE id = ? AND created_by_user_id = ?
+          AND (last_error IS NULL OR last_error <> ?)`,
+      message,
+      id,
+      ownerUserId,
+      message,
+    );
+    if (result.changes === 0) return;
+    await database.runAsync(
+      `INSERT INTO scanner_sync_errors
+        (scan_id, created_by_user_id, kind, error_type, message, occurred_at)
+       SELECT id, created_by_user_id, kind, 'retryable', ?, ?
+         FROM pending_scans
+        WHERE id = ? AND created_by_user_id = ?`,
+      message,
+      new Date().toISOString(),
+      id,
+      ownerUserId,
+    );
+  });
 }
 
 /**
@@ -793,8 +839,38 @@ export async function wipeOfflineScanQueue(ownerUserId: number): Promise<void> {
   const database = await queueDb(ownerUserId);
   await withSerializedTransaction(queueChainRef, database, async () => {
     await database.runAsync(`DELETE FROM pending_scans WHERE created_by_user_id = ?`, ownerUserId);
+    await database.runAsync(
+      `DELETE FROM scanner_sync_errors WHERE created_by_user_id = ?`,
+      ownerUserId,
+    );
   });
   await resetQueueKey(ownerUserId);
+}
+
+/** Returns every replay error for this operator, newest first. */
+export async function syncErrorHistory(ownerUserId: number): Promise<ScannerSyncErrorEntry[]> {
+  const rows = await (await queueDb(ownerUserId)).getAllAsync<{
+    id: number;
+    scan_id: string;
+    kind: ScannerSyncErrorEntry["kind"];
+    error_type: ScannerSyncErrorEntry["type"];
+    message: string;
+    occurred_at: string;
+  }>(
+    `SELECT id, scan_id, kind, error_type, message, occurred_at
+       FROM scanner_sync_errors
+      WHERE created_by_user_id = ?
+      ORDER BY occurred_at DESC, id DESC`,
+    ownerUserId,
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    scanId: row.scan_id,
+    kind: row.kind,
+    type: row.error_type,
+    message: row.message,
+    occurredAt: row.occurred_at,
+  }));
 }
 
 export async function getScannerMeta(

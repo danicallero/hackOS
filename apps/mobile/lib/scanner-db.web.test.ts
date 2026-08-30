@@ -8,6 +8,7 @@ import {
   noteRetryableError,
   pendingScans,
   retryScan,
+  syncErrorHistory,
   wipeOfflineScanQueue,
 } from "./scanner-db.web";
 import type { ScanPayload } from "./scanner-types";
@@ -60,5 +61,30 @@ describe("web scanner queue ownership", () => {
     expect(await pendingScans(OWNER_USER_ID)).toEqual([
       expect.objectContaining({ id, status: "failed", lastError: "business rejection" }),
     ]);
+  });
+
+  it("keeps a deduplicated error history until the operator wipes the queue", async () => {
+    const id = await enqueueLocalScan(payload, OWNER_USER_ID);
+
+    await noteRetryableError(id, "temporary network error", OWNER_USER_ID);
+    await noteRetryableError(id, "temporary network error", OWNER_USER_ID);
+    await failScan(id, "server rejected the scan", OWNER_USER_ID);
+    await deleteScan(id, OWNER_USER_ID);
+
+    expect(await syncErrorHistory(OWNER_USER_ID)).toEqual([
+      expect.objectContaining({
+        scanId: id,
+        type: "rejected",
+        message: "server rejected the scan",
+      }),
+      expect.objectContaining({
+        scanId: id,
+        type: "retryable",
+        message: "temporary network error",
+      }),
+    ]);
+
+    await wipeOfflineScanQueue(OWNER_USER_ID);
+    expect(await syncErrorHistory(OWNER_USER_ID)).toEqual([]);
   });
 });

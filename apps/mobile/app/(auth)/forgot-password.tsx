@@ -5,6 +5,7 @@ import { Pressable, Text, type TextInput, useWindowDimensions, View } from "reac
 import { AuthAlert, AuthButton, AuthField, AuthHeader, AuthScreen } from "@/components/auth-ui";
 import { authClient } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
+import { safeBack } from "@/lib/navigation";
 import { colors } from "@/theme/colors";
 
 const RESET_DEEP_LINK = "hackos://reset-password";
@@ -53,7 +54,7 @@ export default function ForgotPasswordScreen() {
           title={t("checkEmail")}
           description={t("resetEmailSent")}
         />
-        <AuthButton label={t("backToSignIn")} onPress={() => router.back()} />
+        <AuthButton label={t("backToSignIn")} onPress={() => safeBack(router, "/(auth)/sign-in")} />
       </AuthScreen>
     );
   }
@@ -64,7 +65,7 @@ export default function ForgotPasswordScreen() {
       footer={
         <Pressable
           accessibilityRole="link"
-          onPress={() => router.back()}
+          onPress={() => safeBack(router, "/(auth)/sign-in")}
           style={({ pressed }) => ({
             alignItems: "center",
             justifyContent: "center",

@@ -216,6 +216,7 @@ export function ActionButton({
   disabled = false,
   busy = false,
   destructive = false,
+  variant = "plain",
   icon,
   haptic: hapticIntent = "light",
   style,
@@ -226,19 +227,31 @@ export function ActionButton({
   disabled?: boolean;
   busy?: boolean;
   destructive?: boolean;
+  variant?: "plain" | "filled" | "outlined";
   icon?: SymbolViewProps["name"];
   haptic?: HapticIntent | false;
   style?: ViewStyle;
   testID?: string;
 }) {
-  const foreground = destructive ? colors.destructive : colors.accent;
+  const isDisabled = disabled || busy;
+  const filledDestructive = variant === "filled" && destructive;
+  const disabledFilledDestructive = filledDestructive && disabled && !busy;
+  const foreground = filledDestructive
+    ? disabledFilledDestructive
+      ? colors.tertiaryLabel
+      : colors.destructive
+    : variant === "filled"
+      ? colors.primaryActionText
+      : destructive
+        ? colors.destructive
+        : colors.accent;
   return (
     <Pressable
       testID={testID}
       accessibilityLabel={label}
       accessibilityRole="button"
-      accessibilityState={{ disabled: disabled || busy, busy }}
-      disabled={disabled || busy}
+      accessibilityState={{ disabled: isDisabled, busy }}
+      disabled={isDisabled}
       onPress={() => {
         if (hapticIntent) void haptic(hapticIntent);
         onPress();
@@ -246,11 +259,38 @@ export function ActionButton({
       style={({ pressed }) => [
         {
           alignItems: "center",
+          backgroundColor:
+            variant === "filled"
+              ? destructive
+                ? disabledFilledDestructive
+                  ? colors.elevatedSurface
+                  : pressed
+                    ? colors.destructiveSurface
+                    : colors.surface
+                : colors.primaryAction
+              : undefined,
+          borderColor:
+            variant === "outlined" || filledDestructive
+              ? disabledFilledDestructive
+                ? colors.separator
+                : colors.separator
+              : undefined,
+          borderCurve: "continuous",
+          borderRadius: variant === "plain" ? 0 : 12,
+          borderWidth: variant === "outlined" || filledDestructive ? 1 : 0,
           flexDirection: "row",
           gap: 8,
           justifyContent: "center",
           minHeight: 50,
-          opacity: disabled || busy ? 0.45 : pressed ? 0.6 : 1,
+          opacity: disabledFilledDestructive
+            ? 1
+            : busy
+              ? 0.75
+              : disabled
+                ? 0.45
+                : pressed
+                  ? 0.9
+                  : 1,
           paddingHorizontal: 16,
           transform: [{ scale: pressed ? 0.96 : 1 }],
         },

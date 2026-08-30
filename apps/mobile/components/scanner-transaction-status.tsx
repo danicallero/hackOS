@@ -52,7 +52,7 @@ function ClockSkewBanner() {
   );
 }
 
-function findSubject(scan: PendingScan, people: ScannerPerson[]): ScannerPerson | undefined {
+export function findSubject(scan: PendingScan, people: ScannerPerson[]): ScannerPerson | undefined {
   const p = scan.payload;
   switch (p.kind) {
     case "accreditation":
@@ -71,18 +71,27 @@ function findSubject(scan: PendingScan, people: ScannerPerson[]): ScannerPerson 
       return people.find((person) => person.userId === p.userId);
     case "presence_signal_edit_door":
     case "presence_signal_edit_activity":
-    case "presence_signal_delete":
       return undefined;
+    case "presence_signal_delete": {
+      const byUserId =
+        p.userId === undefined ? undefined : people.find((person) => person.userId === p.userId);
+      if (byUserId) return byUserId;
+      const badgeId = p.badgeId;
+      if (!badgeId) return undefined;
+      return people.find(
+        (person) => person.badgeId === badgeId || person.revokedBadgeIds.includes(badgeId),
+      );
+    }
   }
 }
 
-function subjectLabel(scan: PendingScan, people: ScannerPerson[]): string | null {
+export function subjectLabel(scan: PendingScan, people: ScannerPerson[]): string | null {
   const person = findSubject(scan, people);
   if (!person) return null;
   return [person.name, person.surname].filter(Boolean).join(" ") || person.email;
 }
 
-function detailLabel(
+export function detailLabel(
   scan: PendingScan,
   activities: ScannerActivity[],
   t: ReturnType<typeof useLocale>["t"],
@@ -110,8 +119,52 @@ function detailLabel(
       return `${t("edit")} · #${p.logId}`;
     case "presence_signal_edit_activity":
       return `${t("edit")} · #${p.logId}`;
+    case "presence_signal_delete": {
+      const context =
+        p.source === "door"
+          ? p.direction
+            ? p.direction === "in"
+              ? t("presenceSignalEntry")
+              : t("presenceSignalExit")
+            : null
+          : p.activityId == null
+            ? null
+            : (activities.find((activity) => activity.id === p.activityId)?.name ??
+              `#${p.activityId}`);
+      return [
+        t("delete"),
+        p.source === "door" ? t("scannerPresence") : t("scannerActivity"),
+        `#${p.logId}`,
+        context,
+        p.badgeId ? `${t("scannerFieldBadge")}: ${p.badgeId}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    }
+  }
+}
+
+export function scannerOperationLabel(
+  scan: PendingScan,
+  t: ReturnType<typeof useLocale>["t"],
+): string {
+  switch (scan.kind) {
+    case "activity":
+      return t("scannerActivity");
+    case "presence":
+    case "presence_signal":
+    case "presence_signal_activity":
+      return t("scannerPresence");
+    case "presence_signal_edit_door":
+    case "presence_signal_edit_activity":
     case "presence_signal_delete":
-      return `${t("delete")} · #${p.logId}`;
+      return t("scannerPresenceLog");
+    case "accreditation":
+    case "accreditation_user":
+      return t("scannerAccreditation");
+    case "badge_rotation":
+    case "badge_removal":
+      return t("scannerBadge");
   }
 }
 
@@ -136,7 +189,7 @@ function manualLogDetails(
       value: `${[subject.name, subject.surname].filter(Boolean).join(" ") || subject.email} (${subject.email})`,
     });
     details.push({ label: t("scannerFieldUserId"), value: String(subject.userId) });
-  } else if ("userId" in p) {
+  } else if ("userId" in p && typeof p.userId === "number") {
     details.push({ label: t("scannerFieldUserId"), value: String(p.userId) });
   } else {
     details.push({ label: t("scannerFieldPerson"), value: t("scannerFieldUnknownPerson") });
@@ -243,32 +296,62 @@ function manualLogDetails(
       break;
     }
     case "presence_signal_delete":
+      if (p.badgeId ?? subject?.badgeId) {
+        details.push({
+          label: t("scannerFieldBadge"),
+          value: p.badgeId ?? subject?.badgeId ?? "",
+        });
+      }
       details.push({
         label: t("scannerFieldSource"),
-        value: p.source === "door" ? t("presenceSignalEntry") : t("scannerFieldActivity"),
+        value: p.source === "door" ? t("scannerPresence") : t("scannerActivity"),
       });
       details.push({ label: t("scannerFieldLogId"), value: String(p.logId) });
+      if (p.source === "door" && p.direction) {
+        details.push({
+          label: t("scannerFieldDirection"),
+          value: p.direction === "in" ? t("presenceSignalEntry") : t("presenceSignalExit"),
+        });
+      }
+      if (p.source === "activity" && p.activityId != null) {
+        const activity = activities.find((item) => item.id === p.activityId);
+        details.push({
+          label: t("scannerFieldActivity"),
+          value: activity ? `${activity.name} (#${p.activityId})` : `#${p.activityId}`,
+        });
+      }
+      if (p.occurredAt) {
+        details.push({
+          label: t("scannerFieldTimestamp"),
+          value: new Date(p.occurredAt).toLocaleString(),
+        });
+      }
+      if (p.notes) details.push({ label: t("scannerFieldNotes"), value: p.notes });
       break;
   }
   return details;
 }
 
-function ManualLogDetails({
+export function ManualLogDetails({
   scan,
   people,
   activities,
+  showHint = true,
 }: {
   scan: PendingScan;
   people: ScannerPerson[];
   activities: ScannerActivity[];
+  showHint?: boolean;
 }) {
   const { t } = useLocale();
   const details = manualLogDetails(scan, people, activities, t);
   return (
     <View style={{ gap: 8 }}>
-      <Text style={{ color: colors.secondaryLabel, fontSize: 12, lineHeight: 16 }}>
-        {t("scannerManualLogHint")}
-      </Text>
+      {showHint ? (
+        <Text style={{ color: colors.secondaryLabel, fontSize: 12, lineHeight: 16 }}>
+          {t("scannerManualLogHint")}
+        </Text>
+      ) : null}
       <View
         style={{
           backgroundColor: colors.background,
@@ -500,26 +583,6 @@ export function ScannerQueueStatus({
     : health.saved > 0
       ? t("scannerQueueSavedCount", { count: String(health.saved) })
       : t("scannerStateReady");
-  const operationLabel = (scan: PendingScan) => {
-    switch (scan.kind) {
-      case "activity":
-        return t("scannerActivity");
-      case "presence":
-      case "presence_signal":
-      case "presence_signal_activity":
-        return t("scannerPresence");
-      case "presence_signal_edit_door":
-      case "presence_signal_edit_activity":
-      case "presence_signal_delete":
-        return t("scannerPresenceLog");
-      case "accreditation":
-      case "accreditation_user":
-        return t("scannerAccreditation");
-      case "badge_rotation":
-      case "badge_removal":
-        return t("scannerBadge");
-    }
-  };
   return (
     <>
       <GlassView
@@ -666,14 +729,14 @@ export function ScannerQueueStatus({
                                 fontWeight: "700",
                               }}
                             >
-                              {subject ?? operationLabel(scan)}
+                              {subject ?? scannerOperationLabel(scan, t)}
                             </Text>
                             <Text style={{ color: colors.secondaryLabel, fontSize: 12 }}>
                               {new Date(scan.createdAt).toLocaleTimeString()}
                             </Text>
                           </View>
                           <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-                            {operationLabel(scan)} · {detailLabel(scan, activities, t)}
+                            {scannerOperationLabel(scan, t)} · {detailLabel(scan, activities, t)}
                             {scan.attempts > 1
                               ? ` · ${t("scannerAttemptsCount", { count: String(scan.attempts) })}`
                               : ""}
@@ -753,7 +816,10 @@ export function ScannerQueueStatus({
                 icon="clock.arrow.circlepath"
                 onPress={() => {
                   setOpen(false);
-                  router.push(SCAN_LOG_ROUTES.scanner);
+                  router.push({
+                    pathname: SCAN_LOG_ROUTES.scanner,
+                    params: { from: "scanner" },
+                  });
                 }}
               />
             </Section>

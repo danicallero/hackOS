@@ -661,7 +661,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "My scan counts",
         description:
-          "Counts of scans the calling operator personally performed, by domain: accreditation check-ins, presence door-scans, activity/meal scans. Any scan-capable operator can read their own counts.",
+          "Counts of scans the calling operator personally performed, by domain: accreditation check-ins, presence door-scans, activity/meal scans. Also returns the total scans, distinct people reached, and the latest scan time. Any scan-capable operator can read their own counts.",
         response: { 200: staffScanStatsResponse },
       },
     },

@@ -8,9 +8,10 @@ import {
   pendingScans,
   retryFailedScans,
   retryScan,
+  syncErrorHistory,
 } from "./scanner-db";
 import { synchronizeScanner } from "./scanner-sync";
-import type { PendingScan } from "./scanner-types";
+import type { PendingScan, ScannerSyncErrorEntry } from "./scanner-types";
 
 /** Sync stopped retrying automatically after this many straight failures. */
 const MAX_AUTO_RETRIES = 3;
@@ -42,6 +43,7 @@ export function useScannerSync() {
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [queue, setQueue] = useState<PendingScan[]>([]);
+  const [errorHistory, setErrorHistory] = useState<ScannerSyncErrorEntry[]>([]);
   const [error, setError] = useState<ScannerSyncError | null>(null);
   const [clockSkewMs, setClockSkewMs] = useState<number | null>(null);
   const consecutiveFailures = useRef(0);
@@ -53,12 +55,14 @@ export function useScannerSync() {
 
   const refreshLocal = useCallback(async () => {
     if (ownerUserId === null) return;
-    const [meta, scans] = await Promise.all([
+    const [meta, scans, errors] = await Promise.all([
       getScannerMeta(ownerUserId),
       pendingScans(ownerUserId),
+      syncErrorHistory(ownerUserId),
     ]);
     setLastSync(meta.lastSync);
     setQueue(scans);
+    setErrorHistory(errors);
   }, [ownerUserId]);
 
   const sync = useCallback(async () => {
@@ -148,6 +152,7 @@ export function useScannerSync() {
     syncing,
     lastSync,
     queue,
+    errorHistory,
     error,
     autoRetryPaused,
     clockSkewMs,

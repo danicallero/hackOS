@@ -1,4 +1,5 @@
 import { isMealActivityKind } from "@hackos/shared/activity-kinds";
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -32,6 +33,7 @@ import { useMeContext } from "@/lib/me-context";
 import { durationMinutes, guaranteedMinutesTotal } from "@/lib/presence-timeline";
 import { enqueueLocalScan, pendingScans } from "@/lib/scanner-db";
 import type { ScanPayload } from "@/lib/scanner-types";
+import { has } from "@/lib/tabs";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
 
@@ -86,12 +88,17 @@ interface SignalDraft {
 
 export function PresenceManagement({
   userId,
+  badgeId,
   refreshKey,
   onDoorState,
   accredited,
   initialDraft,
+  focusSignal,
+  onFocusedSignalLayout,
 }: {
   userId: number;
+  /** Snapshot badge used to identify queued deletes after the local roster changes. */
+  badgeId?: string | null;
   refreshKey?: string;
   /** Reports the server's last door log so the register can derive its direction from ground truth. */
   onDoorState?: (state: { kind: "in" | "out"; at: string } | null) => void;
@@ -103,12 +110,17 @@ export function PresenceManagement({
    * or a backdated fix for a session that timed out uncredited).
    */
   initialDraft?: { kind: "in" | "out"; occurredAt: Date };
+  /** Deep-link target from the staff scan history. */
+  focusSignal?: { id: number; source: "door" | "activity" };
+  /** Lets the owning profile scroll the deep-linked signal into view. */
+  onFocusedSignalLayout?: (target: View) => void;
 }) {
   useColorScheme();
   const { language, t } = useLocale();
   const { me } = useMeContext();
   const ownerUserId = me?.id;
   const sync = useScannerSync();
+  const canEdit = has(me?.capabilities ?? [], CAPABILITIES.PRESENCE_SCAN);
   const [timeline, setTimeline] = useState<PresenceTimeline | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -179,7 +191,18 @@ export function PresenceManagement({
           void (async () => {
             if (ownerUserId === undefined) return;
             const scanId = await enqueueLocalScan(
-              { kind: "presence_signal_delete", source: signal.source, logId: signal.id },
+              {
+                kind: "presence_signal_delete",
+                source: signal.source,
+                logId: signal.id,
+                userId,
+                badgeId,
+                occurredAt: signal.occurredAt,
+                direction:
+                  signal.source === "door" && signal.kind !== "activity" ? signal.kind : undefined,
+                activityId: signal.source === "activity" ? signal.activityId : undefined,
+                notes: signal.notes,
+              },
               ownerUserId,
             );
             await sync.sync();
@@ -229,11 +252,13 @@ export function PresenceManagement({
 
       <View style={{ gap: 16 }}>
         <Section title={t("presenceTimeline")}>
-          <ActionButton
-            icon="plus.circle.fill"
-            label={t("presenceAddSignal")}
-            onPress={addSignal}
-          />
+          {canEdit ? (
+            <ActionButton
+              icon="plus.circle.fill"
+              label={t("presenceAddSignal")}
+              onPress={addSignal}
+            />
+          ) : null}
           {loading && !timeline ? (
             <>
               <Separator />
@@ -320,6 +345,9 @@ export function PresenceManagement({
               {group.items.map(({ signal, window }) => (
                 <SignalCard
                   key={`${signal.source}-${signal.id}`}
+                  editable={canEdit}
+                  focused={focusSignal?.id === signal.id && focusSignal.source === signal.source}
+                  onFocusedLayout={onFocusedSignalLayout}
                   signal={signal}
                   window={window}
                   language={language}
@@ -342,6 +370,19 @@ export function PresenceManagement({
             }}
           >
             {t("presenceTimelineFooter")}
+          </Text>
+        ) : null}
+        {!canEdit ? (
+          <Text
+            selectable
+            style={{
+              color: colors.secondaryLabel,
+              fontSize: 13,
+              lineHeight: 18,
+              paddingHorizontal: 16,
+            }}
+          >
+            {t("presenceReadOnly")}
           </Text>
         ) : null}
       </View>
@@ -495,14 +536,21 @@ function SignalCard({
   language,
   onEdit,
   onDelete,
+  editable,
+  focused,
+  onFocusedLayout,
 }: {
   signal: PresenceSignal;
   window: CertaintyWindow | null;
   language: string;
   onEdit: () => void;
   onDelete: () => void;
+  editable: boolean;
+  focused: boolean;
+  onFocusedLayout?: (target: View) => void;
 }) {
   const { t } = useLocale();
+  const cardRef = useRef<View>(null);
   const title =
     signal.kind === "activity"
       ? (signal.activityName ?? t("presenceSignalActivity"))
@@ -539,119 +587,149 @@ function SignalCard({
   const meterFraction = totalMinutes > 0 ? Math.min(1, elapsedMinutes / totalMinutes) : 0;
   const showHint = window?.status === "provisional" && elapsedMinutes === 0;
 
-  return (
-    <View style={{ borderCurve: "continuous", borderRadius: 14, overflow: "hidden" }}>
-      <Swipeable
-        renderRightActions={() => <SignalCardActions onEdit={onEdit} onDelete={onDelete} />}
-        rightThreshold={40}
-        overshootRight={false}
-      >
-        <View style={{ backgroundColor: colors.surface, gap: 8, padding: 16 }}>
-          <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 12 }}>
+  const content = (
+    <View style={{ backgroundColor: colors.surface, gap: 8, padding: 16 }}>
+      <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 12 }}>
+        <View
+          style={{
+            alignItems: "center",
+            backgroundColor: background,
+            borderCurve: "continuous",
+            borderRadius: 8,
+            height: 30,
+            justifyContent: "center",
+            width: 30,
+          }}
+        >
+          <SymbolView name={icon} tintColor="white" size={15} accessible={false} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text
+            selectable
+            numberOfLines={1}
+            style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}
+          >
+            {title}
+          </Text>
+          {focused ? (
+            <Text style={{ color: colors.accent, fontSize: 12, fontWeight: "600", marginTop: 1 }}>
+              {t("presenceOpenedFromHistory")}
+            </Text>
+          ) : null}
+          {recordedBy ? (
+            <Text
+              selectable
+              numberOfLines={1}
+              style={{ color: colors.tertiaryLabel, fontSize: 12, marginTop: 1 }}
+            >
+              {t("presenceRecordedBy", { name: recordedBy })}
+            </Text>
+          ) : signal.recordedBy == null ? (
+            <Text
+              selectable
+              numberOfLines={1}
+              style={{ color: colors.tertiaryLabel, fontSize: 12, marginTop: 1 }}
+            >
+              {t("presenceRecordedBySystem")}
+            </Text>
+          ) : null}
+        </View>
+        <Text
+          style={{
+            color: colors.secondaryLabel,
+            fontSize: 15,
+            fontVariant: ["tabular-nums"],
+          }}
+        >
+          {fmtTime(new Date(signal.occurredAt), language)}
+        </Text>
+      </View>
+
+      <View style={{ gap: 8, marginLeft: 42 }}>
+        {window ? (
+          <View style={{ alignItems: "center", flexDirection: "row", gap: 10 }}>
             <View
               style={{
-                alignItems: "center",
-                backgroundColor: background,
+                backgroundColor: colors.elevatedSurface,
                 borderCurve: "continuous",
-                borderRadius: 8,
-                height: 30,
-                justifyContent: "center",
-                width: 30,
+                borderRadius: 999,
+                flex: 1,
+                height: 4,
+                overflow: "hidden",
               }}
             >
-              <SymbolView name={icon} tintColor="white" size={15} accessible={false} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text
-                selectable
-                numberOfLines={1}
-                style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}
-              >
-                {title}
-              </Text>
-              {recordedBy ? (
-                <Text
-                  selectable
-                  numberOfLines={1}
-                  style={{ color: colors.tertiaryLabel, fontSize: 12, marginTop: 1 }}
-                >
-                  {t("presenceRecordedBy", { name: recordedBy })}
-                </Text>
-              ) : signal.recordedBy == null ? (
-                <Text
-                  selectable
-                  numberOfLines={1}
-                  style={{ color: colors.tertiaryLabel, fontSize: 12, marginTop: 1 }}
-                >
-                  {t("presenceRecordedBySystem")}
-                </Text>
-              ) : null}
-            </View>
-            <Text
-              style={{
-                color: colors.secondaryLabel,
-                fontSize: 15,
-                fontVariant: ["tabular-nums"],
-              }}
-            >
-              {fmtTime(new Date(signal.occurredAt), language)}
-            </Text>
-          </View>
-
-          <View style={{ gap: 8, marginLeft: 42 }}>
-            {window ? (
-              <View style={{ alignItems: "center", flexDirection: "row", gap: 10 }}>
+              {window.status === "invalid" ? null : (
                 <View
                   style={{
-                    backgroundColor: colors.elevatedSurface,
-                    borderCurve: "continuous",
-                    borderRadius: 999,
-                    flex: 1,
-                    height: 4,
-                    overflow: "hidden",
+                    backgroundColor:
+                      window.status === "provisional" ? colors.accent : colors.success,
+                    height: "100%",
+                    width: `${meterFraction * 100}%`,
                   }}
-                >
-                  {window.status === "invalid" ? null : (
-                    <View
-                      style={{
-                        backgroundColor:
-                          window.status === "provisional" ? colors.accent : colors.success,
-                        height: "100%",
-                        width: `${meterFraction * 100}%`,
-                      }}
-                    />
-                  )}
-                </View>
-                {status ? (
-                  <StatusPill tone={status.tone}>{status.label}</StatusPill>
-                ) : (
-                  <Text
-                    style={{
-                      color: colors.secondaryLabel,
-                      fontSize: 13,
-                      fontVariant: ["tabular-nums"],
-                    }}
-                  >
-                    {t("presenceMeterLabel", {
-                      elapsed: elapsedMinutes === 0 ? "0" : formatMinutes(elapsedMinutes, t),
-                      total: formatMinutes(totalMinutes, t),
-                    })}
-                  </Text>
-                )}
-              </View>
-            ) : null}
-
-            {showHint ? (
-              <View style={{ alignItems: "center", flexDirection: "row", gap: 6 }}>
-                <SymbolView name="clock" tintColor={colors.accent} size={13} accessible={false} />
-                <Text style={{ color: colors.accent, flex: 1, fontSize: 12 }}>
-                  {t("presenceSecureTimeHint")}
-                </Text>
-              </View>
-            ) : null}
+                />
+              )}
+            </View>
+            {status ? (
+              <StatusPill tone={status.tone}>{status.label}</StatusPill>
+            ) : (
+              <Text
+                style={{
+                  color: colors.secondaryLabel,
+                  fontSize: 13,
+                  fontVariant: ["tabular-nums"],
+                }}
+              >
+                {t("presenceMeterLabel", {
+                  elapsed: elapsedMinutes === 0 ? "0" : formatMinutes(elapsedMinutes, t),
+                  total: formatMinutes(totalMinutes, t),
+                })}
+              </Text>
+            )}
           </View>
-        </View>
-      </Swipeable>
+        ) : null}
+
+        {showHint ? (
+          <View style={{ alignItems: "center", flexDirection: "row", gap: 6 }}>
+            <SymbolView name="clock" tintColor={colors.accent} size={13} accessible={false} />
+            <Text style={{ color: colors.accent, flex: 1, fontSize: 12 }}>
+              {t("presenceSecureTimeHint")}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+
+  useEffect(() => {
+    if (!focused || !onFocusedLayout) return;
+    const frame = requestAnimationFrame(() => {
+      if (cardRef.current) onFocusedLayout(cardRef.current);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focused, onFocusedLayout]);
+
+  return (
+    <View
+      ref={cardRef}
+      style={{
+        borderColor: focused ? colors.accent : colors.transparent,
+        borderCurve: "continuous",
+        borderRadius: 14,
+        borderWidth: focused ? 1 : 0,
+        overflow: "hidden",
+      }}
+    >
+      {editable ? (
+        <Swipeable
+          renderRightActions={() => <SignalCardActions onEdit={onEdit} onDelete={onDelete} />}
+          rightThreshold={40}
+          overshootRight={false}
+        >
+          {content}
+        </Swipeable>
+      ) : (
+        content
+      )}
     </View>
   );
 }

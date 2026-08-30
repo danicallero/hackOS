@@ -155,6 +155,7 @@ describe("native sign-in UI contract", () => {
     expect(password).toHaveProp("secureTextEntry", true);
     expect(email.props.value).toBeUndefined();
     expect(password.props.value).toBeUndefined();
+    expect(email).not.toHaveProp("placeholder");
 
     // Opening a password-provider sheet temporarily blurs the native input.
     // The fields must stay uncontrolled so iOS can inject the selected pair.
