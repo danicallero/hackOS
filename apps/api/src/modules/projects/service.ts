@@ -1622,16 +1622,21 @@ function toEnqueuedChallenge(outcome: EnqueueOutcome): EnqueuedChallenge {
 
 /** Enqueued entries a caller must announce (SSE + notify) after commit. */
 async function announceQueueOutcomes(outcomes: EnqueueOutcome[]): Promise<void> {
-  for (const outcome of outcomes) {
-    await broadcastQueueEvent(
-      pool,
-      "entry",
-      outcome.entry.id,
-      EVENTS.QUEUE_ENTRY_CHANGED,
-      outcome.entry,
-    );
-    await notifyChallengeQueueChanged(pool, outcome.entry.challenge_id);
-  }
+  await Promise.all(
+    outcomes.map((outcome) =>
+      broadcastQueueEvent(
+        pool,
+        "entry",
+        outcome.entry.id,
+        EVENTS.QUEUE_ENTRY_CHANGED,
+        outcome.entry,
+      ),
+    ),
+  );
+  const challengeIds = new Set(outcomes.map((outcome) => outcome.entry.challenge_id));
+  await Promise.all(
+    [...challengeIds].map((challengeId) => notifyChallengeQueueChanged(pool, challengeId)),
+  );
 }
 
 /**

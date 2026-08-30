@@ -79,22 +79,18 @@ export function GeneralScannerScreen() {
   // tiles update within a second of another operator's scan instead of
   // waiting on this device's own next sync tick.
   useEffect(() => startLogisticsEventStream(), []);
-  useEffect(
-    () => subscribeToServerEvent(EVENTS.LOGISTICS_ACCREDITED, loadRoleStats),
-    [loadRoleStats],
-  );
-  useEffect(
-    () => subscribeToServerEvent(EVENTS.LOGISTICS_PRESENCE_SCAN, loadRoleStats),
-    [loadRoleStats],
-  );
-  useEffect(
-    () => subscribeToServerEvent(EVENTS.LOGISTICS_ACTIVITY_SCAN, loadRoleStats),
-    [loadRoleStats],
-  );
-  useEffect(
-    () => subscribeToServerEvent(EVENTS.LOGISTICS_MEAL_SCAN_BATCH, loadRoleStats),
-    [loadRoleStats],
-  );
+  useEffect(() => {
+    const events = [
+      EVENTS.LOGISTICS_ACCREDITED,
+      EVENTS.LOGISTICS_PRESENCE_SCAN,
+      EVENTS.LOGISTICS_ACTIVITY_SCAN,
+      EVENTS.LOGISTICS_MEAL_SCAN_BATCH,
+    ];
+    const unsubscribes = events.map((event) => subscribeToServerEvent(event, loadRoleStats));
+    return () => {
+      for (const unsubscribe of unsubscribes) unsubscribe();
+    };
+  }, [loadRoleStats]);
 
   const toggleGroup = useCallback((group: ScannerGroup) => {
     setGroups((current) => {

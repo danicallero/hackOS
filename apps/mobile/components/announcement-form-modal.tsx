@@ -1,9 +1,9 @@
 import { MenuView } from "@expo/ui/community/menu";
 import { useEffect, useRef, useState } from "react";
-import { Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DateTimeField } from "@/components/date-time-field";
-import { FloatingGlassButton, Section } from "@/components/native-ui";
+import { FloatingGlassButton, Section, ToggleRow } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import {
@@ -754,38 +754,6 @@ export function AnnouncementFormModal({
         />
       </View>
     </Modal>
-  );
-}
-
-function ToggleRow({
-  label,
-  value,
-  onChange,
-  disabled = false,
-}: {
-  label: string;
-  value: boolean;
-  onChange: (value: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <View
-      style={{
-        alignItems: "center",
-        flexDirection: "row",
-        gap: 12,
-        minHeight: 50,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-      }}
-    >
-      <Text
-        style={{ color: disabled ? colors.tertiaryLabel : colors.label, flex: 1, fontSize: 16 }}
-      >
-        {label}
-      </Text>
-      <Switch disabled={disabled} onValueChange={onChange} value={value} />
-    </View>
   );
 }
 
