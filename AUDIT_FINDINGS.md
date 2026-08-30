@@ -186,8 +186,9 @@ Nothing new. Round 1 already deleted everything in the codebase that was verifia
 
 ## 7. Database/API efficiency improvements
 
-- **`apps/api/src/modules/projects/service.ts:1508-1580` — `bulkAddRepoChallenge`/`bulkRemoveRepoChallenge`.** Per repo in the loop, `enqueueRepoOnChallenge` (line 1297) re-runs `assertQueueChallengeScope` (2-3 queries) even though `challengeId` is invariant across the whole loop, plus a per-row `SELECT ... FOR UPDATE` via `nextBottomPosition`/`lockedGroupOrder` while holding transaction locks the entire time. Fix: hoist `assertQueueChallengeScope` above the loop; replace the per-row locked read with one locked read of the current max position before the loop, then increment an in-memory counter per insert.
-- **`apps/api/src/modules/projects/service.ts:1624-1635` — `announceQueueOutcomes`.** Sequential `await broadcastQueueEvent(...)` + `await notifyChallengeQueueChanged(...)` per outcome — the same pattern Round 1 fixed in `queue/service.ts` but missed here. For the bulk-enroll callers, every outcome shares one `challenge_id`, so `notifyChallengeQueueChanged`'s internal `SELECT queue_group_id FROM queue_group_challenges WHERE challenge_id = $1` plus its BullMQ enqueue runs N times instead of once. Fix: `Promise.all` the broadcasts, call `notifyChallengeQueueChanged` once per distinct `challenge_id` after the loop.
+- **FIXED** — `apps/api/src/modules/projects/service.ts:1508-1580` — `bulkAddRepoChallenge`. `enqueueRepoOnChallenge` now takes optional `challengeMarker`/`allocatePosition` params; the bulk caller computes `assertQueueChallengeScope` once and locks the group's bottom position once via `nextBottomPosition`, then hands out positions from an in-memory counter for the rest of the loop. The initial `FOR UPDATE` lock is held for the whole transaction, so serialization against a concurrent bulk-add on the same `queue_group` is unchanged — verified by inspection (each outcome, insert or revival, increments the active-entry count by exactly 1, which is what the original per-call `nextBottomPosition` recomputation also relied on). The 4 other `enqueueRepoOnChallenge` call sites (single add, `createRepoNative`'s per-challenge loop, etc.) omit the new params and get byte-identical behavior to before. `bulkRemoveRepoChallenge` was already correctly batched (single `FOR UPDATE`, single `compactQueueGroupPositions`) — no change needed there.
+  - **Caveat:** this sandbox's Docker daemon is non-functional, so the live Postgres-backed integration suite (`test/projects/bulk.test.ts`) could not be executed to confirm this at runtime — verified via typecheck + careful reasoning about the locking/serialization invariants only. Run `pnpm --filter @hackos/api test test/projects/bulk.test.ts` before merging.
+- **FIXED** — `apps/api/src/modules/projects/service.ts:1624-1635` — `announceQueueOutcomes`. Broadcasts now run via `Promise.all`; `notifyChallengeQueueChanged` is now called once per distinct `challenge_id` (deduped with a `Set`) instead of once per outcome.
 - No other N+1s, redundant queries, or missing-batching patterns were found in this round's per-module read of `apps/api` beyond what Round 1 already fixed (`wallet-sync.ts`, `queue/service.ts` broadcasts).
 
 ## 8. Documentation/comment cleanup
@@ -214,8 +215,8 @@ Nothing new. Round 1 already deleted everything in the codebase that was verifia
 - Verify whether `eslint`/`eslint-config-next` in `apps/web` is actually invoked by `next build`; remove if not (§4/§6).
 
 **Phase 4 — database/API optimization:**
-- Fix the bulk-enroll N+1 in `projects/service.ts` (§7, item 1) — highest-value item in this whole round.
-- Fix `announceQueueOutcomes`'s sequential broadcast loop (§7, item 2).
+- **DONE** — bulk-enroll N+1 in `projects/service.ts` (§7, item 1) fixed; needs the live integration suite run before merge (Docker was unavailable in the sandbox that made this change).
+- **DONE** — `announceQueueOutcomes`'s sequential broadcast loop (§7, item 2) fixed.
 
 **Phase 5 — larger architectural technical debt:**
 - Nothing found in this round rises to this level. The one open architectural/product question carried from Round 1 remains: whether to fully retire `SPONSOR_PORTAL`'s compatibility shim (§4) — a product decision, not a code-quality finding.
