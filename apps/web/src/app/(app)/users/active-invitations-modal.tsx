@@ -32,6 +32,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError, api } from "@/lib/api";
+import { shortDateTimeFmt } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import type {
   EnterpriseInviteLink,
@@ -41,13 +42,7 @@ import type {
 } from "@/lib/types";
 import { UserInviteLinksSection } from "./user-invite-links-section";
 
-const dateFmt = new Intl.DateTimeFormat("en-GB", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+const dateFmt = shortDateTimeFmt;
 
 const LINK_STATUS_TONE: Record<
   EnterpriseInviteLink["status"],

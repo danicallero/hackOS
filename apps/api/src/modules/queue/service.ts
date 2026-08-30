@@ -88,8 +88,10 @@ async function assertEntryFixtureScope(
 }
 
 async function broadcastEntry(entry: QueueEntryRow): Promise<QueueEntryRow> {
-  await broadcastQueueEvent(pool, "entry", entry.id, EVENTS.QUEUE_ENTRY_CHANGED, entry);
-  await notifyChallengeQueueChanged(pool, entry.challenge_id);
+  await Promise.all([
+    broadcastQueueEvent(pool, "entry", entry.id, EVENTS.QUEUE_ENTRY_CHANGED, entry),
+    notifyChallengeQueueChanged(pool, entry.challenge_id),
+  ]);
   return entry;
 }
 
@@ -417,13 +419,15 @@ export async function notifyEnter(entryId: number, actorId: number): Promise<Que
     };
   });
 
-  await broadcastQueueEvent(pool, "entry", entry.id, EVENTS.QUEUE_NOTIFY_ENTER, eventPayload);
-  for (const userId of memberIds) {
-    await broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_NOTIFICATION, {
-      entryId: entry.id,
-      type: "notify_enter",
-    });
-  }
+  await Promise.all([
+    broadcastQueueEvent(pool, "entry", entry.id, EVENTS.QUEUE_NOTIFY_ENTER, eventPayload),
+    ...memberIds.map((userId) =>
+      broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_NOTIFICATION, {
+        entryId: entry.id,
+        type: "notify_enter",
+      }),
+    ),
+  ]);
   return entry;
 }
 

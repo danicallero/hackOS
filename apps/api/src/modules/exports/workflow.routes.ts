@@ -5,7 +5,7 @@ import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
 import { requireCapability, userHasCapability } from "../../lib/capabilities.js";
-import { ConflictError, ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
+import { ConflictError, ForbiddenError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { subscribe } from "../../lib/sse.js";
@@ -29,22 +29,20 @@ import { enqueueDataSubjectRequest } from "./worker.js";
  */
 export function registerWorkflowRoutes(app: FastifyInstance): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-  const requireExportRequestAccess: preHandlerHookHandler = async (req) => {
-    if (req.userId == null) throw new UnauthorizedError();
-    if (!(await userHasCapability(req.userId, CAPABILITIES.EXPORTS_RUN, req))) {
-      throw new ForbiddenError(`Missing capability: ${CAPABILITIES.EXPORTS_RUN}`, {
-        capability: CAPABILITIES.EXPORTS_RUN,
-      });
-    }
+  // EXPORTS_RUN itself is enforced by requireCapability below; this handler
+  // only adds the request-specific scoping on top (fixture subject scope,
+  // ADMIN_ALL for deletions).
+  const requireExportRequestScope: preHandlerHookHandler = async (req) => {
+    const userId = req.userId as number;
     const subjectUserId = (req.body as { subjectUserId?: number } | undefined)?.subjectUserId;
     if (subjectUserId !== undefined) {
       // H54: DSR/export targets are subject data, so the synthetic fixture
       // boundary applies before the request row is created.
-      await assertFixtureSubjectScope(pool, req.userId, subjectUserId);
+      await assertFixtureSubjectScope(pool, userId, subjectUserId);
     }
     if (
       (req.body as { type?: string } | undefined)?.type === "deletion" &&
-      !(await userHasCapability(req.userId, CAPABILITIES.ADMIN_ALL, req))
+      !(await userHasCapability(userId, CAPABILITIES.ADMIN_ALL, req))
     ) {
       throw new ForbiddenError(`Missing capability: ${CAPABILITIES.ADMIN_ALL}`, {
         capability: CAPABILITIES.ADMIN_ALL,
@@ -55,7 +53,11 @@ export function registerWorkflowRoutes(app: FastifyInstance): void {
   typed.post(
     "/api/exports/requests",
     {
-      preHandler: [requireExportRequestAccess, idempotencyGuard],
+      preHandler: [
+        requireCapability(CAPABILITIES.EXPORTS_RUN),
+        requireExportRequestScope,
+        idempotencyGuard,
+      ],
       config: routeAccess({
         kind: "contextual",
         policy: "export-request-create",

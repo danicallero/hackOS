@@ -29,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ApiError, api } from "@/lib/api";
+import { shortDateTimeFmt } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import type {
   EnterpriseSummary,
@@ -37,13 +38,7 @@ import type {
   UserInviteLink,
 } from "@/lib/types";
 
-const dateFmt = new Intl.DateTimeFormat("en-GB", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+const dateFmt = shortDateTimeFmt;
 
 const LINK_STATUS_TONE: Record<
   UserInviteLink["status"],
