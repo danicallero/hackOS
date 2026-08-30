@@ -30,32 +30,23 @@ import {
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { ApiError, api } from "@/lib/api";
+import { shortDateFmt } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
 import type { Tone } from "@/lib/tones";
 import type { DerivedRole, UserList, UserListItem } from "@/lib/types";
+import { initials } from "./[id]/shared";
 import { ActiveInvitationsModal } from "./active-invitations-modal";
 import { InviteUserDialog } from "./invite-dialog";
 import { ReviewFixturesDialog } from "./review-fixtures-dialog";
-
-function initials(u: UserListItem): string {
-  const a = u.name?.trim()?.[0];
-  const b = u.surname?.trim()?.[0];
-  if (a || b) return `${a ?? ""}${b ?? ""}`.toUpperCase();
-  return u.email.slice(0, 2).toUpperCase();
-}
 
 function fullName(u: UserListItem): string {
   const name = [u.name, u.surname].filter(Boolean).join(" ").trim();
   return name || "—";
 }
 
-const dateFmt = new Intl.DateTimeFormat("en-GB", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-});
+const dateFmt = shortDateFmt;
 
 function roleLabel(t: Translate): Record<DerivedRole, string> {
   return {

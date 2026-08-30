@@ -33,6 +33,7 @@ interface PassRow {
 }
 
 interface DeviceRow {
+  pass_id: number;
   device_library_identifier: string;
   push_token: string;
 }
@@ -43,13 +44,27 @@ export async function processWalletSync(job: { data: SyncJobData }): Promise<voi
     [job.data.passIds],
   );
 
+  // One query for every apple pass's devices instead of one per pass (N+1).
+  const applePassIds = (rows as PassRow[])
+    .filter((pass) => pass.platform === "apple")
+    .map((pass) => pass.id);
+  const devicesByPassId = new Map<number, DeviceRow[]>();
+  if (applePassIds.length > 0) {
+    const { rows: deviceRows } = await pool.query(
+      `SELECT pass_id, device_library_identifier, push_token FROM wallet_pass_devices WHERE pass_id = ANY($1)`,
+      [applePassIds],
+    );
+    for (const device of deviceRows as DeviceRow[]) {
+      const list = devicesByPassId.get(device.pass_id);
+      if (list) list.push(device);
+      else devicesByPassId.set(device.pass_id, [device]);
+    }
+  }
+
   for (const pass of rows as PassRow[]) {
     if (pass.platform === "apple") {
-      const { rows: devices } = await pool.query(
-        `SELECT device_library_identifier, push_token FROM wallet_pass_devices WHERE pass_id = $1`,
-        [pass.id],
-      );
-      for (const device of devices as DeviceRow[]) {
+      const devices = devicesByPassId.get(pass.id) ?? [];
+      for (const device of devices) {
         try {
           await sendApplePush(device.push_token, PASS_TYPE_IDENTIFIER);
         } catch (err) {

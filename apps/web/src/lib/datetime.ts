@@ -1,3 +1,20 @@
+/** Shared "en-GB" short display formats (e.g. "05 Jan 2026, 14:30") used across
+ * admin tables (audit log, invite links, user lists) so every surface renders
+ * timestamps identically. */
+export const shortDateTimeFmt = new Intl.DateTimeFormat("en-GB", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+export const shortDateFmt = new Intl.DateTimeFormat("en-GB", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+});
+
 export function toDatetimeLocal(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);

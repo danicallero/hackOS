@@ -24,20 +24,14 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { ApiError } from "@/lib/api";
 import { getActionLabel } from "@/lib/audit-labels";
-import { fromDatetimeLocal } from "@/lib/datetime";
+import { fromDatetimeLocal, shortDateTimeFmt } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { type AuditRow, type AuditVocabularyEntry, notificationsApi } from "@/lib/notifications";
 import { useCan } from "@/lib/session";
 
 const LIMIT = 50;
 
-export const auditTimeFmt = new Intl.DateTimeFormat("en-GB", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+export const auditTimeFmt = shortDateTimeFmt;
 
 export function auditActorLabel(
   row: Pick<AuditRow, "actor_name" | "actor_surname" | "actor_email">,

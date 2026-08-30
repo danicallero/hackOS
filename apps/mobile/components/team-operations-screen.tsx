@@ -95,6 +95,71 @@ interface HistoryRow {
 
 type TeamLoadState = "loading" | "ready" | "missing" | "error";
 
+/**
+ * Debounced (250ms, 2-char minimum) search against the shared member-candidate
+ * endpoint. Used both for adding a team member and for picking who to link a
+ * secondary/devpost member to — identical search behavior, different targets.
+ */
+function useMemberCandidateSearch(t: ReturnType<typeof useLocale>["t"], enabled = true) {
+  const [query, setQuery] = useState("");
+  const [candidates, setCandidates] = useState<MemberCandidate[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const [searched, setSearched] = useState(false);
+
+  const search = useCallback(
+    async (rawQuery = query) => {
+      const q = rawQuery.trim();
+      if (!q) {
+        setCandidates([]);
+        setSearched(false);
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await apiFetch<{ users: MemberCandidate[] }>(
+          `/api/projects/member-candidates?q=${encodeURIComponent(q)}`,
+        );
+        setCandidates(result.users);
+        setSearched(true);
+      } catch (cause) {
+        setError(cause instanceof Error ? cause : new Error(t("teamDetailMemberSearchError")));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [query, t],
+  );
+
+  useEffect(() => {
+    if (!enabled) return;
+    const q = query.trim();
+    if (q.length < 2) {
+      setCandidates([]);
+      setSearched(false);
+      return;
+    }
+    const handle = setTimeout(() => {
+      void search(q);
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [search, query, enabled]);
+
+  return {
+    query,
+    setQuery,
+    candidates,
+    setCandidates,
+    loading,
+    error,
+    setError,
+    searched,
+    setSearched,
+    search,
+  };
+}
+
 /** H29/H31 operator team detail: the participant's own queue card, with the extra context an operator needs. */
 export function TeamOperationsScreen() {
   useColorScheme();
@@ -117,11 +182,7 @@ export function TeamOperationsScreen() {
   const [tabLoading, setTabLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [loadState, setLoadState] = useState<TeamLoadState>("loading");
-  const [memberQuery, setMemberQuery] = useState("");
-  const [memberCandidates, setMemberCandidates] = useState<MemberCandidate[]>([]);
-  const [memberCandidatesLoading, setMemberCandidatesLoading] = useState(false);
-  const [memberCandidatesError, setMemberCandidatesError] = useState<Error | null>(null);
-  const [memberSearched, setMemberSearched] = useState(false);
+  const memberSearch = useMemberCandidateSearch(t);
   const [memberMutationError, setMemberMutationError] = useState<Error | null>(null);
   const [memberMutation, setMemberMutation] = useState<string | null>(null);
   const [showAddChallenge, setShowAddChallenge] = useState(false);
@@ -141,11 +202,7 @@ export function TeamOperationsScreen() {
     me?.capabilities.includes(CAPABILITIES.PROJECTS_IMPORT) ||
     false;
   const [linkTarget, setLinkTarget] = useState<TeamMember | null>(null);
-  const [linkQuery, setLinkQuery] = useState("");
-  const [linkCandidates, setLinkCandidates] = useState<MemberCandidate[]>([]);
-  const [linkCandidatesLoading, setLinkCandidatesLoading] = useState(false);
-  const [linkCandidatesError, setLinkCandidatesError] = useState<Error | null>(null);
-  const [linkSearched, setLinkSearched] = useState(false);
+  const linkSearch = useMemberCandidateSearch(t, Boolean(linkTarget));
   const [linkMutation, setLinkMutation] = useState(false);
   const [linkError, setLinkError] = useState<Error | null>(null);
   const [linkSuccess, setLinkSuccess] = useState(false);
@@ -229,46 +286,6 @@ export function TeamOperationsScreen() {
 
   const teamName = entry?.repo_name ?? t("queueOpsUnnamedTeam");
 
-  const findMemberCandidates = useCallback(
-    async (rawQuery = memberQuery) => {
-      const query = rawQuery.trim();
-      if (!query) {
-        setMemberCandidates([]);
-        setMemberSearched(false);
-        return;
-      }
-      setMemberCandidatesLoading(true);
-      setMemberCandidatesError(null);
-      try {
-        const result = await apiFetch<{ users: MemberCandidate[] }>(
-          `/api/projects/member-candidates?q=${encodeURIComponent(query)}`,
-        );
-        setMemberCandidates(result.users);
-        setMemberSearched(true);
-      } catch (cause) {
-        setMemberCandidatesError(
-          cause instanceof Error ? cause : new Error(t("teamDetailMemberSearchError")),
-        );
-      } finally {
-        setMemberCandidatesLoading(false);
-      }
-    },
-    [memberQuery, t],
-  );
-
-  useEffect(() => {
-    const query = memberQuery.trim();
-    if (query.length < 2) {
-      setMemberCandidates([]);
-      setMemberSearched(false);
-      return;
-    }
-    const handle = setTimeout(() => {
-      void findMemberCandidates(query);
-    }, 250);
-    return () => clearTimeout(handle);
-  }, [findMemberCandidates, memberQuery]);
-
   const addMember = useCallback(
     async (userId: number) => {
       if (!entry) return;
@@ -284,9 +301,9 @@ export function TeamOperationsScreen() {
           },
           body: JSON.stringify({ userId }),
         });
-        setMemberQuery("");
-        setMemberCandidates([]);
-        setMemberSearched(false);
+        memberSearch.setQuery("");
+        memberSearch.setCandidates([]);
+        memberSearch.setSearched(false);
         await load();
       } catch (cause) {
         setMemberMutationError(
@@ -296,7 +313,7 @@ export function TeamOperationsScreen() {
         setMemberMutation(null);
       }
     },
-    [entry, load, t],
+    [entry, load, t, memberSearch.setQuery, memberSearch.setCandidates, memberSearch.setSearched],
   );
 
   const deleteMember = useCallback(
@@ -352,63 +369,28 @@ export function TeamOperationsScreen() {
     [deleteMember, t],
   );
 
-  const openLinkModal = useCallback((member: TeamMember) => {
-    setLinkTarget(member);
-    setLinkQuery("");
-    setLinkCandidates([]);
-    setLinkSearched(false);
-    setLinkError(null);
-    setLinkSuccess(false);
-  }, []);
+  const openLinkModal = useCallback(
+    (member: TeamMember) => {
+      setLinkTarget(member);
+      linkSearch.setQuery("");
+      linkSearch.setCandidates([]);
+      linkSearch.setSearched(false);
+      linkSearch.setError(null);
+      setLinkError(null);
+      setLinkSuccess(false);
+    },
+    [linkSearch],
+  );
 
   const closeLinkModal = useCallback(() => {
     setLinkTarget(null);
-    setLinkQuery("");
-    setLinkCandidates([]);
-    setLinkSearched(false);
+    linkSearch.setQuery("");
+    linkSearch.setCandidates([]);
+    linkSearch.setSearched(false);
+    linkSearch.setError(null);
     setLinkError(null);
     setLinkSuccess(false);
-  }, []);
-
-  const searchLinkCandidates = useCallback(
-    async (rawQuery = linkQuery) => {
-      const query = rawQuery.trim();
-      if (!query) {
-        setLinkCandidates([]);
-        setLinkSearched(false);
-        return;
-      }
-      setLinkCandidatesLoading(true);
-      setLinkCandidatesError(null);
-      try {
-        const result = await apiFetch<{ users: MemberCandidate[] }>(
-          `/api/projects/member-candidates?q=${encodeURIComponent(query)}`,
-        );
-        setLinkCandidates(result.users);
-        setLinkSearched(true);
-      } catch (cause) {
-        setLinkCandidatesError(
-          cause instanceof Error ? cause : new Error(t("teamDetailMemberSearchError")),
-        );
-      } finally {
-        setLinkCandidatesLoading(false);
-      }
-    },
-    [linkQuery, t],
-  );
-
-  useEffect(() => {
-    const query = linkQuery.trim();
-    if (query.length < 2 || !linkTarget) {
-      setLinkCandidates([]);
-      setLinkSearched(false);
-      return;
-    }
-    const handle = setTimeout(() => {
-      void searchLinkCandidates(query);
-    }, 250);
-    return () => clearTimeout(handle);
-  }, [searchLinkCandidates, linkQuery, linkTarget]);
+  }, [linkSearch]);
 
   const linkParticipant = useCallback(
     async (candidate: MemberCandidate) => {
@@ -787,25 +769,25 @@ export function TeamOperationsScreen() {
                 <Pressable
                   accessibilityLabel={t("teamDetailMemberSearch")}
                   accessibilityRole="button"
-                  onPress={() => void findMemberCandidates()}
+                  onPress={() => void memberSearch.search()}
                   hitSlop={8}
                 >
                   <SymbolView name="magnifyingglass" tintColor={colors.tertiaryLabel} size={15} />
                 </Pressable>
                 <TextInput
                   accessibilityLabel={t("teamDetailMemberSearch")}
-                  editable={memberMutation === null && !memberCandidatesLoading}
+                  editable={memberMutation === null && !memberSearch.loading}
                   onChangeText={(value) => {
-                    setMemberQuery(value);
-                    setMemberCandidates([]);
-                    setMemberCandidatesError(null);
-                    setMemberSearched(false);
+                    memberSearch.setQuery(value);
+                    memberSearch.setCandidates([]);
+                    memberSearch.setError(null);
+                    memberSearch.setSearched(false);
                   }}
-                  onSubmitEditing={() => void findMemberCandidates()}
+                  onSubmitEditing={() => void memberSearch.search()}
                   placeholder={t("teamDetailMemberSearchPlaceholder")}
                   placeholderTextColor={colors.tertiaryLabel}
                   returnKeyType="search"
-                  value={memberQuery}
+                  value={memberSearch.query}
                   style={{
                     color: colors.label,
                     flex: 1,
@@ -813,14 +795,14 @@ export function TeamOperationsScreen() {
                     minHeight: 36,
                   }}
                 />
-                {memberQuery.length > 0 ? (
+                {memberSearch.query.length > 0 ? (
                   <Pressable
                     accessibilityLabel={t("cancel")}
                     onPress={() => {
-                      setMemberQuery("");
-                      setMemberCandidates([]);
-                      setMemberCandidatesError(null);
-                      setMemberSearched(false);
+                      memberSearch.setQuery("");
+                      memberSearch.setCandidates([]);
+                      memberSearch.setError(null);
+                      memberSearch.setSearched(false);
                     }}
                     hitSlop={8}
                   >
@@ -833,11 +815,8 @@ export function TeamOperationsScreen() {
                   </Pressable>
                 ) : null}
               </View>
-              {memberCandidatesError ? (
-                <RequestFeedback
-                  error={memberCandidatesError}
-                  message={memberCandidatesError.message}
-                />
+              {memberSearch.error ? (
+                <RequestFeedback error={memberSearch.error} message={memberSearch.error.message} />
               ) : null}
               {memberMutationError ? (
                 <RequestFeedback
@@ -845,7 +824,7 @@ export function TeamOperationsScreen() {
                   message={memberMutationError.message}
                 />
               ) : null}
-              {memberCandidates.map((candidate) => (
+              {memberSearch.candidates.map((candidate) => (
                 <View key={candidate.id}>
                   <Separator inset={0} />
                   <View
@@ -898,7 +877,9 @@ export function TeamOperationsScreen() {
                   </View>
                 </View>
               ))}
-              {!memberCandidatesLoading && memberSearched && memberCandidates.length === 0 ? (
+              {!memberSearch.loading &&
+              memberSearch.searched &&
+              memberSearch.candidates.length === 0 ? (
                 <Text
                   selectable
                   style={{
@@ -1030,17 +1011,17 @@ export function TeamOperationsScreen() {
                     accessibilityLabel={t("teamDetailLinkSearchPlaceholder")}
                     editable={!linkMutation}
                     onChangeText={(value) => {
-                      setLinkQuery(value);
-                      setLinkCandidates([]);
-                      setLinkCandidatesError(null);
-                      setLinkSearched(false);
+                      linkSearch.setQuery(value);
+                      linkSearch.setCandidates([]);
+                      linkSearch.setError(null);
+                      linkSearch.setSearched(false);
                       setLinkSuccess(false);
                     }}
-                    onSubmitEditing={() => void searchLinkCandidates()}
+                    onSubmitEditing={() => void linkSearch.search()}
                     placeholder={t("teamDetailLinkSearchPlaceholder")}
                     placeholderTextColor={colors.tertiaryLabel}
                     returnKeyType="search"
-                    value={linkQuery}
+                    value={linkSearch.query}
                     style={{
                       color: colors.label,
                       flex: 1,
@@ -1048,14 +1029,14 @@ export function TeamOperationsScreen() {
                       minHeight: 44,
                     }}
                   />
-                  {linkQuery.length > 0 ? (
+                  {linkSearch.query.length > 0 ? (
                     <Pressable
                       accessibilityLabel={t("cancel")}
                       onPress={() => {
-                        setLinkQuery("");
-                        setLinkCandidates([]);
-                        setLinkCandidatesError(null);
-                        setLinkSearched(false);
+                        linkSearch.setQuery("");
+                        linkSearch.setCandidates([]);
+                        linkSearch.setError(null);
+                        linkSearch.setSearched(false);
                         setLinkSuccess(false);
                       }}
                       hitSlop={8}
@@ -1071,11 +1052,8 @@ export function TeamOperationsScreen() {
                 </View>
               </Section>
 
-              {linkCandidatesError ? (
-                <RequestFeedback
-                  error={linkCandidatesError}
-                  message={linkCandidatesError.message}
-                />
+              {linkSearch.error ? (
+                <RequestFeedback error={linkSearch.error} message={linkSearch.error.message} />
               ) : null}
               {linkError ? <RequestFeedback error={linkError} message={linkError.message} /> : null}
               {linkSuccess ? (
@@ -1094,9 +1072,9 @@ export function TeamOperationsScreen() {
                 </View>
               ) : null}
 
-              {linkCandidates.length > 0 ? (
+              {linkSearch.candidates.length > 0 ? (
                 <Section>
-                  {linkCandidates.map((candidate, index) => (
+                  {linkSearch.candidates.map((candidate, index) => (
                     <View key={candidate.id}>
                       {index > 0 ? <Separator /> : null}
                       <Pressable
@@ -1139,9 +1117,9 @@ export function TeamOperationsScreen() {
                 </Section>
               ) : null}
 
-              {!linkCandidatesLoading &&
-              linkSearched &&
-              linkCandidates.length === 0 &&
+              {!linkSearch.loading &&
+              linkSearch.searched &&
+              linkSearch.candidates.length === 0 &&
               !linkSuccess ? (
                 <Text
                   selectable
