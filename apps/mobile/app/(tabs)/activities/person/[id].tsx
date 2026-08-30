@@ -1,3 +1,13 @@
-import { PersonOperationsScreen } from "@/components/person-operations-screen";
+import { Stack } from "expo-router/stack";
 
-export default PersonOperationsScreen;
+import { PersonOperationsScreen } from "@/components/person-operations-screen";
+import { transparentDetailHeaderOptions } from "@/lib/navigation";
+
+export default function ActivitiesPersonRoute() {
+  return (
+    <>
+      <Stack.Screen options={transparentDetailHeaderOptions} />
+      <PersonOperationsScreen />
+    </>
+  );
+}

@@ -29,6 +29,11 @@ export function isOperator(capabilities: string[]): boolean {
   return STAFF_SCAN_CAPABILITIES.some((cap) => has(capabilities, cap));
 }
 
+/** Staff members with access to their personal logistics statistics. */
+export function canViewStaffStatistics(capabilities: string[]): boolean {
+  return isOperator(capabilities) || has(capabilities, CAPABILITIES.LOGISTICS_STATS);
+}
+
 export function canScanActivities(capabilities: string[]): boolean {
   return has(capabilities, CAPABILITIES.ACTIVITY_SCAN);
 }

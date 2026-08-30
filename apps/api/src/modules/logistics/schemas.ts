@@ -95,6 +95,12 @@ const staffScanCountsSchema = z.object({
   activityCount: z.number().int(),
 });
 
+const myStaffScanStatsSchema = staffScanCountsSchema.extend({
+  totalCount: z.number().int(),
+  uniquePeopleCount: z.number().int(),
+  lastScanAt: z.string().nullable(),
+});
+
 export const scanLogResponse = z.object({
   items: z.array(
     z.object({
@@ -105,12 +111,20 @@ export const scanLogResponse = z.object({
       subjectUserId: z.number().int(),
       subjectName: z.string(),
       subjectSurname: z.string(),
+      badgeId: z.string().nullable(),
+      method: z.enum(["manual", "qr", "nfc"]).nullable(),
+      activityId: z.number().int().nullable(),
+      activityName: z.string().nullable(),
+      activityCategory: z.string().nullable(),
+      doorKind: z.enum(["in", "out"]).nullable(),
+      doorLocation: z.string().nullable(),
+      notes: z.string().nullable(),
     }),
   ),
   total: z.number().int(),
 });
 
-export const staffScanStatsResponse = staffScanCountsSchema;
+export const staffScanStatsResponse = myStaffScanStatsSchema;
 
 export const staffScanRankingResponse = z.object({
   items: z.array(

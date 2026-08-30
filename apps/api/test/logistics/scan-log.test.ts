@@ -10,7 +10,7 @@ import {
   createUserWithCapabilities,
   truncateAll,
 } from "../helpers.js";
-import { issueTicket } from "./fixtures.js";
+import { assignBadge, createActivity, issueTicket } from "./fixtures.js";
 
 let app: App;
 let operatorA: number;
@@ -65,11 +65,14 @@ describe("staff scan stats and scan-log (extends H22-H27)", () => {
       headers: asUser(operatorA),
     });
     expect(resA.statusCode).toBe(200);
-    expect(resA.json()).toEqual({
+    expect(resA.json()).toMatchObject({
       accreditationCount: 2,
       presenceCount: 0,
       activityCount: 0,
+      totalCount: 2,
+      uniquePeopleCount: 2,
     });
+    expect(resA.json().lastScanAt).toEqual(expect.any(String));
 
     const resB = await app.inject({
       method: "GET",
@@ -122,9 +125,72 @@ describe("staff scan stats and scan-log (extends H22-H27)", () => {
     expect(body.total).toBe(2);
     expect(body.items).toHaveLength(2);
     expect(body.items[0].source).toBe("accreditation");
+    expect(body.items[0].badgeId).toBe("S-A2");
+    expect(body.items[0].method).toBe("qr");
+    expect(body.items[0].activityId).toBeNull();
+    expect(body.items[0].doorKind).toBeNull();
     // createUser() never sets a surname (NULL in the DB) — must come back as
     // "", never the literal string "null" (a past bug: String(null) === "null").
     expect(body.items[0].subjectSurname).toBe("");
+  });
+
+  it("includes enough context to reconcile accreditation, door, and activity scans", async () => {
+    const allScanner = await createUserWithCapabilities([
+      CAPABILITIES.ACCREDIT_SCAN,
+      CAPABILITIES.PRESENCE_SCAN,
+      CAPABILITIES.ACTIVITY_SCAN,
+    ]);
+    const subject = await createUser();
+    await assignBadge(subject, "S-CONTEXT");
+    const door = await app.inject({
+      method: "POST",
+      url: "/api/presence/scan",
+      headers: asUser(allScanner),
+      payload: { badgeId: "S-CONTEXT", kind: "in" },
+    });
+    expect(door.statusCode).toBe(200);
+
+    const activityId = await createActivity({
+      category: "meal",
+      name: "Lunch",
+      requiresScan: true,
+    });
+    await pool.query(
+      `INSERT INTO activity_logs (user_id, activity_id, notes, logged_by)
+       VALUES ($1, $2, $3, $4)`,
+      [subject, activityId, "Manual correction", allScanner],
+    );
+    await checkIn(allScanner, "S-CONTEXT-ACCREDITATION");
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/logistics/scan-log",
+      headers: asUser(allScanner),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: "door",
+          subjectUserId: subject,
+          doorKind: "in",
+          doorLocation: null,
+        }),
+        expect.objectContaining({
+          source: "activity",
+          subjectUserId: subject,
+          activityId,
+          activityName: "Lunch",
+          activityCategory: "meal",
+          notes: "Manual correction",
+        }),
+        expect.objectContaining({
+          source: "accreditation",
+          badgeId: "S-CONTEXT-ACCREDITATION",
+          method: "qr",
+        }),
+      ]),
+    );
   });
 
   it("GET /api/logistics/scan-log rejects viewing another staff member's scans without LOGISTICS_STATS", async () => {

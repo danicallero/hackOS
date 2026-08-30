@@ -1,3 +1,13 @@
-import { PresenceScreen } from "@/components/presence-screen";
+import { Stack } from "expo-router/stack";
 
-export default PresenceScreen;
+import { PresenceScreen } from "@/components/presence-screen";
+import { transparentDetailHeaderOptions } from "@/lib/navigation";
+
+export default function ScannerPresenceRoute() {
+  return (
+    <>
+      <Stack.Screen options={transparentDetailHeaderOptions} />
+      <PresenceScreen />
+    </>
+  );
+}

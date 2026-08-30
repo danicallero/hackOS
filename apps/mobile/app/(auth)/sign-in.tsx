@@ -231,7 +231,6 @@ export default function SignInScreen() {
             autoComplete="username"
             fieldRef={emailRef}
             label={t("emailLabel")}
-            placeholder={t("emailPlaceholder")}
             error={emailError}
             keyboardType="email-address"
             returnKeyType="next"

@@ -137,7 +137,9 @@ hidden destinations stay routable:
   **Scanner**, Activities (`activity:scan` holders only), notifications —
   scanning must never sit behind an ellipsis. The separate
   **"Others" overflow selector** holds eligible personal Queue, Wallet,
-  Account, and any queue operations destination as pseudo-tabs.
+  Account, and any queue operations destination as pseudo-tabs. Account's
+  Statistics destination is the staff operations hub for the person finder,
+  scan history, and sync reconciliation.
 - **Queue-only operator** (`queue:operate`, `queue:admin`, or `*`, without a
   scanner capability): Queue operations is a direct tab alongside Schedule and
   Alerts; an eligible personal Queue, Wallet, and Account move to Others. If

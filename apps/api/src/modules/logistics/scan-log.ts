@@ -18,6 +18,15 @@ export interface ScanLogEntry {
   subjectUserId: number;
   subjectName: string;
   subjectSurname: string;
+  /** The badge and method are recorded for accreditation scans only. */
+  badgeId: string | null;
+  method: "manual" | "qr" | "nfc" | null;
+  activityId: number | null;
+  activityName: string | null;
+  activityCategory: string | null;
+  doorKind: "in" | "out" | null;
+  doorLocation: string | null;
+  notes: string | null;
 }
 
 export interface ScanLogPage {
@@ -29,17 +38,25 @@ function scanLogUnion(subjectFilter: string): string {
   return `
   SELECT cil.id, 'accreditation' AS source, cil.checked_in_at AS occurred_at,
          cil.check_in_method AS detail, u.id AS subject_user_id,
-         u.name AS subject_name, u.surname AS subject_surname
+         u.name AS subject_name, u.surname AS subject_surname,
+         cil.badge_id, cil.check_in_method AS method,
+         NULL::integer AS activity_id, NULL::text AS activity_name,
+         NULL::text AS activity_category, NULL::text AS door_kind,
+         NULL::text AS door_location, cil.notes
     FROM check_in_logs cil JOIN users u ON u.id = cil.user_id
    WHERE cil.staff_id = $1
      AND u.account_state = 'active' AND u.anonymized_at IS NULL${subjectFilter}
   UNION ALL
   SELECT tl.id, 'door', tl.scanned_at, tl.kind, u.id, u.name, u.surname
+         ,NULL::text, NULL::text, NULL::integer, NULL::text, NULL::text,
+         tl.kind, NULL::text, tl.notes
     FROM time_logs tl JOIN users u ON u.id = tl.user_id
    WHERE tl.scanned_by = $1
      AND u.account_state = 'active' AND u.anonymized_at IS NULL${subjectFilter}
   UNION ALL
   SELECT al.id, 'activity', al.logged_at, a.name, u.id, u.name, u.surname
+         ,NULL::text, NULL::text, a.id, a.name, a.category,
+         NULL::text, NULL::text, al.notes
     FROM activity_logs al
     JOIN activities a ON a.id = al.activity_id
     JOIN users u ON u.id = al.user_id
@@ -79,6 +96,14 @@ export async function queryScanLog(
       subjectUserId: Number(r.subject_user_id),
       subjectName: (r.subject_name as string | null) ?? "",
       subjectSurname: (r.subject_surname as string | null) ?? "",
+      badgeId: (r.badge_id as string | null) ?? null,
+      method: (r.method as ScanLogEntry["method"]) ?? null,
+      activityId: r.activity_id == null ? null : Number(r.activity_id),
+      activityName: (r.activity_name as string | null) ?? null,
+      activityCategory: (r.activity_category as string | null) ?? null,
+      doorKind: (r.door_kind as ScanLogEntry["doorKind"]) ?? null,
+      doorLocation: (r.door_location as string | null) ?? null,
+      notes: (r.notes as string | null) ?? null,
     })),
     total: countRows[0].count as number,
   };
@@ -90,29 +115,35 @@ export interface StaffScanCounts {
   activityCount: number;
 }
 
+export interface MyStaffScanStats extends StaffScanCounts {
+  totalCount: number;
+  uniquePeopleCount: number;
+  lastScanAt: string | null;
+}
+
 /** Counts of scans a single staff member performed, by domain. */
-export async function staffScanCounts(staffId: number): Promise<StaffScanCounts> {
+export async function staffScanCounts(staffId: number): Promise<MyStaffScanStats> {
   const subjectFilter = await fixtureReadFilter(pool, staffId, "u");
+  const union = scanLogUnion(subjectFilter);
   const { rows } = await pool.query(
     `SELECT
-       (SELECT count(*)::int
-         FROM check_in_logs cil JOIN users u ON u.id = cil.user_id
-         WHERE cil.staff_id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
-           ${subjectFilter || "AND u.is_test_account = false"}) AS accreditation_count,
-       (SELECT count(*)::int
-         FROM time_logs tl JOIN users u ON u.id = tl.user_id
-         WHERE tl.scanned_by = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
-           ${subjectFilter || "AND u.is_test_account = false"}) AS presence_count,
-       (SELECT count(*)::int
-         FROM activity_logs al JOIN users u ON u.id = al.user_id
-         WHERE al.logged_by = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
-           ${subjectFilter || "AND u.is_test_account = false"}) AS activity_count`,
+       count(*) FILTER (WHERE source = 'accreditation')::int AS accreditation_count,
+       count(*) FILTER (WHERE source = 'door')::int AS presence_count,
+       count(*) FILTER (WHERE source = 'activity')::int AS activity_count,
+       count(*)::int AS total_count,
+       count(DISTINCT subject_user_id)::int AS unique_people_count,
+       max(occurred_at) AS last_scan_at
+       FROM (${union}) scans`,
     [staffId],
   );
+  const lastScanAt = rows[0].last_scan_at;
   return {
     accreditationCount: rows[0].accreditation_count as number,
     presenceCount: rows[0].presence_count as number,
     activityCount: rows[0].activity_count as number,
+    totalCount: rows[0].total_count as number,
+    uniquePeopleCount: rows[0].unique_people_count as number,
+    lastScanAt: lastScanAt ? new Date(String(lastScanAt)).toISOString() : null,
   };
 }
 

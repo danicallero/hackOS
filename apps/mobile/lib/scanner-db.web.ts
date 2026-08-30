@@ -4,6 +4,7 @@ import type {
   ScannerActivityState,
   ScannerPerson,
   ScannerSnapshot,
+  ScannerSyncErrorEntry,
   ScanPayload,
 } from "./scanner-types";
 
@@ -22,6 +23,24 @@ let snapshot: ScannerSnapshot = {
   activityStates: [],
 };
 let scans: (PendingScan & { ownerUserId: number })[] = [];
+let syncErrors: (ScannerSyncErrorEntry & { ownerUserId: number })[] = [];
+let nextSyncErrorId = 1;
+
+function recordSyncError(
+  scan: PendingScan & { ownerUserId: number },
+  message: string,
+  type: ScannerSyncErrorEntry["type"],
+) {
+  syncErrors.push({
+    id: nextSyncErrorId++,
+    scanId: scan.id,
+    ownerUserId: scan.ownerUserId,
+    kind: scan.kind,
+    type,
+    message,
+    occurredAt: new Date().toISOString(),
+  });
+}
 
 export async function applyScannerSnapshot(
   next: ScannerSnapshot,
@@ -153,11 +172,13 @@ export async function acknowledgeScan(
 }
 
 export async function failScan(id: string, message: string, ownerUserId: number): Promise<void> {
-  scans = scans.map((scan) =>
-    scan.id === id && scan.ownerUserId === ownerUserId
-      ? { ...scan, status: "failed", lastError: message }
-      : scan,
-  );
+  scans = scans.map((scan) => {
+    if (scan.id !== id || scan.ownerUserId !== ownerUserId) return scan;
+    if (scan.status === "failed" && scan.lastError === message) return scan;
+    const failed = { ...scan, status: "failed" as const, lastError: message };
+    recordSyncError(failed, message, "rejected");
+    return failed;
+  });
 }
 
 export async function noteRetryableError(
@@ -165,9 +186,13 @@ export async function noteRetryableError(
   message: string,
   ownerUserId: number,
 ): Promise<void> {
-  scans = scans.map((scan) =>
-    scan.id === id && scan.ownerUserId === ownerUserId ? { ...scan, lastError: message } : scan,
-  );
+  scans = scans.map((scan) => {
+    if (scan.id !== id || scan.ownerUserId !== ownerUserId) return scan;
+    if (scan.lastError === message) return scan;
+    const noted = { ...scan, lastError: message };
+    recordSyncError(noted, message, "retryable");
+    return noted;
+  });
 }
 
 export async function correctScanTimestamp(
@@ -205,6 +230,14 @@ export async function deleteScan(id: string, ownerUserId: number): Promise<void>
 
 export async function wipeOfflineScanQueue(ownerUserId: number): Promise<void> {
   scans = scans.filter((scan) => scan.ownerUserId !== ownerUserId);
+  syncErrors = syncErrors.filter((entry) => entry.ownerUserId !== ownerUserId);
+}
+
+export async function syncErrorHistory(ownerUserId: number): Promise<ScannerSyncErrorEntry[]> {
+  return syncErrors
+    .filter((entry) => entry.ownerUserId === ownerUserId)
+    .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt) || b.id - a.id)
+    .map(({ ownerUserId: _ownerUserId, ...entry }) => entry);
 }
 
 export async function getScannerMeta(

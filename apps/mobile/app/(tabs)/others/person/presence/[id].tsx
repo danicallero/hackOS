@@ -1,13 +1,13 @@
 import { Stack } from "expo-router/stack";
 
-import { PersonOperationsScreen } from "@/components/person-operations-screen";
+import { PresenceScreen } from "@/components/presence-screen";
 import { transparentDetailHeaderOptions } from "@/lib/navigation";
 
-export default function ScannerPersonRoute() {
+export default function OthersPresenceRoute() {
   return (
     <>
       <Stack.Screen options={transparentDetailHeaderOptions} />
-      <PersonOperationsScreen />
+      <PresenceScreen />
     </>
   );
 }

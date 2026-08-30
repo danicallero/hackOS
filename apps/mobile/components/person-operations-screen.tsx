@@ -1,20 +1,26 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
-import { useFocusEffect, useLocalSearchParams, useRouter, useScrollToTop } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  useFocusEffect,
+  useLocalSearchParams,
+  useNavigation,
+  usePathname,
+  useRouter,
+  useScrollToTop,
+} from "expo-router";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Alert, InteractionManager, Pressable, ScrollView, Text, View } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ActionButton,
-  AdaptiveBackButton,
   EmptyState,
   InfoRow,
   Section,
   Separator,
   StatusPill,
 } from "@/components/native-ui";
-import { formatMinutes } from "@/components/presence-management";
+import { formatMinutes, PresenceManagement } from "@/components/presence-management";
 import { QrCamera } from "@/components/QrCamera";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
@@ -22,6 +28,7 @@ import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
+import { transparentDetailHeaderOptions } from "@/lib/navigation";
 import type { PresenceDivergence } from "@/lib/presence-timeline";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import {
@@ -44,11 +51,10 @@ interface PersonDetails extends ScannerPerson {
 }
 
 const CONTENT_PADDING = 16;
-// The floating back button sits at `topInset + 6` with a 44pt diameter and
-// a small margin below it — Android (no `contentInsetAdjustmentBehavior`,
-// no native bar here since this screen is headerless there) has to clear
-// the whole thing itself.
-const ANDROID_BUTTON_ROW_HEIGHT = 60;
+// Transparent native headers do not reserve space on Android. Keep the first
+// profile row below the status bar and native header there; iOS handles the
+// same inset through `contentInsetAdjustmentBehavior="automatic"`.
+const ANDROID_HEADER_CLEARANCE = 68;
 
 /**
  * The action panel revealed by swiping the current-badge row left, matching
@@ -151,13 +157,30 @@ function personRolePill(
 }
 
 export function PersonOperationsScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, focusLogId, focusSource } = useLocalSearchParams<{
+    id: string;
+    focusLogId?: string;
+    focusSource?: string;
+  }>();
   const userId = Number(id);
   const router = useRouter();
+  const navigation = useNavigation();
+  const pathname = usePathname();
   const { language, t } = useLocale();
   const insets = useSafeAreaInsets();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
+  const scrollViewportRef = useRef<View>(null);
+  const scrollOffsetRef = useRef(0);
+  const autoScrolledFocusRef = useRef<string | null>(null);
+
+  // These profile routes can be pushed from several independent stacks. Set
+  // the same native options on the mounted leaf route as in each layout so a
+  // parent stack cannot briefly expose `[id]` while the detail screen mounts.
+  useLayoutEffect(() => {
+    navigation.setOptions(transparentDetailHeaderOptions);
+  }, [navigation]);
+
   useScrollToTop(scrollRef);
   const { me } = useMeContext();
   const ownerUserId = me?.id;
@@ -166,6 +189,38 @@ export function PersonOperationsScreen() {
   const admin = capabilities.has("*");
   const canAccredit = admin || capabilities.has(CAPABILITIES.ACCREDIT_SCAN);
   const canPresence = admin || capabilities.has(CAPABILITIES.PRESENCE_SCAN);
+  const focusLogIdNumber = focusLogId ? Number(focusLogId) : NaN;
+  const focusSignal: { id: number; source: "door" | "activity" } | undefined =
+    Number.isInteger(focusLogIdNumber) && focusLogIdNumber > 0
+      ? focusSource === "door"
+        ? { id: focusLogIdNumber, source: "door" }
+        : focusSource === "activity"
+          ? { id: focusLogIdNumber, source: "activity" }
+          : undefined
+      : undefined;
+  const focusSignalKey = focusSignal ? `${focusSignal.source}:${focusSignal.id}` : null;
+  const scrollToFocusedSignal = useCallback(
+    (target: View) => {
+      if (!focusSignalKey || autoScrolledFocusRef.current === focusSignalKey) return;
+
+      InteractionManager.runAfterInteractions(() => {
+        if (autoScrolledFocusRef.current === focusSignalKey) return;
+        target.measureInWindow((_targetX, targetY) => {
+          scrollViewportRef.current?.measureInWindow((_viewportX, viewportY) => {
+            const headerClearance =
+              process.env.EXPO_OS === "ios" ? insets.top + 68 : insets.top + 16;
+            const targetOffset = scrollOffsetRef.current + targetY - viewportY - headerClearance;
+            scrollRef.current?.scrollTo({
+              animated: true,
+              y: Math.max(0, targetOffset),
+            });
+            autoScrolledFocusRef.current = focusSignalKey;
+          });
+        });
+      });
+    },
+    [focusSignalKey, insets.top],
+  );
   const [person, setPerson] = useState<PersonDetails | null>(null);
   const [loadState, setLoadState] = useState<PersonLoadState>("loading");
   const [loadError, setLoadError] = useState<Error | null>(null);
@@ -456,7 +511,6 @@ export function PersonOperationsScreen() {
         }}
       >
         <RequestFeedback loading />
-        <AdaptiveBackButton top={insets.top + 6} onPress={() => router.back()} />
       </View>
     );
   }
@@ -472,7 +526,6 @@ export function PersonOperationsScreen() {
         }}
       >
         <RequestFeedback error={loadError} onRetry={() => void load()} />
-        <AdaptiveBackButton top={insets.top + 6} onPress={() => router.back()} />
       </View>
     );
   }
@@ -491,7 +544,6 @@ export function PersonOperationsScreen() {
           title={t("screenNotFoundTitle")}
           description={t("requestUnavailable")}
         />
-        <AdaptiveBackButton top={insets.top + 6} onPress={() => router.back()} />
       </View>
     );
   }
@@ -548,12 +600,15 @@ export function PersonOperationsScreen() {
   const directionIcon = (dir: "in" | "out") =>
     dir === "in" ? "arrow.right.to.line" : "arrow.left.to.line";
   const directionLabel = (dir: "in" | "out") => (dir === "in" ? t("scannerIn") : t("scannerOut"));
-
   function openPresenceDraft(kind: "in" | "out", at: string) {
-    router.push({
-      pathname: "/(tabs)/scan/person/presence/[id]",
-      params: { id: String(userId), draftKind: kind, draftAt: at },
-    });
+    const params = { id: String(userId), draftKind: kind, draftAt: at };
+    if (pathname.includes("/activities/")) {
+      router.push({ pathname: "/(tabs)/activities/person/presence/[id]", params });
+    } else if (pathname.includes("/others/")) {
+      router.push({ pathname: "/(tabs)/others/person/presence/[id]", params });
+    } else {
+      router.push({ pathname: "/(tabs)/scan/person/presence/[id]", params });
+    }
   }
 
   // The suggested action fires immediately, right on this screen — an
@@ -709,12 +764,16 @@ export function PersonOperationsScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t("presenceGuaranteedHours")}
-          onPress={() =>
-            router.push({
-              pathname: "/(tabs)/scan/person/presence/[id]",
-              params: { id: String(userId) },
-            })
-          }
+          onPress={() => {
+            const params = { id: String(userId) };
+            if (pathname.includes("/activities/")) {
+              router.push({ pathname: "/(tabs)/activities/person/presence/[id]", params });
+            } else if (pathname.includes("/others/")) {
+              router.push({ pathname: "/(tabs)/others/person/presence/[id]", params });
+            } else {
+              router.push({ pathname: "/(tabs)/scan/person/presence/[id]", params });
+            }
+          }}
           style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
         >
           <InfoRow
@@ -728,143 +787,163 @@ export function PersonOperationsScreen() {
       </Section>
     ) : null;
 
-  // The Stack.Screen this route registers in `(tabs)/activities/_layout.tsx`
-  // / `(tabs)/scan/_layout.tsx` keeps the iOS detail chrome transparent and
-  // title-less so `AdaptiveBackButton` can dock into it. Android has no
-  // `contentInsetAdjustmentBehavior` (an iOS-only prop), so content there has
-  // to clear the floating back button row itself.
+  // The profile owns the visible heading while the transparent native header
+  // owns the back action. Android has no `contentInsetAdjustmentBehavior` (an
+  // iOS-only prop), so content there has to clear that header itself.
   const contentPaddingTop =
-    process.env.EXPO_OS === "ios" ? CONTENT_PADDING : insets.top + ANDROID_BUTTON_ROW_HEIGHT;
+    process.env.EXPO_OS === "ios" ? 0 : insets.top + ANDROID_HEADER_CLEARANCE;
 
   return (
     <>
-      <ScrollView
-        ref={scrollRef}
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{
-          gap: 22,
-          paddingBottom: Math.max(40, tabBarBottomInset + 16),
-          paddingHorizontal: CONTENT_PADDING,
-          paddingTop: contentPaddingTop,
-        }}
-        style={{ backgroundColor: colors.background }}
-      >
-        {loadState === "error" && loadError ? (
-          <RequestFeedback error={loadError} onRetry={() => void load()} />
-        ) : null}
+      <View ref={scrollViewportRef} style={{ backgroundColor: colors.background, flex: 1 }}>
+        <ScrollView
+          ref={scrollRef}
+          contentInsetAdjustmentBehavior="automatic"
+          contentContainerStyle={{
+            gap: 22,
+            paddingBottom: Math.max(40, tabBarBottomInset + 16),
+            paddingHorizontal: CONTENT_PADDING,
+            paddingTop: contentPaddingTop,
+          }}
+          onScroll={(event) => {
+            scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+          }}
+          scrollEventThrottle={16}
+          style={{ backgroundColor: colors.background, flex: 1 }}
+        >
+          {loadState === "error" && loadError ? (
+            <RequestFeedback error={loadError} onRetry={() => void load()} />
+          ) : null}
 
-        <View style={{ gap: 2 }}>
-          <Text
-            selectable
-            accessibilityRole="header"
-            numberOfLines={1}
-            style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}
-          >
-            {fullName}
-          </Text>
-          {person.email ? (
+          <View style={{ gap: 2 }}>
             <Text
               selectable
+              accessibilityRole="header"
               numberOfLines={1}
-              style={{ color: colors.secondaryLabel, fontSize: 15 }}
+              style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}
             >
-              {person.email}
+              {fullName}
             </Text>
-          ) : null}
-        </View>
-
-        <Section title={t("personPersonalData")}>
-          {person.secondaryEmail ? (
-            <>
-              <InfoRow
-                label={t("personSecondaryEmail")}
-                value={person.secondaryEmail}
-                icon="envelope.badge"
-                accessoryIcon={
-                  person.secondaryEmailVerified ? "checkmark.seal.fill" : "exclamationmark.circle"
-                }
-                accessoryColor={person.secondaryEmailVerified ? colors.success : colors.warning}
-                accessoryLabel={
-                  person.secondaryEmailVerified
-                    ? t("personSecondaryEmailVerified")
-                    : t("personSecondaryEmailUnverified")
-                }
-              />
-              <Separator />
-            </>
-          ) : null}
-          <InfoRow label={t("personDni")} value={person.dni ?? "—"} icon="person.text.rectangle" />
-          <Separator />
-          <InfoRow label={t("personShirt")} value={person.shirtSize ?? "—"} icon="tshirt" />
-
-          {canAccredit && person.badgeId ? (
-            <>
-              <Separator />
-              <View
-                style={{
-                  borderBottomLeftRadius: 14,
-                  borderBottomRightRadius: 14,
-                  borderCurve: "continuous",
-                  overflow: "hidden",
-                }}
+            {person.email ? (
+              <Text
+                selectable
+                numberOfLines={1}
+                style={{ color: colors.secondaryLabel, fontSize: 15 }}
               >
-                <Swipeable
-                  renderRightActions={() => (
-                    <AccreditationRevealActions
-                      onReplace={beginBadgeAction}
-                      onDelete={confirmRemoveBadge}
-                    />
-                  )}
-                  rightThreshold={40}
-                  overshootRight={false}
-                >
-                  <View style={{ backgroundColor: colors.surface }}>
-                    <InfoRow
-                      label={t("personCurrentBadge")}
-                      value={person.badgeId}
-                      icon="key.card"
-                    />
-                  </View>
-                </Swipeable>
-              </View>
-            </>
-          ) : null}
-        </Section>
-
-        {person.intolerances.length > 0 || person.foodIntoleranceNotes ? (
-          <Section title={t("personDietaryTitle")}>
-            {person.intolerances.length > 0 ? (
-              <InfoRow
-                label={t("personFoodRestrictions")}
-                value={person.intolerances
-                  .map((item) => item.label[language] ?? item.label.en ?? String(item.id))
-                  .join(", ")}
-                icon="exclamationmark.triangle.fill"
-                valueStyle={{ color: colors.warning, fontWeight: "600" }}
-              />
+                {person.email}
+              </Text>
             ) : null}
-            {person.intolerances.length > 0 ? <Separator /> : null}
+          </View>
+
+          <Section title={t("personPersonalData")}>
+            {person.secondaryEmail ? (
+              <>
+                <InfoRow
+                  label={t("personSecondaryEmail")}
+                  value={person.secondaryEmail}
+                  icon="envelope.badge"
+                  accessoryIcon={
+                    person.secondaryEmailVerified ? "checkmark.seal.fill" : "exclamationmark.circle"
+                  }
+                  accessoryColor={person.secondaryEmailVerified ? colors.success : colors.warning}
+                  accessoryLabel={
+                    person.secondaryEmailVerified
+                      ? t("personSecondaryEmailVerified")
+                      : t("personSecondaryEmailUnverified")
+                  }
+                />
+                <Separator />
+              </>
+            ) : null}
             <InfoRow
-              label={t("personFoodNotes")}
-              value={person.foodIntoleranceNotes || "—"}
-              icon="note.text"
+              label={t("personDni")}
+              value={person.dni ?? "—"}
+              icon="person.text.rectangle"
             />
+            <Separator />
+            <InfoRow label={t("personShirt")} value={person.shirtSize ?? "—"} icon="tshirt" />
+
+            {canAccredit && person.badgeId ? (
+              <>
+                <Separator />
+                <View
+                  style={{
+                    borderBottomLeftRadius: 14,
+                    borderBottomRightRadius: 14,
+                    borderCurve: "continuous",
+                    overflow: "hidden",
+                  }}
+                >
+                  <Swipeable
+                    renderRightActions={() => (
+                      <AccreditationRevealActions
+                        onReplace={beginBadgeAction}
+                        onDelete={confirmRemoveBadge}
+                      />
+                    )}
+                    rightThreshold={40}
+                    overshootRight={false}
+                  >
+                    <View style={{ backgroundColor: colors.surface }}>
+                      <InfoRow
+                        label={t("personCurrentBadge")}
+                        value={person.badgeId}
+                        icon="key.card"
+                      />
+                    </View>
+                  </Swipeable>
+                </View>
+              </>
+            ) : null}
           </Section>
-        ) : null}
 
-        {person.notes ? (
-          <Section>
-            <InfoRow label={t("personNotes")} value={person.notes} icon="note.text" />
-          </Section>
-        ) : null}
+          {person.intolerances.length > 0 || person.foodIntoleranceNotes ? (
+            <Section title={t("personDietaryTitle")}>
+              {person.intolerances.length > 0 ? (
+                <InfoRow
+                  label={t("personFoodRestrictions")}
+                  value={person.intolerances
+                    .map((item) => item.label[language] ?? item.label.en ?? String(item.id))
+                    .join(", ")}
+                  icon="exclamationmark.triangle.fill"
+                  valueStyle={{ color: colors.warning, fontWeight: "600" }}
+                />
+              ) : null}
+              {person.intolerances.length > 0 ? <Separator /> : null}
+              <InfoRow
+                label={t("personFoodNotes")}
+                value={person.foodIntoleranceNotes || "—"}
+                icon="note.text"
+              />
+            </Section>
+          ) : null}
 
-        {/* Personal details always lead; then the movement register (badge
-            holders) or badge assignment (everyone else), then the rest. */}
-        {person.badgeId ? presenceRegisterSection : null}
-        {accreditationSection}
-      </ScrollView>
+          {person.notes ? (
+            <Section>
+              <InfoRow label={t("personNotes")} value={person.notes} icon="note.text" />
+            </Section>
+          ) : null}
 
-      <AdaptiveBackButton top={insets.top + 6} onPress={() => router.back()} />
+          {/* Personal details always lead. A history deep-link expands the full
+            editable timeline on this same profile and highlights the exact
+            record; the normal profile keeps the compact register. */}
+          {focusSignal ? (
+            <PresenceManagement
+              accredited={Boolean(person.badgeId)}
+              badgeId={person.badgeId}
+              focusSignal={focusSignal}
+              onDoorState={onDoorState}
+              onFocusedSignalLayout={scrollToFocusedSignal}
+              refreshKey={sync.lastSync ?? undefined}
+              userId={userId}
+            />
+          ) : person.badgeId ? (
+            presenceRegisterSection
+          ) : null}
+          {accreditationSection}
+        </ScrollView>
+      </View>
+
       {rolePill ? (
         <View
           pointerEvents="none"

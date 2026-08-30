@@ -11,6 +11,7 @@ import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
+import { safeBack } from "@/lib/navigation";
 import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import { findPersonByBadge, findPersonByTicket, listScannerPeople } from "@/lib/scanner-db";
 import {
@@ -152,7 +153,7 @@ export function GeneralScannerScreen() {
       <Stack.Screen options={{ headerShown: glassAvailable, headerTitle: "" }} />
       <QrCamera
         hint={null}
-        onClose={pathname === "/scan" ? undefined : () => router.back()}
+        onClose={pathname === "/scan" ? undefined : () => safeBack(router, "/(tabs)/scan")}
         onValue={(value) => void resolve(value)}
       />
       <ScannerToolbarActions

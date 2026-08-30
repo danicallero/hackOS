@@ -136,7 +136,19 @@ export type ScanPayload =
       occurredAt?: string;
       notes?: string | null;
     }
-  | { kind: "presence_signal_delete"; source: "door" | "activity"; logId: number };
+  | {
+      kind: "presence_signal_delete";
+      source: "door" | "activity";
+      logId: number;
+      /** Local context retained so a failed delete can be reconciled later. */
+      userId?: number;
+      /** Badge active when the operator created the delete request. */
+      badgeId?: string | null;
+      occurredAt?: string;
+      direction?: "in" | "out";
+      activityId?: number | null;
+      notes?: string | null;
+    };
 
 export interface PendingScan {
   id: string;
@@ -149,4 +161,14 @@ export interface PendingScan {
   acknowledgedAt: string | null;
   /** Whether a device-clock-skew timestamp correction has already been applied (see scanner-sync.ts). */
   clockCorrected: boolean;
+}
+
+/** Local, non-sensitive audit trail for every failed queue replay attempt. */
+export interface ScannerSyncErrorEntry {
+  id: number;
+  scanId: string;
+  kind: ScanKind;
+  type: "retryable" | "rejected";
+  message: string;
+  occurredAt: string;
 }

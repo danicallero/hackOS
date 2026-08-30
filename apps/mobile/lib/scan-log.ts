@@ -8,6 +8,14 @@ export interface ScanLogEntry {
   subjectUserId: number;
   subjectName: string;
   subjectSurname: string;
+  badgeId: string | null;
+  method: "manual" | "qr" | "nfc" | null;
+  activityId: number | null;
+  activityName: string | null;
+  activityCategory: string | null;
+  doorKind: "in" | "out" | null;
+  doorLocation: string | null;
+  notes: string | null;
 }
 
 export interface ScanLogPage {
@@ -24,9 +32,12 @@ export interface MyScanStats {
   accreditationCount: number;
   presenceCount: number;
   activityCount: number;
+  totalCount: number;
+  uniquePeopleCount: number;
+  lastScanAt: string | null;
 }
 
-/** The caller's own scan counts, shown on Account for operators (Part 3). */
+/** The caller's own scan counts, shown on the staff Statistics page (Part 3). */
 export function fetchMyScanStats(): Promise<MyScanStats> {
   return apiFetch<MyScanStats>("/api/me/logistics/stats");
 }

@@ -2,6 +2,7 @@ import { Stack } from "expo-router/stack";
 
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { useLocale } from "@/lib/i18n";
+import { transparentDetailHeaderOptions } from "@/lib/navigation";
 
 export default function ScannerLayout() {
   const { t } = useLocale();
@@ -44,29 +45,11 @@ export default function ScannerLayout() {
           },
         }}
       />
-      {/* Kept as direct children of this Stack (not nested ones) so they share
-          the same navigation chrome as `index`. A second Stack would create
-          a duplicate native header. */}
-      <Stack.Screen
-        name="person/[id]"
-        options={{
-          headerShown: process.env.EXPO_OS === "ios",
-          headerTransparent: true,
-          headerShadowVisible: false,
-          headerTitle: "",
-          headerBackVisible: false,
-        }}
-      />
-      <Stack.Screen
-        name="person/presence/[id]"
-        options={{
-          headerShown: process.env.EXPO_OS === "ios",
-          headerTransparent: true,
-          headerShadowVisible: false,
-          headerTitle: "",
-          headerBackVisible: false,
-        }}
-      />
+      {/* Keep detail routes in this Stack so the native Back action stays
+          attached to the scanner flow. The shared screens provide content;
+          the transparent native header provides navigation only. */}
+      <Stack.Screen name="person/[id]" options={transparentDetailHeaderOptions} />
+      <Stack.Screen name="person/presence/[id]" options={transparentDetailHeaderOptions} />
     </Stack>
   );
 }

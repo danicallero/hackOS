@@ -127,11 +127,13 @@ implementation is now the shared lifecycle in `removal.ts`.
   requests a one-time PIN for verified primary email accounts, sends
   `Idempotency-Key`, clears app-owned browser storage, signs out, and redirects
   even when the response is ambiguous after the server has revoked access.
-- Mobile: `apps/mobile/components/account-screen.tsx` performs the same
-  preflight, warning and confirmation flow, requests the same verified-email
-  PIN through a native modal, sends the authenticated API request, clears
+- Mobile: `apps/mobile/components/delete-account-screen.tsx` performs the
+  same preflight, consequence review and inline verification flow, requests
+  the same verified-email code, sends the authenticated API request, clears
   native app data and scanner cache, signs out, and explains that a
-  storage/network error may still have completed server-side. A pending-exit
+  storage/network error may still have completed server-side. The verification
+  screen keeps the code field anchored in a fixed keyboard-aware layout and
+  reserves safe space for the final destructive action. A pending-exit
   response leaves the authenticated recovery surface available: after sign-in
   it shows the expiry countdown, tells the participant to ask staff to record
   the exit, and offers cancellation or sign-out until a valid exit, H24
@@ -674,7 +676,7 @@ suite alone.
 ### Clients and copy
 
 - `apps/mobile/components/account-screen.tsx`,
-  `apps/mobile/components/account-removal-pin-modal.tsx`, and
+  `apps/mobile/components/delete-account-screen.tsx`, and
   `apps/mobile/lib/{self-service.ts,scanner-db.native.ts,scanner-db.web.ts,scanner-sync.ts,storage-usage.ts}`.
 - `apps/web/src/app/(app)/settings/profile/danger-zone.tsx`, admin
   `users/[id]/profile-header.tsx`, `lib/privacy-removal.ts`, and logistics

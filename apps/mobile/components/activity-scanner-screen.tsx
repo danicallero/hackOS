@@ -15,6 +15,7 @@ import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { subscribeToManualActivityScan } from "@/lib/manual-activity-scan";
 import { useMeContext } from "@/lib/me-context";
+import { safeBack } from "@/lib/navigation";
 import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import {
   enqueueLocalScan,
@@ -193,7 +194,7 @@ export function ActivityScannerScreen() {
         top={insets.top + 12}
         colorScheme="dark"
         tintColor="white"
-        onPress={() => router.back()}
+        onPress={() => safeBack(router, "/(tabs)/activities")}
       />
       <AdaptiveToolbarButton
         top={insets.top + 12}
