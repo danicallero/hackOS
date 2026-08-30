@@ -187,7 +187,7 @@ Nothing new. Round 1 already deleted everything in the codebase that was verifia
 ## 7. Database/API efficiency improvements
 
 - **FIXED** — `apps/api/src/modules/projects/service.ts:1508-1580` — `bulkAddRepoChallenge`. `enqueueRepoOnChallenge` now takes optional `challengeMarker`/`allocatePosition` params; the bulk caller computes `assertQueueChallengeScope` once and locks the group's bottom position once via `nextBottomPosition`, then hands out positions from an in-memory counter for the rest of the loop. The initial `FOR UPDATE` lock is held for the whole transaction, so serialization against a concurrent bulk-add on the same `queue_group` is unchanged — verified by inspection (each outcome, insert or revival, increments the active-entry count by exactly 1, which is what the original per-call `nextBottomPosition` recomputation also relied on). The 4 other `enqueueRepoOnChallenge` call sites (single add, `createRepoNative`'s per-challenge loop, etc.) omit the new params and get byte-identical behavior to before. `bulkRemoveRepoChallenge` was already correctly batched (single `FOR UPDATE`, single `compactQueueGroupPositions`) — no change needed there.
-  - **Caveat:** this sandbox's Docker daemon is non-functional, so the live Postgres-backed integration suite (`test/projects/bulk.test.ts`) could not be executed to confirm this at runtime — verified via typecheck + careful reasoning about the locking/serialization invariants only. Run `pnpm --filter @hackos/api test test/projects/bulk.test.ts` before merging.
+  - **Verified live:** Docker was initially unresponsive in this sandbox; after restarting Docker Desktop and running `pnpm infra:up`, `test/projects/bulk.test.ts` (4/4) and the full `apps/api` suite (987/987 tests, 100/100 files) pass against real Postgres/Valkey.
 - **FIXED** — `apps/api/src/modules/projects/service.ts:1624-1635` — `announceQueueOutcomes`. Broadcasts now run via `Promise.all`; `notifyChallengeQueueChanged` is now called once per distinct `challenge_id` (deduped with a `Set`) instead of once per outcome.
 - No other N+1s, redundant queries, or missing-batching patterns were found in this round's per-module read of `apps/api` beyond what Round 1 already fixed (`wallet-sync.ts`, `queue/service.ts` broadcasts).
 
@@ -215,7 +215,7 @@ Nothing new. Round 1 already deleted everything in the codebase that was verifia
 - Verify whether `eslint`/`eslint-config-next` in `apps/web` is actually invoked by `next build`; remove if not (§4/§6).
 
 **Phase 4 — database/API optimization:**
-- **DONE** — bulk-enroll N+1 in `projects/service.ts` (§7, item 1) fixed; needs the live integration suite run before merge (Docker was unavailable in the sandbox that made this change).
+- **DONE** — bulk-enroll N+1 in `projects/service.ts` (§7, item 1) fixed and verified live: `test/projects/bulk.test.ts` (4/4) and the full `apps/api` suite (987/987) pass.
 - **DONE** — `announceQueueOutcomes`'s sequential broadcast loop (§7, item 2) fixed.
 
 **Phase 5 — larger architectural technical debt:**
