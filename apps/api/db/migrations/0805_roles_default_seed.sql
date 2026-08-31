@@ -1,87 +1,142 @@
--- 0805_roles_default_seed.sql — DELTA(H8): a realistic default role set for a
--- typical event's staff structure, from planning through operations, plus
--- default roles for applications and sponsors. 0801 already seeded the 20
--- H8 platform templates (Access administrator, Application
--- builder/reviewer/decisions/supervisor, Judging administrator, Queue
--- operator, the station roles, Programme manager, Event settings manager,
--- etc.) plus the capability-less `Sponsor` auto-grant role — this migration
--- adds the roles that gap analysis of a real hackathon's org chart still
--- needs, without duplicating any of those:
+-- 0805_roles_default_seed.sql — DELTA(H8): the finalized default role
+-- catalogue for a fresh install, replacing the earlier six-role planning-to-
+-- operations draft entirely. Roles here are deliberately COMPOSABLE: an
+-- organizer normally holds `Organizer` plus whichever functional team
+-- role(s) match their job, rather than a single ladder rung. 0801 already
+-- always creates the capability-less `Sponsor` auto-grant role (see below);
+-- this migration owns everything else in the fresh-install default set.
 --
---   Event director     — planning/organization: owns event identity, venue,
---                         programme, and outward comms end-to-end (a level
---                         above the narrower Event settings manager /
---                         Programme manager / Communications manager, who
---                         each own one slice); as the top non-superadmin
---                         planning tier it's also the sole default owner of
---                         the applications decide/override actions (see the
---                         risk-tiering note below).
---   Judge coordinator   — judging floor coordination (judge:panel,
---                         projects:read, applications:review) without Judging
---                         administrator's queue:operate/queue:admin/
---                         judging:export authority.
---   Operations lead     — day-of ops decision-maker: logistics visibility,
---                         the automatic-presence policy, queue:admin, and
---                         day-of activity/meal scanning, distinct from
---                         Logistics supervisor's scan-console duties and from
---                         Queue operator's call/skip console.
---   Volunteer staff     — lightweight check-in-desk staffing: both entry
---                         scans (accredit + presence), no stats/logistics
---                         visibility — a genuinely smaller grant than
---                         Logistics supervisor or either single-scan station
---                         role.
---   Mentor              — applicant-facing granted role (applications
---                         .grants_role_id target) for accepted mentors:
---                         read-only project visibility, nothing to manage.
---   Participant         — applicant-facing granted role for accepted
---                         participants; carries no capabilities of its own,
---                         same pattern as the existing Sponsor role — it is
---                         a relationship/status marker, not a permission
---                         grant. Distinct from the Application
---                         reviewer/administrator roles, which belong to
---                         STAFF who run the review process, not applicants.
+--   Event Director        — every catalogue capability except the admin
+--                            wildcard (`*`, CLI-only, see system:superadmin)
+--                            and the deprecated `sponsor:portal` no-op. The
+--                            single top non-superadmin tier; sole default
+--                            owner of decide/override/broadcast-type actions
+--                            (applications:decide, applications:confirm-
+--                            override, notifications:send) that finalize an
+--                            outcome or send outward comms on someone else's
+--                            behalf.
+--   Organizer              — baseline held by every year-round organizer:
+--                            read/scan-type visibility across applications,
+--                            projects, and day-of logistics. Composes with
+--                            every functional team role below.
+--   Day Staff              — temporary/on-the-day staff: day-of scanning and
+--                            aggregate stats only, substantially less than
+--                            Organizer, and deliberately NO application
+--                            response/review access (unlike Organizer).
+--   Applications Team      — builds and reviews application forms.
+--   Applications Lead      — decides/accepts and edits responses; sits above
+--                            Applications Team. `applications:confirm-
+--                            override` stays Event-Director-only, not here.
+--   Operations Team        — day-of scan console plus the automatic-presence
+--                            policy, food-intolerance dictionary, and venue
+--                            details.
+--   Hacker Experience      — programme/schedule/TV plus sponsor challenge
+--                            management (challenges:manage, shared with
+--                            Sponsors Team below).
+--   Sponsors Team          — INTERNAL organizers who run the sponsor
+--                            relationship (sponsors:manage) and manage
+--                            challenges (challenges:manage) — distinct from
+--                            the EXTERNAL `Sponsor` role below, which is a
+--                            company representative, not an organizer.
+--   Judging Team           — runs the judging floor: project visibility,
+--                            queue operation, and the judging panel.
+--   Judging Coordinator    — queue administration and results export; sits
+--                            above Judging Team.
+--   Media / Comms          — schedule, public announcements, and TV control.
+--                            `notifications:send` stays Event-Director-only.
+--   Technical Team         — user administration and audit access for
+--                            hackOS developers. Explicitly NOT `*`,
+--                            permissions:manage, wallet:manage, or
+--                            event:manage.
+--   Mentor                 — applicant-facing granted role (applications
+--                            .grants_role_id target) for accepted mentors:
+--                            read-only project visibility (no relationship-
+--                            scoped path exists for mentors the way it does
+--                            for sponsors/judges, so this is a direct grant),
+--                            nothing to manage.
+--   Participant            — applicant-facing granted role for accepted
+--                            participants; carries no capabilities, same
+--                            pattern as `Sponsor` — a relationship/status
+--                            marker, not a permission grant.
 --
--- All six are is_protected = false and fully deletable/editable via the
--- normal roles API (H8 requirement: only system:superadmin is CLI-only).
--- Positions slot into the existing hierarchy: Event director just under
--- Platform administrator; Judge coordinator/Operations lead within the
--- operations band; Volunteer staff below the station roles; Mentor above
--- Sponsor; Participant at the very bottom, below Sponsor.
+-- The EXTERNAL `Sponsor` role (0801, unchanged by this migration) also
+-- carries zero capabilities: investigation of sponsors/access.ts and
+-- challenges/access.ts found that every one of "view my enterprise",
+-- "view/manage my challenges", and "view projects submitted to my
+-- challenges" already falls back to a relationship check (`ownsEnterprise`/
+-- `ownsChallenge`/the sponsor branch of `resolveRepositoryAccessScope`)
+-- ALONGSIDE the capability check, so granting `sponsors:manage`,
+-- `projects:read`, or `challenges:manage` to every sponsor rep would be
+-- broader than needed, not narrower. See docs/access-control-audit-plan.md
+-- for the full investigation, including the one real gap it found (queue
+-- call-next has no ownership fallback at all, by deliberate design — see the
+-- doc for why that stays a documented gap here rather than a route change).
 --
--- Risk-tiering principle applied to these capability sets: read/score/scan/
--- stats-type capabilities (applications:review, activity:scan,
--- logistics:stats, projects:read, users:read) are broad and non-destructive,
--- so they're granted to whichever role's domain they match. Decide/override/
--- broadcast-type capabilities (applications:decide,
--- applications:confirm-override, announcements:manage, notifications:send)
--- send outward communication or finalize outcomes on someone else's behalf —
--- those are concentrated at Event director, the single top non-superadmin
--- tier, rather than spread across every operational role that touches the
--- adjacent read-only capability. Concretely: Judge coordinator gets
--- applications:review (scoring is squarely judging-coordination) but not
--- applications:decide; Operations lead gets activity:scan (day-of scanning)
--- but no applications or comms capability at all — applications aren't its
--- domain, and a broadcast capability there would be excess authority for an
--- operational console role.
+-- All fifteen roles below are is_protected = false and fully deletable/
+-- editable via the normal roles API (H8 requirement: only system:superadmin
+-- is CLI-only). Positions: Event Director sits at the top of the non-
+-- superadmin hierarchy; Applications Lead/Judging Coordinator sit above
+-- their respective Team roles per the composability model; Organizer is a
+-- broadly-held low/mid baseline; Day Staff sits below Organizer (a smaller
+-- grant); Mentor/Participant keep their prior relative order above/below the
+-- unchanged Sponsor role (position 1000 from 0801). Since capabilities here
+-- are additive ALLOW-only grants across largely disjoint domains, exact
+-- relative position among the functional team roles is not load-bearing for
+-- composability — only the three explicitly-ordered pairs above matter.
 
 INSERT INTO roles (name, position, is_visible, is_protected) VALUES
-  ('Event director',   18700, true, false),
-  ('Judge coordinator', 16800, true, false),
-  ('Operations lead',  16700, true, false),
-  ('Volunteer staff',  15150, true, false),
-  ('Mentor',            1500, true, false),
-  ('Participant',        500, true, false);
+  ('Event Director',      18700, true, false),
+  ('Judging Coordinator',  8200, true, false),
+  ('Applications Lead',    8100, true, false),
+  ('Judging Team',         8000, true, false),
+  ('Applications Team',    7900, true, false),
+  ('Operations Team',      7800, true, false),
+  ('Hacker Experience',    7700, true, false),
+  ('Sponsors Team',        7600, true, false),
+  ('Media / Comms',        7500, true, false),
+  ('Technical Team',       7400, true, false),
+  ('Organizer',            5000, true, false),
+  ('Day Staff',            4000, true, false),
+  ('Mentor',               1500, true, false),
+  ('Participant',           500, true, false);
 
 INSERT INTO role_capabilities (role_id, capability, state)
 SELECT r.id, cap, 'allow'::permission_state
 FROM roles r
 JOIN (VALUES
-  ('Event director',    ARRAY['event:manage','venue:manage','schedule:manage','announcements:manage','users:read','applications:review','applications:decide','applications:confirm-override']),
-  ('Judge coordinator',  ARRAY['judge:panel','projects:read','applications:review']),
-  ('Operations lead',   ARRAY['queue:admin','logistics:stats','presence:manage','activity:scan']),
-  ('Volunteer staff',   ARRAY['accredit:scan','presence:scan']),
-  ('Mentor',            ARRAY['projects:read'])
-  -- Participant deliberately carries no capability rows (same as Sponsor):
-  -- it is a status marker for applications.grants_role_id, not a grant.
+  ('Event Director', ARRAY[
+    'users:read','users:write','permissions:manage','invites:manage',
+    'applications:manage','applications:review','applications:decide',
+    'applications:confirm-override','applications:edit-response',
+    'projects:read','projects:import','projects:edit',
+    'accredit:scan','presence:scan','activity:scan','logistics:stats','intolerances:manage',
+    'queue:operate','queue:admin','judge:panel','judging:export',
+    'sponsors:manage','challenges:manage',
+    'schedule:manage','announcements:manage','tv:control',
+    'event:manage','venue:manage','wallet:manage','presence:manage',
+    'notifications:send','audit:read','exports:run'
+  ]),
+  ('Organizer',           ARRAY['users:read','applications:review','projects:read','accredit:scan','presence:scan','activity:scan','logistics:stats']),
+  ('Day Staff',           ARRAY['accredit:scan','presence:scan','activity:scan','logistics:stats']),
+  ('Applications Team',   ARRAY['applications:manage','applications:review']),
+  ('Applications Lead',   ARRAY['applications:decide','applications:edit-response']),
+  ('Operations Team',     ARRAY['accredit:scan','presence:scan','activity:scan','logistics:stats','intolerances:manage','venue:manage','presence:manage']),
+  ('Hacker Experience',   ARRAY['projects:read','activity:scan','schedule:manage','tv:control','challenges:manage']),
+  ('Sponsors Team',       ARRAY['sponsors:manage','challenges:manage']),
+  ('Judging Team',        ARRAY['projects:read','projects:import','projects:edit','queue:operate','judge:panel']),
+  ('Judging Coordinator', ARRAY['queue:admin','judging:export']),
+  ('Media / Comms',       ARRAY['schedule:manage','announcements:manage','tv:control']),
+  ('Technical Team',      ARRAY['users:read','users:write','audit:read'])
+  -- Mentor, Participant deliberately have no ALLOW rows: Mentor's read-only
+  -- project visibility is granted directly (see rationale above) via a
+  -- separate INSERT below; Participant is a pure status marker, same as
+  -- the existing Sponsor role.
 ) AS defaults(role_name, capabilities) ON defaults.role_name = r.name
 CROSS JOIN LATERAL unnest(defaults.capabilities) AS cap;
+
+-- Mentor: read-only project visibility. Kept as its own statement (rather
+-- than folded into the VALUES list above) since it's a single-capability
+-- grant with distinct rationale (no relationship-scoped path exists for
+-- mentors, unlike sponsors/judges — see rationale above).
+INSERT INTO role_capabilities (role_id, capability, state)
+SELECT id, 'projects:read', 'allow'::permission_state FROM roles WHERE name = 'Mentor';
