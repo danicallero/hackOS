@@ -105,6 +105,83 @@ approved inverting that architecture. This is the current model:
   template catalogue (`templates.ts`) is reused only as a prefill/seed
   source for creating a role, not as a separate authorization concept.
 
+### DerivedRole retired: badge_category and getEffectiveRole (H8 full replacement)
+
+The fixed `DerivedRole` enum (`admin | judge | sponsor | staff | mentor |
+participant | unassigned`) that `identity/role.ts`'s `computeDerivedRole`
+used to compute for display purposes — badge printing, wallet passes, scanner
+UI, stats, the `/api/me`/`/api/users` `role` field — is retired. Its
+mentor/participant branch read `manual_attendee_roles` and, failing that,
+guessed from `applications.type` (a static column on the application FORM
+itself, set once at form creation, unrelated to whether that applicant was
+ever actually granted anything). That guess is now stale information: forms
+grant real roles via `application_grants_roles` at confirmation (see the
+"Migration" bullet above and `identity/routes/admin.routes.ts`'s
+`grants_role_ids`), so the applicant's actual `user_roles` membership is the
+authoritative answer.
+
+- **`roles.badge_category`** (`role_badge_category` enum: `admin | judge |
+  sponsor | staff | mentor | participant` — 0800): every role, seeded or
+  custom, carries this fixed bucket alongside its free-form `name`. Default
+  `staff` (a custom role an admin creates is treated as operational unless
+  set otherwise). 0801/0805 assign it per seeded role: `Platform
+  administrator` → `admin`, `Sponsor` → `sponsor`, `Mentor`/`Participant` →
+  their own names, every other seeded template/catalogue role → `staff`
+  (the column default). `system:superadmin` (CLI-only, see below) is also
+  `admin`, though moot for display since it's never `is_visible`.
+- **`user_effective_badge_category`** (0800 SQL view): bulk equivalent of
+  `getEffectiveRole` below — one row per user who holds at least one visible
+  role, carrying that role's `(name, badge_category)`. Read-model queries
+  across many users (scanner snapshot, logistics stats, announcements
+  audience) join this instead of re-deriving per-user.
+- **`getEffectiveRole(db, userId)`** (`identity/role.ts`): the user's
+  highest-position `is_visible` role as `{ name, badgeCategory }`, or `null`.
+  `getHighestVisibleRoleName` is now a thin wrapper over this.
+- **`getBadgeCategory(db, userId)`** (`identity/role.ts`, replacing
+  `computeDerivedRole`): admin/judge/sponsor/staff still resolve from the
+  same authoritative sources as before — the `ADMIN_ALL` capability and the
+  `enterprise_judges`/`sponsors` relationship tables — because neither an
+  enterprise judge nor a sponsor rep is guaranteed a `user_roles` row (no
+  `role_grant_rules` wires `enterprise_judges` the way `sponsor.
+  enterprise_linked` does for sponsors); a pure role-hierarchy lookup for
+  those four would misclassify every judge and any sponsor rep predating the
+  Sponsor auto-grant role. Below that, `getEffectiveRole`'s `badgeCategory`
+  decides — covering Mentor/Participant and any custom role an admin
+  explicitly categorizes as admin/judge/sponsor/staff without a matching
+  relationship row. No visible role and none of the above: `unassigned`,
+  same fallback as the old `DerivedRole`.
+- **`mentorOrParticipantType(db, userId)`** (`identity/role.ts`): kept (same
+  name/signature) for H59 schedule-audience and announcements-audience
+  resolution, which need exactly "is this user's effective role categorized
+  mentor or participant" — its body now reads `getEffectiveRole`'s
+  `badgeCategory` instead of `manual_attendee_roles`/`applications.type`.
+- **`manual_attendee_roles` disposition**: NOT dropped, but no longer
+  written to. It was never a guess like `applications.type` — H10's manual
+  attendee classification (`PUT /api/users/:id/attendee-role`) and
+  accreditation's walk-in classification (`checkInUser`'s `attendeeRole`)
+  were explicit, staff-driven actions, which is exactly what the seeded
+  Mentor/Participant roles (zero capabilities, pure status markers — see
+  "Default seeded role set" below) are for. Both call sites now grant the
+  real role via `identity/role.ts`'s new `assignAttendeeRole` helper
+  instead. Migration `0808` backfills every pre-cutover
+  `manual_attendee_roles` row onto the equivalent `user_roles` grant.
+  `hasEventAccess` still reads `manual_attendee_roles` too, defensively,
+  since the table isn't dropped; `removal.ts`'s existing cleanup of it is
+  unaffected. A pre-existing, unrelated gap noticed but out of scope here:
+  `removal.ts`'s anonymization flow doesn't strip an anonymized user's own
+  `user_roles` rows (only reassigns `assigned_by` on rows they granted to
+  others) — worth a follow-up, not introduced by this change.
+- **API/UI surface**: `POST /api/roles` and `PATCH /api/roles/:roleId`
+  accept/return `badgeCategory`; `role-editor.tsx`'s Display tab and the
+  create-role modal expose it as a select (`apps/web/src/app/(app)/
+  permissions/`). `/api/me` and `/api/users/:id`'s `role` field is now typed
+  as the badge-category union (values unchanged) rather than the retired
+  `DerivedRole`; `/api/me` also gained `visibleRoleName` (the caller's actual
+  highest-visible role name) for parity with `/api/users/:id`, which already
+  had it. Web's `DerivedRole` type is renamed `BadgeCategory` (same values).
+  Mobile (`apps/mobile/lib/scanner-types.ts`/`types.ts`) needed no changes:
+  the wire values are unchanged, only how the server computes them.
+
 ### `system:superadmin` is CLI-only, not just protected
 
 `is_protected` (0800) is informational going forward: every default role

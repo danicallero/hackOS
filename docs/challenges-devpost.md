@@ -175,7 +175,7 @@ as written; this doc records the deliberate supersession instead. Two gates
 apply to every self-service mutation, on top of `participants_can_create_projects`:
 
 - **Admitted-participant eligibility** (`isAdmittedParticipant` in
-  `service.ts`) — a thin wrapper around `computeDerivedRole` +
+  `service.ts`) — a thin wrapper around `getBadgeCategory` +
   `hasMobileAccess` (identity module), reused verbatim rather than
   reimplemented. An account that isn't an accepted/confirmed applicant (or an
   operational role) can't create, be invited into, or otherwise touch a

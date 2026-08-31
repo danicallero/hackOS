@@ -58,14 +58,17 @@ Delivery reaches one of three mutually exclusive audiences, resolved by
   (`docs/schedule-categories.md` doesn't cover this; see
   `apps/web/src/app/(app)/schedule/schedule-model.ts`'s `SCHEDULE_AUDIENCES`);
   `staff` is announcement-specific and means "holds at least one capability"
-  — the same definition `getEffectiveCapabilities`/`computeDerivedRole` use,
+  — the same definition `getEffectiveCapabilities`/`getBadgeCategory` use,
   read from the `user_effective_capabilities` view (H8's tri-state role
   resolution, `db/migrations/0800`) (unlike schedule, where staff always sees
   everything and is never a *stored* tag — here it has to be storable since
   it's a delivery target, not a visibility rule). `sponsor` implies
   `participant`, matching schedule's own rule. Resolved in one SQL query
-  against `manual_attendee_roles`, `application_responses` / `applications`,
-  `sponsors`, and that view — no per-user round-trips.
+  against `sponsors`, `user_effective_capabilities`, and
+  `user_effective_badge_category` (H8 full-replacement: a user's mentor/
+  participant attendee type is their effective role's `badge_category`, not
+  a guess from `manual_attendee_roles`/`applications.type` — see
+  `docs/access-control-audit-plan.md`) — no per-user round-trips.
 - **Specific recipients**: an explicit list in the `announcement_recipients`
   join table (`announcement_id, user_id`). Rejected together with `audiences`
   (choose one), and rejected together with a non-`none` `screen_placement` —
