@@ -30,10 +30,23 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { type MessageKey, type Translate, useLocale } from "@/lib/i18n";
-import type { PermissionState, RoleSeedDiff, RoleSummary, UserListItem } from "@/lib/types";
+import type {
+  BadgeCategory,
+  PermissionState,
+  RoleSeedDiff,
+  RoleSummary,
+  UserListItem,
+} from "@/lib/types";
 import { useUrlTab } from "@/lib/url-tab";
 import { cn } from "@/lib/utils";
 import {
@@ -46,10 +59,33 @@ import {
 const SUPERADMIN_NAME = "system:superadmin";
 const STATE_ORDER: PermissionState[] = ["deny", "inherit", "allow"];
 
+export const BADGE_CATEGORIES: Exclude<BadgeCategory, "unassigned">[] = [
+  "admin",
+  "judge",
+  "sponsor",
+  "staff",
+  "mentor",
+  "participant",
+];
+
+export function badgeCategoryLabel(
+  t: Translate,
+): Record<Exclude<BadgeCategory, "unassigned">, string> {
+  return {
+    admin: t("roleAdmin"),
+    judge: t("roleJudge"),
+    sponsor: t("roleSponsor"),
+    staff: t("roleStaff"),
+    mentor: t("roleMentor"),
+    participant: t("roleParticipant"),
+  };
+}
+
 const detailsSchema = (t: Translate) =>
   z.object({
     name: z.string().min(1, t("required")).max(200),
     isVisible: z.boolean(),
+    badgeCategory: z.enum(["admin", "judge", "sponsor", "staff", "mentor", "participant"]),
   });
 type DetailsValues = z.infer<ReturnType<typeof detailsSchema>>;
 
@@ -81,7 +117,7 @@ export function RoleEditor({
 }: {
   role: RoleSummary;
   users: Map<number, UserListItem>;
-  onSaveDetails: (values: { name: string; isVisible: boolean }) => Promise<void>;
+  onSaveDetails: (values: DetailsValues) => Promise<void>;
   onSaveCapabilities: (
     capabilities: { capability: string; state: PermissionState }[],
   ) => Promise<void>;
@@ -105,11 +141,15 @@ export function RoleEditor({
   const schema = detailsSchema(t);
   const form = useForm<DetailsValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: role.name, isVisible: role.isVisible },
+    defaultValues: {
+      name: role.name,
+      isVisible: role.isVisible,
+      badgeCategory: role.badgeCategory,
+    },
   });
   const { reset } = form;
   useEffect(() => {
-    reset({ name: role.name, isVisible: role.isVisible });
+    reset({ name: role.name, isVisible: role.isVisible, badgeCategory: role.badgeCategory });
   }, [role, reset]);
 
   const [caps, setCaps] = useState<CapabilityStateMap>(() => toStateMap(role));
@@ -248,6 +288,34 @@ export function RoleEditor({
                           disabled={isSuperadmin}
                         />
                       </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="badgeCategory"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("badgeCategoryLabel")}</FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        disabled={isSuperadmin}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {BADGE_CATEGORIES.map((category) => (
+                            <SelectItem key={category} value={category}>
+                              {badgeCategoryLabel(t)[category]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />

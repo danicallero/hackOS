@@ -35,7 +35,7 @@ import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
 import type { Tone } from "@/lib/tones";
-import type { DerivedRole, UserList, UserListItem } from "@/lib/types";
+import type { BadgeCategory, UserList, UserListItem } from "@/lib/types";
 import { initials } from "./[id]/shared";
 import { ActiveInvitationsModal } from "./active-invitations-modal";
 import { InviteUserDialog } from "./invite-dialog";
@@ -48,7 +48,7 @@ function fullName(u: UserListItem): string {
 
 const dateFmt = shortDateFmt;
 
-function roleLabel(t: Translate): Record<DerivedRole, string> {
+function roleLabel(t: Translate): Record<BadgeCategory, string> {
   return {
     admin: t("roleAdmin"),
     judge: t("roleJudge"),
@@ -62,7 +62,7 @@ function roleLabel(t: Translate): Record<DerivedRole, string> {
 
 /** Distinct tone per role so Admin/Judge/Sponsor/Staff never share a color.
  * Kept in sync with the profile header (users/[id]/page.tsx). */
-const ROLE_TONE: Record<DerivedRole, Tone> = {
+const ROLE_TONE: Record<BadgeCategory, Tone> = {
   admin: "brand",
   judge: "info",
   sponsor: "warning",

@@ -48,7 +48,7 @@ import type {
   UserListItem,
 } from "@/lib/types";
 import { permissionTemplateName } from "./helpers";
-import { RoleEditor } from "./role-editor";
+import { BADGE_CATEGORIES, badgeCategoryLabel, RoleEditor } from "./role-editor";
 import { RoleList } from "./role-list";
 
 // H8: admins manage a Discord-style hierarchical role model on a single
@@ -67,6 +67,7 @@ const createSchema = (t: Translate) =>
       .min(1, t("required"))
       .refine((v) => Number.isInteger(Number(v)), t("required")),
     isVisible: z.boolean(),
+    badgeCategory: z.enum(["admin", "judge", "sponsor", "staff", "mentor", "participant"]),
     templateKey: z.string(),
   });
 
@@ -112,7 +113,13 @@ export default function PermissionsPage() {
   const schema = createSchema(t);
   const form = useForm<CreateValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", position: "0", isVisible: true, templateKey: "" },
+    defaultValues: {
+      name: "",
+      position: "0",
+      isVisible: true,
+      badgeCategory: "staff",
+      templateKey: "",
+    },
   });
 
   const load = useCallback(async () => {
@@ -190,11 +197,18 @@ export default function PermissionsPage() {
         name: values.name,
         position: Number(values.position),
         isVisible: values.isVisible,
+        badgeCategory: values.badgeCategory,
         templateKey: template?.key,
       });
       toast.success(t("roleCreated"));
       setCreateOpen(false);
-      form.reset({ name: "", position: "0", isVisible: true, templateKey: "" });
+      form.reset({
+        name: "",
+        position: "0",
+        isVisible: true,
+        badgeCategory: "staff",
+        templateKey: "",
+      });
       setRoles((prev) => [...prev, role]);
       selectRole(role.id);
     } catch (err) {
@@ -216,7 +230,10 @@ export default function PermissionsPage() {
     }
   }
 
-  async function onSaveDetails(roleId: number, values: { name: string; isVisible: boolean }) {
+  async function onSaveDetails(
+    roleId: number,
+    values: { name: string; isVisible: boolean; badgeCategory: RoleSummary["badgeCategory"] },
+  ) {
     try {
       const r = await api.patch<RoleDetail>(`/api/roles/${roleId}`, values);
       applyRole(r);
@@ -441,6 +458,30 @@ export default function PermissionsPage() {
                     <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                   </FormControl>
                   <FormLabel className="font-normal">{t("isVisibleLabel")}</FormLabel>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="badgeCategory"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("badgeCategoryLabel")}</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {BADGE_CATEGORIES.map((category) => (
+                        <SelectItem key={category} value={category}>
+                          {badgeCategoryLabel(t)[category]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
                 </FormItem>
               )}
             />

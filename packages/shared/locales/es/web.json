@@ -2631,6 +2631,7 @@
   "roleCreated": "Rol creado.",
   "positionLabel": "Posición",
   "isVisibleLabel": "Mostrar como rol público",
+  "badgeCategoryLabel": "Categoría de acreditación",
   "roleNotFoundTitle": "Rol no encontrado",
   "roleNotFoundDesc": "Este rol no existe o fue eliminado.",
   "backToRoles": "Roles",

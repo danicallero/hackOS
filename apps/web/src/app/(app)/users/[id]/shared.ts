@@ -4,10 +4,10 @@
 
 import { LOCALE_CODES, type MessageKey } from "@/lib/i18n";
 import type { Tone } from "@/lib/tones";
-import type { DerivedRole, UserDetail } from "@/lib/types";
+import type { BadgeCategory, UserDetail } from "@/lib/types";
 
 /** Illustrative role → tone (never used for gating, only for the header pill). */
-export const ROLE_TONE: Record<DerivedRole, Tone> = {
+export const ROLE_TONE: Record<BadgeCategory, Tone> = {
   admin: "brand",
   judge: "info",
   sponsor: "warning",
@@ -17,7 +17,7 @@ export const ROLE_TONE: Record<DerivedRole, Tone> = {
   unassigned: "neutral",
 };
 
-export const ROLE_COPY: Record<DerivedRole, MessageKey> = {
+export const ROLE_COPY: Record<BadgeCategory, MessageKey> = {
   admin: "roleAdmin",
   judge: "roleJudge",
   sponsor: "roleSponsor",
