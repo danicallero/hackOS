@@ -275,11 +275,17 @@ describe("H8 admin-hierarchy mutation authority", () => {
 describe("H8 roles CRUD and assignment API", () => {
   it("creates, edits capabilities, reorders, and deletes a role with audit rows", async () => {
     const a = await getApp();
-    const actor = await manager();
+    // Also holds ACCREDIT_SCAN itself: the H8 capability-possession guard
+    // requires an actor to already possess a capability before granting it
+    // to (or assigning a role that grants it to) someone else.
+    const actor = await createUserWithCapabilities([
+      CAPABILITIES.PERMISSIONS_MANAGE,
+      CAPABILITIES.ACCREDIT_SCAN,
+    ]);
     const { pool } = await import("../../src/db/pool.js");
     // Give this manager a very high position so it can manage the roles it creates.
     await pool.query(
-      `UPDATE roles SET position = 1000000 WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+      `UPDATE roles SET position = 1000000 WHERE id IN (SELECT role_id FROM user_roles WHERE user_id = $1)`,
       [actor],
     );
 
@@ -685,6 +691,162 @@ describe("H8 role soft-delete and restore", () => {
   });
 });
 
+describe("H8 capability-possession authority (independent of the position guard)", () => {
+  // A high-position PERMISSIONS_MANAGE holder, optionally with extra
+  // capabilities — isolates the capability-possession guard from the
+  // separate admin-hierarchy position check (both must pass independently).
+  async function highPositionManager(extraCapabilities: string[] = []): Promise<number> {
+    const actor = await createUserWithCapabilities([
+      CAPABILITIES.PERMISSIONS_MANAGE,
+      ...extraCapabilities,
+    ]);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE roles SET position = 1000000 WHERE id IN (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+      [actor],
+    );
+    return actor;
+  }
+
+  it("cannot set a role's capability to ALLOW unless the actor possesses it themselves", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const actor = await highPositionManager();
+    const role = await createRole([], { name: "possession-allow-target" });
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [role]);
+
+    const res = await a.inject({
+      method: "PUT",
+      url: `/api/roles/${role}/capabilities`,
+      headers: asUser(actor),
+      payload: { capabilities: [{ capability: CAPABILITIES.ACCREDIT_SCAN, state: "allow" }] },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.message).toMatch(/possess/i);
+  });
+
+  it("cannot set a role's capability to DENY unless the actor possesses it themselves", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const actor = await highPositionManager();
+    const role = await createRole([], { name: "possession-deny-target" });
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [role]);
+
+    const res = await a.inject({
+      method: "PUT",
+      url: `/api/roles/${role}/capabilities`,
+      headers: asUser(actor),
+      payload: { capabilities: [{ capability: CAPABILITIES.ACCREDIT_SCAN, state: "deny" }] },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.message).toMatch(/possess/i);
+  });
+
+  it("can set a role's capability to INHERIT regardless of possession", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const actor = await highPositionManager();
+    const role = await createRole([CAPABILITIES.ACCREDIT_SCAN], {
+      name: "possession-inherit-target",
+    });
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [role]);
+
+    const res = await a.inject({
+      method: "PUT",
+      url: `/api/roles/${role}/capabilities`,
+      headers: asUser(actor),
+      payload: { capabilities: [{ capability: CAPABILITIES.ACCREDIT_SCAN, state: "inherit" }] },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("can set ALLOW/DENY once the actor already possesses that capability", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const actor = await highPositionManager([CAPABILITIES.ACCREDIT_SCAN]);
+    const role = await createRole([], { name: "possession-allow-ok-target" });
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [role]);
+
+    const res = await a.inject({
+      method: "PUT",
+      url: `/api/roles/${role}/capabilities`,
+      headers: asUser(actor),
+      payload: { capabilities: [{ capability: CAPABILITIES.ACCREDIT_SCAN, state: "allow" }] },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("cannot assign a role to a user if it has an explicit-ALLOW capability the actor doesn't possess", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const actor = await highPositionManager();
+    const role = await createRole([CAPABILITIES.ACCREDIT_SCAN], {
+      name: "possession-assign-blocked-target",
+    });
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [role]);
+    const target = await createUser();
+
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/roles/${role}/users/${target}`,
+      headers: asUser(actor),
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.message).toMatch(/possess/i);
+  });
+
+  it("can assign a role whose explicit ALLOWs are a subset of the actor's own capabilities", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const actor = await highPositionManager([CAPABILITIES.ACCREDIT_SCAN]);
+    const role = await createRole([CAPABILITIES.ACCREDIT_SCAN], {
+      name: "possession-assign-ok-target",
+    });
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [role]);
+    const target = await createUser();
+
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/roles/${role}/users/${target}`,
+      headers: asUser(actor),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().memberIds).toContain(target);
+  });
+
+  it("a wildcard ('*') holder is exempt from the possession guard entirely", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const actor = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    await pool.query(
+      `UPDATE roles SET position = 1000000 WHERE id IN (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+      [actor],
+    );
+
+    const capRole = await createRole([], { name: "possession-wildcard-caps-target" });
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [capRole]);
+    const capsRes = await a.inject({
+      method: "PUT",
+      url: `/api/roles/${capRole}/capabilities`,
+      headers: asUser(actor),
+      payload: { capabilities: [{ capability: CAPABILITIES.ACCREDIT_SCAN, state: "allow" }] },
+    });
+    expect(capsRes.statusCode).toBe(200);
+
+    const assignRoleTarget = await createRole([CAPABILITIES.ACCREDIT_SCAN], {
+      name: "possession-wildcard-assign-target",
+    });
+    await pool.query(`UPDATE roles SET position = 11 WHERE id = $1`, [assignRoleTarget]);
+    const target = await createUser();
+    const assignRes = await a.inject({
+      method: "POST",
+      url: `/api/roles/${assignRoleTarget}/users/${target}`,
+      headers: asUser(actor),
+    });
+    expect(assignRes.statusCode).toBe(200);
+  });
+});
+
 describe("H8 default seeded role set (0805)", () => {
   // roles.test.ts's beforeEach truncates every table (test/helpers.ts's
   // truncateAll), which wipes migration-seeded rows along with everything
@@ -755,6 +917,52 @@ describe("H8 default seeded role set (0805)", () => {
     }
   });
 
+  it("seeds zero legacy H8 template roles on a fresh install (0801 only ports pre-existing permission_groups data)", async () => {
+    const pool = await seededRoles();
+    const legacyTemplateRoleNames = [
+      "Platform administrator",
+      "Access administrator",
+      "Application supervisor",
+      "Application decisions",
+      "Application reviewer",
+      "Application builder",
+      "Judging administrator",
+      "Queue operator",
+      "Project operator",
+      "Logistics supervisor",
+      "Accreditation station",
+      "Presence station",
+      "Activity and meal station",
+      "Programme manager",
+      "Event settings manager",
+      "TV operator",
+      "Sponsor administrator",
+      "Communications manager",
+      "Data auditor",
+      "Content library manager",
+    ];
+    const { rows } = await pool.query(`SELECT name FROM roles WHERE name = ANY($1::text[])`, [
+      legacyTemplateRoleNames,
+    ]);
+    expect(rows).toHaveLength(0);
+
+    // Total default set on a fresh install: 0805's six staff/applicant roles
+    // + 0801's always-created Sponsor role. system:superadmin is CLI-only,
+    // never created by migrations.
+    const { rows: allRoles } = await pool.query(`SELECT name FROM roles ORDER BY name`);
+    expect(allRoles.map((r: { name: string }) => r.name).sort()).toEqual(
+      [
+        "Event director",
+        "Judge coordinator",
+        "Mentor",
+        "Operations lead",
+        "Participant",
+        "Sponsor",
+        "Volunteer staff",
+      ].sort(),
+    );
+  });
+
   it("keeps the existing Sponsor auto-grant role capability-less and positioned below the staff tier", async () => {
     const pool = await seededRoles();
     const { rows } = await pool.query(`SELECT id, position FROM roles WHERE name = 'Sponsor'`);
@@ -765,7 +973,7 @@ describe("H8 default seeded role set (0805)", () => {
     );
     expect(capRows).toHaveLength(0);
     const { rows: staffRoleRows } = await pool.query(
-      `SELECT position FROM roles WHERE name = 'Queue operator'`,
+      `SELECT position FROM roles WHERE name = 'Volunteer staff'`,
     );
     expect(rows[0].position).toBeLessThan(staffRoleRows[0].position);
   });

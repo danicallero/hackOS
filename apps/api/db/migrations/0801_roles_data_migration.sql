@@ -1,44 +1,67 @@
--- 0801_roles_data_migration.sql — DELTA(H8): cutover data copy. Creates one
--- role per H8 platform template (src/modules/identity/templates.ts) with the
--- template's exact capability set as ALLOW, migrates every
+-- 0801_roles_data_migration.sql — DELTA(H8): cutover data copy. This is a
+-- true DATA migration, not a seed: it only carries over template-origin
+-- roles for H8 platform templates (src/modules/identity/templates.ts) that
+-- some pre-existing `permission_groups` row actually instantiated
+-- (`template_key` set — 0105) in whatever installation this migration runs
+-- against. A fresh install has zero `permission_groups` rows, so this step
+-- creates zero roles there; 0805 alone provides the fresh-install default
+-- set. An install upgrading from the old capability-group model gets a role
+-- for exactly the templates it actually provisioned, migrates every
 -- permission_group_members row onto the equivalent role(s), creates a
 -- bespoke role for any custom/ad-hoc group that isn't a clean template
 -- instance (carrying over its exact effective — recursively-expanded —
 -- capability set as ALLOW so no user loses access), and adds the Sponsor
 -- auto-grant role + its role_grant_rules row (replaces the sponsor
 -- auto-link-grants-access behavior, wired in application code via
--- lib/role-grants.ts).
+-- lib/role-grants.ts) — Sponsor is always created, template-usage or not,
+-- since it isn't a template port at all but a new mechanism.
 --
 -- Every migrated capability lands as ALLOW, never DENY — the old model was
 -- purely additive (union of group capabilities), so regardless of the
 -- position this migration assigns a role, no combination of migrated roles
 -- can deny a capability a user previously held (DENY did not exist).
 
--- ── 1. the 20 platform templates become named, ALLOW-only roles ────────────
+-- ── 1. the 20 platform templates become named, ALLOW-only roles, but only
+--        the ones some pre-existing permission_groups row actually used ────
 -- Positions are spaced widely (500-1000 apart) so future roles can be
 -- inserted between any two without a bulk renumber.
 
-INSERT INTO roles (name, position, is_visible, is_protected) VALUES
-  ('Platform administrator',    19000, true, true),
-  ('Access administrator',      18000, true, false),
-  ('Application supervisor',    17500, true, false),
-  ('Application decisions',     17400, true, false),
-  ('Application reviewer',      17300, true, false),
-  ('Application builder',       17200, true, false),
-  ('Judging administrator',     17000, true, false),
-  ('Queue operator',            16500, true, false),
-  ('Project operator',          16000, true, false),
-  ('Logistics supervisor',      15500, true, false),
-  ('Accreditation station',     15400, true, false),
-  ('Presence station',          15300, true, false),
-  ('Activity and meal station', 15200, true, false),
-  ('Programme manager',         15000, true, false),
-  ('Event settings manager',    14500, true, false),
-  ('TV operator',               14000, true, false),
-  ('Sponsor administrator',     13500, true, false),
-  ('Communications manager',    13000, true, false),
-  ('Data auditor',              12500, true, false),
-  ('Content library manager',   12000, true, false);
+CREATE TEMP TABLE _h8_all_templates (
+  role_name text PRIMARY KEY,
+  template_key text UNIQUE NOT NULL,
+  position integer NOT NULL,
+  is_visible boolean NOT NULL,
+  is_protected boolean NOT NULL
+) ON COMMIT DROP;
+
+INSERT INTO _h8_all_templates (role_name, template_key, position, is_visible, is_protected) VALUES
+  ('Platform administrator',    'platform-administrator',    19000, true, true),
+  ('Access administrator',      'access-administrator',      18000, true, false),
+  ('Application supervisor',    'application-supervisor',    17500, true, false),
+  ('Application decisions',     'application-decisions',     17400, true, false),
+  ('Application reviewer',      'application-reviewer',      17300, true, false),
+  ('Application builder',       'application-builder',       17200, true, false),
+  ('Judging administrator',     'judging-administrator',     17000, true, false),
+  ('Queue operator',            'queue-operator',             16500, true, false),
+  ('Project operator',          'project-operator',           16000, true, false),
+  ('Logistics supervisor',      'logistics-supervisor',       15500, true, false),
+  ('Accreditation station',     'accreditation-station',      15400, true, false),
+  ('Presence station',          'presence-station',           15300, true, false),
+  ('Activity and meal station', 'activity-and-meal-station',  15200, true, false),
+  ('Programme manager',         'programme-manager',          15000, true, false),
+  ('Event settings manager',    'event-settings-manager',     14500, true, false),
+  ('TV operator',               'tv-operator',                14000, true, false),
+  ('Sponsor administrator',     'sponsor-administrator',      13500, true, false),
+  ('Communications manager',    'communications-manager',     13000, true, false),
+  ('Data auditor',              'data-auditor',                12500, true, false),
+  ('Content library manager',   'content-library-manager',    12000, true, false);
+
+INSERT INTO roles (name, position, is_visible, is_protected)
+SELECT t.role_name, t.position, t.is_visible, t.is_protected
+FROM _h8_all_templates t
+WHERE EXISTS (
+  SELECT 1 FROM permission_groups pg WHERE pg.template_key = t.template_key
+);
 
 INSERT INTO role_capabilities (role_id, capability, state)
 SELECT r.id, cap, 'allow'::permission_state
@@ -69,28 +92,15 @@ CROSS JOIN LATERAL unnest(templates.capabilities) AS cap;
 
 -- template_key -> canonical role name, used both to migrate memberships and
 -- (further down) to skip these groups when hunting for custom/ad-hoc ones.
+-- Scoped to templates that actually got a role in step 1 above (i.e. some
+-- permission_groups row used them) — a template_key with no matching role
+-- would just find nothing to migrate in step 2, but leaving it out keeps
+-- step 3's "clean template-origin vs custom" check exact.
 CREATE TEMP TABLE _h8_template_role_map (template_key text PRIMARY KEY, role_name text) ON COMMIT DROP;
-INSERT INTO _h8_template_role_map (template_key, role_name) VALUES
-  ('platform-administrator',    'Platform administrator'),
-  ('access-administrator',      'Access administrator'),
-  ('application-builder',       'Application builder'),
-  ('application-reviewer',      'Application reviewer'),
-  ('application-decisions',     'Application decisions'),
-  ('application-supervisor',    'Application supervisor'),
-  ('project-operator',          'Project operator'),
-  ('queue-operator',            'Queue operator'),
-  ('judging-administrator',     'Judging administrator'),
-  ('accreditation-station',     'Accreditation station'),
-  ('presence-station',          'Presence station'),
-  ('activity-and-meal-station', 'Activity and meal station'),
-  ('logistics-supervisor',      'Logistics supervisor'),
-  ('programme-manager',         'Programme manager'),
-  ('event-settings-manager',    'Event settings manager'),
-  ('tv-operator',               'TV operator'),
-  ('sponsor-administrator',     'Sponsor administrator'),
-  ('communications-manager',    'Communications manager'),
-  ('data-auditor',              'Data auditor'),
-  ('content-library-manager',   'Content library manager');
+INSERT INTO _h8_template_role_map (template_key, role_name)
+SELECT t.template_key, t.role_name
+FROM _h8_all_templates t
+JOIN roles r ON r.name = t.role_name;
 
 -- ── 2. clean template-origin groups: map members onto the matching role ────
 

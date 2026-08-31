@@ -51,16 +51,38 @@ approved inverting that architecture. This is the current model:
   (`lockRoleGraph`, mirroring the old `lockPermissionGraph`) serializes
   mutations to `roles.position`/`role_capabilities`; `assertActiveWildcardHolder`
   keeps at least one active user resolving `*` to ALLOW after any mutation.
+- **Capability-possession authority** (`role-authority.ts`'s
+  `requireCapabilityPossessionForStateChange` and
+  `requireCapabilityPossessionForAssignment`): a second, independent guard on
+  the same routes, gating capability *content* rather than role *position* —
+  both checks must pass, neither substitutes for the other. An actor who
+  doesn't resolve `*` (ADMIN_ALL) themselves can only set a role's capability
+  to ALLOW or DENY for a capability they currently possess themselves
+  (`PUT /api/roles/:roleId/capabilities`); setting to INHERIT is exempt,
+  since it removes an override rather than asserting one. Assigning a role to
+  a user (`POST /api/roles/:roleId/users/:userId`) requires the actor to
+  already possess every capability the role's own `role_capabilities` rows
+  explicitly ALLOW (ignoring what the assignee's other roles would
+  contribute) — a pure-INHERIT scaffold role trivially passes. Holding
+  `permissions:manage` alone does not exempt an actor from this guard; only
+  an actual `*` resolution does. Unassigning a role needs no such guard —
+  revoking membership grants nothing.
 - **Migration** (`db/migrations/0800`–`0805`; see "`system:superadmin` is
   CLI-only", "Soft-delete and restore", and "Default seeded role set" below
-  for 0804/0805): each of the 20 H8 platform
-  templates (`templates.ts`) became a named role with its template's
-  capabilities as ALLOW; every `permission_group_members` row was mapped
-  onto the matching role (by `template_key`) or a bespoke per-group role
-  (for a custom/ad-hoc group, carrying its exact effective capability set);
-  the wildcard landed on "Platform administrator"; a "Sponsor" role plus a
+  for 0804/0805): 0801 is a true DATA migration, not a seed — of the 20 H8
+  platform templates (`templates.ts`), a template becomes a named role with
+  its capabilities as ALLOW only if some pre-existing `permission_groups` row
+  actually instantiated it (`template_key` set, from 0105); every
+  `permission_group_members` row for such a group is mapped onto the
+  matching role (by `template_key`), and any custom/ad-hoc group gets a
+  bespoke role carrying its exact effective capability set. A fresh install
+  has zero `permission_groups` rows, so 0801 creates zero template-derived
+  roles there — 0805 alone supplies the fresh-install default set (see
+  below), and there is no role holding `*` until a CLI script provisions
+  `system:superadmin`. 0801 also always creates a "Sponsor" role (regardless
+  of any pre-existing data, since it isn't a template port) plus a
   `sponsor.enterprise_linked`/`sponsor.enterprise_unlinked` `role_grant_rules`
-  pair replaced the sponsor auto-link-grants-access behavior
+  pair, replacing the sponsor auto-link-grants-access behavior
   (`sponsors/service.ts`'s `addEnterpriseMember`/`removeEnterpriseMember`
   and `identity/routes/invites.ts`'s sponsor-invite acceptance branch, both
   routed through the shared `applyRoleGrantRule` helper in
@@ -85,9 +107,8 @@ approved inverting that architecture. This is the current model:
 ### `system:superadmin` is CLI-only, not just protected
 
 `is_protected` (0800) is informational going forward: every default role
-seeded by 0801/0805, Platform administrator included, is a fully mutable,
-deletable/restorable role like any other — the earlier "protected roles can't
-be deleted" rule is gone. The one role that stays fully locked out of the
+seeded by 0801/0805 is a fully mutable, deletable/restorable role like any
+other — the earlier "protected roles can't be deleted" rule is gone. The one role that stays fully locked out of the
 HTTP API is `system:superadmin`, identified by **name**
 (`role-authority.ts`'s `assertNotSuperadminRole`/`SUPERADMIN_ROLE_NAME`), not
 by `is_protected` — `is_protected` may end up describing other default roles
@@ -142,23 +163,46 @@ web permissions page's trash panel (`apps/web/src/app/(app)/permissions/page.tsx
 
 ### Default seeded role set (0805)
 
-0801 seeded one role per H8 platform template. 0805 adds the roles a real
-hackathon's org chart still needs, from planning through operations, without
-duplicating any 0801 role: **Event director** (planning — event identity,
-venue, programme, and outward comms as one role, above the narrower Event
-settings manager/Programme manager/Communications manager); **Judge
-coordinator** (judging-floor coordination, narrower than Judging
-administrator); **Operations lead** (day-of decision-maker over logistics
-visibility, the automatic-presence policy, and queue administration, distinct
-from Logistics supervisor's scan-console duties); **Volunteer staff**
-(check-in-desk staffing: both entry scans, no stats visibility); **Mentor**
-and **Participant** (applicant-facing roles for `applications.grants_role_id`
-— read-only project visibility and a bare status marker respectively,
-distinct from the Application reviewer/administrator roles staff use to run
-review). All six are `is_protected = false` and fully deletable/editable. The
-existing `Sponsor` auto-grant role (0801) is unchanged: still capability-less,
-still wired via `role_grant_rules` on enterprise link/unlink, positioned
-below every staff-tier role.
+A fresh install's only source of default roles is 0805 (0801 ports over
+pre-existing template-origin `permission_groups` data on an upgrade, but
+creates nothing on a fresh database — see above) plus 0801's always-created
+`Sponsor` role and the CLI-only `system:superadmin`. Earlier drafts of this
+migration mechanically ported all 20 legacy platform templates as roles
+unconditionally, which meant a fresh install ended up with roughly 25 roles
+nobody asked for; 0805 is now the deliberate, curated default set instead — a
+real hackathon's org chart from planning through operations, kept to four
+staff tiers plus the three applicant/relationship markers:
+
+- **Event director** — planning: event identity, venue, programme, and
+  outward comms as one role, above any narrower slice-owning role a real
+  install may have migrated in from 0801.
+- **Judge coordinator** — judging-floor coordination (`judge:panel`,
+  `projects:read`) — deliberately narrower than a full judging-admin
+  capability set (no `queue:operate`/`queue:admin`/`judging:export`).
+- **Operations lead** — day-of decision-maker: logistics visibility
+  (`logistics:stats`), the automatic-presence policy (`presence:manage`),
+  and queue administration (`queue:admin`) — a genuinely higher tier than
+  scan-console staffing, not a near-duplicate of it.
+- **Volunteer staff** — lightweight check-in-desk staffing: both entry scans
+  (`accredit:scan`, `presence:scan`), no stats/admin visibility. Kept
+  separate from Operations lead rather than merged: the two capability sets
+  don't overlap at all (admin vs. scan-only), so collapsing them would either
+  over-grant volunteers or under-grant the ops lead.
+- **Mentor** — applicant-facing granted role (`applications.grants_role_id`
+  target) for accepted mentors: read-only project visibility, nothing to
+  manage.
+- **Participant** — applicant-facing granted role for accepted participants;
+  carries no capabilities of its own, same pattern as `Sponsor` — a
+  relationship/status marker, not a permission grant.
+
+All six are `is_protected = false` and fully deletable/editable via the
+normal roles API. The existing `Sponsor` auto-grant role (0801) is unchanged:
+still capability-less, still wired via `role_grant_rules` on enterprise
+link/unlink, positioned below every staff-tier role. `Event director`,
+`Judge coordinator`, `Mentor`, and `Participant` are referenced by name only
+in tests/docs — nothing in `role_grant_rules` or seed data targets them by
+name the way `Sponsor` is targeted, so they remain safe to rename later
+without a data migration.
 
 ## Goal and non-goals (capability-group era — superseded, see above)
 
