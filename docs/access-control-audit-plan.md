@@ -168,65 +168,144 @@ pre-existing template-origin `permission_groups` data on an upgrade, but
 creates nothing on a fresh database — see above) plus 0801's always-created
 `Sponsor` role and the CLI-only `system:superadmin`. Earlier drafts of this
 migration mechanically ported all 20 legacy platform templates as roles
-unconditionally, which meant a fresh install ended up with roughly 25 roles
-nobody asked for; 0805 is now the deliberate, curated default set instead — a
-real hackathon's org chart from planning through operations, kept to four
-staff tiers plus the three applicant/relationship markers:
+unconditionally (a fresh install ended up with roughly 25 roles nobody
+asked for), then narrowed to a six-role planning-to-operations ladder. 0805
+now seeds the repo owner's finalized **composable catalogue**: fifteen
+default roles (plus the unchanged `Sponsor` and the CLI-only
+`system:superadmin`) built so an organizer normally holds `Organizer` plus
+whichever functional team role(s) their job actually needs, rather than a
+single rung on a ladder.
 
-- **Event director** — planning: event identity, venue, programme, and
-  outward comms as one role, above any narrower slice-owning role a real
-  install may have migrated in from 0801. As the top non-superadmin tier
-  it's also the default seed's sole owner of the applications
-  decide/override actions: `applications:review`, `applications:decide`,
-  and `applications:confirm-override`.
-- **Judge coordinator** — judging-floor coordination (`judge:panel`,
-  `projects:read`, `applications:review`) — deliberately narrower than a
-  full judging-admin capability set (no `queue:operate`/`queue:admin`/
-  `judging:export`), and stops short of `applications:decide` (see
-  risk-tiering below).
-- **Operations lead** — day-of decision-maker: logistics visibility
-  (`logistics:stats`), the automatic-presence policy (`presence:manage`),
-  queue administration (`queue:admin`), and day-of activity/meal scanning
-  (`activity:scan`) — a genuinely higher tier than scan-console staffing,
-  not a near-duplicate of it, but with no application or comms capability
-  at all (not this role's domain).
-- **Volunteer staff** — lightweight check-in-desk staffing: both entry scans
-  (`accredit:scan`, `presence:scan`), no stats/admin visibility. Kept
-  separate from Operations lead rather than merged: the two capability sets
-  don't overlap at all (admin vs. scan-only), so collapsing them would either
-  over-grant volunteers or under-grant the ops lead.
+- **Event Director** — every catalogue capability except the admin wildcard
+  (`*`) and the deprecated `sponsor:portal` no-op. The single top
+  non-superadmin tier, and the default seed's sole owner of every
+  decide/override/broadcast-type action (see risk tiering below).
+- **Organizer** — the baseline every year-round organizer holds: `users:read`,
+  `applications:review`, `projects:read`, `accredit:scan`, `presence:scan`,
+  `activity:scan`, `logistics:stats`.
+- **Day Staff** — temporary/on-the-day staff: `accredit:scan`,
+  `presence:scan`, `activity:scan`, `logistics:stats` — substantially less
+  than Organizer, and deliberately **no** application response/review access.
+  (`logistics:stats` already covers the "aggregate application counts without
+  seeing individual responses" need via the existing `GET
+  /api/applications/:id/stats` route — no new stats capability was needed.)
+- **Applications Team** — `applications:manage`, `applications:review`.
+- **Applications Lead** — `applications:decide`, `applications:edit-response`,
+  sitting above Applications Team. `applications:confirm-override` stays
+  Event-Director-only, not here.
+- **Operations Team** — `accredit:scan`, `presence:scan`, `activity:scan`,
+  `logistics:stats`, `intolerances:manage`, `venue:manage`,
+  `presence:manage`.
+- **Hacker Experience** — `projects:read`, `activity:scan`,
+  `schedule:manage`, `tv:control`, `challenges:manage`.
+- **Sponsors Team** — INTERNAL organizers who run the sponsor relationship:
+  `sponsors:manage`, `challenges:manage`. Distinct from the EXTERNAL
+  `Sponsor` role below (a company representative, not an organizer).
+- **Judging Team** — `projects:read`, `projects:import`, `projects:edit`,
+  `queue:operate`, `judge:panel`.
+- **Judging Coordinator** — `queue:admin`, `judging:export`, sitting above
+  Judging Team.
+- **Media / Comms** — `schedule:manage`, `announcements:manage`,
+  `tv:control`. `notifications:send` stays Event-Director-only.
+- **Technical Team** — `users:read`, `users:write`, `audit:read` for hackOS
+  developers. Explicitly **not** `*`, `permissions:manage`, `wallet:manage`,
+  or `event:manage`.
 - **Mentor** — applicant-facing granted role (`applications.grants_role_id`
-  target) for accepted mentors: read-only project visibility, nothing to
-  manage.
+  target) for accepted mentors: read-only project visibility
+  (`projects:read`), granted directly since — unlike sponsors/judges — no
+  relationship table scopes project access for mentors.
 - **Participant** — applicant-facing granted role for accepted participants;
   carries no capabilities of its own, same pattern as `Sponsor` — a
   relationship/status marker, not a permission grant.
 
-**Risk tiering: read/scan/score vs. decide/override/broadcast.** Within these
-four staff roles, capabilities split into two bands. The first band — reading,
-scoring, and scanning (`applications:review`, `activity:scan`,
-`logistics:stats`, `projects:read`, `users:read`) — is non-destructive and
-broadly useful, so each capability is granted to whichever role's domain it
-matches: judging-adjacent review sits with Judge coordinator, day-of scanning
-sits with Operations lead. The second band — deciding, overriding, and
-broadcasting (`applications:decide`, `applications:confirm-override`,
-`announcements:manage`, `notifications:send`) — sends outward communication to
-applicants/attendees or finalizes an outcome on someone else's behalf, so the
-default seed concentrates all of it in Event director, the single top
-non-superadmin tier, rather than letting it leak into a middle operational
-role alongside an adjacent read-only grant. No seeded role below Event
-director holds any decide/override/broadcast capability by default; a real
-install can still grant one explicitly via the roles API if its org chart
-needs it.
+**Typical assignments** (operator guidance, not an enforced constraint):
+temporary volunteer → Day Staff; normal organizer → Organizer; ops organizer
+→ Organizer + Operations Team; sponsor organizer → Organizer + Sponsors Team;
+challenge/programme organizer → Organizer + Hacker Experience;
+cross-functional sponsor challenge organizer → Organizer + Sponsors Team +
+Hacker Experience; admissions organizer → Organizer + Applications Team;
+admissions lead → Organizer + Applications Team + Applications Lead; judging
+organizer → Organizer + Judging Team; judging lead → Organizer + Judging Team
++ Judging Coordinator; media organizer → Organizer + Media / Comms; hackOS
+developer → Organizer + Technical Team; external company representative →
+Sponsor.
 
-All six are `is_protected = false` and fully deletable/editable via the
-normal roles API. The existing `Sponsor` auto-grant role (0801) is unchanged:
-still capability-less, still wired via `role_grant_rules` on enterprise
-link/unlink, positioned below every staff-tier role. `Event director`,
-`Judge coordinator`, `Mentor`, and `Participant` are referenced by name only
-in tests/docs — nothing in `role_grant_rules` or seed data targets them by
-name the way `Sponsor` is targeted, so they remain safe to rename later
-without a data migration.
+**Risk tiering: read/scan/score vs. decide/override/broadcast.** Capabilities
+split into two bands. The first band — reading, scoring, and scanning
+(`applications:review`, `activity:scan`, `logistics:stats`, `projects:read`,
+`users:read`, etc.) — is non-destructive and broadly useful, so it's spread
+across whichever functional team role matches that domain. The second band —
+deciding, overriding, and broadcasting (`applications:decide`,
+`applications:confirm-override`, `announcements:manage`,
+`notifications:send`) — sends outward communication to applicants/attendees
+or finalizes an outcome on someone else's behalf, so the default seed
+concentrates all of it in Event Director, the single top non-superadmin
+tier, rather than letting it leak into a functional team role alongside an
+adjacent read-only grant. No seeded role below Event Director holds any
+decide/override/broadcast capability by default; a real install can still
+grant one explicitly via the roles API if its org chart needs it.
+
+**The new `challenges:manage` capability** (`packages/shared/src/
+capabilities.ts`) exists because Hacker Experience and Sponsors Team both
+need to create/publish/manage sponsor challenges without full
+`sponsors:manage` (which would also hand them enterprise/tier/invite
+administration they don't need). It's wired into
+`challenges/routes.ts`'s `manageChallenges` guard and `challenges/access.ts`'s
+`isChallengeAdmin` as a third alternative alongside `sponsors:manage` and
+`queue:admin` — an org-wide grant, exactly like those two, not an
+enterprise-scoped one (a challenge's own ownership check still separately
+gates a sponsor representative's access to their own challenge, unaffected
+by this capability).
+
+**Sponsor-scoping investigation (external `Sponsor` role).** The repo owner
+asked for narrowly-scoped sponsor capabilities rather than global
+`sponsors:manage`/`projects:read`/`queue:admin` grants, and specifically
+asked whether existing relationship-based fallbacks already solve this.
+They do, for four of the five things an external sponsor representative
+needs, so the `Sponsor` role (0801, unchanged by 0805) carries **zero**
+capability grants, exactly as before this rewrite:
+
+- *View own enterprise details* — `sponsors/access.ts`'s
+  `assertCanEditEnterprise` already falls back to `ownsEnterprise()`
+  (a `sponsors` table row) alongside the `sponsors:manage` check.
+- *View/manage own enterprise's challenges* — `challenges/access.ts`'s
+  `assertCanEditChallenge`/`challengeAccessPolicy` already fall back to
+  `ownsChallenge()` for the same challenge. Creating a *new* challenge stays
+  admin-only by design (an org admin binds a hidden challenge template to an
+  enterprise; the rep then edits it) — that's not a gap, it's the intended
+  H44 flow.
+- *View projects submitted to own challenges* — `projects/access.ts`'s
+  `resolveRepositoryAccessScope` already scopes an unprivileged caller to
+  the challenges their `sponsors` or `enterprise_judges` row covers.
+- *Manage/use assigned judging rooms/panels* — `sponsors/access.ts`'s
+  `assertCanManageEnterpriseJudging` (judge roster) and
+  `queue/contextual-access.ts`'s `requireRoomAccessOrCapability`/
+  `requireRoomAssignmentsAccess` (room reads/assignments) already fall back
+  to `ownsEnterprise()`/`ownsRoomEnterprise()`.
+
+The fifth — *operate a judging queue* (`POST
+/api/queue/rooms/:roomId/call-next`, the room's call/skip/pause console) —
+is a **known, documented gap, left unchanged on purpose**: that route hard-
+requires `queue:operate` with no relationship fallback at all, not even for
+an enterprise's own assigned judges (`enterprise_judges`), let alone a
+sponsor representative who isn't a judge. `queue/contextual-access.ts`'s
+`requireEntryJudgeOrCapability` carries an explicit comment that ownership
+"authorizes the sponsor-facing review/export reads, not a judging-panel or
+queue-transition mutation" — i.e. this exclusion looks deliberate (queue
+orchestration is an operations-console job, kept separate from the judging
+relationship so a sponsor rep can't reorder their own challenge's queue).
+Given that documented intent, this migration does not add a
+`sponsor:judging:operate`-style capability or loosen `call-next`'s guard; if
+the org later wants sponsor reps to self-operate their own room's queue,
+that's a follow-up decision for the repo owner, not a default-seed change.
+
+All fifteen non-superadmin roles listed above are `is_protected = false` and
+fully deletable/editable via the normal roles API. The existing `Sponsor`
+auto-grant role (0801) is unchanged: still capability-less, still wired via
+`role_grant_rules` on enterprise link/unlink, positioned below every
+functional-team role. None of the fifteen are referenced by name in
+`role_grant_rules` or other seed data (only `Sponsor` is targeted by name),
+so they remain safe to rename later without a data migration.
 
 ## Goal and non-goals (capability-group era — superseded, see above)
 
