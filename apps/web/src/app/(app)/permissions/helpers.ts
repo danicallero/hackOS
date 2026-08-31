@@ -1,7 +1,7 @@
 import { ALL_CAPABILITIES } from "@hackos/shared/capabilities";
 import type { MultiSelectOption } from "@/components/common/multi-select";
 import type { MessageKey, Translate } from "@/lib/i18n";
-import type { PermissionGroupTemplate, UserListItem } from "@/lib/types";
+import type { RoleTemplate, UserListItem } from "@/lib/types";
 
 /**
  * Capability presentation helpers (H8). The catalogue is derived entirely from
@@ -138,7 +138,7 @@ function templateCopyKeys(templateKey: string) {
   return TEMPLATE_COPY_KEYS[templateKey.replaceAll(/[^a-z]/gi, "").toLowerCase()] ?? null;
 }
 
-type TemplateCopy = Pick<PermissionGroupTemplate, "labelKey" | "descriptionKey">;
+type TemplateCopy = Pick<RoleTemplate, "labelKey" | "descriptionKey">;
 
 export function permissionTemplateName(template: TemplateCopy | string, t: Translate): string {
   if (typeof template !== "string") return t(template.labelKey);
@@ -156,9 +156,7 @@ export function permissionTemplateDescription(
 }
 
 /** The API only permits an existing wildcard holder to create/reset this template. */
-export function templateRequiresWildcardAuthority(
-  template: Pick<PermissionGroupTemplate, "capabilities">,
-) {
+export function templateRequiresWildcardAuthority(template: Pick<RoleTemplate, "capabilities">) {
   return template.capabilities.includes("*");
 }
 

@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/select";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import type { EnterpriseSummary, Invite, InviteKind, PermissionGroupSummary } from "@/lib/types";
+import type { EnterpriseSummary, Invite, InviteKind, RoleSummary } from "@/lib/types";
 
 /**
  * Invite a user (H9/H10). Admin picks the account kind and, optionally,
@@ -34,7 +34,7 @@ export function InviteUserDialog() {
   const [enterpriseId, setEnterpriseId] = useState<string>("");
   const [groupIds, setGroupIds] = useState<string[]>([]);
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
-  const [groups, setGroups] = useState<PermissionGroupSummary[]>([]);
+  const [groups, setGroups] = useState<RoleSummary[]>([]);
   const [pending, setPending] = useState(false);
   const [created, setCreated] = useState<Invite | null>(null);
 
@@ -45,7 +45,7 @@ export function InviteUserDialog() {
       .then((r) => setEnterprises(r.enterprises))
       .catch(() => setEnterprises([]));
     api
-      .get<PermissionGroupSummary[]>("/api/permission-groups")
+      .get<RoleSummary[]>("/api/roles")
       .then(setGroups)
       .catch(() => setGroups([]));
   }, [open]);
@@ -185,16 +185,16 @@ export function InviteUserDialog() {
               staff capabilities. groupIds is still POSTed (empty []) for them. */}
           {kind === "staff" && (
             <div className="space-y-2">
-              <Label htmlFor="invite-capability-groups">{t("capabilityGroupsLabel")}</Label>
+              <Label htmlFor="invite-capability-groups">{t("rolesTitle")}</Label>
               <MultiSelect
                 inDialog
                 id="invite-capability-groups"
                 options={groups.map((g) => ({ value: String(g.id), label: g.name }))}
                 value={groupIds}
                 onChange={setGroupIds}
-                placeholder={t("optionalPreassignGroups")}
-                searchPlaceholder={t("searchGroupsPlaceholder")}
-                emptyText={t("noPermissionGroupsYet")}
+                placeholder={t("optionalPreassignRoles")}
+                searchPlaceholder={t("searchRolesPlaceholder")}
+                emptyText={t("noRolesYet")}
               />
               <p className="text-muted-foreground text-xs">{t("accountHoldsPermissions")}</p>
             </div>

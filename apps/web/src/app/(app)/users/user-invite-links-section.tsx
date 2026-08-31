@@ -31,12 +31,7 @@ import {
 import { ApiError, api } from "@/lib/api";
 import { shortDateTimeFmt } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
-import type {
-  EnterpriseSummary,
-  InviteKind,
-  PermissionGroupSummary,
-  UserInviteLink,
-} from "@/lib/types";
+import type { EnterpriseSummary, InviteKind, RoleSummary, UserInviteLink } from "@/lib/types";
 
 const dateFmt = shortDateTimeFmt;
 
@@ -73,7 +68,7 @@ export function UserInviteLinksSection({
   const [enterpriseId, setEnterpriseId] = useState("");
   const [groupIds, setGroupIds] = useState<string[]>([]);
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
-  const [groups, setGroups] = useState<PermissionGroupSummary[]>([]);
+  const [groups, setGroups] = useState<RoleSummary[]>([]);
   const [optionsError, setOptionsError] = useState(false);
   const [maxRedeems, setMaxRedeems] = useState("");
   const [expiryMinutes, setExpiryMinutes] = useState("10080");
@@ -109,7 +104,7 @@ export function UserInviteLinksSection({
     if (!visible || !createOpen) return;
     Promise.all([
       api.get<{ enterprises: EnterpriseSummary[] }>("/api/invites/enterprise-options"),
-      api.get<PermissionGroupSummary[]>("/api/permission-groups"),
+      api.get<RoleSummary[]>("/api/roles"),
     ])
       .then(([enterpriseData, permissionGroups]) => {
         setEnterprises(enterpriseData.enterprises);
@@ -245,7 +240,7 @@ export function UserInviteLinksSection({
     },
     {
       id: "groups",
-      header: t("capabilityGroupsLabel"),
+      header: t("rolesTitle"),
       sortValue: (link) => link.groupIds.length,
       cell: (link) =>
         link.groupIds.length > 0 ? (
@@ -350,7 +345,7 @@ export function UserInviteLinksSection({
             )}
             {kind === "staff" && (
               <div className="space-y-2">
-                <Label htmlFor="users-user-link-groups">{t("capabilityGroupsLabel")}</Label>
+                <Label htmlFor="users-user-link-groups">{t("rolesTitle")}</Label>
                 <MultiSelect
                   inDialog
                   id="users-user-link-groups"
@@ -358,8 +353,8 @@ export function UserInviteLinksSection({
                   value={groupIds}
                   onChange={setGroupIds}
                   placeholder={t("selectStaffGroups")}
-                  searchPlaceholder={t("searchGroupsPlaceholder")}
-                  emptyText={t("noPermissionGroupsYet")}
+                  searchPlaceholder={t("searchRolesPlaceholder")}
+                  emptyText={t("noRolesYet")}
                 />
               </div>
             )}

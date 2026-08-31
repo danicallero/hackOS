@@ -85,29 +85,32 @@ export interface UserList {
 
 export interface UserDetail extends Omit<Me, "role" | "capabilities"> {
   role: DerivedRole;
+  visibleRoleName: string | null;
   capabilities: Capability[];
-  groups: { id: number; name: string }[];
+  roles: { id: number; name: string }[];
 }
 
-/** GET /api/permission-groups item. */
-export interface PermissionGroupSummary {
+export type PermissionState = "allow" | "deny" | "inherit";
+
+/** GET /api/roles item (H8: the Discord-style hierarchical role model). */
+export interface RoleSummary {
   id: number;
   name: string;
-  description: string | null;
-  /** Originating platform template, if this group was created from one. */
-  templateKey: string | null;
-  /** True when direct capabilities or includes no longer match the template. */
-  templateDrifted: boolean;
+  /** One global hierarchy — higher sorts first. */
+  position: number;
+  /** Whether this can be shown as a user's public role. */
+  isVisible: boolean;
+  /** Built-in roles (e.g. Platform administrator) that cannot be deleted. */
+  isProtected: boolean;
+  /** Sparse: a capability with no explicit row is implicitly 'inherit'. */
+  capabilities: { capability: string; state: PermissionState }[];
+  memberIds: number[];
 }
-/** GET /api/permission-groups/:id — full group. */
-export interface PermissionGroupDetail extends PermissionGroupSummary {
-  capabilities: string[];
-  includes: number[];
-  members: number[];
-}
+/** GET /api/roles/:id — identical shape to the list item. */
+export type RoleDetail = RoleSummary;
 
-/** GET /api/permission-group-templates item. Keys select the web i18n catalogue. */
-export interface PermissionGroupTemplate {
+/** GET /api/role-templates item. Keys select the web i18n catalogue. */
+export interface RoleTemplate {
   key: string;
   labelKey: MessageKey;
   descriptionKey: MessageKey;

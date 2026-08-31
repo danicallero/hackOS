@@ -1,6 +1,6 @@
 import { ALL_CAPABILITIES } from "@hackos/shared/capabilities";
 import { describe, expect, it } from "vitest";
-import type { PermissionGroupTemplate } from "@/lib/types";
+import type { RoleTemplate } from "@/lib/types";
 import {
   capabilitiesByDomain,
   permissionTemplateDescription,
@@ -22,7 +22,7 @@ describe("permission helpers", () => {
   });
 
   it("uses the catalogue's label keys and recognizes wildcard authority", () => {
-    const template: PermissionGroupTemplate = {
+    const template: RoleTemplate = {
       key: "platform-administrator",
       labelKey: "permissionTemplatePlatformAdministrator",
       descriptionKey: "permissionTemplatePlatformAdministratorDescription",
