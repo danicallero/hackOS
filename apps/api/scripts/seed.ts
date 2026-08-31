@@ -1,8 +1,9 @@
 /**
- * Dev seed: an "admin" capability group holding the `*` wildcard (H8) and a
- * bootstrap admin user in it. Idempotent — safe to re-run.
- * The admin's credentials are created via Better Auth once the identity
- * module lands; until then the user row exists for FK/testing purposes.
+ * Dev seed: a bootstrap admin user holding the "Platform administrator" role
+ * created by migration 0801 (the `*` wildcard, H8). Idempotent — safe to
+ * re-run. The admin's credentials are created via Better Auth once the
+ * identity module lands; until then the user row exists for FK/testing
+ * purposes.
  */
 import pg from "pg";
 import { DEFAULT_DATABASE_URL } from "./default-database-url.js";
@@ -14,19 +15,11 @@ await client.connect();
 try {
   await client.query("BEGIN");
 
-  const group = await client.query(
-    `INSERT INTO permission_groups (name, description)
-     VALUES ('admin', 'Full access — every capability via the * wildcard')
-     ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description
-     RETURNING id`,
-  );
-  const groupId = group.rows[0].id;
-
-  await client.query(
-    `INSERT INTO group_capabilities (group_id, capability) VALUES ($1, '*')
-     ON CONFLICT DO NOTHING`,
-    [groupId],
-  );
+  const role = await client.query(`SELECT id FROM roles WHERE name = 'Platform administrator'`);
+  const roleId = role.rows[0]?.id;
+  if (!roleId) {
+    throw new Error("Platform administrator role not found — run migrations first");
+  }
 
   const admin = await client.query(
     `INSERT INTO users (email, name, email_verified, language)
@@ -37,13 +30,13 @@ try {
   const adminId = admin.rows[0].id;
 
   await client.query(
-    `INSERT INTO permission_group_members (user_id, group_id) VALUES ($1, $2)
+    `INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)
      ON CONFLICT DO NOTHING`,
-    [adminId, groupId],
+    [adminId, roleId],
   );
 
   await client.query("COMMIT");
-  console.log(`Seeded: admin group #${groupId}, admin user #${adminId} (admin@hackos.local)`);
+  console.log(`Seeded: admin user #${adminId} (admin@hackos.local) with role #${roleId}`);
 } catch (err) {
   await client.query("ROLLBACK");
   throw err;

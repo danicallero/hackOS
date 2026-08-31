@@ -32,11 +32,7 @@ try {
 
   if (!allowExistingAdmin) {
     const { rows: existingAdmins } = await client.query(
-      `SELECT 1
-       FROM permission_group_members pgm
-       JOIN group_capabilities gc ON gc.group_id = pgm.group_id
-       WHERE gc.capability = $1
-       LIMIT 1`,
+      `SELECT 1 FROM user_effective_capabilities WHERE capability = $1 LIMIT 1`,
       ["*"],
     );
     if (existingAdmins.length > 0) {
@@ -52,26 +48,33 @@ try {
   }
   const userId = users[0].id;
 
-  const { rows: groups } = await client.query(
-    `INSERT INTO permission_groups (name, description)
-     VALUES ('system:superadmin', 'System bootstrap group for superadmin users')
-     ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description
+  // Always keep this role above every other role, even one added after the
+  // last time this script ran.
+  const { rows: positionRows } = await client.query(
+    `SELECT COALESCE(MAX(position), 0) + 1000 AS position FROM roles WHERE name <> 'system:superadmin'`,
+  );
+  const position = positionRows[0].position;
+  const { rows: roles } = await client.query(
+    `INSERT INTO roles (name, position, is_protected)
+     VALUES ('system:superadmin', $1, true)
+     ON CONFLICT (name) DO UPDATE SET position = EXCLUDED.position
      RETURNING id`,
+    [position],
   );
-  const groupId = groups[0].id;
+  const roleId = roles[0].id;
 
   await client.query(
-    `INSERT INTO group_capabilities (group_id, capability)
-     VALUES ($1, $2)
-     ON CONFLICT DO NOTHING`,
-    [groupId, "*"],
+    `INSERT INTO role_capabilities (role_id, capability, state)
+     VALUES ($1, $2, 'allow')
+     ON CONFLICT (role_id, capability) DO UPDATE SET state = 'allow'`,
+    [roleId, "*"],
   );
 
   await client.query(
-    `INSERT INTO permission_group_members (user_id, group_id, assigned_by)
+    `INSERT INTO user_roles (user_id, role_id, assigned_by)
      VALUES ($1, $2, $1)
      ON CONFLICT DO NOTHING`,
-    [userId, groupId],
+    [userId, roleId],
   );
 
   await client.query(`UPDATE users SET email_verified = true WHERE id = $1`, [userId]);
@@ -85,11 +88,11 @@ try {
   await client.query(
     `INSERT INTO audit_log (actor_id, entity_type, entity_id, action, source, after)
      VALUES ($1, 'user', $1::text, 'grant_superadmin', 'system', $2::jsonb)`,
-    [userId, JSON.stringify({ email, capability: "*", groupId })],
+    [userId, JSON.stringify({ email, capability: "*", roleId })],
   );
 
   await client.query("COMMIT");
-  console.log(`Granted superadmin for user #${userId} (${email}) in permission group #${groupId}.`);
+  console.log(`Granted superadmin for user #${userId} (${email}) via role #${roleId}.`);
 } catch (err) {
   await client.query("ROLLBACK");
   throw err;

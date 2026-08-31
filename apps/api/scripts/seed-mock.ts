@@ -469,40 +469,37 @@ async function upsertUser(row: {
   return res.rows[0].id;
 }
 
-async function ensureGroup(
-  name: string,
-  description: string,
-  capabilities: string[],
-): Promise<number> {
-  const group = await client.query(
-    `INSERT INTO permission_groups (name, description) VALUES ($1, $2)
-     ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description
+async function ensureRole(name: string, position: number, capabilities: string[]): Promise<number> {
+  const role = await client.query(
+    `INSERT INTO roles (name, position) VALUES ($1, $2)
+     ON CONFLICT (name) DO UPDATE SET position = EXCLUDED.position
      RETURNING id`,
-    [name, description],
+    [name, position],
   );
-  const groupId = group.rows[0].id;
+  const roleId = role.rows[0].id;
   for (const capability of capabilities) {
     await client.query(
-      `INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-      [groupId, capability],
+      `INSERT INTO role_capabilities (role_id, capability, state) VALUES ($1, $2, 'allow')
+       ON CONFLICT (role_id, capability) DO UPDATE SET state = 'allow'`,
+      [roleId, capability],
     );
   }
-  return groupId;
+  return roleId;
 }
 
-async function addToGroup(userId: number, groupId: number): Promise<void> {
+async function addRole(userId: number, roleId: number): Promise<void> {
   await client.query(
-    `INSERT INTO permission_group_members (user_id, group_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-    [userId, groupId],
+    `INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+    [userId, roleId],
   );
 }
 
-/** Seeded participants: an @example.com user with no capability group membership. */
+/** Seeded participants: an @example.com user with no assigned role. */
 async function seededParticipants(): Promise<{ id: number; email: string }[]> {
   const res = await client.query(
     `SELECT id, email FROM users
      WHERE email LIKE '%@example.com'
-       AND id NOT IN (SELECT user_id FROM permission_group_members)
+       AND id NOT IN (SELECT user_id FROM user_roles)
      ORDER BY email`,
   );
   return res.rows;
@@ -525,7 +522,7 @@ async function seedUsers(): Promise<void> {
     universityIds.push(res.rows[0].id);
   }
 
-  const staffGroup = await ensureGroup("staff", "Logistics + queue operations", [
+  const staffRole = await ensureRole("mock:staff", 600, [
     "users:read",
     "accredit:scan",
     "presence:scan",
@@ -533,8 +530,8 @@ async function seedUsers(): Promise<void> {
     "logistics:stats",
     "queue:operate",
   ]);
-  const judgeGroup = await ensureGroup("judge", "Judging panel access only", ["judge:panel"]);
-  const sponsorGroup = await ensureGroup("sponsor", "Sponsor portal access", ["sponsor:portal"]);
+  const judgeRole = await ensureRole("mock:judge", 500, ["judge:panel"]);
+  const sponsorRole = await ensureRole("mock:sponsor", 400, ["sponsor:portal"]);
 
   for (const person of STAFF) {
     const id = await upsertUser({
@@ -542,7 +539,7 @@ async function seedUsers(): Promise<void> {
       name: person.first,
       surname: person.last,
     });
-    await addToGroup(id, staffGroup);
+    await addRole(id, staffRole);
   }
   for (const person of JUDGES) {
     const id = await upsertUser({
@@ -550,7 +547,7 @@ async function seedUsers(): Promise<void> {
       name: person.first,
       surname: person.last,
     });
-    await addToGroup(id, judgeGroup);
+    await addRole(id, judgeRole);
   }
   for (const person of SPONSOR_REPS) {
     const id = await upsertUser({
@@ -558,7 +555,7 @@ async function seedUsers(): Promise<void> {
       name: person.first,
       surname: person.last,
     });
-    await addToGroup(id, sponsorGroup);
+    await addRole(id, sponsorRole);
   }
 
   for (let i = 0; i < PARTICIPANTS.length; i++) {
@@ -592,9 +589,9 @@ async function seedEnterprises(): Promise<void> {
 
   const sponsorUsers = await client.query(
     `SELECT u.id, u.email FROM users u
-     JOIN permission_group_members pgm ON pgm.user_id = u.id
-     JOIN permission_groups pg ON pg.id = pgm.group_id
-     WHERE pg.name = 'sponsor' AND u.email LIKE '%@example.com'
+     JOIN user_roles ur ON ur.user_id = u.id
+     JOIN roles r ON r.id = ur.role_id
+     WHERE r.name = 'mock:sponsor' AND u.email LIKE '%@example.com'
      ORDER BY u.email`,
   );
   if (sponsorUsers.rows.length === 0) {
@@ -798,7 +795,7 @@ async function seedApplications(): Promise<void> {
 
   const participantUsers = await client.query(
     `SELECT id, email, university_id FROM users WHERE email LIKE '%@example.com'
-       AND id NOT IN (SELECT user_id FROM permission_group_members)
+       AND id NOT IN (SELECT user_id FROM user_roles)
      ORDER BY email`,
   );
   if (participantUsers.rows.length === 0) {

@@ -284,18 +284,16 @@ async function prepareFixture(options: Options): Promise<Fixture> {
     const operators = operatorRows.rows.map((row) => Number(row.id));
     const judges = judgeRows.rows.map((row) => Number(row.id));
 
-    const operatorGroup = await client.query<{ id: number }>(
-      `INSERT INTO permission_groups (name, description)
-       VALUES ('event-day-load-operators', 'Issue #544 load fixture') RETURNING id`,
+    const operatorRole = await client.query<{ id: number }>(
+      `INSERT INTO roles (name, position) VALUES ('event-day-load-operators', 700) RETURNING id`,
     );
-    const judgeGroup = await client.query<{ id: number }>(
-      `INSERT INTO permission_groups (name, description)
-       VALUES ('event-day-load-judges', 'Issue #544 load fixture') RETURNING id`,
+    const judgeRole = await client.query<{ id: number }>(
+      `INSERT INTO roles (name, position) VALUES ('event-day-load-judges', 690) RETURNING id`,
     );
-    const operatorGroupId = operatorGroup.rows[0]?.id;
-    const judgeGroupId = judgeGroup.rows[0]?.id;
-    if (operatorGroupId === undefined || judgeGroupId === undefined) {
-      throw new Error("Load fixture permission groups were not created");
+    const operatorRoleId = operatorRole.rows[0]?.id;
+    const judgeRoleId = judgeRole.rows[0]?.id;
+    if (operatorRoleId === undefined || judgeRoleId === undefined) {
+      throw new Error("Load fixture roles were not created");
     }
     const operatorCapabilities = [
       CAPABILITIES.QUEUE_OPERATE,
@@ -304,23 +302,23 @@ async function prepareFixture(options: Options): Promise<Fixture> {
       CAPABILITIES.ACTIVITY_SCAN,
     ];
     await client.query(
-      `INSERT INTO group_capabilities (group_id, capability)
-       SELECT $1, unnest($2::text[])`,
-      [operatorGroupId, operatorCapabilities],
-    );
-    await client.query(`INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`, [
-      judgeGroupId,
-      CAPABILITIES.JUDGE_PANEL,
-    ]);
-    await client.query(
-      `INSERT INTO permission_group_members (user_id, group_id)
-       SELECT unnest($1::int[]), $2`,
-      [operators, operatorGroupId],
+      `INSERT INTO role_capabilities (role_id, capability, state)
+       SELECT $1, unnest($2::text[]), 'allow'`,
+      [operatorRoleId, operatorCapabilities],
     );
     await client.query(
-      `INSERT INTO permission_group_members (user_id, group_id)
+      `INSERT INTO role_capabilities (role_id, capability, state) VALUES ($1, $2, 'allow')`,
+      [judgeRoleId, CAPABILITIES.JUDGE_PANEL],
+    );
+    await client.query(
+      `INSERT INTO user_roles (user_id, role_id)
        SELECT unnest($1::int[]), $2`,
-      [judges, judgeGroupId],
+      [operators, operatorRoleId],
+    );
+    await client.query(
+      `INSERT INTO user_roles (user_id, role_id)
+       SELECT unnest($1::int[]), $2`,
+      [judges, judgeRoleId],
     );
 
     const enterprise = await client.query<{ id: number }>(

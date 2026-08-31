@@ -5,7 +5,7 @@ import { auth } from "../src/modules/identity/auth.js";
 
 /**
  * Creates or upgrades a superadmin account from a server shell (Docker/SSH)
- * by attaching ADMIN_ALL via permission groups (H8).
+ * by attaching ADMIN_ALL via a dedicated, always-highest-position role (H8).
  *
  * Usage:
  *   pnpm --filter @hackos/api superadmin:create --email root@example.com [--password 'secret123' --name Root --surname Admin] [--language en|es|gl] [--allow-existing-admin]
@@ -42,11 +42,7 @@ function requireFlagIfMissing(name: string, current: string | undefined): string
 
 async function hasAdminAllUser(): Promise<boolean> {
   const { rows } = await pool.query(
-    `SELECT 1
-     FROM permission_group_members pgm
-     JOIN group_capabilities gc ON gc.group_id = pgm.group_id
-     WHERE gc.capability = $1
-     LIMIT 1`,
+    `SELECT 1 FROM user_effective_capabilities WHERE capability = $1 LIMIT 1`,
     [CAPABILITIES.ADMIN_ALL],
   );
   return rows.length > 0;
@@ -97,37 +93,36 @@ async function main(): Promise<void> {
     action = "create_superadmin";
   }
 
-  const { groupId } = await withTransaction(async (client) => {
-    const groupName = "system:superadmin";
-    const { rows: existingGroupRows } = await client.query(
-      `SELECT id FROM permission_groups WHERE name = $1`,
-      [groupName],
+  const { roleId } = await withTransaction(async (client) => {
+    const roleName = "system:superadmin";
+    // Always keep this role above every other role, even one added after the
+    // last time this script ran — recompute its position on every invocation.
+    const { rows: positionRows } = await client.query(
+      `SELECT COALESCE(MAX(position), 0) + 1000 AS position FROM roles WHERE name <> $1`,
+      [roleName],
     );
-    let groupId: number;
-    if (existingGroupRows.length > 0) {
-      groupId = existingGroupRows[0].id as number;
-    } else {
-      const { rows: createdGroupRows } = await client.query(
-        `INSERT INTO permission_groups (name, description)
-         VALUES ($1, $2)
-         RETURNING id`,
-        [groupName, "System bootstrap group for superadmin users"],
-      );
-      groupId = createdGroupRows[0].id as number;
-    }
+    const position = Number(positionRows[0].position);
+    const { rows: roleRows } = await client.query(
+      `INSERT INTO roles (name, position, is_protected)
+       VALUES ($1, $2, true)
+       ON CONFLICT (name) DO UPDATE SET position = EXCLUDED.position
+       RETURNING id`,
+      [roleName, position],
+    );
+    const roleId = roleRows[0].id as number;
 
     await client.query(
-      `INSERT INTO group_capabilities (group_id, capability)
-       VALUES ($1, $2)
-       ON CONFLICT DO NOTHING`,
-      [groupId, CAPABILITIES.ADMIN_ALL],
+      `INSERT INTO role_capabilities (role_id, capability, state)
+       VALUES ($1, $2, 'allow')
+       ON CONFLICT (role_id, capability) DO UPDATE SET state = 'allow'`,
+      [roleId, CAPABILITIES.ADMIN_ALL],
     );
 
     await client.query(
-      `INSERT INTO permission_group_members (user_id, group_id, assigned_by)
+      `INSERT INTO user_roles (user_id, role_id, assigned_by)
        VALUES ($1, $2, $1)
        ON CONFLICT DO NOTHING`,
-      [userId, groupId],
+      [userId, roleId],
     );
 
     await client.query(
@@ -150,14 +145,14 @@ async function main(): Promise<void> {
       entityId: userId,
       action,
       source: "system",
-      after: { email, capability: CAPABILITIES.ADMIN_ALL, groupId },
+      after: { email, capability: CAPABILITIES.ADMIN_ALL, roleId },
     });
 
-    return { groupId };
+    return { roleId };
   });
 
   console.log(
-    `${action === "create_superadmin" ? "Created" : "Granted"} superadmin for user #${userId} (${email}) in permission group #${groupId} (H8).`,
+    `${action === "create_superadmin" ? "Created" : "Granted"} superadmin for user #${userId} (${email}) via role #${roleId} (H8).`,
   );
 }
 
