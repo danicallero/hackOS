@@ -51,7 +51,9 @@ approved inverting that architecture. This is the current model:
   (`lockRoleGraph`, mirroring the old `lockPermissionGraph`) serializes
   mutations to `roles.position`/`role_capabilities`; `assertActiveWildcardHolder`
   keeps at least one active user resolving `*` to ALLOW after any mutation.
-- **Migration** (`db/migrations/0800`–`0803`): each of the 20 H8 platform
+- **Migration** (`db/migrations/0800`–`0805`; see "`system:superadmin` is
+  CLI-only", "Soft-delete and restore", and "Default seeded role set" below
+  for 0804/0805): each of the 20 H8 platform
   templates (`templates.ts`) became a named role with its template's
   capabilities as ALLOW; every `permission_group_members` row was mapped
   onto the matching role (by `template_key`) or a bespoke per-group role
@@ -79,6 +81,84 @@ approved inverting that architecture. This is the current model:
 - Capability groups no longer exist at all, cosmetic or otherwise — the H8
   template catalogue (`templates.ts`) is reused only as a prefill/seed
   source for creating a role, not as a separate authorization concept.
+
+### `system:superadmin` is CLI-only, not just protected
+
+`is_protected` (0800) is informational going forward: every default role
+seeded by 0801/0805, Platform administrator included, is a fully mutable,
+deletable/restorable role like any other — the earlier "protected roles can't
+be deleted" rule is gone. The one role that stays fully locked out of the
+HTTP API is `system:superadmin`, identified by **name**
+(`role-authority.ts`'s `assertNotSuperadminRole`/`SUPERADMIN_ROLE_NAME`), not
+by `is_protected` — `is_protected` may end up describing other default roles
+later without granting them this same lockout.
+
+`identity/routes/roles.ts` calls `assertNotSuperadminRole` before every write
+that touches an existing role by id (rename, reorder, capability edit, soft
+delete, restore, assign/unassign member) and before role creation (to stop an
+API caller minting a decoy role under the reserved name). This holds even for
+an actor who holds `*` themselves — the check is unconditional, not
+capability-gated. Its capability set stays exactly `{'*': allow}` because
+nothing can ever change it through the API.
+
+The only way to grant or revoke `system:superadmin` is a server-shell script,
+run with direct Postgres access:
+
+- `pnpm --filter @hackos/api superadmin:create` (`scripts/create-superadmin.ts`) —
+  create-or-upgrade an account to superadmin.
+- `pnpm --filter @hackos/api superadmin:grant` (`scripts/grant-superadmin.mjs`) —
+  attach it to an existing account (plain Node ESM, no build step, for
+  environments without `tsx`).
+- `pnpm --filter @hackos/api superadmin:revoke` (`scripts/revoke-superadmin.mjs`) —
+  remove it from an account. Refuses if that would leave zero active
+  superadmins, replicating `assertActiveWildcardHolder`'s resolved-tri-state
+  query scoped to `system:superadmin`'s `*` grant and excluding the target
+  user.
+
+All three insert an `audit_log` row (`grant_superadmin` / `create_superadmin`
+/ `revoke_superadmin`) in the same transaction as the `user_roles` write.
+
+### Soft-delete and restore (0804)
+
+`roles.deleted_at` (nullable `timestamptz`) replaces hard `DELETE` for every
+role except `system:superadmin` (still fully locked out — see above).
+`DELETE /api/roles/:roleId` now sets `deleted_at = now()`; the row, its
+`role_capabilities`, its `user_roles` memberships, and every audit entry that
+references it survive untouched. A deleted role stops granting access
+immediately — `user_effective_capabilities` and every hand-rolled resolution
+query in `role-authority.ts` filter `deleted_at IS NULL`, exactly as if the
+user held no such role.
+
+`roles_position_idx` became a partial unique index
+(`WHERE deleted_at IS NULL`) in the same migration: a deleted role's position
+is released for reuse rather than permanently reserved. `POST
+/api/roles/:roleId/restore` clears `deleted_at`, keeping the role's original
+position — if a still-live role has since taken that exact slot, restore
+409s instead of silently picking a new position; the actor moves one of the
+two roles via `PATCH .../position` and retries. `GET /api/roles` excludes
+deleted roles by default; `?includeDeleted=true` (gated by
+`permissions:manage`, same as every mutation) lists them too, powering the
+web permissions page's trash panel (`apps/web/src/app/(app)/permissions/page.tsx`).
+
+### Default seeded role set (0805)
+
+0801 seeded one role per H8 platform template. 0805 adds the roles a real
+hackathon's org chart still needs, from planning through operations, without
+duplicating any 0801 role: **Event director** (planning — event identity,
+venue, programme, and outward comms as one role, above the narrower Event
+settings manager/Programme manager/Communications manager); **Judge
+coordinator** (judging-floor coordination, narrower than Judging
+administrator); **Operations lead** (day-of decision-maker over logistics
+visibility, the automatic-presence policy, and queue administration, distinct
+from Logistics supervisor's scan-console duties); **Volunteer staff**
+(check-in-desk staffing: both entry scans, no stats visibility); **Mentor**
+and **Participant** (applicant-facing roles for `applications.grants_role_id`
+— read-only project visibility and a bare status marker respectively,
+distinct from the Application reviewer/administrator roles staff use to run
+review). All six are `is_protected = false` and fully deletable/editable. The
+existing `Sponsor` auto-grant role (0801) is unchanged: still capability-less,
+still wired via `role_grant_rules` on enterprise link/unlink, positioned
+below every staff-tier role.
 
 ## Goal and non-goals (capability-group era — superseded, see above)
 
