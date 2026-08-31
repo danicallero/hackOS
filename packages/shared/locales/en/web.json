@@ -2638,7 +2638,7 @@
   "deletingRoleRemovesDesc": "Deleting this role removes it from every member who holds it.",
   "deleteRole": "Delete role",
   "deleteRoleQuestionInline": "Delete \"{name}\"?",
-  "permanentlyRemovesRoleDesc": "This permanently removes the role and its capability grants.",
+  "permanentlyRemovesRoleDesc": "Removes the role from every member immediately. It moves to the trash, where it can be restored.",
   "roleDeleted": "Role deleted.",
   "couldNotDeleteRole": "Couldn't delete role.",
   "capabilityStateInherit": "Inherit",
@@ -2658,5 +2658,12 @@
   "addRolePlaceholder": "Add role…",
   "noRolesForUser": "Not assigned any role.",
   "removeRoleAria": "Remove role {name}",
-  "searchRolesPlaceholder": "Search roles…"
+  "searchRolesPlaceholder": "Search roles…",
+  "superadminLockedDesc": "Managed only via server CLI scripts.",
+  "trashTitle": "Deleted roles",
+  "showDeletedRoles": "Show deleted roles",
+  "noDeletedRoles": "No deleted roles.",
+  "restoreRole": "Restore",
+  "roleRestored": "Role restored.",
+  "couldNotRestoreRole": "Couldn't restore role."
 }

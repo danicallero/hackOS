@@ -2,7 +2,14 @@
 
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { KeyRoundIcon, LayersIcon, PlusIcon, ShieldCheckIcon } from "lucide-react";
+import {
+  KeyRoundIcon,
+  LayersIcon,
+  PlusIcon,
+  ShieldCheckIcon,
+  Trash2Icon,
+  UndoIcon,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -63,6 +70,10 @@ export default function PermissionsPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [templates, setTemplates] = useState<RoleTemplate[]>([]);
+  const [showTrash, setShowTrash] = useState(false);
+  const [deletedRoles, setDeletedRoles] = useState<RoleSummary[]>([]);
+  const [trashLoading, setTrashLoading] = useState(false);
+  const [restoringId, setRestoringId] = useState<number | null>(null);
 
   const schema = createSchema(t);
   const form = useForm<CreateValues>({
@@ -89,6 +100,38 @@ export default function PermissionsPage() {
     if (templatesResult.status === "fulfilled") setTemplates(templatesResult.value);
     setLoading(false);
   }, [t]);
+
+  const loadTrash = useCallback(async () => {
+    setTrashLoading(true);
+    try {
+      const all = await api.get<RoleSummary[]>("/api/roles", { query: { includeDeleted: true } });
+      setDeletedRoles(all.filter((r) => r.deletedAt !== null));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadRoles"));
+    } finally {
+      setTrashLoading(false);
+    }
+  }, [t]);
+
+  function toggleTrash() {
+    const next = !showTrash;
+    setShowTrash(next);
+    if (next) void loadTrash();
+  }
+
+  async function restoreRole(roleId: number) {
+    setRestoringId(roleId);
+    try {
+      await api.post<RoleDetail>(`/api/roles/${roleId}/restore`, {});
+      toast.success(t("roleRestored"));
+      setDeletedRoles((prev) => prev.filter((r) => r.id !== roleId));
+      await load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotRestoreRole"));
+    } finally {
+      setRestoringId(null);
+    }
+  }
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // creates/edits a role elsewhere.
@@ -155,11 +198,42 @@ export default function PermissionsPage() {
       <PageHeader
         title={t("rolesTitle")}
         primaryAction={
-          <Button onClick={() => setCreateOpen(true)}>
-            <PlusIcon /> {t("newRole")}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={toggleTrash}>
+              <Trash2Icon /> {t("trashTitle")}
+            </Button>
+            <Button onClick={() => setCreateOpen(true)}>
+              <PlusIcon /> {t("newRole")}
+            </Button>
+          </div>
         }
       />
+
+      {showTrash && (
+        <SectionCard icon={Trash2Icon} title={t("trashTitle")} bodyClassName="p-0">
+          {trashLoading ? (
+            <p className="text-muted-foreground p-6 text-sm">…</p>
+          ) : deletedRoles.length === 0 ? (
+            <p className="text-muted-foreground p-6 text-sm">{t("noDeletedRoles")}</p>
+          ) : (
+            <ul className="divide-border divide-y">
+              {deletedRoles.map((r) => (
+                <li key={r.id} className="flex items-center justify-between gap-3 px-6 py-3">
+                  <span className="truncate text-sm font-medium">{r.name}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={restoringId === r.id}
+                    onClick={() => restoreRole(r.id)}
+                  >
+                    <UndoIcon /> {t("restoreRole")}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </SectionCard>
+      )}
 
       <SectionCard icon={ShieldCheckIcon} title={t("rolesTitle")} bodyClassName="p-0">
         <DataTable

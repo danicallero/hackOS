@@ -100,11 +100,13 @@ export interface RoleSummary {
   position: number;
   /** Whether this can be shown as a user's public role. */
   isVisible: boolean;
-  /** Built-in roles (e.g. Platform administrator) that cannot be deleted. */
+  /** Built-in roles (e.g. Platform administrator). Informational only — see deletedAt/name for what's actually locked. */
   isProtected: boolean;
   /** Sparse: a capability with no explicit row is implicitly 'inherit'. */
   capabilities: { capability: string; state: PermissionState }[];
   memberIds: number[];
+  /** H8/0804: soft-delete marker. Non-null means this role grants nothing and is hidden from the default list. */
+  deletedAt: string | null;
 }
 /** GET /api/roles/:id — identical shape to the list item. */
 export type RoleDetail = RoleSummary;

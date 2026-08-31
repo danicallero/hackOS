@@ -278,6 +278,10 @@ export default function RoleDetailPage() {
   }
 
   const capsDirty = JSON.stringify(caps) !== JSON.stringify(toStateMap(role));
+  // H8: system:superadmin is CLI-only — the API refuses every mutation on it
+  // regardless of the actor's capabilities, so this page locks the same
+  // controls rather than let an admin hit a 403 after filling out a form.
+  const isSuperadmin = role.name === "system:superadmin";
 
   return (
     <div className="space-y-8">
@@ -312,10 +316,13 @@ export default function RoleDetailPage() {
               <SectionCard
                 icon={SettingsIcon}
                 title={t("roleDetailsTitle")}
+                description={isSuperadmin ? t("superadminLockedDesc") : undefined}
                 footer={
-                  <SubmitButton pending={form.formState.isSubmitting}>
-                    {t("saveChanges")}
-                  </SubmitButton>
+                  !isSuperadmin ? (
+                    <SubmitButton pending={form.formState.isSubmitting}>
+                      {t("saveChanges")}
+                    </SubmitButton>
+                  ) : undefined
                 }
               >
                 <FormField
@@ -325,7 +332,7 @@ export default function RoleDetailPage() {
                     <FormItem>
                       <FormLabel>{t("name")}</FormLabel>
                       <FormControl>
-                        <Input {...field} disabled={role.isProtected} />
+                        <Input {...field} disabled={isSuperadmin} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -337,7 +344,11 @@ export default function RoleDetailPage() {
                   render={({ field }) => (
                     <FormItem className="flex flex-row items-center gap-2 space-y-0">
                       <FormControl>
-                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          disabled={isSuperadmin}
+                        />
                       </FormControl>
                       <FormLabel className="font-normal">{t("isVisibleLabel")}</FormLabel>
                     </FormItem>
@@ -351,13 +362,15 @@ export default function RoleDetailPage() {
             icon={MoveVerticalIcon}
             title={t("positionLabel")}
             footer={
-              <Button
-                onClick={onSavePosition}
-                disabled={position === role.position || savingPosition}
-              >
-                {savingPosition && <Spinner />}
-                {t("saveChanges")}
-              </Button>
+              !isSuperadmin ? (
+                <Button
+                  onClick={onSavePosition}
+                  disabled={position === role.position || savingPosition}
+                >
+                  {savingPosition && <Spinner />}
+                  {t("saveChanges")}
+                </Button>
+              ) : undefined
             }
           >
             <Input
@@ -365,6 +378,7 @@ export default function RoleDetailPage() {
               value={position}
               onChange={(e) => setPosition(Number(e.target.value))}
               className="max-w-40"
+              disabled={isSuperadmin}
             />
           </SectionCard>
         </TabsContent>
@@ -373,12 +387,14 @@ export default function RoleDetailPage() {
           <SectionCard
             icon={KeyRoundIcon}
             title={t("capabilitiesLabel")}
-            description={t("capabilitiesChangeDesc")}
+            description={isSuperadmin ? t("superadminLockedDesc") : t("capabilitiesChangeDesc")}
             footer={
-              <Button onClick={onSaveCaps} disabled={!capsDirty || savingCaps}>
-                {savingCaps && <Spinner />}
-                {t("saveCapabilities")}
-              </Button>
+              !isSuperadmin ? (
+                <Button onClick={onSaveCaps} disabled={!capsDirty || savingCaps}>
+                  {savingCaps && <Spinner />}
+                  {t("saveCapabilities")}
+                </Button>
+              ) : undefined
             }
           >
             <div className="space-y-5">
@@ -407,6 +423,7 @@ export default function RoleDetailPage() {
                                 type="button"
                                 size="sm"
                                 variant={state === candidate ? "default" : "outline"}
+                                disabled={isSuperadmin}
                                 onClick={() => setCaps((prev) => ({ ...prev, [cap]: candidate }))}
                               >
                                 {t(
@@ -433,10 +450,13 @@ export default function RoleDetailPage() {
           <SectionCard
             icon={UsersIcon}
             title={t("membersTitle")}
+            description={isSuperadmin ? t("superadminLockedDesc") : undefined}
             action={
-              <Button size="sm" variant="outline" onClick={() => setAddMemberOpen(true)}>
-                <UserPlusIcon /> {t("addMemberLabel")}
-              </Button>
+              !isSuperadmin ? (
+                <Button size="sm" variant="outline" onClick={() => setAddMemberOpen(true)}>
+                  <UserPlusIcon /> {t("addMemberLabel")}
+                </Button>
+              ) : undefined
             }
             bodyClassName={role.memberIds.length === 0 ? undefined : "p-0"}
           >
@@ -456,15 +476,17 @@ export default function RoleDetailPage() {
                           <p className="text-muted-foreground truncate text-xs">{user.email}</p>
                         )}
                       </div>
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        className="text-muted-foreground hover:text-destructive"
-                        onClick={() => removeMember(id)}
-                        aria-label={t("removeMemberAria", { id })}
-                      >
-                        <Trash2Icon />
-                      </Button>
+                      {!isSuperadmin && (
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          className="text-muted-foreground hover:text-destructive"
+                          onClick={() => removeMember(id)}
+                          aria-label={t("removeMemberAria", { id })}
+                        >
+                          <Trash2Icon />
+                        </Button>
+                      )}
                     </li>
                   );
                 })}
@@ -477,16 +499,18 @@ export default function RoleDetailPage() {
           <SectionCard
             icon={Trash2Icon}
             title={t("dangerZoneTitle")}
-            description={t("deletingRoleRemovesDesc")}
+            description={isSuperadmin ? t("superadminLockedDesc") : t("deletingRoleRemovesDesc")}
             action={
-              !role.isProtected ? (
+              !isSuperadmin ? (
                 <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
                   {t("deleteRole")}
                 </Button>
               ) : undefined
             }
           >
-            <p className="text-muted-foreground text-sm">{t("cannotBeUndoneMembersLoseRole")}</p>
+            {!isSuperadmin && (
+              <p className="text-muted-foreground text-sm">{t("cannotBeUndoneMembersLoseRole")}</p>
+            )}
           </SectionCard>
         </TabsContent>
       </Tabs>

@@ -2638,7 +2638,7 @@
   "deletingRoleRemovesDesc": "Eliminar este rol lo quita de todos los miembros que lo tienen.",
   "deleteRole": "Eliminar rol",
   "deleteRoleQuestionInline": "¿Eliminar «{name}»?",
-  "permanentlyRemovesRoleDesc": "Esto elimina permanentemente el rol y sus capacidades asignadas.",
+  "permanentlyRemovesRoleDesc": "Elimina el rol de todos los miembros de inmediato. Pasa a la papelera, donde se puede restaurar.",
   "roleDeleted": "Rol eliminado.",
   "couldNotDeleteRole": "No se pudo eliminar el rol.",
   "capabilityStateInherit": "Heredar",
@@ -2658,5 +2658,12 @@
   "addRolePlaceholder": "Añadir rol…",
   "noRolesForUser": "No tiene ningún rol asignado.",
   "removeRoleAria": "Eliminar rol {name}",
-  "searchRolesPlaceholder": "Buscar roles…"
+  "searchRolesPlaceholder": "Buscar roles…",
+  "superadminLockedDesc": "Solo se gestiona mediante scripts del servidor.",
+  "trashTitle": "Roles eliminados",
+  "showDeletedRoles": "Ver roles eliminados",
+  "noDeletedRoles": "No hay roles eliminados.",
+  "restoreRole": "Restaurar",
+  "roleRestored": "Rol restaurado.",
+  "couldNotRestoreRole": "No se pudo restaurar el rol."
 }
