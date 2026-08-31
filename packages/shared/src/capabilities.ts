@@ -47,6 +47,15 @@ export const CAPABILITIES = {
   // Deprecated compatibility no-op: preserved/reported for repair, never an authorization grant.
   SPONSOR_PORTAL: "sponsor:portal",
 
+  // challenges (H43-H46, H8): split from SPONSORS_MANAGE so a role can create/
+  // edit/publish sponsor challenges without full enterprise/tier/invite
+  // administration — held internally by Hacker Experience and Sponsors Team.
+  // A challenge's own enterprise still gates ownership-scoped edits via the
+  // relationship check in challenges/access.ts; this capability only widens
+  // WHO may attempt org-wide challenge management, same as SPONSORS_MANAGE
+  // and QUEUE_ADMIN already did.
+  CHALLENGES_MANAGE: "challenges:manage",
+
   // content (H45, H47-H50)
   SCHEDULE_MANAGE: "schedule:manage",
   ANNOUNCEMENTS_MANAGE: "announcements:manage",

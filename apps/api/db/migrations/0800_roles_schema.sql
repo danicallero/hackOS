@@ -55,9 +55,9 @@ ALTER TABLE role_capabilities
         'projects:read', 'projects:import', 'projects:edit',
         'accredit:scan', 'presence:scan', 'activity:scan', 'logistics:stats',
         'intolerances:manage', 'queue:operate', 'queue:admin', 'judge:panel',
-        'judging:export', 'sponsors:manage', 'sponsor:portal', 'schedule:manage',
-        'announcements:manage', 'tv:control', 'notifications:send', 'audit:read',
-        'exports:run', 'event:manage', 'venue:manage', 'wallet:manage',
+        'judging:export', 'sponsors:manage', 'sponsor:portal', 'challenges:manage',
+        'schedule:manage', 'announcements:manage', 'tv:control', 'notifications:send',
+        'audit:read', 'exports:run', 'event:manage', 'venue:manage', 'wallet:manage',
         'presence:manage'
       ]::text[]
     )
