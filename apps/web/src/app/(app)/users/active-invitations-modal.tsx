@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { ApiError, api } from "@/lib/api";
 import { shortDateTimeFmt } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
@@ -56,6 +57,7 @@ const LINK_STATUS_TONE: Record<
 
 export function ActiveInvitationsModal() {
   const { t } = useLocale();
+  const copyLink = useCopyToClipboard();
   const kindLabel: Record<string, string> = {
     staff: t("roleStaff"),
     sponsor: t("roleSponsor"),
@@ -135,15 +137,6 @@ export function ActiveInvitationsModal() {
         next.delete(key);
         return next;
       });
-    }
-  }
-
-  async function copyLink(url: string) {
-    try {
-      await navigator.clipboard.writeText(url);
-      toast.success(t("copied"));
-    } catch {
-      toast.error(t("couldNotCopyLink"));
     }
   }
 

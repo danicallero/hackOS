@@ -1293,6 +1293,12 @@ interface EnqueueOutcome {
  * Returns null when the repo is already actively queued (no-op). The caller
  * owns the transaction and must broadcast QUEUE_ENTRY_CHANGED + notify the
  * challenge AFTER commit for every non-null outcome.
+ *
+ * `challengeMarker`/`allocatePosition` let a bulk caller (H21 "enroll ALL
+ * projects") hoist the challenge-scope check and the queue's bottom-position
+ * lock out of the per-repo loop instead of re-running both once per repo —
+ * see `bulkAddRepoChallenge`. Single-repo callers omit them and get the
+ * original per-call behavior unchanged.
  */
 async function enqueueRepoOnChallenge(
   client: Queryable,
@@ -1300,10 +1306,13 @@ async function enqueueRepoOnChallenge(
   repoId: number,
   challengeId: number,
   auditSource: string,
+  challengeMarker?: boolean,
+  allocatePosition: () => Promise<number> = () => nextBottomPosition(client, challengeId),
 ): Promise<EnqueueOutcome | null> {
   const repoMarker = await assertQueueRepoScope(client, actorId, repoId);
-  const challengeMarker = await assertQueueChallengeScope(client, actorId, challengeId);
-  if (repoMarker !== challengeMarker) {
+  const resolvedChallengeMarker =
+    challengeMarker ?? (await assertQueueChallengeScope(client, actorId, challengeId));
+  if (repoMarker !== resolvedChallengeMarker) {
     throw new ConflictError("Queue fixture markers must match", {
       code: "review_fixture_scope",
       repoId,
@@ -1317,7 +1326,7 @@ async function enqueueRepoOnChallenge(
   if (existing.rows[0]) {
     const entry = existing.rows[0] as { id: number; status: string };
     if (!["cancelled", "disqualified", "completed"].includes(entry.status)) return null;
-    const position = await nextBottomPosition(client, challengeId);
+    const position = await allocatePosition();
     const revived = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL,
@@ -1349,7 +1358,7 @@ async function enqueueRepoOnChallenge(
     return { entry: revived.rows[0], inserted: false, revived: true };
   }
 
-  const position = await nextBottomPosition(client, challengeId);
+  const position = await allocatePosition();
   const inserted = await client.query(
     `INSERT INTO queue_entries (challenge_id, repo_id, status, position)
      VALUES ($1, $2, 'waiting', $3)
@@ -1510,7 +1519,7 @@ export async function bulkAddRepoChallenge(
   challengeId: number,
 ): Promise<BulkAddResult> {
   const { outcomes, total } = await withTransaction(async (client) => {
-    await assertQueueChallengeScope(client, actorId, challengeId);
+    const challengeMarker = await assertQueueChallengeScope(client, actorId, challengeId);
     const challenge = await client.query(`SELECT id FROM challenges WHERE id = $1`, [challengeId]);
     if (!challenge.rows[0]) throw new NotFoundError(`Challenge ${challengeId} not found`);
 
@@ -1520,9 +1529,25 @@ export async function bulkAddRepoChallenge(
     );
     const repoIds = repos.rows.map((r: { id: number }) => r.id);
 
+    // One locked read of the group's current bottom position instead of one
+    // per repo: the FOR UPDATE lock it takes is held for the rest of this
+    // transaction, so serialization against a concurrent bulk-add on the same
+    // queue_group is unchanged, but each subsequent repo just takes the next
+    // in-memory slot instead of re-scanning the (growing) active set.
+    let nextPosition = await nextBottomPosition(client, challengeId);
+    const allocatePosition = async () => nextPosition++;
+
     const outcomes: EnqueueOutcome[] = [];
     for (const repoId of repoIds) {
-      const outcome = await enqueueRepoOnChallenge(client, actorId, repoId, challengeId, "admin");
+      const outcome = await enqueueRepoOnChallenge(
+        client,
+        actorId,
+        repoId,
+        challengeId,
+        "admin",
+        challengeMarker,
+        allocatePosition,
+      );
       if (outcome) outcomes.push(outcome);
     }
 
@@ -1622,16 +1647,21 @@ function toEnqueuedChallenge(outcome: EnqueueOutcome): EnqueuedChallenge {
 
 /** Enqueued entries a caller must announce (SSE + notify) after commit. */
 async function announceQueueOutcomes(outcomes: EnqueueOutcome[]): Promise<void> {
-  for (const outcome of outcomes) {
-    await broadcastQueueEvent(
-      pool,
-      "entry",
-      outcome.entry.id,
-      EVENTS.QUEUE_ENTRY_CHANGED,
-      outcome.entry,
-    );
-    await notifyChallengeQueueChanged(pool, outcome.entry.challenge_id);
-  }
+  await Promise.all(
+    outcomes.map((outcome) =>
+      broadcastQueueEvent(
+        pool,
+        "entry",
+        outcome.entry.id,
+        EVENTS.QUEUE_ENTRY_CHANGED,
+        outcome.entry,
+      ),
+    ),
+  );
+  const challengeIds = new Set(outcomes.map((outcome) => outcome.entry.challenge_id));
+  await Promise.all(
+    [...challengeIds].map((challengeId) => notifyChallengeQueueChanged(pool, challengeId)),
+  );
 }
 
 /**
