@@ -122,6 +122,11 @@ export interface ApplicationForm {
   /** Whether this form asks for shirt size / dietary restrictions (H12). */
   ask_shirt_size: boolean;
   ask_food_intolerances: boolean;
+  /** Roles granted alongside ticket issuance when a response is confirmed (H8). */
+  grants_role_ids: number[];
+  /** Whether any response to this form has ever reached "confirmed" (H8) —
+   *  editing grants_role_ids is not retroactive for those responses. */
+  has_confirmed_responses: boolean;
   created_at: string;
 }
 

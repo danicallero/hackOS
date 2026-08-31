@@ -37,6 +37,22 @@ async function getApp(): Promise<App> {
   return app;
 }
 
+/**
+ * Test roles get a random position in [1e6, ~1e9) (see helpers.ts). Push a
+ * user's own (single, throwaway) role position above that whole range so
+ * they can grant/manage any test role by position (H8 role-mutation
+ * authority) — mirrors the `UPDATE roles SET position = ...` pattern used in
+ * test/identity/roles.test.ts.
+ */
+async function giveManagerTopPosition(userId: number): Promise<void> {
+  const { pool } = await import("../../src/db/pool.js");
+  await pool.query(
+    `UPDATE roles SET position = 2000000000
+       WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1 LIMIT 1)`,
+    [userId],
+  );
+}
+
 describe("applications CRUD (H11)", () => {
   it("requires APPLICATIONS_MANAGE to create", async () => {
     const a = await getApp();
@@ -368,6 +384,10 @@ describe("applications CRUD (H11)", () => {
     const roleA = await createRole([], { name: "grant-form-role-a" });
     const roleB = await createRole([], { name: "grant-form-role-b" });
     const roleC = await createRole([], { name: "grant-form-role-c" });
+    // H8: configuring grants_role_ids is now gated by the same role-mutation
+    // authority as direct assignment — put the manager's own role position
+    // strictly above every role it will grant through this form.
+    await giveManagerTopPosition(manager);
 
     const create = await a.inject({
       method: "POST",
@@ -437,6 +457,7 @@ describe("applications CRUD (H11)", () => {
   it("H8: rejects an unknown role ID in grants_role_ids", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    await giveManagerTopPosition(manager);
 
     const create = await a.inject({
       method: "POST",
@@ -480,6 +501,110 @@ describe("applications CRUD (H11)", () => {
       headers: asUser(manager),
     });
     expect(get.json().grants_role_ids).toEqual([roleA]);
+  });
+
+  it("H8: applications:manage alone can't configure grants_role_ids to a role at/above the actor's own highest role", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE roles SET position = 500
+         WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1 LIMIT 1)`,
+      [manager],
+    );
+    // roles.position is unique, so "at or above" can only be exercised as
+    // strictly above here (an exact tie is impossible by constraint) — the
+    // strict `<` in requireRoleMutationAuthority already covers both.
+    const aboveCeiling = await createRole([], { name: "grant-authority-above-ceiling" });
+    await pool.query(`UPDATE roles SET position = 900 WHERE id = $1`, [aboveCeiling]);
+    const belowCeiling = await createRole([], { name: "grant-authority-below-ceiling" });
+    await pool.query(`UPDATE roles SET position = 100 WHERE id = $1`, [belowCeiling]);
+
+    const escalation = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: {
+        name: "Escalation attempt",
+        type: "participant",
+        template: sampleTemplate(),
+        grants_role_ids: [aboveCeiling],
+      },
+    });
+    expect(escalation.statusCode).toBe(403);
+
+    // Strictly below the actor's own highest role: allowed.
+    const ok = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: {
+        name: "Within authority",
+        type: "participant",
+        template: sampleTemplate(),
+        grants_role_ids: [belowCeiling],
+      },
+    });
+    expect(ok.statusCode).toBe(201);
+    const id = ok.json().id;
+
+    // Same rule on update — and it must reject the whole request, not apply
+    // the allowed role while dropping the disallowed one.
+    const patch = await a.inject({
+      method: "PATCH",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+      payload: { grants_role_ids: [belowCeiling, aboveCeiling] },
+    });
+    expect(patch.statusCode).toBe(403);
+    const get = await a.inject({
+      method: "GET",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+    });
+    expect(get.json().grants_role_ids).toEqual([belowCeiling]);
+  });
+
+  it("H8: applications:manage alone can't configure grants_role_ids to a role granting a capability the actor doesn't possess", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    await giveManagerTopPosition(manager);
+    const { pool } = await import("../../src/db/pool.js");
+
+    const unpossessedCapRole = await createRole([CAPABILITIES.PERMISSIONS_MANAGE], {
+      name: "grant-authority-unpossessed-cap",
+    });
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: {
+        name: "Backdoor attempt",
+        type: "participant",
+        template: sampleTemplate(),
+        grants_role_ids: [unpossessedCapRole],
+      },
+    });
+    expect(res.statusCode).toBe(403);
+
+    // Once the actor also possesses that capability, the same role is grantable.
+    await pool.query(
+      `INSERT INTO role_capabilities (role_id, capability, state)
+         SELECT role_id, $2, 'allow' FROM user_roles WHERE user_id = $1 LIMIT 1`,
+      [manager, CAPABILITIES.PERMISSIONS_MANAGE],
+    );
+    const ok = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: {
+        name: "Now within capability",
+        type: "participant",
+        template: sampleTemplate(),
+        grants_role_ids: [unpossessedCapRole],
+      },
+    });
+    expect(ok.statusCode).toBe(201);
   });
 
   it("blocks deleting a form that already has responses", async () => {

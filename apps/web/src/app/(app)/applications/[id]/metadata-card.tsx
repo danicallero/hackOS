@@ -3,16 +3,18 @@
 // Form metadata editor (H11): trilingual name/description, window, limits.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { SettingsIcon } from "lucide-react";
+import { InfoIcon, SettingsIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { DateTimeInput } from "@/components/common/datetime-input";
+import { MultiSelect } from "@/components/common/multi-select";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Form,
   FormControl,
@@ -35,6 +37,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
+import type { RoleSummary } from "@/lib/types";
 import { APPLICATION_TYPES, type ApplicationForm, fromLocalInput, toLocalInput } from "../lib";
 
 // Runtime validator is built inside the component with useMemo so its error
@@ -50,6 +53,7 @@ type MetaValues = {
   confirmation_window_hours: string;
   ask_shirt_size: boolean;
   ask_food_intolerances: boolean;
+  grants_role_ids: string[];
 };
 
 export function MetadataCard({
@@ -63,6 +67,7 @@ export function MetadataCard({
 }) {
   const { t } = useLocale();
   const [saveState, setSaveState] = useState<SaveState>("saved");
+  const [roles, setRoles] = useState<RoleSummary[]>([]);
   const localizedMetaSchema = useMemo(
     () =>
       z.object({
@@ -76,6 +81,7 @@ export function MetadataCard({
         confirmation_window_hours: z.string(),
         ask_shirt_size: z.boolean(),
         ask_food_intolerances: z.boolean(),
+        grants_role_ids: z.array(z.string()),
       }),
     [t],
   );
@@ -92,8 +98,17 @@ export function MetadataCard({
       confirmation_window_hours: String(form.confirmation_window_hours),
       ask_shirt_size: form.ask_shirt_size,
       ask_food_intolerances: form.ask_food_intolerances,
+      grants_role_ids: form.grants_role_ids.map(String),
     },
   });
+
+  useEffect(() => {
+    // system:superadmin is CLI-only (H8) — never offer it as a grantable role.
+    api
+      .get<RoleSummary[]>("/api/roles")
+      .then((r) => setRoles(r.filter((role) => role.name !== "system:superadmin")))
+      .catch(() => setRoles([]));
+  }, []);
 
   useEffect(() => {
     onDirtyChange?.(rhf.formState.isDirty);
@@ -124,6 +139,7 @@ export function MetadataCard({
         confirmation_window_hours: windowHours,
         ask_shirt_size: values.ask_shirt_size,
         ask_food_intolerances: values.ask_food_intolerances,
+        grants_role_ids: values.grants_role_ids.map(Number),
       });
       await onSaved();
       rhf.reset(values);
@@ -324,6 +340,33 @@ export function MetadataCard({
             />
           </div>
           <h3 className="border-t pt-4 text-balance text-sm font-semibold">{t("builderReview")}</h3>
+          <FormField
+            control={rhf.control}
+            name="grants_role_ids"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("grantsRolesLabel")}</FormLabel>
+                <FormControl>
+                  <MultiSelect
+                    options={roles.map((role) => ({ value: String(role.id), label: role.name }))}
+                    value={field.value}
+                    onChange={field.onChange}
+                    placeholder={t("grantsRolesPlaceholder")}
+                    searchPlaceholder={t("searchRolesPlaceholder")}
+                    emptyText={t("noRolesYet")}
+                  />
+                </FormControl>
+                <FormDescription>{t("grantsRolesDesc")}</FormDescription>
+                {form.has_confirmed_responses && (
+                  <Alert>
+                    <InfoIcon aria-hidden="true" />
+                    <AlertDescription>{t("grantsRolesNotRetroactiveNotice")}</AlertDescription>
+                  </Alert>
+                )}
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           <FormField
             control={rhf.control}
             name="active"

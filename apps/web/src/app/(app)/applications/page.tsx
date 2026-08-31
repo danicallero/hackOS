@@ -16,6 +16,7 @@ import { z } from "zod";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { Modal } from "@/components/common/modal";
+import { MultiSelect } from "@/components/common/multi-select";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -42,6 +43,7 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
+import type { RoleSummary } from "@/lib/types";
 import {
   APPLICATION_TYPES,
   type ApplicationForm,
@@ -64,6 +66,7 @@ type CreateValues = {
   confirmation_window_hours: string;
   ask_shirt_size: boolean;
   ask_food_intolerances: boolean;
+  grants_role_ids: string[];
 };
 
 const EMPTY: CreateValues = {
@@ -75,6 +78,7 @@ const EMPTY: CreateValues = {
   confirmation_window_hours: "168",
   ask_shirt_size: DEFAULT_SHIRT_DIETARY_TYPES.includes("participant"),
   ask_food_intolerances: DEFAULT_SHIRT_DIETARY_TYPES.includes("participant"),
+  grants_role_ids: [],
 };
 
 export default function ApplicationsPage() {
@@ -85,6 +89,7 @@ export default function ApplicationsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [roles, setRoles] = useState<RoleSummary[]>([]);
 
   const localizedCreateSchema = useMemo(
     () =>
@@ -97,6 +102,7 @@ export default function ApplicationsPage() {
         confirmation_window_hours: z.string(),
         ask_shirt_size: z.boolean(),
         ask_food_intolerances: z.boolean(),
+        grants_role_ids: z.array(z.string()),
       }),
     [t],
   );
@@ -105,6 +111,15 @@ export default function ApplicationsPage() {
     resolver: zodResolver(localizedCreateSchema),
     defaultValues: EMPTY,
   });
+
+  useEffect(() => {
+    if (!creating) return;
+    // system:superadmin is CLI-only (H8) — never offer it as a grantable role.
+    api
+      .get<RoleSummary[]>("/api/roles")
+      .then((r) => setRoles(r.filter((role) => role.name !== "system:superadmin")))
+      .catch(() => setRoles([]));
+  }, [creating]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -163,6 +178,7 @@ export default function ApplicationsPage() {
         confirmation_window_hours: windowHours,
         ask_shirt_size: values.ask_shirt_size,
         ask_food_intolerances: values.ask_food_intolerances,
+        grants_role_ids: values.grants_role_ids.map(Number),
       });
       toast.success(t("formCreated"));
       setCreating(false);
@@ -415,6 +431,28 @@ export default function ApplicationsPage() {
                 )}
               />
             </div>
+            <FormField
+              control={form.control}
+              name="grants_role_ids"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("grantsRolesLabel")}</FormLabel>
+                  <FormControl>
+                    <MultiSelect
+                      inDialog
+                      options={roles.map((role) => ({ value: String(role.id), label: role.name }))}
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder={t("grantsRolesPlaceholder")}
+                      searchPlaceholder={t("searchRolesPlaceholder")}
+                      emptyText={t("noRolesYet")}
+                    />
+                  </FormControl>
+                  <FormDescription>{t("grantsRolesDesc")}</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <div className="grid gap-4 sm:grid-cols-2">
               <FormField
                 control={form.control}

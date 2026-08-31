@@ -7,6 +7,12 @@ import { audit } from "../../lib/audit.js";
 import { requireAnyCapability, requireCapability } from "../../lib/capabilities.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
+import {
+  lockRoleGraph,
+  type RoleGraphClient,
+  requireCapabilityPossessionForAssignment,
+  requireRoleMutationAuthority,
+} from "../identity/role-authority.js";
 import { createApplicationSchema, idParamSchema, updateApplicationSchema } from "./schemas.js";
 import {
   anonymousRetentionConfiguration,
@@ -24,6 +30,31 @@ async function assertRolesExist(client: Queryable, roleIds: number[]): Promise<v
     const found = new Set(rows.map((r) => r.id as number));
     const missing = unique.filter((id) => !found.has(id));
     throw new NotFoundError("Role not found", { roleIds: missing });
+  }
+}
+
+/**
+ * H8/H11: configuring a form to grant role X on confirmation is functionally
+ * equivalent to being able to hand X to anyone who gets confirmed through it
+ * — so it's gated by the exact same Discord-style hierarchy + capability-
+ * content authority that direct role assignment uses (routes/roles.ts), not
+ * merely applications:manage. Rejects the whole request (throws on the first
+ * failing role) rather than applying any grants partially. Assumes
+ * assertRolesExist already confirmed every id is real.
+ */
+async function assertActorCanGrantRoles(
+  client: RoleGraphClient,
+  actorId: number,
+  roleIds: number[],
+): Promise<void> {
+  if (roleIds.length === 0) return;
+  const unique = [...new Set(roleIds)];
+  const { rows } = await client.query(`SELECT id, position FROM roles WHERE id = ANY($1)`, [
+    unique,
+  ]);
+  for (const { id, position } of rows as { id: number; position: number }[]) {
+    await requireRoleMutationAuthority(client, actorId, Number(position));
+    await requireCapabilityPossessionForAssignment(client, actorId, id);
   }
 }
 
@@ -67,9 +98,17 @@ export function registerAdminRoutes(app: FastifyInstance): void {
            FROM application_grants_roles agr WHERE agr.application_id = applications.id),
         ARRAY[]::integer[]
       ) AS grants_role_ids`;
+  // H8: cheap boolean so the builder UI can warn that editing grants_role_ids
+  // is not retroactive — roles are granted once at confirmation time, so a
+  // form with any confirmed response already has grants "locked in" for it.
+  const HAS_CONFIRMED_RESPONSES_EXPR = `EXISTS (
+        SELECT 1 FROM application_responses ar
+         WHERE ar.application_id = applications.id AND ar.status = 'confirmed'
+      ) AS has_confirmed_responses`;
   const COLUMNS = `id, name, type, template, sections, description, active, open_at, close_at,
                    capacity, confirmation_window_hours, ask_shirt_size, ask_food_intolerances,
-                   current_form_version, created_at, ${GRANTS_ROLE_IDS_EXPR}`;
+                   current_form_version, created_at, ${GRANTS_ROLE_IDS_EXPR},
+                   ${HAS_CONFIRMED_RESPONSES_EXPR}`;
 
   // ── public: open forms with their template ──────────────────────────────────
   // A late invited participant (H10) can also discover/fetch a closed form —
@@ -148,7 +187,8 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       }),
       schema: {
         summary: "Get one application form",
-        description: "Staff read of a single form regardless of window state (H11).",
+        description:
+          "Staff read of a single form regardless of window state (H11). Includes `has_confirmed_responses` (H8) — true once any response reached confirmed, meaning further `grants_role_ids` edits only affect future confirmations, not past ones.",
         params: idParamSchema,
       },
     },
@@ -169,7 +209,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Create an application form",
         description:
-          "Defines a new application form (H11): its template, optional named sections that group template fields under a title/description, open/close window, capacity, confirmation window, whether it asks for a shirt size and/or dietary restrictions (H12) — both off by default, independent of `type` — and an optional `grants_role_ids` (H8) list of roles granted alongside ticket issuance when a response is confirmed.",
+          "Defines a new application form (H11): its template, optional named sections that group template fields under a title/description, open/close window, capacity, confirmation window, whether it asks for a shirt size and/or dietary restrictions (H12) — both off by default, independent of `type` — and an optional `grants_role_ids` (H8) list of roles granted alongside ticket issuance when a response is confirmed. Configuring a role into `grants_role_ids` is gated exactly like directly assigning that role (H8): the actor's highest assigned-role position must sit strictly above every requested role's position, and (unless they hold the wildcard) they must already possess every capability that role's own rows explicitly allow.",
         body: createApplicationSchema,
       },
     },
@@ -178,7 +218,11 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       const row = await withTransaction(async (client) => {
         const template = normalizeTemplateForStorage(b.template);
         const roleIds = b.grants_role_ids ?? [];
-        await assertRolesExist(client, roleIds);
+        if (roleIds.length > 0) {
+          await lockRoleGraph(client);
+          await assertRolesExist(client, roleIds);
+          await assertActorCanGrantRoles(client, req.userId as number, roleIds);
+        }
         const { rows } = await client.query(
           `INSERT INTO applications
              (name, type, template, sections, description, active, open_at, close_at, capacity,
@@ -240,7 +284,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update an application form",
         description:
-          "Partial update of a form's template, named sections grouping template fields, window, capacity, active flag, shirt-size/dietary-restriction toggles (H11, H12), or the roles granted on confirmation (`grants_role_ids`, H8). Fields omitted from the body are left unchanged; passing `grants_role_ids` replaces the full set of granted roles for the form (an empty array clears every grant).",
+          "Partial update of a form's template, named sections grouping template fields, window, capacity, active flag, shirt-size/dietary-restriction toggles (H11, H12), or the roles granted on confirmation (`grants_role_ids`, H8). Fields omitted from the body are left unchanged; passing `grants_role_ids` replaces the full set of granted roles for the form (an empty array clears every grant). Adding a role to `grants_role_ids` requires the same role-mutation authority (position hierarchy + capability possession, H8) as assigning that role directly.",
         params: idParamSchema,
         body: updateApplicationSchema,
       },
@@ -292,7 +336,11 @@ export function registerAdminRoutes(app: FastifyInstance): void {
         // Omitted (undefined) leaves it unchanged; [] clears every grant.
         const grantsChanged = b.grants_role_ids !== undefined;
         const nextRoleIds = b.grants_role_ids ?? [];
-        if (grantsChanged) await assertRolesExist(client, nextRoleIds);
+        if (grantsChanged && nextRoleIds.length > 0) {
+          await lockRoleGraph(client);
+          await assertRolesExist(client, nextRoleIds);
+          await assertActorCanGrantRoles(client, req.userId as number, nextRoleIds);
+        }
 
         if (sets.length === 0 && !grantsChanged) return current;
         let rows: Record<string, unknown>[];
