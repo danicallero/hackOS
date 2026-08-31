@@ -2665,5 +2665,10 @@
   "noDeletedRoles": "No deleted roles.",
   "restoreRole": "Restore",
   "roleRestored": "Role restored.",
-  "couldNotRestoreRole": "Couldn't restore role."
+  "couldNotRestoreRole": "Couldn't restore role.",
+  "displayTab": "Display",
+  "systemRoleBadge": "System",
+  "dragToReorderAria": "Drag to reorder {name}",
+  "couldNotMoveRole": "Couldn't reorder role. Move a neighboring role to make room, then try again.",
+  "selectRoleHint": "Select a role to view its details."
 }

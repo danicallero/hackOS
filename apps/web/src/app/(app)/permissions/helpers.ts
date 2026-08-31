@@ -51,6 +51,29 @@ export function selectableCapabilities(): string[] {
   return ALL_CAPABILITIES.filter((cap) => cap !== "sponsor:portal");
 }
 
+/**
+ * The capability catalogue, grouped by domain, filtered to entries whose
+ * code or prettified label matches `query` (case-insensitive). Empty groups
+ * are dropped rather than shown with zero rows.
+ */
+export function filterCapabilitiesByDomain(
+  query: string,
+  t: Translate,
+): { domain: string; capabilities: string[] }[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return capabilitiesByDomain();
+  return capabilitiesByDomain()
+    .map((group) => ({
+      domain: group.domain,
+      capabilities: group.capabilities.filter(
+        (cap) =>
+          cap.toLowerCase().includes(needle) ||
+          prettifyCapability(cap, t).toLowerCase().includes(needle),
+      ),
+    }))
+    .filter((group) => group.capabilities.length > 0);
+}
+
 const TEMPLATE_COPY_KEYS: Record<string, { name: MessageKey; description: MessageKey }> = {
   platformadministrator: {
     name: "permissionTemplatePlatformAdministrator",

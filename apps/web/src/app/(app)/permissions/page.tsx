@@ -2,25 +2,20 @@
 
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  KeyRoundIcon,
-  LayersIcon,
-  PlusIcon,
-  ShieldCheckIcon,
-  Trash2Icon,
-  UndoIcon,
-} from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { KeyRoundIcon, PlusIcon, ShieldCheckIcon, Trash2Icon, UndoIcon } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
-import { type Column, DataTable } from "@/components/common/data-table";
+import { ContextualError } from "@/components/common/contextual-error";
+import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
-import { StatusBadge } from "@/components/common/status-badge";
+import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
+import type { UserOption } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -42,12 +37,25 @@ import {
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
-import type { RoleDetail, RoleSummary, RoleTemplate } from "@/lib/types";
-import { capabilitiesByDomain, permissionTemplateName, prettifyCapability } from "./helpers";
+import type {
+  PermissionState,
+  RoleDetail,
+  RoleSummary,
+  RoleTemplate,
+  UserList,
+  UserListItem,
+} from "@/lib/types";
+import { permissionTemplateName } from "./helpers";
+import { RoleEditor } from "./role-editor";
+import { RoleList } from "./role-list";
 
-// H8: admins manage a Discord-style role hierarchy. This page lists roles by
-// position, offers a create-role modal (optionally seeded from a template),
-// and shows the read-only catalogue of every capability kind.
+// H8: admins manage a Discord-style hierarchical role model on a single
+// master-detail page — the left column lists every role on one reorderable
+// hierarchy, the right column edits whichever role is selected (persisted as
+// ?role=<id> for deep links, e.g. from a user's permissions tab). This
+// replaced a separate full-page /permissions/[roleId] route per the design
+// review: selecting a role should feel like flipping a tab, not navigating
+// away from the list.
 
 const createSchema = (t: Translate) =>
   z.object({
@@ -65,7 +73,11 @@ type CreateValues = z.infer<ReturnType<typeof createSchema>>;
 export default function PermissionsPage() {
   const { t } = useLocale();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const [roles, setRoles] = useState<RoleSummary[]>([]);
+  const [users, setUsers] = useState<Map<number, UserListItem>>(new Map());
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -74,6 +86,26 @@ export default function PermissionsPage() {
   const [deletedRoles, setDeletedRoles] = useState<RoleSummary[]>([]);
   const [trashLoading, setTrashLoading] = useState(false);
   const [restoringId, setRestoringId] = useState<number | null>(null);
+
+  const selectedId = (() => {
+    const raw = searchParams.get("role");
+    return raw && Number.isFinite(Number(raw)) ? Number(raw) : null;
+  })();
+
+  function selectRole(id: number | null) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (id === null) params.delete("role");
+    else params.set("role", String(id));
+    router.replace(params.size > 0 ? `${pathname}?${params.toString()}` : pathname);
+  }
+
+  const mergeUsers = useCallback((list: UserListItem[]) => {
+    setUsers((prev) => {
+      const next = new Map(prev);
+      for (const u of list) next.set(u.id, u);
+      return next;
+    });
+  }, []);
 
   const schema = createSchema(t);
   const form = useForm<CreateValues>({
@@ -84,9 +116,10 @@ export default function PermissionsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
-    const [rolesResult, templatesResult] = await Promise.allSettled([
+    const [rolesResult, templatesResult, usersResult] = await Promise.allSettled([
       api.get<RoleSummary[]>("/api/roles"),
       api.get<RoleTemplate[]>("/api/role-templates"),
+      api.get<UserList>("/api/users", { query: { limit: 200 } }),
     ]);
     if (rolesResult.status === "fulfilled") {
       setRoles(rolesResult.value);
@@ -98,8 +131,9 @@ export default function PermissionsPage() {
       );
     }
     if (templatesResult.status === "fulfilled") setTemplates(templatesResult.value);
+    if (usersResult.status === "fulfilled") mergeUsers(usersResult.value.users);
     setLoading(false);
-  }, [t]);
+  }, [t, mergeUsers]);
 
   const loadTrash = useCallback(async () => {
     setTrashLoading(true);
@@ -143,6 +177,10 @@ export default function PermissionsPage() {
     load();
   }, [load, liveRefresh]);
 
+  function applyRole(updated: RoleSummary) {
+    setRoles((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+  }
+
   async function onCreate(values: CreateValues) {
     const template = templates.find((tpl) => tpl.key === values.templateKey);
     try {
@@ -155,43 +193,93 @@ export default function PermissionsPage() {
       toast.success(t("roleCreated"));
       setCreateOpen(false);
       form.reset({ name: "", position: "0", isVisible: true, templateKey: "" });
-      router.push(`/permissions/${role.id}`);
+      setRoles((prev) => [...prev, role]);
+      selectRole(role.id);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotCreateRole"));
     }
   }
 
-  const columns: Column<RoleSummary>[] = [
-    {
-      id: "name",
-      header: t("name"),
-      cell: (r) => (
-        <span className="flex items-center gap-2 font-medium">
-          {r.name}
-          {r.isProtected && (
-            <StatusBadge tone="neutral" dot={false}>
-              {t("protectedRoleBadge")}
-            </StatusBadge>
-          )}
-        </span>
-      ),
-      sortValue: (r) => r.name,
-    },
-    {
-      id: "position",
-      header: t("positionLabel"),
-      cell: (r) => <span className="tabular-nums">{r.position}</span>,
-      sortValue: (r) => r.position,
-    },
-    {
-      id: "members",
-      header: t("membersTitle"),
-      cell: (r) => <span className="tabular-nums">{r.memberIds.length}</span>,
-      sortValue: (r) => r.memberIds.length,
-    },
-  ];
+  async function onReorder(roleId: number, newPosition: number) {
+    const before = roles;
+    setRoles((prev) => prev.map((r) => (r.id === roleId ? { ...r, position: newPosition } : r)));
+    try {
+      const updated = await api.patch<RoleDetail>(`/api/roles/${roleId}/position`, {
+        position: newPosition,
+      });
+      applyRole(updated);
+    } catch (err) {
+      setRoles(before);
+      toast.error(err instanceof ApiError ? err.message : t("couldNotMoveRole"));
+    }
+  }
 
-  const catalogue = capabilitiesByDomain();
+  async function onSaveDetails(roleId: number, values: { name: string; isVisible: boolean }) {
+    try {
+      const r = await api.patch<RoleDetail>(`/api/roles/${roleId}`, values);
+      applyRole(r);
+      toast.success(t("roleUpdated"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveRole"));
+    }
+  }
+
+  async function onSaveCapabilities(
+    roleId: number,
+    capabilities: { capability: string; state: PermissionState }[],
+  ) {
+    try {
+      const r = await api.put<RoleDetail>(`/api/roles/${roleId}/capabilities`, { capabilities });
+      applyRole(r);
+      toast.success(t("capabilitiesSaved"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveCapabilities"));
+    }
+  }
+
+  async function onAddMember(roleId: number, userId: number, user?: UserListItem) {
+    try {
+      const r = await api.post<RoleDetail>(`/api/roles/${roleId}/users/${userId}`, {});
+      if (user) mergeUsers([user]);
+      applyRole(r);
+      toast.success(t("memberAdded"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotAddMemberRole"));
+    }
+  }
+
+  async function onRemoveMember(roleId: number, userId: number) {
+    try {
+      const r = await api.delete<RoleDetail>(`/api/roles/${roleId}/users/${userId}`);
+      applyRole(r);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveMemberRole"));
+    }
+  }
+
+  async function onDelete(roleId: number) {
+    try {
+      await api.delete<{ deleted: true }>(`/api/roles/${roleId}`);
+      toast.success(t("roleDeleted"));
+      setRoles((prev) => prev.filter((r) => r.id !== roleId));
+      selectRole(null);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteRole"));
+    }
+  }
+
+  const searchUsers = useMemo(
+    () =>
+      async (query: string): Promise<UserOption[]> => {
+        const result = await api.get<UserList>("/api/users", {
+          query: { q: query || undefined, limit: 20 },
+        });
+        return result.users;
+      },
+    [],
+  );
+
+  const selectedRole = roles.find((r) => r.id === selectedId) ?? null;
 
   return (
     <div className="space-y-8">
@@ -235,48 +323,56 @@ export default function PermissionsPage() {
         </SectionCard>
       )}
 
-      <SectionCard icon={ShieldCheckIcon} title={t("rolesTitle")} bodyClassName="p-0">
-        <DataTable
-          columns={columns}
-          data={[...roles].sort((a, b) => b.position - a.position)}
-          getRowId={(r) => String(r.id)}
-          loading={loading}
-          error={loadError ? { message: loadError, onRetry: load } : undefined}
-          searchable={(r) => r.name}
-          searchPlaceholder={t("filterRolesPlaceholder")}
-          pageSize={20}
-          getRowHref={(r) => `/permissions/${r.id}`}
-          getRowLabel={(r) => r.name}
-          empty={{
-            icon: ShieldCheckIcon,
-            title: t("noRolesYetTitle"),
-            action: (
-              <Button type="button" onClick={() => setCreateOpen(true)}>
-                <PlusIcon aria-hidden="true" />
-                {t("createRole")}
-              </Button>
-            ),
-          }}
-        />
-      </SectionCard>
-
-      <SectionCard icon={LayersIcon} title={t("capabilitiesCatalogueTitle")}>
-        <div className="space-y-5">
-          {catalogue.map((group) => (
-            <div key={group.domain} className="space-y-2">
-              <p className="type-label text-muted-foreground">{group.domain}</p>
-              <div className="flex flex-wrap gap-2">
-                {group.capabilities.map((cap) => (
-                  <StatusBadge key={cap} tone={cap === "*" ? "brand" : "neutral"} dot={false}>
-                    <span className="font-mono">{cap}</span>
-                    <span className="text-muted-foreground">· {prettifyCapability(cap, t)}</span>
-                  </StatusBadge>
-                ))}
+      {loadError ? (
+        <ContextualError message={loadError} onRetry={() => void load()} />
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-[320px_1fr] lg:items-start">
+          <SectionCard icon={ShieldCheckIcon} title={t("rolesTitle")} bodyClassName="p-0">
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Spinner className="size-6" />
               </div>
-            </div>
-          ))}
+            ) : roles.length === 0 ? (
+              <EmptyState
+                icon={ShieldCheckIcon}
+                title={t("noRolesYetTitle")}
+                action={
+                  <Button type="button" onClick={() => setCreateOpen(true)}>
+                    <PlusIcon aria-hidden="true" />
+                    {t("createRole")}
+                  </Button>
+                }
+              />
+            ) : (
+              <RoleList
+                roles={roles}
+                selectedId={selectedId}
+                onSelect={selectRole}
+                onReorder={onReorder}
+              />
+            )}
+          </SectionCard>
+
+          {selectedRole ? (
+            <RoleEditor
+              role={selectedRole}
+              users={users}
+              onSaveDetails={(values) => onSaveDetails(selectedRole.id, values)}
+              onSaveCapabilities={(caps) => onSaveCapabilities(selectedRole.id, caps)}
+              onAddMember={(userId, user) => onAddMember(selectedRole.id, userId, user)}
+              onRemoveMember={(userId) => onRemoveMember(selectedRole.id, userId)}
+              onDelete={() => onDelete(selectedRole.id)}
+              searchUsers={searchUsers}
+            />
+          ) : (
+            !loading && (
+              <SectionCard title={t("rolesTitle")}>
+                <EmptyState icon={ShieldCheckIcon} title={t("selectRoleHint")} />
+              </SectionCard>
+            )
+          )}
         </div>
-      </SectionCard>
+      )}
 
       <Modal
         open={createOpen}

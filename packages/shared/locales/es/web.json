@@ -2665,5 +2665,10 @@
   "noDeletedRoles": "No hay roles eliminados.",
   "restoreRole": "Restaurar",
   "roleRestored": "Rol restaurado.",
-  "couldNotRestoreRole": "No se pudo restaurar el rol."
+  "couldNotRestoreRole": "No se pudo restaurar el rol.",
+  "displayTab": "Visualización",
+  "systemRoleBadge": "Sistema",
+  "dragToReorderAria": "Arrastrar para reordenar {name}",
+  "couldNotMoveRole": "No se pudo reordenar el rol. Mueve un rol vecino para hacer sitio e inténtalo de nuevo.",
+  "selectRoleHint": "Selecciona un rol para ver sus detalles."
 }
