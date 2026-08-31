@@ -520,10 +520,11 @@ export async function markAnnouncementRead(
 /**
  * Resolves who an announcement reaches: an explicit recipient list wins if
  * set; otherwise audience tags (sponsor/participant/mentor, same vocabulary
- * and "sponsor implies participant" rule as H59's schedule audiences —
- * see identity/role.ts's mentorOrParticipantType/computeMembershipFlags,
- * inlined here as one query to avoid an N+1 per user); otherwise everyone,
- * unchanged from before this feature existed.
+ * and "sponsor implies participant" rule as H59's schedule audiences — see
+ * identity/role.ts's mentorOrParticipantType/computeMembershipFlags, whose
+ * bulk-query equivalent (user_effective_badge_category) is joined directly
+ * here to avoid an N+1 per user); otherwise everyone, unchanged from before
+ * this feature existed.
  */
 async function resolveRecipients(
   db: Queryable,
@@ -559,21 +560,13 @@ async function resolveRecipients(
   const { rows } = await db.query(
     `WITH staff AS (
        -- Same "holds at least one capability" definition as
-       -- getEffectiveCapabilities/computeDerivedRole's staff bucket.
+       -- getEffectiveCapabilities/getBadgeCategory's staff bucket.
        SELECT DISTINCT user_id FROM user_effective_capabilities
      ),
      attendee AS (
-       SELECT u.id AS user_id,
-         COALESCE(
-           (SELECT mar.role FROM manual_attendee_roles mar
-             WHERE mar.user_id = u.id AND mar.role IN ('mentor', 'participant')),
-           (SELECT a.type FROM application_responses ar
-              JOIN applications a ON a.id = ar.application_id
-             WHERE ar.user_id = u.id AND ar.status <> 'draft' AND a.type IN ('mentor', 'participant')
-             ORDER BY CASE a.type WHEN 'mentor' THEN 0 ELSE 1 END
-             LIMIT 1)
-         ) AS type
-       FROM users u
+       SELECT user_id, badge_category::text AS type
+       FROM user_effective_badge_category
+       WHERE badge_category IN ('mentor', 'participant')
      ),
      sponsor AS (
        SELECT DISTINCT user_id FROM sponsors WHERE user_id IS NOT NULL

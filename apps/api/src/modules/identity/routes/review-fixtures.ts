@@ -14,6 +14,7 @@ import { issueTicket } from "../../logistics/tickets.js";
 import { auth } from "../auth.js";
 import { purgeReviewFixtureAccount } from "../removal.js";
 import { purgeReviewFixtureQueue } from "../review-fixture-queues.js";
+import { assignAttendeeRole } from "../role.js";
 
 /**
  * Synthetic accounts used in the same deployed hackOS instance. The scenario
@@ -165,11 +166,7 @@ async function configureFixtureParticipant(
   actorId: number,
   staffId: number,
 ): Promise<void> {
-  await client.query(
-    `INSERT INTO manual_attendee_roles (user_id, role, assigned_by)
-     VALUES ($1, 'participant', $2)`,
-    [userId, actorId],
-  );
+  await assignAttendeeRole(client, userId, "participant", actorId);
   // A used account-claim token is the existing, non-application path that
   // grants a manually-created participant mobile access.
   await client.query(

@@ -92,6 +92,10 @@ export async function accreditationCountsByRole() {
   const { rows } = await pool.query(
     `WITH classified AS (
        SELECT u.id,
+              -- H8 full-replacement: see scanner-sync.ts's scannerSnapshot
+              -- for the same pattern/rationale (admin/judge/sponsor/staff
+              -- from capabilities+relationship tables, everyone else from
+              -- their effective role's badge_category).
               CASE
                 WHEN EXISTS (
                   SELECT 1 FROM user_effective_capabilities uec
@@ -102,19 +106,10 @@ export async function accreditationCountsByRole() {
                 WHEN EXISTS (
                   SELECT 1 FROM user_effective_capabilities uec WHERE uec.user_id = u.id
                 ) THEN 'staff'
-                WHEN EXISTS (SELECT 1 FROM manual_attendee_roles mar WHERE mar.user_id = u.id AND mar.role = 'mentor') THEN 'mentor'
-                WHEN EXISTS (SELECT 1 FROM manual_attendee_roles mar WHERE mar.user_id = u.id AND mar.role = 'participant') THEN 'participant'
-                WHEN EXISTS (
-                  SELECT 1 FROM application_responses ar JOIN applications a ON a.id = ar.application_id
-                 WHERE ar.user_id = u.id AND ar.status <> 'draft' AND a.type = 'mentor'
-                ) THEN 'mentor'
-                WHEN EXISTS (
-                  SELECT 1 FROM application_responses ar JOIN applications a ON a.id = ar.application_id
-                 WHERE ar.user_id = u.id AND ar.status <> 'draft' AND a.type = 'participant'
-                ) THEN 'participant'
-                ELSE 'unassigned'
+                ELSE COALESCE(uebc.badge_category::text, 'unassigned')
               END AS role
          FROM users u
+         LEFT JOIN user_effective_badge_category uebc ON uebc.user_id = u.id
         WHERE u.badge_id IS NOT NULL AND u.account_state = 'active' AND u.anonymized_at IS NULL
           AND u.is_test_account = false
      )
@@ -187,14 +182,9 @@ export async function scannerRoleStats(
   const fixtureOnly = actorId != null && (await isSyntheticOperator(pool, actorId));
   const subjectScope = fixtureOnly
     ? `AND u.is_test_account = true
-          AND (
-            EXISTS (SELECT 1 FROM manual_attendee_roles mar
-                    WHERE mar.user_id = u.id AND mar.role = 'participant')
-            OR EXISTS (
-              SELECT 1 FROM application_responses ar
-              JOIN applications a ON a.id = ar.application_id
-              WHERE ar.user_id = u.id AND a.type = 'participant' AND ar.status <> 'draft'
-            )
+          AND EXISTS (
+            SELECT 1 FROM user_effective_badge_category uebc
+             WHERE uebc.user_id = u.id AND uebc.badge_category = 'participant'
           )`
     : "AND u.is_test_account = false";
   const { rows } = await pool.query<{
@@ -211,22 +201,13 @@ export async function scannerRoleStats(
         GROUP BY uec.user_id
      ), classified AS (
        SELECT u.id, u.badge_id,
+              -- H8 full-replacement: see scanner-sync.ts's scannerSnapshot.
               CASE
                 WHEN COALESCE(uc.is_admin, false) THEN 'admin'
                 WHEN EXISTS (SELECT 1 FROM enterprise_judges ej WHERE ej.user_id = u.id) THEN 'judge'
                 WHEN EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id) THEN 'sponsor'
                 WHEN COALESCE(uc.has_capability, false) THEN 'staff'
-                WHEN EXISTS (SELECT 1 FROM manual_attendee_roles mar WHERE mar.user_id = u.id AND mar.role = 'mentor') THEN 'mentor'
-                WHEN EXISTS (SELECT 1 FROM manual_attendee_roles mar WHERE mar.user_id = u.id AND mar.role = 'participant') THEN 'participant'
-                WHEN EXISTS (
-                  SELECT 1 FROM application_responses ar JOIN applications a ON a.id = ar.application_id
-                 WHERE ar.user_id = u.id AND ar.status <> 'draft' AND a.type = 'mentor'
-                ) THEN 'mentor'
-                WHEN EXISTS (
-                  SELECT 1 FROM application_responses ar JOIN applications a ON a.id = ar.application_id
-                 WHERE ar.user_id = u.id AND ar.status <> 'draft' AND a.type = 'participant'
-                ) THEN 'participant'
-                ELSE 'unassigned'
+                ELSE COALESCE(uebc.badge_category::text, 'unassigned')
               END AS role,
               EXISTS (
                 SELECT 1 FROM application_responses ar
@@ -234,6 +215,7 @@ export async function scannerRoleStats(
               ) AS confirmed
          FROM users u
          LEFT JOIN user_caps uc ON uc.user_id = u.id
+         LEFT JOIN user_effective_badge_category uebc ON uebc.user_id = u.id
         WHERE u.account_state = 'active' AND u.anonymized_at IS NULL ${subjectScope}
      )
      SELECT role,

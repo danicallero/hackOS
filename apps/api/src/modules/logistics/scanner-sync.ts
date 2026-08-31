@@ -22,14 +22,9 @@ export async function scannerSnapshot(actorId?: number) {
   // stats read model and the mobile role filter already use that full roster.
   const subjectScope = fixtureOnly
     ? ` AND u.is_test_account = true
-              AND (
-                EXISTS (SELECT 1 FROM manual_attendee_roles mar
-                        WHERE mar.user_id = u.id AND mar.role = 'participant')
-                OR EXISTS (
-                  SELECT 1 FROM application_responses ar
-                  JOIN applications a ON a.id = ar.application_id
-                  WHERE ar.user_id = u.id AND a.type = 'participant' AND ar.status <> 'draft'
-                )
+              AND EXISTS (
+                SELECT 1 FROM user_effective_badge_category uebc
+                 WHERE uebc.user_id = u.id AND uebc.badge_category = 'participant'
               )`
     : " AND u.is_test_account = false";
   // The snapshot is replace-all. Retired credentials are represented by
@@ -48,24 +43,19 @@ export async function scannerSnapshot(actorId?: number) {
        )
        SELECT u.id, u.email, u.name, u.surname, u.badge_id, u.badge_id_history,
               u.food_intolerance_notes, u.notes, t.token AS ticket_token,
+              -- H8 full-replacement: admin/judge/sponsor/staff still come
+              -- from the same authoritative capability/relationship sources
+              -- as the old DerivedRole (neither enterprise_judges nor a
+              -- pre-Sponsor-role sponsor rep is guaranteed a user_roles row);
+              -- everyone else falls through to their effective role's
+              -- badge_category (identity/role.ts's getBadgeCategory — this
+              -- is its bulk-query equivalent via user_effective_badge_category).
               CASE
                 WHEN COALESCE(uc.is_admin, false) THEN 'admin'
                 WHEN EXISTS (SELECT 1 FROM enterprise_judges ej WHERE ej.user_id = u.id) THEN 'judge'
                 WHEN EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id) THEN 'sponsor'
                 WHEN COALESCE(uc.has_capability, false) THEN 'staff'
-                WHEN EXISTS (SELECT 1 FROM manual_attendee_roles mar WHERE mar.user_id = u.id AND mar.role = 'mentor') THEN 'mentor'
-                WHEN EXISTS (SELECT 1 FROM manual_attendee_roles mar WHERE mar.user_id = u.id AND mar.role = 'participant') THEN 'participant'
-                WHEN EXISTS (
-                  SELECT 1 FROM application_responses ar
-                  JOIN applications a ON a.id = ar.application_id
-                 WHERE ar.user_id = u.id AND ar.status <> 'draft' AND a.type = 'mentor'
-                ) THEN 'mentor'
-                WHEN EXISTS (
-                  SELECT 1 FROM application_responses ar
-                  JOIN applications a ON a.id = ar.application_id
-                 WHERE ar.user_id = u.id AND ar.status <> 'draft' AND a.type = 'participant'
-                ) THEN 'participant'
-                ELSE 'unassigned'
+                ELSE COALESCE(uebc.badge_category::text, 'unassigned')
               END AS role,
               EXISTS (
                 SELECT 1 FROM application_responses ar
@@ -85,6 +75,7 @@ export async function scannerSnapshot(actorId?: number) {
               last_presence.scanned_at AS last_presence_at
          FROM users u
          LEFT JOIN user_caps uc ON uc.user_id = u.id
+         LEFT JOIN user_effective_badge_category uebc ON uebc.user_id = u.id
          LEFT JOIN tickets t ON t.user_id = u.id
          -- Anonymized profiles (H54) must never reach a scanner's local store.
          LEFT JOIN LATERAL (

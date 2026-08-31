@@ -20,7 +20,7 @@ import {
   UnauthorizedError,
 } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
-import { computeDerivedRole, type DerivedRole } from "../identity/role.js";
+import { type BadgeCategory, getBadgeCategory } from "../identity/role.js";
 import { logisticsTopicForFixture } from "./active-broadcast.js";
 import {
   ensurePassRecord,
@@ -29,7 +29,7 @@ import {
   resolvePassIdentity,
 } from "./wallet-passes.js";
 
-const ROLE_LABELS: Record<DerivedRole, string> = {
+const ROLE_LABELS: Record<BadgeCategory, string> = {
   admin: "Admin",
   judge: "Judge",
   sponsor: "Sponsor",
@@ -164,7 +164,7 @@ async function passPayload(pass: PassRow) {
   const { fullName, barcode } = revoked
     ? { fullName: "Pass revoked", barcode: "REVOKED" }
     : resolvePassIdentity(u, pass.user_id, pass.purpose);
-  const role = revoked ? "Closed" : ROLE_LABELS[await computeDerivedRole(pool, pass.user_id)];
+  const role = revoked ? "Closed" : ROLE_LABELS[await getBadgeCategory(pool, pass.user_id)];
   // No primaryFields: the embedded strip image already carries "hackUDC"
   // branding text, and PassKit renders primaryFields overlaid on the strip —
   // putting the name there made it visually collide with the artwork.

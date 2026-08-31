@@ -33,9 +33,10 @@ import {
 import { issueRemovalPin } from "../removal-pin.js";
 import {
   type AssignedRoleSummary,
-  computeDerivedRole,
+  assignAttendeeRole,
   computeMembershipFlags,
   getAssignedRoles,
+  getBadgeCategory,
   getHighestVisibleRoleName,
   hasEventAccess,
 } from "../role.js";
@@ -62,7 +63,7 @@ const assignedRoleSchema = z.object({
   isVisible: z.boolean(),
 });
 
-const derivedRoleSchema = z.enum([
+const badgeCategorySchema = z.enum([
   "admin",
   "judge",
   "sponsor",
@@ -472,7 +473,12 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         summary: "Get my profile",
         response: {
           200: userResponseSchema.extend({
-            role: derivedRoleSchema,
+            role: badgeCategorySchema,
+            // H8 full-replacement: the caller's actual highest-visible role
+            // name (getEffectiveRole), alongside `role` (its fixed
+            // badge/wallet/scanner category) — same pairing /api/users/:id
+            // already exposes as visibleRoleName next to its own `role`.
+            visibleRoleName: z.string().nullable(),
             mobileAccess: z.boolean(),
             // Effective capabilities (H8) so the web/mobile UI can gate by
             // capability, never by the illustrative role (H55). Authoritative
@@ -524,7 +530,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         removalStatus,
         roles,
       ] = await Promise.all([
-        computeDerivedRole(pool, userId),
+        getBadgeCategory(pool, userId),
         getEffectiveCapabilities(userId),
         computeMembershipFlags(pool, userId),
         hasEventAccess(pool, userId),
@@ -540,6 +546,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       return {
         ...serializeUser(row, removalStatus),
         role,
+        visibleRoleName: roles.find((r) => r.isVisible)?.name ?? null,
         mobileAccess,
         capabilities: [...capabilities],
         roles,
@@ -810,7 +817,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                 name: z.string().nullable(),
                 surname: z.string().nullable(),
                 badgeId: z.string().nullable(),
-                role: derivedRoleSchema,
+                role: badgeCategorySchema,
                 language: z.string(),
                 shirtSize: z.string().nullable(),
                 applicationStatus: z.string().nullable(),
@@ -882,7 +889,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           name: r.name,
           surname: r.surname,
           badgeId: r.badge_id,
-          role: await computeDerivedRole(pool, r.id),
+          role: await getBadgeCategory(pool, r.id),
           language: r.language,
           shirtSize: r.shirt_size,
           applicationStatus: statusByUser.get(r.id) ?? null,
@@ -914,7 +921,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         params: z.object({ id: z.coerce.number().int() }),
         response: {
           200: userResponseSchema.extend({
-            role: derivedRoleSchema,
+            role: badgeCategorySchema,
             visibleRoleName: z.string().nullable(),
             capabilities: z.array(z.string()),
             roles: z.array(assignedRoleSchema),
@@ -926,7 +933,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       await assertProfileSubjectScope(req.userId as number, req.params.id);
       const row = await fetchUser(req.params.id);
       const [role, visibleRoleName, capabilities, allRoles, canSeeSuperadmin] = await Promise.all([
-        computeDerivedRole(pool, req.params.id),
+        getBadgeCategory(pool, req.params.id),
         getHighestVisibleRoleName(pool, req.params.id),
         getEffectiveCapabilities(req.params.id),
         getAssignedRoles(pool, req.params.id),
@@ -994,7 +1001,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         body: attendeeRoleBody,
         summary: "Set an attendee type manually",
         description:
-          "Classify an attendee as participant or mentor through an auditable relationship, never a permission role. The permanent ticket is issued in the same transaction.",
+          "Classify an attendee as participant or mentor by granting the matching seeded Mentor/Participant role (H8) — an auditable, explicit staff action, distinct from a capability-bearing permission role (both seeded roles carry zero capabilities). The permanent ticket is issued in the same transaction. Re-classifying replaces whichever of the two roles this action previously granted.",
         response: {
           200: z.object({ role: z.enum(["participant", "mentor"]), ticketIssued: z.literal(true) }),
         },
@@ -1010,13 +1017,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           [req.params.id],
         );
         if (!rows[0]) throw new NotFoundError("User not found", { userId: req.params.id });
-        await client.query(
-          `INSERT INTO manual_attendee_roles (user_id, role, assigned_by)
-           VALUES ($1, $2, $3)
-           ON CONFLICT (user_id) DO UPDATE
-             SET role = EXCLUDED.role, assigned_by = EXCLUDED.assigned_by, assigned_at = now()`,
-          [req.params.id, req.body.role, req.userId],
-        );
+        await assignAttendeeRole(client, req.params.id, req.body.role, req.userId as number);
         await issueTicket(client, req.params.id);
         await audit(client, {
           actorId: req.userId,
