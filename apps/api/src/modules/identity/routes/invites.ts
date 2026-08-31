@@ -17,11 +17,12 @@ import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { issueTicket } from "../../logistics/tickets.js";
 import { auth } from "../auth.js";
 import {
-  inviteContainsWildcardGroup,
-  lockPermissionGraph,
+  inviteContainsWildcardRole,
+  lockRoleGraph,
   requireWildcardInviteAuthority,
-} from "../invite-permissions.js";
-import { userHasAnyCapability } from "../permission-graph.js";
+} from "../invite-role-authority.js";
+import { userHasAnyCapability } from "../role-authority.js";
+import { applyRoleGrantRule } from "../role-grants.js";
 import {
   enterpriseInviteClaimUrl,
   enterpriseInviteLinkIsExpired,
@@ -99,7 +100,8 @@ const inviteResponse = z.object({
   email: z.string(),
   kind: inviteKind,
   enterpriseId: z.number().nullable(),
-  // Capability groups the invitee is added to on acceptance (H8/H10).
+  // Roles the invitee is added to on acceptance (H8/H10). Field kept as
+  // groupIds for API compatibility; values are roles.id.
   groupIds: z.array(z.number()),
   expiresAt: z.string(),
   usedAt: z.string().nullable(),
@@ -123,7 +125,7 @@ interface TokenRow {
 }
 
 async function loadInviteForUpdate(
-  client: Parameters<typeof lockPermissionGraph>[0],
+  client: Parameters<typeof lockRoleGraph>[0],
   id: number,
 ): Promise<TokenRow | undefined> {
   const { rows } = await client.query(
@@ -175,7 +177,8 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           email: z.string().email(),
           kind: inviteKind,
           enterpriseId: z.number().int().optional(),
-          // Capability groups pre-assigned on acceptance (H8/H10).
+          // Roles pre-assigned on acceptance (H8/H10). Field kept as
+          // groupIds for API compatibility; values are roles.id.
           groupIds: z.array(z.number().int()).default([]),
         }),
         response: { 201: inviteResponse },
@@ -214,7 +217,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         // An invitation is a deferred membership assignment. Validate its
         // targets while the graph is locked, so a permissions manager cannot
         // smuggle wildcard access through account creation (H8/H10, H53).
-        await lockPermissionGraph(client);
+        await lockRoleGraph(client);
         const wildcardAuthorized = await requireWildcardInviteAuthority(
           client,
           req.userId as number,
@@ -321,7 +324,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
     async (req, reply) => {
       const { id } = req.params;
       const result = await withTransaction(async (client) => {
-        await lockPermissionGraph(client);
+        await lockRoleGraph(client);
         const old = await loadInviteForUpdate(client, id);
         if (!old) throw new NotFoundError("Invite not found", { id });
         if (old.used_at !== null && old.user_id !== null) {
@@ -438,7 +441,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
     async (req, reply) => {
       const { id } = req.params;
       const result = await withTransaction(async (client) => {
-        await lockPermissionGraph(client);
+        await lockRoleGraph(client);
         const invite = await loadInviteForUpdate(client, id);
         if (!invite) throw new NotFoundError("Invite not found", { id });
         if (invite.used_at !== null) {
@@ -490,7 +493,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
     async (req, reply) => {
       const { id } = req.params;
       await withTransaction(async (client) => {
-        await lockPermissionGraph(client);
+        await lockRoleGraph(client);
         const invite = await loadInviteForUpdate(client, id);
         if (!invite) throw new NotFoundError("Invite not found", { id });
         if (invite.used_at !== null) {
@@ -667,7 +670,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
       // then 409s on "email already exists" and staff resolves it. The audit
       // trail stays consistent either way.
       const result = await withTransaction(async (client) => {
-        await lockPermissionGraph(client);
+        await lockRoleGraph(client);
         const { rows } = await client.query(
           `SELECT * FROM email_verification_tokens
            WHERE token = $1 AND type IN ('sponsor_invite', 'account_claim')
@@ -701,7 +704,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         }
         if (
           invite &&
-          (await inviteContainsWildcardGroup(client, invite.group_ids)) &&
+          (await inviteContainsWildcardRole(client, invite.group_ids)) &&
           !invite.wildcard_authorized
         ) {
           throw new ForbiddenError(
@@ -710,7 +713,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         }
         if (
           userLink &&
-          (await inviteContainsWildcardGroup(client, userLink.group_ids)) &&
+          (await inviteContainsWildcardRole(client, userLink.group_ids)) &&
           !userLink.wildcard_authorized
         ) {
           throw new ForbiddenError(
@@ -806,6 +809,9 @@ export function registerInviteRoutes(app: FastifyInstance): void {
             [enterpriseId, userId],
           );
           await issueTicket(client, userId);
+          // H8: the Sponsor role is granted through the generic
+          // role_grant_rules mechanism, not an ad hoc user_roles write.
+          await applyRoleGrantRule(client, userId, "sponsor.enterprise_linked", null);
         }
 
         if (enterpriseLink) {
@@ -835,16 +841,18 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           );
         }
 
-        // H8/H10: pre-assigned capability groups. The invitation creator
-        // validated every assignment under the same graph lock. A deleted
-        // group is intentionally skipped: deletion revokes deferred grants.
-        for (const groupId of invite?.group_ids ?? userLink?.group_ids ?? []) {
+        // H8/H10: pre-assigned roles (the `group_ids` column now holds
+        // roles.id — see 0803's migration comment). The invitation creator
+        // validated every assignment under the same role-graph lock. A
+        // deleted role is intentionally skipped: deletion revokes deferred
+        // grants.
+        for (const roleId of invite?.group_ids ?? userLink?.group_ids ?? []) {
           await client.query(
-            `INSERT INTO permission_group_members (user_id, group_id, assigned_by)
-             SELECT $1, $2, NULL
-             WHERE EXISTS (SELECT 1 FROM permission_groups WHERE id = $2)
+            `INSERT INTO user_roles (user_id, role_id, assigned_by, source)
+             SELECT $1, $2, NULL, 'invite'
+             WHERE EXISTS (SELECT 1 FROM roles WHERE id = $2)
              ON CONFLICT DO NOTHING`,
-            [userId, groupId],
+            [userId, roleId],
           );
         }
 

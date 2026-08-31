@@ -10,10 +10,10 @@ import { setUserIdResolver } from "../../plugins/auth-context.js";
 import { auth, getBetterAuthSessionToken } from "./auth.js";
 import { recordReviewFixtureAuthentication } from "./review-fixture-usage.js";
 import { registerInviteRoutes } from "./routes/invites.js";
-import { registerPermissionGroupRoutes } from "./routes/permissions.js";
 import { registerProfileRoutes } from "./routes/profile.js";
 import { registerResendVerificationRoutes } from "./routes/resend-verification.js";
 import { registerReviewFixtureRoutes } from "./routes/review-fixtures.js";
+import { registerRoleRoutes } from "./routes/roles.js";
 import { registerSecondaryEmailRoutes } from "./routes/secondary-email.js";
 import { registerUiPrefsRoutes } from "./routes/ui-prefs.js";
 
@@ -23,8 +23,8 @@ import { registerUiPrefsRoutes } from "./routes/ui-prefs.js";
  * get-session/revoke-session(s) (all built-in, see auth.ts for the
  * enumeration-safety and session-revocation notes), then layers this
  * project's own routes for everything Better Auth doesn't cover: rate
- * -limited resend (H3), profile (H7), secondary email (H6), permission
- * groups (H8) and invitations (H9/H10).
+ * -limited resend (H3), profile (H7), secondary email (H6), hierarchical
+ * roles (H8) and invitations (H9/H10).
  *
  * Also wires `setUserIdResolver` (src/plugins/auth-context.ts) so
  * `req.userId` resolves from the Better Auth session cookie on every
@@ -110,7 +110,7 @@ export async function registerIdentityModule(app: FastifyInstance): Promise<void
   registerProfileRoutes(app);
   registerReviewFixtureRoutes(app);
   registerSecondaryEmailRoutes(app);
-  registerPermissionGroupRoutes(app);
+  registerRoleRoutes(app);
   registerInviteRoutes(app);
   registerUiPrefsRoutes(app);
 }

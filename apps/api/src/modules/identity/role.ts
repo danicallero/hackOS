@@ -78,6 +78,30 @@ export async function mentorOrParticipantType(
 }
 
 /**
+ * H8's actual "public role" concept: the highest-position role among a
+ * user's assigned roles that is marked `is_visible`, or null if they hold no
+ * visible role. This is the literal Discord-style hierarchy answer — kept
+ * separate from computeDerivedRole (whose fixed admin/judge/sponsor/staff/
+ * mentor/participant/unassigned union many existing callers already switch
+ * on) rather than replacing it, so nothing that reads DerivedRole breaks.
+ */
+export async function getHighestVisibleRoleName(
+  db: Queryable,
+  userId: number,
+): Promise<string | null> {
+  const { rows } = await db.query(
+    `SELECT r.name
+       FROM user_roles ur
+       JOIN roles r ON r.id = ur.role_id
+      WHERE ur.user_id = $1 AND r.is_visible = true
+      ORDER BY r.position DESC
+      LIMIT 1`,
+    [userId],
+  );
+  return (rows[0]?.name as string | undefined) ?? null;
+}
+
+/**
  * Association-based facts underlying the illustrative `role` above, exposed
  * independently so navigation (H8/H55, issue #187) can show every relevant
  * workspace for a multi-capability account instead of collapsing to one

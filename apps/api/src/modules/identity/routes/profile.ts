@@ -30,7 +30,12 @@ import {
   runAccountRemoval,
 } from "../removal.js";
 import { issueRemovalPin } from "../removal-pin.js";
-import { computeDerivedRole, computeMembershipFlags, hasEventAccess } from "../role.js";
+import {
+  computeDerivedRole,
+  computeMembershipFlags,
+  getHighestVisibleRoleName,
+  hasEventAccess,
+} from "../role.js";
 
 /**
  * Profile routes (H7).
@@ -882,8 +887,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         response: {
           200: userResponseSchema.extend({
             role: derivedRoleSchema,
+            visibleRoleName: z.string().nullable(),
             capabilities: z.array(z.string()),
-            groups: z.array(z.object({ id: z.number(), name: z.string() })),
+            roles: z.array(z.object({ id: z.number(), name: z.string() })),
           }),
         },
       },
@@ -891,19 +897,26 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => {
       await assertProfileSubjectScope(req.userId as number, req.params.id);
       const row = await fetchUser(req.params.id);
-      const [role, capabilities, groups] = await Promise.all([
+      const [role, visibleRoleName, capabilities, roles] = await Promise.all([
         computeDerivedRole(pool, req.params.id),
+        getHighestVisibleRoleName(pool, req.params.id),
         getEffectiveCapabilities(req.params.id),
         pool
           .query(
-            `SELECT g.id, g.name FROM permission_group_members m
-               JOIN permission_groups g ON g.id = m.group_id
-              WHERE m.user_id = $1 ORDER BY g.name`,
+            `SELECT r.id, r.name FROM user_roles ur
+               JOIN roles r ON r.id = ur.role_id
+              WHERE ur.user_id = $1 ORDER BY r.position DESC`,
             [req.params.id],
           )
           .then((r) => r.rows as { id: number; name: string }[]),
       ]);
-      return { ...serializeUser(row), role, capabilities: [...capabilities], groups };
+      return {
+        ...serializeUser(row),
+        role,
+        visibleRoleName,
+        capabilities: [...capabilities],
+        roles,
+      };
     },
   );
 

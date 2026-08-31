@@ -9,10 +9,10 @@ import { requireCapability } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import {
-  groupIdsGrantCapability,
-  lockPermissionGraph,
+  lockRoleGraph,
   requireWildcardInviteAuthority,
-} from "../invite-permissions.js";
+  roleIdsGrantCapability,
+} from "../invite-role-authority.js";
 import { enterpriseInviteClaimUrl } from "./enterprise-invite-links.js";
 
 export type UserInviteLinkKind = "staff" | "sponsor" | "participant";
@@ -203,7 +203,7 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
         response: { 201: userInviteLinkResponse },
         summary: "Create a reusable user invite link",
         description:
-          "Creates a reusable account-creation link. Each claimant supplies their own email; staff links assign capability groups on acceptance (H10).",
+          "Creates a reusable account-creation link. Each claimant supplies their own email; staff links assign roles on acceptance (H10).",
       },
     },
     async (req, reply) => {
@@ -217,23 +217,23 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
         throw new BadRequestError("enterpriseId is only valid for sponsor invite links");
       }
       if (kind !== "staff" && groupIds.length > 0) {
-        throw new BadRequestError("Only staff invite links may assign capability groups");
+        throw new BadRequestError("Only staff invite links may assign roles");
       }
       if (kind === "staff" && groupIds.length === 0) {
-        throw new BadRequestError("Staff invite links require at least one capability group");
+        throw new BadRequestError("Staff invite links require at least one role");
       }
 
       const token = randomBytes(32).toString("base64url");
       const result = await withTransaction(async (client) => {
-        await lockPermissionGraph(client);
+        await lockRoleGraph(client);
         const wildcardAuthorized = await requireWildcardInviteAuthority(
           client,
           req.userId as number,
           groupIds,
           { requireExisting: true },
         );
-        if (kind === "staff" && !(await groupIdsGrantCapability(client, groupIds))) {
-          throw new BadRequestError("Staff invite links require a group with capabilities");
+        if (kind === "staff" && !(await roleIdsGrantCapability(client, groupIds))) {
+          throw new BadRequestError("Staff invite links require a role with capabilities");
         }
 
         let enterprise: { id: number; name: string } | undefined;

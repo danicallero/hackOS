@@ -26,9 +26,13 @@ import { PASS_TYPE_IDENTIFIER } from "../logistics/wallet.js";
 import { queueFixtureMarker } from "../queue/broadcast.js";
 import { REPO_MEMBER_RELATION_SQL } from "../queue/membership.js";
 import { type DeletedQueueEntryNotification, notifyDeletedQueueEntries } from "../queue/notify.js";
-import { assertActiveWildcardHolder, lockPermissionGraph } from "./permission-graph.js";
 import { consumeRemovalPin } from "./removal-pin.js";
 import { purgeReviewFixtureQueuesForUser } from "./review-fixture-queues.js";
+import {
+  assertActiveWildcardHolder,
+  lockRoleGraph,
+  userResolvesCapabilityRegardlessOfState,
+} from "./role-authority.js";
 
 export type AccountRemovalAction = "delete" | "anonymize";
 const REMOVAL_RETRY_QUEUE = "account-removal-retries";
@@ -548,20 +552,7 @@ async function userHasWildcardRegardlessOfState(
   client: pg.PoolClient,
   userId: number,
 ): Promise<boolean> {
-  const { rows } = await client.query(
-    `WITH RECURSIVE effective_groups(group_id) AS (
-       SELECT group_id FROM permission_group_members WHERE user_id = $1
-       UNION
-       SELECT pgi.child_group_id
-         FROM effective_groups eg
-         JOIN permission_group_includes pgi ON pgi.parent_group_id = eg.group_id
-     )
-     SELECT 1 FROM effective_groups eg
-      JOIN group_capabilities gc ON gc.group_id = eg.group_id
-     WHERE gc.capability = '*' LIMIT 1`,
-    [userId],
-  );
-  return rows.length > 0;
+  return userResolvesCapabilityRegardlessOfState(client, userId, "*");
 }
 
 async function collectStorageKeys(client: pg.PoolClient, userId: number): Promise<string[]> {
@@ -666,7 +657,7 @@ async function prepareAccountRemoval(
   options: RunAccountRemovalOptions,
 ): Promise<RemovalPreparation | null> {
   return withTransaction(async (client) => {
-    await lockPermissionGraph(client);
+    await lockRoleGraph(client);
     const user = await loadUserForRemoval(client, options.targetId);
     if (
       options.retryOnlyPending &&
@@ -1426,10 +1417,7 @@ async function scrubRelationships(
     userId,
   ]);
 
-  await client.query(
-    `UPDATE permission_group_members SET assigned_by = NULL WHERE assigned_by = $1`,
-    [userId],
-  );
+  await client.query(`UPDATE user_roles SET assigned_by = NULL WHERE assigned_by = $1`, [userId]);
   await client.query(`UPDATE universities SET proposed_by = NULL WHERE proposed_by = $1`, [userId]);
   await client.query(`UPDATE enterprises SET director_id = NULL WHERE director_id = $1`, [userId]);
   await client.query(`UPDATE enterprise_invite_links SET created_by = NULL WHERE created_by = $1`, [
@@ -1708,7 +1696,7 @@ export async function purgeReviewFixtureAccount(
   client: pg.PoolClient,
   userId: number,
 ): Promise<void> {
-  await lockPermissionGraph(client);
+  await lockRoleGraph(client);
   const user = await loadUserForRemoval(client, userId);
   if (!user.is_test_account) {
     throw new ConflictError("Only synthetic review fixture accounts can be regenerated.", {
@@ -1745,7 +1733,7 @@ export async function finalizeAccountRemoval(
     deletedQueueEntries?: DeletedQueueEntryNotification[];
   },
 ): Promise<AccountRemovalResult> {
-  await lockPermissionGraph(client);
+  await lockRoleGraph(client);
   const user = await loadUserForRemoval(client, options.targetId);
   if (user.account_state !== "removal_pending" || user.removal_action !== options.action) {
     throw new ConflictError("This account-removal request is not in the expected state.", {
