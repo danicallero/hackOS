@@ -13,6 +13,21 @@
 -- into the new tables first, and a later migration in this same change
 -- drops them once the copy is verified.
 
+-- H8 full-replacement (role-hierarchy rewrite): DerivedRole, the old fixed
+-- admin/judge/sponsor/staff/mentor/participant/unassigned union computed by
+-- guessing from capabilities/relationship tables and a stale
+-- applications.type snapshot, is retired. Badge printing, wallet passes,
+-- scanner UI and stats now classify a user by the badge_category of their
+-- highest-position is_visible role (identity/role.ts's getEffectiveRole) —
+-- but an arbitrary admin-named role ("Event Director", "Judging Coordinator")
+-- still needs to render as one of a SMALL fixed set of visual/behavioral
+-- buckets, hence this column. Values mirror the old DerivedRole set minus
+-- 'unassigned' (unassigned is never a role property — it's what a user with
+-- no visible role at all falls back to in code, see getEffectiveRole).
+CREATE TYPE role_badge_category AS ENUM (
+  'admin', 'judge', 'sponsor', 'staff', 'mentor', 'participant'
+);
+
 CREATE TABLE roles (
   id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   name text NOT NULL UNIQUE,
@@ -26,6 +41,12 @@ CREATE TABLE roles (
   -- trash/restore panel to seeded roles only and to gate the "reset to
   -- default" action (role_seed_defaults, 0807).
   is_seeded boolean NOT NULL DEFAULT false,
+  -- H8: the badge/wallet/scanner display-and-behavior bucket this role's
+  -- holders render as (see the type comment above). Defaults to 'staff' — a
+  -- freshly created custom role is treated as an operational role unless an
+  -- admin says otherwise via PATCH .../capabilities' sibling role-details
+  -- route.
+  badge_category role_badge_category NOT NULL DEFAULT 'staff',
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -136,3 +157,25 @@ SELECT user_id, capability
 
 COMMENT ON VIEW user_effective_capabilities IS
   'H8: (user_id, capability) pairs currently resolving to ALLOW through the user''s own assigned-role chain. Replaces the old recursive group_capabilities join everywhere a bulk per-user capability check is needed.';
+
+-- H8 full-replacement: one row per user who holds at least one VISIBLE role,
+-- carrying that user's single highest-position visible role's badge_category
+-- (and name, for callers that want both without a second query). Bulk-query
+-- equivalent of identity/role.ts's getEffectiveRole, for the same reason
+-- user_effective_capabilities exists alongside the per-request
+-- getEffectiveCapabilities: scanner snapshot, logistics stats and
+-- announcements audience classify every user in one query rather than N+1.
+-- `roles.deleted_at` doesn't exist until 0804, which redefines this view the
+-- same way it redefines user_effective_capabilities above to exclude
+-- soft-deleted roles. A user with no visible role has no row here — callers
+-- COALESCE to 'unassigned'.
+CREATE VIEW user_effective_badge_category AS
+SELECT DISTINCT ON (ur.user_id)
+       ur.user_id, r.badge_category, r.name AS role_name
+  FROM user_roles ur
+  JOIN roles r ON r.id = ur.role_id
+ WHERE r.is_visible = true
+ ORDER BY ur.user_id, r.position DESC;
+
+COMMENT ON VIEW user_effective_badge_category IS
+  'H8: each user''s single highest-position visible role, reduced to its (name, badge_category) pair. No row means the user holds no visible role — treat as the ''unassigned'' badge category. Bulk equivalent of identity/role.ts''s getEffectiveRole.';

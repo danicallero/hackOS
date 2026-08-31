@@ -63,6 +63,13 @@ WHERE EXISTS (
   SELECT 1 FROM permission_groups pg WHERE pg.template_key = t.template_key
 );
 
+-- H8 full-replacement: every migrated template role is an internal
+-- organizer/staff role — badge_category's column DEFAULT ('staff') already
+-- covers all of them except Platform administrator, which is the wildcard
+-- admin template and must classify as 'admin' (matches the old
+-- computeDerivedRole priority: ADMIN_ALL capability outranks everything).
+UPDATE roles SET badge_category = 'admin' WHERE name = 'Platform administrator';
+
 INSERT INTO role_capabilities (role_id, capability, state)
 SELECT r.id, cap, 'allow'::permission_state
 FROM roles r
@@ -156,7 +163,7 @@ ON CONFLICT (user_id, role_id) DO NOTHING;
 --        Carries no capabilities of its own — sponsor portal access is a
 --        relationship (the `sponsors` table), not a capability grant.
 
-INSERT INTO roles (name, position, is_visible, is_protected, is_seeded) VALUES ('Sponsor', 1000, true, false, true);
+INSERT INTO roles (name, position, is_visible, is_protected, is_seeded, badge_category) VALUES ('Sponsor', 1000, true, false, true, 'sponsor');
 
 INSERT INTO role_grant_rules (role_id, trigger_event, action, enabled)
 SELECT id, 'sponsor.enterprise_linked', 'grant', true FROM roles WHERE name = 'Sponsor';

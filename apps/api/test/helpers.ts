@@ -46,17 +46,21 @@ export async function createRole(
     isVisible: boolean;
     isProtected: boolean;
     isSeeded: boolean;
+    /** H8 full-replacement: badge/wallet/scanner display bucket (roles.badge_category, 0800). */
+    badgeCategory: "admin" | "judge" | "sponsor" | "staff" | "mentor" | "participant";
   }> = {},
 ): Promise<number> {
   const name = overrides.name ?? `test-role-${crypto.randomUUID()}`;
   const { rows } = await pool.query(
-    `INSERT INTO roles (name, position, is_visible, is_protected, is_seeded) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+    `INSERT INTO roles (name, position, is_visible, is_protected, is_seeded, badge_category)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
     [
       name,
       randomRolePosition(),
       overrides.isVisible ?? true,
       overrides.isProtected ?? false,
       overrides.isSeeded ?? false,
+      overrides.badgeCategory ?? "staff",
     ],
   );
   const roleId = rows[0].id;
@@ -97,6 +101,45 @@ export async function assignRole(
      ON CONFLICT DO NOTHING`,
     [userId, roleId, assignedBy ?? null],
   );
+}
+
+/**
+ * H8 full-replacement: creates the seeded Mentor/Participant roles (badge_
+ * category 'mentor'/'participant', is_seeded=true) if they don't already
+ * exist — production's `identity/role.ts` assignAttendeeRole (PUT
+ * /api/users/:id/attendee-role, accreditation's walk-in classification) and
+ * review-fixtures' synthetic-account setup look these up by badge_category
+ * and 409/throw if missing, but truncateAll wipes 0801/0805's real seed data
+ * between every test. Call this in any test exercising either flow.
+ */
+export async function seedAttendeeRoles(): Promise<void> {
+  for (const category of ["mentor", "participant"] as const) {
+    const { rows } = await pool.query(
+      `SELECT 1 FROM roles WHERE badge_category = $1 AND is_seeded = true AND deleted_at IS NULL LIMIT 1`,
+      [category],
+    );
+    if (rows.length === 0) {
+      await createRole([], {
+        name: category === "mentor" ? "Mentor" : "Participant",
+        isSeeded: true,
+        badgeCategory: category,
+      });
+    }
+  }
+}
+
+/** Directly grants a test user the seeded Mentor/Participant role for `category` (creating it if missing). */
+export async function grantAttendeeRole(
+  userId: number,
+  category: "mentor" | "participant",
+  assignedBy?: number,
+): Promise<void> {
+  await seedAttendeeRoles();
+  const { rows } = await pool.query(
+    `SELECT id FROM roles WHERE badge_category = $1 AND is_seeded = true AND deleted_at IS NULL LIMIT 1`,
+    [category],
+  );
+  await assignRole(userId, rows[0].id, assignedBy);
 }
 
 /** Create a user holding the given capabilities (via a throwaway role). */
