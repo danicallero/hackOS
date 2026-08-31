@@ -888,12 +888,20 @@ describe("H8 default seeded role set (0805)", () => {
         CAPABILITIES.SCHEDULE_MANAGE,
         CAPABILITIES.ANNOUNCEMENTS_MANAGE,
         CAPABILITIES.USERS_READ,
+        CAPABILITIES.APPLICATIONS_REVIEW,
+        CAPABILITIES.APPLICATIONS_DECIDE,
+        CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE,
       ],
-      "Judge coordinator": [CAPABILITIES.JUDGE_PANEL, CAPABILITIES.PROJECTS_READ],
+      "Judge coordinator": [
+        CAPABILITIES.JUDGE_PANEL,
+        CAPABILITIES.PROJECTS_READ,
+        CAPABILITIES.APPLICATIONS_REVIEW,
+      ],
       "Operations lead": [
         CAPABILITIES.QUEUE_ADMIN,
         CAPABILITIES.LOGISTICS_STATS,
         CAPABILITIES.PRESENCE_MANAGE,
+        CAPABILITIES.ACTIVITY_SCAN,
       ],
       "Volunteer staff": [CAPABILITIES.ACCREDIT_SCAN, CAPABILITIES.PRESENCE_SCAN],
       Mentor: [CAPABILITIES.PROJECTS_READ],
@@ -915,6 +923,59 @@ describe("H8 default seeded role set (0805)", () => {
         [...caps].sort(),
       );
     }
+  });
+
+  it("concentrates decide/override/broadcast capabilities at Event director, not the operational tiers below it (H8 risk tiering)", async () => {
+    const pool = await seededRoles();
+    const riskyCapabilities = [
+      CAPABILITIES.APPLICATIONS_DECIDE,
+      CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE,
+      CAPABILITIES.NOTIFICATIONS_SEND,
+      CAPABILITIES.ANNOUNCEMENTS_MANAGE,
+    ];
+    const { rows } = await pool.query(
+      `SELECT r.name, rc.capability
+         FROM role_capabilities rc
+         JOIN roles r ON r.id = rc.role_id
+        WHERE rc.state = 'allow' AND rc.capability = ANY($1::text[])
+        ORDER BY r.name, rc.capability`,
+      [riskyCapabilities],
+    );
+    const byRole = new Map<string, string[]>();
+    for (const row of rows as { name: string; capability: string }[]) {
+      byRole.set(row.name, [...(byRole.get(row.name) ?? []), row.capability]);
+    }
+    // Only Event director holds any decide/override/broadcast capability in
+    // the default seed; Judge coordinator and Operations lead each get the
+    // read/score/scan side of their domain (applications:review,
+    // activity:scan) but none of the outward-facing actions.
+    expect([...byRole.keys()]).toEqual(["Event director"]);
+    expect(byRole.get("Event director")?.sort()).toEqual(
+      [
+        CAPABILITIES.ANNOUNCEMENTS_MANAGE,
+        CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE,
+        CAPABILITIES.APPLICATIONS_DECIDE,
+      ].sort(),
+    );
+
+    const { rows: judgeCoordinatorCaps } = await pool.query(
+      `SELECT rc.capability FROM role_capabilities rc
+         JOIN roles r ON r.id = rc.role_id
+        WHERE r.name = 'Judge coordinator' AND rc.state = 'allow'`,
+    );
+    expect(judgeCoordinatorCaps.map((r: { capability: string }) => r.capability)).toContain(
+      CAPABILITIES.APPLICATIONS_REVIEW,
+    );
+
+    const { rows: opsLeadCaps } = await pool.query(
+      `SELECT rc.capability FROM role_capabilities rc
+         JOIN roles r ON r.id = rc.role_id
+        WHERE r.name = 'Operations lead' AND rc.state = 'allow'`,
+    );
+    const opsLeadCapNames = opsLeadCaps.map((r: { capability: string }) => r.capability);
+    expect(opsLeadCapNames).toContain(CAPABILITIES.ACTIVITY_SCAN);
+    expect(opsLeadCapNames).not.toContain(CAPABILITIES.APPLICATIONS_REVIEW);
+    expect(opsLeadCapNames).not.toContain(CAPABILITIES.APPLICATIONS_DECIDE);
   });
 
   it("seeds zero legacy H8 template roles on a fresh install (0801 only ports pre-existing permission_groups data)", async () => {

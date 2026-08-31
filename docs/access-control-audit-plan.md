@@ -175,14 +175,21 @@ staff tiers plus the three applicant/relationship markers:
 
 - **Event director** — planning: event identity, venue, programme, and
   outward comms as one role, above any narrower slice-owning role a real
-  install may have migrated in from 0801.
+  install may have migrated in from 0801. As the top non-superadmin tier
+  it's also the default seed's sole owner of the applications
+  decide/override actions: `applications:review`, `applications:decide`,
+  and `applications:confirm-override`.
 - **Judge coordinator** — judging-floor coordination (`judge:panel`,
-  `projects:read`) — deliberately narrower than a full judging-admin
-  capability set (no `queue:operate`/`queue:admin`/`judging:export`).
+  `projects:read`, `applications:review`) — deliberately narrower than a
+  full judging-admin capability set (no `queue:operate`/`queue:admin`/
+  `judging:export`), and stops short of `applications:decide` (see
+  risk-tiering below).
 - **Operations lead** — day-of decision-maker: logistics visibility
   (`logistics:stats`), the automatic-presence policy (`presence:manage`),
-  and queue administration (`queue:admin`) — a genuinely higher tier than
-  scan-console staffing, not a near-duplicate of it.
+  queue administration (`queue:admin`), and day-of activity/meal scanning
+  (`activity:scan`) — a genuinely higher tier than scan-console staffing,
+  not a near-duplicate of it, but with no application or comms capability
+  at all (not this role's domain).
 - **Volunteer staff** — lightweight check-in-desk staffing: both entry scans
   (`accredit:scan`, `presence:scan`), no stats/admin visibility. Kept
   separate from Operations lead rather than merged: the two capability sets
@@ -194,6 +201,23 @@ staff tiers plus the three applicant/relationship markers:
 - **Participant** — applicant-facing granted role for accepted participants;
   carries no capabilities of its own, same pattern as `Sponsor` — a
   relationship/status marker, not a permission grant.
+
+**Risk tiering: read/scan/score vs. decide/override/broadcast.** Within these
+four staff roles, capabilities split into two bands. The first band — reading,
+scoring, and scanning (`applications:review`, `activity:scan`,
+`logistics:stats`, `projects:read`, `users:read`) — is non-destructive and
+broadly useful, so each capability is granted to whichever role's domain it
+matches: judging-adjacent review sits with Judge coordinator, day-of scanning
+sits with Operations lead. The second band — deciding, overriding, and
+broadcasting (`applications:decide`, `applications:confirm-override`,
+`announcements:manage`, `notifications:send`) — sends outward communication to
+applicants/attendees or finalizes an outcome on someone else's behalf, so the
+default seed concentrates all of it in Event director, the single top
+non-superadmin tier, rather than letting it leak into a middle operational
+role alongside an adjacent read-only grant. No seeded role below Event
+director holds any decide/override/broadcast capability by default; a real
+install can still grant one explicitly via the roles API if its org chart
+needs it.
 
 All six are `is_protected = false` and fully deletable/editable via the
 normal roles API. The existing `Sponsor` auto-grant role (0801) is unchanged:

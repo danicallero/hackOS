@@ -12,14 +12,19 @@
 --                         programme, and outward comms end-to-end (a level
 --                         above the narrower Event settings manager /
 --                         Programme manager / Communications manager, who
---                         each own one slice).
+--                         each own one slice); as the top non-superadmin
+--                         planning tier it's also the sole default owner of
+--                         the applications decide/override actions (see the
+--                         risk-tiering note below).
 --   Judge coordinator   — judging floor coordination (judge:panel,
---                         projects:read) without Judging administrator's
---                         queue:operate/queue:admin/judging:export authority.
+--                         projects:read, applications:review) without Judging
+--                         administrator's queue:operate/queue:admin/
+--                         judging:export authority.
 --   Operations lead     — day-of ops decision-maker: logistics visibility,
---                         the automatic-presence policy, and queue:admin,
---                         distinct from Logistics supervisor's scan-console
---                         duties and from Queue operator's call/skip console.
+--                         the automatic-presence policy, queue:admin, and
+--                         day-of activity/meal scanning, distinct from
+--                         Logistics supervisor's scan-console duties and from
+--                         Queue operator's call/skip console.
 --   Volunteer staff     — lightweight check-in-desk staffing: both entry
 --                         scans (accredit + presence), no stats/logistics
 --                         visibility — a genuinely smaller grant than
@@ -42,6 +47,22 @@
 -- Platform administrator; Judge coordinator/Operations lead within the
 -- operations band; Volunteer staff below the station roles; Mentor above
 -- Sponsor; Participant at the very bottom, below Sponsor.
+--
+-- Risk-tiering principle applied to these capability sets: read/score/scan/
+-- stats-type capabilities (applications:review, activity:scan,
+-- logistics:stats, projects:read, users:read) are broad and non-destructive,
+-- so they're granted to whichever role's domain they match. Decide/override/
+-- broadcast-type capabilities (applications:decide,
+-- applications:confirm-override, announcements:manage, notifications:send)
+-- send outward communication or finalize outcomes on someone else's behalf —
+-- those are concentrated at Event director, the single top non-superadmin
+-- tier, rather than spread across every operational role that touches the
+-- adjacent read-only capability. Concretely: Judge coordinator gets
+-- applications:review (scoring is squarely judging-coordination) but not
+-- applications:decide; Operations lead gets activity:scan (day-of scanning)
+-- but no applications or comms capability at all — applications aren't its
+-- domain, and a broadcast capability there would be excess authority for an
+-- operational console role.
 
 INSERT INTO roles (name, position, is_visible, is_protected) VALUES
   ('Event director',   18700, true, false),
@@ -55,9 +76,9 @@ INSERT INTO role_capabilities (role_id, capability, state)
 SELECT r.id, cap, 'allow'::permission_state
 FROM roles r
 JOIN (VALUES
-  ('Event director',    ARRAY['event:manage','venue:manage','schedule:manage','announcements:manage','users:read']),
-  ('Judge coordinator',  ARRAY['judge:panel','projects:read']),
-  ('Operations lead',   ARRAY['queue:admin','logistics:stats','presence:manage']),
+  ('Event director',    ARRAY['event:manage','venue:manage','schedule:manage','announcements:manage','users:read','applications:review','applications:decide','applications:confirm-override']),
+  ('Judge coordinator',  ARRAY['judge:panel','projects:read','applications:review']),
+  ('Operations lead',   ARRAY['queue:admin','logistics:stats','presence:manage','activity:scan']),
   ('Volunteer staff',   ARRAY['accredit:scan','presence:scan']),
   ('Mentor',            ARRAY['projects:read'])
   -- Participant deliberately carries no capability rows (same as Sponsor):
