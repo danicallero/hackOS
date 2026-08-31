@@ -204,3 +204,65 @@ export async function userHasAnyCapability(
   const capabilities = await getEffectiveCapabilities(userId, undefined, client);
   return capabilities.size > 0;
 }
+
+/**
+ * Capability-content guard (H8): independent of, and IN ADDITION TO,
+ * requireRoleMutationAuthority's position-hierarchy check — both must pass.
+ * An actor may only ALLOW or DENY a capability on someone else's role if they
+ * themselves currently resolve that exact capability to true, UNLESS they
+ * hold the wildcard ('*' / ADMIN_ALL), which exempts them entirely (a
+ * wildcard holder can already do everything, so content-gating them would be
+ * meaningless). Holding PERMISSIONS_MANAGE alone does NOT exempt an actor —
+ * only an actual '*' resolution does.
+ *
+ * Reading applied for "grant/revoke capabilities they possess": ALLOW and
+ * DENY both count as an actor asserting a decision about that capability on
+ * someone else's role, so both require possession. INHERIT removes an
+ * explicit override and defers to the role chain instead of asserting
+ * anything, so it is exempt from this check.
+ */
+export async function requireCapabilityPossessionForStateChange(
+  client: RoleGraphClient,
+  actorId: number,
+  capabilities: { capability: string; state: "allow" | "deny" | "inherit" }[],
+): Promise<void> {
+  if (await userResolvesCapability(client, actorId, CAPABILITIES.ADMIN_ALL)) return;
+  for (const { capability, state } of capabilities) {
+    if (state === "inherit") continue;
+    if (!(await userResolvesCapability(client, actorId, capability))) {
+      throw new ForbiddenError(
+        "You may only grant or deny a capability you currently possess yourself",
+        { capability, state, reason: "capability_possession" },
+      );
+    }
+  }
+}
+
+/**
+ * Capability-content guard for role assignment (H8): before assigning a role
+ * to a user, an actor who doesn't hold the wildcard must already possess
+ * every capability that role's OWN explicit ALLOW rows would grant (its
+ * role_capabilities, not the assignee's resulting effective set through
+ * other roles — a role's own explicit ALLOWs are what it contributes). A
+ * role with no explicit ALLOWs (a pure INHERIT scaffold) trivially passes.
+ * Independent of, and in addition to, requireRoleMutationAuthority.
+ */
+export async function requireCapabilityPossessionForAssignment(
+  client: RoleGraphClient,
+  actorId: number,
+  roleId: number,
+): Promise<void> {
+  if (await userResolvesCapability(client, actorId, CAPABILITIES.ADMIN_ALL)) return;
+  const { rows } = await client.query(
+    `SELECT capability FROM role_capabilities WHERE role_id = $1 AND state = 'allow'`,
+    [roleId],
+  );
+  for (const { capability } of rows as { capability: string }[]) {
+    if (!(await userResolvesCapability(client, actorId, capability))) {
+      throw new ForbiddenError(
+        "You may only assign a role that grants capabilities you already possess yourself",
+        { capability, reason: "capability_possession" },
+      );
+    }
+  }
+}

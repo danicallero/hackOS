@@ -20,6 +20,8 @@ import {
   assertActiveWildcardHolder,
   assertNotSuperadminRole,
   lockRoleGraph,
+  requireCapabilityPossessionForAssignment,
+  requireCapabilityPossessionForStateChange,
   requireRoleMutationAuthority,
   requireWildcardRoleAuthority,
   roleGrantsWildcard,
@@ -373,6 +375,9 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         const before = await loadRole(client, roleId);
         assertNotSuperadminRole(before.name);
         await requireRoleMutationAuthority(client, actorId, before.position);
+        // H8: independent, second guard — the actor may only set a capability
+        // to ALLOW/DENY if they possess it themselves (or hold the wildcard).
+        await requireCapabilityPossessionForStateChange(client, actorId, req.body.capabilities);
         const introducesWildcard = req.body.capabilities.some(
           (c) => c.capability === CAPABILITIES.ADMIN_ALL && c.state === "allow",
         );
@@ -514,6 +519,9 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         const role = await loadRole(client, roleId);
         assertNotSuperadminRole(role.name);
         await requireRoleMutationAuthority(client, actorId, role.position);
+        // H8: independent, second guard — the actor may only assign a role
+        // whose own explicit ALLOWs they already possess (or hold the wildcard).
+        await requireCapabilityPossessionForAssignment(client, actorId, roleId);
         const { rows: userRows } = await client.query(
           `SELECT id FROM users
             WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
