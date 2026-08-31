@@ -67,6 +67,10 @@ const roleResponse = z.object({
   position: z.number(),
   isVisible: z.boolean(),
   isProtected: z.boolean(),
+  // H8/0800/0807: true for a role inserted by a seed migration (0801's
+  // Sponsor, every 0805 default) rather than created via POST /api/roles.
+  // Scopes the trash/restore panel and gates the reset-to-default action.
+  isSeeded: z.boolean(),
   // Sparse: capabilities with no explicit row are implicitly 'inherit' and
   // omitted (mirrors the role_capabilities table — a missing row IS inherit).
   capabilities: z.array(z.object({ capability: z.string(), state: permissionState })),
@@ -95,6 +99,7 @@ async function loadRole(db: pg.Pool | pg.PoolClient, roleId: number) {
     position: rows[0].position as number,
     isVisible: rows[0].is_visible as boolean,
     isProtected: rows[0].is_protected as boolean,
+    isSeeded: rows[0].is_seeded as boolean,
     capabilities: caps.rows as { capability: string; state: "allow" | "deny" | "inherit" }[],
     memberIds: members.rows.map((r: { user_id: number }) => r.user_id),
     deletedAt: rows[0].deleted_at ? new Date(rows[0].deleted_at).toISOString() : null,
@@ -147,7 +152,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List roles by position",
         description:
-          "Lists every non-deleted role highest-position first (H8). Invitation managers get this same read access to choose deferred role pre-assignments; only PERMISSIONS_MANAGE can mutate. Pass includeDeleted=true (PERMISSIONS_MANAGE only) to also list soft-deleted roles, for a trash/restore panel.",
+          "Lists every non-deleted role highest-position first (H8). Invitation managers get this same read access to choose deferred role pre-assignments; only PERMISSIONS_MANAGE can mutate. Pass includeDeleted=true (PERMISSIONS_MANAGE only) to ALSO list soft-deleted roles, scoped to is_seeded=true ones only — the trash/restore panel only ever offers back roles from the seeded default catalogue (0801/0805), never a custom role an admin created and later deleted. Non-deleted roles in the response are unaffected by this scoping.",
         querystring: z.object({ includeDeleted: z.coerce.boolean().default(false) }),
         response: { 200: z.array(roleResponse) },
       },
@@ -157,7 +162,9 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         req.query.includeDeleted &&
         (await userHasCapability(req.userId as number, CAPABILITIES.PERMISSIONS_MANAGE, req));
       const { rows } = await pool.query(
-        `SELECT id FROM roles WHERE $1 OR deleted_at IS NULL ORDER BY position DESC`,
+        `SELECT id FROM roles
+          WHERE deleted_at IS NULL OR ($1 AND is_seeded)
+          ORDER BY position DESC`,
         [includeDeleted],
       );
       return Promise.all(rows.map((row: { id: number }) => loadRole(pool, row.id)));

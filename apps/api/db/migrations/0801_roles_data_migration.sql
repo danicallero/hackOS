@@ -156,7 +156,7 @@ ON CONFLICT (user_id, role_id) DO NOTHING;
 --        Carries no capabilities of its own — sponsor portal access is a
 --        relationship (the `sponsors` table), not a capability grant.
 
-INSERT INTO roles (name, position, is_visible, is_protected) VALUES ('Sponsor', 1000, true, false);
+INSERT INTO roles (name, position, is_visible, is_protected, is_seeded) VALUES ('Sponsor', 1000, true, false, true);
 
 INSERT INTO role_grant_rules (role_id, trigger_event, action, enabled)
 SELECT id, 'sponsor.enterprise_linked', 'grant', true FROM roles WHERE name = 'Sponsor';

@@ -19,6 +19,13 @@ CREATE TABLE roles (
   position integer NOT NULL,
   is_visible boolean NOT NULL DEFAULT true,
   is_protected boolean NOT NULL DEFAULT false,
+  -- H8: true for every role inserted by a seed migration (0801's Sponsor row,
+  -- every 0805 default-catalogue row) — never set by the normal POST
+  -- /api/roles route, so a custom role an admin creates stays false. Durable
+  -- across renames/edits (unlike matching on `name`), and used to scope the
+  -- trash/restore panel to seeded roles only and to gate the "reset to
+  -- default" action (role_seed_defaults, 0807).
+  is_seeded boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -29,7 +36,7 @@ CREATE TRIGGER roles_updated_at BEFORE UPDATE ON roles
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 COMMENT ON TABLE roles IS
-  'H8: the authorization truth. is_visible marks a role eligible to be shown as a user''s public role; is_protected marks a role the admin UI/API refuses to delete (e.g. the platform-administrator role created by 0801).';
+  'H8: the authorization truth. is_visible marks a role eligible to be shown as a user''s public role; is_protected marks a role the admin UI/API refuses to delete (e.g. the platform-administrator role created by 0801); is_seeded marks a role that came from a seed migration rather than being created by an admin.';
 
 CREATE TYPE permission_state AS ENUM ('allow', 'deny', 'inherit');
 

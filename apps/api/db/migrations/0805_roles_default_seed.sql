@@ -85,21 +85,21 @@
 -- relative position among the functional team roles is not load-bearing for
 -- composability — only the three explicitly-ordered pairs above matter.
 
-INSERT INTO roles (name, position, is_visible, is_protected) VALUES
-  ('Event Director',      18700, true, false),
-  ('Judging Coordinator',  8200, true, false),
-  ('Applications Lead',    8100, true, false),
-  ('Judging Team',         8000, true, false),
-  ('Applications Team',    7900, true, false),
-  ('Operations Team',      7800, true, false),
-  ('Hacker Experience',    7700, true, false),
-  ('Sponsors Team',        7600, true, false),
-  ('Media / Comms',        7500, true, false),
-  ('Technical Team',       7400, true, false),
-  ('Organizer',            5000, true, false),
-  ('Day Staff',            4000, true, false),
-  ('Mentor',               1500, true, false),
-  ('Participant',           500, true, false);
+INSERT INTO roles (name, position, is_visible, is_protected, is_seeded) VALUES
+  ('Event Director',      18700, true, false, true),
+  ('Judging Coordinator',  8200, true, false, true),
+  ('Applications Lead',    8100, true, false, true),
+  ('Judging Team',         8000, true, false, true),
+  ('Applications Team',    7900, true, false, true),
+  ('Operations Team',      7800, true, false, true),
+  ('Hacker Experience',    7700, true, false, true),
+  ('Sponsors Team',        7600, true, false, true),
+  ('Media / Comms',        7500, true, false, true),
+  ('Technical Team',       7400, true, false, true),
+  ('Organizer',            5000, true, false, true),
+  ('Day Staff',            4000, true, false, true),
+  ('Mentor',               1500, true, false, true),
+  ('Participant',           500, true, false, true);
 
 INSERT INTO role_capabilities (role_id, capability, state)
 SELECT r.id, cap, 'allow'::permission_state

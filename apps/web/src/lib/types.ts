@@ -112,6 +112,8 @@ export interface RoleSummary {
   isVisible: boolean;
   /** Built-in roles (e.g. Platform administrator). Informational only — see deletedAt/name for what's actually locked. */
   isProtected: boolean;
+  /** H8/0800: true for a role from the seeded default catalogue (0801 Sponsor / 0805). Scopes trash/restore and gates reset-to-default. */
+  isSeeded: boolean;
   /** Sparse: a capability with no explicit row is implicitly 'inherit'. */
   capabilities: { capability: string; state: PermissionState }[];
   memberIds: number[];
