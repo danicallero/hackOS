@@ -1,6 +1,7 @@
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { applyRoleGrantRule } from "../identity/role-grants.js";
 import {
   assertFixtureEnterpriseScope,
   assertFixtureSubjectScope,
@@ -337,6 +338,9 @@ export async function addEnterpriseMember(
       [enterpriseId, userId],
     );
     await issueTicket(client, userId);
+    // H8: the Sponsor role is granted through the generic role_grant_rules
+    // mechanism, not an ad hoc user_roles write — see role-grants.ts.
+    await applyRoleGrantRule(client, userId, "sponsor.enterprise_linked", actorId);
     await audit(client, {
       actorId,
       entityType: "enterprise",
@@ -373,6 +377,15 @@ export async function removeEnterpriseMember(
         enterpriseId,
         userId,
       });
+    }
+    // H8: only revoke the Sponsor role once no enterprise affiliation remains
+    // — a rep linked to several enterprises keeps sponsor access via any one.
+    const { rows: remaining } = await client.query(
+      `SELECT 1 FROM sponsors WHERE user_id = $1 LIMIT 1`,
+      [userId],
+    );
+    if (remaining.length === 0) {
+      await applyRoleGrantRule(client, userId, "sponsor.enterprise_unlinked", actorId);
     }
     await audit(client, {
       actorId,

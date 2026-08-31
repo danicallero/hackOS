@@ -169,6 +169,8 @@ export const createApplicationSchema = z
     confirmation_window_hours: z.number().int().positive().default(168),
     ask_shirt_size: z.boolean().default(false),
     ask_food_intolerances: z.boolean().default(false),
+    // H8/H11: role granted alongside ticket issuance on confirmation.
+    grants_role_id: z.number().int().positive().nullish(),
   })
   .strict()
   .refine((b) => fieldsReferenceKnownSections(b.template, b.sections), {
@@ -190,6 +192,7 @@ export const updateApplicationSchema = z
     confirmation_window_hours: z.number().int().positive().optional(),
     ask_shirt_size: z.boolean().optional(),
     ask_food_intolerances: z.boolean().optional(),
+    grants_role_id: z.number().int().positive().nullish(),
   })
   .strict()
   .refine(

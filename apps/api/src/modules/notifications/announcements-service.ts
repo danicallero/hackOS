@@ -557,20 +557,10 @@ async function resolveRecipients(
   }
 
   const { rows } = await db.query(
-    `WITH RECURSIVE user_groups AS (
-       SELECT pgm.user_id, pgm.group_id
-       FROM permission_group_members pgm
-       UNION
-       SELECT ug.user_id, gi.child_group_id
-       FROM permission_group_includes gi
-       JOIN user_groups ug ON ug.group_id = gi.parent_group_id
-     ),
-     staff AS (
+    `WITH staff AS (
        -- Same "holds at least one capability" definition as
        -- getEffectiveCapabilities/computeDerivedRole's staff bucket.
-       SELECT DISTINCT ug.user_id
-       FROM user_groups ug
-       JOIN group_capabilities gc ON gc.group_id = ug.group_id
+       SELECT DISTINCT user_id FROM user_effective_capabilities
      ),
      attendee AS (
        SELECT u.id AS user_id,

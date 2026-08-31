@@ -39,19 +39,12 @@ export async function scannerSnapshot(actorId?: number) {
   // for immediate operator feedback.
   const [peopleResult, activitiesResult, statesResult] = await Promise.all([
     pool.query(
-      `WITH RECURSIVE effective_groups (user_id, group_id) AS (
-         SELECT user_id, group_id FROM permission_group_members
-         UNION
-         SELECT eg.user_id, gi.child_group_id
-           FROM effective_groups eg
-           JOIN permission_group_includes gi ON gi.parent_group_id = eg.group_id
-       ), user_caps AS (
-         SELECT eg.user_id,
-                bool_or(gc.capability = '*') AS is_admin,
-                count(gc.capability) > 0 AS has_capability
-           FROM effective_groups eg
-           JOIN group_capabilities gc ON gc.group_id = eg.group_id
-          GROUP BY eg.user_id
+      `WITH user_caps AS (
+         SELECT uec.user_id,
+                bool_or(uec.capability = '*') AS is_admin,
+                count(uec.capability) > 0 AS has_capability
+           FROM user_effective_capabilities uec
+          GROUP BY uec.user_id
        )
        SELECT u.id, u.email, u.name, u.surname, u.badge_id, u.badge_id_history,
               u.food_intolerance_notes, u.notes, t.token AS ticket_token,

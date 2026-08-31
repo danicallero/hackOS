@@ -90,26 +90,17 @@ export async function scannableActivities(
 /** Accreditation totals by operational role; admins are included in staff. */
 export async function accreditationCountsByRole() {
   const { rows } = await pool.query(
-    `WITH RECURSIVE effective_groups(user_id, group_id) AS (
-       SELECT user_id, group_id FROM permission_group_members
-       UNION
-       SELECT eg.user_id, pgi.child_group_id
-         FROM effective_groups eg
-         JOIN permission_group_includes pgi ON pgi.parent_group_id = eg.group_id
-     ), classified AS (
+    `WITH classified AS (
        SELECT u.id,
               CASE
                 WHEN EXISTS (
-                  SELECT 1 FROM effective_groups eg
-                  JOIN group_capabilities gc ON gc.group_id = eg.group_id
-                  WHERE eg.user_id = u.id AND gc.capability = '*'
+                  SELECT 1 FROM user_effective_capabilities uec
+                  WHERE uec.user_id = u.id AND uec.capability = '*'
                 ) THEN 'staff'
                 WHEN EXISTS (SELECT 1 FROM enterprise_judges ej WHERE ej.user_id = u.id) THEN 'judge'
                 WHEN EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id) THEN 'sponsor'
                 WHEN EXISTS (
-                  SELECT 1 FROM effective_groups eg
-                  JOIN group_capabilities gc ON gc.group_id = eg.group_id
-                 WHERE eg.user_id = u.id
+                  SELECT 1 FROM user_effective_capabilities uec WHERE uec.user_id = u.id
                 ) THEN 'staff'
                 WHEN EXISTS (SELECT 1 FROM manual_attendee_roles mar WHERE mar.user_id = u.id AND mar.role = 'mentor') THEN 'mentor'
                 WHEN EXISTS (SELECT 1 FROM manual_attendee_roles mar WHERE mar.user_id = u.id AND mar.role = 'participant') THEN 'participant'
@@ -212,19 +203,12 @@ export async function scannerRoleStats(
     accredited: number;
     user_ids: number[];
   }>(
-    `WITH RECURSIVE effective_groups (user_id, group_id) AS (
-       SELECT user_id, group_id FROM permission_group_members
-       UNION
-       SELECT eg.user_id, gi.child_group_id
-         FROM effective_groups eg
-         JOIN permission_group_includes gi ON gi.parent_group_id = eg.group_id
-     ), user_caps AS (
-       SELECT eg.user_id,
-              bool_or(gc.capability = '*') AS is_admin,
-              count(gc.capability) > 0 AS has_capability
-         FROM effective_groups eg
-         JOIN group_capabilities gc ON gc.group_id = eg.group_id
-        GROUP BY eg.user_id
+    `WITH user_caps AS (
+       SELECT uec.user_id,
+              bool_or(uec.capability = '*') AS is_admin,
+              count(uec.capability) > 0 AS has_capability
+         FROM user_effective_capabilities uec
+        GROUP BY uec.user_id
      ), classified AS (
        SELECT u.id, u.badge_id,
               CASE

@@ -30,7 +30,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
 
   const COLUMNS = `id, name, type, template, sections, description, active, open_at, close_at,
                    capacity, confirmation_window_hours, ask_shirt_size, ask_food_intolerances,
-                   current_form_version, created_at`;
+                   current_form_version, created_at, grants_role_id`;
 
   // ── public: open forms with their template ──────────────────────────────────
   // A late invited participant (H10) can also discover/fetch a closed form —
@@ -130,7 +130,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Create an application form",
         description:
-          "Defines a new application form (H11): its template, optional named sections that group template fields under a title/description, open/close window, capacity, confirmation window, and whether it asks for a shirt size and/or dietary restrictions (H12) — both off by default, independent of `type`.",
+          "Defines a new application form (H11): its template, optional named sections that group template fields under a title/description, open/close window, capacity, confirmation window, whether it asks for a shirt size and/or dietary restrictions (H12) — both off by default, independent of `type` — and an optional `grants_role_id` (H8) granted alongside ticket issuance when a response is confirmed.",
         body: createApplicationSchema,
       },
     },
@@ -138,11 +138,18 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       const b = req.body;
       const row = await withTransaction(async (client) => {
         const template = normalizeTemplateForStorage(b.template);
+        if (b.grants_role_id != null) {
+          const { rows: roleRows } = await client.query(`SELECT 1 FROM roles WHERE id = $1`, [
+            b.grants_role_id,
+          ]);
+          if (!roleRows[0]) throw new NotFoundError("Role not found", { roleId: b.grants_role_id });
+        }
         const { rows } = await client.query(
           `INSERT INTO applications
              (name, type, template, sections, description, active, open_at, close_at, capacity,
-              confirmation_window_hours, ask_shirt_size, ask_food_intolerances, current_form_version)
-           VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, 1)
+              confirmation_window_hours, ask_shirt_size, ask_food_intolerances, current_form_version,
+              grants_role_id)
+           VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, 1, $13)
            RETURNING ${COLUMNS}`,
           [
             b.name,
@@ -157,6 +164,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
             b.confirmation_window_hours,
             b.ask_shirt_size,
             b.ask_food_intolerances,
+            b.grants_role_id ?? null,
           ],
         );
         const application = rows[0];
@@ -193,7 +201,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update an application form",
         description:
-          "Partial update of a form's template, named sections grouping template fields, window, capacity, active flag, or shirt-size/dietary-restriction toggles (H11, H12). Fields omitted from the body are left unchanged.",
+          "Partial update of a form's template, named sections grouping template fields, window, capacity, active flag, shirt-size/dietary-restriction toggles (H11, H12), or the role granted on confirmation (`grants_role_id`, H8). Fields omitted from the body are left unchanged.",
         params: idParamSchema,
         body: updateApplicationSchema,
       },
@@ -240,6 +248,16 @@ export function registerAdminRoutes(app: FastifyInstance): void {
         if (b.ask_shirt_size !== undefined) put("ask_shirt_size", b.ask_shirt_size);
         if (b.ask_food_intolerances !== undefined)
           put("ask_food_intolerances", b.ask_food_intolerances);
+        if (b.grants_role_id !== undefined) {
+          if (b.grants_role_id !== null) {
+            const { rows: roleRows } = await client.query(`SELECT 1 FROM roles WHERE id = $1`, [
+              b.grants_role_id,
+            ]);
+            if (!roleRows[0])
+              throw new NotFoundError("Role not found", { roleId: b.grants_role_id });
+          }
+          put("grants_role_id", b.grants_role_id ?? null);
+        }
 
         if (sets.length === 0) return current;
         values.push(req.params.id);
