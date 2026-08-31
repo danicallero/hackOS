@@ -497,4 +497,71 @@ describe("challenge lifecycle (H43-H45)", () => {
     expect(hidden.json().visibility).toBe("hidden");
     expect(hidden.json().available_from).toBeNull();
   });
+
+  describe("challenges:manage capability (H8)", () => {
+    it("lets a CHALLENGES_MANAGE-only holder create, list, edit, and reveal any challenge", async () => {
+      const server = await getApp();
+      const manager = await createUserWithCapabilities([CAPABILITIES.CHALLENGES_MANAGE]);
+      const enterpriseId = await createEnterprise("ChallengeMgrCo");
+
+      const created = await server.inject({
+        method: "POST",
+        url: "/api/challenges",
+        headers: asUser(manager),
+        payload: { enterpriseId, title: "Managed Challenge" },
+      });
+      expect(created.statusCode).toBe(201);
+      const id = created.json().id;
+
+      // Also reaches a challenge it doesn't own, unlike a plain sponsor rep.
+      const otherId = await createOwnedChallenge(await createUser());
+      const list = await server.inject({
+        method: "GET",
+        url: "/api/challenges",
+        headers: asUser(manager),
+      });
+      expect(list.json().challenges.map((c: { id: number }) => c.id)).toEqual(
+        expect.arrayContaining([id, otherId]),
+      );
+
+      const edited = await server.inject({
+        method: "PATCH",
+        url: `/api/challenges/${id}`,
+        headers: asUser(manager),
+        payload: { title: "Renamed" },
+      });
+      expect(edited.statusCode).toBe(200);
+
+      const revealed = await server.inject({
+        method: "POST",
+        url: "/api/challenges/visibility",
+        headers: asUser(manager),
+        payload: { ids: [id], visible: true },
+      });
+      expect(revealed.statusCode).toBe(200);
+    });
+
+    it("denies challenge creation and management to an unrelated capability holder", async () => {
+      const server = await getApp();
+      const unrelated = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
+      const enterpriseId = await createEnterprise("DeniedCo");
+
+      const created = await server.inject({
+        method: "POST",
+        url: "/api/challenges",
+        headers: asUser(unrelated),
+        payload: { enterpriseId, title: "Should Fail" },
+      });
+      expect(created.statusCode).toBe(403);
+
+      const ownedId = await createOwnedChallenge(await createUser());
+      const edited = await server.inject({
+        method: "PATCH",
+        url: `/api/challenges/${ownedId}`,
+        headers: asUser(unrelated),
+        payload: { title: "Should Fail" },
+      });
+      expect(edited.statusCode).toBe(403);
+    });
+  });
 });

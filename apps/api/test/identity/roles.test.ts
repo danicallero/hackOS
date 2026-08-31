@@ -879,31 +879,68 @@ describe("H8 default seeded role set (0805)", () => {
     return seedPool;
   }
 
-  it("seeds a planning-to-operations role set with real, non-overlapping capability grants", async () => {
+  it("seeds the composable default catalogue with real, exact capability grants per role", async () => {
     const pool = await seededRoles();
+    const eventDirectorCaps = Object.values(CAPABILITIES).filter(
+      (cap) => cap !== CAPABILITIES.ADMIN_ALL && cap !== CAPABILITIES.SPONSOR_PORTAL,
+    );
     const expected: Record<string, string[]> = {
-      "Event director": [
-        CAPABILITIES.EVENT_MANAGE,
-        CAPABILITIES.VENUE_MANAGE,
-        CAPABILITIES.SCHEDULE_MANAGE,
-        CAPABILITIES.ANNOUNCEMENTS_MANAGE,
+      "Event Director": eventDirectorCaps,
+      Organizer: [
         CAPABILITIES.USERS_READ,
         CAPABILITIES.APPLICATIONS_REVIEW,
-        CAPABILITIES.APPLICATIONS_DECIDE,
-        CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE,
-      ],
-      "Judge coordinator": [
-        CAPABILITIES.JUDGE_PANEL,
         CAPABILITIES.PROJECTS_READ,
-        CAPABILITIES.APPLICATIONS_REVIEW,
-      ],
-      "Operations lead": [
-        CAPABILITIES.QUEUE_ADMIN,
-        CAPABILITIES.LOGISTICS_STATS,
-        CAPABILITIES.PRESENCE_MANAGE,
+        CAPABILITIES.ACCREDIT_SCAN,
+        CAPABILITIES.PRESENCE_SCAN,
         CAPABILITIES.ACTIVITY_SCAN,
+        CAPABILITIES.LOGISTICS_STATS,
       ],
-      "Volunteer staff": [CAPABILITIES.ACCREDIT_SCAN, CAPABILITIES.PRESENCE_SCAN],
+      "Day Staff": [
+        CAPABILITIES.ACCREDIT_SCAN,
+        CAPABILITIES.PRESENCE_SCAN,
+        CAPABILITIES.ACTIVITY_SCAN,
+        CAPABILITIES.LOGISTICS_STATS,
+      ],
+      "Applications Team": [CAPABILITIES.APPLICATIONS_MANAGE, CAPABILITIES.APPLICATIONS_REVIEW],
+      "Applications Lead": [
+        CAPABILITIES.APPLICATIONS_DECIDE,
+        CAPABILITIES.APPLICATIONS_EDIT_RESPONSE,
+      ],
+      "Operations Team": [
+        CAPABILITIES.ACCREDIT_SCAN,
+        CAPABILITIES.PRESENCE_SCAN,
+        CAPABILITIES.ACTIVITY_SCAN,
+        CAPABILITIES.LOGISTICS_STATS,
+        CAPABILITIES.INTOLERANCES_MANAGE,
+        CAPABILITIES.VENUE_MANAGE,
+        CAPABILITIES.PRESENCE_MANAGE,
+      ],
+      "Hacker Experience": [
+        CAPABILITIES.PROJECTS_READ,
+        CAPABILITIES.ACTIVITY_SCAN,
+        CAPABILITIES.SCHEDULE_MANAGE,
+        CAPABILITIES.TV_CONTROL,
+        CAPABILITIES.CHALLENGES_MANAGE,
+      ],
+      "Sponsors Team": [CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.CHALLENGES_MANAGE],
+      "Judging Team": [
+        CAPABILITIES.PROJECTS_READ,
+        CAPABILITIES.PROJECTS_IMPORT,
+        CAPABILITIES.PROJECTS_EDIT,
+        CAPABILITIES.QUEUE_OPERATE,
+        CAPABILITIES.JUDGE_PANEL,
+      ],
+      "Judging Coordinator": [CAPABILITIES.QUEUE_ADMIN, CAPABILITIES.JUDGING_EXPORT],
+      "Media / Comms": [
+        CAPABILITIES.SCHEDULE_MANAGE,
+        CAPABILITIES.ANNOUNCEMENTS_MANAGE,
+        CAPABILITIES.TV_CONTROL,
+      ],
+      "Technical Team": [
+        CAPABILITIES.USERS_READ,
+        CAPABILITIES.USERS_WRITE,
+        CAPABILITIES.AUDIT_READ,
+      ],
       Mentor: [CAPABILITIES.PROJECTS_READ],
       Participant: [],
     };
@@ -925,7 +962,7 @@ describe("H8 default seeded role set (0805)", () => {
     }
   });
 
-  it("concentrates decide/override/broadcast capabilities at Event director, not the operational tiers below it (H8 risk tiering)", async () => {
+  it("concentrates decide/override/broadcast capabilities at Event Director, not any functional team role (H8 risk tiering)", async () => {
     const pool = await seededRoles();
     const riskyCapabilities = [
       CAPABILITIES.APPLICATIONS_DECIDE,
@@ -945,37 +982,36 @@ describe("H8 default seeded role set (0805)", () => {
     for (const row of rows as { name: string; capability: string }[]) {
       byRole.set(row.name, [...(byRole.get(row.name) ?? []), row.capability]);
     }
-    // Only Event director holds any decide/override/broadcast capability in
-    // the default seed; Judge coordinator and Operations lead each get the
-    // read/score/scan side of their domain (applications:review,
-    // activity:scan) but none of the outward-facing actions.
-    expect([...byRole.keys()]).toEqual(["Event director"]);
-    expect(byRole.get("Event director")?.sort()).toEqual(
+    // applications:confirm-override and notifications:send are Event
+    // Director exclusives; announcements:manage is also legitimately held by
+    // Media / Comms, and applications:decide by Applications Lead — both by
+    // deliberate composable-role design, not a risk-tiering leak.
+    expect([...byRole.keys()].sort()).toEqual(
+      ["Applications Lead", "Event Director", "Media / Comms"].sort(),
+    );
+    expect(byRole.get("Event Director")?.sort()).toEqual(
       [
         CAPABILITIES.ANNOUNCEMENTS_MANAGE,
         CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE,
         CAPABILITIES.APPLICATIONS_DECIDE,
+        CAPABILITIES.NOTIFICATIONS_SEND,
       ].sort(),
     );
+    expect(byRole.get("Applications Lead")).toEqual([CAPABILITIES.APPLICATIONS_DECIDE]);
+    expect(byRole.get("Media / Comms")).toEqual([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
 
-    const { rows: judgeCoordinatorCaps } = await pool.query(
-      `SELECT rc.capability FROM role_capabilities rc
+    // applications:confirm-override and notifications:send never leak below
+    // Event Director.
+    const { rows: overrideHolders } = await pool.query(
+      `SELECT r.name FROM role_capabilities rc
          JOIN roles r ON r.id = rc.role_id
-        WHERE r.name = 'Judge coordinator' AND rc.state = 'allow'`,
+        WHERE rc.state = 'allow'
+          AND rc.capability = ANY($1::text[])`,
+      [[CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE, CAPABILITIES.NOTIFICATIONS_SEND]],
     );
-    expect(judgeCoordinatorCaps.map((r: { capability: string }) => r.capability)).toContain(
-      CAPABILITIES.APPLICATIONS_REVIEW,
+    expect(new Set(overrideHolders.map((r: { name: string }) => r.name))).toEqual(
+      new Set(["Event Director"]),
     );
-
-    const { rows: opsLeadCaps } = await pool.query(
-      `SELECT rc.capability FROM role_capabilities rc
-         JOIN roles r ON r.id = rc.role_id
-        WHERE r.name = 'Operations lead' AND rc.state = 'allow'`,
-    );
-    const opsLeadCapNames = opsLeadCaps.map((r: { capability: string }) => r.capability);
-    expect(opsLeadCapNames).toContain(CAPABILITIES.ACTIVITY_SCAN);
-    expect(opsLeadCapNames).not.toContain(CAPABILITIES.APPLICATIONS_REVIEW);
-    expect(opsLeadCapNames).not.toContain(CAPABILITIES.APPLICATIONS_DECIDE);
   });
 
   it("seeds zero legacy H8 template roles on a fresh install (0801 only ports pre-existing permission_groups data)", async () => {
@@ -1007,24 +1043,39 @@ describe("H8 default seeded role set (0805)", () => {
     ]);
     expect(rows).toHaveLength(0);
 
-    // Total default set on a fresh install: 0805's six staff/applicant roles
-    // + 0801's always-created Sponsor role. system:superadmin is CLI-only,
-    // never created by migrations.
+    // Also confirm the OLD (superseded) six-role draft catalogue is gone.
+    const { rows: oldDraftRows } = await pool.query(
+      `SELECT name FROM roles WHERE name = ANY($1::text[])`,
+      [["Event director", "Judge coordinator", "Operations lead", "Volunteer staff"]],
+    );
+    expect(oldDraftRows).toHaveLength(0);
+
+    // Total default set on a fresh install: 0805's fifteen roles + 0801's
+    // always-created Sponsor role. system:superadmin is CLI-only, never
+    // created by migrations.
     const { rows: allRoles } = await pool.query(`SELECT name FROM roles ORDER BY name`);
     expect(allRoles.map((r: { name: string }) => r.name).sort()).toEqual(
       [
-        "Event director",
-        "Judge coordinator",
+        "Event Director",
+        "Organizer",
+        "Day Staff",
+        "Applications Team",
+        "Applications Lead",
+        "Operations Team",
+        "Hacker Experience",
+        "Sponsors Team",
+        "Judging Team",
+        "Judging Coordinator",
+        "Media / Comms",
+        "Technical Team",
         "Mentor",
-        "Operations lead",
         "Participant",
         "Sponsor",
-        "Volunteer staff",
       ].sort(),
     );
   });
 
-  it("keeps the existing Sponsor auto-grant role capability-less and positioned below the staff tier", async () => {
+  it("keeps the existing Sponsor auto-grant role capability-less and positioned below the functional team roles", async () => {
     const pool = await seededRoles();
     const { rows } = await pool.query(`SELECT id, position FROM roles WHERE name = 'Sponsor'`);
     expect(rows).toHaveLength(1);
@@ -1033,10 +1084,29 @@ describe("H8 default seeded role set (0805)", () => {
       [rows[0].id],
     );
     expect(capRows).toHaveLength(0);
-    const { rows: staffRoleRows } = await pool.query(
-      `SELECT position FROM roles WHERE name = 'Volunteer staff'`,
+    const { rows: dayStaffRows } = await pool.query(
+      `SELECT position FROM roles WHERE name = 'Day Staff'`,
     );
-    expect(rows[0].position).toBeLessThan(staffRoleRows[0].position);
+    expect(rows[0].position).toBeLessThan(dayStaffRows[0].position);
+  });
+
+  it("orders Applications Lead above Applications Team and Judging Coordinator above Judging Team", async () => {
+    const pool = await seededRoles();
+    const { rows } = await pool.query(
+      `SELECT name, position FROM roles
+        WHERE name = ANY($1::text[])`,
+      [["Applications Team", "Applications Lead", "Judging Team", "Judging Coordinator"]],
+    );
+    const positions = new Map<string, number>(
+      rows.map((r: { name: string; position: number }) => [r.name, r.position]),
+    );
+    function positionOf(name: string): number {
+      const position = positions.get(name);
+      if (position == null) throw new Error(`role "${name}" should exist`);
+      return position;
+    }
+    expect(positionOf("Applications Lead")).toBeGreaterThan(positionOf("Applications Team"));
+    expect(positionOf("Judging Coordinator")).toBeGreaterThan(positionOf("Judging Team"));
   });
 });
 
