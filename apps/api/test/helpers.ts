@@ -27,23 +27,55 @@ export async function createUser(
   return rows[0].id;
 }
 
-/** Create a user holding the given capabilities (via a throwaway group). */
+/**
+ * A unique, collision-free role position. ALLOW-only test roles (as created
+ * by createUserWithCapabilities/createRole below) never need a particular
+ * ordering relative to each other — no DENY exists in this codebase's own
+ * migrated roles, so any unique integer is safe (see 0801's migration
+ * comment for why ALLOW-only role membership is order-independent).
+ */
+function randomRolePosition(): number {
+  return 1_000_000 + Math.floor(Math.random() * 1_000_000_000);
+}
+
+/** Create a role with the given ALLOW capabilities at a fresh unique position. */
+export async function createRole(
+  capabilities: string[] = [],
+  overrides: Partial<{ name: string; isVisible: boolean; isProtected: boolean }> = {},
+): Promise<number> {
+  const name = overrides.name ?? `test-role-${crypto.randomUUID()}`;
+  const { rows } = await pool.query(
+    `INSERT INTO roles (name, position, is_visible, is_protected) VALUES ($1, $2, $3, $4) RETURNING id`,
+    [name, randomRolePosition(), overrides.isVisible ?? true, overrides.isProtected ?? false],
+  );
+  const roleId = rows[0].id;
+  for (const capability of capabilities) {
+    await pool.query(
+      `INSERT INTO role_capabilities (role_id, capability, state) VALUES ($1, $2, 'allow')`,
+      [roleId, capability],
+    );
+  }
+  return roleId;
+}
+
+/** Assign an existing role to a user. */
+export async function assignRole(
+  userId: number,
+  roleId: number,
+  assignedBy?: number,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO user_roles (user_id, role_id, assigned_by) VALUES ($1, $2, $3)
+     ON CONFLICT DO NOTHING`,
+    [userId, roleId, assignedBy ?? null],
+  );
+}
+
+/** Create a user holding the given capabilities (via a throwaway role). */
 export async function createUserWithCapabilities(capabilities: string[]): Promise<number> {
   const userId = await createUser();
-  const group = await pool.query(`INSERT INTO permission_groups (name) VALUES ($1) RETURNING id`, [
-    `test-group-${crypto.randomUUID()}`,
-  ]);
-  const groupId = group.rows[0].id;
-  for (const cap of capabilities) {
-    await pool.query(`INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`, [
-      groupId,
-      cap,
-    ]);
-  }
-  await pool.query(`INSERT INTO permission_group_members (user_id, group_id) VALUES ($1, $2)`, [
-    userId,
-    groupId,
-  ]);
+  const roleId = await createRole(capabilities);
+  await assignRole(userId, roleId);
   return userId;
 }
 

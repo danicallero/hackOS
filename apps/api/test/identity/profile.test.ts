@@ -1926,7 +1926,7 @@ describe("staff user routes (H7)", () => {
     );
   });
 
-  it("GET /api/users/:id includes role, capabilities and groups", async () => {
+  it("GET /api/users/:id includes role, capabilities and roles", async () => {
     const a = await getApp();
     const target = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
     const reader = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
@@ -1938,7 +1938,7 @@ describe("staff user routes (H7)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().role).toBe("staff");
     expect(res.json().capabilities).toContain(CAPABILITIES.ACCREDIT_SCAN);
-    expect(Array.isArray(res.json().groups)).toBe(true);
+    expect(Array.isArray(res.json().roles)).toBe(true);
   });
 
   it("DELETE /api/users/:id — superadmin only, blocks self, removes a fresh account", async () => {

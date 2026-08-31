@@ -192,15 +192,8 @@ describe("H10 invite creation", () => {
     const a = await getApp();
     const manager = await inviter();
     const wildcard = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
-    const { pool } = await import("../../src/db/pool.js");
-    const { rows } = await pool.query(
-      `INSERT INTO permission_groups (name) VALUES ('invite-platform-admin') RETURNING id`,
-    );
-    const groupId = rows[0].id as number;
-    await pool.query(`INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`, [
-      groupId,
-      CAPABILITIES.ADMIN_ALL,
-    ]);
+    const { createRole } = await import("../helpers.js");
+    const groupId = await createRole([CAPABILITIES.ADMIN_ALL], { name: "invite-platform-admin" });
 
     const anonymous = await a.inject({
       method: "POST",
@@ -1016,36 +1009,25 @@ describe("H9 invite regeneration", () => {
     expect([first.statusCode, second.statusCode].sort()).toEqual([201, 409]);
   });
 
-  it("fails closed if an ordinary deferred group later inherits wildcard access", async () => {
+  it("fails closed if an ordinary deferred role later gains wildcard access", async () => {
     const a = await getApp();
     const manager = await inviter();
     const wildcard = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
     const { pool } = await import("../../src/db/pool.js");
-    const createGroup = async (name: string) => {
-      const { rows } = await pool.query(
-        `INSERT INTO permission_groups (name) VALUES ($1) RETURNING id`,
-        [name],
-      );
-      return rows[0].id as number;
-    };
-    const parent = await createGroup("deferred-ordinary-parent");
-    const child = await createGroup("deferred-nested-child");
-    await pool.query(
-      `INSERT INTO permission_group_includes (parent_group_id, child_group_id) VALUES ($1, $2)`,
-      [parent, child],
-    );
+    const { createRole } = await import("../helpers.js");
+    const role = await createRole([]);
     const stale = await createInvite(a, manager, {
       email: "stale-wildcard@example.com",
       kind: "staff",
-      groupIds: [parent],
+      groupIds: [role],
     });
 
-    // The closure changes after issuance through a nested child, not by
-    // editing the invitation. Its default provenance must now fail closed.
-    await pool.query(`INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`, [
-      child,
-      CAPABILITIES.ADMIN_ALL,
-    ]);
+    // The role's own capabilities change after issuance, not the invitation
+    // itself. Its default provenance must now fail closed.
+    await pool.query(
+      `INSERT INTO role_capabilities (role_id, capability, state) VALUES ($1, $2, 'allow')`,
+      [role, CAPABILITIES.ADMIN_ALL],
+    );
     for (const action of [
       { url: `/api/invites/${stale.id}/regenerate` },
       { url: `/api/invites/${stale.id}/renew` },
@@ -1072,7 +1054,7 @@ describe("H9 invite regeneration", () => {
     const authorized = await createInvite(a, wildcard, {
       email: "authorized-wildcard@example.com",
       kind: "staff",
-      groupIds: [parent],
+      groupIds: [role],
     });
     const accepted = await a.inject({
       method: "POST",
@@ -1092,19 +1074,8 @@ describe("H9 invite regeneration", () => {
     const manager = await inviter();
     const wildcard = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
     const { pool } = await import("../../src/db/pool.js");
-    const createGroup = async (name: string) => {
-      const { rows } = await pool.query(
-        `INSERT INTO permission_groups (name) VALUES ($1) RETURNING id`,
-        [name],
-      );
-      return rows[0].id as number;
-    };
-    const parent = await createGroup("reauthorize-parent");
-    const child = await createGroup("reauthorize-child");
-    await pool.query(
-      `INSERT INTO permission_group_includes (parent_group_id, child_group_id) VALUES ($1, $2)`,
-      [parent, child],
-    );
+    const { createRole } = await import("../helpers.js");
+    const role = await createRole([]);
 
     const stale = await Promise.all(
       ["regenerate", "renew", "resend"].map(async (operation) => ({
@@ -1112,14 +1083,14 @@ describe("H9 invite regeneration", () => {
         invite: await createInvite(a, manager, {
           email: `reauthorize-${operation}@example.com`,
           kind: "staff",
-          groupIds: [parent],
+          groupIds: [role],
         }),
       })),
     );
-    await pool.query(`INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`, [
-      child,
-      CAPABILITIES.ADMIN_ALL,
-    ]);
+    await pool.query(
+      `INSERT INTO role_capabilities (role_id, capability, state) VALUES ($1, $2, 'allow')`,
+      [role, CAPABILITIES.ADMIN_ALL],
+    );
 
     for (const { operation, invite } of stale) {
       const response = await a.inject({
@@ -1147,16 +1118,16 @@ describe("H9 invite regeneration", () => {
 });
 
 describe("H10 reusable user invite links", () => {
-  it("requires a capability-backed group for a staff link", async () => {
+  it("requires a capability-backed role for a staff link", async () => {
     const a = await getApp();
     const actor = await inviter();
 
-    const groupOptions = await a.inject({
+    const roleOptions = await a.inject({
       method: "GET",
-      url: "/api/permission-groups",
+      url: "/api/roles",
       headers: asUser(actor),
     });
-    expect(groupOptions.statusCode).toBe(200);
+    expect(roleOptions.statusCode).toBe(200);
 
     const missingGroups = await a.inject({
       method: "POST",
@@ -1166,11 +1137,8 @@ describe("H10 reusable user invite links", () => {
     });
     expect(missingGroups.statusCode).toBe(400);
 
-    const { pool } = await import("../../src/db/pool.js");
-    const { rows } = await pool.query(
-      `INSERT INTO permission_groups (name) VALUES ('empty-link-group') RETURNING id`,
-    );
-    const emptyGroup = rows[0].id as number;
+    const { createRole } = await import("../helpers.js");
+    const emptyGroup = await createRole([], { name: "empty-link-group" });
     const noCapabilities = await a.inject({
       method: "POST",
       url: "/api/invites/user-links",
@@ -1180,18 +1148,12 @@ describe("H10 reusable user invite links", () => {
     expect(noCapabilities.statusCode).toBe(400);
   });
 
-  it("creates and redeems a reusable staff link with capability groups", async () => {
+  it("creates and redeems a reusable staff link with a role", async () => {
     const a = await getApp();
     const actor = await inviter();
     const { pool } = await import("../../src/db/pool.js");
-    const { rows } = await pool.query(
-      `INSERT INTO permission_groups (name) VALUES ('reusable-staff-group') RETURNING id`,
-    );
-    const groupId = rows[0].id as number;
-    await pool.query(`INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`, [
-      groupId,
-      CAPABILITIES.QUEUE_OPERATE,
-    ]);
+    const { createRole } = await import("../helpers.js");
+    const groupId = await createRole([CAPABILITIES.QUEUE_OPERATE], { name: "reusable-staff-role" });
 
     const link = await createUserInviteLink(a, actor, {
       kind: "staff",
@@ -1257,7 +1219,7 @@ describe("H10 reusable user invite links", () => {
     const { userHasCapability } = await import("../../src/lib/capabilities.js");
     expect(await userHasCapability(first.json().userId, CAPABILITIES.QUEUE_OPERATE)).toBe(true);
     const { rows: memberships } = await pool.query(
-      `SELECT 1 FROM permission_group_members WHERE user_id = $1 AND group_id = $2`,
+      `SELECT 1 FROM user_roles WHERE user_id = $1 AND role_id = $2`,
       [first.json().userId, groupId],
     );
     expect(memberships).toHaveLength(1);
@@ -1334,15 +1296,8 @@ describe("H10 reusable user invite links", () => {
   it("serializes a one-redeem staff link so only one claimant wins", async () => {
     const a = await getApp();
     const actor = await inviter();
-    const { pool } = await import("../../src/db/pool.js");
-    const { rows } = await pool.query(
-      `INSERT INTO permission_groups (name) VALUES ('race-link-group') RETURNING id`,
-    );
-    const groupId = rows[0].id as number;
-    await pool.query(`INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`, [
-      groupId,
-      CAPABILITIES.ACTIVITY_SCAN,
-    ]);
+    const { createRole } = await import("../helpers.js");
+    const groupId = await createRole([CAPABILITIES.ACTIVITY_SCAN], { name: "race-link-role" });
     const link = await createUserInviteLink(a, actor, {
       kind: "staff",
       groupIds: [groupId],
