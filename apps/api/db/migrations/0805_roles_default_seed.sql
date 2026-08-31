@@ -48,8 +48,8 @@
 --                            hackOS developers. Explicitly NOT `*`,
 --                            permissions:manage, wallet:manage, or
 --                            event:manage.
---   Mentor                 — applicant-facing granted role (applications
---                            .grants_role_id target) for accepted mentors;
+--   Mentor                 — applicant-facing granted role (an
+--                            application_grants_roles target) for accepted mentors;
 --                            carries no capabilities today. Mentor-facing
 --                            features (public mentor profiles, participants
 --                            asking a mentor for help) are future work, not

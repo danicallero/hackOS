@@ -1,11 +1,13 @@
 -- 0804_roles_soft_delete.sql — DELTA(H8): roles gain soft-delete/restore
 -- instead of hard DELETE. A deleted role's row, its role_capabilities, its
--- user_roles memberships, and every audit_log entry that references it all
--- stay intact — only `deleted_at` flips — so restore is a pure metadata
--- change and nothing has to be re-created. This also sidesteps the implicit
--- RESTRICT on applications.grants_role_id -> roles(id) (0800) that a hard
--- DELETE of an in-use default role would previously have hit: soft delete
--- never touches that FK at all.
+-- user_roles memberships, its application_grants_roles rows, and every
+-- audit_log entry that references it all stay intact — only `deleted_at`
+-- flips — so restore is a pure metadata change and nothing has to be
+-- re-created. This also sidesteps the implicit RESTRICT that
+-- application_grants_roles.role_id -> roles(id) (0800) would otherwise put on
+-- hard-deleting an in-use default role: soft delete never touches that FK at
+-- all, and roles are never hard-deleted through the API anyway (routes/roles.ts's
+-- DELETE only removes a user_roles membership, never a roles row).
 --
 -- A deleted role must stop granting access immediately, exactly as if the
 -- user held no such role: user_effective_capabilities (0800) is redefined

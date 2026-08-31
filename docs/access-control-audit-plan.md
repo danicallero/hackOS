@@ -32,8 +32,9 @@ approved inverting that architecture. This is the current model:
   missing row == INHERIT); `user_roles` (a user may hold several roles);
   `role_grant_rules` (role_id, `trigger_event`, `action` grant/revoke — a
   generic hook for automatic role assignment, decoupled from any specific
-  domain); `applications.grants_role_id` (a role granted alongside ticket
-  issuance on confirmation).
+  domain); `application_grants_roles` (application_id, role_id — the roles a
+  form grants alongside ticket issuance on confirmation; a form may grant
+  zero or more roles).
 - **Resolution** (`apps/api/src/lib/capabilities.ts`, backed by the
   `user_effective_capabilities` SQL view): for a capability, walk the user's
   OWN assigned roles ordered by position descending; the first ALLOW/DENY
@@ -210,7 +211,7 @@ single rung on a ladder.
 - **Technical Team** — `users:read`, `users:write`, `audit:read` for hackOS
   developers. Explicitly **not** `*`, `permissions:manage`, `wallet:manage`,
   or `event:manage`.
-- **Mentor** — applicant-facing granted role (`applications.grants_role_id`
+- **Mentor** — applicant-facing granted role (an `application_grants_roles`
   target) for accepted mentors; carries no capabilities today. Mentor-facing
   features (public mentor profiles, participants asking a mentor for help)
   are future work, not yet built or scheduled — access isn't granted ahead

@@ -76,12 +76,17 @@ CREATE TABLE user_roles (
 
 CREATE INDEX user_roles_role_id_idx ON user_roles (role_id);
 
--- DELTA(H11): each application form can grant a role alongside its existing
--- ticket-issuing behavior on confirmation.
-ALTER TABLE applications ADD COLUMN grants_role_id integer REFERENCES roles(id);
+-- DELTA(H11): each application form can grant zero or more roles alongside
+-- its existing ticket-issuing behavior on confirmation. A join table rather
+-- than a single FK column, so a form can configure any number of roles.
+CREATE TABLE application_grants_roles (
+  application_id integer NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+  role_id integer NOT NULL REFERENCES roles(id),
+  PRIMARY KEY (application_id, role_id)
+);
 
-COMMENT ON COLUMN applications.grants_role_id IS
-  'H8/H11: role granted to the applicant on confirmation, in addition to ticket issuance. NULL grants nothing.';
+COMMENT ON TABLE application_grants_roles IS
+  'H8/H11: roles granted to the applicant on confirmation, in addition to ticket issuance. No rows for a form grants nothing.';
 
 -- Generic automatic role grant/revoke rules, decoupled from any specific
 -- domain trigger. `trigger_event` is an application-code-defined string

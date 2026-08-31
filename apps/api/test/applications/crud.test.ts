@@ -5,6 +5,7 @@ import type { App } from "../../src/app.js";
 import {
   asUser,
   buildTestApp,
+  createRole,
   createUser,
   createUserWithCapabilities,
   truncateAll,
@@ -359,6 +360,126 @@ describe("applications CRUD (H11)", () => {
     expect(patch.json().ask_shirt_size).toBe(true);
     // Untouched field stays as-is (partial update).
     expect(patch.json().ask_food_intolerances).toBe(false);
+  });
+
+  it("H8: creates a form with multiple grants_role_ids and updates the granted set", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    const roleA = await createRole([], { name: "grant-form-role-a" });
+    const roleB = await createRole([], { name: "grant-form-role-b" });
+    const roleC = await createRole([], { name: "grant-form-role-c" });
+
+    const create = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: {
+        name: "Mentor form",
+        type: "mentor",
+        template: sampleTemplate(),
+        grants_role_ids: [roleA, roleB],
+      },
+    });
+    expect(create.statusCode).toBe(201);
+    expect(create.json().grants_role_ids.sort()).toEqual([roleA, roleB].sort());
+    const id = create.json().id;
+
+    const get = await a.inject({
+      method: "GET",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+    });
+    expect(get.json().grants_role_ids.sort()).toEqual([roleA, roleB].sort());
+
+    // Replace the full set: drop roleA, add roleC.
+    const patch = await a.inject({
+      method: "PATCH",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+      payload: { grants_role_ids: [roleB, roleC] },
+    });
+    expect(patch.statusCode).toBe(200);
+    expect(patch.json().grants_role_ids.sort()).toEqual([roleB, roleC].sort());
+
+    // Omitting the field on a further PATCH leaves the grants unchanged.
+    const patchUnrelated = await a.inject({
+      method: "PATCH",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+      payload: { capacity: 10 },
+    });
+    expect(patchUnrelated.json().grants_role_ids.sort()).toEqual([roleB, roleC].sort());
+
+    // Explicit [] clears every grant.
+    const clear = await a.inject({
+      method: "PATCH",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+      payload: { grants_role_ids: [] },
+    });
+    expect(clear.json().grants_role_ids).toEqual([]);
+  });
+
+  it("H8: a form with no grants_role_ids still creates and confirms with no role side-effects", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+
+    const create = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: { name: "No-grant form", type: "participant", template: sampleTemplate() },
+    });
+    expect(create.statusCode).toBe(201);
+    expect(create.json().grants_role_ids).toEqual([]);
+  });
+
+  it("H8: rejects an unknown role ID in grants_role_ids", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+
+    const create = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: {
+        name: "Bad grant form",
+        type: "participant",
+        template: sampleTemplate(),
+        grants_role_ids: [999999],
+      },
+    });
+    expect(create.statusCode).toBe(404);
+
+    const roleA = await createRole([], { name: "grant-form-role-update-target" });
+    const okCreate = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: {
+        name: "Ok grant form",
+        type: "participant",
+        template: sampleTemplate(),
+        grants_role_ids: [roleA],
+      },
+    });
+    expect(okCreate.statusCode).toBe(201);
+    const id = okCreate.json().id;
+
+    const patch = await a.inject({
+      method: "PATCH",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+      payload: { grants_role_ids: [roleA, 999999] },
+    });
+    expect(patch.statusCode).toBe(404);
+    // Unknown role ID in the PATCH must not have partially applied.
+    const get = await a.inject({
+      method: "GET",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+    });
+    expect(get.json().grants_role_ids).toEqual([roleA]);
   });
 
   it("blocks deleting a form that already has responses", async () => {

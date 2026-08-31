@@ -1,6 +1,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
+import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireAnyCapability, requireCapability } from "../../lib/capabilities.js";
@@ -13,6 +14,36 @@ import {
   isWindowOpen,
   normalizeTemplateForStorage,
 } from "./service.js";
+
+/** H8/H11: 404s if any of `roleIds` doesn't reference a real role. */
+async function assertRolesExist(client: Queryable, roleIds: number[]): Promise<void> {
+  if (roleIds.length === 0) return;
+  const unique = [...new Set(roleIds)];
+  const { rows } = await client.query(`SELECT id FROM roles WHERE id = ANY($1)`, [unique]);
+  if (rows.length !== unique.length) {
+    const found = new Set(rows.map((r) => r.id as number));
+    const missing = unique.filter((id) => !found.has(id));
+    throw new NotFoundError("Role not found", { roleIds: missing });
+  }
+}
+
+/** H8/H11: replaces the full set of roles a form grants on confirmation. */
+async function replaceGrantedRoles(
+  client: Queryable,
+  applicationId: number,
+  roleIds: number[],
+): Promise<void> {
+  await client.query(`DELETE FROM application_grants_roles WHERE application_id = $1`, [
+    applicationId,
+  ]);
+  if (roleIds.length > 0) {
+    await client.query(
+      `INSERT INTO application_grants_roles (application_id, role_id)
+       SELECT $1, unnest($2::int[])`,
+      [applicationId, [...new Set(roleIds)]],
+    );
+  }
+}
 
 /**
  * H11 (APPLICATIONS_MANAGE): define application forms, open/close windows,
@@ -28,9 +59,17 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     CAPABILITIES.APPLICATIONS_DECIDE,
   ] as const;
 
+  // H8/H11: grants_role_ids is a correlated-subquery column, not a stored
+  // one — it aggregates application_grants_roles per form so callers get a
+  // plain array without a second round trip.
+  const GRANTS_ROLE_IDS_EXPR = `COALESCE(
+        (SELECT array_agg(agr.role_id ORDER BY agr.role_id)
+           FROM application_grants_roles agr WHERE agr.application_id = applications.id),
+        ARRAY[]::integer[]
+      ) AS grants_role_ids`;
   const COLUMNS = `id, name, type, template, sections, description, active, open_at, close_at,
                    capacity, confirmation_window_hours, ask_shirt_size, ask_food_intolerances,
-                   current_form_version, created_at, grants_role_id`;
+                   current_form_version, created_at, ${GRANTS_ROLE_IDS_EXPR}`;
 
   // ── public: open forms with their template ──────────────────────────────────
   // A late invited participant (H10) can also discover/fetch a closed form —
@@ -130,7 +169,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Create an application form",
         description:
-          "Defines a new application form (H11): its template, optional named sections that group template fields under a title/description, open/close window, capacity, confirmation window, whether it asks for a shirt size and/or dietary restrictions (H12) — both off by default, independent of `type` — and an optional `grants_role_id` (H8) granted alongside ticket issuance when a response is confirmed.",
+          "Defines a new application form (H11): its template, optional named sections that group template fields under a title/description, open/close window, capacity, confirmation window, whether it asks for a shirt size and/or dietary restrictions (H12) — both off by default, independent of `type` — and an optional `grants_role_ids` (H8) list of roles granted alongside ticket issuance when a response is confirmed.",
         body: createApplicationSchema,
       },
     },
@@ -138,19 +177,14 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       const b = req.body;
       const row = await withTransaction(async (client) => {
         const template = normalizeTemplateForStorage(b.template);
-        if (b.grants_role_id != null) {
-          const { rows: roleRows } = await client.query(`SELECT 1 FROM roles WHERE id = $1`, [
-            b.grants_role_id,
-          ]);
-          if (!roleRows[0]) throw new NotFoundError("Role not found", { roleId: b.grants_role_id });
-        }
+        const roleIds = b.grants_role_ids ?? [];
+        await assertRolesExist(client, roleIds);
         const { rows } = await client.query(
           `INSERT INTO applications
              (name, type, template, sections, description, active, open_at, close_at, capacity,
-              confirmation_window_hours, ask_shirt_size, ask_food_intolerances, current_form_version,
-              grants_role_id)
-           VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, 1, $13)
-           RETURNING ${COLUMNS}`,
+              confirmation_window_hours, ask_shirt_size, ask_food_intolerances, current_form_version)
+           VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, 1)
+           RETURNING id`,
           [
             b.name,
             b.type,
@@ -164,29 +198,34 @@ export function registerAdminRoutes(app: FastifyInstance): void {
             b.confirmation_window_hours,
             b.ask_shirt_size,
             b.ask_food_intolerances,
-            b.grants_role_id ?? null,
           ],
         );
-        const application = rows[0];
+        const applicationId = rows[0].id as number;
         await client.query(
           `INSERT INTO application_form_versions
              (application_id, version, template, sections, created_by)
            VALUES ($1, 1, $2::jsonb, $3::jsonb, $4)`,
-          [application.id, JSON.stringify(template), JSON.stringify(b.sections), req.userId],
+          [applicationId, JSON.stringify(template), JSON.stringify(b.sections), req.userId],
         );
+        await replaceGrantedRoles(client, applicationId, roleIds);
         await audit(client, {
           actorId: req.userId,
           entityType: "application",
-          entityId: application.id,
+          entityId: applicationId,
           action: "created",
           after: {
             name: b.name,
             type: b.type,
             formVersion: 1,
             anonymousRetention: anonymousRetentionConfiguration(template),
+            grantsRoleIds: roleIds,
           },
         });
-        return application;
+        const { rows: finalRows } = await client.query(
+          `SELECT ${COLUMNS} FROM applications WHERE id = $1`,
+          [applicationId],
+        );
+        return finalRows[0];
       });
       reply.code(201);
       return row;
@@ -201,7 +240,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update an application form",
         description:
-          "Partial update of a form's template, named sections grouping template fields, window, capacity, active flag, shirt-size/dietary-restriction toggles (H11, H12), or the role granted on confirmation (`grants_role_id`, H8). Fields omitted from the body are left unchanged.",
+          "Partial update of a form's template, named sections grouping template fields, window, capacity, active flag, shirt-size/dietary-restriction toggles (H11, H12), or the roles granted on confirmation (`grants_role_ids`, H8). Fields omitted from the body are left unchanged; passing `grants_role_ids` replaces the full set of granted roles for the form (an empty array clears every grant).",
         params: idParamSchema,
         body: updateApplicationSchema,
       },
@@ -248,24 +287,26 @@ export function registerAdminRoutes(app: FastifyInstance): void {
         if (b.ask_shirt_size !== undefined) put("ask_shirt_size", b.ask_shirt_size);
         if (b.ask_food_intolerances !== undefined)
           put("ask_food_intolerances", b.ask_food_intolerances);
-        if (b.grants_role_id !== undefined) {
-          if (b.grants_role_id !== null) {
-            const { rows: roleRows } = await client.query(`SELECT 1 FROM roles WHERE id = $1`, [
-              b.grants_role_id,
-            ]);
-            if (!roleRows[0])
-              throw new NotFoundError("Role not found", { roleId: b.grants_role_id });
-          }
-          put("grants_role_id", b.grants_role_id ?? null);
-        }
 
-        if (sets.length === 0) return current;
-        values.push(req.params.id);
-        const { rows } = await client.query(
-          `UPDATE applications SET ${sets.join(", ")} WHERE id = $${i} RETURNING ${COLUMNS}`,
-          values,
-        );
+        // grants_role_ids replaces the form's full role-grant set (H8, H11).
+        // Omitted (undefined) leaves it unchanged; [] clears every grant.
+        const grantsChanged = b.grants_role_ids !== undefined;
+        const nextRoleIds = b.grants_role_ids ?? [];
+        if (grantsChanged) await assertRolesExist(client, nextRoleIds);
+
+        if (sets.length === 0 && !grantsChanged) return current;
+        let rows: Record<string, unknown>[];
+        if (sets.length > 0) {
+          values.push(req.params.id);
+          ({ rows } = await client.query(
+            `UPDATE applications SET ${sets.join(", ")} WHERE id = $${i} RETURNING id`,
+            values,
+          ));
+        } else {
+          rows = [{ id: req.params.id }];
+        }
         if (!rows[0]) throw new NotFoundError("Application not found");
+        if (grantsChanged) await replaceGrantedRoles(client, req.params.id, nextRoleIds);
 
         if (schemaChanged) {
           await client.query(
@@ -290,16 +331,24 @@ export function registerAdminRoutes(app: FastifyInstance): void {
             ? {
                 formVersion: Number(current.current_form_version ?? 1),
                 anonymousRetention: anonymousRetentionConfiguration(current.template ?? []),
+                ...(grantsChanged ? { grantsRoleIds: current.grants_role_ids } : {}),
               }
-            : undefined,
+            : grantsChanged
+              ? { grantsRoleIds: current.grants_role_ids }
+              : undefined,
           after: schemaChanged
             ? {
                 formVersion: nextVersion,
                 anonymousRetention: anonymousRetentionConfiguration(nextTemplate),
+                ...(grantsChanged ? { grantsRoleIds: nextRoleIds } : {}),
               }
-            : b,
+            : { ...b, ...(grantsChanged ? { grants_role_ids: nextRoleIds } : {}) },
         });
-        return rows[0];
+        const { rows: finalRows } = await client.query(
+          `SELECT ${COLUMNS} FROM applications WHERE id = $1`,
+          [req.params.id],
+        );
+        return finalRows[0];
       });
     },
   );

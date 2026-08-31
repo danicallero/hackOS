@@ -448,18 +448,22 @@ describe("H8 sponsor auto-grant rule and application-confirmation role grant", (
     expect(afterRevoke).toHaveLength(0);
   });
 
-  it("grants a form's configured role on confirmation, alongside ticket issuance", async () => {
+  it("grants every one of a form's configured roles on confirmation, alongside ticket issuance", async () => {
     const { pool } = await import("../../src/db/pool.js");
-    const grantedRole = await createRole([], { name: "confirmed-applicant-role" });
+    const grantedRoleA = await createRole([], { name: "confirmed-applicant-role-a" });
+    const grantedRoleB = await createRole([], { name: "confirmed-applicant-role-b" });
 
     const { rows: appRows } = await pool.query(
       `INSERT INTO applications
-         (name, type, template, sections, active, confirmation_window_hours, current_form_version, grants_role_id)
-       VALUES ('Test form', 'participant', '[]'::jsonb, '[]'::jsonb, true, 168, 1, $1)
+         (name, type, template, sections, active, confirmation_window_hours, current_form_version)
+       VALUES ('Test form', 'participant', '[]'::jsonb, '[]'::jsonb, true, 168, 1)
        RETURNING id`,
-      [grantedRole],
     );
     const applicationId = appRows[0].id as number;
+    await pool.query(
+      `INSERT INTO application_grants_roles (application_id, role_id) VALUES ($1, $2), ($1, $3)`,
+      [applicationId, grantedRoleA, grantedRoleB],
+    );
     const { ensureApplicationFormVersion } = await import("../helpers.js");
     const formVersionId = await ensureApplicationFormVersion(applicationId);
     const userId = await createUser({ email: "confirm-role-grant@test.local" });
@@ -481,10 +485,10 @@ describe("H8 sponsor auto-grant rule and application-confirmation role grant", (
     await confirmByResponseId(responseId, "admin_override", null);
 
     const { rows: roleRows } = await pool.query(
-      `SELECT 1 FROM user_roles WHERE user_id = $1 AND role_id = $2`,
-      [userId, grantedRole],
+      `SELECT role_id FROM user_roles WHERE user_id = $1 ORDER BY role_id`,
+      [userId],
     );
-    expect(roleRows).toHaveLength(1);
+    expect(roleRows.map((r) => r.role_id).sort()).toEqual([grantedRoleA, grantedRoleB].sort());
     const { rows: ticketRows } = await pool.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [
       userId,
     ]);

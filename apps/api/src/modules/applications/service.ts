@@ -1772,19 +1772,19 @@ async function doConfirm(
   if (resp.confirmation_token_id) {
     await invalidateConfirmationToken(client, resp.confirmation_token_id);
   }
-  // H8/H11: grant the form's configured role alongside ticket issuance, in
-  // the same transaction as the confirmation write.
-  const { rows: formRows } = await client.query(
-    `SELECT grants_role_id FROM applications WHERE id = $1`,
+  // H8/H11: grant every role the form is configured to grant alongside
+  // ticket issuance, in the same transaction as the confirmation write.
+  const { rows: grantRows } = await client.query(
+    `SELECT role_id FROM application_grants_roles WHERE application_id = $1`,
     [resp.application_id],
   );
-  const grantsRoleId = formRows[0]?.grants_role_id as number | null | undefined;
-  if (grantsRoleId != null) {
+  const grantedRoleIds = grantRows.map((r) => r.role_id as number);
+  if (grantedRoleIds.length > 0) {
     await client.query(
       `INSERT INTO user_roles (user_id, role_id, assigned_by, source)
-       VALUES ($1, $2, $3, 'application_confirmed')
+       SELECT $1, unnest($2::int[]), $3, 'application_confirmed'
        ON CONFLICT DO NOTHING`,
-      [resp.user_id, grantsRoleId, actorId],
+      [resp.user_id, grantedRoleIds, actorId],
     );
   }
   await audit(client, {
@@ -1794,7 +1794,7 @@ async function doConfirm(
     action: "confirmed",
     source: via,
     before: { status: "accepted" },
-    after: { status: "confirmed", grantedRoleId: grantsRoleId ?? null },
+    after: { status: "confirmed", grantedRoleIds },
   });
   return { status: "confirmed", alreadyConfirmed: false, ticketToken, userId: resp.user_id };
 }
