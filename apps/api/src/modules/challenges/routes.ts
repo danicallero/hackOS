@@ -50,6 +50,7 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
   const manageChallenges = requireAnyCapability(
     CAPABILITIES.SPONSORS_MANAGE,
     CAPABILITIES.QUEUE_ADMIN,
+    CAPABILITIES.CHALLENGES_MANAGE,
   );
 
   // Admin-wide list.
@@ -95,14 +96,18 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
     {
       ...access({
         kind: "capability",
-        anyOf: [CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN],
+        anyOf: [
+          CAPABILITIES.SPONSORS_MANAGE,
+          CAPABILITIES.QUEUE_ADMIN,
+          CAPABILITIES.CHALLENGES_MANAGE,
+        ],
       }),
       preHandler: manageChallenges,
       schema: {
         body: createChallengeBody,
         summary: "Create a sponsor challenge",
         description:
-          "Creates a hidden challenge template for an enterprise. Requires global sponsor or queue administration (H43, H44).",
+          "Creates a hidden challenge template for an enterprise. Requires global sponsor, queue, or challenge administration (H8, H43, H44).",
       },
     },
     async (req, reply) => {
@@ -155,7 +160,7 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
         body: updateChallengeBody,
         summary: "Update a challenge",
         description:
-          "Partially updates challenge content, prizes, judging configuration, timing and visibility. Organization admins with sponsors:manage, queue:admin or the admin wildcard may update any editable field; a sponsor representative may edit only their own challenge, and public content is locked after reveal. Judging panel criteria remain locked after the first submitted evaluation or completed queue entry in the challenge's queue group. Every successful edit is versioned and audited (H44, H45, H53).",
+          "Partially updates challenge content, prizes, judging configuration, timing and visibility. Organization admins with sponsors:manage, queue:admin, challenges:manage, or the admin wildcard may update any editable field; a sponsor representative may edit only their own challenge, and public content is locked after reveal. Judging panel criteria remain locked after the first submitted evaluation or completed queue entry in the challenge's queue group. Every successful edit is versioned and audited (H8, H44, H45, H53).",
       },
     },
     async (req) => {
@@ -174,7 +179,11 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
     {
       ...access({
         kind: "capability",
-        anyOf: [CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN],
+        anyOf: [
+          CAPABILITIES.SPONSORS_MANAGE,
+          CAPABILITIES.QUEUE_ADMIN,
+          CAPABILITIES.CHALLENGES_MANAGE,
+        ],
       }),
       preHandler: manageChallenges,
       schema: {
@@ -191,7 +200,11 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
     {
       ...access({
         kind: "capability",
-        anyOf: [CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN],
+        anyOf: [
+          CAPABILITIES.SPONSORS_MANAGE,
+          CAPABILITIES.QUEUE_ADMIN,
+          CAPABILITIES.CHALLENGES_MANAGE,
+        ],
       }),
       preHandler: manageChallenges,
       schema: {
@@ -209,7 +222,11 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
     {
       ...access({
         kind: "capability",
-        anyOf: [CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN],
+        anyOf: [
+          CAPABILITIES.SPONSORS_MANAGE,
+          CAPABILITIES.QUEUE_ADMIN,
+          CAPABILITIES.CHALLENGES_MANAGE,
+        ],
       }),
       preHandler: manageChallenges,
       schema: {
