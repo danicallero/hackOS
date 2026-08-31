@@ -7,6 +7,7 @@ import {
   buildTestApp,
   createUser,
   createUserWithCapabilities,
+  seedAttendeeRoles,
   truncateAll,
 } from "../helpers.js";
 import {
@@ -123,6 +124,7 @@ describe("H22 accreditation lookup + check-in", () => {
   });
 
   it("classifies an unassigned person and issues their ticket before accreditation", async () => {
+    await seedAttendeeRoles();
     const uid = await createUser({ name: "Manual mentor" });
     const res = await app.inject({
       method: "POST",
@@ -133,8 +135,14 @@ describe("H22 accreditation lookup + check-in", () => {
     expect(res.statusCode).toBe(200);
     const { pool } = await import("../../src/db/pool.js");
     expect(
-      (await pool.query(`SELECT role FROM manual_attendee_roles WHERE user_id = $1`, [uid])).rows[0]
-        .role,
+      (
+        await pool.query(
+          `SELECT r.badge_category FROM user_roles ur
+             JOIN roles r ON r.id = ur.role_id
+            WHERE ur.user_id = $1 AND r.badge_category = 'mentor'`,
+          [uid],
+        )
+      ).rows[0]?.badge_category,
     ).toBe("mentor");
     expect(
       (await pool.query(`SELECT token FROM tickets WHERE user_id = $1`, [uid])).rows,
@@ -224,7 +232,14 @@ describe("H22 accreditation lookup + check-in", () => {
     const uid = await createUser();
     const token = await issueTicket(uid);
     const { pool } = await import("../../src/db/pool.js");
-    await pool.query(`DELETE FROM manual_attendee_roles WHERE user_id = $1`, [uid]);
+    // issueTicket (fixtures.ts) now grants the seeded Participant role
+    // (H8 full-replacement) rather than writing manual_attendee_roles — undo
+    // that grant to simulate the same "no more event access" state.
+    await pool.query(
+      `DELETE FROM user_roles ur USING roles r
+        WHERE ur.role_id = r.id AND ur.user_id = $1 AND r.badge_category = 'participant'`,
+      [uid],
+    );
 
     const lookup = await app.inject({
       method: "POST",

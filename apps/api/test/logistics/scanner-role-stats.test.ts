@@ -8,6 +8,7 @@ import {
   createUser,
   createUserWithCapabilities,
   ensureApplicationFormVersion,
+  grantAttendeeRole,
   truncateAll,
 } from "../helpers.js";
 import { assignBadge, makeConfirmed } from "./fixtures.js";
@@ -68,17 +69,11 @@ describe("scanner role stats", () => {
 
     const confirmed = await createUser();
     await makeConfirmed(confirmed);
-    await pool.query(
-      `INSERT INTO manual_attendee_roles (user_id, role) VALUES ($1, 'participant')`,
-      [confirmed],
-    );
+    await grantAttendeeRole(confirmed, "participant");
     await assignBadge(confirmed, "PAX-CONFIRMED");
 
     const unconfirmed = await createUser();
-    await pool.query(
-      `INSERT INTO manual_attendee_roles (user_id, role) VALUES ($1, 'participant')`,
-      [unconfirmed],
-    );
+    await grantAttendeeRole(unconfirmed, "participant");
     await pool.query(
       `INSERT INTO applications (name, type, template) VALUES ('participant-app', 'participant', '{}'::jsonb)`,
     );

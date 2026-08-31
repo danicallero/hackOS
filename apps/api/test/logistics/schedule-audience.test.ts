@@ -8,6 +8,7 @@ import {
   buildTestApp,
   createUser,
   createUserWithCapabilities,
+  grantAttendeeRole,
   truncateAll,
 } from "../helpers.js";
 
@@ -67,10 +68,7 @@ async function createItem(opts: {
 
 async function makeAttendee(role: "participant" | "mentor"): Promise<number> {
   const userId = await createUser();
-  await pool.query(`INSERT INTO manual_attendee_roles (user_id, role) VALUES ($1, $2)`, [
-    userId,
-    role,
-  ]);
+  await grantAttendeeRole(userId, role);
   return userId;
 }
 

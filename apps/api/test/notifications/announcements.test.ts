@@ -4,7 +4,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
 import { runAnnouncementsPublisherOnce } from "../../src/modules/notifications/announcements-publisher.js";
-import { asUser, buildTestApp, createUser, createUserWithCapabilities } from "../helpers.js";
+import {
+  asUser,
+  buildTestApp,
+  createUser,
+  createUserWithCapabilities,
+  grantAttendeeRole,
+} from "../helpers.js";
 import { resetNotificationsState } from "./notif-helpers.js";
 
 /**
@@ -362,10 +368,7 @@ describe("announcement delivery controls", () => {
 
 async function makeAttendee(role: "participant" | "mentor"): Promise<number> {
   const userId = await createUser();
-  await pool.query(`INSERT INTO manual_attendee_roles (user_id, role) VALUES ($1, $2)`, [
-    userId,
-    role,
-  ]);
+  await grantAttendeeRole(userId, role);
   return userId;
 }
 

@@ -8,6 +8,7 @@ import {
   buildTestApp,
   createUser,
   createUserWithCapabilities,
+  seedAttendeeRoles,
   truncateAll,
 } from "../helpers.js";
 import { createApplication } from "./fixtures.js";
@@ -213,6 +214,7 @@ describe("ticket/wallet exposure follows event access", () => {
 
   it("a manually-assigned attendee role grants event access without any application", async () => {
     const a = await getApp();
+    await seedAttendeeRoles();
     const userId = await createUser({ emailVerified: true });
     const admin = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
 

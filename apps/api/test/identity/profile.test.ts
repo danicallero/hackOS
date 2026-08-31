@@ -10,6 +10,8 @@ import {
   createUser,
   createUserWithCapabilities,
   ensureApplicationFormVersion,
+  grantAttendeeRole,
+  seedAttendeeRoles,
   truncateAll,
 } from "../helpers.js";
 
@@ -78,6 +80,7 @@ async function requestRemovalPin(a: App, userId: number): Promise<string> {
 describe("GET /api/me (H7)", () => {
   it("lets staff manually classify a user as participant or mentor and issues a ticket", async () => {
     const a = await getApp();
+    await seedAttendeeRoles();
     const manager = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
     const user = await createUser();
     const res = await a.inject({
@@ -186,29 +189,14 @@ describe("GET /api/me (H7)", () => {
     const admin = await createUserWithCapabilities(["*"]);
     const staff = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
     const plain = await createUser();
+    // H8 full-replacement: mentor/participant is the holder's effective role
+    // (getEffectiveRole's badge_category), not a guess from an application's
+    // static `type` column — grant the real seeded Mentor/Participant role
+    // instead of just submitting an application of that type.
     const participant = await createUser();
+    await grantAttendeeRole(participant, "participant");
     const mentor = await createUser();
-    const { rows: participantApp } = await pool.query(
-      `INSERT INTO applications (name, type, template) VALUES ('Hackers', 'participant', '[]') RETURNING id`,
-    );
-    const { rows: mentorApp } = await pool.query(
-      `INSERT INTO applications (name, type, template) VALUES ('Mentors', 'mentor', '[]') RETURNING id`,
-    );
-    const participantFormVersionId = await ensureApplicationFormVersion(participantApp[0].id);
-    const mentorFormVersionId = await ensureApplicationFormVersion(mentorApp[0].id);
-    await pool.query(
-      `INSERT INTO application_responses
-         (user_id, application_id, application_form_version_id, status)
-       VALUES ($1, $2, $3, 'review'), ($4, $5, $6, 'review')`,
-      [
-        participant,
-        participantApp[0].id,
-        participantFormVersionId,
-        mentor,
-        mentorApp[0].id,
-        mentorFormVersionId,
-      ],
-    );
+    await grantAttendeeRole(mentor, "mentor");
 
     // judge: an enterprise_judges row (the roster is enterprise-scoped)
     const judge = await createUser();
