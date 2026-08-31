@@ -69,9 +69,11 @@ Better Auth session lifecycle (`/api/auth/*`, pass-through, exempt from the
 route-policy ledger by design), the caller's own profile (`GET/PATCH
 /api/me`), staff user management, secondary-email verification (H6),
 invitations including reusable enterprise and account links (H9/H10/H43), and the
-permission-group graph: capability groups, groups-of-groups with cycle
-rejection, and the `ADMIN_ALL` wildcard's "at least one active holder"
-invariant (`permission-graph.ts`). Account removal (H54) branches to hard
+hierarchical role model: a global reorderable role hierarchy with a tri-state
+(ALLOW/DENY/INHERIT) per capability, resolved over each user's own assigned
+roles, plus the `ADMIN_ALL` wildcard's "at least one active holder" invariant
+(`role-authority.ts`, replacing the retired `permission-graph.ts`). Account
+removal (H54) branches to hard
 delete or irreversible migration to a random `anonymous_participants` subject
 depending on canonical accreditation. Legacy door/activity/badge references
 without accreditation are integrity warnings, not an automatic retention rule.

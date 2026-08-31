@@ -1,10 +1,11 @@
 # Access-control audit and consolidation plan
 
-Status: **implemented and independently release-gate verified (2026-07-31)**.
+Status: **implemented and independently release-gate verified (2026-07-31);
+superseded by the H8 role-hierarchy rewrite below (2026-08-31)**.
 The historical baseline and task DAG remain below for traceability; the generated runtime ledger is
 [`access-control-route-ledger.md`](./access-control-route-ledger.md).
 
-Stories: H1–H10 (identity and capability groups), H11–H15
+Stories: H1–H10 (identity and the role hierarchy), H11–H15
 (applications), H16–H21 (projects), H28 (wallet), H29–H46 (queue, judging,
 TV, sponsors), H47–H54 (content, communications, audit, and exports), and H55
 (capability-based navigation).
@@ -17,7 +18,69 @@ permission, concurrency, and broadcast invariants remain in
 [`plan/07-datos-relevantes-ers.md`](../plan/07-datos-relevantes-ers.md). If
 this brief conflicts with either file, `plan/` wins.
 
-## Goal and non-goals
+## H8 role-hierarchy rewrite (current architecture)
+
+The section below ("Goal and non-goals" through "Historical audit baseline")
+describes the capability-group era of this system and is kept for
+traceability; its claim that this work "does not replace capability-based
+authorization with roles" is **no longer true** — the repo owner explicitly
+approved inverting that architecture. This is the current model:
+
+- **Data model**: `roles` (id, name, `position` — one global reorderable
+  hierarchy, higher = more priority — `is_visible`, `is_protected`);
+  `role_capabilities` (role_id, capability, `state` ALLOW/DENY/INHERIT,
+  missing row == INHERIT); `user_roles` (a user may hold several roles);
+  `role_grant_rules` (role_id, `trigger_event`, `action` grant/revoke — a
+  generic hook for automatic role assignment, decoupled from any specific
+  domain); `applications.grants_role_id` (a role granted alongside ticket
+  issuance on confirmation).
+- **Resolution** (`apps/api/src/lib/capabilities.ts`, backed by the
+  `user_effective_capabilities` SQL view): for a capability, walk the user's
+  OWN assigned roles ordered by position descending; the first ALLOW/DENY
+  wins; INHERIT skips to the next-lower-position role the user ALSO holds
+  (never to the next role in the global hierarchy — a role the user doesn't
+  have is invisible to their chain); an all-INHERIT chain, or no roles,
+  denies. `*` still means every capability. `userHasCapability`,
+  `requireCapability`, and `requireAnyCapability` keep their existing
+  signatures, so call sites across the codebase are unchanged.
+- **Admin-hierarchy authority** (`apps/api/src/modules/identity/
+  role-authority.ts`, replacing `permission-graph.ts`): to assign, remove,
+  edit, or reorder a role, the actor needs `permissions:manage` AND the
+  role's position — its NEW position, for a reorder — must sit strictly
+  below the actor's own highest assigned-role position. An advisory lock
+  (`lockRoleGraph`, mirroring the old `lockPermissionGraph`) serializes
+  mutations to `roles.position`/`role_capabilities`; `assertActiveWildcardHolder`
+  keeps at least one active user resolving `*` to ALLOW after any mutation.
+- **Migration** (`db/migrations/0800`–`0803`): each of the 20 H8 platform
+  templates (`templates.ts`) became a named role with its template's
+  capabilities as ALLOW; every `permission_group_members` row was mapped
+  onto the matching role (by `template_key`) or a bespoke per-group role
+  (for a custom/ad-hoc group, carrying its exact effective capability set);
+  the wildcard landed on "Platform administrator"; a "Sponsor" role plus a
+  `sponsor.enterprise_linked`/`sponsor.enterprise_unlinked` `role_grant_rules`
+  pair replaced the sponsor auto-link-grants-access behavior
+  (`sponsors/service.ts`'s `addEnterpriseMember`/`removeEnterpriseMember`
+  and `identity/routes/invites.ts`'s sponsor-invite acceptance branch, both
+  routed through the shared `applyRoleGrantRule` helper in
+  `identity/role-grants.ts`). `permission_groups`/`group_capabilities`/
+  `permission_group_includes`/`permission_group_members` were dropped once
+  the copy landed, in the same change.
+- **Sponsor/judge relationship-based access** is unaffected by this rewrite:
+  a sponsor rep's portal access and a judge's panel access still come from
+  the `sponsors`/`enterprise_judges` relationship tables, resource-bound as
+  before (see "Implementation result" below) — the Sponsor role from
+  `role_grant_rules` is additive (it exists so a sponsor rep also shows up
+  correctly in role-based UI and audit), not a replacement for that
+  relationship check.
+- **Admin routes**: `identity/routes/roles.ts` (replacing
+  `routes/permissions.ts`) exposes role CRUD, tri-state capability editing,
+  position reordering, and user assignment — the old capability-group CRUD
+  routes (`/api/permission-groups*`) are removed, not deprecated in place.
+- Capability groups no longer exist at all, cosmetic or otherwise — the H8
+  template catalogue (`templates.ts`) is reused only as a prefill/seed
+  source for creating a role, not as a separate authorization concept.
+
+## Goal and non-goals (capability-group era — superseded, see above)
 
 Every API route must declare one authoritative access policy, and every
 capability or relationship grant must be validated, bounded, immediately
@@ -30,7 +93,14 @@ permissions from the UI, auto-assign new templates, remap existing custom
 groups, or edit the normative files under `plan/`. Frontend gates remain
 usability controls; the API remains authoritative.
 
-## Implementation result
+> The role-hierarchy rewrite above is the one exception to "does not replace
+> capability-based authorization with roles" — it was a deliberate,
+> explicitly approved architecture inversion, done via new migrations and a
+> `plan/` update rather than an ad hoc edit, so it doesn't contradict the
+> spirit of this non-goal (`plan/` still wins on conflict; it was updated,
+> not silently overridden).
+
+## Implementation result (capability-group era — superseded, see above)
 
 - Strict startup enforcement records **278 non-HEAD route-policy rows** and
   exactly one logical Better Auth generated-route exemption, yielding **276
@@ -50,6 +120,10 @@ usability controls; the API remains authoritative.
   integration suite (**70 files / 614 tests**), web typecheck and tests
   (**28 files / 179 tests**), and mobile typecheck and tests
   (**15 suites / 68 tests**) passed.
+
+These specific counts predate the role-hierarchy rewrite (the route count,
+for instance, changed when `/api/permission-groups*` was replaced by
+`/api/roles*` — see the generated ledger for the current numbers).
 
 Run `pnpm --filter @hackos/api route-policy:audit` after route changes, then
 review the generated ledger before release. The route-policy tests plus API,

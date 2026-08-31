@@ -2,8 +2,9 @@
 
 The web sidebar and the mobile tab bar are both driven by capability and
 association data, never by a display role. IA rules live in
-[`DESIGN.md`](./DESIGN.md) §7 (H8: capability groups, never role; H55: one
-app, additive tabs).
+[`DESIGN.md`](./DESIGN.md) §7 (H8: capabilities resolved through the user's
+assigned role hierarchy, never a single display role; H55: one app,
+additive tabs).
 
 Web: `apps/web/src/lib/nav.ts` (data) + `apps/web/src/components/layout/app-sidebar.tsx`
 (rendering). Mobile: `apps/mobile/lib/tabs.ts` (data) +
