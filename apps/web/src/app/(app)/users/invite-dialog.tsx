@@ -46,7 +46,9 @@ export function InviteUserDialog() {
       .catch(() => setEnterprises([]));
     api
       .get<RoleSummary[]>("/api/roles")
-      .then(setGroups)
+      // system:superadmin is CLI-only (H8) — never offer it as a
+      // pre-assignable invite role even though the list endpoint returns it.
+      .then((roles) => setGroups(roles.filter((r) => r.name !== "system:superadmin")))
       .catch(() => setGroups([]));
   }, [open]);
 

@@ -108,7 +108,9 @@ export function UserInviteLinksSection({
     ])
       .then(([enterpriseData, permissionGroups]) => {
         setEnterprises(enterpriseData.enterprises);
-        setGroups(permissionGroups);
+        // system:superadmin is CLI-only (H8) — never offer it as a
+        // pre-assignable role even though the list endpoint returns it.
+        setGroups(permissionGroups.filter((r) => r.name !== "system:superadmin"));
         setOptionsError(false);
       })
       .catch(() => {
