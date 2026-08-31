@@ -123,6 +123,13 @@ export interface RoleSummary {
 /** GET /api/roles/:id — identical shape to the list item. */
 export type RoleDetail = RoleSummary;
 
+/** GET /api/roles/:id/seed-diff — a seeded role's drift from its seed-time snapshot. */
+export interface RoleSeedDiff {
+  isSeeded: boolean;
+  hasDrifted: boolean;
+  diff: { capability: string; current: PermissionState; default: PermissionState }[];
+}
+
 /** GET /api/role-templates item. Keys select the web i18n catalogue. */
 export interface RoleTemplate {
   key: string;

@@ -3,6 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   ChevronDownIcon,
+  History,
   KeyRoundIcon,
   LockIcon,
   SearchIcon,
@@ -31,8 +32,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
-import { type Translate, useLocale } from "@/lib/i18n";
-import type { PermissionState, RoleSummary, UserListItem } from "@/lib/types";
+import { type MessageKey, type Translate, useLocale } from "@/lib/i18n";
+import type { PermissionState, RoleSeedDiff, RoleSummary, UserListItem } from "@/lib/types";
 import { useUrlTab } from "@/lib/url-tab";
 import { cn } from "@/lib/utils";
 import {
@@ -75,6 +76,8 @@ export function RoleEditor({
   onRemoveMember,
   onDelete,
   searchUsers,
+  loadSeedDiff,
+  onResetToDefault,
 }: {
   role: RoleSummary;
   users: Map<number, UserListItem>;
@@ -86,6 +89,9 @@ export function RoleEditor({
   onRemoveMember: (userId: number) => Promise<void>;
   onDelete: () => Promise<void>;
   searchUsers: (query: string) => Promise<UserOption[]>;
+  /** H8: only meaningful when role.isSeeded — reports drift from role_seed_defaults. */
+  loadSeedDiff: () => Promise<RoleSeedDiff>;
+  onResetToDefault: () => Promise<void>;
 }) {
   const { t } = useLocale();
   const { tab, setTab } = useUrlTab({
@@ -116,6 +122,42 @@ export function RoleEditor({
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // H8: seeded roles (0801/0805) can drift from their seed-time snapshot as
+  // an admin edits their capabilities; re-check on every role change (and
+  // after every capability save/reset, since applyRole gives us a new
+  // `role` object) so the "reset to default" banner tracks live drift.
+  const [seedDiff, setSeedDiff] = useState<RoleSeedDiff | null>(null);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: loadSeedDiff is a fresh closure per render (like searchUsers); depending only on role identity is intentional.
+  useEffect(() => {
+    let active = true;
+    if (!role.isSeeded) {
+      setSeedDiff(null);
+      return;
+    }
+    loadSeedDiff()
+      .then((d) => {
+        if (active) setSeedDiff(d);
+      })
+      .catch(() => {
+        if (active) setSeedDiff(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [role]);
+
+  async function confirmReset() {
+    setResetting(true);
+    try {
+      await onResetToDefault();
+    } finally {
+      setResetting(false);
+      setResetOpen(false);
+    }
+  }
 
   const groups = useMemo(() => filterCapabilitiesByDomain(capQuery, t), [capQuery, t]);
 
@@ -231,7 +273,20 @@ export function RoleEditor({
           </SectionCard>
         </TabsContent>
 
-        <TabsContent value="capabilities" className="pt-2">
+        <TabsContent value="capabilities" className="space-y-4 pt-2">
+          {seedDiff?.hasDrifted && (
+            <SectionCard
+              icon={History}
+              title={t("roleDriftedFromDefault")}
+              action={
+                <Button variant="outline" size="sm" onClick={() => setResetOpen(true)}>
+                  {t("resetToDefault")}
+                </Button>
+              }
+            >
+              {null}
+            </SectionCard>
+          )}
           {/* No title here — the "Capabilities" tab label above already names this panel (H8). */}
           <SectionCard
             icon={KeyRoundIcon}
@@ -296,8 +351,43 @@ export function RoleEditor({
         pending={deleting}
         onConfirm={confirmDelete}
       />
+
+      <AlertModal
+        open={resetOpen}
+        onOpenChange={setResetOpen}
+        title={t("resetToDefaultTitle", { name: role.name })}
+        description={t("resetToDefaultDescription")}
+        cancelLabel={t("cancel")}
+        confirmLabel={t("resetToDefault")}
+        pending={resetting}
+        onConfirm={confirmReset}
+      >
+        {seedDiff && seedDiff.diff.length > 0 && (
+          <ul className="divide-border max-h-64 divide-y overflow-y-auto rounded-md border text-sm">
+            {seedDiff.diff.map((entry) => (
+              <li
+                key={entry.capability}
+                className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+              >
+                <span className="truncate font-mono text-xs">{entry.capability}</span>
+                <span className="text-muted-foreground shrink-0 text-xs">
+                  {t(capabilityStateKey(entry.current))} → {t(capabilityStateKey(entry.default))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </AlertModal>
     </div>
   );
+}
+
+function capabilityStateKey(state: PermissionState): MessageKey {
+  return state === "allow"
+    ? "capabilityStateAllow"
+    : state === "deny"
+      ? "capabilityStateDeny"
+      : "capabilityStateInherit";
 }
 
 function CapabilityGroup({
@@ -386,13 +476,7 @@ function CapabilityStateControl({
               : "hover:bg-muted text-muted-foreground",
           )}
         >
-          {t(
-            candidate === "allow"
-              ? "capabilityStateAllow"
-              : candidate === "deny"
-                ? "capabilityStateDeny"
-                : "capabilityStateInherit",
-          )}
+          {t(capabilityStateKey(candidate))}
         </button>
       ))}
     </div>

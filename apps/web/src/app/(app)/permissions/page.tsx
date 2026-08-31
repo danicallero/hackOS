@@ -41,6 +41,7 @@ import { type Translate, useLocale } from "@/lib/i18n";
 import type {
   PermissionState,
   RoleDetail,
+  RoleSeedDiff,
   RoleSummary,
   RoleTemplate,
   UserList,
@@ -258,6 +259,16 @@ export default function PermissionsPage() {
     }
   }
 
+  async function onResetToDefault(roleId: number) {
+    try {
+      const r = await api.post<RoleDetail>(`/api/roles/${roleId}/reset-to-default`, {});
+      applyRole(r);
+      toast.success(t("resetToDefaultDone"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotResetRole"));
+    }
+  }
+
   async function onDelete(roleId: number) {
     try {
       await api.delete<{ deleted: true }>(`/api/roles/${roleId}`);
@@ -364,6 +375,8 @@ export default function PermissionsPage() {
               onRemoveMember={(userId) => onRemoveMember(selectedRole.id, userId)}
               onDelete={() => onDelete(selectedRole.id)}
               searchUsers={searchUsers}
+              loadSeedDiff={() => api.get<RoleSeedDiff>(`/api/roles/${selectedRole.id}/seed-diff`)}
+              onResetToDefault={() => onResetToDefault(selectedRole.id)}
             />
           ) : (
             !loading && (

@@ -12,7 +12,7 @@ import {
   requireCapability,
   userHasCapability,
 } from "../../../lib/capabilities.js";
-import { ConflictError, NotFoundError } from "../../../lib/errors.js";
+import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { broadcast } from "../../../lib/sse.js";
 import { issueTicket } from "../../logistics/tickets.js";
@@ -78,6 +78,18 @@ const roleResponse = z.object({
   // H8: soft-delete marker (0804). Non-null means this role no longer grants
   // anything and is hidden from the default GET /api/roles listing.
   deletedAt: z.string().nullable(),
+});
+
+const seedDiffEntry = z.object({
+  capability: z.string(),
+  current: permissionState,
+  default: permissionState,
+});
+
+const seedDiffResponse = z.object({
+  isSeeded: z.boolean(),
+  hasDrifted: z.boolean(),
+  diff: z.array(seedDiffEntry),
 });
 
 async function loadRole(db: pg.Pool | pg.PoolClient, roleId: number) {
@@ -495,6 +507,127 @@ export function registerRoleRoutes(app: FastifyInstance): void {
           source: "admin",
           after: { roleId },
         });
+        return loadRole(client, roleId);
+      });
+      announceRoleChange();
+      return result;
+    },
+  );
+
+  // ── seeded-role reset to default (H8) ───────────────────────────────────
+
+  api.get(
+    "/api/roles/:roleId/seed-diff",
+    {
+      preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      schema: {
+        summary: "Compare a seeded role against its seed-time snapshot",
+        description:
+          "Reports whether this role is one of the seeded defaults (0801 Sponsor / 0805 catalogue, is_seeded=true) and, if so, whether its live role_capabilities have drifted from the ALLOW set it was seeded with (role_seed_defaults, 0807). `diff` lists every capability whose current tri-state differs from its seed-time state (missing on either side reads as 'inherit'); empty/isSeeded=false for a non-seeded or custom role, since neither carries a snapshot to compare against.",
+        params: roleIdParams,
+        response: { 200: seedDiffResponse },
+      },
+    },
+    async (req) => {
+      const { roleId } = req.params;
+      const role = await loadRole(pool, roleId);
+      if (!role.isSeeded) return { isSeeded: false, hasDrifted: false, diff: [] };
+      const { rows } = await pool.query(
+        `SELECT capabilities FROM role_seed_defaults WHERE role_id = $1`,
+        [roleId],
+      );
+      if (rows.length === 0) return { isSeeded: true, hasDrifted: false, diff: [] };
+      const defaults = rows[0].capabilities as Record<string, "allow" | "deny" | "inherit">;
+      const current = new Map(role.capabilities.map((c) => [c.capability, c.state]));
+      const defaultMap = new Map(Object.entries(defaults));
+      const caps = new Set([...current.keys(), ...defaultMap.keys()]);
+      const diff = [...caps]
+        .map((capability) => ({
+          capability,
+          current: current.get(capability) ?? ("inherit" as const),
+          default: defaultMap.get(capability) ?? ("inherit" as const),
+        }))
+        .filter((entry) => entry.current !== entry.default)
+        .sort((a, b) => a.capability.localeCompare(b.capability));
+      return { isSeeded: true, hasDrifted: diff.length > 0, diff };
+    },
+  );
+
+  api.post(
+    "/api/roles/:roleId/reset-to-default",
+    {
+      preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      schema: {
+        summary: "Reset a seeded role's capabilities to its seed-time snapshot",
+        description:
+          "Replaces this role's live role_capabilities with exactly its role_seed_defaults snapshot (H8, 0807) — the ALLOW set it was seeded with; nothing outside that set survives, everything else reverts to implicit INHERIT. Only valid for is_seeded=true roles that still carry a snapshot; system:superadmin is never seeded so this always 404s/403s for it. Guarded the same as PUT .../capabilities: the actor's highest role must sit above this role's position, and — since a reset can re-grant capabilities the role had drifted away from — the actor must already possess every capability that would newly become ALLOW as a result of the reset (or hold the wildcard). That means an admin who lost a capability since this role's last edit cannot use reset to hand it back to themselves via this role; they would need someone who still holds it to do so, or to edit the role's capabilities directly for whichever subset they do possess.",
+        params: roleIdParams,
+        response: { 200: roleResponse },
+      },
+    },
+    async (req) => {
+      const { roleId } = req.params;
+      const result = await withTransaction(async (client) => {
+        await lockRoleGraph(client);
+        const actorId = req.userId as number;
+        const before = await loadRole(client, roleId);
+        assertNotSuperadminRole(before.name);
+        if (!before.isSeeded) {
+          throw new BadRequestError("Only a seeded default role can be reset to default", {
+            roleId,
+          });
+        }
+        if (before.deletedAt) {
+          throw new ConflictError("Restore this role before resetting its capabilities", {
+            roleId,
+          });
+        }
+        const { rows: snapshotRows } = await client.query(
+          `SELECT capabilities FROM role_seed_defaults WHERE role_id = $1`,
+          [roleId],
+        );
+        if (snapshotRows.length === 0) {
+          throw new NotFoundError("This role has no seed snapshot to reset to", { roleId });
+        }
+        const defaults = snapshotRows[0].capabilities as Record<string, "allow">;
+        await requireRoleMutationAuthority(client, actorId, before.position);
+        // H8: possession guard applies only to capabilities the reset would
+        // newly grant — one already ALLOW on the live role isn't "new".
+        const currentAllow = new Set(
+          before.capabilities.filter((c) => c.state === "allow").map((c) => c.capability),
+        );
+        const newlyAllow = Object.keys(defaults).filter((cap) => !currentAllow.has(cap));
+        await requireCapabilityPossessionForStateChange(
+          client,
+          actorId,
+          newlyAllow.map((capability) => ({ capability, state: "allow" as const })),
+        );
+        const introducesWildcard = Object.hasOwn(defaults, CAPABILITIES.ADMIN_ALL);
+        const hadWildcard = await roleGrantsWildcard(client, roleId);
+        if (introducesWildcard || hadWildcard) await requireWildcardRoleAuthority(client, actorId);
+        await client.query(`DELETE FROM role_capabilities WHERE role_id = $1`, [roleId]);
+        const afterCapabilities = Object.entries(defaults).map(([capability, state]) => ({
+          capability,
+          state,
+        }));
+        for (const { capability, state } of afterCapabilities) {
+          await client.query(
+            `INSERT INTO role_capabilities (role_id, capability, state) VALUES ($1, $2, $3)`,
+            [roleId, capability, state],
+          );
+        }
+        await audit(client, {
+          actorId,
+          entityType: "role",
+          entityId: roleId,
+          action: "reset_to_default",
+          source: "admin",
+          before: { capabilities: before.capabilities },
+          after: { capabilities: afterCapabilities },
+        });
+        if (hadWildcard && !introducesWildcard) await assertActiveWildcardHolder(client);
         return loadRole(client, roleId);
       });
       announceRoleChange();
