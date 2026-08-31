@@ -10,6 +10,7 @@ import {
   assertKnownCapabilities,
   requireAnyCapability,
   requireCapability,
+  userHasCapability,
 } from "../../../lib/capabilities.js";
 import { ConflictError, NotFoundError } from "../../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
@@ -17,6 +18,7 @@ import { broadcast } from "../../../lib/sse.js";
 import { issueTicket } from "../../logistics/tickets.js";
 import {
   assertActiveWildcardHolder,
+  assertNotSuperadminRole,
   lockRoleGraph,
   requireRoleMutationAuthority,
   requireWildcardRoleAuthority,
@@ -37,6 +39,15 @@ import { getPermissionGroupTemplate, PERMISSION_GROUP_TEMPLATES } from "../templ
  * assigned role — enforced here, not just in the UI. Every mutation is
  * audited (H53) and broadcast on the identity topic (H7-H10) in the same
  * transaction as the write.
+ *
+ * `system:superadmin` is the one exception: every mutation route refuses it
+ * outright via `assertNotSuperadminRole` (role-authority.ts), unconditional
+ * on the actor's own capabilities — it can only be granted/revoked/created
+ * via server-shell CLI scripts (scripts/grant-superadmin.mjs,
+ * scripts/create-superadmin.ts, scripts/revoke-superadmin.mjs). DELETE
+ * soft-deletes (`roles.deleted_at`, 0804) instead of removing the row;
+ * POST .../restore reverses it, 409ing only if another role has since taken
+ * its exact position (see that route's own schema description).
  */
 
 const manage = requireCapability(CAPABILITIES.PERMISSIONS_MANAGE);
@@ -58,6 +69,9 @@ const roleResponse = z.object({
   // omitted (mirrors the role_capabilities table — a missing row IS inherit).
   capabilities: z.array(z.object({ capability: z.string(), state: permissionState })),
   memberIds: z.array(z.number()),
+  // H8: soft-delete marker (0804). Non-null means this role no longer grants
+  // anything and is hidden from the default GET /api/roles listing.
+  deletedAt: z.string().nullable(),
 });
 
 async function loadRole(db: pg.Pool | pg.PoolClient, roleId: number) {
@@ -81,6 +95,7 @@ async function loadRole(db: pg.Pool | pg.PoolClient, roleId: number) {
     isProtected: rows[0].is_protected as boolean,
     capabilities: caps.rows as { capability: string; state: "allow" | "deny" | "inherit" }[],
     memberIds: members.rows.map((r: { user_id: number }) => r.user_id),
+    deletedAt: rows[0].deleted_at ? new Date(rows[0].deleted_at).toISOString() : null,
   };
 }
 
@@ -130,12 +145,19 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List roles by position",
         description:
-          "Lists every role highest-position first (H8). Invitation managers get this same read access to choose deferred role pre-assignments; only PERMISSIONS_MANAGE can mutate.",
+          "Lists every non-deleted role highest-position first (H8). Invitation managers get this same read access to choose deferred role pre-assignments; only PERMISSIONS_MANAGE can mutate. Pass includeDeleted=true (PERMISSIONS_MANAGE only) to also list soft-deleted roles, for a trash/restore panel.",
+        querystring: z.object({ includeDeleted: z.coerce.boolean().default(false) }),
         response: { 200: z.array(roleResponse) },
       },
     },
-    async () => {
-      const { rows } = await pool.query(`SELECT id FROM roles ORDER BY position DESC`);
+    async (req) => {
+      const includeDeleted =
+        req.query.includeDeleted &&
+        (await userHasCapability(req.userId as number, CAPABILITIES.PERMISSIONS_MANAGE, req));
+      const { rows } = await pool.query(
+        `SELECT id FROM roles WHERE $1 OR deleted_at IS NULL ORDER BY position DESC`,
+        [includeDeleted],
+      );
       return Promise.all(rows.map((row: { id: number }) => loadRole(pool, row.id)));
     },
   );
@@ -173,6 +195,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     },
     async (req, reply) => {
       const { name, position, isVisible, templateKey } = req.body;
+      assertNotSuperadminRole(name);
       let capabilities = req.body.capabilities;
       if (templateKey) {
         const template = getPermissionGroupTemplate(templateKey);
@@ -245,8 +268,10 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       const role = await withTransaction(async (client) => {
         await lockRoleGraph(client);
         const before = await loadRole(client, roleId);
+        assertNotSuperadminRole(before.name);
         await requireRoleMutationAuthority(client, req.userId as number, before.position);
         const name = req.body.name ?? before.name;
+        assertNotSuperadminRole(name);
         const isVisible = req.body.isVisible ?? before.isVisible;
         await client.query(`UPDATE roles SET name = $2, is_visible = $3 WHERE id = $1`, [
           roleId,
@@ -289,6 +314,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         await lockRoleGraph(client);
         const actorId = req.userId as number;
         const before = await loadRole(client, roleId);
+        assertNotSuperadminRole(before.name);
         await requireRoleMutationAuthority(client, actorId, before.position);
         await requireRoleMutationAuthority(client, actorId, req.body.position);
         const { rows: collision } = await client.query(
@@ -345,6 +371,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         await lockRoleGraph(client);
         const actorId = req.userId as number;
         const before = await loadRole(client, roleId);
+        assertNotSuperadminRole(before.name);
         await requireRoleMutationAuthority(client, actorId, before.position);
         const introducesWildcard = req.body.capabilities.some(
           (c) => c.capability === CAPABILITIES.ADMIN_ALL && c.state === "allow",
@@ -381,32 +408,85 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     {
       preHandler: manage,
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
-      schema: { params: roleIdParams, response: { 200: z.object({ deleted: z.literal(true) }) } },
+      schema: {
+        summary: "Soft-delete a role",
+        description:
+          "Soft-deletes a role (H8, 0804): sets deleted_at instead of removing the row, so its history, capability set, and member list survive for POST .../restore. A deleted role stops granting access immediately. Every default role (Platform administrator included) is deletable this way — the only role this route always refuses is system:superadmin, which is CLI-only.",
+        params: roleIdParams,
+        response: { 200: z.object({ deleted: z.literal(true) }) },
+      },
     },
     async (req) => {
       const { roleId } = req.params;
       await withTransaction(async (client) => {
         await lockRoleGraph(client);
         const before = await loadRole(client, roleId);
-        if (before.isProtected) {
-          throw new ConflictError("This role is protected and cannot be deleted", { roleId });
-        }
+        assertNotSuperadminRole(before.name);
+        if (before.deletedAt) throw new ConflictError("Role is already deleted", { roleId });
         const actorId = req.userId as number;
         await requireRoleMutationAuthority(client, actorId, before.position);
         const removesWildcard = await roleGrantsWildcard(client, roleId);
-        await client.query(`DELETE FROM roles WHERE id = $1`, [roleId]);
+        await client.query(`UPDATE roles SET deleted_at = now() WHERE id = $1`, [roleId]);
         if (removesWildcard) await assertActiveWildcardHolder(client);
         await audit(client, {
           actorId,
           entityType: "role",
           entityId: roleId,
-          action: "delete",
+          action: "soft_delete",
           source: "admin",
           before,
         });
       });
       announceRoleChange();
       return { deleted: true as const };
+    },
+  );
+
+  api.post(
+    "/api/roles/:roleId/restore",
+    {
+      preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
+      schema: {
+        summary: "Restore a soft-deleted role",
+        description:
+          "Clears deleted_at on a soft-deleted role (H8, 0804), reinstating its capability grants and member list immediately. The role keeps its original position; if another role has since taken that exact slot, this 409s instead of silently picking a new one — move the colliding role, or the one being restored, via PATCH .../position first, then retry.",
+        params: roleIdParams,
+        response: { 200: roleResponse },
+      },
+    },
+    async (req) => {
+      const { roleId } = req.params;
+      const result = await withTransaction(async (client) => {
+        await lockRoleGraph(client);
+        const actorId = req.userId as number;
+        const before = await loadRole(client, roleId);
+        assertNotSuperadminRole(before.name);
+        if (!before.deletedAt) throw new ConflictError("Role is not deleted", { roleId });
+        await requireRoleMutationAuthority(client, actorId, before.position);
+        const { rows: collision } = await client.query(
+          `SELECT id FROM roles WHERE position = $1 AND id <> $2 AND deleted_at IS NULL`,
+          [before.position, roleId],
+        );
+        if (collision.length > 0) {
+          throw new ConflictError(
+            "Another role has since taken this role's position; move one of them before restoring",
+            { position: before.position },
+          );
+        }
+        await client.query(`UPDATE roles SET deleted_at = NULL WHERE id = $1`, [roleId]);
+        await audit(client, {
+          actorId,
+          entityType: "role",
+          entityId: roleId,
+          action: "restore",
+          source: "admin",
+          after: { roleId },
+        });
+        return loadRole(client, roleId);
+      });
+      announceRoleChange();
+      return result;
     },
   );
 
@@ -432,6 +512,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         await lockRoleGraph(client);
         const actorId = req.userId as number;
         const role = await loadRole(client, roleId);
+        assertNotSuperadminRole(role.name);
         await requireRoleMutationAuthority(client, actorId, role.position);
         const { rows: userRows } = await client.query(
           `SELECT id FROM users
@@ -483,6 +564,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         await lockRoleGraph(client);
         const actorId = req.userId as number;
         const role = await loadRole(client, roleId);
+        assertNotSuperadminRole(role.name);
         await requireRoleMutationAuthority(client, actorId, role.position);
         const removesWildcard = await roleGrantsWildcard(client, roleId);
         await client.query(`DELETE FROM user_roles WHERE user_id = $1 AND role_id = $2`, [

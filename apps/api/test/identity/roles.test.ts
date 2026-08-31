@@ -11,6 +11,7 @@ import {
   createUserWithCapabilities,
   truncateAll,
 } from "../helpers.js";
+import { TEST_DATABASE_URL } from "../test-env.js";
 
 /**
  * H8: the Discord-style hierarchical role model — tri-state (ALLOW/DENY/
@@ -348,7 +349,7 @@ describe("H8 roles CRUD and assignment API", () => {
       "reorder",
       "assign_user",
       "remove_user",
-      "delete",
+      "soft_delete",
     ]);
   });
 
@@ -482,5 +483,312 @@ describe("H8 sponsor auto-grant rule and application-confirmation role grant", (
       userId,
     ]);
     expect(ticketRows).toHaveLength(1);
+  });
+});
+
+describe("H8 system:superadmin is CLI-only", () => {
+  async function superadminSetup() {
+    const { pool } = await import("../../src/db/pool.js");
+    const roleId = await createRole([CAPABILITIES.ADMIN_ALL], {
+      name: "system:superadmin",
+      isProtected: true,
+    });
+    await pool.query(`UPDATE roles SET position = 999999999 WHERE id = $1`, [roleId]);
+    const holder = await createUser();
+    await assignRole(holder, roleId);
+    // A distinct '*' holder to act as the API caller — even wielding '*'
+    // itself, it must never be able to touch system:superadmin over HTTP.
+    const wildcardActor = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    return { roleId, holder, wildcardActor };
+  }
+
+  it("cannot be assigned to a user via the API, even by a wildcard-holding actor", async () => {
+    const a = await getApp();
+    const { roleId, wildcardActor } = await superadminSetup();
+    const target = await createUser();
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/roles/${roleId}/users/${target}`,
+      headers: asUser(wildcardActor),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("cannot be removed from a user via the API, even by a wildcard-holding actor", async () => {
+    const a = await getApp();
+    const { roleId, holder, wildcardActor } = await superadminSetup();
+    const res = await a.inject({
+      method: "DELETE",
+      url: `/api/roles/${roleId}/users/${holder}`,
+      headers: asUser(wildcardActor),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("cannot be renamed, reordered, or have its capabilities edited via the API", async () => {
+    const a = await getApp();
+    const { roleId, wildcardActor } = await superadminSetup();
+
+    const rename = await a.inject({
+      method: "PATCH",
+      url: `/api/roles/${roleId}`,
+      headers: asUser(wildcardActor),
+      payload: { name: "renamed" },
+    });
+    expect(rename.statusCode).toBe(403);
+
+    const reorder = await a.inject({
+      method: "PATCH",
+      url: `/api/roles/${roleId}/position`,
+      headers: asUser(wildcardActor),
+      payload: { position: 1 },
+    });
+    expect(reorder.statusCode).toBe(403);
+
+    const caps = await a.inject({
+      method: "PUT",
+      url: `/api/roles/${roleId}/capabilities`,
+      headers: asUser(wildcardActor),
+      payload: { capabilities: [{ capability: CAPABILITIES.USERS_READ, state: "allow" }] },
+    });
+    expect(caps.statusCode).toBe(403);
+  });
+
+  it("cannot be deleted via the API", async () => {
+    const a = await getApp();
+    const { roleId, wildcardActor } = await superadminSetup();
+    const res = await a.inject({
+      method: "DELETE",
+      url: `/api/roles/${roleId}`,
+      headers: asUser(wildcardActor),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("cannot be minted under this name via role creation", async () => {
+    const a = await getApp();
+    const actor = await manager();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE roles SET position = 1000000 WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+      [actor],
+    );
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/roles",
+      headers: asUser(actor),
+      payload: { name: "system:superadmin", position: 10 },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+});
+
+describe("H8 role soft-delete and restore", () => {
+  it("a soft-deleted role stops granting access immediately, and restore brings it back", async () => {
+    const a = await getApp();
+    const actor = await manager();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE roles SET position = 1000000 WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+      [actor],
+    );
+    const roleId = await createRole([CAPABILITIES.USERS_READ], { name: "soft-delete-target" });
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [roleId]);
+    const member = await createUser();
+    await assignRole(member, roleId);
+
+    const { userHasCapability } = await import("../../src/lib/capabilities.js");
+    expect(await userHasCapability(member, CAPABILITIES.USERS_READ)).toBe(true);
+
+    const del = await a.inject({
+      method: "DELETE",
+      url: `/api/roles/${roleId}`,
+      headers: asUser(actor),
+    });
+    expect(del.statusCode).toBe(200);
+    expect(await userHasCapability(member, CAPABILITIES.USERS_READ)).toBe(false);
+
+    // Hidden from the default listing, but still loadable by id and via
+    // includeDeleted for a trash/restore panel.
+    const list = await a.inject({ method: "GET", url: "/api/roles", headers: asUser(actor) });
+    expect(list.json().map((r: { id: number }) => r.id)).not.toContain(roleId);
+    const listWithDeleted = await a.inject({
+      method: "GET",
+      url: "/api/roles?includeDeleted=true",
+      headers: asUser(actor),
+    });
+    expect(listWithDeleted.json().map((r: { id: number }) => r.id)).toContain(roleId);
+
+    const restored = await a.inject({
+      method: "POST",
+      url: `/api/roles/${roleId}/restore`,
+      headers: asUser(actor),
+    });
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json().deletedAt).toBeNull();
+    expect(await userHasCapability(member, CAPABILITIES.USERS_READ)).toBe(true);
+  });
+
+  it("restore 409s if another role has since taken the deleted role's exact position", async () => {
+    const a = await getApp();
+    const actor = await manager();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE roles SET position = 1000000 WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+      [actor],
+    );
+    const roleId = await createRole([], { name: "position-conflict-target" });
+    await pool.query(`UPDATE roles SET position = 42 WHERE id = $1`, [roleId]);
+
+    const del = await a.inject({
+      method: "DELETE",
+      url: `/api/roles/${roleId}`,
+      headers: asUser(actor),
+    });
+    expect(del.statusCode).toBe(200);
+
+    // Another role takes the exact same slot while the first is in the trash.
+    const collider = await createRole([], { name: "position-conflict-collider" });
+    await pool.query(`UPDATE roles SET position = 42 WHERE id = $1`, [collider]);
+
+    const restore = await a.inject({
+      method: "POST",
+      url: `/api/roles/${roleId}/restore`,
+      headers: asUser(actor),
+    });
+    expect(restore.statusCode).toBe(409);
+  });
+
+  it("deleting a role removing the last wildcard holder still enforces the active-wildcard-holder invariant", async () => {
+    const a = await getApp();
+    const wildcardHolder = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(
+      `SELECT role_id, position FROM user_roles ur
+      JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = $1`,
+      [wildcardHolder],
+    );
+    const roleId = rows[0].role_id as number;
+    const rolePosition = rows[0].position as number;
+    const topActor = await createUserWithCapabilities([CAPABILITIES.PERMISSIONS_MANAGE]);
+    await pool.query(
+      `UPDATE roles SET position = $2 WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+      [topActor, rolePosition + 1000],
+    );
+
+    const res = await a.inject({
+      method: "DELETE",
+      url: `/api/roles/${roleId}`,
+      headers: asUser(topActor),
+    });
+    expect(res.statusCode).toBe(409);
+  });
+});
+
+describe("H8 default seeded role set (0805)", () => {
+  // roles.test.ts's beforeEach truncates every table (test/helpers.ts's
+  // truncateAll), which wipes migration-seeded rows along with everything
+  // else — so this suite can't just query the shared test database the way
+  // the rest of this file does. Instead it migrates a throwaway database of
+  // its own and inspects that, mirroring test/migrations.test.ts's pattern.
+  let seedPool: import("pg").Pool | undefined;
+
+  afterAll(async () => {
+    await seedPool?.end();
+  });
+
+  async function seededRoles() {
+    if (!seedPool) {
+      const { randomUUID } = await import("node:crypto");
+      const pgModule = await import("pg");
+      const { migrate } = await import("../../scripts/migrate.js");
+      const dbName = `hackos_roles_seed_${process.pid}_${randomUUID().replaceAll("-", "")}`;
+      const adminUrl = new URL(TEST_DATABASE_URL);
+      adminUrl.pathname = "/postgres";
+      const admin = new pgModule.default.Client({ connectionString: adminUrl.toString() });
+      await admin.connect();
+      await admin.query(`CREATE DATABASE "${dbName}"`);
+      await admin.end();
+      const dbUrl = new URL(TEST_DATABASE_URL);
+      dbUrl.pathname = `/${dbName}`;
+      await migrate(dbUrl.toString());
+      seedPool = new pgModule.default.Pool({ connectionString: dbUrl.toString() });
+    }
+    return seedPool;
+  }
+
+  it("seeds a planning-to-operations role set with real, non-overlapping capability grants", async () => {
+    const pool = await seededRoles();
+    const expected: Record<string, string[]> = {
+      "Event director": [
+        CAPABILITIES.EVENT_MANAGE,
+        CAPABILITIES.VENUE_MANAGE,
+        CAPABILITIES.SCHEDULE_MANAGE,
+        CAPABILITIES.ANNOUNCEMENTS_MANAGE,
+        CAPABILITIES.USERS_READ,
+      ],
+      "Judge coordinator": [CAPABILITIES.JUDGE_PANEL, CAPABILITIES.PROJECTS_READ],
+      "Operations lead": [
+        CAPABILITIES.QUEUE_ADMIN,
+        CAPABILITIES.LOGISTICS_STATS,
+        CAPABILITIES.PRESENCE_MANAGE,
+      ],
+      "Volunteer staff": [CAPABILITIES.ACCREDIT_SCAN, CAPABILITIES.PRESENCE_SCAN],
+      Mentor: [CAPABILITIES.PROJECTS_READ],
+      Participant: [],
+    };
+    for (const [name, caps] of Object.entries(expected)) {
+      const { rows: roleRows } = await pool.query(
+        `SELECT id, is_protected, deleted_at FROM roles WHERE name = $1`,
+        [name],
+      );
+      expect(roleRows, `role "${name}" should exist`).toHaveLength(1);
+      expect(roleRows[0].is_protected).toBe(false);
+      expect(roleRows[0].deleted_at).toBeNull();
+      const { rows: capRows } = await pool.query(
+        `SELECT capability FROM role_capabilities WHERE role_id = $1 AND state = 'allow' ORDER BY capability`,
+        [roleRows[0].id],
+      );
+      expect(capRows.map((r: { capability: string }) => r.capability).sort()).toEqual(
+        [...caps].sort(),
+      );
+    }
+  });
+
+  it("keeps the existing Sponsor auto-grant role capability-less and positioned below the staff tier", async () => {
+    const pool = await seededRoles();
+    const { rows } = await pool.query(`SELECT id, position FROM roles WHERE name = 'Sponsor'`);
+    expect(rows).toHaveLength(1);
+    const { rows: capRows } = await pool.query(
+      `SELECT 1 FROM role_capabilities WHERE role_id = $1`,
+      [rows[0].id],
+    );
+    expect(capRows).toHaveLength(0);
+    const { rows: staffRoleRows } = await pool.query(
+      `SELECT position FROM roles WHERE name = 'Queue operator'`,
+    );
+    expect(rows[0].position).toBeLessThan(staffRoleRows[0].position);
+  });
+});
+
+describe("H8 revoke-superadmin's last-active-superadmin guard", () => {
+  it("refuses to leave zero active wildcard holders (the guard scripts/revoke-superadmin.mjs mirrors)", async () => {
+    const { assertActiveWildcardHolder } = await import(
+      "../../src/modules/identity/role-authority.js"
+    );
+    const { withTransaction } = await import("../../src/db/pool.js");
+    const soleSuperadmin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+
+    await withTransaction(async (client) => {
+      await expect(assertActiveWildcardHolder(client, soleSuperadmin)).rejects.toThrow(
+        "Role changes must retain one active wildcard holder",
+      );
+    });
+
+    // With a second holder present, excluding the first no longer trips it.
+    await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    await withTransaction(async (client) => {
+      await expect(assertActiveWildcardHolder(client, soleSuperadmin)).resolves.toBeUndefined();
+    });
   });
 });

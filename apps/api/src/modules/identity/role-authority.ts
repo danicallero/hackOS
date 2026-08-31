@@ -19,7 +19,32 @@ export async function lockRoleGraph(client: RoleGraphClient): Promise<void> {
   await client.query(`SELECT pg_advisory_xact_lock($1)`, [ROLE_GRAPH_LOCK]);
 }
 
-/** Highest role position among a user's assigned roles, or null if they hold none. */
+// H8: system:superadmin is provisioned and managed exclusively via server
+// shell CLI scripts (scripts/grant-superadmin.mjs, scripts/create-superadmin.ts,
+// scripts/revoke-superadmin.mjs) — never through the HTTP API, regardless of
+// the actor's capabilities (including a '*' wildcard holder). Identified by
+// NAME rather than is_protected, since is_protected may describe other
+// default roles (e.g. Platform administrator) without granting them this
+// same CLI-only lockout.
+export const SUPERADMIN_ROLE_NAME = "system:superadmin";
+
+/**
+ * Throws if `roleName` is system:superadmin. Call this from every roles route
+ * that mutates an EXISTING role by id (rename, reorder, capabilities,
+ * delete, restore, assign/unassign member) before making any write, and from
+ * role creation to stop an API caller from ever minting a decoy role under
+ * this reserved name.
+ */
+export function assertNotSuperadminRole(roleName: string): void {
+  if (roleName === SUPERADMIN_ROLE_NAME) {
+    throw new ForbiddenError(
+      "system:superadmin can only be managed via server shell CLI scripts, never the API",
+      { roleName },
+    );
+  }
+}
+
+/** Highest role position among a user's assigned, non-deleted roles, or null if they hold none. */
 export async function highestRolePosition(
   client: RoleGraphClient,
   userId: number,
@@ -28,7 +53,7 @@ export async function highestRolePosition(
     `SELECT MAX(r.position) AS position
        FROM user_roles ur
        JOIN roles r ON r.id = ur.role_id
-      WHERE ur.user_id = $1`,
+      WHERE ur.user_id = $1 AND r.deleted_at IS NULL`,
     [userId],
   );
   const position = rows[0]?.position;
@@ -53,6 +78,7 @@ export async function userResolvesCapability(
        JOIN users u ON u.id = ur.user_id
        LEFT JOIN role_capabilities rc ON rc.role_id = r.id AND rc.capability = $2
       WHERE ur.user_id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
+        AND r.deleted_at IS NULL
       ORDER BY r.position DESC`,
     [userId, capability],
   );
@@ -79,7 +105,7 @@ export async function userResolvesCapabilityRegardlessOfState(
        FROM user_roles ur
        JOIN roles r ON r.id = ur.role_id
        LEFT JOIN role_capabilities rc ON rc.role_id = r.id AND rc.capability = $2
-      WHERE ur.user_id = $1
+      WHERE ur.user_id = $1 AND r.deleted_at IS NULL
       ORDER BY r.position DESC`,
     [userId, capability],
   );
@@ -105,7 +131,10 @@ export async function roleGrantsWildcard(
   roleId: number,
 ): Promise<boolean> {
   const { rows } = await client.query(
-    `SELECT 1 FROM role_capabilities WHERE role_id = $1 AND capability = $2 AND state = 'allow'`,
+    `SELECT 1
+       FROM role_capabilities rc
+       JOIN roles r ON r.id = rc.role_id
+      WHERE rc.role_id = $1 AND rc.capability = $2 AND rc.state = 'allow' AND r.deleted_at IS NULL`,
     [roleId, CAPABILITIES.ADMIN_ALL],
   );
   return rows.length > 0;
@@ -151,6 +180,7 @@ export async function assertActiveWildcardHolder(
          JOIN users u ON u.id = ur.user_id
          LEFT JOIN role_capabilities rc ON rc.role_id = r.id AND rc.capability = $1
         WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
+          AND r.deleted_at IS NULL
           AND ($2::integer IS NULL OR ur.user_id <> $2)
      ), resolved AS (
        SELECT DISTINCT ON (user_id) user_id, state

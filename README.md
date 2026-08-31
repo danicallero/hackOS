@@ -131,6 +131,13 @@ pnpm --filter @hackos/api superadmin:create \
 It refuses to create a second superadmin unless
 `--allow-existing-admin` is passed deliberately.
 
+`system:superadmin` is CLI-only (H8): it can never be granted, revoked, or
+edited through the HTTP API, even by a `*`-holding admin. Besides
+`superadmin:create`, `pnpm --filter @hackos/api superadmin:grant --email
+user@example.com` attaches it to an existing account, and `pnpm --filter
+@hackos/api superadmin:revoke --email user@example.com` removes it (refusing
+if that would leave zero active superadmins).
+
 ### Start the mobile app
 
 The root `pnpm dev` command starts the API and web app only. Run Expo separately:
