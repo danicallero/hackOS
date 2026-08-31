@@ -35,7 +35,12 @@ import { type Translate, useLocale } from "@/lib/i18n";
 import type { PermissionState, RoleSummary, UserListItem } from "@/lib/types";
 import { useUrlTab } from "@/lib/url-tab";
 import { cn } from "@/lib/utils";
-import { filterCapabilitiesByDomain, prettifyCapability, userDisplayName } from "./helpers";
+import {
+  capabilityDescription,
+  filterCapabilitiesByDomain,
+  prettifyCapability,
+  userDisplayName,
+} from "./helpers";
 
 const SUPERADMIN_NAME = "system:superadmin";
 const STATE_ORDER: PermissionState[] = ["deny", "inherit", "allow"];
@@ -328,19 +333,28 @@ function CapabilityGroup({
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent className="divide-border divide-y border-t">
-        {capabilities.map((cap) => (
-          <div key={cap} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{prettifyCapability(cap, t)}</p>
-              <p className="text-muted-foreground truncate font-mono text-xs">{cap}</p>
+        {capabilities.map((cap) => {
+          const description = capabilityDescription(cap, t);
+          return (
+            <div
+              key={cap}
+              className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{prettifyCapability(cap, t)}</p>
+                {description && (
+                  <p className="text-muted-foreground truncate text-xs">{description}</p>
+                )}
+                <p className="text-muted-foreground truncate font-mono text-xs">{cap}</p>
+              </div>
+              <CapabilityStateControl
+                state={caps[cap] ?? "inherit"}
+                disabled={disabled}
+                onChange={(state) => onChange(cap, state)}
+              />
             </div>
-            <CapabilityStateControl
-              state={caps[cap] ?? "inherit"}
-              disabled={disabled}
-              onChange={(state) => onChange(cap, state)}
-            />
-          </div>
-        ))}
+          );
+        })}
       </CollapsibleContent>
     </Collapsible>
   );

@@ -22,6 +22,56 @@ export function prettifyCapability(cap: string, t: Translate): string {
   return action ? `${cap1(domain)} · ${cap1(action)}` : cap1(domain);
 }
 
+/**
+ * Maps each catalogue capability to its `capabilityDescription*` message key
+ * (H8). Descriptions themselves are single-sourced as English prose in
+ * `CAPABILITY_DESCRIPTIONS` (`@hackos/shared/capabilities`); this file has no
+ * i18n machinery, so the web UI keeps its own es/gl/en translations of the
+ * same content under these keys (see `packages/shared/locales/*\/web.json`).
+ */
+const CAPABILITY_DESCRIPTION_KEYS: Partial<Record<string, MessageKey>> = {
+  "*": "capabilityDescriptionAdminAll",
+  "users:read": "capabilityDescriptionUsersRead",
+  "users:write": "capabilityDescriptionUsersWrite",
+  "permissions:manage": "capabilityDescriptionPermissionsManage",
+  "invites:manage": "capabilityDescriptionInvitesManage",
+  "applications:manage": "capabilityDescriptionApplicationsManage",
+  "applications:review": "capabilityDescriptionApplicationsReview",
+  "applications:decide": "capabilityDescriptionApplicationsDecide",
+  "applications:confirm-override": "capabilityDescriptionApplicationsConfirmOverride",
+  "applications:edit-response": "capabilityDescriptionApplicationsEditResponse",
+  "projects:read": "capabilityDescriptionProjectsRead",
+  "projects:import": "capabilityDescriptionProjectsImport",
+  "projects:edit": "capabilityDescriptionProjectsEdit",
+  "accredit:scan": "capabilityDescriptionAccreditScan",
+  "presence:scan": "capabilityDescriptionPresenceScan",
+  "activity:scan": "capabilityDescriptionActivityScan",
+  "logistics:stats": "capabilityDescriptionLogisticsStats",
+  "intolerances:manage": "capabilityDescriptionIntolerancesManage",
+  "queue:operate": "capabilityDescriptionQueueOperate",
+  "queue:admin": "capabilityDescriptionQueueAdmin",
+  "judge:panel": "capabilityDescriptionJudgePanel",
+  "judging:export": "capabilityDescriptionJudgingExport",
+  "sponsors:manage": "capabilityDescriptionSponsorsManage",
+  "challenges:manage": "capabilityDescriptionChallengesManage",
+  "schedule:manage": "capabilityDescriptionScheduleManage",
+  "announcements:manage": "capabilityDescriptionAnnouncementsManage",
+  "tv:control": "capabilityDescriptionTvControl",
+  "event:manage": "capabilityDescriptionEventManage",
+  "venue:manage": "capabilityDescriptionVenueManage",
+  "wallet:manage": "capabilityDescriptionWalletManage",
+  "presence:manage": "capabilityDescriptionPresenceManage",
+  "notifications:send": "capabilityDescriptionNotificationsSend",
+  "audit:read": "capabilityDescriptionAuditRead",
+  "exports:run": "capabilityDescriptionExportsRun",
+};
+
+/** Short inline description of what a capability grants, or "" if none is defined. */
+export function capabilityDescription(cap: string, t: Translate): string {
+  const key = CAPABILITY_DESCRIPTION_KEYS[cap];
+  return key ? t(key) : "";
+}
+
 /** Options for the capabilities MultiSelect: raw string value + prettified label. */
 export function capabilityOptions(t: Translate): MultiSelectOption[] {
   return selectableCapabilities().map((cap) => ({
