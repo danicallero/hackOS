@@ -34,6 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Section } from "@/components/ui/surface";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
@@ -327,7 +328,7 @@ export default function PermissionsPage() {
         <ContextualError message={loadError} onRetry={() => void load()} />
       ) : (
         <div className="grid gap-6 lg:grid-cols-[320px_1fr] lg:items-start">
-          <SectionCard icon={ShieldCheckIcon} title={t("rolesTitle")} bodyClassName="p-0">
+          <Section padding="none" className="overflow-hidden">
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Spinner className="size-6" />
@@ -351,7 +352,7 @@ export default function PermissionsPage() {
                 onReorder={onReorder}
               />
             )}
-          </SectionCard>
+          </Section>
 
           {selectedRole ? (
             <RoleEditor
@@ -366,9 +367,9 @@ export default function PermissionsPage() {
             />
           ) : (
             !loading && (
-              <SectionCard title={t("rolesTitle")}>
+              <Section>
                 <EmptyState icon={ShieldCheckIcon} title={t("selectRoleHint")} />
-              </SectionCard>
+              </Section>
             )
           )}
         </div>

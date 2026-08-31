@@ -227,9 +227,9 @@ export function RoleEditor({
         </TabsContent>
 
         <TabsContent value="capabilities" className="pt-2">
+          {/* No title here — the "Capabilities" tab label above already names this panel (H8). */}
           <SectionCard
             icon={KeyRoundIcon}
-            title={t("capabilitiesLabel")}
             description={isSuperadmin ? t("superadminLockedDesc") : t("capabilitiesChangeDesc")}
             bodyClassName="p-0"
             footer={
@@ -424,11 +424,8 @@ function MembersPanel({
   }
 
   return (
-    <SectionCard
-      title={t("membersTitle")}
-      description={disabled ? t("superadminLockedDesc") : undefined}
-      bodyClassName="p-0"
-    >
+    // No title here — the "Members" tab label above already names this panel (H8).
+    <SectionCard description={disabled ? t("superadminLockedDesc") : undefined} bodyClassName="p-0">
       {!disabled && (
         <div className="flex flex-wrap items-center gap-2 border-b p-4">
           <UserPicker
