@@ -54,10 +54,14 @@ try {
     `SELECT COALESCE(MAX(position), 0) + 1000 AS position FROM roles WHERE name <> 'system:superadmin'`,
   );
   const position = positionRows[0].position;
+  // H8: system:superadmin must never be a user's shown "public role" — it is
+  // real, auditable state (who holds it), but is_visible = false keeps it out
+  // of the highest-position-visible-role computation (role.ts) permanently.
   const { rows: roles } = await client.query(
-    `INSERT INTO roles (name, position, is_protected)
-     VALUES ('system:superadmin', $1, true)
-     ON CONFLICT (name) DO UPDATE SET position = EXCLUDED.position
+    `INSERT INTO roles (name, position, is_protected, is_visible)
+     VALUES ('system:superadmin', $1, true, false)
+     ON CONFLICT (name) DO UPDATE SET
+       position = EXCLUDED.position, is_protected = true, is_visible = false
      RETURNING id`,
     [position],
   );
@@ -87,7 +91,7 @@ try {
 
   await client.query(
     `INSERT INTO audit_log (actor_id, entity_type, entity_id, action, source, after)
-     VALUES ($1, 'user', $1::text, 'grant_superadmin', 'system', $2::jsonb)`,
+     VALUES ($1::int, 'user', $1::text, 'grant_superadmin', 'system', $2::jsonb)`,
     [userId, JSON.stringify({ email, capability: "*", roleId })],
   );
 
