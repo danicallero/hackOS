@@ -41,12 +41,23 @@ function randomRolePosition(): number {
 /** Create a role with the given ALLOW capabilities at a fresh unique position. */
 export async function createRole(
   capabilities: string[] = [],
-  overrides: Partial<{ name: string; isVisible: boolean; isProtected: boolean }> = {},
+  overrides: Partial<{
+    name: string;
+    isVisible: boolean;
+    isProtected: boolean;
+    isSeeded: boolean;
+  }> = {},
 ): Promise<number> {
   const name = overrides.name ?? `test-role-${crypto.randomUUID()}`;
   const { rows } = await pool.query(
-    `INSERT INTO roles (name, position, is_visible, is_protected) VALUES ($1, $2, $3, $4) RETURNING id`,
-    [name, randomRolePosition(), overrides.isVisible ?? true, overrides.isProtected ?? false],
+    `INSERT INTO roles (name, position, is_visible, is_protected, is_seeded) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+    [
+      name,
+      randomRolePosition(),
+      overrides.isVisible ?? true,
+      overrides.isProtected ?? false,
+      overrides.isSeeded ?? false,
+    ],
   );
   const roleId = rows[0].id;
   for (const capability of capabilities) {
@@ -56,6 +67,23 @@ export async function createRole(
     );
   }
   return roleId;
+}
+
+/**
+ * Records a role's seed-time capability snapshot (role_seed_defaults, 0807),
+ * for tests exercising GET .../seed-diff and POST .../reset-to-default
+ * against an is_seeded role — since truncateAll wipes the real 0801/0805
+ * seed data every test, tests recreate a minimal seeded role + snapshot
+ * themselves via createRole({ isSeeded: true }) + this helper.
+ */
+export async function seedRoleDefaults(
+  roleId: number,
+  capabilities: Record<string, "allow">,
+): Promise<void> {
+  await pool.query(`INSERT INTO role_seed_defaults (role_id, capabilities) VALUES ($1, $2)`, [
+    roleId,
+    JSON.stringify(capabilities),
+  ]);
 }
 
 /** Assign an existing role to a user. */

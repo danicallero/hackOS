@@ -13,11 +13,13 @@ describe("final route-policy ledger", () => {
   it("has the exact classified rows, allowlists, and sole Better Auth exemption", async () => {
     app = await buildTestApp();
     const rows = app.routePolicyLedger.filter((row) => row.method !== "HEAD");
-    expect(rows).toHaveLength(339);
+    expect(rows).toHaveLength(341);
     expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(18);
     expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(12);
     expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(47);
-    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(195);
+    // +2 (H8): GET .../seed-diff and POST .../reset-to-default, both gated
+    // by permissions:manage like every other role-mutation route.
+    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(197);
     expect(rows.filter((row) => row.policy.kind === "contextual")).toHaveLength(67);
     expect(app.routePolicyExemptions).toEqual([
       { url: "/api/auth/*", exemption: "better-auth-generated" },

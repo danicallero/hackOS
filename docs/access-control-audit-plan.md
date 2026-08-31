@@ -309,6 +309,69 @@ functional-team role. None of the fifteen are referenced by name in
 `role_grant_rules` or other seed data (only `Sponsor` is targeted by name),
 so they remain safe to rename later without a data migration.
 
+### `is_seeded`, `role_seed_defaults`, and reset-to-default (0800/0807)
+
+`roles.is_seeded` (`boolean NOT NULL DEFAULT false`, added in 0800, set
+`true` by 0801's `Sponsor` insert and every 0805 default-catalogue insert)
+marks a role as coming from the seeded default set rather than from an admin
+using `POST /api/roles`. It's a durable column rather than a name match, so
+renaming a seeded role (e.g. "Organizer" → "Field Organizer") doesn't drop it
+out of this set. `system:superadmin` is never `is_seeded` — it's CLI-only,
+never created by a migration.
+
+Two behaviors key off it:
+
+- **Trash/restore scoping.** `GET /api/roles?includeDeleted=true` now
+  returns soft-deleted roles only where `is_seeded = true`, in addition to
+  every non-deleted role (that half is unchanged). A custom role an admin
+  creates and later soft-deletes no longer appears in the web permissions
+  page's trash panel — it's gone for good once deleted, same as before this
+  scoping existed for a truly custom role, but a seeded default role (someone
+  deletes "Day Staff" by mistake) is still recoverable there.
+- **Reset to default.** `role_seed_defaults` (0807) is a one-row-per-seeded-
+  role snapshot table (`role_id PRIMARY KEY, capabilities jsonb`), populated
+  once at seed time by copying each `is_seeded` role's live `role_capabilities`
+  ALLOW rows right after 0801/0805 insert them (`{"applications:review":
+  "allow", ...}` — every 0801/0805 role capability is ALLOW-only, per the
+  catalogue's "prefer ALLOW + implicit INHERIT, no DENY" convention, so the
+  snapshot only ever needs to record the ALLOW set; anything absent is
+  implicitly INHERIT, exactly like a fresh seed). Scope: capability drift
+  only — the snapshot doesn't cover name/visibility, so a rename or a
+  visibility toggle survives a reset untouched.
+
+  - `GET /api/roles/:roleId/seed-diff` → `{ isSeeded, hasDrifted, diff:
+    { capability, current, default }[] }`. `isSeeded=false` (no snapshot to
+    compare against) for a non-seeded/custom role or a seeded role with no
+    snapshot row; otherwise `diff` lists every capability whose live
+    tri-state differs from its seed-time state (a capability missing from
+    either side reads as `inherit`).
+  - `POST /api/roles/:roleId/reset-to-default` replaces the role's live
+    `role_capabilities` with exactly its snapshot (delete + re-insert,
+    transactional, audited as `reset_to_default`). Requires `is_seeded = true`
+    and an existing snapshot row (400/404 otherwise); refuses
+    `system:superadmin` the same way every other role-capability mutation
+    route does, though that's a non-issue in practice since it's never
+    seeded. Guarded exactly like `PUT .../capabilities`:
+    `requireRoleMutationAuthority` (position hierarchy) plus the wildcard-
+    holder invariant check when the reset adds/removes the `*` grant.
+  - **Possession-guard interaction.** The existing capability-possession
+    guard (`requireCapabilityPossessionForStateChange`) still applies, scoped
+    to only the capabilities the reset would **newly** turn ALLOW (i.e. ones
+    not already ALLOW on the live role) — a capability the actor didn't touch
+    because it was already ALLOW before the reset isn't re-checked. An actor
+    without the wildcard who doesn't currently possess a capability the
+    snapshot would restore cannot use reset to hand it back to themselves via
+    this role; they need someone who still holds it to run the reset, or to
+    edit the role's capabilities directly for whichever subset they do
+    possess. This is a deliberate tradeoff (consistent with the same
+    limitation on ordinary capability edits) rather than a bypass.
+
+  The web permissions page's Capabilities tab shows a "Reset to default"
+  banner+button when `hasDrifted` is true for the selected seeded role;
+  clicking it opens a confirmation modal listing each drifted capability's
+  current → default state before the admin confirms — the reset is never
+  applied without that preview step.
+
 ## Goal and non-goals (capability-group era — superseded, see above)
 
 Every API route must declare one authoritative access policy, and every

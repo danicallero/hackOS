@@ -9,6 +9,7 @@ import {
   createRole,
   createUser,
   createUserWithCapabilities,
+  seedRoleDefaults,
   truncateAll,
 } from "../helpers.js";
 import { TEST_DATABASE_URL } from "../test-env.js";
@@ -602,7 +603,15 @@ describe("H8 role soft-delete and restore", () => {
       `UPDATE roles SET position = 1000000 WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1)`,
       [actor],
     );
-    const roleId = await createRole([CAPABILITIES.USERS_READ], { name: "soft-delete-target" });
+    // is_seeded: true — the trash/restore (includeDeleted=true) listing this
+    // test exercises below is scoped to seeded roles only (H8); this test is
+    // about soft-delete/restore mechanics, not that scoping, so it mints a
+    // seeded role to stay visible there (see the dedicated scoping suite for
+    // the custom-role-excluded case).
+    const roleId = await createRole([CAPABILITIES.USERS_READ], {
+      name: "soft-delete-target",
+      isSeeded: true,
+    });
     await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [roleId]);
     const member = await createUser();
     await assignRole(member, roleId);
@@ -1112,6 +1121,42 @@ describe("H8 default seeded role set (0805)", () => {
     expect(positionOf("Applications Lead")).toBeGreaterThan(positionOf("Applications Team"));
     expect(positionOf("Judging Coordinator")).toBeGreaterThan(positionOf("Judging Team"));
   });
+
+  it("marks every 0801/0805 seeded role is_seeded=true, and snapshots exactly its ALLOW set into role_seed_defaults", async () => {
+    const pool = await seededRoles();
+    const { rows: unseeded } = await pool.query(`SELECT name FROM roles WHERE NOT is_seeded`);
+    // system:superadmin is CLI-only, never created by a migration.
+    expect(unseeded).toHaveLength(0);
+
+    const { rows: eventDirector } = await pool.query(
+      `SELECT r.id, rsd.capabilities
+         FROM roles r
+         JOIN role_seed_defaults rsd ON rsd.role_id = r.id
+        WHERE r.name = 'Event Director'`,
+    );
+    expect(eventDirector).toHaveLength(1);
+    const { rows: liveCaps } = await pool.query(
+      `SELECT capability FROM role_capabilities WHERE role_id = $1 AND state = 'allow'`,
+      [eventDirector[0].id],
+    );
+    expect(Object.keys(eventDirector[0].capabilities).sort()).toEqual(
+      liveCaps.map((r: { capability: string }) => r.capability).sort(),
+    );
+    expect(Object.values(eventDirector[0].capabilities)).toEqual(
+      Object.keys(eventDirector[0].capabilities).map(() => "allow"),
+    );
+
+    // A capability-less seeded role (Mentor/Participant/Sponsor) still gets a
+    // snapshot row — an empty object, not a missing row.
+    const { rows: mentor } = await pool.query(
+      `SELECT rsd.capabilities
+         FROM roles r
+         JOIN role_seed_defaults rsd ON rsd.role_id = r.id
+        WHERE r.name = 'Mentor'`,
+    );
+    expect(mentor).toHaveLength(1);
+    expect(mentor[0].capabilities).toEqual({});
+  });
 });
 
 describe("H8 revoke-superadmin's last-active-superadmin guard", () => {
@@ -1133,5 +1178,244 @@ describe("H8 revoke-superadmin's last-active-superadmin guard", () => {
     await withTransaction(async (client) => {
       await expect(assertActiveWildcardHolder(client, soleSuperadmin)).resolves.toBeUndefined();
     });
+  });
+});
+
+describe("H8 trash/restore panel scoped to seeded roles", () => {
+  it("includeDeleted=true excludes a soft-deleted custom role but includes a soft-deleted seeded role", async () => {
+    const a = await getApp();
+    const actor = await manager();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE roles SET position = 1000000 WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+      [actor],
+    );
+    const customRole = await createRole([], { name: "custom-trash-target" });
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [customRole]);
+    const seededRole = await createRole([], { name: "seeded-trash-target", isSeeded: true });
+    await pool.query(`UPDATE roles SET position = 11 WHERE id = $1`, [seededRole]);
+
+    for (const roleId of [customRole, seededRole]) {
+      const del = await a.inject({
+        method: "DELETE",
+        url: `/api/roles/${roleId}`,
+        headers: asUser(actor),
+      });
+      expect(del.statusCode).toBe(200);
+    }
+
+    const list = await a.inject({
+      method: "GET",
+      url: "/api/roles?includeDeleted=true",
+      headers: asUser(actor),
+    });
+    const ids = list.json().map((r: { id: number }) => r.id);
+    expect(ids).toContain(seededRole);
+    expect(ids).not.toContain(customRole);
+
+    // Non-deleted listing behavior is unaffected: neither shows up there.
+    const liveList = await a.inject({ method: "GET", url: "/api/roles", headers: asUser(actor) });
+    const liveIds = liveList.json().map((r: { id: number }) => r.id);
+    expect(liveIds).not.toContain(customRole);
+    expect(liveIds).not.toContain(seededRole);
+  });
+
+  it("a newly created custom role reports is_seeded=false", async () => {
+    const a = await getApp();
+    const actor = await manager();
+    const created = await a.inject({
+      method: "POST",
+      url: "/api/roles",
+      headers: asUser(actor),
+      payload: { name: "brand-new-custom-role", position: 1 },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json().isSeeded).toBe(false);
+  });
+});
+
+describe("H8 seed-diff and reset-to-default (0807)", () => {
+  async function seededRoleWithSnapshot(caps: string[], name = `seed-diff-${crypto.randomUUID()}`) {
+    const roleId = await createRole(caps, { name, isSeeded: true });
+    await seedRoleDefaults(roleId, Object.fromEntries(caps.map((c) => [c, "allow" as const])));
+    return roleId;
+  }
+
+  it("GET .../seed-diff reports isSeeded=false for a non-seeded role", async () => {
+    const a = await getApp();
+    const actor = await manager();
+    const roleId = await createRole([CAPABILITIES.USERS_READ], { name: "not-seeded-diff" });
+    const res = await a.inject({
+      method: "GET",
+      url: `/api/roles/${roleId}/seed-diff`,
+      headers: asUser(actor),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ isSeeded: false, hasDrifted: false, diff: [] });
+  });
+
+  it("reports no drift right after seeding", async () => {
+    const a = await getApp();
+    const actor = await manager();
+    const roleId = await seededRoleWithSnapshot([CAPABILITIES.USERS_READ]);
+    const res = await a.inject({
+      method: "GET",
+      url: `/api/roles/${roleId}/seed-diff`,
+      headers: asUser(actor),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ isSeeded: true, hasDrifted: false, diff: [] });
+  });
+
+  it("reports the correct diff after the role's capabilities are edited", async () => {
+    const a = await getApp();
+    const actor = await manager();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE roles SET position = 1000000 WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+      [actor],
+    );
+    const roleId = await seededRoleWithSnapshot([CAPABILITIES.USERS_READ]);
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [roleId]);
+
+    const put = await a.inject({
+      method: "PUT",
+      url: `/api/roles/${roleId}/capabilities`,
+      headers: asUser(actor),
+      payload: { capabilities: [{ capability: CAPABILITIES.USERS_READ, state: "inherit" }] },
+    });
+    expect(put.statusCode).toBe(200);
+
+    const res = await a.inject({
+      method: "GET",
+      url: `/api/roles/${roleId}/seed-diff`,
+      headers: asUser(actor),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      isSeeded: true,
+      hasDrifted: true,
+      diff: [{ capability: CAPABILITIES.USERS_READ, current: "inherit", default: "allow" }],
+    });
+  });
+
+  it("restores exactly the seed snapshot: drops drift-added capabilities, restores drift-removed ones", async () => {
+    const a = await getApp();
+    const actor = await createUserWithCapabilities([
+      CAPABILITIES.PERMISSIONS_MANAGE,
+      CAPABILITIES.USERS_READ,
+      CAPABILITIES.PROJECTS_READ,
+      CAPABILITIES.AUDIT_READ,
+    ]);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE roles SET position = 1000000 WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+      [actor],
+    );
+    const roleId = await seededRoleWithSnapshot([
+      CAPABILITIES.USERS_READ,
+      CAPABILITIES.PROJECTS_READ,
+    ]);
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [roleId]);
+
+    // Drift: drop USERS_READ, keep PROJECTS_READ, add an out-of-snapshot capability.
+    const put = await a.inject({
+      method: "PUT",
+      url: `/api/roles/${roleId}/capabilities`,
+      headers: asUser(actor),
+      payload: {
+        capabilities: [
+          { capability: CAPABILITIES.PROJECTS_READ, state: "allow" },
+          { capability: CAPABILITIES.AUDIT_READ, state: "allow" },
+        ],
+      },
+    });
+    expect(put.statusCode).toBe(200);
+
+    const reset = await a.inject({
+      method: "POST",
+      url: `/api/roles/${roleId}/reset-to-default`,
+      headers: asUser(actor),
+    });
+    expect(reset.statusCode).toBe(200);
+    const caps = reset.json().capabilities as { capability: string; state: string }[];
+    expect(caps.map((c) => c.capability).sort()).toEqual(
+      [CAPABILITIES.USERS_READ, CAPABILITIES.PROJECTS_READ].sort(),
+    );
+    expect(caps.every((c) => c.state === "allow")).toBe(true);
+
+    const diff = await a.inject({
+      method: "GET",
+      url: `/api/roles/${roleId}/seed-diff`,
+      headers: asUser(actor),
+    });
+    expect(diff.json()).toEqual({ isSeeded: true, hasDrifted: false, diff: [] });
+  });
+
+  it("rejects reset-to-default for a non-seeded role", async () => {
+    const a = await getApp();
+    const actor = await manager();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE roles SET position = 1000000 WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+      [actor],
+    );
+    const roleId = await createRole([CAPABILITIES.USERS_READ], { name: "not-seeded-reset" });
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [roleId]);
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/roles/${roleId}/reset-to-default`,
+      headers: asUser(actor),
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("rejects reset-to-default for a seeded role with no snapshot row", async () => {
+    const a = await getApp();
+    const actor = await manager();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE roles SET position = 1000000 WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+      [actor],
+    );
+    const roleId = await createRole([], { name: "seeded-no-snapshot", isSeeded: true });
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [roleId]);
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/roles/${roleId}/reset-to-default`,
+      headers: asUser(actor),
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("the capability-possession guard blocks reset-to-default from newly re-granting a capability the actor doesn't possess", async () => {
+    const a = await getApp();
+    // PERMISSIONS_MANAGE only — deliberately not USERS_READ.
+    const actor = await createUserWithCapabilities([CAPABILITIES.PERMISSIONS_MANAGE]);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE roles SET position = 1000000 WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+      [actor],
+    );
+    const roleId = await seededRoleWithSnapshot([CAPABILITIES.USERS_READ]);
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [roleId]);
+
+    // Drift the role away from USERS_READ first, so resetting it would newly
+    // re-grant a capability the actor themselves doesn't hold.
+    const put = await a.inject({
+      method: "PUT",
+      url: `/api/roles/${roleId}/capabilities`,
+      headers: asUser(actor),
+      payload: { capabilities: [{ capability: CAPABILITIES.USERS_READ, state: "inherit" }] },
+    });
+    expect(put.statusCode).toBe(200);
+
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/roles/${roleId}/reset-to-default`,
+      headers: asUser(actor),
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.message).toMatch(/possess/i);
   });
 });
