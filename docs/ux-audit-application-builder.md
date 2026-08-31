@@ -422,3 +422,28 @@ no shadow — see `docs/DESIGN.md` §2-3).
   Removed the now-dead `previewLocale` state, `FormPreviewPanel` import, and
   `livePreviewLabel` i18n key along with it — `FormPreviewPanel` itself stays
   in `form-preview.tsx`, still used by the preview modal.
+
+### Follow-up: creation modal → dedicated page (H11, user-requested)
+
+Owner feedback: a modal is cramped for a form this size (name, type,
+template/questions, sections, open/close window, capacity, confirmation
+window, shirt-size/dietary toggles, granted roles). Converted form
+*creation* from the in-page `Modal` on `applications/page.tsx` to its own
+route, `applications/new/page.tsx`, matching how editing already works as a
+full page at `applications/[id]/page.tsx`.
+
+- New `apps/web/src/app/(app)/applications/new/page.tsx`: the exact field set
+  and validation from the old create modal (name, type, shirt/dietary
+  toggles, open/close window, `grants_role_ids` via `MultiSelect`, capacity,
+  confirmation window), laid out as a `BackLink` + `PageHeader` + one
+  `SectionCard` with a footer `SubmitButton` — the same shell
+  `applications/[id]/metadata-card.tsx` uses for its own full-page form
+  section. Submits via the same `POST /api/applications` call and redirects
+  to `/applications/:id` on success. Gated on `applications:manage` with
+  `AccessDenied` (new `applicationsAccessDeniedDesc` i18n key), matching
+  `challenges/new/page.tsx`'s convention for a dedicated create route.
+- `applications/page.tsx`: the "New form" button (both in `PageHeader` and
+  the empty-state action) now links to `/applications/new` instead of
+  opening a modal. Removed the modal, its form state, react-hook-form setup,
+  and the role-fetch effect that only existed to feed it — none of it is
+  referenced from this file anymore.

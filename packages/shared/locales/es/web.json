@@ -795,6 +795,7 @@
   "createFirstFormDesc": "Crea el primer formulario para que la gente pueda solicitar plaza en tu evento.",
   "formsWillAppear": "Los formularios aparecerán aquí en cuanto un organizador los cree.",
   "newApplicationForm": "Nuevo formulario de solicitud",
+  "applicationsAccessDeniedDesc": "Solicita a un administrador acceso a la gestión de formularios.",
   "createForm": "Crear formulario",
   "personTypeLabel": "Tipo de persona",
   "openImmediately": "Abre inmediatamente",

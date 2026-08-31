@@ -795,6 +795,7 @@
   "createFirstFormDesc": "Create the first form so people can apply to your event.",
   "formsWillAppear": "Forms will appear here once an organizer creates them.",
   "newApplicationForm": "New application form",
+  "applicationsAccessDeniedDesc": "Ask an administrator for application-management access.",
   "createForm": "Create form",
   "personTypeLabel": "Person type",
   "openImmediately": "Open immediately",
