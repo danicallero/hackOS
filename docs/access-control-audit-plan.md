@@ -211,9 +211,10 @@ single rung on a ladder.
   developers. Explicitly **not** `*`, `permissions:manage`, `wallet:manage`,
   or `event:manage`.
 - **Mentor** — applicant-facing granted role (`applications.grants_role_id`
-  target) for accepted mentors: read-only project visibility
-  (`projects:read`), granted directly since — unlike sponsors/judges — no
-  relationship table scopes project access for mentors.
+  target) for accepted mentors; carries no capabilities today. Mentor-facing
+  features (public mentor profiles, participants asking a mentor for help)
+  are future work, not yet built or scheduled — access isn't granted ahead
+  of the feature that would need it.
 - **Participant** — applicant-facing granted role for accepted participants;
   carries no capabilities of its own, same pattern as `Sponsor` — a
   relationship/status marker, not a permission grant.

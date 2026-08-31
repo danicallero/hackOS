@@ -49,11 +49,12 @@
 --                            permissions:manage, wallet:manage, or
 --                            event:manage.
 --   Mentor                 — applicant-facing granted role (applications
---                            .grants_role_id target) for accepted mentors:
---                            read-only project visibility (no relationship-
---                            scoped path exists for mentors the way it does
---                            for sponsors/judges, so this is a direct grant),
---                            nothing to manage.
+--                            .grants_role_id target) for accepted mentors;
+--                            carries no capabilities today. Mentor-facing
+--                            features (public mentor profiles, participants
+--                            asking a mentor for help) are future work, not
+--                            yet built or scheduled — don't grant access
+--                            ahead of the feature that would need it.
 --   Participant            — applicant-facing granted role for accepted
 --                            participants; carries no capabilities, same
 --                            pattern as `Sponsor` — a relationship/status
@@ -127,16 +128,11 @@ JOIN (VALUES
   ('Judging Coordinator', ARRAY['queue:admin','judging:export']),
   ('Media / Comms',       ARRAY['schedule:manage','announcements:manage','tv:control']),
   ('Technical Team',      ARRAY['users:read','users:write','audit:read'])
-  -- Mentor, Participant deliberately have no ALLOW rows: Mentor's read-only
-  -- project visibility is granted directly (see rationale above) via a
-  -- separate INSERT below; Participant is a pure status marker, same as
-  -- the existing Sponsor role.
+  -- Mentor, Participant deliberately have no ALLOW rows: both are pure
+  -- product/identity status markers today (same as the existing Sponsor
+  -- role). Mentor-facing capabilities (e.g. project visibility for public
+  -- mentor profiles, "ask a mentor for help") are future work, not yet
+  -- built or scheduled — don't grant access ahead of the feature that
+  -- needs it.
 ) AS defaults(role_name, capabilities) ON defaults.role_name = r.name
 CROSS JOIN LATERAL unnest(defaults.capabilities) AS cap;
-
--- Mentor: read-only project visibility. Kept as its own statement (rather
--- than folded into the VALUES list above) since it's a single-capability
--- grant with distinct rationale (no relationship-scoped path exists for
--- mentors, unlike sponsors/judges — see rationale above).
-INSERT INTO role_capabilities (role_id, capability, state)
-SELECT id, 'projects:read', 'allow'::permission_state FROM roles WHERE name = 'Mentor';

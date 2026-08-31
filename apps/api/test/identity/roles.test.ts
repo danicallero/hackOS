@@ -941,7 +941,7 @@ describe("H8 default seeded role set (0805)", () => {
         CAPABILITIES.USERS_WRITE,
         CAPABILITIES.AUDIT_READ,
       ],
-      Mentor: [CAPABILITIES.PROJECTS_READ],
+      Mentor: [],
       Participant: [],
     };
     for (const [name, caps] of Object.entries(expected)) {
