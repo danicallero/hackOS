@@ -1,5 +1,5 @@
 import type { Queryable } from "../../db/pool.js";
-import type { DerivedRole } from "./role.js";
+import type { BadgeCategory } from "./role.js";
 
 /**
  * Mobile is an event-day surface, not an alternate application portal.
@@ -9,7 +9,7 @@ import type { DerivedRole } from "./role.js";
 export async function hasMobileAccess(
   db: Queryable,
   userId: number,
-  role: DerivedRole,
+  role: BadgeCategory,
 ): Promise<boolean> {
   // Operational and sponsor relationships are event attendees immediately.
   // Applicant-derived roles still require an accepted/confirmed response.
