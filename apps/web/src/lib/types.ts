@@ -38,6 +38,8 @@ export interface Me {
   createdAt: string;
   role: "admin" | "judge" | "sponsor" | "staff" | "mentor" | "participant" | "unassigned";
   capabilities: Capability[];
+  /** H8: the caller's complete assigned-role set, highest position first — additive next to `role`. */
+  roles: AssignedRoleSummary[];
   /** Association facts underlying `role` (H55) — a sponsor rep who also judges needs both workspaces. */
   isEnterpriseJudge: boolean;
   isSponsorRep: boolean;
@@ -83,11 +85,19 @@ export interface UserList {
   total: number;
 }
 
-export interface UserDetail extends Omit<Me, "role" | "capabilities"> {
+/** H8: an entry in a user's full assigned-role list (see `Me.roles`/`UserDetail.roles`). */
+export interface AssignedRoleSummary {
+  id: number;
+  name: string;
+  position: number;
+  isVisible: boolean;
+}
+
+export interface UserDetail extends Omit<Me, "role" | "capabilities" | "roles"> {
   role: DerivedRole;
   visibleRoleName: string | null;
   capabilities: Capability[];
-  roles: { id: number; name: string }[];
+  roles: AssignedRoleSummary[];
 }
 
 export type PermissionState = "allow" | "deny" | "inherit";

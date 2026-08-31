@@ -11,6 +11,7 @@ import {
   invalidateCapabilities,
   requireAuth,
   requireCapability,
+  userHasCapability,
 } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
 import { idempotencyGuard, replayCompletedIdempotency } from "../../../lib/idempotency.js";
@@ -31,11 +32,14 @@ import {
 } from "../removal.js";
 import { issueRemovalPin } from "../removal-pin.js";
 import {
+  type AssignedRoleSummary,
   computeDerivedRole,
   computeMembershipFlags,
+  getAssignedRoles,
   getHighestVisibleRoleName,
   hasEventAccess,
 } from "../role.js";
+import { SUPERADMIN_ROLE_NAME } from "../role-authority.js";
 
 /**
  * Profile routes (H7).
@@ -49,6 +53,14 @@ import {
 
 const LANGUAGES = ["en", "es", "gl"] as const;
 const DIETARY_DATA_STATES = ["not_provided", "present"] as const;
+
+/** H8: a user's complete assigned-role set, for a secondary "all roles" list next to the single displayed role. */
+const assignedRoleSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  position: z.number(),
+  isVisible: z.boolean(),
+});
 
 const derivedRoleSchema = z.enum([
   "admin",
@@ -454,8 +466,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           "the isEnterpriseJudge/isSponsorRep association facts nav uses for multi-capability " +
           "accounts (H55), whether they currently hold event access (confirmed spot or " +
           "manual attendee role), whether they have a project/queue entry of their own " +
-          "(drives hiding the My project/My queue nav items, issue #424), and mobile " +
-          "access eligibility.",
+          "(drives hiding the My project/My queue nav items, issue #424), mobile " +
+          "access eligibility, and the caller's complete assigned-role set (H8) alongside " +
+          "the single highest-visible `role` shown elsewhere.",
         summary: "Get my profile",
         response: {
           200: userResponseSchema.extend({
@@ -465,6 +478,12 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             // capability, never by the illustrative role (H55). Authoritative
             // enforcement still happens on every guarded route server-side.
             capabilities: z.array(z.string()),
+            // H8: the caller's FULL assigned-role set (highest position
+            // first), additive next to `role` (the single highest-visible
+            // one). Always the caller's own roles, so system:superadmin is
+            // included when they actually hold it — nothing to hide from
+            // yourself.
+            roles: z.array(assignedRoleSchema),
             // Additive association facts (H55): a multi-capability account
             // (e.g. sponsor rep + enterprise judge) needs both workspaces, which
             // the single-priority `role` above can't represent on its own.
@@ -503,6 +522,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         canCreateProject,
         profileLocked,
         removalStatus,
+        roles,
       ] = await Promise.all([
         computeDerivedRole(pool, userId),
         getEffectiveCapabilities(userId),
@@ -513,6 +533,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         canCreateMyProject(userId),
         hasAcceptedApplication(userId),
         getPendingAccountRemovalStatus(pool, userId),
+        getAssignedRoles(pool, userId),
       ]);
       const mobileAccess =
         row.account_state === "active" && (await hasMobileAccess(pool, userId, role));
@@ -521,6 +542,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         role,
         mobileAccess,
         capabilities: [...capabilities],
+        roles,
         ...membership,
         hasEventAccess: eventAccess,
         hasProject,
@@ -883,13 +905,19 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       preHandler: requireCapability(CAPABILITIES.USERS_READ),
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_READ }),
       schema: {
+        description:
+          "A staff member's view of another user's profile. `visibleRoleName` is the single " +
+          "highest-visible role also shown elsewhere; `roles` is that user's complete " +
+          "assigned-role set (H8) for a secondary role list — system:superadmin is stripped " +
+          "out of it unless the viewer holds PERMISSIONS_MANAGE (irrelevant to an ordinary " +
+          "USERS_READ viewer, and never advertised to them).",
         params: z.object({ id: z.coerce.number().int() }),
         response: {
           200: userResponseSchema.extend({
             role: derivedRoleSchema,
             visibleRoleName: z.string().nullable(),
             capabilities: z.array(z.string()),
-            roles: z.array(z.object({ id: z.number(), name: z.string() })),
+            roles: z.array(assignedRoleSchema),
           }),
         },
       },
@@ -897,19 +925,20 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => {
       await assertProfileSubjectScope(req.userId as number, req.params.id);
       const row = await fetchUser(req.params.id);
-      const [role, visibleRoleName, capabilities, roles] = await Promise.all([
+      const [role, visibleRoleName, capabilities, allRoles, canSeeSuperadmin] = await Promise.all([
         computeDerivedRole(pool, req.params.id),
         getHighestVisibleRoleName(pool, req.params.id),
         getEffectiveCapabilities(req.params.id),
-        pool
-          .query(
-            `SELECT r.id, r.name FROM user_roles ur
-               JOIN roles r ON r.id = ur.role_id
-              WHERE ur.user_id = $1 ORDER BY r.position DESC`,
-            [req.params.id],
-          )
-          .then((r) => r.rows as { id: number; name: string }[]),
+        getAssignedRoles(pool, req.params.id),
+        userHasCapability(req.userId as number, CAPABILITIES.PERMISSIONS_MANAGE, req),
       ]);
+      // H8: system:superadmin is CLI-only and never advertised to a staff
+      // viewer browsing someone else's profile unless they themselves manage
+      // permissions — it carries no operational meaning to an ordinary
+      // USERS_READ viewer beyond "this account has every capability".
+      const roles: AssignedRoleSummary[] = canSeeSuperadmin
+        ? allRoles
+        : allRoles.filter((r) => r.name !== SUPERADMIN_ROLE_NAME);
       return {
         ...serializeUser(row),
         role,

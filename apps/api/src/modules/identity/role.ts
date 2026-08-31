@@ -101,6 +101,39 @@ export async function getHighestVisibleRoleName(
   return (rows[0]?.name as string | undefined) ?? null;
 }
 
+export interface AssignedRoleSummary {
+  id: number;
+  name: string;
+  position: number;
+  isVisible: boolean;
+}
+
+/**
+ * The user's complete assigned-role set (H8), highest position first — not
+ * just the single displayed role `getHighestVisibleRoleName` returns above.
+ * Used by /api/me and /api/users/:id to show a full role list alongside the
+ * one prominent "displayed role" (issue: profile role-list display).
+ */
+export async function getAssignedRoles(
+  db: Queryable,
+  userId: number,
+): Promise<AssignedRoleSummary[]> {
+  const { rows } = await db.query(
+    `SELECT r.id, r.name, r.position, r.is_visible
+       FROM user_roles ur
+       JOIN roles r ON r.id = ur.role_id
+      WHERE ur.user_id = $1 AND r.deleted_at IS NULL
+      ORDER BY r.position DESC`,
+    [userId],
+  );
+  return rows.map((r: { id: number; name: string; position: number; is_visible: boolean }) => ({
+    id: r.id,
+    name: r.name,
+    position: r.position,
+    isVisible: r.is_visible,
+  }));
+}
+
 /**
  * Association-based facts underlying the illustrative `role` above, exposed
  * independently so navigation (H8/H55, issue #187) can show every relevant

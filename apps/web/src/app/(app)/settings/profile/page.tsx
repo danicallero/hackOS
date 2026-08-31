@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { UserIcon } from "lucide-react";
+import { ShieldIcon, UserIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -10,6 +10,7 @@ import { MultiSelect } from "@/components/common/multi-select";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
+import { Badge } from "@/components/ui/badge";
 import {
   Form,
   FormControl,
@@ -127,6 +128,17 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
   return (
     <div className="space-y-6">
       <PageHeader title={t("myProfile")} />
+      {me.roles.length > 0 && (
+        <SectionCard icon={ShieldIcon} title={t("rolesTitle")}>
+          <div className="flex flex-wrap gap-2">
+            {me.roles.map((r) => (
+              <Badge key={r.id} variant="outline">
+                {r.name}
+              </Badge>
+            ))}
+          </div>
+        </SectionCard>
+      )}
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <SectionCard
