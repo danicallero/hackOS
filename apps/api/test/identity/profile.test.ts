@@ -152,6 +152,33 @@ describe("GET /api/me (H7)", () => {
     expect(res.json().capabilities).toContain("*");
   });
 
+  it("exposes the caller's complete assigned-role set alongside the single displayed role (H8)", async () => {
+    const a = await getApp();
+    const { createRole, assignRole } = await import("../helpers.js");
+    const staff = await createUser();
+    const lower = await createRole([CAPABILITIES.ACCREDIT_SCAN], {
+      name: "lower-role",
+      isVisible: false,
+    });
+    const higher = await createRole([CAPABILITIES.USERS_READ], { name: "higher-role" });
+    await assignRole(staff, lower);
+    await assignRole(staff, higher);
+
+    const res = await a.inject({ method: "GET", url: "/api/me", headers: asUser(staff) });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.roles).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: lower, name: "lower-role", isVisible: false }),
+        expect.objectContaining({ id: higher, name: "higher-role", isVisible: true }),
+      ]),
+    );
+    // Highest-position first — createRole assigns random positions, so just
+    // confirm both are present and ordered by position descending.
+    const positions = body.roles.map((r: { position: number }) => r.position);
+    expect(positions).toEqual([...positions].sort((x, y) => y - x));
+  });
+
   it("derives the illustrative role: admin > judge > sponsor > staff > mentor > participant > unassigned", async () => {
     const a = await getApp();
     const { pool } = await import("../../src/db/pool.js");
@@ -1939,6 +1966,50 @@ describe("staff user routes (H7)", () => {
     expect(res.json().role).toBe("staff");
     expect(res.json().capabilities).toContain(CAPABILITIES.ACCREDIT_SCAN);
     expect(Array.isArray(res.json().roles)).toBe(true);
+    expect(res.json().roles[0]).toMatchObject({
+      id: expect.any(Number),
+      name: expect.any(String),
+      position: expect.any(Number),
+      isVisible: expect.any(Boolean),
+    });
+  });
+
+  it("strips system:superadmin out of another user's role list unless the viewer holds PERMISSIONS_MANAGE (H8)", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const { createRole, assignRole } = await import("../helpers.js");
+    const superadminRoleId = await createRole([CAPABILITIES.ADMIN_ALL], {
+      name: "system:superadmin",
+      isProtected: true,
+    });
+    await pool.query(`UPDATE roles SET position = 999999999 WHERE id = $1`, [superadminRoleId]);
+    const target = await createUser();
+    await assignRole(target, superadminRoleId);
+
+    const plainReader = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
+    const asPlainReader = await a.inject({
+      method: "GET",
+      url: `/api/users/${target}`,
+      headers: asUser(plainReader),
+    });
+    expect(asPlainReader.statusCode).toBe(200);
+    expect(
+      asPlainReader.json().roles.some((r: { name: string }) => r.name === "system:superadmin"),
+    ).toBe(false);
+
+    const permissionsManager = await createUserWithCapabilities([
+      CAPABILITIES.USERS_READ,
+      CAPABILITIES.PERMISSIONS_MANAGE,
+    ]);
+    const asManager = await a.inject({
+      method: "GET",
+      url: `/api/users/${target}`,
+      headers: asUser(permissionsManager),
+    });
+    expect(asManager.statusCode).toBe(200);
+    expect(
+      asManager.json().roles.some((r: { name: string }) => r.name === "system:superadmin"),
+    ).toBe(true);
   });
 
   it("DELETE /api/users/:id — superadmin only, blocks self, removes a fresh account", async () => {

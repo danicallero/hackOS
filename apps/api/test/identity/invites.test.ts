@@ -232,6 +232,38 @@ describe("H10 invite creation", () => {
     const { userHasCapability } = await import("../../src/lib/capabilities.js");
     expect(await userHasCapability(accepted.json().userId, CAPABILITIES.INVITES_MANAGE)).toBe(true);
   });
+
+  it("refuses to pre-assign system:superadmin even to a wildcard-holding inviter (H8 CLI-only lockout)", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const { createRole } = await import("../helpers.js");
+    const wildcard = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    const superadminRoleId = await createRole([CAPABILITIES.ADMIN_ALL], {
+      name: "system:superadmin",
+      isProtected: true,
+    });
+    await pool.query(`UPDATE roles SET position = 999999999 WHERE id = $1`, [superadminRoleId]);
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/invites",
+      headers: asUser(wildcard),
+      payload: {
+        email: "sneaky-superadmin@example.com",
+        kind: "staff",
+        groupIds: [superadminRoleId],
+      },
+    });
+    expect(res.statusCode).toBe(403);
+
+    const linkRes = await a.inject({
+      method: "POST",
+      url: "/api/invites/user-links",
+      headers: asUser(wildcard),
+      payload: { kind: "staff", groupIds: [superadminRoleId] },
+    });
+    expect(linkRes.statusCode).toBe(403);
+  });
 });
 
 describe("GET /api/invites — list active invites", () => {
