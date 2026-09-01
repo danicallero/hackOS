@@ -47,6 +47,8 @@ let rosterOwnerUserId: number | null = null;
 interface PersonPayload {
   email: string;
   role: ScannerPerson["role"];
+  hasCapabilities: boolean;
+  isEnterpriseJudge: boolean;
   name: string | null;
   surname: string | null;
   accepted: boolean;
@@ -274,7 +276,9 @@ export async function applyScannerSnapshot(
       encrypted: await encryptJson(
         {
           email: person.email ?? "",
-          role: person.role ?? "participant",
+          role: person.role,
+          hasCapabilities: person.hasCapabilities,
+          isEnterpriseJudge: person.isEnterpriseJudge,
           name: person.name,
           surname: person.surname,
           accepted: person.accepted ?? person.confirmed,

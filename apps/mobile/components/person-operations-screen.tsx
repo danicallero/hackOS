@@ -127,33 +127,27 @@ function AccreditationRevealActions({
 type PersonLoadState = "loading" | "ready" | "missing" | "error";
 
 /**
- * The badge shown in the top-right corner: for staff/admin/sponsor/mentor/
- * judge it's just the role (there's no "accepted place" concept for them).
- * For participants and unassigned people it flags a missing accepted place
- * or an unconfirmed one, and is omitted entirely once they've confirmed.
+ * The badge shown in the top-right corner: capability holders, enterprise
+ * judges, sponsors, and mentors just show their role (there's no "accepted
+ * place" concept for them). Participants (and anyone with no visible role at
+ * all) instead flag a missing accepted place or an unconfirmed one, and the
+ * pill is omitted entirely once they've confirmed (H8 — badge_category
+ * retired, no more fixed admin/staff/sponsor/mentor/judge role-name match).
  */
 function personRolePill(
   person: ScannerPerson,
   t: ReturnType<typeof useLocale>["t"],
 ): { label: string; tone: "accent" | "warning" } | null {
-  switch (person.role) {
-    case "admin":
-      return { label: t("roleAdmin"), tone: "accent" };
-    case "staff":
-      return { label: t("roleStaff"), tone: "accent" };
-    case "sponsor":
-      return { label: t("roleSponsor"), tone: "accent" };
-    case "mentor":
-      return { label: t("roleMentor"), tone: "accent" };
-    case "judge":
-      return { label: t("roleJudge"), tone: "accent" };
-    case "participant":
-    case "unassigned":
-      if (!person.accepted) return { label: t("scannerNoAcceptedPlace"), tone: "warning" };
-      return person.confirmed ? null : { label: t("scannerPlaceUnconfirmed"), tone: "warning" };
-    default:
-      return null;
+  const normalizedRole = person.role?.toLocaleLowerCase() ?? null;
+  if (person.hasCapabilities || person.isEnterpriseJudge) {
+    return { label: person.role ?? t("roleUnassigned"), tone: "accent" };
   }
+  if (normalizedRole === "sponsor" || normalizedRole === "mentor") {
+    return { label: person.role as string, tone: "accent" };
+  }
+  // Participant, a custom attendee role, or no visible role at all.
+  if (!person.accepted) return { label: t("scannerNoAcceptedPlace"), tone: "warning" };
+  return person.confirmed ? null : { label: t("scannerPlaceUnconfirmed"), tone: "warning" };
 }
 
 export function PersonOperationsScreen() {
@@ -345,7 +339,7 @@ export function PersonOperationsScreen() {
   function beginBadgeAction() {
     if (!person) return;
     const nextAction = person.badgeId ? "replace" : "assign";
-    if (!person.badgeId && person.role === "unassigned") {
+    if (!person.badgeId && person.role == null) {
       Alert.alert(t("accreditationChooseRole"), t("accreditationChooseRoleBody"), [
         { text: t("cancel"), style: "cancel" },
         {
@@ -365,7 +359,7 @@ export function PersonOperationsScreen() {
       ]);
       return;
     }
-    if (person.role === "participant" && !person.confirmed) {
+    if (person.role?.toLocaleLowerCase() === "participant" && !person.confirmed) {
       Alert.alert(
         person.accepted ? t("scannerPlaceUnconfirmed") : t("scannerNoAcceptedPlace"),
         person.accepted ? t("personUnconfirmedWarning") : t("personUnacceptedWarning"),

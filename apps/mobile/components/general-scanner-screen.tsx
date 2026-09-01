@@ -12,13 +12,14 @@ import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { safeBack } from "@/lib/navigation";
-import { ROLE_FILTER_ALL, SCANNER_GROUP_FILTER_OPTIONS } from "@/lib/role-filters";
+import { ROLE_FILTER_ALL_ICON } from "@/lib/role-filters";
 import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import { findPersonByBadge, findPersonByTicket, listScannerPeople } from "@/lib/scanner-db";
 import {
   isAccreditationEligible,
   loadScannerGroupFilter,
   matchesScannerGroup,
+  SCANNER_GROUP_OPTIONS,
   type ScannerGroup,
   saveScannerGroupFilter,
 } from "@/lib/scanner-group-filter";
@@ -29,6 +30,7 @@ import { colors } from "@/theme/colors";
 
 interface ScannerRoleStat {
   role: ScannerPerson["role"];
+  hasCapabilities: boolean;
   eligible: number;
   accredited: number;
   inside: number;
@@ -114,14 +116,14 @@ export function GeneralScannerScreen() {
 
   const stats = useMemo(() => {
     if (roleStats) {
-      const filtered = roleStats.filter((row) => matchesScannerGroup(row.role, groups));
+      const filtered = roleStats.filter((row) => matchesScannerGroup(row, groups));
       return {
         accredited: filtered.reduce((sum, row) => sum + row.accredited, 0),
         confirmed: filtered.reduce((sum, row) => sum + row.eligible, 0),
         inside: filtered.reduce((sum, row) => sum + row.inside, 0),
       };
     }
-    const filtered = people.filter((person) => matchesScannerGroup(person.role, groups));
+    const filtered = people.filter((person) => matchesScannerGroup(person, groups));
     return {
       accredited: filtered.filter((person) => person.badgeId !== null).length,
       confirmed: filtered.filter((person) => isAccreditationEligible(person)).length,
@@ -308,7 +310,10 @@ function ScannerGroupFilterButton({
   const [open, setOpen] = useState(false);
   const filterIcon =
     groups.length === 0 ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill";
-  const rows = [{ value: null, ...ROLE_FILTER_ALL }, ...SCANNER_GROUP_FILTER_OPTIONS];
+  const rows = [
+    { value: null, label: t("roleAll"), icon: ROLE_FILTER_ALL_ICON },
+    ...SCANNER_GROUP_OPTIONS.map((option) => ({ ...option, label: t(option.labelKey) })),
+  ];
 
   return (
     <>
@@ -428,7 +433,7 @@ function ScannerGroupFilterButton({
                     selectable={false}
                     style={{ color: "white", flex: 1, fontSize: 15, fontWeight: "600" }}
                   >
-                    {t(row.labelKey)}
+                    {row.label}
                   </Text>
                   {selected ? (
                     <SymbolView

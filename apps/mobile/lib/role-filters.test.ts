@@ -1,36 +1,64 @@
-import { ROLE_FILTER_ALL, ROLE_FILTER_OPTIONS, SCANNER_GROUP_FILTER_OPTIONS } from "./role-filters";
-import { SCANNER_GROUP_VALUES } from "./scanner-group-filter";
+import { roleDisplayName, roleFilterOptionsFromRoster } from "./role-filters";
+import { SCANNER_GROUP_OPTIONS } from "./scanner-group-filter";
 
-describe("ROLE_FILTER_OPTIONS", () => {
-  it("covers every filterable role category exactly once", () => {
-    const values = ROLE_FILTER_OPTIONS.map((option) => option.value);
-    expect(values).toEqual(["admin", "staff", "sponsor", "mentor", "judge", "participant"]);
-    expect(new Set(values).size).toBe(values.length);
+const t = (key: string) => `t:${key}`;
+
+describe("roleFilterOptionsFromRoster", () => {
+  it("derives one row per distinct role present on the roster, sorted by label", () => {
+    const options = roleFilterOptionsFromRoster(
+      [
+        { role: "Day Staff" },
+        { role: "Event Director" },
+        { role: "Day Staff" },
+        { role: "Participant" },
+      ],
+      (role) => roleDisplayName(role, t),
+    );
+    expect(options.map((option) => option.value).sort()).toEqual(
+      ["Day Staff", "Event Director", "Participant"].sort(),
+    );
+    expect(new Set(options.map((option) => option.value)).size).toBe(options.length);
   });
 
-  it("exposes the all-roles sentinel row separately from the category list", () => {
-    expect(ROLE_FILTER_ALL).toEqual({ labelKey: "roleAll", icon: "person.2" });
-    expect(ROLE_FILTER_OPTIONS.some((option) => (option.labelKey as string) === "roleAll")).toBe(
-      false,
+  it("omits people with no visible role from the filter list", () => {
+    const options = roleFilterOptionsFromRoster([{ role: null }], (role) =>
+      roleDisplayName(role, t),
     );
+    expect(options).toEqual([]);
+  });
+
+  it("shows an arbitrary custom role name verbatim (H8: no more fixed category enum)", () => {
+    const options = roleFilterOptionsFromRoster([{ role: "Event Director" }], (role) =>
+      roleDisplayName(role, t),
+    );
+    expect(options).toEqual([
+      { value: "Event Director", label: "Event Director", icon: "checkmark.seal" },
+    ]);
+  });
+
+  it("gives the well-known seeded role names their cosmetic icon", () => {
+    const options = roleFilterOptionsFromRoster([{ role: "Sponsor" }], (role) =>
+      roleDisplayName(role, t),
+    );
+    expect(options).toEqual([{ value: "Sponsor", label: "Sponsor", icon: "briefcase" }]);
   });
 });
 
-describe("SCANNER_GROUP_FILTER_OPTIONS", () => {
-  it("is the general scanner's subset of the canonical role-filter list, not a second copy", () => {
-    // Regression guard: this used to be an independent `GROUP_FILTERS`
-    // literal in general-scanner-screen.tsx that could (and did) drift from
-    // people-directory-screen.tsx's own `ROLE_FILTERS` literal. Both screens
-    // now derive from `ROLE_FILTER_OPTIONS`, so every scanner row must still
-    // be found there with the exact same label/icon.
-    for (const option of SCANNER_GROUP_FILTER_OPTIONS) {
-      expect(ROLE_FILTER_OPTIONS).toContainEqual(option);
-    }
+describe("roleDisplayName", () => {
+  it("shows a real role name verbatim, untranslated (H8: no more fixed category enum)", () => {
+    expect(roleDisplayName("Day Staff", t)).toBe("Day Staff");
+    expect(roleDisplayName("Event Director", t)).toBe("Event Director");
   });
 
-  it("only ever contains the scanner's operational groups (never admin or judge)", () => {
-    const values = SCANNER_GROUP_FILTER_OPTIONS.map((option) => option.value);
-    expect(values.sort()).toEqual([...SCANNER_GROUP_VALUES].sort());
+  it("falls back to the translated Unassigned label when there is no visible role", () => {
+    expect(roleDisplayName(null, t)).toBe("t:roleUnassigned");
+  });
+});
+
+describe("SCANNER_GROUP_OPTIONS", () => {
+  it("only ever contains the scanner's four operational groups (never admin or judge)", () => {
+    const values = SCANNER_GROUP_OPTIONS.map((option) => option.value);
+    expect(values.sort()).toEqual(["mentor", "participant", "sponsor", "staff"]);
     expect(values).not.toContain("admin");
     expect(values).not.toContain("judge");
   });
