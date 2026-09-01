@@ -35,7 +35,7 @@ CREATE TEMP TABLE _h8_all_templates (
 ) ON COMMIT DROP;
 
 INSERT INTO _h8_all_templates (role_name, template_key, position, is_visible, is_protected) VALUES
-  ('Platform administrator',    'platform-administrator',    19000, true, true),
+  ('Platform administrator',    'platform-administrator',    19000, true, false),
   ('Access administrator',      'access-administrator',      18000, true, false),
   ('Application supervisor',    'application-supervisor',    17500, true, false),
   ('Application decisions',     'application-decisions',     17400, true, false),

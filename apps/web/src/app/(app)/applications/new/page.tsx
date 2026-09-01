@@ -69,10 +69,11 @@ export default function NewApplicationFormPage() {
   const [roles, setRoles] = useState<RoleSummary[]>([]);
 
   useEffect(() => {
-    // system:superadmin is CLI-only (H8) — never offer it as a grantable role.
+    // A protected role (system:superadmin today, CLI-only, H8) is never
+    // offerable as a grantable role — the assign route would 403 it anyway.
     api
       .get<RoleSummary[]>("/api/roles")
-      .then((r) => setRoles(r.filter((role) => role.name !== "system:superadmin")))
+      .then((r) => setRoles(r.filter((role) => !role.isProtected)))
       .catch(() => setRoles([]));
   }, []);
 

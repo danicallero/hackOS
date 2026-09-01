@@ -58,7 +58,6 @@ import {
   userDisplayName,
 } from "./helpers";
 
-const SUPERADMIN_NAME = "system:superadmin";
 const STATE_ORDER: PermissionState[] = ["deny", "inherit", "allow"];
 
 export const BADGE_CATEGORIES: Exclude<BadgeCategory, "unassigned">[] = [
@@ -152,7 +151,11 @@ export function RoleEditor({
     aliases: { overview: "display", advanced: "display" },
   });
 
-  const isSuperadmin = role.name === SUPERADMIN_NAME;
+  // H8: is_protected is the real, DB-enforced lockout (assertNotProtectedRole,
+  // role-authority.ts) — every control this UI disables mirrors exactly what
+  // the server refuses. system:superadmin is the only role that carries this
+  // flag today, but the check is generic for any future protected role.
+  const isProtected = role.isProtected;
 
   const schema = detailsSchema(t);
   const form = useForm<DetailsValues>({
@@ -244,14 +247,9 @@ export function RoleEditor({
   const roleHeader = (
     <div className="flex flex-wrap items-center gap-2">
       <h1 className="type-page-title text-balance">{role.name}</h1>
-      {isSuperadmin && (
+      {isProtected && (
         <StatusBadge tone="neutral" dot={false}>
           <LockIcon className="size-3" /> {t("systemRoleBadge")}
-        </StatusBadge>
-      )}
-      {!isSuperadmin && role.isProtected && (
-        <StatusBadge tone="neutral" dot={false}>
-          {t("protectedRoleBadge")}
         </StatusBadge>
       )}
     </div>
@@ -262,9 +260,9 @@ export function RoleEditor({
       <form onSubmit={form.handleSubmit(submitDetails)}>
         <SectionCard
           title={t("roleDetailsTitle")}
-          description={isSuperadmin ? t("superadminLockedDesc") : undefined}
+          description={isProtected ? t("superadminLockedDesc") : undefined}
           footer={
-            !isSuperadmin ? (
+            !isProtected ? (
               <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
             ) : undefined
           }
@@ -276,7 +274,7 @@ export function RoleEditor({
               <FormItem>
                 <FormLabel>{t("name")}</FormLabel>
                 <FormControl>
-                  <Input {...field} disabled={isSuperadmin} />
+                  <Input {...field} disabled={isProtected} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -292,7 +290,7 @@ export function RoleEditor({
                   <Switch
                     checked={field.value}
                     onCheckedChange={field.onChange}
-                    disabled={isSuperadmin}
+                    disabled={isProtected}
                   />
                 </FormControl>
               </FormItem>
@@ -304,7 +302,7 @@ export function RoleEditor({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>{t("badgeCategoryLabel")}</FormLabel>
-                <Select value={field.value} onValueChange={field.onChange} disabled={isSuperadmin}>
+                <Select value={field.value} onValueChange={field.onChange} disabled={isProtected}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue />
@@ -331,16 +329,16 @@ export function RoleEditor({
     <SectionCard
       icon={Trash2Icon}
       title={t("dangerZoneTitle")}
-      description={isSuperadmin ? t("superadminLockedDesc") : t("deletingRoleRemovesDesc")}
+      description={isProtected ? t("superadminLockedDesc") : t("deletingRoleRemovesDesc")}
       action={
-        !isSuperadmin ? (
+        !isProtected ? (
           <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
             {t("deleteRole")}
           </Button>
         ) : undefined
       }
     >
-      {!isSuperadmin && (
+      {!isProtected && (
         <p className="text-muted-foreground text-sm">{t("cannotBeUndoneMembersLoseRole")}</p>
       )}
     </SectionCard>
@@ -364,10 +362,10 @@ export function RoleEditor({
       {/* No title here — the "Capabilities" tab label / nav row already names this panel (H8). */}
       <SectionCard
         icon={KeyRoundIcon}
-        description={isSuperadmin ? t("superadminLockedDesc") : t("capabilitiesChangeDesc")}
+        description={isProtected ? t("superadminLockedDesc") : t("capabilitiesChangeDesc")}
         bodyClassName="p-0"
         footer={
-          !isSuperadmin ? (
+          !isProtected ? (
             <Button onClick={submitCaps} disabled={!capsDirty || savingCaps}>
               {t("saveCapabilities")}
             </Button>
@@ -393,7 +391,7 @@ export function RoleEditor({
                 domain={group.domain}
                 capabilities={group.capabilities}
                 caps={caps}
-                disabled={isSuperadmin}
+                disabled={isProtected}
                 onChange={(cap, state) => setCaps((prev) => ({ ...prev, [cap]: state }))}
               />
             ))}
@@ -407,7 +405,7 @@ export function RoleEditor({
     <MembersPanel
       role={role}
       users={users}
-      disabled={isSuperadmin}
+      disabled={isProtected}
       onAdd={onAddMember}
       onRemove={onRemoveMember}
       search={searchUsers}

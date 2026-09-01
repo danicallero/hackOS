@@ -30,7 +30,7 @@ DROP INDEX roles_position_idx;
 CREATE UNIQUE INDEX roles_position_idx ON roles (position) WHERE deleted_at IS NULL;
 
 COMMENT ON COLUMN roles.is_protected IS
-  'H8: informational flag carried over from the original template cutover (0801). It no longer gates deletion by itself — every default role (Platform administrator included) is deletable/editable like any other role. The one role that cannot be mutated through the API at all is identified by NAME (system:superadmin), enforced in code (role-authority.ts assertNotSuperadminRole), not by this column, since is_protected may end up describing other default roles in the future without granting them the same CLI-only lockout.';
+  'H8: the real, enforced lockout — every HTTP mutation route (rename/reorder/capability-edit/delete/restore/assign/unassign) refuses a role with is_protected = true outright, unconditional on the actor''s own capabilities (role-authority.ts assertNotProtectedRole). Never settable via POST/PATCH /api/roles; only ever flipped by direct DB/CLI action. Only system:superadmin carries it as of this migration (0801''s "Platform administrator" template row was corrected to false — every default role stays deletable/editable like any other role), but any future role given this flag gets the identical lockout automatically.';
 
 CREATE OR REPLACE VIEW user_effective_capabilities AS
 SELECT user_id, capability

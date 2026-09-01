@@ -57,7 +57,7 @@ CREATE TRIGGER roles_updated_at BEFORE UPDATE ON roles
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 COMMENT ON TABLE roles IS
-  'H8: the authorization truth. is_visible marks a role eligible to be shown as a user''s public role; is_protected marks a role the admin UI/API refuses to delete (e.g. the platform-administrator role created by 0801); is_seeded marks a role that came from a seed migration rather than being created by an admin.';
+  'H8: the authorization truth. is_visible marks a role eligible to be shown as a user''s public role; is_protected is the enforced (not informational) lockout — every HTTP mutation route refuses a role with is_protected = true outright (role-authority.ts assertNotProtectedRole), regardless of the actor''s own capabilities; it is never settable via POST/PATCH /api/roles, only by direct DB/CLI action (only system:superadmin carries it today, see scripts/grant-superadmin.mjs and create-superadmin.ts); is_seeded marks a role that came from a seed migration rather than being created by an admin.';
 
 CREATE TYPE permission_state AS ENUM ('allow', 'deny', 'inherit');
 

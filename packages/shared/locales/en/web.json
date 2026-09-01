@@ -2647,7 +2647,6 @@
   "capabilityStateAllow": "Allow",
   "capabilityStateDeny": "Deny",
   "roleSections": "Role sections",
-  "protectedRoleBadge": "Protected",
   "couldNotReorderRole": "Couldn't reorder role.",
   "roleMoved": "Role moved.",
   "cannotBeUndoneMembersLoseRole": "This cannot be undone. Members lose the capabilities this role granted them.",

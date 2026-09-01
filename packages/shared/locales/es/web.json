@@ -2647,7 +2647,6 @@
   "capabilityStateAllow": "Permitir",
   "capabilityStateDeny": "Denegar",
   "roleSections": "Secciones del rol",
-  "protectedRoleBadge": "Protegido",
   "couldNotReorderRole": "No se pudo reordenar el rol.",
   "roleMoved": "Rol movido.",
   "cannotBeUndoneMembersLoseRole": "Esto no se puede deshacer. Los miembros pierden las capacidades que este rol les otorgaba.",

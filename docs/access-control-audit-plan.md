@@ -296,23 +296,38 @@ off the form's real role grants.
   again on re-accept; a form granting a non-mentor role does not) instead of
   going through the retired `type: "mentor"` fixture value.
 
-### `system:superadmin` is CLI-only, not just protected
+### `is_protected` is the real, enforced lockout
 
-`is_protected` (0800) is informational going forward: every default role
-seeded by 0801/0805 is a fully mutable, deletable/restorable role like any
-other — the earlier "protected roles can't be deleted" rule is gone. The one role that stays fully locked out of the
-HTTP API is `system:superadmin`, identified by **name**
-(`role-authority.ts`'s `assertNotSuperadminRole`/`SUPERADMIN_ROLE_NAME`), not
-by `is_protected` — `is_protected` may end up describing other default roles
-later without granting them this same lockout.
+`is_protected` (0800) is the actual, DB-authoritative signal that a role is
+fully locked out of the HTTP API — not informational. Every mutation route on
+an EXISTING role by id (rename, reorder, capability edit, soft delete,
+restore, assign/unassign member) refuses a role with `is_protected = true`
+outright via `role-authority.ts`'s `assertNotProtectedRole`, using the row the
+handler already loaded, unconditional on the actor's own capabilities —
+including an actor who holds `*` themselves. `is_protected` is never a
+settable field in `POST`/`PATCH /api/roles`' request bodies, so it can only
+ever be flipped by direct DB/CLI action.
 
-`identity/routes/roles.ts` calls `assertNotSuperadminRole` before every write
-that touches an existing role by id (rename, reorder, capability edit, soft
-delete, restore, assign/unassign member) and before role creation (to stop an
-API caller minting a decoy role under the reserved name). This holds even for
-an actor who holds `*` themselves — the check is unconditional, not
-capability-gated. Its capability set stays exactly `{'*': allow}` because
-nothing can ever change it through the API.
+`system:superadmin` is the only role that carries this flag today (set by
+`scripts/grant-superadmin.mjs`/`scripts/create-superadmin.ts`), but the check
+is generic: any role an operator protects this way in the future gets the
+identical lockout automatically, with no code change and no separate
+allowlist to maintain. 0801's "Platform administrator" template row
+originally set `is_protected = true` too (carried over from the pre-H8
+"protected roles can't be deleted" model); that was a bug given the new
+enforced semantics, since it would have made an ordinary, fully mutable
+default role permanently un-editable/un-deletable on an upgrade install that
+happened to instantiate it — fixed to `is_protected = false`, matching every
+other 0801/0805 default role.
+
+Role creation and rename ALSO separately refuse the reserved name
+`system:superadmin` itself via `assertNotSuperadminRole` — a distinct,
+identity-based check (never mint or rename a role into this name), kept apart
+from `assertNotProtectedRole`'s mutation-authority check. The two checks
+serve different purposes: one stops a decoy role under a reserved identity,
+the other blocks every mutation on whatever role the DB flag names. Its
+capability set stays exactly `{'*': allow}` because nothing can ever change
+it through the API.
 
 The only way to grant or revoke `system:superadmin` is a server-shell script,
 run with direct Postgres access:

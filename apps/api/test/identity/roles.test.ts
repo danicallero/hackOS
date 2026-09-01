@@ -594,6 +594,197 @@ describe("H8 system:superadmin is CLI-only", () => {
   });
 });
 
+describe("H8 is_protected is the real, enforced lockout (not just system:superadmin)", () => {
+  // A role that carries is_protected=true under an ordinary name, never
+  // "system:superadmin" — created via direct SQL (createRole), the same way
+  // scripts/grant-superadmin.mjs/create-superadmin.ts are the only things
+  // that ever flip this column, since the API itself must never be able to
+  // produce a protected role (see the POST/PATCH tests below).
+  async function protectedRoleSetup() {
+    const { pool } = await import("../../src/db/pool.js");
+    const roleId = await createRole([CAPABILITIES.USERS_READ], {
+      name: "ops:break-glass",
+      isProtected: true,
+    });
+    const holder = await createUser();
+    await assignRole(holder, roleId);
+    const actor = await manager();
+    return { roleId, holder, actor, pool };
+  }
+
+  it("is fully locked out of assign/unassign/rename/reorder/capabilities/delete/restore/reset-to-default", async () => {
+    const a = await getApp();
+    const { roleId, holder, actor } = await protectedRoleSetup();
+    const target = await createUser();
+
+    const assign = await a.inject({
+      method: "POST",
+      url: `/api/roles/${roleId}/users/${target}`,
+      headers: asUser(actor),
+    });
+    expect(assign.statusCode).toBe(403);
+
+    const unassign = await a.inject({
+      method: "DELETE",
+      url: `/api/roles/${roleId}/users/${holder}`,
+      headers: asUser(actor),
+    });
+    expect(unassign.statusCode).toBe(403);
+
+    const rename = await a.inject({
+      method: "PATCH",
+      url: `/api/roles/${roleId}`,
+      headers: asUser(actor),
+      payload: { name: "renamed" },
+    });
+    expect(rename.statusCode).toBe(403);
+
+    const reorder = await a.inject({
+      method: "PATCH",
+      url: `/api/roles/${roleId}/position`,
+      headers: asUser(actor),
+      payload: { position: 1 },
+    });
+    expect(reorder.statusCode).toBe(403);
+
+    const caps = await a.inject({
+      method: "PUT",
+      url: `/api/roles/${roleId}/capabilities`,
+      headers: asUser(actor),
+      payload: { capabilities: [{ capability: CAPABILITIES.USERS_READ, state: "allow" }] },
+    });
+    expect(caps.statusCode).toBe(403);
+
+    const del = await a.inject({
+      method: "DELETE",
+      url: `/api/roles/${roleId}`,
+      headers: asUser(actor),
+    });
+    expect(del.statusCode).toBe(403);
+
+    const restore = await a.inject({
+      method: "POST",
+      url: `/api/roles/${roleId}/restore`,
+      headers: asUser(actor),
+    });
+    expect(restore.statusCode).toBe(403);
+
+    const reset = await a.inject({
+      method: "POST",
+      url: `/api/roles/${roleId}/reset-to-default`,
+      headers: asUser(actor),
+    });
+    expect(reset.statusCode).toBe(403);
+  });
+
+  it("is never settable via POST /api/roles, even when the actor tries to pass isProtected in the body", async () => {
+    const a = await getApp();
+    const actor = await manager();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE roles SET position = 1000000 WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+      [actor],
+    );
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/roles",
+      headers: asUser(actor),
+      // isProtected isn't in the create schema at all — an extra field a
+      // caller tries to smuggle in must have zero effect.
+      payload: { name: "a-new-role", position: 10, isProtected: true },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().isProtected).toBe(false);
+    const { rows } = await pool.query(`SELECT is_protected FROM roles WHERE id = $1`, [
+      res.json().id,
+    ]);
+    expect(rows[0].is_protected).toBe(false);
+  });
+
+  it("is never settable via PATCH /api/roles/:roleId either", async () => {
+    const a = await getApp();
+    const actor = await manager();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE roles SET position = 1000000 WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+      [actor],
+    );
+    const roleId = await createRole([], { isProtected: false });
+    await pool.query(`UPDATE roles SET position = 1 WHERE id = $1`, [roleId]);
+    const res = await a.inject({
+      method: "PATCH",
+      url: `/api/roles/${roleId}`,
+      headers: asUser(actor),
+      payload: { name: "still-not-protected", isProtected: true },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().isProtected).toBe(false);
+    const { rows } = await pool.query(`SELECT is_protected FROM roles WHERE id = $1`, [roleId]);
+    expect(rows[0].is_protected).toBe(false);
+  });
+});
+
+describe("H8 0801's 'Platform administrator' template is not protected", () => {
+  it("the 0801 migration seeds it with is_protected = false, like every other default template", async () => {
+    // Regression guard for the exact bug this fixed: 0801 previously set
+    // is_protected = true only for this one template row, which would have
+    // made it permanently un-editable/un-deletable on an upgrade install
+    // that happened to instantiate it — inconsistent with every other
+    // default role (0801/0805), which are all fully mutable.
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const migrationPath = fileURLToPath(
+      new URL("../../db/migrations/0801_roles_data_migration.sql", import.meta.url),
+    );
+    const sql = readFileSync(migrationPath, "utf8");
+    expect(sql).toMatch(
+      /'Platform administrator',\s*'platform-administrator',\s*19000,\s*true,\s*false/,
+    );
+    expect(sql).not.toMatch(
+      /'Platform administrator',\s*'platform-administrator',\s*19000,\s*true,\s*true/,
+    );
+  });
+
+  it("a role named 'Platform administrator' seeded the way 0801 seeds it is fully mutable via the API", async () => {
+    const a = await getApp();
+    const actor = await manager();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE roles SET position = 1000000 WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+      [actor],
+    );
+    // Matches 0801's actual INSERT shape post-fix: is_visible=true, is_protected=false.
+    const roleId = await createRole([CAPABILITIES.ADMIN_ALL], {
+      name: "Platform administrator",
+      isVisible: true,
+      isProtected: false,
+      badgeCategory: "admin",
+    });
+    await pool.query(`UPDATE roles SET position = 1 WHERE id = $1`, [roleId]);
+    // Deleting a role that grants the wildcard must still leave one active
+    // wildcard holder somewhere (assertActiveWildcardHolder) — unrelated to
+    // is_protected, this just backstops that invariant so the delete below
+    // exercises the protection question in isolation.
+    await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+
+    const rename = await a.inject({
+      method: "PATCH",
+      url: `/api/roles/${roleId}`,
+      headers: asUser(actor),
+      payload: { name: "Platform administrator (renamed)" },
+    });
+    expect(rename.statusCode).toBe(200);
+    expect(rename.json().isProtected).toBe(false);
+
+    const del = await a.inject({
+      method: "DELETE",
+      url: `/api/roles/${roleId}`,
+      headers: asUser(actor),
+    });
+    expect(del.statusCode).toBe(200);
+  });
+});
+
 describe("H8 role soft-delete and restore", () => {
   it("a soft-deleted role stops granting access immediately, and restore brings it back", async () => {
     const a = await getApp();

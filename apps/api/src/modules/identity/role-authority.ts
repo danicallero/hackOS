@@ -22,24 +22,50 @@ export async function lockRoleGraph(client: RoleGraphClient): Promise<void> {
 // H8: system:superadmin is provisioned and managed exclusively via server
 // shell CLI scripts (scripts/grant-superadmin.mjs, scripts/create-superadmin.ts,
 // scripts/revoke-superadmin.mjs) — never through the HTTP API, regardless of
-// the actor's capabilities (including a '*' wildcard holder). Identified by
-// NAME rather than is_protected, since is_protected may describe other
-// default roles (e.g. Platform administrator) without granting them this
-// same CLI-only lockout.
+// the actor's capabilities (including a '*' wildcard holder). This name is
+// used ONLY to look up/create/reserve that one specific role (the CLI
+// scripts, and the create/rename routes that must refuse the name outright so
+// an API caller can never mint a decoy role under it) — it is NOT how
+// mutation is blocked on an EXISTING protected role. That's a separate,
+// general concern: see assertNotProtectedRole below, keyed off the real
+// roles.is_protected column so any future protected role gets the identical
+// lockout automatically.
 export const SUPERADMIN_ROLE_NAME = "system:superadmin";
 
 /**
- * Throws if `roleName` is system:superadmin. Call this from every roles route
- * that mutates an EXISTING role by id (rename, reorder, capabilities,
- * delete, restore, assign/unassign member) before making any write, and from
- * role creation to stop an API caller from ever minting a decoy role under
- * this reserved name.
+ * Throws if `roleName` is the reserved system:superadmin name. Call this from
+ * role creation and from a rename's target name, to stop an API caller from
+ * ever minting or renaming a role into this reserved identity. This is an
+ * identity check, not a mutation-authority check — it says nothing about
+ * whether an EXISTING role by this name (or any other) is locked from
+ * mutation; that's assertNotProtectedRole.
  */
 export function assertNotSuperadminRole(roleName: string): void {
   if (roleName === SUPERADMIN_ROLE_NAME) {
     throw new ForbiddenError(
-      "system:superadmin can only be managed via server shell CLI scripts, never the API",
+      "system:superadmin is a reserved name and cannot be created or renamed to via the API",
       { roleName },
+    );
+  }
+}
+
+/**
+ * Throws if an EXISTING role is protected (roles.is_protected = true) — the
+ * real, DB-authoritative "locked out of every HTTP mutation" signal (H8).
+ * Call this from every roles route that mutates an EXISTING role by id
+ * (rename, reorder, capabilities, delete, restore, assign/unassign member)
+ * before making any write, using the role row the handler already loaded —
+ * unconditional on the actor's own capabilities, including a '*' wildcard
+ * holder. Only system:superadmin carries this flag today (CLI-provisioned;
+ * is_protected is never settable via POST/PATCH /api/roles), but any future
+ * role an operator flags this way via direct DB/CLI action gets the
+ * identical lockout without a code change.
+ */
+export function assertNotProtectedRole(role: { isProtected: boolean; name?: string }): void {
+  if (role.isProtected) {
+    throw new ForbiddenError(
+      "This role is protected and can only be managed via server shell CLI scripts, never the API",
+      { roleName: role.name },
     );
   }
 }

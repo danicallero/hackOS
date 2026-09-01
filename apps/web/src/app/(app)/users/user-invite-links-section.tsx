@@ -59,7 +59,7 @@ export function UserInviteLinksSection({
   const [createOpen, setCreateOpen] = useState(false);
   const [enterpriseId, setEnterpriseId] = useState("");
   const [allowClosedForms, setAllowClosedForms] = useState(false);
-  const [groupIds, setGroupIds] = useState<string[]>([]);
+  const [roleIds, setRoleIds] = useState<string[]>([]);
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
   const [groups, setGroups] = useState<RoleSummary[]>([]);
   const [optionsError, setOptionsError] = useState(false);
@@ -75,7 +75,7 @@ export function UserInviteLinksSection({
   const resetForm = useCallback(() => {
     setEnterpriseId("");
     setAllowClosedForms(false);
-    setGroupIds([]);
+    setRoleIds([]);
     setMaxRedeems("");
     setExpiryMinutes("10080");
     setNeverExpires(false);
@@ -101,9 +101,10 @@ export function UserInviteLinksSection({
     ])
       .then(([enterpriseData, permissionGroups]) => {
         setEnterprises(enterpriseData.enterprises);
-        // system:superadmin is CLI-only (H8) — never offer it as a
-        // pre-assignable role even though the list endpoint returns it.
-        setGroups(permissionGroups.filter((r) => r.name !== "system:superadmin"));
+        // A protected role (system:superadmin today, CLI-only, H8) is never
+        // offerable as a pre-assignable role even though the list endpoint
+        // returns it — assigning it would 403 server-side anyway.
+        setGroups(permissionGroups.filter((r) => !r.isProtected));
         setOptionsError(false);
       })
       .catch(() => {
@@ -178,7 +179,7 @@ export function UserInviteLinksSection({
     // participant link, otherwise it's a bare staff link — which still needs
     // at least one role server-side, since that's the only thing it's for.
     const kind: InviteKind = enterpriseId ? "sponsor" : allowClosedForms ? "participant" : "staff";
-    if (kind === "staff" && groupIds.length === 0) {
+    if (kind === "staff" && roleIds.length === 0) {
       setCreateError(t("staffLinkGroupsRequired"));
       return;
     }
@@ -196,7 +197,7 @@ export function UserInviteLinksSection({
       await api.post<UserInviteLink>("/api/invites/user-links", {
         kind,
         ...(kind === "sponsor" ? { enterpriseId: Number(enterpriseId) } : {}),
-        groupIds: groupIds.map(Number),
+        roleIds: roleIds.map(Number),
         maxRedeems: parsedMax,
         expiresInMinutes: neverExpires ? null : parsedExpiry,
       });
@@ -237,10 +238,10 @@ export function UserInviteLinksSection({
     {
       id: "groups",
       header: t("rolesTitle"),
-      sortValue: (link) => link.groupIds.length,
+      sortValue: (link) => link.roleIds.length,
       cell: (link) =>
-        link.groupIds.length > 0 ? (
-          <span className="tabular-nums">{link.groupIds.length}</span>
+        link.roleIds.length > 0 ? (
+          <span className="tabular-nums">{link.roleIds.length}</span>
         ) : (
           <span className="text-muted-foreground">—</span>
         ),
@@ -308,8 +309,8 @@ export function UserInviteLinksSection({
                 inDialog
                 id="users-user-link-groups"
                 options={groups.map((group) => ({ value: String(group.id), label: group.name }))}
-                value={groupIds}
-                onChange={setGroupIds}
+                value={roleIds}
+                onChange={setRoleIds}
                 placeholder={t("selectStaffGroups")}
                 searchPlaceholder={t("searchRolesPlaceholder")}
                 emptyText={t("noRolesYet")}

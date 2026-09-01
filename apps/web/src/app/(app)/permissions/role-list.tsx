@@ -24,15 +24,15 @@ import { useLocale } from "@/lib/i18n";
 import type { RoleSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const SUPERADMIN_NAME = "system:superadmin";
-
 /**
  * A flat, reorderable role list (H8). Drag or keyboard-move a row
  * to reorder — the new position is the midpoint between its new neighbors'
  * `position` values; when there isn't room, `onReorder` reports failure and
- * the caller reverts. `system:superadmin` is real state worth seeing (who
+ * the caller reverts. A protected role (roles.is_protected = true —
+ * system:superadmin today, CLI-only, H8) is real state worth seeing (who
  * holds it) but is never draggable or selectable-as-editable the way other
- * roles are, so it's pinned above the reorderable list with a System badge.
+ * roles are, so any protected role is pinned above the reorderable list with
+ * a lock badge.
  */
 export function RoleList({
   roles,
@@ -51,10 +51,9 @@ export function RoleList({
   const { t } = useLocale();
   const [query, setQuery] = useState("");
 
-  const superadmin = roles.find((r) => r.name === SUPERADMIN_NAME) ?? null;
+  const protectedRoles = useMemo(() => roles.filter((r) => r.isProtected), [roles]);
   const sortable = useMemo(
-    () =>
-      [...roles].filter((r) => r.name !== SUPERADMIN_NAME).sort((a, b) => b.position - a.position),
+    () => [...roles].filter((r) => !r.isProtected).sort((a, b) => b.position - a.position),
     [roles],
   );
 
@@ -94,15 +93,16 @@ export function RoleList({
         />
       </div>
       <ul className="divide-border divide-y">
-        {superadmin && (
+        {protectedRoles.map((role) => (
           <RoleRow
-            role={superadmin}
-            selected={selectedId === superadmin.id}
-            onSelect={() => onSelect(superadmin.id)}
+            key={role.id}
+            role={role}
+            selected={selectedId === role.id}
+            onSelect={() => onSelect(role.id)}
             locked
             mobile={mobile}
           />
-        )}
+        ))}
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext
             items={filtered.map((r) => String(r.id))}
@@ -172,11 +172,6 @@ function RoleRow({
           {locked && (
             <StatusBadge tone="neutral" dot={false} className="shrink-0">
               <LockIcon className="size-3" /> {t("systemRoleBadge")}
-            </StatusBadge>
-          )}
-          {!locked && role.isProtected && (
-            <StatusBadge tone="neutral" dot={false} className="shrink-0">
-              {t("protectedRoleBadge")}
             </StatusBadge>
           )}
         </span>

@@ -1,6 +1,6 @@
 import { NotFoundError } from "../../lib/errors.js";
 import {
-  assertNotSuperadminRole,
+  assertNotProtectedRole,
   lockRoleGraph,
   type RoleGraphClient,
   requireWildcardRoleAuthority,
@@ -10,14 +10,13 @@ import {
 /**
  * Deferred invitation grants (H8, H10, H53) use the same role-graph lock and
  * wildcard-provenance rules whether the invitation is email-bound or
- * reusable. The invite/link `group_ids` column (kept under that name for API
- * compatibility, see 0803's migration comment) now holds `roles.id` values.
+ * reusable. The invite/link `role_ids` column now holds `roles.id` values.
  *
- * Also enforces the system:superadmin CLI-only lockout (H8) here: without
- * this check, a wildcard ('*') holder who isn't the superadmin themselves
- * could otherwise pre-assign system:superadmin to a fresh invitee through
- * this deferred path and slip past every role-route's own
- * assertNotSuperadminRole guard.
+ * Also enforces the protected-role CLI-only lockout (H8) here: without this
+ * check, a wildcard ('*') holder who isn't the CLI operator themselves could
+ * otherwise pre-assign a protected role (system:superadmin today) to a fresh
+ * invitee through this deferred path and slip past every role-route's own
+ * assertNotProtectedRole guard.
  */
 export async function inviteContainsWildcardRole(
   client: RoleGraphClient,
@@ -26,12 +25,17 @@ export async function inviteContainsWildcardRole(
 ): Promise<boolean> {
   let containsWildcard = false;
   for (const roleId of roleIds) {
-    const { rows } = await client.query(`SELECT id, name FROM roles WHERE id = $1`, [roleId]);
+    const { rows } = await client.query(`SELECT id, name, is_protected FROM roles WHERE id = $1`, [
+      roleId,
+    ]);
     if (!rows[0]) {
       if (requireExisting) throw new NotFoundError("Role not found", { roleId });
       continue;
     }
-    assertNotSuperadminRole(rows[0].name as string);
+    assertNotProtectedRole({
+      isProtected: rows[0].is_protected as boolean,
+      name: rows[0].name as string,
+    });
     if (await roleGrantsWildcard(client, roleId)) containsWildcard = true;
   }
   return containsWildcard;

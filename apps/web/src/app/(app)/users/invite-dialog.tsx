@@ -25,7 +25,7 @@ import type { EnterpriseSummary, Invite, InviteKind, RoleSummary } from "@/lib/t
  *     independent of any pre-assigned role — most participant invites don't
  *     pre-assign one, since the application form grants a role on confirm)
  *   - neither -> kind "staff"
- * Pre-assigned roles (groupIds) are independent of this and can be combined
+ * Pre-assigned roles (roleIds) are independent of this and can be combined
  * with either of the above (e.g. a sponsor rep also holding a staff role).
  */
 export function InviteUserDialog() {
@@ -34,7 +34,7 @@ export function InviteUserDialog() {
   const [email, setEmail] = useState("");
   const [enterpriseId, setEnterpriseId] = useState<string>("");
   const [allowClosedForms, setAllowClosedForms] = useState(false);
-  const [groupIds, setGroupIds] = useState<string[]>([]);
+  const [roleIds, setRoleIds] = useState<string[]>([]);
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
   const [groups, setGroups] = useState<RoleSummary[]>([]);
   const [pending, setPending] = useState(false);
@@ -48,9 +48,10 @@ export function InviteUserDialog() {
       .catch(() => setEnterprises([]));
     api
       .get<RoleSummary[]>("/api/roles")
-      // system:superadmin is CLI-only (H8) — never offer it as a
-      // pre-assignable invite role even though the list endpoint returns it.
-      .then((roles) => setGroups(roles.filter((r) => r.name !== "system:superadmin")))
+      // A protected role (system:superadmin today, CLI-only, H8) is never
+      // offerable as a pre-assignable invite role even though the list
+      // endpoint returns it — assigning it would 403 server-side anyway.
+      .then((roles) => setGroups(roles.filter((r) => !r.isProtected)))
       .catch(() => setGroups([]));
   }, [open]);
 
@@ -58,7 +59,7 @@ export function InviteUserDialog() {
     setEmail("");
     setEnterpriseId("");
     setAllowClosedForms(false);
-    setGroupIds([]);
+    setRoleIds([]);
     setCreated(null);
   }
 
@@ -74,7 +75,7 @@ export function InviteUserDialog() {
         email: email.trim().toLowerCase(),
         kind,
         ...(kind === "sponsor" ? { enterpriseId: Number(enterpriseId) } : {}),
-        groupIds: groupIds.map(Number),
+        roleIds: roleIds.map(Number),
       });
       setCreated(invite);
       toast.success(t("inviteSentMsg"));
@@ -155,8 +156,8 @@ export function InviteUserDialog() {
               inDialog
               id="invite-capability-groups"
               options={groups.map((g) => ({ value: String(g.id), label: g.name }))}
-              value={groupIds}
-              onChange={setGroupIds}
+              value={roleIds}
+              onChange={setRoleIds}
               placeholder={t("optionalPreassignRoles")}
               searchPlaceholder={t("searchRolesPlaceholder")}
               emptyText={t("noRolesYet")}

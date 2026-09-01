@@ -18,6 +18,7 @@ import { broadcast } from "../../../lib/sse.js";
 import { issueTicket } from "../../logistics/tickets.js";
 import {
   assertActiveWildcardHolder,
+  assertNotProtectedRole,
   assertNotSuperadminRole,
   lockRoleGraph,
   requireCapabilityPossessionForAssignment,
@@ -42,14 +43,21 @@ import { getPermissionGroupTemplate, PERMISSION_GROUP_TEMPLATES } from "../templ
  * audited (H53) and broadcast on the identity topic (H7-H10) in the same
  * transaction as the write.
  *
- * `system:superadmin` is the one exception: every mutation route refuses it
- * outright via `assertNotSuperadminRole` (role-authority.ts), unconditional
- * on the actor's own capabilities — it can only be granted/revoked/created
- * via server-shell CLI scripts (scripts/grant-superadmin.mjs,
- * scripts/create-superadmin.ts, scripts/revoke-superadmin.mjs). DELETE
- * soft-deletes (`roles.deleted_at`, 0804) instead of removing the row;
- * POST .../restore reverses it, 409ing only if another role has since taken
- * its exact position (see that route's own schema description).
+ * A PROTECTED role (`roles.is_protected = true`) is the one kind of
+ * exception: every mutation route on an EXISTING role refuses it outright via
+ * `assertNotProtectedRole` (role-authority.ts), unconditional on the actor's
+ * own capabilities. `system:superadmin` is the only role that carries this
+ * flag today — it can only be granted/revoked/created via server-shell CLI
+ * scripts (scripts/grant-superadmin.mjs, scripts/create-superadmin.ts,
+ * scripts/revoke-superadmin.mjs) — but the check is generic: any role an
+ * operator flags this way via direct DB/CLI action gets the identical
+ * lockout, and `is_protected` is never settable through this API's
+ * create/update bodies. Role CREATION separately refuses the reserved name
+ * `system:superadmin` itself via `assertNotSuperadminRole`, so an API caller
+ * can never mint a decoy role under that identity. DELETE soft-deletes
+ * (`roles.deleted_at`, 0804) instead of removing the row; POST .../restore
+ * reverses it, 409ing only if another role has since taken its exact
+ * position (see that route's own schema description).
  */
 
 const manage = requireCapability(CAPABILITIES.PERMISSIONS_MANAGE);
@@ -306,7 +314,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       const role = await withTransaction(async (client) => {
         await lockRoleGraph(client);
         const before = await loadRole(client, roleId);
-        assertNotSuperadminRole(before.name);
+        assertNotProtectedRole(before);
         await requireRoleMutationAuthority(client, req.userId as number, before.position);
         const name = req.body.name ?? before.name;
         assertNotSuperadminRole(name);
@@ -356,7 +364,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         await lockRoleGraph(client);
         const actorId = req.userId as number;
         const before = await loadRole(client, roleId);
-        assertNotSuperadminRole(before.name);
+        assertNotProtectedRole(before);
         await requireRoleMutationAuthority(client, actorId, before.position);
         await requireRoleMutationAuthority(client, actorId, req.body.position);
         const { rows: collision } = await client.query(
@@ -413,7 +421,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         await lockRoleGraph(client);
         const actorId = req.userId as number;
         const before = await loadRole(client, roleId);
-        assertNotSuperadminRole(before.name);
+        assertNotProtectedRole(before);
         await requireRoleMutationAuthority(client, actorId, before.position);
         // H8: independent, second guard — the actor may only set a capability
         // to ALLOW/DENY if they possess it themselves (or hold the wildcard).
@@ -466,7 +474,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       await withTransaction(async (client) => {
         await lockRoleGraph(client);
         const before = await loadRole(client, roleId);
-        assertNotSuperadminRole(before.name);
+        assertNotProtectedRole(before);
         if (before.deletedAt) throw new ConflictError("Role is already deleted", { roleId });
         const actorId = req.userId as number;
         await requireRoleMutationAuthority(client, actorId, before.position);
@@ -506,7 +514,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         await lockRoleGraph(client);
         const actorId = req.userId as number;
         const before = await loadRole(client, roleId);
-        assertNotSuperadminRole(before.name);
+        assertNotProtectedRole(before);
         if (!before.deletedAt) throw new ConflictError("Role is not deleted", { roleId });
         await requireRoleMutationAuthority(client, actorId, before.position);
         const { rows: collision } = await client.query(
@@ -594,7 +602,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         await lockRoleGraph(client);
         const actorId = req.userId as number;
         const before = await loadRole(client, roleId);
-        assertNotSuperadminRole(before.name);
+        assertNotProtectedRole(before);
         if (!before.isSeeded) {
           throw new BadRequestError("Only a seeded default role can be reset to default", {
             roleId,
@@ -678,7 +686,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         await lockRoleGraph(client);
         const actorId = req.userId as number;
         const role = await loadRole(client, roleId);
-        assertNotSuperadminRole(role.name);
+        assertNotProtectedRole(role);
         await requireRoleMutationAuthority(client, actorId, role.position);
         // H8: independent, second guard — the actor may only assign a role
         // whose own explicit ALLOWs they already possess (or hold the wildcard).
@@ -733,7 +741,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         await lockRoleGraph(client);
         const actorId = req.userId as number;
         const role = await loadRole(client, roleId);
-        assertNotSuperadminRole(role.name);
+        assertNotProtectedRole(role);
         await requireRoleMutationAuthority(client, actorId, role.position);
         const removesWildcard = await roleGrantsWildcard(client, roleId);
         await client.query(`DELETE FROM user_roles WHERE user_id = $1 AND role_id = $2`, [
