@@ -21,13 +21,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { ApiError, api } from "@/lib/api";
 import { shortDateTimeFmt } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
@@ -64,8 +57,8 @@ export function UserInviteLinksSection({
 }: UserInviteLinksSectionProps) {
   const { t } = useLocale();
   const [createOpen, setCreateOpen] = useState(false);
-  const [kind, setKind] = useState<InviteKind>("staff");
   const [enterpriseId, setEnterpriseId] = useState("");
+  const [allowClosedForms, setAllowClosedForms] = useState(false);
   const [groupIds, setGroupIds] = useState<string[]>([]);
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
   const [groups, setGroups] = useState<RoleSummary[]>([]);
@@ -80,8 +73,8 @@ export function UserInviteLinksSection({
   const [busy, setBusy] = useState<Set<string>>(new Set());
 
   const resetForm = useCallback(() => {
-    setKind("staff");
     setEnterpriseId("");
+    setAllowClosedForms(false);
     setGroupIds([]);
     setMaxRedeems("");
     setExpiryMinutes("10080");
@@ -180,12 +173,13 @@ export function UserInviteLinksSection({
     setCreateError(null);
     const parsedMax = maxRedeems.trim() ? Number(maxRedeems) : null;
     const parsedExpiry = expiryMinutes.trim() ? Number(expiryMinutes) : NaN;
+    // Same derivation as the single-email invite dialog (H8/H9/H10): an
+    // enterprise makes it a sponsor link, the closed-form bypass makes it a
+    // participant link, otherwise it's a bare staff link — which still needs
+    // at least one role server-side, since that's the only thing it's for.
+    const kind: InviteKind = enterpriseId ? "sponsor" : allowClosedForms ? "participant" : "staff";
     if (kind === "staff" && groupIds.length === 0) {
       setCreateError(t("staffLinkGroupsRequired"));
-      return;
-    }
-    if (kind === "sponsor" && !enterpriseId) {
-      setCreateError(t("required"));
       return;
     }
     if (parsedMax !== null && (!Number.isInteger(parsedMax) || parsedMax < 1)) {
@@ -202,7 +196,7 @@ export function UserInviteLinksSection({
       await api.post<UserInviteLink>("/api/invites/user-links", {
         kind,
         ...(kind === "sponsor" ? { enterpriseId: Number(enterpriseId) } : {}),
-        ...(kind === "staff" ? { groupIds: groupIds.map(Number) } : {}),
+        groupIds: groupIds.map(Number),
         maxRedeems: parsedMax,
         expiresInMinutes: neverExpires ? null : parsedExpiry,
       });
@@ -309,57 +303,51 @@ export function UserInviteLinksSection({
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="users-user-link-kind">{t("accountTypeLabel")}</Label>
-              <Select
-                value={kind}
-                onValueChange={(value) => {
-                  const next = value as InviteKind;
-                  setKind(next);
-                  if (next !== "staff") setGroupIds([]);
-                  if (next !== "sponsor") setEnterpriseId("");
-                }}
-              >
-                <SelectTrigger id="users-user-link-kind" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="staff">{t("staffOrg")}</SelectItem>
-                  <SelectItem value="participant">{t("participantOption")}</SelectItem>
-                  <SelectItem value="sponsor">{t("sponsorOption")}</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label htmlFor="users-user-link-groups">{t("rolesTitle")}</Label>
+              <MultiSelect
+                inDialog
+                id="users-user-link-groups"
+                options={groups.map((group) => ({ value: String(group.id), label: group.name }))}
+                value={groupIds}
+                onChange={setGroupIds}
+                placeholder={t("selectStaffGroups")}
+                searchPlaceholder={t("searchRolesPlaceholder")}
+                emptyText={t("noRolesYet")}
+              />
             </div>
-            {kind === "sponsor" && (
-              <div className="space-y-2">
-                <Label htmlFor="users-user-link-enterprise">{t("enterpriseLabel")}</Label>
-                <EntityCombobox
-                  id="users-user-link-enterprise"
-                  inDialog
-                  options={enterprises}
-                  value={enterpriseId}
-                  onChange={setEnterpriseId}
-                  getId={(enterprise) => enterprise.id}
-                  getLabel={(enterprise) => enterprise.name}
-                  placeholder={t("selectSponsorEnterprise")}
-                  aria-describedby={optionsError ? "users-user-link-options-error" : undefined}
-                />
-              </div>
-            )}
-            {kind === "staff" && (
-              <div className="space-y-2">
-                <Label htmlFor="users-user-link-groups">{t("rolesTitle")}</Label>
-                <MultiSelect
-                  inDialog
-                  id="users-user-link-groups"
-                  options={groups.map((group) => ({ value: String(group.id), label: group.name }))}
-                  value={groupIds}
-                  onChange={setGroupIds}
-                  placeholder={t("selectStaffGroups")}
-                  searchPlaceholder={t("searchRolesPlaceholder")}
-                  emptyText={t("noRolesYet")}
-                />
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label htmlFor="users-user-link-enterprise">{t("enterpriseLabel")}</Label>
+              <EntityCombobox
+                id="users-user-link-enterprise"
+                inDialog
+                options={enterprises}
+                value={enterpriseId}
+                onChange={(value) => {
+                  setEnterpriseId(value);
+                  // Mutually exclusive kinds on the backend (H9/H10) — an
+                  // enterprise makes this a sponsor link.
+                  if (value) setAllowClosedForms(false);
+                }}
+                getId={(enterprise) => enterprise.id}
+                getLabel={(enterprise) => enterprise.name}
+                placeholder={t("selectSponsorEnterprise")}
+                aria-describedby={optionsError ? "users-user-link-options-error" : undefined}
+              />
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="users-user-link-allow-closed-forms"
+              checked={allowClosedForms}
+              disabled={Boolean(enterpriseId)}
+              onCheckedChange={(checked) => setAllowClosedForms(checked === true)}
+            />
+            <div className="space-y-1">
+              <Label htmlFor="users-user-link-allow-closed-forms" className="leading-5">
+                {t("allowClosedFormsLabel")}
+              </Label>
+              <p className="text-muted-foreground text-xs">{t("allowClosedFormsHint")}</p>
+            </div>
           </div>
           {optionsError && (
             <p id="users-user-link-options-error" className="text-destructive text-sm" role="alert">

@@ -8,30 +8,32 @@ import { Modal } from "@/components/common/modal";
 import { MultiSelect } from "@/components/common/multi-select";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import type { EnterpriseSummary, Invite, InviteKind, RoleSummary } from "@/lib/types";
 
 /**
- * Invite a user (H9/H10). Admin picks the account kind and, optionally,
- * capability groups the account is pre-loaded with on acceptance (H8). Sponsor
- * invites require an enterprise; the account is auto-linked to it when accepted.
+ * Invite a user (H9/H10). The admin no longer picks an "account type" up
+ * front — roles and the enterprise link are always available, and `kind` is
+ * derived from what's actually filled in on submit:
+ *   - an enterprise picked -> kind "sponsor" (auto-linked to it on accept, H9/H43)
+ *   - "allow closed-form submission" checked -> kind "participant" (H10: lets
+ *     the invitee discover/submit a CLOSED application and auto-confirms it,
+ *     independent of any pre-assigned role — most participant invites don't
+ *     pre-assign one, since the application form grants a role on confirm)
+ *   - neither -> kind "staff"
+ * Pre-assigned roles (groupIds) are independent of this and can be combined
+ * with either of the above (e.g. a sponsor rep also holding a staff role).
  */
 export function InviteUserDialog() {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
-  const [kind, setKind] = useState<InviteKind>("staff");
   const [enterpriseId, setEnterpriseId] = useState<string>("");
+  const [allowClosedForms, setAllowClosedForms] = useState(false);
   const [groupIds, setGroupIds] = useState<string[]>([]);
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
   const [groups, setGroups] = useState<RoleSummary[]>([]);
@@ -54,8 +56,8 @@ export function InviteUserDialog() {
 
   function reset() {
     setEmail("");
-    setKind("staff");
     setEnterpriseId("");
+    setAllowClosedForms(false);
     setGroupIds([]);
     setCreated(null);
   }
@@ -63,10 +65,15 @@ export function InviteUserDialog() {
   async function submit() {
     setPending(true);
     try {
+      const kind: InviteKind = enterpriseId
+        ? "sponsor"
+        : allowClosedForms
+          ? "participant"
+          : "staff";
       const invite = await api.post<Invite>("/api/invites", {
         email: email.trim().toLowerCase(),
         kind,
-        ...(kind === "sponsor" && enterpriseId ? { enterpriseId: Number(enterpriseId) } : {}),
+        ...(kind === "sponsor" ? { enterpriseId: Number(enterpriseId) } : {}),
         groupIds: groupIds.map(Number),
       });
       setCreated(invite);
@@ -143,64 +150,53 @@ export function InviteUserDialog() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="invite-kind">{t("accountTypeLabel")}</Label>
-            <Select
-              value={kind}
-              onValueChange={(v) => {
-                const next = v as InviteKind;
-                setKind(next);
-                // Only staff accounts carry capability groups (H8). Clear any
-                // stale selection when switching to sponsor/participant so a
-                // hidden, previously-picked group isn't sent on submit.
-                if (next !== "staff") setGroupIds([]);
-              }}
-            >
-              <SelectTrigger id="invite-kind" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="staff">{t("staffOrg")}</SelectItem>
-                <SelectItem value="sponsor">{t("sponsorOption")}</SelectItem>
-                <SelectItem value="participant">{t("participantOption")}</SelectItem>
-              </SelectContent>
-            </Select>
+            <Label htmlFor="invite-capability-groups">{t("rolesTitle")}</Label>
+            <MultiSelect
+              inDialog
+              id="invite-capability-groups"
+              options={groups.map((g) => ({ value: String(g.id), label: g.name }))}
+              value={groupIds}
+              onChange={setGroupIds}
+              placeholder={t("optionalPreassignRoles")}
+              searchPlaceholder={t("searchRolesPlaceholder")}
+              emptyText={t("noRolesYet")}
+            />
+            <p className="text-muted-foreground text-xs">{t("accountHoldsPermissions")}</p>
           </div>
-          {kind === "sponsor" && (
-            <div className="space-y-2">
-              <Label htmlFor="invite-enterprise">{t("enterpriseLabel")}</Label>
-              <EntityCombobox
-                id="invite-enterprise"
-                inDialog
-                options={enterprises}
-                value={enterpriseId}
-                onChange={setEnterpriseId}
-                getId={(e) => e.id}
-                getLabel={(e) => e.name}
-                placeholder={t("selectSponsorEnterprise")}
-              />
-              <p className="text-muted-foreground text-xs">{t("linkedAutomatically")}</p>
+          <div className="space-y-2">
+            <Label htmlFor="invite-enterprise">{t("enterpriseLabel")}</Label>
+            <EntityCombobox
+              id="invite-enterprise"
+              inDialog
+              options={enterprises}
+              value={enterpriseId}
+              onChange={(v) => {
+                setEnterpriseId(v);
+                // A sponsor invite and the closed-form bypass are mutually
+                // exclusive kinds on the backend (H9/H10) — picking an
+                // enterprise here makes this a sponsor invite.
+                if (v) setAllowClosedForms(false);
+              }}
+              getId={(e) => e.id}
+              getLabel={(e) => e.name}
+              placeholder={t("selectSponsorEnterprise")}
+            />
+            <p className="text-muted-foreground text-xs">{t("linkedAutomatically")}</p>
+          </div>
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="invite-allow-closed-forms"
+              checked={allowClosedForms}
+              disabled={Boolean(enterpriseId)}
+              onCheckedChange={(checked) => setAllowClosedForms(checked === true)}
+            />
+            <div className="space-y-1">
+              <Label htmlFor="invite-allow-closed-forms" className="leading-5">
+                {t("allowClosedFormsLabel")}
+              </Label>
+              <p className="text-muted-foreground text-xs">{t("allowClosedFormsHint")}</p>
             </div>
-          )}
-          {/* Capability groups are staff-only (H8): sponsors control just their
-              own enterprise/challenge through the sponsors→enterprise ownership
-              link created on accept, not via capabilities; participants need no
-              staff capabilities. groupIds is still POSTed (empty []) for them. */}
-          {kind === "staff" && (
-            <div className="space-y-2">
-              <Label htmlFor="invite-capability-groups">{t("rolesTitle")}</Label>
-              <MultiSelect
-                inDialog
-                id="invite-capability-groups"
-                options={groups.map((g) => ({ value: String(g.id), label: g.name }))}
-                value={groupIds}
-                onChange={setGroupIds}
-                placeholder={t("optionalPreassignRoles")}
-                searchPlaceholder={t("searchRolesPlaceholder")}
-                emptyText={t("noRolesYet")}
-              />
-              <p className="text-muted-foreground text-xs">{t("accountHoldsPermissions")}</p>
-            </div>
-          )}
+          </div>
         </div>
       )}
     </Modal>

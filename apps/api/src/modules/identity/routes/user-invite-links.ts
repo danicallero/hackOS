@@ -203,7 +203,7 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
         response: { 201: userInviteLinkResponse },
         summary: "Create a reusable user invite link",
         description:
-          "Creates a reusable account-creation link. Each claimant supplies their own email; staff links assign roles on acceptance (H10).",
+          "Creates a reusable account-creation link. Each claimant supplies their own email; any kind of link can pre-assign roles on acceptance, a sponsor link auto-links to an enterprise, and a participant link bypasses the closed-application-window check (H8, H10).",
       },
     },
     async (req, reply) => {
@@ -216,9 +216,12 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
       if (kind !== "sponsor" && enterpriseId !== undefined) {
         throw new BadRequestError("enterpriseId is only valid for sponsor invite links");
       }
-      if (kind !== "staff" && groupIds.length > 0) {
-        throw new BadRequestError("Only staff invite links may assign roles");
-      }
+      // Roles can be pre-assigned on any kind of reusable link (H8/H10) — a
+      // sponsor or participant link can just as well carry a staff-side role.
+      // A staff-derived link (no enterprise, no closed-form bypass) still
+      // needs at least one role: that's the only thing a bare "staff" link
+      // is for, unlike sponsor (enterprise linking) or participant
+      // (closed-form bypass), which are meaningful with zero roles.
       if (kind === "staff" && groupIds.length === 0) {
         throw new BadRequestError("Staff invite links require at least one role");
       }

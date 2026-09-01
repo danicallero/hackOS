@@ -500,6 +500,45 @@ functional-team role. None of the fifteen are referenced by name in
 `role_grant_rules` or other seed data (only `Sponsor` is targeted by name),
 so they remain safe to rename later without a data migration.
 
+### Invite UI stops asking "account type" separately from role-picking (H8/H9/H10)
+
+The web invite dialog (`invite-dialog.tsx`) and the reusable-link form
+(`user-invite-links-section.tsx`) used to gate two things behind an explicit
+"account type" `<Select>` (`kind`: staff/sponsor/participant): whether the
+enterprise picker showed at all (sponsor-only), and whether the role
+multi-select showed at all (staff-only — a stale assumption from before this
+rewrite gave every account kind a real role graph). Both admin-facing forms
+now always show the role multi-select and the enterprise combobox, and
+derive `kind` on submit instead of asking for it directly: an enterprise
+picked -> `sponsor`; otherwise a "allow submitting to closed application
+forms" checkbox, checked -> `participant`; neither -> `staff`. The two are
+mutually exclusive in the UI (picking one clears the other), matching the
+single-column `kind` this still becomes on the wire — the `POST
+/api/invites` / `POST /api/invites/user-links` request bodies are otherwise
+unchanged.
+
+This intentionally decouples "does this invite pre-assign the seeded
+Participant role" from "does this invite bypass the closed-application-window
+check" — they used to be conflated by a single kind picker, but are
+independent in practice: most participant invites don't pre-assign any role
+at all (the application form's `grants_role_ids` does that at confirm time),
+while the bypass (`applications/service.ts`'s `isInvitedParticipant`, keyed
+on `email_verification_tokens.kind = 'participant'`) is about application-
+form *access*, not role membership. Roles can now be pre-assigned on any
+invite kind, composing freely (e.g. a sponsor rep who should also hold a
+staff-side role).
+
+The one load-bearing backend change this required: `user_invite_links` had a
+DB-level `CHECK (kind = 'staff' OR group_ids = '{}')` (0113) — reusable
+sponsor/participant links could never carry roles, unlike the single-email
+`/api/invites` flow, which never had that restriction. Migration 0810 drops
+that check; the route (`identity/routes/user-invite-links.ts`) still requires
+a staff-derived link (no enterprise, no bypass) to carry at least one role,
+since that's the only thing such a link is for — sponsor and participant
+links are meaningful with zero roles, so that requirement only applies when
+`kind === "staff"`. `isInvitedParticipant`'s query shape and every other
+caller of the accept endpoint are unchanged.
+
 ### `is_seeded`, `role_seed_defaults`, and reset-to-default (0800/0807)
 
 `roles.is_seeded` (`boolean NOT NULL DEFAULT false`, added in 0800, set

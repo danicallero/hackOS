@@ -568,6 +568,8 @@
   "enterpriseLabel": "Enterprise",
   "selectSponsorEnterprise": "Select the sponsor's enterprise",
   "linkedAutomatically": "They're linked to this enterprise automatically when they accept.",
+  "allowClosedFormsLabel": "Allow submitting to closed application forms",
+  "allowClosedFormsHint": "They can submit an application after the window closes or capacity is full, and it's confirmed automatically.",
   "capabilityGroupsLabel": "Capability groups",
   "optionalPreassignGroups": "Optional — pre-assign permission groups",
   "searchGroupsPlaceholder": "Search groups…",
