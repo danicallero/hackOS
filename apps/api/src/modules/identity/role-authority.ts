@@ -87,15 +87,20 @@ export async function highestRolePosition(
 }
 
 /**
- * Whether an active user resolves `capability` to ALLOW through their own
- * assigned-role chain, ordered by position descending, short-circuiting on
- * the first ALLOW/DENY (H8's tri-state resolution — see lib/capabilities.ts
- * for the full-set equivalent used by ordinary request authorization).
+ * Shared tri-state resolution behind userResolvesCapability and
+ * userResolvesCapabilityRegardlessOfState: the user's own assigned-role
+ * chain, ordered by position descending, short-circuiting on the first
+ * ALLOW/DENY (H8's tri-state resolution — see lib/capabilities.ts for the
+ * full-set equivalent used by ordinary request authorization). The two
+ * public functions differ only in whether the active/anonymized filter
+ * applies (H54's account-removal bookkeeping needs it OFF, everything else
+ * needs it ON) — kept as one parameterized query so that SQL exists once.
  */
-export async function userResolvesCapability(
+async function resolveUserCapability(
   client: RoleGraphClient,
   userId: number,
   capability: string,
+  requireActive: boolean,
 ): Promise<boolean> {
   const { rows } = await client.query(
     `SELECT COALESCE(rc.state, 'inherit') AS state
@@ -103,16 +108,29 @@ export async function userResolvesCapability(
        JOIN roles r ON r.id = ur.role_id
        JOIN users u ON u.id = ur.user_id
        LEFT JOIN role_capabilities rc ON rc.role_id = r.id AND rc.capability = $2
-      WHERE ur.user_id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
+      WHERE ur.user_id = $1
+        AND ($3::boolean = false OR (u.account_state = 'active' AND u.anonymized_at IS NULL))
         AND r.deleted_at IS NULL
       ORDER BY r.position DESC`,
-    [userId, capability],
+    [userId, capability, requireActive],
   );
   for (const row of rows as { state: "allow" | "deny" | "inherit" }[]) {
     if (row.state === "allow") return true;
     if (row.state === "deny") return false;
   }
   return false;
+}
+
+/**
+ * Whether an active user resolves `capability` to ALLOW through their own
+ * assigned-role chain (H8's tri-state resolution).
+ */
+export async function userResolvesCapability(
+  client: RoleGraphClient,
+  userId: number,
+  capability: string,
+): Promise<boolean> {
+  return resolveUserCapability(client, userId, capability, true);
 }
 
 /**
@@ -126,20 +144,7 @@ export async function userResolvesCapabilityRegardlessOfState(
   userId: number,
   capability: string,
 ): Promise<boolean> {
-  const { rows } = await client.query(
-    `SELECT COALESCE(rc.state, 'inherit') AS state
-       FROM user_roles ur
-       JOIN roles r ON r.id = ur.role_id
-       LEFT JOIN role_capabilities rc ON rc.role_id = r.id AND rc.capability = $2
-      WHERE ur.user_id = $1 AND r.deleted_at IS NULL
-      ORDER BY r.position DESC`,
-    [userId, capability],
-  );
-  for (const row of rows as { state: "allow" | "deny" | "inherit" }[]) {
-    if (row.state === "allow") return true;
-    if (row.state === "deny") return false;
-  }
-  return false;
+  return resolveUserCapability(client, userId, capability, false);
 }
 
 export async function requireWildcardRoleAuthority(
@@ -232,14 +237,38 @@ export async function userHasAnyCapability(
 }
 
 /**
+ * Resolves the actor's full effective capability set ONCE (rather than one
+ * userResolvesCapability query per candidate capability), then asserts every
+ * entry in `capabilities` is a member — or that the actor holds the wildcard
+ * ('*' / ADMIN_ALL), which exempts them entirely (a wildcard holder can
+ * already do everything, so content-gating them would be meaningless).
+ * Shared by requireCapabilityPossessionForStateChange and
+ * requireCapabilityPossessionForAssignment below (H8) so the possession
+ * check's actual query pattern exists in one place.
+ */
+export async function assertPossessesAll(
+  client: RoleGraphClient,
+  actorId: number,
+  capabilities: readonly string[],
+  message: string,
+): Promise<void> {
+  if (capabilities.length === 0) return;
+  const effective = await getEffectiveCapabilities(actorId, undefined, client);
+  if (effective.has(CAPABILITIES.ADMIN_ALL)) return;
+  for (const capability of capabilities) {
+    if (!effective.has(capability)) {
+      throw new ForbiddenError(message, { capability, reason: "capability_possession" });
+    }
+  }
+}
+
+/**
  * Capability-content guard (H8): independent of, and IN ADDITION TO,
  * requireRoleMutationAuthority's position-hierarchy check — both must pass.
  * An actor may only ALLOW or DENY a capability on someone else's role if they
  * themselves currently resolve that exact capability to true, UNLESS they
- * hold the wildcard ('*' / ADMIN_ALL), which exempts them entirely (a
- * wildcard holder can already do everything, so content-gating them would be
- * meaningless). Holding PERMISSIONS_MANAGE alone does NOT exempt an actor —
- * only an actual '*' resolution does.
+ * hold the wildcard. Holding PERMISSIONS_MANAGE alone does NOT exempt an
+ * actor — only an actual '*' resolution does (see assertPossessesAll).
  *
  * Reading applied for "grant/revoke capabilities they possess": ALLOW and
  * DENY both count as an actor asserting a decision about that capability on
@@ -252,16 +281,13 @@ export async function requireCapabilityPossessionForStateChange(
   actorId: number,
   capabilities: { capability: string; state: "allow" | "deny" | "inherit" }[],
 ): Promise<void> {
-  if (await userResolvesCapability(client, actorId, CAPABILITIES.ADMIN_ALL)) return;
-  for (const { capability, state } of capabilities) {
-    if (state === "inherit") continue;
-    if (!(await userResolvesCapability(client, actorId, capability))) {
-      throw new ForbiddenError(
-        "You may only grant or deny a capability you currently possess yourself",
-        { capability, state, reason: "capability_possession" },
-      );
-    }
-  }
+  const toCheck = capabilities.filter((c) => c.state !== "inherit").map((c) => c.capability);
+  await assertPossessesAll(
+    client,
+    actorId,
+    toCheck,
+    "You may only grant or deny a capability you currently possess yourself",
+  );
 }
 
 /**
@@ -278,17 +304,14 @@ export async function requireCapabilityPossessionForAssignment(
   actorId: number,
   roleId: number,
 ): Promise<void> {
-  if (await userResolvesCapability(client, actorId, CAPABILITIES.ADMIN_ALL)) return;
   const { rows } = await client.query(
     `SELECT capability FROM role_capabilities WHERE role_id = $1 AND state = 'allow'`,
     [roleId],
   );
-  for (const { capability } of rows as { capability: string }[]) {
-    if (!(await userResolvesCapability(client, actorId, capability))) {
-      throw new ForbiddenError(
-        "You may only assign a role that grants capabilities you already possess yourself",
-        { capability, reason: "capability_possession" },
-      );
-    }
-  }
+  await assertPossessesAll(
+    client,
+    actorId,
+    (rows as { capability: string }[]).map((r) => r.capability),
+    "You may only assign a role that grants capabilities you already possess yourself",
+  );
 }
