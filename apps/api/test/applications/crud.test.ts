@@ -61,7 +61,7 @@ describe("applications CRUD (H11)", () => {
       method: "POST",
       url: "/api/applications",
       headers: asUser(pleb),
-      payload: { name: "X", type: "participant", template: sampleTemplate() },
+      payload: { name: "X", template: sampleTemplate() },
     });
     expect(res.statusCode).toBe(403);
   });
@@ -76,7 +76,6 @@ describe("applications CRUD (H11)", () => {
       headers: asUser(manager),
       payload: {
         name: "Participant form",
-        type: "participant",
         template: sampleTemplate(),
         capacity: 100,
       },
@@ -114,7 +113,7 @@ describe("applications CRUD (H11)", () => {
       method: "POST",
       url: "/api/applications",
       headers: asUser(manager),
-      payload: { name: "Retention form", type: "participant", template },
+      payload: { name: "Retention form", template },
     });
     expect(create.statusCode).toBe(201);
     const id = create.json().id as number;
@@ -190,7 +189,7 @@ describe("applications CRUD (H11)", () => {
       method: "POST",
       url: "/api/applications",
       headers: asUser(manager),
-      payload: { name: "Test", type: "participant", template: sampleTemplate() },
+      payload: { name: "Test", template: sampleTemplate() },
     });
     const id = created.json().id;
 
@@ -229,7 +228,7 @@ describe("applications CRUD (H11)", () => {
       method: "POST",
       url: "/api/applications",
       headers: asUser(manager),
-      payload: { name: "Decision form", type: "participant", template: sampleTemplate() },
+      payload: { name: "Decision form", template: sampleTemplate() },
     });
     const id = created.json().id as number;
 
@@ -262,7 +261,6 @@ describe("applications CRUD (H11)", () => {
       headers: asUser(manager),
       payload: {
         name: "Bad",
-        type: "participant",
         template: [
           { key: "x", label: { en: "x", es: "x", gl: "x" }, kind: "select", required: true },
         ],
@@ -351,7 +349,7 @@ describe("applications CRUD (H11)", () => {
     expect(single.statusCode).toBe(404);
   });
 
-  it("H12: ask_shirt_size/ask_food_intolerances default false and are independently togglable per form, regardless of type", async () => {
+  it("H12: ask_shirt_size/ask_food_intolerances default false and are independently togglable per form", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
 
@@ -359,7 +357,7 @@ describe("applications CRUD (H11)", () => {
       method: "POST",
       url: "/api/applications",
       headers: asUser(manager),
-      payload: { name: "Volunteer form", type: "volunteer", template: sampleTemplate() },
+      payload: { name: "New form", template: sampleTemplate() },
     });
     expect(create.statusCode).toBe(201);
     expect(create.json().ask_shirt_size).toBe(false);
@@ -395,7 +393,6 @@ describe("applications CRUD (H11)", () => {
       headers: asUser(manager),
       payload: {
         name: "Mentor form",
-        type: "mentor",
         template: sampleTemplate(),
         grants_role_ids: [roleA, roleB],
       },
@@ -448,7 +445,7 @@ describe("applications CRUD (H11)", () => {
       method: "POST",
       url: "/api/applications",
       headers: asUser(manager),
-      payload: { name: "No-grant form", type: "participant", template: sampleTemplate() },
+      payload: { name: "No-grant form", template: sampleTemplate() },
     });
     expect(create.statusCode).toBe(201);
     expect(create.json().grants_role_ids).toEqual([]);
@@ -465,7 +462,6 @@ describe("applications CRUD (H11)", () => {
       headers: asUser(manager),
       payload: {
         name: "Bad grant form",
-        type: "participant",
         template: sampleTemplate(),
         grants_role_ids: [999999],
       },
@@ -479,7 +475,6 @@ describe("applications CRUD (H11)", () => {
       headers: asUser(manager),
       payload: {
         name: "Ok grant form",
-        type: "participant",
         template: sampleTemplate(),
         grants_role_ids: [roleA],
       },
@@ -526,7 +521,6 @@ describe("applications CRUD (H11)", () => {
       headers: asUser(manager),
       payload: {
         name: "Escalation attempt",
-        type: "participant",
         template: sampleTemplate(),
         grants_role_ids: [aboveCeiling],
       },
@@ -540,7 +534,6 @@ describe("applications CRUD (H11)", () => {
       headers: asUser(manager),
       payload: {
         name: "Within authority",
-        type: "participant",
         template: sampleTemplate(),
         grants_role_ids: [belowCeiling],
       },
@@ -580,7 +573,6 @@ describe("applications CRUD (H11)", () => {
       headers: asUser(manager),
       payload: {
         name: "Backdoor attempt",
-        type: "participant",
         template: sampleTemplate(),
         grants_role_ids: [unpossessedCapRole],
       },
@@ -599,7 +591,6 @@ describe("applications CRUD (H11)", () => {
       headers: asUser(manager),
       payload: {
         name: "Now within capability",
-        type: "participant",
         template: sampleTemplate(),
         grants_role_ids: [unpossessedCapRole],
       },
@@ -636,7 +627,6 @@ describe("applications CRUD (H11)", () => {
       headers: asUser(manager),
       payload: {
         name: "Sectioned form",
-        type: "participant",
         template,
         sections: [{ key: "education", title: en }],
       },
@@ -673,7 +663,7 @@ describe("applications CRUD (H11)", () => {
       method: "POST",
       url: "/api/applications",
       headers: asUser(manager),
-      payload: { name: "Help text form", type: "participant", template },
+      payload: { name: "Help text form", template },
     });
     expect(create.statusCode).toBe(201);
     expect(create.json().template[0].help_text).toEqual(help);
@@ -688,7 +678,7 @@ describe("applications CRUD (H11)", () => {
       method: "POST",
       url: "/api/applications",
       headers: asUser(manager),
-      payload: { name: "Bad sections", type: "participant", template, sections: [] },
+      payload: { name: "Bad sections", template, sections: [] },
     });
     expect(res.statusCode).toBe(400);
   });
@@ -704,7 +694,6 @@ describe("applications CRUD (H11)", () => {
       headers: asUser(manager),
       payload: {
         name: "Dup sections",
-        type: "participant",
         template: sampleTemplate(),
         sections: [
           { key: "dup", title },

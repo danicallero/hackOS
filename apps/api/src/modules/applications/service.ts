@@ -15,7 +15,7 @@ import { issueTicket } from "../logistics/tickets.js";
 import { issueWalletAccessToken } from "../logistics/wallet-access.js";
 import { voidTicketPasses } from "../logistics/wallet-passes.js";
 import { enqueueWalletSync } from "../logistics/wallet-sync.js";
-import type { ApplicationType, FormSection, TemplateField } from "./schemas.js";
+import type { FormSection, TemplateField } from "./schemas.js";
 
 /**
  * Applications domain service (H11-H15, H27, H56). Holds the state-machine
@@ -28,7 +28,11 @@ import type { ApplicationType, FormSection, TemplateField } from "./schemas.js";
 export interface ApplicationRow {
   id: number;
   name: string;
-  type: ApplicationType;
+  /** DEPRECATED (H8): legacy static classification, no longer set by the API
+   *  or read as authoritative — see application_grants_roles +
+   *  roles.badge_category (formGrantsMentorRole below, granted_badge_category
+   *  in admin.routes.ts) for the real, drift-proof classification. */
+  type: string | null;
   template: TemplateField[];
   sections: FormSection[];
   current_form_version: number;
@@ -148,6 +152,32 @@ export async function requireApplication(db: Queryable, id: number): Promise<App
   const app = await getApplication(db, id);
   if (!app) throw new NotFoundError("Application not found");
   return app;
+}
+
+/**
+ * H8: whether a form's `grants_role_ids` include a role identified as the
+ * real "Mentor" role by its durable `badge_category` (see roles.badge_category,
+ * 0800_roles_schema.sql) — never by matching the role's editable display
+ * name, which is exactly as driftable as the retired `applications.type ===
+ * "mentor"` string check this replaces. Powers the early-ticket-issuance
+ * special case below (sendOne/reAccept): accepted mentors attend without a
+ * separate spot-confirmation step, so their decision itself is the
+ * ticket-issuing transition, unlike every other applicant who waits for
+ * confirm.
+ */
+async function formGrantsMentorRole(
+  client: pg.PoolClient,
+  applicationId: number,
+): Promise<boolean> {
+  const { rows } = await client.query(
+    `SELECT 1
+       FROM application_grants_roles agr
+       JOIN roles r ON r.id = agr.role_id AND r.deleted_at IS NULL
+      WHERE agr.application_id = $1 AND r.badge_category = 'mentor'
+      LIMIT 1`,
+    [applicationId],
+  );
+  return rows.length > 0;
 }
 
 /** Open for a NEW draft = active, past open_at, before close_at (close optional). */
@@ -1005,8 +1035,9 @@ async function sendOne(
   if (isAccepted) {
     token = await issueConfirmationToken(client, resp, app, user.email);
     // Accepted mentors attend without a separate spot-confirmation step, so
-    // their decision is the ticket-issuing transition.
-    if (app.type === "mentor") await issueTicket(client, resp.user_id);
+    // their decision is the ticket-issuing transition (H8: keyed off the
+    // form's actual grants_role_ids, not a static applications.type).
+    if (await formGrantsMentorRole(client, app.id)) await issueTicket(client, resp.user_id);
   }
   await client.query(
     `UPDATE application_responses SET status = $2, decision_sent_at = now() WHERE id = $1`,
@@ -1192,7 +1223,9 @@ export async function reAccept(
        WHERE id = $1`,
       [resp.id],
     );
-    if (app.type === "mentor") await issueTicket(client, resp.user_id);
+    // H8: keyed off the form's actual grants_role_ids, not a static
+    // applications.type — see formGrantsMentorRole's doc comment.
+    if (await formGrantsMentorRole(client, app.id)) await issueTicket(client, resp.user_id);
 
     await enqueueDecisionEmailRow(client, resp.user_id, user, app, "accepted", token);
 
@@ -1537,7 +1570,10 @@ export interface ResponseDetail {
   application: {
     id: number;
     name: string;
-    type: ApplicationType;
+    /** H8: the badge_category of this form's highest-position granted role
+     *  (see granted_badge_category doc in admin.routes.ts), or null if the
+     *  form grants no role — replaces the retired static `type` field. */
+    granted_badge_category: string | null;
     template: TemplateField[];
     sections: FormSection[];
     ask_shirt_size: boolean;
@@ -1580,7 +1616,13 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
   const { rows } = await pool.query(
     `SELECT r.*, u.name, u.email, u.shirt_size,
             u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
-            a.id AS app_id, a.name AS app_name, a.type AS app_type,
+            a.id AS app_id, a.name AS app_name,
+            (SELECT r2.badge_category::text
+               FROM application_grants_roles agr
+               JOIN roles r2 ON r2.id = agr.role_id AND r2.deleted_at IS NULL
+              WHERE agr.application_id = a.id
+              ORDER BY r2.position DESC
+              LIMIT 1) AS granted_badge_category,
             fv.template,
             fv.sections,
             a.ask_shirt_size, a.ask_food_intolerances
@@ -1604,7 +1646,7 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
     dietary_data_state,
     app_id,
     app_name,
-    app_type,
+    granted_badge_category,
     template,
     sections,
     ask_shirt_size,
@@ -1634,7 +1676,7 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
     application: {
       id: app_id,
       name: app_name,
-      type: app_type,
+      granted_badge_category,
       template,
       sections,
       ask_shirt_size,
@@ -2003,14 +2045,22 @@ export async function listUserResponsesForStaff(userId: number): Promise<
     id: number;
     application_id: number;
     application_name: string;
-    application_type: ApplicationType;
+    /** H8: badge_category of the form's highest-position granted role, or
+     *  null if it grants none — replaces the retired static `type` field. */
+    application_granted_badge_category: string | null;
     status: string;
     decision_sent: boolean;
     submitted_at: Date | null;
   }>
 > {
   const { rows } = await pool.query(
-    `SELECT r.id, r.application_id, a.name AS application_name, a.type AS application_type,
+    `SELECT r.id, r.application_id, a.name AS application_name,
+            (SELECT r2.badge_category::text
+               FROM application_grants_roles agr
+               JOIN roles r2 ON r2.id = agr.role_id AND r2.deleted_at IS NULL
+              WHERE agr.application_id = a.id
+              ORDER BY r2.position DESC
+              LIMIT 1) AS application_granted_badge_category,
             r.status, r.decision_sent_at, r.submitted_at
      FROM application_responses r
      JOIN applications a ON a.id = r.application_id
@@ -2023,7 +2073,7 @@ export async function listUserResponsesForStaff(userId: number): Promise<
       id: number;
       application_id: number;
       application_name: string;
-      application_type: ApplicationType;
+      application_granted_badge_category: string | null;
       status: string;
       decision_sent_at: Date | null;
       submitted_at: Date | null;
@@ -2031,7 +2081,7 @@ export async function listUserResponsesForStaff(userId: number): Promise<
       id: r.id,
       application_id: r.application_id,
       application_name: r.application_name,
-      application_type: r.application_type,
+      application_granted_badge_category: r.application_granted_badge_category,
       status: r.status,
       decision_sent: r.decision_sent_at !== null,
       submitted_at: r.submitted_at,

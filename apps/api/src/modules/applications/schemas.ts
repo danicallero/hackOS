@@ -8,9 +8,6 @@ import { z } from "zod";
  * `field.key`. i18n labels carry en/es/gl per plan/07 §2.
  */
 
-export const APPLICATION_TYPES = ["participant", "mentor", "sponsor", "volunteer"] as const;
-export type ApplicationType = (typeof APPLICATION_TYPES)[number];
-
 export const FIELD_KINDS = [
   "text",
   "textarea",
@@ -158,7 +155,6 @@ const timestampCoerce = z.union([z.string(), z.null()]).optional();
 export const createApplicationSchema = z
   .object({
     name: z.string().min(1),
-    type: z.enum(APPLICATION_TYPES),
     template: templateSchema,
     sections: sectionsSchema.default([]),
     description: z.string().nullish(),
@@ -182,7 +178,6 @@ export const createApplicationSchema = z
 export const updateApplicationSchema = z
   .object({
     name: z.string().min(1).optional(),
-    type: z.enum(APPLICATION_TYPES).optional(),
     template: templateSchema.optional(),
     sections: sectionsSchema.optional(),
     description: z.string().nullish(),

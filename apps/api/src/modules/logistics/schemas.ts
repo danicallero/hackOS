@@ -237,7 +237,7 @@ export const ticketResponse = z.object({
     z.object({
       responseId: z.number().int(),
       applicationName: z.string(),
-      applicationType: z.string(),
+      grantedBadgeCategory: z.string().nullable(),
       expiresAt: z.string().nullable(),
     }),
   ),

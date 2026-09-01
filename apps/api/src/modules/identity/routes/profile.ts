@@ -1329,7 +1329,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                 id: z.number(),
                 applicationId: z.number(),
                 applicationName: z.string(),
-                applicationType: z.string(),
+                applicationGrantedBadgeCategory: z.string().nullable(),
                 status: z.string(),
                 submittedAt: z.string().nullable(),
                 confirmedAt: z.string().nullable(),
@@ -1357,7 +1357,13 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       await fetchUser(userId);
 
       const { rows: responseRows } = await pool.query(
-        `SELECT r.*, a.name AS app_name, a.type AS app_type
+        `SELECT r.*, a.name AS app_name,
+                (SELECT ro.badge_category::text
+                   FROM application_grants_roles agr
+                   JOIN roles ro ON ro.id = agr.role_id AND ro.deleted_at IS NULL
+                  WHERE agr.application_id = a.id
+                  ORDER BY ro.position DESC
+                  LIMIT 1) AS app_granted_badge_category
          FROM application_responses r
          JOIN applications a ON a.id = r.application_id
          WHERE r.user_id = $1
@@ -1375,7 +1381,8 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             id: row.id as number,
             applicationId: row.application_id as number,
             applicationName: row.app_name as string,
-            applicationType: row.app_type as string,
+            applicationGrantedBadgeCategory:
+              (row.app_granted_badge_category as string | null) ?? null,
             status: row.status as string,
             submittedAt: row.submitted_at ? (row.submitted_at as Date).toISOString() : null,
             confirmedAt: row.confirmed_at ? (row.confirmed_at as Date).toISOString() : null,

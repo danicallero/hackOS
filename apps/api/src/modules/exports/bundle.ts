@@ -40,7 +40,13 @@ export async function buildExportBundle(
   const capabilities = [...(await getEffectiveCapabilities(subjectUserId, undefined, db))];
   const applications = (
     await db.query(
-      `SELECT ar.id, ar.application_id, a.name AS application_name, a.type AS application_type,
+      `SELECT ar.id, ar.application_id, a.name AS application_name,
+              (SELECT r.badge_category::text
+                 FROM application_grants_roles agr
+                 JOIN roles r ON r.id = agr.role_id AND r.deleted_at IS NULL
+                WHERE agr.application_id = a.id
+                ORDER BY r.position DESC
+                LIMIT 1) AS application_granted_badge_category,
               ar.status, ar.responses, ar.submitted_at, ar.confirmed_at, ar.declined_at,
               (SELECT jsonb_agg(jsonb_build_object('authorId', rv.author_id, 'score', rv.score, 'notes', rv.notes))
                  FROM applicant_reviews rv WHERE rv.response_id = ar.id) AS reviews

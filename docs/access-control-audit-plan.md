@@ -220,6 +220,82 @@ authoritative answer.
   the caller already holds the full `GET /api/roles` response for another
   reason.
 
+### `applications.type` fully retired as a semantic driver (H8/H11)
+
+The previous round above already stopped `identity/role.ts` READING
+`applications.type` for display (`getEffectiveRole`/`getBadgeCategory`/
+`mentorOrParticipantType`). This round finishes the retirement: the column
+stops being a user-facing, API-settable field at all, and the one remaining
+place that actually branched on its VALUE — not just displayed it —
+`applications/service.ts`'s early-ticket-issuance special case — is re-keyed
+off the form's real role grants.
+
+- **The bug class this closes**: nothing stopped a form from being created
+  `type: "participant"` while its `grants_role_ids` actually granted the
+  Mentor role, or vice versa — the two were independently settable and could
+  silently drift. "What kind of applicant does this form produce" must now
+  be answered the same way everywhere: by which role(s) it grants
+  (`application_grants_roles` joined to `roles.badge_category`), never by a
+  separately-set static label.
+- **Schema**: `createApplicationSchema`/`updateApplicationSchema`
+  (`applications/schemas.ts`) no longer accept a `type` field at all (removed
+  `APPLICATION_TYPES`/`ApplicationType`). Migration `0809` drops the
+  column's `NOT NULL` constraint and marks it deprecated via `COMMENT ON
+  COLUMN` — the column itself is kept (existing rows' historical value stays
+  inspectable) but nothing reads it as authoritative and the API never
+  writes it again.
+- **Replacement for display**: every read path that used to surface `type`
+  (the applications list column/sort/search, the form detail page, the
+  public open-forms page, `my-applications`, a user's application tab, the
+  applicant-facing form list, `GET /api/applications/:id/stats`, the CSV/GDPR
+  bundle exports, the ticket QR payload) now derives `granted_badge_category`
+  (or a `_granted_badge_category`-suffixed sibling) live: a correlated
+  subquery over `application_grants_roles` joined to `roles`, picking the
+  `badge_category` of the highest-position granted role, or `null` if the
+  form grants none. This can never drift from `grants_role_ids` the way the
+  old column could, because it IS `grants_role_ids` read back.
+- **The behavioral fix — mentor early-ticket-issuance**: accepting a mentor
+  application (not confirming it) has always issued the entrance ticket
+  immediately, because a mentor's decision itself is the ticket-issuing
+  transition — they attend without the separate spot-confirmation step every
+  other applicant goes through (see the code comment at both call sites in
+  `sendOne`/`reAccept`, `applications/service.ts`). This was previously keyed
+  off `app.type === "mentor"`; it now calls `formGrantsMentorRole(client,
+  applicationId)`, which checks whether the form's `grants_role_ids` include
+  a role whose `badge_category = 'mentor'` — the same durable, editable-
+  name-proof identifier `roles.badge_category` already provides for every
+  other mentor/participant classification in this codebase. Note this does
+  **not** move the Mentor role's own grant earlier: role-granting is still
+  uniformly confirm-time only (`doConfirm` in `service.ts`), for every form
+  regardless of what it grants — a mentor gets an early ticket but is not
+  granted the Mentor `user_roles` row until they actually confirm, exactly
+  as before this change. Whether that decoupling (ticket now, role later)
+  is itself the right long-term shape, versus also moving the mentor role
+  grant to accept-time so "ticket follows role" holds uniformly, is a
+  product decision this round deliberately left alone — flagging it here
+  rather than guessing, since ticket-issuance timing is user-facing and
+  consequential.
+- **`hasEventAccess`** (`identity/role.ts`) already implements the general
+  "does this user hold a role (or another qualifying tie to the event)"
+  question this round's guidance describes, and predates it: it is an OR of
+  a confirmed application response, a `user_roles` row with
+  `badge_category IN ('mentor', 'participant')`, `manual_attendee_roles`,
+  a sponsor-rep tie, or any operational capability — never `applications.
+  type`. Mobile's wallet screen (`app/(tabs)/wallet.tsx`) does not compute
+  its own acceptance/pending state at all; it only renders whatever
+  `ticketToken`/`acceptedSpots` the API already returned, which are gated by
+  this same `hasEventAccess` call server-side. No mobile-side fix was needed.
+- **Wallet/badge role labels**: `logistics/wallet.ts`'s `ROLE_LABELS` was
+  already migrated to key off `getBadgeCategory` in the earlier round (see
+  above); `wallet-passes.ts`, `google-wallet.ts`, `cards.ts`, and `badge.ts`
+  render no role/type label at all. Re-verified none of them reference
+  `applications.type`.
+- **Tests**: `apps/api/test/applications/lifecycle.test.ts` covers the
+  re-keyed mentor early-issuance behavior directly (a form granting a
+  `badge_category = 'mentor'` role issues a ticket at accept-sent time and
+  again on re-accept; a form granting a non-mentor role does not) instead of
+  going through the retired `type: "mentor"` fixture value.
+
 ### `system:superadmin` is CLI-only, not just protected
 
 `is_protected` (0800) is informational going forward: every default role

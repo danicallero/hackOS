@@ -6,6 +6,7 @@ import { pool } from "../../src/db/pool.js";
 import {
   asUser,
   buildTestApp,
+  createRole,
   createUser,
   createUserWithCapabilities,
   truncateAll,
@@ -319,10 +320,30 @@ describe("review + decide (H13, H14)", () => {
 
 describe("confirm / decline (H15)", () => {
   it("issues a ticket when a mentor acceptance is sent, without waiting for confirmation", async () => {
-    const mentorAppId = await createApplication({ type: "mentor" });
+    // H8: mentor-ness is now the form actually granting a role with
+    // badge_category 'mentor' (see roles.badge_category), not a static
+    // applications.type — the retired field this replaces.
+    const mentorRoleId = await createRole([], { badgeCategory: "mentor" });
+    const mentorAppId = await createApplication();
+    await pool.query(
+      `INSERT INTO application_grants_roles (application_id, role_id) VALUES ($1, $2)`,
+      [mentorAppId, mentorRoleId],
+    );
     const { userId } = await toAcceptedSent(mentorAppId);
     const { rows } = await pool.query(`SELECT token FROM tickets WHERE user_id = $1`, [userId]);
     expect(rows).toHaveLength(1);
+  });
+
+  it("does not early-issue a ticket for a form granting a non-mentor role", async () => {
+    const staffRoleId = await createRole([], { badgeCategory: "staff" });
+    const appId = await createApplication();
+    await pool.query(
+      `INSERT INTO application_grants_roles (application_id, role_id) VALUES ($1, $2)`,
+      [appId, staffRoleId],
+    );
+    const { userId } = await toAcceptedSent(appId);
+    const { rows } = await pool.query(`SELECT token FROM tickets WHERE user_id = $1`, [userId]);
+    expect(rows).toHaveLength(0);
   });
 
   it("confirms via the public token, issues a permanent ticket, double-confirm is idempotent", async () => {
@@ -835,6 +856,33 @@ describe("re-accept (admin)", () => {
     });
     expect(confirm.statusCode).toBe(200);
     expect(confirm.json().status).toBe("confirmed");
+  });
+
+  it("issues a ticket on re-accept for a form granting the mentor role (H8)", async () => {
+    const a = await getApp();
+    const mentorRoleId = await createRole([], { badgeCategory: "mentor" });
+    const appId = await createApplication();
+    await pool.query(
+      `INSERT INTO application_grants_roles (application_id, role_id) VALUES ($1, $2)`,
+      [appId, mentorRoleId],
+    );
+    const { userId, responseId } = await toAcceptedSent(appId);
+
+    await a.inject({
+      method: "POST",
+      url: `/api/me/responses/${responseId}/decline`,
+      headers: asUser(userId),
+    });
+
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/re-accept`,
+      headers: asUser(decider),
+    });
+    expect(res.statusCode).toBe(200);
+
+    const { rows } = await pool.query(`SELECT token FROM tickets WHERE user_id = $1`, [userId]);
+    expect(rows).toHaveLength(1);
   });
 
   it("re-accepts a rejected response (sent)", async () => {
