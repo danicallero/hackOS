@@ -115,10 +115,20 @@ CREATE TABLE role_grant_rules (
   role_id integer NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
   trigger_event text NOT NULL,
   action text NOT NULL CHECK (action IN ('grant', 'revoke')),
-  enabled boolean NOT NULL DEFAULT true
+  enabled boolean NOT NULL DEFAULT true,
+  -- H8: NULL means "applies to this trigger_event for ANY enterprise" (the
+  -- original, still-default behavior); a specific id scopes the rule to a
+  -- trigger fired FOR that one enterprise (e.g. a bespoke role only for
+  -- Sponsor X's reps/judges). A global and an enterprise-specific rule for
+  -- the same trigger_event can coexist — applyRoleGrantRule
+  -- (identity/role-grants.ts) applies every matching row, so both fire.
+  enterprise_id integer REFERENCES enterprises(id) ON DELETE CASCADE
 );
 
 CREATE INDEX role_grant_rules_trigger_event_idx ON role_grant_rules (trigger_event) WHERE enabled;
+
+COMMENT ON TABLE role_grant_rules IS
+  'H8: admin-configurable automatic role grant/revoke rules keyed off a fixed developer-defined trigger_event vocabulary (packages/shared/src/role-grant-triggers.ts). enterprise_id NULL scopes a rule to every occurrence of trigger_event; a specific enterprise_id scopes it to that one enterprise only, and can coexist with a global rule for the same event.';
 
 -- Bulk-resolution view (H8): one row per (user_id, capability) the user is
 -- currently granted, resolved over THEIR OWN assigned roles ordered by

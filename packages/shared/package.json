@@ -13,6 +13,7 @@
     "./locale": "./src/locale.ts",
     "./locales/*": "./locales/*",
     "./questions": "./src/questions.ts",
+    "./role-grant-triggers": "./src/role-grant-triggers.ts",
     "./ui-test-ids": "./src/ui-test-ids.ts",
     "./wallet-pass-labels": "./src/wallet-pass-labels.ts"
   },

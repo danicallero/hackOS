@@ -3,5 +3,6 @@ export * from "./applications.js";
 export * from "./capabilities.js";
 export * from "./events.js";
 export * from "./questions.js";
+export * from "./role-grant-triggers.js";
 export * from "./ui-test-ids.js";
 export * from "./wallet-pass-labels.js";
