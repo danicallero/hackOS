@@ -531,8 +531,8 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         removalStatus,
         roles,
       ] = await Promise.all([
-        getBadgeCategory(pool, userId),
-        getEffectiveCapabilities(userId),
+        getBadgeCategory(pool, userId, req),
+        getEffectiveCapabilities(userId, req),
         computeMembershipFlags(pool, userId),
         hasEventAccess(pool, userId),
         hasMyProject(userId),

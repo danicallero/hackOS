@@ -1,4 +1,5 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import type { FastifyRequest } from "fastify";
 import type { Queryable } from "../../db/pool.js";
 import { getEffectiveCapabilities } from "../../lib/capabilities.js";
 import { ConflictError } from "../../lib/errors.js";
@@ -40,7 +41,14 @@ export interface EffectiveRole {
 export async function getEffectiveRole(
   db: Queryable,
   userId: number,
+  // Accepted for interface consistency with getBadgeCategory/
+  // mentorOrParticipantType below (H8) — this function itself never calls
+  // getEffectiveCapabilities, but its callers do, so a caller already
+  // holding a request can thread it through uniformly without knowing which
+  // function in the chain actually needs it.
+  request?: FastifyRequest,
 ): Promise<EffectiveRole | null> {
+  void request;
   const { rows } = await db.query(
     `SELECT r.name, r.badge_category
        FROM user_roles ur
@@ -70,13 +78,17 @@ export async function getEffectiveRole(
  * matching relationship row. No visible role and none of the above:
  * 'unassigned', same as the old DerivedRole's fallback.
  */
-export async function getBadgeCategory(db: Queryable, userId: number): Promise<BadgeCategory> {
+export async function getBadgeCategory(
+  db: Queryable,
+  userId: number,
+  request?: FastifyRequest,
+): Promise<BadgeCategory> {
   const { rows: activeRows } = await db.query(
     `SELECT 1 FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
     [userId],
   );
   if (!activeRows[0]) return "unassigned";
-  const capabilities = await getEffectiveCapabilities(userId);
+  const capabilities = await getEffectiveCapabilities(userId, request);
   if (capabilities.has(CAPABILITIES.ADMIN_ALL)) return "admin";
 
   const { isEnterpriseJudge, isSponsorRep } = await computeMembershipFlags(db, userId);
@@ -87,7 +99,7 @@ export async function getBadgeCategory(db: Queryable, userId: number): Promise<B
   // *something* operational beyond being a plain participant.
   if (capabilities.size > 0) return "staff";
 
-  const effective = await getEffectiveRole(db, userId);
+  const effective = await getEffectiveRole(db, userId, request);
   return effective?.badgeCategory ?? "unassigned";
 }
 
@@ -103,13 +115,14 @@ export async function getBadgeCategory(db: Queryable, userId: number): Promise<B
 export async function mentorOrParticipantType(
   db: Queryable,
   userId: number,
+  request?: FastifyRequest,
 ): Promise<"mentor" | "participant" | null> {
   const { rows: activeRows } = await db.query(
     `SELECT 1 FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
     [userId],
   );
   if (!activeRows[0]) return null;
-  const effective = await getEffectiveRole(db, userId);
+  const effective = await getEffectiveRole(db, userId, request);
   if (effective?.badgeCategory === "mentor") return "mentor";
   if (effective?.badgeCategory === "participant") return "participant";
   return null;
@@ -123,8 +136,9 @@ export async function mentorOrParticipantType(
 export async function getHighestVisibleRoleName(
   db: Queryable,
   userId: number,
+  request?: FastifyRequest,
 ): Promise<string | null> {
-  const effective = await getEffectiveRole(db, userId);
+  const effective = await getEffectiveRole(db, userId, request);
   return effective?.name ?? null;
 }
 
