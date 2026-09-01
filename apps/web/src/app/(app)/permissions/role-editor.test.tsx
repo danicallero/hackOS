@@ -8,8 +8,7 @@ import { RoleEditor } from "./role-editor";
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
-// jsdom has no ResizeObserver; the Select control (badge category) uses one
-// via radix-ui's internal size hook.
+// jsdom has no ResizeObserver; radix-ui's internal size hook uses one.
 class StubResizeObserver {
   observe() {}
   unobserve() {}
@@ -54,7 +53,6 @@ const role: RoleSummary = {
   isVisible: true,
   isProtected: false,
   isSeeded: false,
-  badgeCategory: "judge",
   capabilities: [{ capability: "users:read", state: "inherit" }],
   memberIds: [],
   deletedAt: null,

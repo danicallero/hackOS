@@ -254,14 +254,17 @@ export default function NewApplicationFormPage() {
                         // Re-suggest the logistics defaults from the roles
                         // actually being granted (H8) — still just a
                         // starting point, editable below. Replaces the
-                        // retired static `type`-keyed default.
-                        const selectedCategories = new Set(
+                        // retired static `type`-keyed default; matches by
+                        // name against the default seed roles' own names
+                        // ("Participant"/"Mentor") since there's no fixed
+                        // category to key off anymore.
+                        const selectedNames = new Set(
                           roles
                             .filter((role) => next.includes(String(role.id)))
-                            .map((role) => role.badgeCategory),
+                            .map((role) => role.name.toLowerCase()),
                         );
                         const asksByDefault =
-                          selectedCategories.has("participant") || selectedCategories.has("mentor");
+                          selectedNames.has("participant") || selectedNames.has("mentor");
                         form.setValue("ask_shirt_size", asksByDefault);
                         form.setValue("ask_food_intolerances", asksByDefault);
                       }}

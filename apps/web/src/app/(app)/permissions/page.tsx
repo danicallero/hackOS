@@ -49,12 +49,7 @@ import type {
   UserListItem,
 } from "@/lib/types";
 import { permissionTemplateName } from "./helpers";
-import {
-  BADGE_CATEGORIES,
-  badgeCategoryLabel,
-  DrilldownBackButton,
-  RoleEditor,
-} from "./role-editor";
+import { DrilldownBackButton, RoleEditor } from "./role-editor";
 import { RoleList } from "./role-list";
 
 // H8: admins manage a hierarchical, position-ordered multi-role model on a single
@@ -78,7 +73,6 @@ const createSchema = (t: Translate) =>
       .min(1, t("required"))
       .refine((v) => Number.isInteger(Number(v)), t("required")),
     isVisible: z.boolean(),
-    badgeCategory: z.enum(["admin", "judge", "sponsor", "staff", "mentor", "participant"]),
     templateKey: z.string(),
   });
 
@@ -129,7 +123,6 @@ export default function PermissionsPage() {
       name: "",
       position: "0",
       isVisible: true,
-      badgeCategory: "staff",
       templateKey: "",
     },
   });
@@ -209,7 +202,6 @@ export default function PermissionsPage() {
         name: values.name,
         position: Number(values.position),
         isVisible: values.isVisible,
-        badgeCategory: values.badgeCategory,
         templateKey: template?.key,
       });
       toast.success(t("roleCreated"));
@@ -218,7 +210,6 @@ export default function PermissionsPage() {
         name: "",
         position: "0",
         isVisible: true,
-        badgeCategory: "staff",
         templateKey: "",
       });
       setRoles((prev) => [...prev, role]);
@@ -242,10 +233,7 @@ export default function PermissionsPage() {
     }
   }
 
-  async function onSaveDetails(
-    roleId: number,
-    values: { name: string; isVisible: boolean; badgeCategory: RoleSummary["badgeCategory"] },
-  ) {
+  async function onSaveDetails(roleId: number, values: { name: string; isVisible: boolean }) {
     try {
       const r = await api.patch<RoleDetail>(`/api/roles/${roleId}`, values);
       applyRole(r);
@@ -505,30 +493,6 @@ export default function PermissionsPage() {
                     <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                   </FormControl>
                   <FormLabel className="font-normal">{t("isVisibleLabel")}</FormLabel>
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="badgeCategory"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("badgeCategoryLabel")}</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {BADGE_CATEGORIES.map((category) => (
-                        <SelectItem key={category} value={category}>
-                          {badgeCategoryLabel(t)[category]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
                 </FormItem>
               )}
             />

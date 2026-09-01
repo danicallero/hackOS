@@ -76,9 +76,9 @@ export interface FormSection {
 export interface PublicForm {
   id: number;
   name: string;
-  /** H8: badge_category of the form's highest-position granted role, or null
+  /** H8: name of the form's highest-position granted role, or null
    *  if it grants none — replaces the retired static `type` field. */
-  granted_badge_category: string | null;
+  granted_role_name: string | null;
   template: TemplateField[];
   sections: FormSection[];
   description: string | null;
@@ -356,21 +356,12 @@ export function statusLabel(status: string, t: Translate): string {
 }
 
 /**
- * H8: label for a form's `granted_badge_category` — the badge_category of
- * its highest-position granted role, or null if it grants none. Replaces
- * the retired static `type` field's display; same fixed role-copy
- * vocabulary the user-profile header uses for a person's own effective role.
+ * H8: label for a form's `granted_role_name` — the name of its
+ * highest-position granted role, or null if it grants none. Replaces the
+ * retired static `type` field's display.
  */
-export function formTypeLabel(grantedBadgeCategory: string | null, t: Translate): string {
-  const map: Record<string, string> = {
-    admin: t("roleAdmin"),
-    judge: t("roleJudge"),
-    sponsor: t("roleSponsor"),
-    staff: t("roleStaff"),
-    mentor: t("roleMentor"),
-    participant: t("roleParticipant"),
-  };
-  return (grantedBadgeCategory && map[grantedBadgeCategory]) || t("roleUnassigned");
+export function formTypeLabel(grantedRoleName: string | null, t: Translate): string {
+  return grantedRoleName ?? t("roleUnassigned");
 }
 
 // ── datetime ──────────────────────────────────────────────────────────────────

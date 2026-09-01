@@ -18,7 +18,7 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
-import { type ApplicationForm, fmtDateTime, grantedBadgeCategoryLabel, windowState } from "./lib";
+import { type ApplicationForm, fmtDateTime, grantedRoleNameLabel, windowState } from "./lib";
 
 export default function ApplicationsPage() {
   const { t } = useLocale();
@@ -77,10 +77,8 @@ export default function ApplicationsPage() {
     {
       id: "type",
       header: t("colGrantedRole"),
-      sortValue: (f) => grantedBadgeCategoryLabel(f.granted_badge_category, t),
-      cell: (f) => (
-        <span className="text-sm">{grantedBadgeCategoryLabel(f.granted_badge_category, t)}</span>
-      ),
+      sortValue: (f) => grantedRoleNameLabel(f.granted_role_name, t),
+      cell: (f) => <span className="text-sm">{grantedRoleNameLabel(f.granted_role_name, t)}</span>,
     },
     {
       id: "status",
@@ -142,7 +140,7 @@ export default function ApplicationsPage() {
         error={loadError ? { message: loadError, onRetry: load } : undefined}
         getRowHref={(f) => `/applications/${f.id}`}
         getRowLabel={(f) => f.name}
-        searchable={(f) => `${f.name} ${grantedBadgeCategoryLabel(f.granted_badge_category, t)}`}
+        searchable={(f) => `${f.name} ${grantedRoleNameLabel(f.granted_role_name, t)}`}
         searchPlaceholder={t("searchFormsPlaceholder")}
         empty={{
           icon: ClipboardListIcon,

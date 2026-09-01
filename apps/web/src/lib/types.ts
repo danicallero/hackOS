@@ -36,9 +36,8 @@ export interface Me {
       }
     | null;
   createdAt: string;
-  role: BadgeCategory;
-  /** H8 full-replacement: the caller's actual highest-visible role name, alongside `role`'s fixed category. */
-  visibleRoleName: string | null;
+  /** H8: the caller's actual highest-visible role name (null if they hold no visible role). */
+  role: string | null;
   capabilities: Capability[];
   /** H8: the caller's complete assigned-role set, highest position first — additive next to `role`. */
   roles: AssignedRoleSummary[];
@@ -58,21 +57,6 @@ export interface Me {
 }
 
 export type Language = "en" | "es" | "gl";
-/**
- * H8 full-replacement: the fixed display/behavior bucket badge printing,
- * wallet passes, scanner UI and stats classify a user into — decoupled from
- * the arbitrary name an admin gives a role. Replaces the old DerivedRole
- * (same values; 'unassigned' is the no-visible-role fallback, never a role's
- * own category). See apps/api's identity/role.ts getBadgeCategory/roles.badge_category.
- */
-export type BadgeCategory =
-  | "admin"
-  | "judge"
-  | "sponsor"
-  | "staff"
-  | "mentor"
-  | "participant"
-  | "unassigned";
 
 export interface UserListItem {
   id: number;
@@ -81,7 +65,8 @@ export interface UserListItem {
   name: string | null;
   surname: string | null;
   badgeId: string | null;
-  role: BadgeCategory;
+  /** H8: this user's actual highest-visible role name (null if they hold no visible role). */
+  role: string | null;
   language: string;
   shirtSize: string | null;
   applicationStatus: string | null;
@@ -103,8 +88,7 @@ export interface AssignedRoleSummary {
 }
 
 export interface UserDetail extends Omit<Me, "role" | "capabilities" | "roles"> {
-  role: BadgeCategory;
-  visibleRoleName: string | null;
+  role: string | null;
   capabilities: Capability[];
   roles: AssignedRoleSummary[];
 }
@@ -123,8 +107,6 @@ export interface RoleSummary {
   isProtected: boolean;
   /** H8/0800: true for a role from the seeded default catalogue (0801 Sponsor / 0805). Scopes trash/restore and gates reset-to-default. */
   isSeeded: boolean;
-  /** H8 full-replacement: the badge/wallet/scanner display bucket this role's holders render as. */
-  badgeCategory: Exclude<BadgeCategory, "unassigned">;
   /** Sparse: a capability with no explicit row is implicitly 'inherit'. */
   capabilities: { capability: string; state: PermissionState }[];
   memberIds: number[];

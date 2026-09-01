@@ -18,11 +18,10 @@ describe("participant application presentation", () => {
     expect(statusLabel("accepted_internal", translate)).toBe("unknownStatus");
   });
 
-  it("localizes a form's granted badge category instead of exposing enum values (H8)", () => {
-    expect(formTypeLabel("participant", translate)).toBe("roleParticipant");
-    expect(formTypeLabel("mentor", translate)).toBe("roleMentor");
+  it("shows a form's granted role name as-is, or unassigned when it grants none (H8)", () => {
+    expect(formTypeLabel("Participant", translate)).toBe("Participant");
+    expect(formTypeLabel("Mentor", translate)).toBe("Mentor");
     expect(formTypeLabel(null, translate)).toBe("roleUnassigned");
-    expect(formTypeLabel("future_category", translate)).toBe("roleUnassigned");
   });
 
   it("formats dates using the selected locale", () => {

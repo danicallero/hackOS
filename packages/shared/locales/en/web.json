@@ -2627,7 +2627,6 @@
   "roleCreated": "Role created.",
   "positionLabel": "Position",
   "isVisibleLabel": "Show as public role",
-  "badgeCategoryLabel": "Badge category",
   "roleNotFoundTitle": "Role not found",
   "roleNotFoundDesc": "This role doesn't exist or was deleted.",
   "backToRoles": "Roles",

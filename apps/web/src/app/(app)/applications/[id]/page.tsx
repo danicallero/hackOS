@@ -44,7 +44,7 @@ import {
 import {
   type ApplicationForm,
   type ApplicationStats,
-  grantedBadgeCategoryLabel,
+  grantedRoleNameLabel,
   windowState,
 } from "../lib";
 
@@ -187,7 +187,7 @@ export default function ApplicationDetailPage() {
           form && w ? (
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge tone="neutral">
-                {grantedBadgeCategoryLabel(form.granted_badge_category, t)}
+                {grantedRoleNameLabel(form.granted_role_name, t)}
               </StatusBadge>
               <StatusBadge tone={w.tone} dot={false}>
                 {w.label}
@@ -230,7 +230,7 @@ export default function ApplicationDetailPage() {
                   <div>
                     <dt className="text-muted-foreground text-sm">{t("colGrantedRole")}</dt>
                     <dd className="mt-1 font-medium">
-                      {grantedBadgeCategoryLabel(form.granted_badge_category, t)}
+                      {grantedRoleNameLabel(form.granted_role_name, t)}
                     </dd>
                   </div>
                   <div>

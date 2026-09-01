@@ -47,21 +47,12 @@ const dateTime = (value: string, timezone: string, language: "es" | "gl" | "en")
   }).format(new Date(value));
 
 /**
- * H8: label for a public form's `granted_badge_category` — the badge_category
- * of its highest-position granted role, or null if it grants none. Replaces
- * the retired static `type` field's display; same fixed role-copy vocabulary
- * the user-profile header uses for a person's own effective role.
+ * H8: label for a public form's `granted_role_name` — the name of its
+ * highest-position granted role, or null if it grants none. Replaces the
+ * retired static `type` field's display.
  */
-function grantedBadgeCategoryLabel(category: string | null, t: Translate): string {
-  const copy: Record<string, string> = {
-    admin: t("roleAdmin"),
-    judge: t("roleJudge"),
-    sponsor: t("roleSponsor"),
-    staff: t("roleStaff"),
-    mentor: t("roleMentor"),
-    participant: t("roleParticipant"),
-  };
-  return (category && copy[category]) || t("roleUnassigned");
+function grantedRoleNameLabel(roleName: string | null, t: Translate): string {
+  return roleName ?? t("roleUnassigned");
 }
 
 export function PublicPage() {
@@ -265,7 +256,7 @@ function PublicPageContent({
                 <div className="min-w-0">
                   <h3 className="font-medium">{form.name}</h3>
                   <p className="text-muted-foreground mt-1 text-sm">
-                    <span>{grantedBadgeCategoryLabel(form.granted_badge_category, t)}</span>
+                    <span>{grantedRoleNameLabel(form.granted_role_name, t)}</span>
                     {form.close_at
                       ? ` · ${t("closes")} ${dateTime(form.close_at, event.timezone, language)}`
                       : ""}

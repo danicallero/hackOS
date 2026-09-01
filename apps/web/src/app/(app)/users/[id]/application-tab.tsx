@@ -16,7 +16,7 @@ import { LOCALE_CODES, useLocale } from "@/lib/i18n";
 import {
   type ApplicationForm,
   type FormSection,
-  grantedBadgeCategoryLabel,
+  grantedRoleNameLabel,
   type ResponseRow,
   type TemplateField,
 } from "../../applications/lib";
@@ -26,7 +26,7 @@ interface UserApplicationRow {
   id: number;
   application_id: number;
   application_name: string;
-  application_granted_badge_category: string | null;
+  application_granted_role_name: string | null;
   status: string;
   decision_sent: boolean;
   submitted_at: string | null;
@@ -162,7 +162,7 @@ export function ApplicationTab({ userId }: { userId: number }) {
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{r.application_name}</p>
               <p className="text-muted-foreground text-xs">
-                {grantedBadgeCategoryLabel(r.application_granted_badge_category, t)}
+                {grantedRoleNameLabel(r.application_granted_role_name, t)}
                 {r.submitted_at
                   ? t("submittedOnInline", {
                       date: new Intl.DateTimeFormat(LOCALE_CODES[language], {
