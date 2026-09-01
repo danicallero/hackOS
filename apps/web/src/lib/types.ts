@@ -212,7 +212,7 @@ export interface Invite {
   email: string;
   kind: InviteKind;
   enterpriseId: number | null;
-  groupIds: number[];
+  roleIds: number[];
   expiresAt: string;
   usedAt: string | null;
   token: string | null;
@@ -224,7 +224,7 @@ export interface InviteListItem {
   email: string;
   kind: InviteKind;
   enterpriseId: number | null;
-  groupIds: number[];
+  roleIds: number[];
   expiresAt: string;
   createdAt: string;
 }
@@ -273,7 +273,7 @@ export interface UserInviteLink {
   kind: InviteKind;
   enterpriseId: number | null;
   enterpriseName: string | null;
-  groupIds: number[];
+  roleIds: number[];
   token: string;
   url: string;
   maxRedeems: number | null;

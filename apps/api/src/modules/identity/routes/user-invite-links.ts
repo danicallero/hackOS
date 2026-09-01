@@ -22,7 +22,7 @@ export interface UserInviteLinkRow {
   token: string;
   kind: UserInviteLinkKind;
   enterprise_id: number | null;
-  group_ids: number[];
+  role_ids: number[];
   wildcard_authorized: boolean;
   max_redeems: number | null;
   redeemed_count: number;
@@ -48,7 +48,7 @@ export async function findUserInviteLink(
   lock = false,
 ): Promise<UserInviteLinkRow | undefined> {
   const { rows } = await db.query(
-    `SELECT id, token, kind, enterprise_id, group_ids, wildcard_authorized,
+    `SELECT id, token, kind, enterprise_id, role_ids, wildcard_authorized,
             max_redeems, redeemed_count, expires_at, revoked_at, created_at
        FROM user_invite_links
       WHERE token = $1${lock ? " FOR UPDATE" : ""}`,
@@ -65,7 +65,7 @@ const userInviteLinkResponse = z.object({
   kind: inviteKind,
   enterpriseId: z.number().nullable(),
   enterpriseName: z.string().nullable(),
-  groupIds: z.array(z.number()),
+  roleIds: z.array(z.number()),
   token: z.string(),
   url: z.string(),
   maxRedeems: z.number().nullable(),
@@ -112,7 +112,7 @@ function toResponse(row: Record<string, unknown>): UserInviteLinkResponse {
     kind: link.kind,
     enterpriseId: row.enterprise_id == null ? null : Number(row.enterprise_id),
     enterpriseName: (row.enterprise_name as string | null) ?? null,
-    groupIds: (row.group_ids as number[]) ?? [],
+    roleIds: (row.role_ids as number[]) ?? [],
     token: String(row.token),
     url: enterpriseInviteClaimUrl(String(row.token)),
     maxRedeems: link.max_redeems,
@@ -139,7 +139,7 @@ function toResponse(row: Record<string, unknown>): UserInviteLinkResponse {
 async function listLinks(): Promise<UserInviteLinkResponse[]> {
   const { rows } = await pool.query(
     `SELECT l.id, l.token, l.kind, l.enterprise_id, e.name AS enterprise_name,
-            l.group_ids, l.max_redeems, l.redeemed_count, l.expires_at,
+            l.role_ids, l.max_redeems, l.redeemed_count, l.expires_at,
             l.revoked_at, l.created_at,
             COALESCE(
               json_agg(
@@ -190,7 +190,7 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
         body: z.object({
           kind: inviteKind,
           enterpriseId: z.number().int().positive().optional(),
-          groupIds: z.array(z.number().int().positive()).default([]),
+          roleIds: z.array(z.number().int().positive()).default([]),
           maxRedeems: z.number().int().positive().nullable().default(null),
           // null means no automatic expiry.
           expiresInMinutes: z
@@ -208,7 +208,7 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
     },
     async (req, reply) => {
       const { kind, enterpriseId, maxRedeems, expiresInMinutes } = req.body;
-      const groupIds = [...new Set(req.body.groupIds)];
+      const roleIds = [...new Set(req.body.roleIds)];
 
       if (kind === "sponsor" && enterpriseId === undefined) {
         throw new BadRequestError("Sponsor invite links require enterpriseId");
@@ -222,7 +222,7 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
       // needs at least one role: that's the only thing a bare "staff" link
       // is for, unlike sponsor (enterprise linking) or participant
       // (closed-form bypass), which are meaningful with zero roles.
-      if (kind === "staff" && groupIds.length === 0) {
+      if (kind === "staff" && roleIds.length === 0) {
         throw new BadRequestError("Staff invite links require at least one role");
       }
 
@@ -232,10 +232,10 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
         const wildcardAuthorized = await requireWildcardInviteAuthority(
           client,
           req.userId as number,
-          groupIds,
+          roleIds,
           { requireExisting: true },
         );
-        if (kind === "staff" && !(await roleIdsGrantCapability(client, groupIds))) {
+        if (kind === "staff" && !(await roleIdsGrantCapability(client, roleIds))) {
           throw new BadRequestError("Staff invite links require a role with capabilities");
         }
 
@@ -251,19 +251,19 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
 
         const { rows } = await client.query(
           `INSERT INTO user_invite_links
-             (token, kind, enterprise_id, created_by, group_ids, wildcard_authorized,
+             (token, kind, enterprise_id, created_by, role_ids, wildcard_authorized,
               max_redeems, expires_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7,
                    CASE WHEN $8::integer IS NULL THEN NULL
                         ELSE now() + ($8::integer * interval '1 minute') END)
-           RETURNING id, token, kind, enterprise_id, group_ids, wildcard_authorized,
+           RETURNING id, token, kind, enterprise_id, role_ids, wildcard_authorized,
                      max_redeems, redeemed_count, expires_at, revoked_at, created_at`,
           [
             token,
             kind,
             enterpriseId ?? null,
             req.userId,
-            groupIds,
+            roleIds,
             wildcardAuthorized,
             maxRedeems,
             expiresInMinutes,
@@ -279,7 +279,7 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
           after: {
             kind,
             enterpriseId: enterpriseId ?? null,
-            groupIds,
+            roleIds,
             maxRedeems,
             expiresInMinutes,
           },
@@ -307,7 +307,7 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
     async (req) => {
       await withTransaction(async (client) => {
         const { rows } = await client.query(
-          `SELECT id, kind, enterprise_id, group_ids, max_redeems, redeemed_count,
+          `SELECT id, kind, enterprise_id, role_ids, max_redeems, redeemed_count,
                   expires_at, revoked_at
              FROM user_invite_links WHERE id = $1 FOR UPDATE`,
           [req.params.id],
@@ -329,7 +329,7 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
           before: {
             kind: link.kind,
             enterpriseId: link.enterprise_id,
-            groupIds: link.group_ids,
+            roleIds: link.role_ids,
             maxRedeems: link.max_redeems,
             redeemedCount: link.redeemed_count,
             expiresAt: link.expires_at?.toISOString() ?? null,

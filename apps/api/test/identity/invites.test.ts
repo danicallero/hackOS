@@ -206,7 +206,7 @@ describe("H10 invite creation", () => {
       method: "POST",
       url: "/api/invites",
       headers: asUser(manager),
-      payload: { email: "missing-group@example.com", kind: "staff", groupIds: [999_999] },
+      payload: { email: "missing-group@example.com", kind: "staff", roleIds: [999_999] },
     });
     expect(missingGroup.statusCode).toBe(404);
 
@@ -214,14 +214,14 @@ describe("H10 invite creation", () => {
       method: "POST",
       url: "/api/invites",
       headers: asUser(manager),
-      payload: { email: "escalation@example.com", kind: "staff", groupIds: [groupId] },
+      payload: { email: "escalation@example.com", kind: "staff", roleIds: [groupId] },
     });
     expect(escalation.statusCode).toBe(403);
 
     const delegated = await createInvite(a, wildcard, {
       email: "delegated@example.com",
       kind: "staff",
-      groupIds: [groupId],
+      roleIds: [groupId],
     });
     const accepted = await a.inject({
       method: "POST",
@@ -251,7 +251,7 @@ describe("H10 invite creation", () => {
       payload: {
         email: "sneaky-superadmin@example.com",
         kind: "staff",
-        groupIds: [superadminRoleId],
+        roleIds: [superadminRoleId],
       },
     });
     expect(res.statusCode).toBe(403);
@@ -260,7 +260,7 @@ describe("H10 invite creation", () => {
       method: "POST",
       url: "/api/invites/user-links",
       headers: asUser(wildcard),
-      payload: { kind: "staff", groupIds: [superadminRoleId] },
+      payload: { kind: "staff", roleIds: [superadminRoleId] },
     });
     expect(linkRes.statusCode).toBe(403);
   });
@@ -321,7 +321,7 @@ describe("GET /api/invites — list active invites", () => {
     ]);
   });
 
-  it("lists fields correctly including enterpriseId and groupIds", async () => {
+  it("lists fields correctly including enterpriseId and roleIds", async () => {
     const a = await getApp();
     const actor = await inviter();
     const entId = await createEnterprise("DetailCo");
@@ -330,7 +330,7 @@ describe("GET /api/invites — list active invites", () => {
       email: "detail@example.com",
       kind: "sponsor",
       enterpriseId: entId,
-      groupIds: [],
+      roleIds: [],
     });
 
     const res = await a.inject({
@@ -346,7 +346,7 @@ describe("GET /api/invites — list active invites", () => {
     expect(invite.email).toBe("detail@example.com");
     expect(invite.kind).toBe("sponsor");
     expect(invite.enterpriseId).toBe(entId);
-    expect(invite.groupIds).toEqual([]);
+    expect(invite.roleIds).toEqual([]);
     expect(invite.expiresAt).toBeDefined();
     expect(invite.createdAt).toBeDefined();
     expect(typeof invite.expiresAt).toBe("string");
@@ -1051,7 +1051,7 @@ describe("H9 invite regeneration", () => {
     const stale = await createInvite(a, manager, {
       email: "stale-wildcard@example.com",
       kind: "staff",
-      groupIds: [role],
+      roleIds: [role],
     });
 
     // The role's own capabilities change after issuance, not the invitation
@@ -1086,7 +1086,7 @@ describe("H9 invite regeneration", () => {
     const authorized = await createInvite(a, wildcard, {
       email: "authorized-wildcard@example.com",
       kind: "staff",
-      groupIds: [role],
+      roleIds: [role],
     });
     const accepted = await a.inject({
       method: "POST",
@@ -1115,7 +1115,7 @@ describe("H9 invite regeneration", () => {
         invite: await createInvite(a, manager, {
           email: `reauthorize-${operation}@example.com`,
           kind: "staff",
-          groupIds: [role],
+          roleIds: [role],
         }),
       })),
     );
@@ -1175,7 +1175,7 @@ describe("H10 reusable user invite links", () => {
       method: "POST",
       url: "/api/invites/user-links",
       headers: asUser(actor),
-      payload: { kind: "staff", groupIds: [emptyGroup] },
+      payload: { kind: "staff", roleIds: [emptyGroup] },
     });
     expect(noCapabilities.statusCode).toBe(400);
   });
@@ -1189,7 +1189,7 @@ describe("H10 reusable user invite links", () => {
 
     const link = await createUserInviteLink(a, actor, {
       kind: "staff",
-      groupIds: [groupId],
+      roleIds: [groupId],
       maxRedeems: 2,
       expiresInMinutes: null,
     });
@@ -1332,7 +1332,7 @@ describe("H10 reusable user invite links", () => {
     const groupId = await createRole([CAPABILITIES.ACTIVITY_SCAN], { name: "race-link-role" });
     const link = await createUserInviteLink(a, actor, {
       kind: "staff",
-      groupIds: [groupId],
+      roleIds: [groupId],
       maxRedeems: 1,
       expiresInMinutes: null,
     });
@@ -1387,7 +1387,7 @@ describe("H8/H9/H10 invite kind composes with pre-assigned roles", () => {
       email: "sponsor-with-role@example.com",
       kind: "sponsor",
       enterpriseId: entId,
-      groupIds: [extraRole],
+      roleIds: [extraRole],
     });
 
     const res = await a.inject({
@@ -1435,7 +1435,7 @@ describe("H8/H9/H10 invite kind composes with pre-assigned roles", () => {
     const invite = await createInvite(a, actor, {
       email: "participant-with-role@example.com",
       kind: "participant",
-      groupIds: [extraRole],
+      roleIds: [extraRole],
     });
 
     const res = await a.inject({
@@ -1476,7 +1476,7 @@ describe("H8/H9/H10 invite kind composes with pre-assigned roles", () => {
     const invite = await createInvite(a, actor, {
       email: "plain-staff@example.com",
       kind: "staff",
-      groupIds: [role],
+      roleIds: [role],
     });
 
     const res = await a.inject({
@@ -1510,7 +1510,7 @@ describe("H8/H9/H10 invite kind composes with pre-assigned roles", () => {
     const sponsorLink = await createUserInviteLink(a, actor, {
       kind: "sponsor",
       enterpriseId: entId,
-      groupIds: [sponsorExtraRole],
+      roleIds: [sponsorExtraRole],
       maxRedeems: 1,
       expiresInMinutes: null,
     });
@@ -1534,7 +1534,7 @@ describe("H8/H9/H10 invite kind composes with pre-assigned roles", () => {
 
     const participantLink = await createUserInviteLink(a, actor, {
       kind: "participant",
-      groupIds: [participantExtraRole],
+      roleIds: [participantExtraRole],
       maxRedeems: 1,
       expiresInMinutes: null,
     });
