@@ -29,18 +29,24 @@ export async function buildExportBundle(
   // Keep these reads sequential. The worker passes a single PoolClient while
   // holding the user share lock; Promise.all on that client can interleave
   // protocol operations and defeats the transaction's simple lock model.
-  const groups = (
+  const roles = (
     await db.query(
-      `SELECT g.id, g.name FROM permission_group_members m
-         JOIN permission_groups g ON g.id = m.group_id
-        WHERE m.user_id = $1 ORDER BY g.name`,
+      `SELECT r.id, r.name FROM user_roles ur
+         JOIN roles r ON r.id = ur.role_id
+        WHERE ur.user_id = $1 ORDER BY r.position DESC`,
       [subjectUserId],
     )
   ).rows;
   const capabilities = [...(await getEffectiveCapabilities(subjectUserId, undefined, db))];
   const applications = (
     await db.query(
-      `SELECT ar.id, ar.application_id, a.name AS application_name, a.type AS application_type,
+      `SELECT ar.id, ar.application_id, a.name AS application_name,
+              (SELECT r.name
+                 FROM application_grants_roles agr
+                 JOIN roles r ON r.id = agr.role_id AND r.deleted_at IS NULL
+                WHERE agr.application_id = a.id
+                ORDER BY r.position DESC
+                LIMIT 1) AS application_granted_role_name,
               ar.status, ar.responses, ar.submitted_at, ar.confirmed_at, ar.declined_at,
               (SELECT jsonb_agg(jsonb_build_object('authorId', rv.author_id, 'score', rv.score, 'notes', rv.notes))
                  FROM applicant_reviews rv WHERE rv.response_id = ar.id) AS reviews
@@ -176,7 +182,7 @@ export async function buildExportBundle(
       notes: user.notes,
       createdAt: user.created_at,
     },
-    permissions: { groups, effectiveCapabilities: capabilities },
+    permissions: { roles, effectiveCapabilities: capabilities },
     applications,
     projects: { submissions, devpostParticipant },
     judgingParticipation,

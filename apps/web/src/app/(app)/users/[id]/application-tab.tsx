@@ -12,12 +12,13 @@ import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { ApiError, api } from "@/lib/api";
-import { LOCALE_CODES, type MessageKey, useLocale } from "@/lib/i18n";
-import type {
-  ApplicationForm,
-  FormSection,
-  ResponseRow,
-  TemplateField,
+import { LOCALE_CODES, useLocale } from "@/lib/i18n";
+import {
+  type ApplicationForm,
+  type FormSection,
+  grantedRoleNameLabel,
+  type ResponseRow,
+  type TemplateField,
 } from "../../applications/lib";
 import { applicationStatusLabel } from "../../applications/workflow";
 
@@ -25,7 +26,7 @@ interface UserApplicationRow {
   id: number;
   application_id: number;
   application_name: string;
-  application_type: string;
+  application_granted_role_name: string | null;
   status: string;
   decision_sent: boolean;
   submitted_at: string | null;
@@ -40,7 +41,7 @@ interface ResponseDetailPayload {
     food_intolerances: number[];
     food_intolerance_notes: string | null;
   };
-  application: Pick<ApplicationForm, "id" | "name" | "type"> & {
+  application: Pick<ApplicationForm, "id" | "name"> & {
     template: TemplateField[];
     sections: FormSection[];
     ask_shirt_size: boolean;
@@ -48,13 +49,6 @@ interface ResponseDetailPayload {
   };
   reviews: { score: number | null }[];
 }
-
-const APPLICATION_TYPE_COPY: Record<string, MessageKey> = {
-  participant: "applicationTypeParticipant",
-  mentor: "applicationTypeMentor",
-  sponsor: "applicationTypeSponsor",
-  volunteer: "applicationTypeVolunteer",
-};
 
 export function ApplicationTab({ userId }: { userId: number }) {
   const { language, t } = useLocale();
@@ -167,8 +161,8 @@ export function ApplicationTab({ userId }: { userId: number }) {
           <li key={r.id} className="flex items-center gap-3 py-3">
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{r.application_name}</p>
-              <p className="text-muted-foreground text-xs capitalize">
-                {t(APPLICATION_TYPE_COPY[r.application_type] ?? "applicationTypeOther")}
+              <p className="text-muted-foreground text-xs">
+                {grantedRoleNameLabel(r.application_granted_role_name, t)}
                 {r.submitted_at
                   ? t("submittedOnInline", {
                       date: new Intl.DateTimeFormat(LOCALE_CODES[language], {

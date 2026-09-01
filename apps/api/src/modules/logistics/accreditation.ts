@@ -3,7 +3,7 @@ import type pg from "pg";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
-import { hasEventAccess } from "../identity/role.js";
+import { assignAttendeeRole, hasEventAccess } from "../identity/role.js";
 import { broadcastForActiveUser } from "./active-broadcast.js";
 import { loadPersonCard } from "./cards.js";
 import { scannerCredentialDigest } from "./credential-tombstones.js";
@@ -178,21 +178,12 @@ export async function checkInUser(
     await assertFixtureSubjectScope(client, actorId, input.userId);
     if (input.attendeeRole) {
       const { rows: existingRole } = await client.query(
-        `WITH RECURSIVE effective_groups(group_id) AS (
-           SELECT group_id FROM permission_group_members WHERE user_id = $1
-           UNION
-           SELECT pgi.child_group_id
-             FROM effective_groups eg
-             JOIN permission_group_includes pgi ON pgi.parent_group_id = eg.group_id
-         )
-         SELECT 1 FROM manual_attendee_roles WHERE user_id = $1
+        `SELECT 1 FROM manual_attendee_roles WHERE user_id = $1
+         UNION ALL SELECT 1 FROM user_roles WHERE user_id = $1
          UNION ALL SELECT 1 FROM application_responses WHERE user_id = $1 AND status <> 'draft'
          UNION ALL SELECT 1 FROM sponsors WHERE user_id = $1
          UNION ALL SELECT 1 FROM enterprise_judges WHERE user_id = $1
-         UNION ALL
-         SELECT 1
-           FROM effective_groups eg
-           JOIN group_capabilities gc ON gc.group_id = eg.group_id
+         UNION ALL SELECT 1 FROM user_effective_capabilities WHERE user_id = $1
          LIMIT 1`,
         [input.userId],
       );
@@ -201,10 +192,7 @@ export async function checkInUser(
           userId: input.userId,
         });
       }
-      await client.query(
-        `INSERT INTO manual_attendee_roles (user_id, role, assigned_by) VALUES ($1, $2, $3)`,
-        [input.userId, input.attendeeRole, actorId],
-      );
+      await assignAttendeeRole(client, input.userId, input.attendeeRole, actorId);
       await issueTicket(client, input.userId);
       await audit(client, {
         actorId,

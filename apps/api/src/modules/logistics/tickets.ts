@@ -45,7 +45,13 @@ export async function ticketQrPayload(userId: number, actorId?: number) {
         [userId],
       ),
       pool.query(
-        `SELECT r.id AS response_id, a.name AS application_name, a.type AS application_type,
+        `SELECT r.id AS response_id, a.name AS application_name,
+              (SELECT ro.name
+                 FROM application_grants_roles agr
+                 JOIN roles ro ON ro.id = agr.role_id AND ro.deleted_at IS NULL
+                WHERE agr.application_id = a.id
+                ORDER BY ro.position DESC
+                LIMIT 1) AS granted_role_name,
               evt.expires_at
          FROM application_responses r
          JOIN applications a ON a.id = r.application_id
@@ -88,7 +94,7 @@ export async function ticketQrPayload(userId: number, actorId?: number) {
     acceptedSpots: acceptedRows.map((accepted) => ({
       responseId: accepted.response_id as number,
       applicationName: accepted.application_name as string,
-      applicationType: accepted.application_type as string,
+      grantedRoleName: (accepted.granted_role_name as string | null) ?? null,
       expiresAt: accepted.expires_at ? (accepted.expires_at as Date).toISOString() : null,
     })),
   };

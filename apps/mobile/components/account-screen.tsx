@@ -388,15 +388,5 @@ function roleLabel(
   role: NonNullable<ReturnType<typeof useMeContext>["me"]>["role"],
   t: ReturnType<typeof useLocale>["t"],
 ) {
-  return (
-    {
-      admin: t("roleAdmin"),
-      judge: t("roleJudge"),
-      sponsor: t("roleSponsor"),
-      staff: t("roleStaff"),
-      mentor: t("roleMentor"),
-      participant: t("roleParticipant"),
-      unassigned: t("roleUnassigned"),
-    } as const
-  )[role];
+  return role ?? t("roleUnassigned");
 }

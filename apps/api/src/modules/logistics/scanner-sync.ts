@@ -22,14 +22,9 @@ export async function scannerSnapshot(actorId?: number) {
   // stats read model and the mobile role filter already use that full roster.
   const subjectScope = fixtureOnly
     ? ` AND u.is_test_account = true
-              AND (
-                EXISTS (SELECT 1 FROM manual_attendee_roles mar
-                        WHERE mar.user_id = u.id AND mar.role = 'participant')
-                OR EXISTS (
-                  SELECT 1 FROM application_responses ar
-                  JOIN applications a ON a.id = ar.application_id
-                  WHERE ar.user_id = u.id AND a.type = 'participant' AND ar.status <> 'draft'
-                )
+              AND EXISTS (
+                SELECT 1 FROM user_effective_role_name uern
+                 WHERE uern.user_id = u.id AND uern.role_name = 'Participant'
               )`
     : " AND u.is_test_account = false";
   // The snapshot is replace-all. Retired credentials are represented by
@@ -39,41 +34,26 @@ export async function scannerSnapshot(actorId?: number) {
   // for immediate operator feedback.
   const [peopleResult, activitiesResult, statesResult] = await Promise.all([
     pool.query(
-      `WITH RECURSIVE effective_groups (user_id, group_id) AS (
-         SELECT user_id, group_id FROM permission_group_members
-         UNION
-         SELECT eg.user_id, gi.child_group_id
-           FROM effective_groups eg
-           JOIN permission_group_includes gi ON gi.parent_group_id = eg.group_id
-       ), user_caps AS (
-         SELECT eg.user_id,
-                bool_or(gc.capability = '*') AS is_admin,
-                count(gc.capability) > 0 AS has_capability
-           FROM effective_groups eg
-           JOIN group_capabilities gc ON gc.group_id = eg.group_id
-          GROUP BY eg.user_id
-       )
-       SELECT u.id, u.email, u.name, u.surname, u.badge_id, u.badge_id_history,
+      `SELECT u.id, u.email, u.name, u.surname, u.badge_id, u.badge_id_history,
               u.food_intolerance_notes, u.notes, t.token AS ticket_token,
-              CASE
-                WHEN COALESCE(uc.is_admin, false) THEN 'admin'
-                WHEN EXISTS (SELECT 1 FROM enterprise_judges ej WHERE ej.user_id = u.id) THEN 'judge'
-                WHEN EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id) THEN 'sponsor'
-                WHEN COALESCE(uc.has_capability, false) THEN 'staff'
-                WHEN EXISTS (SELECT 1 FROM manual_attendee_roles mar WHERE mar.user_id = u.id AND mar.role = 'mentor') THEN 'mentor'
-                WHEN EXISTS (SELECT 1 FROM manual_attendee_roles mar WHERE mar.user_id = u.id AND mar.role = 'participant') THEN 'participant'
-                WHEN EXISTS (
-                  SELECT 1 FROM application_responses ar
-                  JOIN applications a ON a.id = ar.application_id
-                 WHERE ar.user_id = u.id AND ar.status <> 'draft' AND a.type = 'mentor'
-                ) THEN 'mentor'
-                WHEN EXISTS (
-                  SELECT 1 FROM application_responses ar
-                  JOIN applications a ON a.id = ar.application_id
-                 WHERE ar.user_id = u.id AND ar.status <> 'draft' AND a.type = 'participant'
-                ) THEN 'participant'
-                ELSE 'unassigned'
-              END AS role,
+              -- H8 full-replacement: a person's scanner-facing "role" is
+              -- simply their highest-visible role name (identity/role.ts's
+              -- getHighestVisibleRoleName — this is its bulk-query
+              -- equivalent via user_effective_role_name). No separate
+              -- admin/judge/sponsor/staff bucket.
+              uern.role_name AS role,
+              -- H8: the scanner's own operational grouping (door-scan
+              -- relevance) can no longer read this off a badge_category
+              -- column, since role names are now free text with no fixed
+              -- "admin"/"staff" spelling. These mirror stats.ts's
+              -- scannerRoleStats is_operational/enterprise-judge checks --
+              -- the real underlying data those groupings always used.
+              EXISTS (
+                SELECT 1 FROM user_effective_capabilities uec WHERE uec.user_id = u.id
+              ) AS has_capabilities,
+              EXISTS (
+                SELECT 1 FROM enterprise_judges ej WHERE ej.user_id = u.id
+              ) AS is_enterprise_judge,
               EXISTS (
                 SELECT 1 FROM application_responses ar
                  WHERE ar.user_id = u.id
@@ -91,7 +71,7 @@ export async function scannerSnapshot(actorId?: number) {
               last_presence.kind AS last_presence_kind,
               last_presence.scanned_at AS last_presence_at
          FROM users u
-         LEFT JOIN user_caps uc ON uc.user_id = u.id
+         LEFT JOIN user_effective_role_name uern ON uern.user_id = u.id
          LEFT JOIN tickets t ON t.user_id = u.id
          -- Anonymized profiles (H54) must never reach a scanner's local store.
          LEFT JOIN LATERAL (
@@ -131,14 +111,9 @@ export async function scannerSnapshot(actorId?: number) {
     people: peopleResult.rows.map((row) => ({
       userId: row.id as number,
       email: row.email as string,
-      role: row.role as
-        | "admin"
-        | "judge"
-        | "sponsor"
-        | "staff"
-        | "mentor"
-        | "participant"
-        | "unassigned",
+      role: (row.role as string | null) ?? null,
+      hasCapabilities: Boolean(row.has_capabilities),
+      isEnterpriseJudge: Boolean(row.is_enterprise_judge),
       ticketToken: (row.ticket_token as string | null) ?? null,
       badgeId: (row.badge_id as string | null) ?? null,
       revokedBadgeIds: (row.badge_id_history as string[]) ?? [],

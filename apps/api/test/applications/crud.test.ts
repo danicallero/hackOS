@@ -5,6 +5,7 @@ import type { App } from "../../src/app.js";
 import {
   asUser,
   buildTestApp,
+  createRole,
   createUser,
   createUserWithCapabilities,
   truncateAll,
@@ -36,6 +37,22 @@ async function getApp(): Promise<App> {
   return app;
 }
 
+/**
+ * Test roles get a random position in [1e6, ~1e9) (see helpers.ts). Push a
+ * user's own (single, throwaway) role position above that whole range so
+ * they can grant/manage any test role by position (H8 role-mutation
+ * authority) — mirrors the `UPDATE roles SET position = ...` pattern used in
+ * test/identity/roles.test.ts.
+ */
+async function giveManagerTopPosition(userId: number): Promise<void> {
+  const { pool } = await import("../../src/db/pool.js");
+  await pool.query(
+    `UPDATE roles SET position = 2000000000
+       WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1 LIMIT 1)`,
+    [userId],
+  );
+}
+
 describe("applications CRUD (H11)", () => {
   it("requires APPLICATIONS_MANAGE to create", async () => {
     const a = await getApp();
@@ -44,7 +61,7 @@ describe("applications CRUD (H11)", () => {
       method: "POST",
       url: "/api/applications",
       headers: asUser(pleb),
-      payload: { name: "X", type: "participant", template: sampleTemplate() },
+      payload: { name: "X", template: sampleTemplate() },
     });
     expect(res.statusCode).toBe(403);
   });
@@ -59,7 +76,6 @@ describe("applications CRUD (H11)", () => {
       headers: asUser(manager),
       payload: {
         name: "Participant form",
-        type: "participant",
         template: sampleTemplate(),
         capacity: 100,
       },
@@ -97,7 +113,7 @@ describe("applications CRUD (H11)", () => {
       method: "POST",
       url: "/api/applications",
       headers: asUser(manager),
-      payload: { name: "Retention form", type: "participant", template },
+      payload: { name: "Retention form", template },
     });
     expect(create.statusCode).toBe(201);
     const id = create.json().id as number;
@@ -173,7 +189,7 @@ describe("applications CRUD (H11)", () => {
       method: "POST",
       url: "/api/applications",
       headers: asUser(manager),
-      payload: { name: "Test", type: "participant", template: sampleTemplate() },
+      payload: { name: "Test", template: sampleTemplate() },
     });
     const id = created.json().id;
 
@@ -212,7 +228,7 @@ describe("applications CRUD (H11)", () => {
       method: "POST",
       url: "/api/applications",
       headers: asUser(manager),
-      payload: { name: "Decision form", type: "participant", template: sampleTemplate() },
+      payload: { name: "Decision form", template: sampleTemplate() },
     });
     const id = created.json().id as number;
 
@@ -245,7 +261,6 @@ describe("applications CRUD (H11)", () => {
       headers: asUser(manager),
       payload: {
         name: "Bad",
-        type: "participant",
         template: [
           { key: "x", label: { en: "x", es: "x", gl: "x" }, kind: "select", required: true },
         ],
@@ -334,7 +349,7 @@ describe("applications CRUD (H11)", () => {
     expect(single.statusCode).toBe(404);
   });
 
-  it("H12: ask_shirt_size/ask_food_intolerances default false and are independently togglable per form, regardless of type", async () => {
+  it("H12: ask_shirt_size/ask_food_intolerances default false and are independently togglable per form", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
 
@@ -342,7 +357,7 @@ describe("applications CRUD (H11)", () => {
       method: "POST",
       url: "/api/applications",
       headers: asUser(manager),
-      payload: { name: "Volunteer form", type: "volunteer", template: sampleTemplate() },
+      payload: { name: "New form", template: sampleTemplate() },
     });
     expect(create.statusCode).toBe(201);
     expect(create.json().ask_shirt_size).toBe(false);
@@ -359,6 +374,228 @@ describe("applications CRUD (H11)", () => {
     expect(patch.json().ask_shirt_size).toBe(true);
     // Untouched field stays as-is (partial update).
     expect(patch.json().ask_food_intolerances).toBe(false);
+  });
+
+  it("H8: creates a form with multiple grants_role_ids and updates the granted set", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    const roleA = await createRole([], { name: "grant-form-role-a" });
+    const roleB = await createRole([], { name: "grant-form-role-b" });
+    const roleC = await createRole([], { name: "grant-form-role-c" });
+    // H8: configuring grants_role_ids is now gated by the same role-mutation
+    // authority as direct assignment — put the manager's own role position
+    // strictly above every role it will grant through this form.
+    await giveManagerTopPosition(manager);
+
+    const create = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: {
+        name: "Mentor form",
+        template: sampleTemplate(),
+        grants_role_ids: [roleA, roleB],
+      },
+    });
+    expect(create.statusCode).toBe(201);
+    expect(create.json().grants_role_ids.sort()).toEqual([roleA, roleB].sort());
+    const id = create.json().id;
+
+    const get = await a.inject({
+      method: "GET",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+    });
+    expect(get.json().grants_role_ids.sort()).toEqual([roleA, roleB].sort());
+
+    // Replace the full set: drop roleA, add roleC.
+    const patch = await a.inject({
+      method: "PATCH",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+      payload: { grants_role_ids: [roleB, roleC] },
+    });
+    expect(patch.statusCode).toBe(200);
+    expect(patch.json().grants_role_ids.sort()).toEqual([roleB, roleC].sort());
+
+    // Omitting the field on a further PATCH leaves the grants unchanged.
+    const patchUnrelated = await a.inject({
+      method: "PATCH",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+      payload: { capacity: 10 },
+    });
+    expect(patchUnrelated.json().grants_role_ids.sort()).toEqual([roleB, roleC].sort());
+
+    // Explicit [] clears every grant.
+    const clear = await a.inject({
+      method: "PATCH",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+      payload: { grants_role_ids: [] },
+    });
+    expect(clear.json().grants_role_ids).toEqual([]);
+  });
+
+  it("H8: a form with no grants_role_ids still creates and confirms with no role side-effects", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+
+    const create = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: { name: "No-grant form", template: sampleTemplate() },
+    });
+    expect(create.statusCode).toBe(201);
+    expect(create.json().grants_role_ids).toEqual([]);
+  });
+
+  it("H8: rejects an unknown role ID in grants_role_ids", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    await giveManagerTopPosition(manager);
+
+    const create = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: {
+        name: "Bad grant form",
+        template: sampleTemplate(),
+        grants_role_ids: [999999],
+      },
+    });
+    expect(create.statusCode).toBe(404);
+
+    const roleA = await createRole([], { name: "grant-form-role-update-target" });
+    const okCreate = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: {
+        name: "Ok grant form",
+        template: sampleTemplate(),
+        grants_role_ids: [roleA],
+      },
+    });
+    expect(okCreate.statusCode).toBe(201);
+    const id = okCreate.json().id;
+
+    const patch = await a.inject({
+      method: "PATCH",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+      payload: { grants_role_ids: [roleA, 999999] },
+    });
+    expect(patch.statusCode).toBe(404);
+    // Unknown role ID in the PATCH must not have partially applied.
+    const get = await a.inject({
+      method: "GET",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+    });
+    expect(get.json().grants_role_ids).toEqual([roleA]);
+  });
+
+  it("H8: applications:manage alone can't configure grants_role_ids to a role at/above the actor's own highest role", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE roles SET position = 500
+         WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1 LIMIT 1)`,
+      [manager],
+    );
+    // roles.position is unique, so "at or above" can only be exercised as
+    // strictly above here (an exact tie is impossible by constraint) — the
+    // strict `<` in requireRoleMutationAuthority already covers both.
+    const aboveCeiling = await createRole([], { name: "grant-authority-above-ceiling" });
+    await pool.query(`UPDATE roles SET position = 900 WHERE id = $1`, [aboveCeiling]);
+    const belowCeiling = await createRole([], { name: "grant-authority-below-ceiling" });
+    await pool.query(`UPDATE roles SET position = 100 WHERE id = $1`, [belowCeiling]);
+
+    const escalation = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: {
+        name: "Escalation attempt",
+        template: sampleTemplate(),
+        grants_role_ids: [aboveCeiling],
+      },
+    });
+    expect(escalation.statusCode).toBe(403);
+
+    // Strictly below the actor's own highest role: allowed.
+    const ok = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: {
+        name: "Within authority",
+        template: sampleTemplate(),
+        grants_role_ids: [belowCeiling],
+      },
+    });
+    expect(ok.statusCode).toBe(201);
+    const id = ok.json().id;
+
+    // Same rule on update — and it must reject the whole request, not apply
+    // the allowed role while dropping the disallowed one.
+    const patch = await a.inject({
+      method: "PATCH",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+      payload: { grants_role_ids: [belowCeiling, aboveCeiling] },
+    });
+    expect(patch.statusCode).toBe(403);
+    const get = await a.inject({
+      method: "GET",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+    });
+    expect(get.json().grants_role_ids).toEqual([belowCeiling]);
+  });
+
+  it("H8: applications:manage alone can't configure grants_role_ids to a role granting a capability the actor doesn't possess", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    await giveManagerTopPosition(manager);
+    const { pool } = await import("../../src/db/pool.js");
+
+    const unpossessedCapRole = await createRole([CAPABILITIES.PERMISSIONS_MANAGE], {
+      name: "grant-authority-unpossessed-cap",
+    });
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: {
+        name: "Backdoor attempt",
+        template: sampleTemplate(),
+        grants_role_ids: [unpossessedCapRole],
+      },
+    });
+    expect(res.statusCode).toBe(403);
+
+    // Once the actor also possesses that capability, the same role is grantable.
+    await pool.query(
+      `INSERT INTO role_capabilities (role_id, capability, state)
+         SELECT role_id, $2, 'allow' FROM user_roles WHERE user_id = $1 LIMIT 1`,
+      [manager, CAPABILITIES.PERMISSIONS_MANAGE],
+    );
+    const ok = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: {
+        name: "Now within capability",
+        template: sampleTemplate(),
+        grants_role_ids: [unpossessedCapRole],
+      },
+    });
+    expect(ok.statusCode).toBe(201);
   });
 
   it("blocks deleting a form that already has responses", async () => {
@@ -390,7 +627,6 @@ describe("applications CRUD (H11)", () => {
       headers: asUser(manager),
       payload: {
         name: "Sectioned form",
-        type: "participant",
         template,
         sections: [{ key: "education", title: en }],
       },
@@ -427,7 +663,7 @@ describe("applications CRUD (H11)", () => {
       method: "POST",
       url: "/api/applications",
       headers: asUser(manager),
-      payload: { name: "Help text form", type: "participant", template },
+      payload: { name: "Help text form", template },
     });
     expect(create.statusCode).toBe(201);
     expect(create.json().template[0].help_text).toEqual(help);
@@ -442,7 +678,7 @@ describe("applications CRUD (H11)", () => {
       method: "POST",
       url: "/api/applications",
       headers: asUser(manager),
-      payload: { name: "Bad sections", type: "participant", template, sections: [] },
+      payload: { name: "Bad sections", template, sections: [] },
     });
     expect(res.statusCode).toBe(400);
   });
@@ -458,7 +694,6 @@ describe("applications CRUD (H11)", () => {
       headers: asUser(manager),
       payload: {
         name: "Dup sections",
-        type: "participant",
         template: sampleTemplate(),
         sections: [
           { key: "dup", title },

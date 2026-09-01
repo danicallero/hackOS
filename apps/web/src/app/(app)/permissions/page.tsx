@@ -2,21 +2,29 @@
 
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { KeyRoundIcon, LayersIcon, PlusIcon, ShieldCheckIcon } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import {
+  KeyRoundIcon,
+  PlusIcon,
+  ShieldCheckIcon,
+  Trash2Icon,
+  UndoIcon,
+  ZapIcon,
+} from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { ContextualError } from "@/components/common/contextual-error";
-import { type Column, DataTable } from "@/components/common/data-table";
+import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
-import { MultiSelect } from "@/components/common/multi-select";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
-import { StatusBadge } from "@/components/common/status-badge";
+import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
+import type { UserOption } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
   FormControl,
@@ -26,95 +34,177 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Section } from "@/components/ui/surface";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError, api } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
-import { useMe } from "@/lib/session";
 import type {
-  PermissionGroupDetail,
-  PermissionGroupSummary,
-  PermissionGroupTemplate,
+  PermissionState,
+  RoleDetail,
+  RoleSeedDiff,
+  RoleSummary,
+  RoleTemplate,
+  UserList,
+  UserListItem,
 } from "@/lib/types";
-import {
-  capabilitiesByDomain,
-  capabilityOptions,
-  permissionTemplateDescription,
-  permissionTemplateName,
-  prettifyCapability,
-  templateRequiresWildcardAuthority,
-} from "./helpers";
+import { GrantRulesOverviewModal } from "./grant-rules-overview";
+import { permissionTemplateName } from "./helpers";
+import { DrilldownBackButton, RoleEditor } from "./role-editor";
+import { RoleList } from "./role-list";
 
-// H8: admins manage capability groups. This page lists groups, offers a
-// create-group modal and shows the read-only catalogue of every capability kind.
+// H8: admins manage a hierarchical, position-ordered multi-role model on a single
+// master-detail page — the left column lists every role on one reorderable
+// hierarchy, the right column edits whichever role is selected (persisted as
+// ?role=<id> for deep links, e.g. from a user's permissions tab). This
+// replaced a separate full-page /permissions/[roleId] route per the design
+// review: selecting a role should feel like flipping a tab, not navigating
+// away from the list.
+//
+// Below the `md` breakpoint (`useIsMobile`, this app's existing mobile/desktop
+// split convention), the same data/state instead drives a drill-down
+// presentation — one screen at a time with a back button — instead of the
+// always-visible two-pane split. Desktop is unchanged.
+//
+// role_grant_rules admin (H8, H43-H46) originally lived here as a standalone
+// "Automation" tab, an equal-weight sibling of "Roles" showing a flat,
+// ungrouped, id-referencing list of every rule in the system. A later UX
+// pass found that bolted-on: a rule is inherently about ONE role, so
+// create/edit/delete now lives on that role's own "Grant rules" tab
+// (role-editor.tsx), scoped via `GET /api/role-grant-rules?roleId=`. What a
+// per-role view genuinely can't answer — "show me every automatic rule in
+// the system" — survives as a lightweight, read-only, filterable overview
+// (`grant-rules-overview.tsx`), opened from a plain button here rather than
+// competing as a second top-level tab.
 
 const createSchema = (t: Translate) =>
   z.object({
     name: z.string().min(1, t("required")).max(200),
-    description: z.string().max(2000),
-    capabilities: z.array(z.string()),
+    position: z
+      .string()
+      .min(1, t("required"))
+      .refine((v) => Number.isInteger(Number(v)), t("required")),
+    isVisible: z.boolean(),
+    templateKey: z.string(),
   });
 
 type CreateValues = z.infer<ReturnType<typeof createSchema>>;
-type TemplateValues = Pick<CreateValues, "name" | "description">;
 
 export default function PermissionsPage() {
   const { t } = useLocale();
-  const me = useMe();
   const router = useRouter();
-  const [groups, setGroups] = useState<PermissionGroupSummary[]>([]);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const isMobile = useIsMobile();
+
+  const [roles, setRoles] = useState<RoleSummary[]>([]);
+  const [users, setUsers] = useState<Map<number, UserListItem>>(new Map());
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [templates, setTemplates] = useState<PermissionGroupTemplate[]>([]);
-  const [templatesLoading, setTemplatesLoading] = useState(true);
-  const [templatesError, setTemplatesError] = useState<string | null>(null);
-  const [selectedTemplate, setSelectedTemplate] = useState<PermissionGroupTemplate | null>(null);
-  const [instantiateError, setInstantiateError] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<RoleTemplate[]>([]);
+  const [showTrash, setShowTrash] = useState(false);
+  const [deletedRoles, setDeletedRoles] = useState<RoleSummary[]>([]);
+  const [trashLoading, setTrashLoading] = useState(false);
+  const [restoringId, setRestoringId] = useState<number | null>(null);
+  // H8: the read-only cross-role rules overview (see the file-level comment
+  // above) is a plain modal, not a routed view.
+  const [allRulesOpen, setAllRulesOpen] = useState(false);
+
+  const selectedId = (() => {
+    const raw = searchParams.get("role");
+    return raw && Number.isFinite(Number(raw)) ? Number(raw) : null;
+  })();
+
+  function selectRole(id: number | null) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (id === null) params.delete("role");
+    else params.set("role", String(id));
+    router.replace(params.size > 0 ? `${pathname}?${params.toString()}` : pathname);
+  }
+
+  const mergeUsers = useCallback((list: UserListItem[]) => {
+    setUsers((prev) => {
+      const next = new Map(prev);
+      for (const u of list) next.set(u.id, u);
+      return next;
+    });
+  }, []);
 
   const schema = createSchema(t);
   const form = useForm<CreateValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", description: "", capabilities: [] },
-  });
-  const templateForm = useForm<TemplateValues>({
-    resolver: zodResolver(schema.pick({ name: true, description: true })),
-    defaultValues: { name: "", description: "" },
+    defaultValues: {
+      name: "",
+      position: "0",
+      isVisible: true,
+      templateKey: "",
+    },
   });
 
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
-    setTemplatesLoading(true);
-    setTemplatesError(null);
-    const [groupsResult, templatesResult] = await Promise.allSettled([
-      api.get<PermissionGroupSummary[]>("/api/permission-groups"),
-      api.get<PermissionGroupTemplate[]>("/api/permission-group-templates"),
+    const [rolesResult, templatesResult, usersResult] = await Promise.allSettled([
+      api.get<RoleSummary[]>("/api/roles"),
+      api.get<RoleTemplate[]>("/api/role-templates"),
+      api.get<UserList>("/api/users", { query: { limit: 200 } }),
     ]);
-    if (groupsResult.status === "fulfilled") {
-      setGroups(groupsResult.value);
+    if (rolesResult.status === "fulfilled") {
+      setRoles(rolesResult.value);
     } else {
       setLoadError(
-        groupsResult.reason instanceof ApiError
-          ? groupsResult.reason.message
-          : t("couldNotLoadPermissionGroups"),
+        rolesResult.reason instanceof ApiError
+          ? rolesResult.reason.message
+          : t("couldNotLoadRoles"),
       );
     }
-    if (templatesResult.status === "fulfilled") {
-      setTemplates(templatesResult.value);
-    } else {
-      setTemplatesError(
-        templatesResult.reason instanceof ApiError
-          ? templatesResult.reason.message
-          : t("couldNotLoadPermissionTemplates"),
-      );
-    }
+    if (templatesResult.status === "fulfilled") setTemplates(templatesResult.value);
+    if (usersResult.status === "fulfilled") mergeUsers(usersResult.value.users);
     setLoading(false);
-    setTemplatesLoading(false);
+  }, [t, mergeUsers]);
+
+  const loadTrash = useCallback(async () => {
+    setTrashLoading(true);
+    try {
+      const all = await api.get<RoleSummary[]>("/api/roles", { query: { includeDeleted: true } });
+      setDeletedRoles(all.filter((r) => r.deletedAt !== null));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadRoles"));
+    } finally {
+      setTrashLoading(false);
+    }
   }, [t]);
 
+  function toggleTrash() {
+    const next = !showTrash;
+    setShowTrash(next);
+    if (next) void loadTrash();
+  }
+
+  async function restoreRole(roleId: number) {
+    setRestoringId(roleId);
+    try {
+      await api.post<RoleDetail>(`/api/roles/${roleId}/restore`, {});
+      toast.success(t("roleRestored"));
+      setDeletedRoles((prev) => prev.filter((r) => r.id !== roleId));
+      await load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotRestoreRole"));
+    } finally {
+      setRestoringId(null);
+    }
+  }
+
   // Soft, in-place refresh instead of a hard reload when another admin
-  // creates/edits a permission group elsewhere.
+  // creates/edits a role elsewhere.
   const liveRefresh = useAutoRefresh("/api/events/stream?topic=identity", [EVENTS.DOMAIN_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
@@ -123,184 +213,276 @@ export default function PermissionsPage() {
     load();
   }, [load, liveRefresh]);
 
+  function applyRole(updated: RoleSummary) {
+    setRoles((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+  }
+
   async function onCreate(values: CreateValues) {
+    const template = templates.find((tpl) => tpl.key === values.templateKey);
     try {
-      const group = await api.post<PermissionGroupDetail>("/api/permission-groups", {
+      const role = await api.post<RoleDetail>("/api/roles", {
         name: values.name,
-        description: values.description || undefined,
-        capabilities: values.capabilities,
+        position: Number(values.position),
+        isVisible: values.isVisible,
+        templateKey: template?.key,
       });
-      toast.success(t("groupCreated"));
+      toast.success(t("roleCreated"));
       setCreateOpen(false);
-      form.reset({ name: "", description: "", capabilities: [] });
-      router.push(`/permissions/${group.id}`);
+      form.reset({
+        name: "",
+        position: "0",
+        isVisible: true,
+        templateKey: "",
+      });
+      setRoles((prev) => [...prev, role]);
+      selectRole(role.id);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateGroup"));
+      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateRole"));
     }
   }
 
-  async function onInstantiate(values: TemplateValues) {
-    if (!selectedTemplate) return;
-    setInstantiateError(null);
+  async function onReorder(roleId: number, newPosition: number) {
+    const before = roles;
+    setRoles((prev) => prev.map((r) => (r.id === roleId ? { ...r, position: newPosition } : r)));
     try {
-      const group = await api.post<PermissionGroupDetail>(
-        `/api/permission-group-templates/${encodeURIComponent(selectedTemplate.key)}/instantiate`,
-        { name: values.name, description: values.description || undefined },
-      );
-      toast.success(t("templateGroupCreated"));
-      setSelectedTemplate(null);
-      templateForm.reset({ name: "", description: "" });
-      router.push(`/permissions/${group.id}`);
+      const updated = await api.patch<RoleDetail>(`/api/roles/${roleId}/position`, {
+        position: newPosition,
+      });
+      applyRole(updated);
     } catch (err) {
-      setInstantiateError(err instanceof ApiError ? err.message : t("couldNotCreateTemplateGroup"));
+      setRoles(before);
+      toast.error(err instanceof ApiError ? err.message : t("couldNotMoveRole"));
     }
   }
 
-  const columns: Column<PermissionGroupSummary>[] = [
-    {
-      id: "name",
-      header: t("name"),
-      cell: (g) => <span className="font-medium">{g.name}</span>,
-      sortValue: (g) => g.name,
-    },
-    {
-      id: "description",
-      header: t("descriptionLabel"),
-      cell: (g) =>
-        g.description ? (
-          <span className="text-muted-foreground">{g.description}</span>
-        ) : (
-          <span className="text-muted-foreground/60 italic">{t("noDescriptionItalic")}</span>
-        ),
-    },
-  ];
+  async function onSaveDetails(roleId: number, values: { name: string; isVisible: boolean }) {
+    try {
+      const r = await api.patch<RoleDetail>(`/api/roles/${roleId}`, values);
+      applyRole(r);
+      toast.success(t("roleUpdated"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveRole"));
+    }
+  }
 
-  const catalogue = capabilitiesByDomain();
+  async function onSaveCapabilities(
+    roleId: number,
+    capabilities: { capability: string; state: PermissionState }[],
+  ) {
+    try {
+      const r = await api.put<RoleDetail>(`/api/roles/${roleId}/capabilities`, { capabilities });
+      applyRole(r);
+      toast.success(t("capabilitiesSaved"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveCapabilities"));
+    }
+  }
+
+  async function onAddMember(roleId: number, userId: number, user?: UserListItem) {
+    try {
+      const r = await api.post<RoleDetail>(`/api/roles/${roleId}/users/${userId}`, {});
+      if (user) mergeUsers([user]);
+      applyRole(r);
+      toast.success(t("memberAdded"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotAddMemberRole"));
+    }
+  }
+
+  async function onRemoveMember(roleId: number, userId: number) {
+    try {
+      const r = await api.delete<RoleDetail>(`/api/roles/${roleId}/users/${userId}`);
+      applyRole(r);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveMemberRole"));
+    }
+  }
+
+  async function onResetToDefault(roleId: number) {
+    try {
+      const r = await api.post<RoleDetail>(`/api/roles/${roleId}/reset-to-default`, {});
+      applyRole(r);
+      toast.success(t("resetToDefaultDone"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotResetRole"));
+    }
+  }
+
+  async function onDelete(roleId: number) {
+    try {
+      await api.delete<{ deleted: true }>(`/api/roles/${roleId}`);
+      toast.success(t("roleDeleted"));
+      setRoles((prev) => prev.filter((r) => r.id !== roleId));
+      selectRole(null);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteRole"));
+    }
+  }
+
+  const searchUsers = useMemo(
+    () =>
+      async (query: string): Promise<UserOption[]> => {
+        const result = await api.get<UserList>("/api/users", {
+          query: { q: query || undefined, limit: 20 },
+        });
+        return result.users;
+      },
+    [],
+  );
+
+  const selectedRole = roles.find((r) => r.id === selectedId) ?? null;
+
+  // Mobile drill-down: the roles list screen is the only one with the page
+  // header (search/+/trash); the role, permissions and members screens each
+  // carry their own back button instead (H8).
+  const showHeader = !isMobile || (!showTrash && selectedRole === null);
+
+  const trashPanel = (
+    <SectionCard icon={Trash2Icon} title={t("trashTitle")} bodyClassName="p-0">
+      {trashLoading ? (
+        <p className="text-muted-foreground p-6 text-sm">…</p>
+      ) : deletedRoles.length === 0 ? (
+        <p className="text-muted-foreground p-6 text-sm">{t("noDeletedRoles")}</p>
+      ) : (
+        <ul className="divide-border divide-y">
+          {deletedRoles.map((r) => (
+            <li key={r.id} className="flex items-center justify-between gap-3 px-6 py-3">
+              <span className="truncate text-sm font-medium">{r.name}</span>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={restoringId === r.id}
+                onClick={() => restoreRole(r.id)}
+              >
+                <UndoIcon /> {t("restoreRole")}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SectionCard>
+  );
+
+  const rolesListBody = loading ? (
+    <div className="flex items-center justify-center py-12">
+      <Spinner className="size-6" />
+    </div>
+  ) : roles.length === 0 ? (
+    <EmptyState
+      icon={ShieldCheckIcon}
+      title={t("noRolesYetTitle")}
+      action={
+        <Button type="button" onClick={() => setCreateOpen(true)}>
+          <PlusIcon aria-hidden="true" />
+          {t("createRole")}
+        </Button>
+      }
+    />
+  ) : (
+    <RoleList
+      roles={roles}
+      selectedId={selectedId}
+      onSelect={selectRole}
+      onReorder={onReorder}
+      mobile={isMobile}
+    />
+  );
+
+  const roleEditor = selectedRole && (
+    <RoleEditor
+      role={selectedRole}
+      users={users}
+      onSaveDetails={(values) => onSaveDetails(selectedRole.id, values)}
+      onSaveCapabilities={(caps) => onSaveCapabilities(selectedRole.id, caps)}
+      onAddMember={(userId, user) => onAddMember(selectedRole.id, userId, user)}
+      onRemoveMember={(userId) => onRemoveMember(selectedRole.id, userId)}
+      onDelete={() => onDelete(selectedRole.id)}
+      searchUsers={searchUsers}
+      loadSeedDiff={() => api.get<RoleSeedDiff>(`/api/roles/${selectedRole.id}/seed-diff`)}
+      onResetToDefault={() => onResetToDefault(selectedRole.id)}
+      mobile={isMobile}
+      onBack={() => selectRole(null)}
+    />
+  );
 
   return (
     <div className="space-y-8">
-      <PageHeader
-        title={t("permissions")}
-        primaryAction={
-          <Button onClick={() => setCreateOpen(true)}>
-            <PlusIcon /> {t("newGroup")}
-          </Button>
-        }
-      />
-
-      <SectionCard icon={ShieldCheckIcon} title={t("permissionGroupsTitle")} bodyClassName="p-0">
-        <DataTable
-          columns={columns}
-          data={groups}
-          getRowId={(g) => String(g.id)}
-          loading={loading}
-          error={loadError ? { message: loadError, onRetry: load } : undefined}
-          searchable={(g) => `${g.name} ${g.description ?? ""}`}
-          searchPlaceholder={t("filterGroupsPlaceholder")}
-          pageSize={10}
-          getRowHref={(g) => `/permissions/${g.id}`}
-          getRowLabel={(g) => g.name}
-          empty={{
-            icon: ShieldCheckIcon,
-            title: t("noPermissionGroupsYetTitle"),
-            action: (
-              <Button type="button" onClick={() => setCreateOpen(true)}>
-                <PlusIcon aria-hidden="true" />
-                {t("createGroup")}
+      {showHeader && (
+        <PageHeader
+          title={t("rolesTitle")}
+          primaryAction={
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setAllRulesOpen(true)}>
+                <ZapIcon /> {t("allGrantRulesButton")}
               </Button>
-            ),
-          }}
-        />
-      </SectionCard>
-
-      <SectionCard
-        icon={KeyRoundIcon}
-        title={t("permissionTemplatesTitle")}
-        description={t("permissionTemplatesDescription")}
-      >
-        {templatesLoading ? (
-          <div className="grid gap-3 sm:grid-cols-2" aria-busy="true">
-            <p className="sr-only" role="status">
-              {t("loadingPermissionTemplates")}
-            </p>
-            {["one", "two", "three", "four"].map((skeleton) => (
-              <div key={skeleton} className="space-y-3 rounded-md border p-4" aria-hidden="true">
-                <div className="bg-muted h-5 w-2/3 rounded-md" />
-                <div className="bg-muted h-4 w-full rounded-md" />
-                <div className="bg-muted h-9 w-28 rounded-md" />
-              </div>
-            ))}
-          </div>
-        ) : templatesError ? (
-          <ContextualError message={templatesError} onRetry={() => void load()} />
-        ) : templates.length === 0 ? (
-          <p className="text-muted-foreground text-pretty text-sm">{t("noPermissionTemplates")}</p>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {templates.map((template) => (
-              <div key={template.key} className="flex min-w-0 flex-col gap-4 rounded-md border p-4">
-                <div className="min-w-0 space-y-1">
-                  <h2 className="type-label text-balance">{permissionTemplateName(template, t)}</h2>
-                  <p className="text-muted-foreground text-pretty text-sm">
-                    {permissionTemplateDescription(template, t)}
-                  </p>
-                </div>
-                {(!templateRequiresWildcardAuthority(template) ||
-                  me?.capabilities.includes("*")) && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="self-start"
-                    onClick={() => {
-                      setInstantiateError(null);
-                      setSelectedTemplate(template);
-                    }}
-                  >
-                    {t("usePermissionTemplate")}
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </SectionCard>
-
-      <SectionCard icon={LayersIcon} title={t("capabilitiesCatalogueTitle")}>
-        <div className="space-y-5">
-          {catalogue.map((group) => (
-            <div key={group.domain} className="space-y-2">
-              <p className="type-label text-muted-foreground">{group.domain}</p>
-              <div className="flex flex-wrap gap-2">
-                {group.capabilities.map((cap) => (
-                  <StatusBadge key={cap} tone={cap === "*" ? "brand" : "neutral"} dot={false}>
-                    <span className="font-mono">{cap}</span>
-                    <span className="text-muted-foreground">· {prettifyCapability(cap, t)}</span>
-                  </StatusBadge>
-                ))}
-              </div>
+              <Button variant="outline" onClick={toggleTrash}>
+                <Trash2Icon /> {t("trashTitle")}
+              </Button>
+              <Button onClick={() => setCreateOpen(true)}>
+                <PlusIcon /> {t("newRole")}
+              </Button>
             </div>
-          ))}
-        </div>
-      </SectionCard>
+          }
+        />
+      )}
 
+      {isMobile ? (
+        showTrash ? (
+          <div className="space-y-4">
+            <DrilldownBackButton label={t("backToRoles")} onClick={() => setShowTrash(false)} />
+            {trashPanel}
+          </div>
+        ) : selectedRole ? (
+          roleEditor
+        ) : loadError ? (
+          <ContextualError message={loadError} onRetry={() => void load()} />
+        ) : (
+          <Section padding="none" className="overflow-hidden">
+            {rolesListBody}
+          </Section>
+        )
+      ) : (
+        <>
+          {showTrash && trashPanel}
+
+          {loadError ? (
+            <ContextualError message={loadError} onRetry={() => void load()} />
+          ) : (
+            <div className="grid gap-6 lg:grid-cols-[320px_1fr] lg:items-start">
+              <Section padding="none" className="overflow-hidden">
+                {rolesListBody}
+              </Section>
+
+              {selectedRole
+                ? roleEditor
+                : !loading && (
+                    <Section>
+                      <EmptyState icon={ShieldCheckIcon} title={t("selectRoleHint")} />
+                    </Section>
+                  )}
+            </div>
+          )}
+        </>
+      )}
+      <GrantRulesOverviewModal open={allRulesOpen} onOpenChange={setAllRulesOpen} />
       <Modal
         open={createOpen}
         onOpenChange={setCreateOpen}
         icon={KeyRoundIcon}
-        title={t("newPermissionGroupTitle")}
+        title={t("newRole")}
         footer={
           <>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>
               {t("cancel")}
             </Button>
-            <SubmitButton form="create-group-form" pending={form.formState.isSubmitting}>
-              {t("createGroup")}
+            <SubmitButton form="create-role-form" pending={form.formState.isSubmitting}>
+              {t("createRole")}
             </SubmitButton>
           </>
         }
       >
         <Form {...form}>
-          <form id="create-group-form" onSubmit={form.handleSubmit(onCreate)} className="space-y-5">
+          <form id="create-role-form" onSubmit={form.handleSubmit(onCreate)} className="space-y-5">
             <FormField
               control={form.control}
               name="name"
@@ -316,12 +498,12 @@ export default function PermissionsPage() {
             />
             <FormField
               control={form.control}
-              name="description"
+              name="position"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t("descriptionLabel")}</FormLabel>
+                  <FormLabel>{t("positionLabel")}</FormLabel>
                   <FormControl>
-                    <Textarea rows={3} placeholder={t("whatGroupForPlaceholder")} {...field} />
+                    <Input type="number" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -329,99 +511,43 @@ export default function PermissionsPage() {
             />
             <FormField
               control={form.control}
-              name="capabilities"
+              name="isVisible"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("capabilitiesLabel")}</FormLabel>
+                <FormItem className="flex flex-row items-center gap-2 space-y-0">
                   <FormControl>
-                    <MultiSelect
-                      inDialog
-                      options={capabilityOptions(t)}
-                      value={field.value}
-                      onChange={field.onChange}
-                      placeholder={t("selectCapabilitiesPlaceholder")}
-                      searchPlaceholder={t("searchCapabilitiesPlaceholder")}
-                      emptyText={t("noMatchingCapability")}
-                    />
+                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                   </FormControl>
-                  <FormMessage />
+                  <FormLabel className="font-normal">{t("isVisibleLabel")}</FormLabel>
                 </FormItem>
               )}
             />
-          </form>
-        </Form>
-      </Modal>
-
-      <Modal
-        open={selectedTemplate !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setSelectedTemplate(null);
-            setInstantiateError(null);
-            templateForm.reset({ name: "", description: "" });
-          }
-        }}
-        icon={KeyRoundIcon}
-        title={
-          selectedTemplate
-            ? t("createFromPermissionTemplate", {
-                template: permissionTemplateName(selectedTemplate, t),
-              })
-            : t("permissionTemplate")
-        }
-        description={t("createFromPermissionTemplateDescription")}
-        footer={
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setSelectedTemplate(null)}
-              disabled={templateForm.formState.isSubmitting}
-            >
-              {t("cancel")}
-            </Button>
-            <SubmitButton
-              form="instantiate-template-form"
-              pending={templateForm.formState.isSubmitting}
-            >
-              {t("createGroup")}
-            </SubmitButton>
-          </>
-        }
-      >
-        <Form {...templateForm}>
-          <form
-            id="instantiate-template-form"
-            onSubmit={templateForm.handleSubmit(onInstantiate)}
-            className="space-y-5"
-          >
-            {instantiateError && <ContextualError message={instantiateError} />}
-            <FormField
-              control={templateForm.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("name")}</FormLabel>
-                  <FormControl>
-                    <Input placeholder={t("templateGroupNameExample")} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={templateForm.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("descriptionLabel")}</FormLabel>
-                  <FormControl>
-                    <Textarea rows={3} placeholder={t("whatGroupForPlaceholder")} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {templates.length > 0 && (
+              <FormField
+                control={form.control}
+                name="templateKey"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("permissionTemplate")}</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={t("noneOptionLabel")} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="">{t("noneOptionLabel")}</SelectItem>
+                        {templates.map((template) => (
+                          <SelectItem key={template.key} value={template.key}>
+                            {permissionTemplateName(template, t)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
           </form>
         </Form>
       </Modal>

@@ -12,12 +12,14 @@ import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { safeBack } from "@/lib/navigation";
+import { ROLE_FILTER_ALL_ICON } from "@/lib/role-filters";
 import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import { findPersonByBadge, findPersonByTicket, listScannerPeople } from "@/lib/scanner-db";
 import {
   isAccreditationEligible,
   loadScannerGroupFilter,
   matchesScannerGroup,
+  SCANNER_GROUP_OPTIONS,
   type ScannerGroup,
   saveScannerGroupFilter,
 } from "@/lib/scanner-group-filter";
@@ -28,6 +30,7 @@ import { colors } from "@/theme/colors";
 
 interface ScannerRoleStat {
   role: ScannerPerson["role"];
+  hasCapabilities: boolean;
   eligible: number;
   accredited: number;
   inside: number;
@@ -109,14 +112,14 @@ export function GeneralScannerScreen() {
 
   const stats = useMemo(() => {
     if (roleStats) {
-      const filtered = roleStats.filter((row) => matchesScannerGroup(row.role, groups));
+      const filtered = roleStats.filter((row) => matchesScannerGroup(row, groups));
       return {
         accredited: filtered.reduce((sum, row) => sum + row.accredited, 0),
         confirmed: filtered.reduce((sum, row) => sum + row.eligible, 0),
         inside: filtered.reduce((sum, row) => sum + row.inside, 0),
       };
     }
-    const filtered = people.filter((person) => matchesScannerGroup(person.role, groups));
+    const filtered = people.filter((person) => matchesScannerGroup(person, groups));
     return {
       accredited: filtered.filter((person) => person.badgeId !== null).length,
       confirmed: filtered.filter((person) => isAccreditationEligible(person)).length,
@@ -233,17 +236,6 @@ export function GeneralScannerScreen() {
 /** Keeps the filter's outside-tap backdrop and panel above every other floating control (stats tiles, sync pill, camera controls). */
 const FILTER_PANEL_Z_INDEX = 1000;
 
-const GROUP_FILTERS: Array<{
-  value: ScannerGroup;
-  labelKey: "roleParticipants" | "roleMentor" | "roleStaff" | "roleSponsor";
-  icon: "person" | "person.2" | "person.crop.circle.badge.checkmark" | "briefcase";
-}> = [
-  { value: "participant", labelKey: "roleParticipants", icon: "person" },
-  { value: "mentor", labelKey: "roleMentor", icon: "person.2" },
-  { value: "staff", labelKey: "roleStaff", icon: "person.crop.circle.badge.checkmark" },
-  { value: "sponsor", labelKey: "roleSponsor", icon: "briefcase" },
-];
-
 /**
  * The group-filter and people-finder controls, side by side in one
  * elongated glass pill — see `ScannerGroupFilterButton`.
@@ -315,8 +307,8 @@ function ScannerGroupFilterButton({
   const filterIcon =
     groups.length === 0 ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill";
   const rows = [
-    { value: null, labelKey: "roleAll" as const, icon: "person.2" as const },
-    ...GROUP_FILTERS,
+    { value: null, label: t("roleAll"), icon: ROLE_FILTER_ALL_ICON },
+    ...SCANNER_GROUP_OPTIONS.map((option) => ({ ...option, label: t(option.labelKey) })),
   ];
 
   return (
@@ -437,7 +429,7 @@ function ScannerGroupFilterButton({
                     selectable={false}
                     style={{ color: "white", flex: 1, fontSize: 15, fontWeight: "600" }}
                   >
-                    {t(row.labelKey)}
+                    {row.label}
                   </Text>
                   {selected ? (
                     <SymbolView

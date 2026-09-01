@@ -27,6 +27,12 @@ Enum notification_channel {
   push
 }
 
+Enum permission_state {
+  allow
+  deny
+  inherit
+}
+
 Enum queue_status {
   waiting
   called
@@ -196,6 +202,17 @@ Table application_form_versions {
   Note: 'H54 immutable form-definition snapshots; response retention uses the submitted snapshot.'
 }
 
+Table application_grants_roles {
+  application_id integer [not null]
+  role_id integer [not null]
+
+  indexes {
+  (application_id, role_id) [pk]
+  }
+
+  Note: 'H8/H11: roles granted to the applicant on confirmation, in addition to ticket issuance. No rows for a form grants nothing.'
+}
+
 Table application_responses {
   id integer [pk, increment, not null]
   user_id integer [not null]
@@ -222,7 +239,7 @@ Table application_responses {
 Table applications {
   id integer [pk, increment, not null]
   name text [not null]
-  type text [not null]
+  type text [note: 'DEPRECATED (H8): legacy static classification, no longer set by the API or read as authoritative for any behavior. See application_grants_roles + roles.name (granted_role_name in admin.routes.ts COLUMNS) for the real, drift-proof classification.']
   template jsonb [not null]
   description text
   active boolean [not null, default: `true`]
@@ -389,7 +406,7 @@ Table email_verification_tokens {
   used_at "timestamp with time zone"
   created_at "timestamp with time zone" [not null, default: `now()`]
   kind text
-  group_ids "integer[]" [not null, default: `'{}'::integer[]`]
+  role_ids "integer[]" [not null, default: `'{}'::integer[]`, note: 'H8/H10: role ids (roles.id) pre-assigned on invite acceptance via user_roles.']
   wildcard_authorized boolean [not null, default: `false`, note: 'Durable proof that a wildcard holder authorized this deferred group grant.']
 }
 
@@ -482,15 +499,6 @@ Table food_intolerances {
   created_at "timestamp with time zone" [not null, default: `now()`]
 }
 
-Table group_capabilities {
-  group_id integer [not null]
-  capability text [not null]
-
-  indexes {
-  (group_id, capability) [pk]
-  }
-}
-
 Table idempotency_keys {
   key text [not null]
   scope text [not null]
@@ -578,33 +586,6 @@ Table notification_preferences {
   indexes {
   (user_id, category, channel) [pk]
   }
-}
-
-Table permission_group_includes {
-  parent_group_id integer [not null]
-  child_group_id integer [not null]
-
-  indexes {
-  (parent_group_id, child_group_id) [pk]
-  }
-}
-
-Table permission_group_members {
-  user_id integer [not null]
-  group_id integer [not null]
-  assigned_by integer
-  assigned_at "timestamp with time zone" [not null, default: `now()`]
-
-  indexes {
-  (user_id, group_id) [pk]
-  }
-}
-
-Table permission_groups {
-  id integer [pk, increment, not null]
-  name text [unique, not null]
-  description text
-  template_key text [note: 'H8 template catalogue key used to calculate template drift; does not restrict normal group editing.']
 }
 
 Table push_tokens {
@@ -723,6 +704,45 @@ Table review_fixture_queues {
   updated_at "timestamp with time zone" [not null, default: `clock_timestamp()`]
 
   Note: 'Current synthetic queue/project pointers; never use as a participant-to-anonymous mapping.'
+}
+
+Table role_capabilities {
+  role_id integer [not null]
+  capability text [not null]
+  state permission_state [not null, default: `'inherit'::permission_state`]
+
+  indexes {
+  (role_id, capability) [pk]
+  }
+}
+
+Table role_grant_rules {
+  id integer [pk, increment, not null]
+  role_id integer [not null]
+  trigger_event text [not null]
+  action text [not null]
+  enabled boolean [not null, default: `true`]
+}
+
+Table role_seed_defaults {
+  role_id integer [pk, not null]
+  capabilities jsonb [not null]
+
+  Note: 'H8: one row per is_seeded role, capturing exactly the ALLOW capability set it was seeded with (0801 Sponsor, 0805 default catalogue). Used by GET /api/roles/:roleId/seed-diff and POST /api/roles/:roleId/reset-to-default to compute/undo drift from live role_capabilities.'
+}
+
+Table roles {
+  id integer [pk, increment, not null]
+  name text [unique, not null]
+  position integer [not null]
+  is_visible boolean [not null, default: `true`]
+  is_protected boolean [not null, default: `false`, note: 'H8: the real, enforced lockout — every HTTP mutation route (rename/reorder/capability-edit/delete/restore/assign/unassign) refuses a role with is_protected = true outright, unconditional on the actor\'s own capabilities (role-authority.ts assertNotProtectedRole). Never settable via POST/PATCH /api/roles; only ever flipped by direct DB/CLI action. Only system:superadmin carries it as of this migration (0801\'s "Platform administrator" template row was corrected to false — every default role stays deletable/editable like any other role), but any future role given this flag gets the identical lockout automatically.']
+  is_seeded boolean [not null, default: `false`]
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+  deleted_at "timestamp with time zone" [note: 'H8: soft-delete marker. Non-null excludes the role from capability resolution (user_effective_capabilities), from default GET /api/roles listings, and from every "highest role" / wildcard-holder computation, as if the user held no such role. A deleted role\'s position becomes available for reuse (see roles_position_idx below); POST .../restore 409s only if a still-live role has since taken that exact slot.']
+
+  Note: 'H8: the authorization truth. is_visible marks a role eligible to be shown as a user\'s public role; is_protected is the enforced (not informational) lockout — every HTTP mutation route refuses a role with is_protected = true outright (role-authority.ts assertNotProtectedRole), regardless of the actor\'s own capabilities; it is never settable via POST/PATCH /api/roles, only by direct DB/CLI action (only system:superadmin carries it today, see scripts/grant-superadmin.mjs and create-superadmin.ts); is_seeded marks a role that came from a seed migration rather than being created by an admin.'
 }
 
 Table room_enterprises {
@@ -924,7 +944,7 @@ Table user_invite_links {
   kind text [not null]
   enterprise_id integer
   created_by integer
-  group_ids "integer[]" [not null, default: `'{}'::integer[]`]
+  role_ids "integer[]" [not null, default: `'{}'::integer[]`, note: 'H8/H10: role ids (roles.id) pre-assigned on link redemption via user_roles.']
   wildcard_authorized boolean [not null, default: `false`, note: 'Durable proof that a wildcard holder authorized this deferred group grant.']
   max_redeems integer
   redeemed_count integer [not null, default: `0`]
@@ -932,6 +952,18 @@ Table user_invite_links {
   revoked_at "timestamp with time zone"
   created_at "timestamp with time zone" [not null, default: `now()`]
   updated_at "timestamp with time zone" [not null, default: `now()`]
+}
+
+Table user_roles {
+  user_id integer [not null]
+  role_id integer [not null]
+  assigned_by integer
+  assigned_at "timestamp with time zone" [not null, default: `now()`]
+  source text [not null, default: `'manual'::text`]
+
+  indexes {
+  (user_id, role_id) [pk]
+  }
 }
 
 Table users {
@@ -1029,6 +1061,8 @@ Ref: applicant_reviews.author_id > users.id
 Ref: applicant_reviews.response_id > application_responses.id
 Ref: application_form_versions.application_id > applications.id
 Ref: application_form_versions.created_by > users.id
+Ref: application_grants_roles.application_id > applications.id
+Ref: application_grants_roles.role_id > roles.id
 Ref: application_responses.application_form_version_id > application_form_versions.id
 Ref: application_responses.application_form_version_id > application_form_versions.id
 Ref: application_responses.application_id > application_form_versions.application_id
@@ -1066,7 +1100,6 @@ Ref: enterprise_judges.user_id > users.id
 Ref: enterprises.director_id > users.id
 Ref: enterprises.tier_id > sponsor_tiers.id
 Ref: food_intolerances.proposed_by > users.id
-Ref: group_capabilities.group_id > permission_groups.id
 Ref: judging_session.judge_id > users.id
 Ref: judging_session.queue_entry_id > queue_entries.id
 Ref: judging_session.room_id > rooms.id
@@ -1078,11 +1111,6 @@ Ref: meal_scan_batches.activity_id > activities.id
 Ref: meal_scan_batches.submitted_by > users.id
 Ref: notification_outbox.user_id > users.id
 Ref: notification_preferences.user_id > users.id
-Ref: permission_group_includes.child_group_id > permission_groups.id
-Ref: permission_group_includes.parent_group_id > permission_groups.id
-Ref: permission_group_members.assigned_by > users.id
-Ref: permission_group_members.group_id > permission_groups.id
-Ref: permission_group_members.user_id > users.id
 Ref: push_tokens.user_id > users.id
 Ref: queue_entries.assigned_room_id > rooms.id
 Ref: queue_entries.challenge_id > challenges.id
@@ -1102,6 +1130,9 @@ Ref: review_fixture_queues.fixture_key > review_fixture_accounts.fixture_key
 Ref: review_fixture_queues.queue_entry_id > queue_entries.id
 Ref: review_fixture_queues.repo_id > repos.id
 Ref: review_fixture_queues.sponsor_id > sponsors.id
+Ref: role_capabilities.role_id > roles.id
+Ref: role_grant_rules.role_id > roles.id
+Ref: role_seed_defaults.role_id > roles.id
 Ref: room_enterprises.assigned_by > users.id
 Ref: room_enterprises.enterprise_id > enterprises.id
 Ref: room_enterprises.room_id > rooms.id
@@ -1127,6 +1158,9 @@ Ref: user_invite_link_redemptions.link_id > user_invite_links.id
 Ref: user_invite_link_redemptions.user_id > users.id
 Ref: user_invite_links.created_by > users.id
 Ref: user_invite_links.enterprise_id > enterprises.id
+Ref: user_roles.assigned_by > users.id
+Ref: user_roles.role_id > roles.id
+Ref: user_roles.user_id > users.id
 Ref: users.university_id > universities.id
 Ref: wallet_access_tokens.user_id > users.id
 Ref: wallet_pass_devices.pass_id > wallet_passes.id

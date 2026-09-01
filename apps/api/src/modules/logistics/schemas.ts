@@ -140,8 +140,12 @@ export const staffScanRankingResponse = z.object({
 export const scannerRoleStatsResponse = z.object({
   byRole: z.array(
     z.object({
-      role: z.enum(["admin", "judge", "sponsor", "staff", "mentor", "participant", "unassigned"]),
-      /** Eligible to be accredited: staff/admin/sponsors always, mentors/participants only once their application is confirmed. */
+      // H8 full-replacement: the role's own name ("Unassigned" for anyone
+      // with no visible role) — no separate admin/judge/sponsor/staff bucket.
+      role: z.string(),
+      /** At least one member of this role bucket is a real capability holder — the scanner's "staff" filter key. */
+      hasCapabilities: z.boolean(),
+      /** Eligible to be accredited: capability holders/enterprise judges/sponsor reps always, everyone else only once their application is confirmed. */
       eligible: z.number().int(),
       /** Badge already issued. */
       accredited: z.number().int(),
@@ -154,7 +158,14 @@ export const scannerRoleStatsResponse = z.object({
 const scannerPersonCard = z.object({
   userId: z.number().int().positive(),
   email: z.string().email(),
-  role: z.enum(["admin", "judge", "sponsor", "staff", "mentor", "participant", "unassigned"]),
+  // H8 full-replacement: the person's highest-visible role name, or null
+  // with no visible role — no separate admin/judge/sponsor/staff bucket.
+  role: z.string().nullable(),
+  // H8: real signals backing the scanner's own operational grouping (door-
+  // scan relevance), since role names no longer carry a fixed admin/staff
+  // spelling — mirrors stats.ts's scannerRoleStats classification.
+  hasCapabilities: z.boolean(),
+  isEnterpriseJudge: z.boolean(),
   ticketToken: z.string().nullable(),
   badgeId: z.string().nullable(),
   revokedBadgeIds: z.array(z.string()),
@@ -237,7 +248,7 @@ export const ticketResponse = z.object({
     z.object({
       responseId: z.number().int(),
       applicationName: z.string(),
-      applicationType: z.string(),
+      grantedRoleName: z.string().nullable(),
       expiresAt: z.string().nullable(),
     }),
   ),

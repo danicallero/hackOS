@@ -75,9 +75,11 @@ confirmations listed below.
 Registration is external to hackOS.  An accepted participant or authorized
 staff member receives an app-capable account; acceptance itself is not a
 mobile login grant.  Better Auth credentials live in `accounts`, server
-sessions in `sessions`, and the identity/profile in `users`.  Role is derived
-from capability groups and event relationships in `apps/api/src/modules/identity/role.ts`;
-there is no role column to preserve or anonymize.
+sessions in `sessions`, and the identity/profile in `users`.  The illustrative
+display role is derived from assigned roles and event relationships in
+`apps/api/src/modules/identity/role.ts`; there is no role column to preserve
+or anonymize (the actual permission truth — `user_roles`/`role_capabilities` —
+is a grant table, handled below like any other access relationship).
 
 The old implementation on `origin/main` (`anonymizeUser()` in the former
 `apps/api/src/modules/identity/anonymize.ts`) changed a user in place to an
@@ -586,7 +588,7 @@ synthetic identity-shaped `users` row.
 | `meal_scan_batch_items`: badge, client ID, result/error/times | Empty | Offline meal retry | Clear/delete badge and identity-bearing result/error; keep only terminal operational count/status | No | Badge is transient credential; dietary data excluded. |
 | `audit_log`: actor, entity ID/type, JSON before/after, reason, IP/UA | May contain setup actions | Staff/action history | Delete rows that can identify subject; detach unrelated actor; suppress final IP/UA | Anonymous completion event only | Audit accountability cannot justify an identity bridge. |
 | `idempotency_keys`: scope, request hash, response body | Request replay | Critical mutation replay | Delete identity-bearing rows; move current self key to identity-free completion scope | Boolean completion only, bounded by normal idempotency retention | Prevent replay from keeping user identity. |
-| `permission_group_members`: user/assigned_by | Access grant | Staff/role access | Delete subject membership; null subject assigner on unrelated grants | No | Capability access is not audit data. |
+| `user_roles`: user/assigned_by | Access grant | Staff/role access | Delete subject's role assignments; null subject assigner on unrelated grants | No | Capability access is not audit data. |
 | `manual_attendee_roles`: user/assigned_by/role | Optional classification | Participant/mentor access | Delete subject role; detach subject assigner | No | Derived access relationship. |
 | `enterprise_judges`: user/added_by | Staff/judge roster | Judging operation | Delete subject roster; detach subject adder | No | Identity-dependent judging role. |
 | `sponsors`: user FK/enterprise | Sponsor contact | Sponsor operation | Delete subject row unless needed anchor, then null user FK | No | Preserve organization challenge anchor only. |

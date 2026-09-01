@@ -1,7 +1,28 @@
 import { ALL_CAPABILITIES } from "@hackos/shared/capabilities";
+import { ALL_TRIGGER_EVENTS, TRIGGER_EVENTS } from "@hackos/shared/role-grant-triggers";
 import type { MultiSelectOption } from "@/components/common/multi-select";
 import type { MessageKey, Translate } from "@/lib/i18n";
-import type { PermissionGroupTemplate, UserListItem } from "@/lib/types";
+import type { RoleTemplate, UserListItem } from "@/lib/types";
+
+export { ALL_TRIGGER_EVENTS };
+
+/**
+ * Human label for a trigger_event constant (H8). The registry itself
+ * (packages/shared/src/role-grant-triggers.ts) is the single source of the
+ * event strings; this maps each one to its own translated label, the same
+ * pattern prettifyCapability uses for the capability catalogue below.
+ */
+const TRIGGER_EVENT_LABEL_KEYS: Record<string, MessageKey> = {
+  [TRIGGER_EVENTS.SPONSOR_ENTERPRISE_LINKED]: "triggerEventSponsorEnterpriseLinked",
+  [TRIGGER_EVENTS.SPONSOR_ENTERPRISE_UNLINKED]: "triggerEventSponsorEnterpriseUnlinked",
+  [TRIGGER_EVENTS.JUDGE_ENTERPRISE_ASSIGNED]: "triggerEventJudgeEnterpriseAssigned",
+  [TRIGGER_EVENTS.JUDGE_ENTERPRISE_REMOVED]: "triggerEventJudgeEnterpriseRemoved",
+};
+
+export function triggerEventLabel(event: string, t: Translate): string {
+  const key = TRIGGER_EVENT_LABEL_KEYS[event];
+  return key ? t(key) : event;
+}
 
 /**
  * Capability presentation helpers (H8). The catalogue is derived entirely from
@@ -20,6 +41,56 @@ export function prettifyCapability(cap: string, t: Translate): string {
   const [domain, action] = cap.split(":");
   const cap1 = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
   return action ? `${cap1(domain)} · ${cap1(action)}` : cap1(domain);
+}
+
+/**
+ * Maps each catalogue capability to its `capabilityDescription*` message key
+ * (H8). Descriptions themselves are single-sourced as English prose in
+ * `CAPABILITY_DESCRIPTIONS` (`@hackos/shared/capabilities`); this file has no
+ * i18n machinery, so the web UI keeps its own es/gl/en translations of the
+ * same content under these keys (see `packages/shared/locales/*\/web.json`).
+ */
+const CAPABILITY_DESCRIPTION_KEYS: Partial<Record<string, MessageKey>> = {
+  "*": "capabilityDescriptionAdminAll",
+  "users:read": "capabilityDescriptionUsersRead",
+  "users:write": "capabilityDescriptionUsersWrite",
+  "permissions:manage": "capabilityDescriptionPermissionsManage",
+  "invites:manage": "capabilityDescriptionInvitesManage",
+  "applications:manage": "capabilityDescriptionApplicationsManage",
+  "applications:review": "capabilityDescriptionApplicationsReview",
+  "applications:decide": "capabilityDescriptionApplicationsDecide",
+  "applications:confirm-override": "capabilityDescriptionApplicationsConfirmOverride",
+  "applications:edit-response": "capabilityDescriptionApplicationsEditResponse",
+  "projects:read": "capabilityDescriptionProjectsRead",
+  "projects:import": "capabilityDescriptionProjectsImport",
+  "projects:edit": "capabilityDescriptionProjectsEdit",
+  "accredit:scan": "capabilityDescriptionAccreditScan",
+  "presence:scan": "capabilityDescriptionPresenceScan",
+  "activity:scan": "capabilityDescriptionActivityScan",
+  "logistics:stats": "capabilityDescriptionLogisticsStats",
+  "intolerances:manage": "capabilityDescriptionIntolerancesManage",
+  "queue:operate": "capabilityDescriptionQueueOperate",
+  "queue:admin": "capabilityDescriptionQueueAdmin",
+  "judge:panel": "capabilityDescriptionJudgePanel",
+  "judging:export": "capabilityDescriptionJudgingExport",
+  "sponsors:manage": "capabilityDescriptionSponsorsManage",
+  "challenges:manage": "capabilityDescriptionChallengesManage",
+  "schedule:manage": "capabilityDescriptionScheduleManage",
+  "announcements:manage": "capabilityDescriptionAnnouncementsManage",
+  "tv:control": "capabilityDescriptionTvControl",
+  "event:manage": "capabilityDescriptionEventManage",
+  "venue:manage": "capabilityDescriptionVenueManage",
+  "wallet:manage": "capabilityDescriptionWalletManage",
+  "presence:manage": "capabilityDescriptionPresenceManage",
+  "notifications:send": "capabilityDescriptionNotificationsSend",
+  "audit:read": "capabilityDescriptionAuditRead",
+  "exports:run": "capabilityDescriptionExportsRun",
+};
+
+/** Short inline description of what a capability grants, or "" if none is defined. */
+export function capabilityDescription(cap: string, t: Translate): string {
+  const key = CAPABILITY_DESCRIPTION_KEYS[cap];
+  return key ? t(key) : "";
 }
 
 /** Options for the capabilities MultiSelect: raw string value + prettified label. */
@@ -49,6 +120,29 @@ export function capabilitiesByDomain(): { domain: string; capabilities: string[]
 /** Deprecated compatibility capability: never offer it for a new assignment (AC-3T2). */
 export function selectableCapabilities(): string[] {
   return ALL_CAPABILITIES.filter((cap) => cap !== "sponsor:portal");
+}
+
+/**
+ * The capability catalogue, grouped by domain, filtered to entries whose
+ * code or prettified label matches `query` (case-insensitive). Empty groups
+ * are dropped rather than shown with zero rows.
+ */
+export function filterCapabilitiesByDomain(
+  query: string,
+  t: Translate,
+): { domain: string; capabilities: string[] }[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return capabilitiesByDomain();
+  return capabilitiesByDomain()
+    .map((group) => ({
+      domain: group.domain,
+      capabilities: group.capabilities.filter(
+        (cap) =>
+          cap.toLowerCase().includes(needle) ||
+          prettifyCapability(cap, t).toLowerCase().includes(needle),
+      ),
+    }))
+    .filter((group) => group.capabilities.length > 0);
 }
 
 const TEMPLATE_COPY_KEYS: Record<string, { name: MessageKey; description: MessageKey }> = {
@@ -138,7 +232,7 @@ function templateCopyKeys(templateKey: string) {
   return TEMPLATE_COPY_KEYS[templateKey.replaceAll(/[^a-z]/gi, "").toLowerCase()] ?? null;
 }
 
-type TemplateCopy = Pick<PermissionGroupTemplate, "labelKey" | "descriptionKey">;
+type TemplateCopy = Pick<RoleTemplate, "labelKey" | "descriptionKey">;
 
 export function permissionTemplateName(template: TemplateCopy | string, t: Translate): string {
   if (typeof template !== "string") return t(template.labelKey);
@@ -156,9 +250,7 @@ export function permissionTemplateDescription(
 }
 
 /** The API only permits an existing wildcard holder to create/reset this template. */
-export function templateRequiresWildcardAuthority(
-  template: Pick<PermissionGroupTemplate, "capabilities">,
-) {
+export function templateRequiresWildcardAuthority(template: Pick<RoleTemplate, "capabilities">) {
   return template.capabilities.includes("*");
 }
 

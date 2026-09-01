@@ -76,7 +76,9 @@ export interface FormSection {
 export interface PublicForm {
   id: number;
   name: string;
-  type: string;
+  /** H8: name of the form's highest-position granted role, or null
+   *  if it grants none — replaces the retired static `type` field. */
+  granted_role_name: string | null;
   template: TemplateField[];
   sections: FormSection[];
   description: string | null;
@@ -353,14 +355,13 @@ export function statusLabel(status: string, t: Translate): string {
   return map[status] ?? t("unknownStatus");
 }
 
-export function formTypeLabel(type: string, t: Translate): string {
-  const map: Record<string, string> = {
-    participant: t("applicationTypeParticipant"),
-    mentor: t("applicationTypeMentor"),
-    sponsor: t("applicationTypeSponsor"),
-    volunteer: t("applicationTypeVolunteer"),
-  };
-  return map[type] ?? t("applicationTypeOther");
+/**
+ * H8: label for a form's `granted_role_name` — the name of its
+ * highest-position granted role, or null if it grants none. Replaces the
+ * retired static `type` field's display.
+ */
+export function formTypeLabel(grantedRoleName: string | null, t: Translate): string {
+  return grantedRoleName ?? t("roleUnassigned");
 }
 
 // ── datetime ──────────────────────────────────────────────────────────────────

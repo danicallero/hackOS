@@ -52,7 +52,9 @@ export interface PublicAnnouncement {
 export interface PublicApplicationForm {
   id: number;
   name: string;
-  type: string;
+  /** H8: name of the form's highest-position granted role, or null
+   *  if it grants none — replaces the retired static `type` field. */
+  granted_role_name: string | null;
   description: string | null;
   close_at: string | null;
 }

@@ -27,23 +27,123 @@ export async function createUser(
   return rows[0].id;
 }
 
-/** Create a user holding the given capabilities (via a throwaway group). */
+/**
+ * A unique, collision-free role position. ALLOW-only test roles (as created
+ * by createUserWithCapabilities/createRole below) never need a particular
+ * ordering relative to each other — no DENY exists in this codebase's own
+ * migrated roles, so any unique integer is safe (see 0801's migration
+ * comment for why ALLOW-only role membership is order-independent).
+ */
+function randomRolePosition(): number {
+  return 1_000_000 + Math.floor(Math.random() * 1_000_000_000);
+}
+
+/** Create a role with the given ALLOW capabilities at a fresh unique position. */
+export async function createRole(
+  capabilities: string[] = [],
+  overrides: Partial<{
+    name: string;
+    isVisible: boolean;
+    isProtected: boolean;
+    isSeeded: boolean;
+  }> = {},
+): Promise<number> {
+  const name = overrides.name ?? `test-role-${crypto.randomUUID()}`;
+  const { rows } = await pool.query(
+    `INSERT INTO roles (name, position, is_visible, is_protected, is_seeded)
+     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+    [
+      name,
+      randomRolePosition(),
+      overrides.isVisible ?? true,
+      overrides.isProtected ?? false,
+      overrides.isSeeded ?? false,
+    ],
+  );
+  const roleId = rows[0].id;
+  for (const capability of capabilities) {
+    await pool.query(
+      `INSERT INTO role_capabilities (role_id, capability, state) VALUES ($1, $2, 'allow')`,
+      [roleId, capability],
+    );
+  }
+  return roleId;
+}
+
+/**
+ * Records a role's seed-time capability snapshot (role_seed_defaults, 0807),
+ * for tests exercising GET .../seed-diff and POST .../reset-to-default
+ * against an is_seeded role — since truncateAll wipes the real 0801/0805
+ * seed data every test, tests recreate a minimal seeded role + snapshot
+ * themselves via createRole({ isSeeded: true }) + this helper.
+ */
+export async function seedRoleDefaults(
+  roleId: number,
+  capabilities: Record<string, "allow">,
+): Promise<void> {
+  await pool.query(`INSERT INTO role_seed_defaults (role_id, capabilities) VALUES ($1, $2)`, [
+    roleId,
+    JSON.stringify(capabilities),
+  ]);
+}
+
+/** Assign an existing role to a user. */
+export async function assignRole(
+  userId: number,
+  roleId: number,
+  assignedBy?: number,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO user_roles (user_id, role_id, assigned_by) VALUES ($1, $2, $3)
+     ON CONFLICT DO NOTHING`,
+    [userId, roleId, assignedBy ?? null],
+  );
+}
+
+const ATTENDEE_ROLE_NAMES = { mentor: "Mentor", participant: "Participant" } as const;
+
+/**
+ * H8 full-replacement: creates the seeded Mentor/Participant roles
+ * (is_seeded=true, matched by NAME — no separate badge_category column) if
+ * they don't already exist — production's `identity/role.ts`
+ * assignAttendeeRole (PUT /api/users/:id/attendee-role, accreditation's
+ * walk-in classification) and review-fixtures' synthetic-account setup look
+ * these up by name and 409/throw if missing, but truncateAll wipes
+ * 0801/0805's real seed data between every test. Call this in any test
+ * exercising either flow.
+ */
+export async function seedAttendeeRoles(): Promise<void> {
+  for (const category of ["mentor", "participant"] as const) {
+    const roleName = ATTENDEE_ROLE_NAMES[category];
+    const { rows } = await pool.query(
+      `SELECT 1 FROM roles WHERE name = $1 AND is_seeded = true AND deleted_at IS NULL LIMIT 1`,
+      [roleName],
+    );
+    if (rows.length === 0) {
+      await createRole([], { name: roleName, isSeeded: true });
+    }
+  }
+}
+
+/** Directly grants a test user the seeded Mentor/Participant role for `category` (creating it if missing). */
+export async function grantAttendeeRole(
+  userId: number,
+  category: "mentor" | "participant",
+  assignedBy?: number,
+): Promise<void> {
+  await seedAttendeeRoles();
+  const { rows } = await pool.query(
+    `SELECT id FROM roles WHERE name = $1 AND is_seeded = true AND deleted_at IS NULL LIMIT 1`,
+    [ATTENDEE_ROLE_NAMES[category]],
+  );
+  await assignRole(userId, rows[0].id, assignedBy);
+}
+
+/** Create a user holding the given capabilities (via a throwaway role). */
 export async function createUserWithCapabilities(capabilities: string[]): Promise<number> {
   const userId = await createUser();
-  const group = await pool.query(`INSERT INTO permission_groups (name) VALUES ($1) RETURNING id`, [
-    `test-group-${crypto.randomUUID()}`,
-  ]);
-  const groupId = group.rows[0].id;
-  for (const cap of capabilities) {
-    await pool.query(`INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`, [
-      groupId,
-      cap,
-    ]);
-  }
-  await pool.query(`INSERT INTO permission_group_members (user_id, group_id) VALUES ($1, $2)`, [
-    userId,
-    groupId,
-  ]);
+  const roleId = await createRole(capabilities);
+  await assignRole(userId, roleId);
   return userId;
 }
 

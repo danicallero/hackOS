@@ -143,22 +143,27 @@ as contextual policies (the former binds the upload key; the latter binds the
 data-subject request body) rather than overstating their access as merely
 authenticated or `exports:run`.
 
-**Resettable permission templates (H8, H53).** The read-only
-`GET /api/permission-groups` choice list is also available to invitation
-managers so staff-invite forms can show assignable groups; group creation,
-editing, nesting, and membership mutations remain `PERMISSIONS_MANAGE` only.
-The permission-template
-catalogue is code-owned (`identity/templates.ts`) and exposes stable keys,
-client-side i18n message keys, and capability sets — never localized interface
-copy or mutable role rows. `GET /api/permission-group-templates` lists the
-catalogue; instantiation creates a normal editable `permission_groups` row
-with nullable `template_key`, while reset restores its exact direct grants and
-removes every custom include without changing its name, description, or
-members. Group DTOs derive `templateDrifted` from direct-capability set equality
-plus absence of includes on every read; wildcard-bearing before/after graphs
-take the permission-graph advisory lock, require an existing wildcard holder,
-and retain the last active holder or roll back with 409. The deprecated
-`sponsor:portal` compatibility grant is deliberately absent from templates.
+**Hierarchical roles (H8, H53).** The read-only `GET /api/roles` list is also
+available to invitation managers so staff-invite forms can show assignable
+roles; role creation, capability editing, reordering, and assignment mutations
+remain `PERMISSIONS_MANAGE` only. Each role sits on one global reorderable
+hierarchy (`position`) and holds an ALLOW/DENY/INHERIT tri-state per
+capability (`role_capabilities`; a missing row is INHERIT). For a capability,
+resolution walks a user's OWN assigned roles ordered by position descending,
+stopping at the first ALLOW/DENY — INHERIT skips to the next-lower-position
+role the user also holds, never to the next role in the global hierarchy; no
+roles or an all-INHERIT chain denies. To assign, edit, or reorder a role, the
+actor needs `PERMISSIONS_MANAGE` AND the role's position (its NEW position,
+for a reorder) must sit strictly below the actor's own highest assigned role.
+The role-creation template catalogue is code-owned (`identity/templates.ts`)
+and exposes stable keys, client-side i18n message keys, and capability sets —
+never localized interface copy. `GET /api/role-templates` lists the catalogue;
+creating a role from one just seeds its initial ALLOW rows (no drift-tracking
+concept — an edited role is simply an edited role). Wildcard-bearing role
+mutations take the role-graph advisory lock (`role-authority.ts`'s
+`lockRoleGraph`), require an existing wildcard holder, and retain the last
+active holder or roll back with 409. The deprecated `sponsor:portal`
+compatibility grant is deliberately absent from templates.
 
 ---
 

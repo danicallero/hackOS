@@ -105,6 +105,73 @@ describe("enterprise judge roster", () => {
     ]);
   });
 
+  it("fires the judge.enterprise_assigned/removed role-grant triggers, scoped to the enterprise (H8)", async () => {
+    const a = await getApp();
+    const { enterpriseId, rep } = await createEnterpriseWithChallenge("TriggerCo");
+    const { enterpriseId: otherEnterpriseId } =
+      await createEnterpriseWithChallenge("OtherTriggerCo");
+    const judgeRole = await pool.query(
+      `INSERT INTO roles (name, position) VALUES ('judge-trigger-role', 999999) RETURNING id`,
+    );
+    const roleId = Number(judgeRole.rows[0].id);
+    await pool.query(
+      `INSERT INTO role_grant_rules (role_id, trigger_event, action, enterprise_id)
+       VALUES ($1, 'judge.enterprise_assigned', 'grant', $2),
+              ($1, 'judge.enterprise_removed', 'revoke', $2)`,
+      [roleId, enterpriseId],
+    );
+    const judge = await createUser();
+
+    const added = await a.inject({
+      method: "POST",
+      url: `/api/enterprises/${enterpriseId}/judges`,
+      headers: asUser(rep),
+      payload: { userId: judge },
+    });
+    expect(added.statusCode).toBe(201);
+    expect(
+      (
+        await pool.query(`SELECT 1 FROM user_roles WHERE user_id = $1 AND role_id = $2`, [
+          judge,
+          roleId,
+        ])
+      ).rowCount,
+    ).toBe(1);
+
+    // The rule is scoped to `enterpriseId`, not `otherEnterpriseId`: adding a
+    // judge there must not grant the role.
+    const otherJudge = await createUser();
+    await a.inject({
+      method: "POST",
+      url: `/api/enterprises/${otherEnterpriseId}/judges`,
+      headers: asUser(rep),
+      payload: { userId: otherJudge },
+    });
+    expect(
+      (
+        await pool.query(`SELECT 1 FROM user_roles WHERE user_id = $1 AND role_id = $2`, [
+          otherJudge,
+          roleId,
+        ])
+      ).rowCount,
+    ).toBe(0);
+
+    const removed = await a.inject({
+      method: "DELETE",
+      url: `/api/enterprises/${enterpriseId}/judges/${judge}`,
+      headers: asUser(rep),
+    });
+    expect(removed.statusCode).toBe(200);
+    expect(
+      (
+        await pool.query(`SELECT 1 FROM user_roles WHERE user_id = $1 AND role_id = $2`, [
+          judge,
+          roleId,
+        ])
+      ).rowCount,
+    ).toBe(0);
+  });
+
   it("refuses a rep of another enterprise, an unrelated account and its own judges", async () => {
     const a = await getApp();
     const { enterpriseId } = await createEnterpriseWithChallenge("MineCo");
@@ -246,7 +313,9 @@ describe("enterprise judge roster", () => {
     expect(assigned.json().challenges.map((c: { id: number }) => c.id)).toContain(challengeId);
     const me = await a.inject({ method: "GET", url: "/api/me", headers: asUser(judge) });
     expect(me.json().isEnterpriseJudge).toBe(true);
-    expect(me.json().role).toBe("judge");
+    // H8 full-replacement: no visible role of their own -> no display label
+    // (isEnterpriseJudge is the fact to check, not a retired "judge" bucket).
+    expect(me.json().visibleRoleName).toBeNull();
 
     await a.inject({
       method: "DELETE",

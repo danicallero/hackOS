@@ -21,7 +21,8 @@ export interface AccreditationLookup extends PersonCard {
 }
 
 export interface AccreditationRoleCount {
-  role: "admin" | "judge" | "sponsor" | "staff" | "mentor" | "participant" | "unassigned";
+  /** The role's actual name, or null when the person has no visible role (H8). */
+  role: string | null;
   count: number;
 }
 
@@ -201,7 +202,7 @@ export interface LogisticsStats {
   accreditedCount: number;
   currentlyPresent: number;
   accreditedByRole: Array<{
-    role: "admin" | "judge" | "sponsor" | "staff" | "mentor" | "participant" | "unassigned";
+    role: string | null;
     count: number;
   }>;
   meals: Array<{

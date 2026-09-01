@@ -51,11 +51,15 @@ async function ensureExists(challengeId: number, fixtureMarker: boolean): Promis
   if (rowCount === 0) throw new NotFoundError("Challenge not found", { challengeId });
 }
 
-/** True when `userId` is an org admin over challenges (QUEUE_ADMIN or SPONSORS_MANAGE). */
+/**
+ * True when `userId` is an org admin over challenges (QUEUE_ADMIN,
+ * SPONSORS_MANAGE, or the narrower CHALLENGES_MANAGE — H8).
+ */
 export async function isChallengeAdmin(userId: number): Promise<boolean> {
   return (
     (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN)) ||
-    (await userHasCapability(userId, CAPABILITIES.SPONSORS_MANAGE))
+    (await userHasCapability(userId, CAPABILITIES.SPONSORS_MANAGE)) ||
+    (await userHasCapability(userId, CAPABILITIES.CHALLENGES_MANAGE))
   );
 }
 
@@ -103,9 +107,8 @@ export async function assertCanViewPanel(
   if (!activeCount) throw new UnauthorizedError("This account is closed or being removed");
   const fixtureMarker = await isSyntheticOperator(pool, userId);
   await ensureExists(challengeId, fixtureMarker);
+  if (await isChallengeAdmin(userId)) return;
   if (
-    (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN)) ||
-    (await userHasCapability(userId, CAPABILITIES.SPONSORS_MANAGE)) ||
     (await userHasCapability(userId, CAPABILITIES.JUDGE_PANEL)) ||
     (await userHasCapability(userId, CAPABILITIES.QUEUE_OPERATE))
   ) {

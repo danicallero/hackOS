@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { TRIGGER_EVENTS } from "@hackos/shared/role-grant-triggers";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -17,11 +18,12 @@ import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { issueTicket } from "../../logistics/tickets.js";
 import { auth } from "../auth.js";
 import {
-  inviteContainsWildcardGroup,
-  lockPermissionGraph,
+  inviteContainsWildcardRole,
+  lockRoleGraph,
   requireWildcardInviteAuthority,
-} from "../invite-permissions.js";
-import { userHasAnyCapability } from "../permission-graph.js";
+} from "../invite-role-authority.js";
+import { userHasAnyCapability } from "../role-authority.js";
+import { applyRoleGrantRule } from "../role-grants.js";
 import {
   enterpriseInviteClaimUrl,
   enterpriseInviteLinkIsExpired,
@@ -99,8 +101,8 @@ const inviteResponse = z.object({
   email: z.string(),
   kind: inviteKind,
   enterpriseId: z.number().nullable(),
-  // Capability groups the invitee is added to on acceptance (H8/H10).
-  groupIds: z.array(z.number()),
+  // Roles the invitee is added to on acceptance (H8/H10). Values are roles.id.
+  roleIds: z.array(z.number()),
   expiresAt: z.string(),
   usedAt: z.string().nullable(),
   // token returned to the admin so the link can also be handed over manually
@@ -117,13 +119,13 @@ interface TokenRow {
   expires_at: Date;
   used_at: Date | null;
   kind: string | null;
-  group_ids: number[];
+  role_ids: number[];
   wildcard_authorized: boolean;
   created_at: Date;
 }
 
 async function loadInviteForUpdate(
-  client: Parameters<typeof lockPermissionGraph>[0],
+  client: Parameters<typeof lockRoleGraph>[0],
   id: number,
 ): Promise<TokenRow | undefined> {
   const { rows } = await client.query(
@@ -175,15 +177,15 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           email: z.string().email(),
           kind: inviteKind,
           enterpriseId: z.number().int().optional(),
-          // Capability groups pre-assigned on acceptance (H8/H10).
-          groupIds: z.array(z.number().int()).default([]),
+          // Roles pre-assigned on acceptance (H8/H10). Values are roles.id.
+          roleIds: z.array(z.number().int()).default([]),
         }),
         response: { 201: inviteResponse },
       },
     },
     async (req, reply) => {
       const email = req.body.email.trim().toLowerCase();
-      const { kind, enterpriseId, groupIds } = req.body;
+      const { kind, enterpriseId, roleIds } = req.body;
 
       if (kind === "sponsor" && enterpriseId === undefined) {
         throw new BadRequestError("Sponsor invites require enterpriseId");
@@ -214,16 +216,16 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         // An invitation is a deferred membership assignment. Validate its
         // targets while the graph is locked, so a permissions manager cannot
         // smuggle wildcard access through account creation (H8/H10, H53).
-        await lockPermissionGraph(client);
+        await lockRoleGraph(client);
         const wildcardAuthorized = await requireWildcardInviteAuthority(
           client,
           req.userId as number,
-          groupIds,
+          roleIds,
           { requireExisting: true },
         );
         const { rows } = await client.query(
           `INSERT INTO email_verification_tokens
-             (token, type, email, enterprise_id, kind, group_ids, wildcard_authorized, expires_at)
+             (token, type, email, enterprise_id, kind, role_ids, wildcard_authorized, expires_at)
            VALUES ($1, $2::token_type, $3, $4, $5, $6, $7, now() + make_interval(hours => $8))
            RETURNING *`,
           [
@@ -232,7 +234,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
             email,
             enterpriseId ?? null,
             kind,
-            groupIds,
+            roleIds,
             wildcardAuthorized,
             INVITE_TTL_HOURS,
           ],
@@ -245,7 +247,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           entityId: created.id,
           action: "create",
           source: "admin",
-          after: { email, kind, enterpriseId: enterpriseId ?? null, groupIds },
+          after: { email, kind, enterpriseId: enterpriseId ?? null, roleIds },
         });
         return created;
       });
@@ -255,7 +257,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         email: row.email,
         kind,
         enterpriseId: row.enterprise_id,
-        groupIds: row.group_ids,
+        roleIds: row.role_ids,
         expiresAt: row.expires_at.toISOString(),
         usedAt: null,
         token,
@@ -278,7 +280,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
               email: z.string(),
               kind: inviteKind,
               enterpriseId: z.number().nullable(),
-              groupIds: z.array(z.number()),
+              roleIds: z.array(z.number()),
               expiresAt: z.string(),
               createdAt: z.string(),
             }),
@@ -299,7 +301,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         email: row.email,
         kind: (row.kind ?? "staff") as z.infer<typeof inviteKind>,
         enterpriseId: row.enterprise_id,
-        groupIds: row.group_ids,
+        roleIds: row.role_ids,
         expiresAt: row.expires_at.toISOString(),
         createdAt: row.created_at.toISOString(),
       }));
@@ -321,7 +323,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
     async (req, reply) => {
       const { id } = req.params;
       const result = await withTransaction(async (client) => {
-        await lockPermissionGraph(client);
+        await lockRoleGraph(client);
         const old = await loadInviteForUpdate(client, id);
         if (!old) throw new NotFoundError("Invite not found", { id });
         if (old.used_at !== null && old.user_id !== null) {
@@ -332,7 +334,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         const currentWildcard = await requireWildcardInviteAuthority(
           client,
           req.userId as number,
-          old.group_ids,
+          old.role_ids,
         );
         const wildcardAuthorized = old.wildcard_authorized || currentWildcard;
 
@@ -346,7 +348,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         const token = randomBytes(32).toString("base64url");
         const { rows: newRows } = await client.query(
           `INSERT INTO email_verification_tokens
-             (token, type, email, enterprise_id, kind, group_ids, wildcard_authorized, expires_at)
+             (token, type, email, enterprise_id, kind, role_ids, wildcard_authorized, expires_at)
            VALUES ($1, $2::token_type, $3, $4, $5, $6, $7, now() + make_interval(hours => $8))
            RETURNING *`,
           [
@@ -355,7 +357,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
             old.email,
             old.enterprise_id,
             old.kind,
-            old.group_ids,
+            old.role_ids,
             wildcardAuthorized,
             INVITE_TTL_HOURS,
           ],
@@ -379,7 +381,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         email: result.created.email,
         kind: (result.created.kind ?? "staff") as z.infer<typeof inviteKind>,
         enterpriseId: result.created.enterprise_id,
-        groupIds: result.created.group_ids,
+        roleIds: result.created.role_ids,
         expiresAt: result.created.expires_at.toISOString(),
         usedAt: null,
         token: result.token,
@@ -438,7 +440,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
     async (req, reply) => {
       const { id } = req.params;
       const result = await withTransaction(async (client) => {
-        await lockPermissionGraph(client);
+        await lockRoleGraph(client);
         const invite = await loadInviteForUpdate(client, id);
         if (!invite) throw new NotFoundError("Invite not found", { id });
         if (invite.used_at !== null) {
@@ -450,7 +452,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         const containsWildcard = await requireWildcardInviteAuthority(
           client,
           req.userId as number,
-          invite.group_ids,
+          invite.role_ids,
         );
         const { rows: updated } = await client.query(
           `UPDATE email_verification_tokens
@@ -490,7 +492,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
     async (req, reply) => {
       const { id } = req.params;
       await withTransaction(async (client) => {
-        await lockPermissionGraph(client);
+        await lockRoleGraph(client);
         const invite = await loadInviteForUpdate(client, id);
         if (!invite) throw new NotFoundError("Invite not found", { id });
         if (invite.used_at !== null) {
@@ -502,7 +504,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         const containsWildcard = await requireWildcardInviteAuthority(
           client,
           req.userId as number,
-          invite.group_ids,
+          invite.role_ids,
         );
         if (containsWildcard) {
           await client.query(
@@ -667,7 +669,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
       // then 409s on "email already exists" and staff resolves it. The audit
       // trail stays consistent either way.
       const result = await withTransaction(async (client) => {
-        await lockPermissionGraph(client);
+        await lockRoleGraph(client);
         const { rows } = await client.query(
           `SELECT * FROM email_verification_tokens
            WHERE token = $1 AND type IN ('sponsor_invite', 'account_claim')
@@ -701,7 +703,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         }
         if (
           invite &&
-          (await inviteContainsWildcardGroup(client, invite.group_ids)) &&
+          (await inviteContainsWildcardRole(client, invite.role_ids)) &&
           !invite.wildcard_authorized
         ) {
           throw new ForbiddenError(
@@ -710,7 +712,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         }
         if (
           userLink &&
-          (await inviteContainsWildcardGroup(client, userLink.group_ids)) &&
+          (await inviteContainsWildcardRole(client, userLink.role_ids)) &&
           !userLink.wildcard_authorized
         ) {
           throw new ForbiddenError(
@@ -806,6 +808,13 @@ export function registerInviteRoutes(app: FastifyInstance): void {
             [enterpriseId, userId],
           );
           await issueTicket(client, userId);
+          // H8: the Sponsor role is granted through the generic
+          // role_grant_rules mechanism, not an ad hoc user_roles write. The
+          // enterprise is passed as context so an admin can additionally (or
+          // instead) configure a rule scoped to this one enterprise.
+          await applyRoleGrantRule(client, userId, TRIGGER_EVENTS.SPONSOR_ENTERPRISE_LINKED, null, {
+            enterpriseId,
+          });
         }
 
         if (enterpriseLink) {
@@ -835,16 +844,17 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           );
         }
 
-        // H8/H10: pre-assigned capability groups. The invitation creator
-        // validated every assignment under the same graph lock. A deleted
-        // group is intentionally skipped: deletion revokes deferred grants.
-        for (const groupId of invite?.group_ids ?? userLink?.group_ids ?? []) {
+        // H8/H10: pre-assigned roles (`role_ids` holds roles.id). The
+        // invitation creator validated every assignment under the same
+        // role-graph lock. A deleted role is intentionally skipped: deletion
+        // revokes deferred grants.
+        for (const roleId of invite?.role_ids ?? userLink?.role_ids ?? []) {
           await client.query(
-            `INSERT INTO permission_group_members (user_id, group_id, assigned_by)
-             SELECT $1, $2, NULL
-             WHERE EXISTS (SELECT 1 FROM permission_groups WHERE id = $2)
+            `INSERT INTO user_roles (user_id, role_id, assigned_by, source)
+             SELECT $1, $2, NULL, 'invite'
+             WHERE EXISTS (SELECT 1 FROM roles WHERE id = $2)
              ON CONFLICT DO NOTHING`,
-            [userId, groupId],
+            [userId, roleId],
           );
         }
 
@@ -868,7 +878,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
             userId,
             kind,
             enterpriseId,
-            groupIds: invite?.group_ids ?? userLink?.group_ids ?? [],
+            roleIds: invite?.role_ids ?? userLink?.role_ids ?? [],
             reusable: Boolean(enterpriseLink || userLink),
           },
         });

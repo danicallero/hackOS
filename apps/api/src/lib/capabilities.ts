@@ -4,12 +4,21 @@ import { pool, type Queryable } from "../db/pool.js";
 import { BadRequestError, ForbiddenError, UnauthorizedError } from "./errors.js";
 
 /**
- * Capability resolution (H8). Effective capabilities of a user =
- * capabilities of every group they belong to, expanded through nested
- * group includes (groups of groups). `*` grants everything.
+ * Capability resolution (H8). A hierarchical, position-ordered multi-role model replaces
+ * capability groups as the authorization source: a user may hold several
+ * roles; roles sit on one global reorderable hierarchy (`roles.position`,
+ * higher = more priority); each role holds an ALLOW/DENY/INHERIT tri-state
+ * per capability.
+ *
+ * For one capability, the chain is the user's OWN assigned roles ordered by
+ * position descending: the first ALLOW/DENY found wins; INHERIT skips to the
+ * next-lower-position role the user also holds (never to the next role in
+ * the *global* hierarchy — a role the user doesn't have is invisible to the
+ * chain). An all-INHERIT chain, or no roles at all, denies (deny-by-default).
+ * `*` still means "every capability" exactly as before.
  *
  * Authorization always reads PostgreSQL. A request-local promise prevents
- * repeated recursive queries by stacked preHandlers without leaving a stale
+ * repeated queries by stacked preHandlers without leaving a stale
  * cross-request window after revocation (H8, H53).
  */
 export async function getEffectiveCapabilities(
@@ -19,20 +28,14 @@ export async function getEffectiveCapabilities(
 ): Promise<Set<string>> {
   if (request?.effectiveCapabilities) return request.effectiveCapabilities;
   const resolve = async (): Promise<Set<string>> => {
+    // user_effective_capabilities (0800) already resolves the tri-state
+    // chain (first non-inherit state per capability, ordered by role
+    // position descending); this just adds the active-account filter.
     const result = await db.query(
-      `WITH RECURSIVE user_groups AS (
-       SELECT pgm.group_id
-       FROM users u
-       JOIN permission_group_members pgm ON pgm.user_id = u.id
-       WHERE u.id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
-       UNION
-       SELECT gi.child_group_id
-       FROM permission_group_includes gi
-       JOIN user_groups ug ON ug.group_id = gi.parent_group_id
-     )
-     SELECT DISTINCT gc.capability
-     FROM group_capabilities gc
-     JOIN user_groups ug ON ug.group_id = gc.group_id`,
+      `SELECT uec.capability
+         FROM users u
+         JOIN user_effective_capabilities uec ON uec.user_id = u.id
+        WHERE u.id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
       [userId],
     );
     return new Set(result.rows.map((r: { capability: string }) => r.capability));

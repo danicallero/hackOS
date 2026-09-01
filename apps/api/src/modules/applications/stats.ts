@@ -22,6 +22,19 @@ export async function applicationStats(
   field?: string,
 ): Promise<Record<string, unknown>> {
   const app = await requireApplication(pool, applicationId);
+  // H8: the retired static `type` is replaced by the name of the form's
+  // highest-position granted role — derived from grants_role_ids so it can
+  // never drift from what the form actually grants.
+  const { rows: grantedRoleRows } = await pool.query(
+    `SELECT r.name AS granted_role_name
+       FROM application_grants_roles agr
+       JOIN roles r ON r.id = agr.role_id AND r.deleted_at IS NULL
+      WHERE agr.application_id = $1
+      ORDER BY r.position DESC
+      LIMIT 1`,
+    [applicationId],
+  );
+  const grantedRoleName = (grantedRoleRows[0]?.granted_role_name as string | undefined) ?? null;
 
   const statusCounts = await pool.query(
     `SELECT r.status, count(*)::int AS n FROM application_responses r
@@ -118,7 +131,12 @@ export async function applicationStats(
   );
 
   const result: Record<string, unknown> = {
-    application: { id: app.id, name: app.name, type: app.type, capacity: app.capacity },
+    application: {
+      id: app.id,
+      name: app.name,
+      granted_role_name: grantedRoleName,
+      capacity: app.capacity,
+    },
     counts_by_status: byStatus,
     funnel: funnel.rows[0],
     time_series: {

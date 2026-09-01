@@ -26,9 +26,14 @@ import { PASS_TYPE_IDENTIFIER } from "../logistics/wallet.js";
 import { queueFixtureMarker } from "../queue/broadcast.js";
 import { REPO_MEMBER_RELATION_SQL } from "../queue/membership.js";
 import { type DeletedQueueEntryNotification, notifyDeletedQueueEntries } from "../queue/notify.js";
-import { assertActiveWildcardHolder, lockPermissionGraph } from "./permission-graph.js";
 import { consumeRemovalPin } from "./removal-pin.js";
 import { purgeReviewFixtureQueuesForUser } from "./review-fixture-queues.js";
+import { getAssignedRoles } from "./role.js";
+import {
+  assertActiveWildcardHolder,
+  lockRoleGraph,
+  userResolvesCapabilityRegardlessOfState,
+} from "./role-authority.js";
 
 export type AccountRemovalAction = "delete" | "anonymize";
 const REMOVAL_RETRY_QUEUE = "account-removal-retries";
@@ -548,20 +553,7 @@ async function userHasWildcardRegardlessOfState(
   client: pg.PoolClient,
   userId: number,
 ): Promise<boolean> {
-  const { rows } = await client.query(
-    `WITH RECURSIVE effective_groups(group_id) AS (
-       SELECT group_id FROM permission_group_members WHERE user_id = $1
-       UNION
-       SELECT pgi.child_group_id
-         FROM effective_groups eg
-         JOIN permission_group_includes pgi ON pgi.parent_group_id = eg.group_id
-     )
-     SELECT 1 FROM effective_groups eg
-      JOIN group_capabilities gc ON gc.group_id = eg.group_id
-     WHERE gc.capability = '*' LIMIT 1`,
-    [userId],
-  );
-  return rows.length > 0;
+  return userResolvesCapabilityRegardlessOfState(client, userId, "*");
 }
 
 async function collectStorageKeys(client: pg.PoolClient, userId: number): Promise<string[]> {
@@ -666,7 +658,7 @@ async function prepareAccountRemoval(
   options: RunAccountRemovalOptions,
 ): Promise<RemovalPreparation | null> {
   return withTransaction(async (client) => {
-    await lockPermissionGraph(client);
+    await lockRoleGraph(client);
     const user = await loadUserForRemoval(client, options.targetId);
     if (
       options.retryOnlyPending &&
@@ -1426,10 +1418,7 @@ async function scrubRelationships(
     userId,
   ]);
 
-  await client.query(
-    `UPDATE permission_group_members SET assigned_by = NULL WHERE assigned_by = $1`,
-    [userId],
-  );
+  await client.query(`UPDATE user_roles SET assigned_by = NULL WHERE assigned_by = $1`, [userId]);
   await client.query(`UPDATE universities SET proposed_by = NULL WHERE proposed_by = $1`, [userId]);
   await client.query(`UPDATE enterprises SET director_id = NULL WHERE director_id = $1`, [userId]);
   await client.query(`UPDATE enterprise_invite_links SET created_by = NULL WHERE created_by = $1`, [
@@ -1708,7 +1697,7 @@ export async function purgeReviewFixtureAccount(
   client: pg.PoolClient,
   userId: number,
 ): Promise<void> {
-  await lockPermissionGraph(client);
+  await lockRoleGraph(client);
   const user = await loadUserForRemoval(client, userId);
   if (!user.is_test_account) {
     throw new ConflictError("Only synthetic review fixture accounts can be regenerated.", {
@@ -1745,7 +1734,7 @@ export async function finalizeAccountRemoval(
     deletedQueueEntries?: DeletedQueueEntryNotification[];
   },
 ): Promise<AccountRemovalResult> {
-  await lockPermissionGraph(client);
+  await lockRoleGraph(client);
   const user = await loadUserForRemoval(client, options.targetId);
   if (user.account_state !== "removal_pending" || user.removal_action !== options.action) {
     throw new ConflictError("This account-removal request is not in the expected state.", {
@@ -1772,10 +1761,29 @@ export async function finalizeAccountRemoval(
   const wasWildcardHolder = await userHasWildcardRegardlessOfState(client, user.id);
   let anonymousId: string | null = null;
   let retainedApplicationFields: AnonymousAuditField[] = [];
+  let retainedRoleNames: string[] = [];
   if (options.action === "anonymize") {
     anonymousId = randomUUID();
     retainedApplicationFields = await extractAnonymousAuditFields(client, user);
     const guaranteedMinutes = await guaranteedMinutesAtRemoval(client, user.id);
+    // H8/H53: the departing identity's own role assignments collapse to
+    // visible-only before the users row (and therefore every user_roles row,
+    // via ON DELETE CASCADE) is gone below. The org's stated intent is
+    // coarse — "I care they were staff", not the granular internal role name
+    // a hidden role like "Door Operator" would otherwise carry — so the
+    // hidden-role rows are dropped explicitly here and only the visible
+    // role names are copied into the permanent anonymous_participant audit
+    // trail (below), the one place that outlives this transaction's final
+    // DELETE FROM users. This never touches roles this person assigned to
+    // OTHERS (assigned_by is nulled separately in scrubRelationships).
+    const assignedRoles = await getAssignedRoles(client, user.id);
+    retainedRoleNames = assignedRoles.filter((role) => role.isVisible).map((role) => role.name);
+    await client.query(
+      `DELETE FROM user_roles ur
+         USING roles r
+        WHERE ur.role_id = r.id AND ur.user_id = $1 AND r.is_visible = false`,
+      [user.id],
+    );
     await client.query(
       `INSERT INTO anonymous_participants
          (id, guaranteed_presence_minutes, is_test_account)
@@ -1853,6 +1861,10 @@ export async function finalizeAccountRemoval(
       ip: null,
       userAgent: null,
       after: {
+        // H8: the coarse visible-role names this identity held (e.g.
+        // "Staff"), never a hidden role's name — those user_roles rows were
+        // dropped above rather than copied here.
+        retainedRoles: retainedRoleNames,
         retainedFields: [
           ...new Set([
             ...retainedApplicationFields.map((field) => field.dimension ?? field.fieldKey),

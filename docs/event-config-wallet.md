@@ -72,7 +72,10 @@ the event is baked into issued passes. Composition:
   (Ticket/Badge), university, email — each auto-filled from the user row and
   each behind its `pass_field_visibility` toggle, captioned per
   `pass_field_labels`. University/email rows also drop out when the user has
-  no value.
+  no value. The role field is simply the holder's highest-visible role name
+  (`getHighestVisibleRoleName`, H8 — see `docs/access-control-audit-plan.md`'s
+  "badge_category retired entirely" section), or "Unassigned" with no visible
+  role at all.
 - **Back fields**, in order: event name → venue name (if set) → the custom
   `pass_back_fields` list → "Organized by" (`APPLE_PASS_ORGANIZATION`).
 - **App link**: when `APPLE_PASS_APP_STORE_ID` (the mobile app's numeric App

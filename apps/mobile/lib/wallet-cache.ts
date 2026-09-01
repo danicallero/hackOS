@@ -10,7 +10,7 @@ export interface WalletTicketPayload {
   acceptedSpots: Array<{
     responseId: number;
     applicationName: string;
-    applicationType: string;
+    grantedBadgeCategory: string | null;
     expiresAt: string | null;
   }>;
 }

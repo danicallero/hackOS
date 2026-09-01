@@ -18,12 +18,6 @@ export interface I18nText {
   gl: string;
 }
 
-export const APPLICATION_TYPES = ["participant", "mentor", "sponsor", "volunteer"] as const;
-export type ApplicationType = (typeof APPLICATION_TYPES)[number];
-
-/** Types that ask for a shirt size/dietary data by default when creating a new form. */
-export const DEFAULT_SHIRT_DIETARY_TYPES: ApplicationType[] = ["participant", "mentor"];
-
 export const FIELD_KINDS = [
   "text",
   "textarea",
@@ -108,7 +102,11 @@ export interface FormSection {
 export interface ApplicationForm {
   id: number;
   name: string;
-  type: ApplicationType;
+  /** H8: name of the form's highest-position granted role, or null
+   *  if it grants none — derived live from `grants_role_ids` so it can never
+   *  drift from what the form actually grants. Replaces the retired static
+   *  `type` field. */
+  granted_role_name: string | null;
   template: TemplateField[];
   sections: FormSection[];
   /** Immutable snapshot used by newly-created drafts/submissions. */
@@ -122,6 +120,11 @@ export interface ApplicationForm {
   /** Whether this form asks for shirt size / dietary restrictions (H12). */
   ask_shirt_size: boolean;
   ask_food_intolerances: boolean;
+  /** Roles granted alongside ticket issuance when a response is confirmed (H8). */
+  grants_role_ids: number[];
+  /** Whether any response to this form has ever reached "confirmed" (H8) —
+   *  editing grants_role_ids is not retroactive for those responses. */
+  has_confirmed_responses: boolean;
   created_at: string;
 }
 
@@ -152,7 +155,12 @@ export interface ResponseRow {
 
 /** Shape of GET /api/applications/:id/stats (subset we render). */
 export interface ApplicationStats {
-  application: { id: number; name: string; type: string; capacity: number | null };
+  application: {
+    id: number;
+    name: string;
+    granted_role_name: string | null;
+    capacity: number | null;
+  };
   counts_by_status: Record<string, number>;
   funnel: {
     sent: number;
@@ -180,6 +188,13 @@ const STATUS_TONE: Record<string, Tone> = {
 
 export function statusTone(status: string): Tone {
   return STATUS_TONE[status] ?? "neutral";
+}
+
+// ── granted-role display (H8) ─────────────────────────────────────────────────
+
+/** Label for a form's `granted_role_name` (see ApplicationForm doc). Replaces the retired static `type` field's display. */
+export function grantedRoleNameLabel(roleName: string | null | undefined, t: Translate): string {
+  return roleName ?? t("roleUnassigned");
 }
 
 // ── datetime-local <-> ISO helpers ────────────────────────────────────────────

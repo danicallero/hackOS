@@ -1,10 +1,11 @@
 # Access-control audit and consolidation plan
 
-Status: **implemented and independently release-gate verified (2026-07-31)**.
+Status: **implemented and independently release-gate verified (2026-07-31);
+superseded by the H8 role-hierarchy rewrite below (2026-08-31)**.
 The historical baseline and task DAG remain below for traceability; the generated runtime ledger is
 [`access-control-route-ledger.md`](./access-control-route-ledger.md).
 
-Stories: H1–H10 (identity and capability groups), H11–H15
+Stories: H1–H10 (identity and the role hierarchy), H11–H15
 (applications), H16–H21 (projects), H28 (wallet), H29–H46 (queue, judging,
 TV, sponsors), H47–H54 (content, communications, audit, and exports), and H55
 (capability-based navigation).
@@ -17,7 +18,813 @@ permission, concurrency, and broadcast invariants remain in
 [`plan/07-datos-relevantes-ers.md`](../plan/07-datos-relevantes-ers.md). If
 this brief conflicts with either file, `plan/` wins.
 
-## Goal and non-goals
+## H8 role-hierarchy rewrite (current architecture)
+
+The section below ("Goal and non-goals" through "Historical audit baseline")
+describes the capability-group era of this system and is kept for
+traceability; its claim that this work "does not replace capability-based
+authorization with roles" is **no longer true** — the repo owner explicitly
+approved inverting that architecture. This is the current model:
+
+- **Data model**: `roles` (id, name, `position` — one global reorderable
+  hierarchy, higher = more priority — `is_visible`, `is_protected`);
+  `role_capabilities` (role_id, capability, `state` ALLOW/DENY/INHERIT,
+  missing row == INHERIT); `user_roles` (a user may hold several roles);
+  `role_grant_rules` (role_id, `trigger_event`, `action` grant/revoke — a
+  generic hook for automatic role assignment, decoupled from any specific
+  domain); `application_grants_roles` (application_id, role_id — the roles a
+  form grants alongside ticket issuance on confirmation; a form may grant
+  zero or more roles).
+- **Resolution** (`apps/api/src/lib/capabilities.ts`, backed by the
+  `user_effective_capabilities` SQL view): for a capability, walk the user's
+  OWN assigned roles ordered by position descending; the first ALLOW/DENY
+  wins; INHERIT skips to the next-lower-position role the user ALSO holds
+  (never to the next role in the global hierarchy — a role the user doesn't
+  have is invisible to their chain); an all-INHERIT chain, or no roles,
+  denies. `*` still means every capability. `userHasCapability`,
+  `requireCapability`, and `requireAnyCapability` keep their existing
+  signatures, so call sites across the codebase are unchanged.
+- **Admin-hierarchy authority** (`apps/api/src/modules/identity/
+  role-authority.ts`, replacing `permission-graph.ts`): to assign, remove,
+  edit, or reorder a role, the actor needs `permissions:manage` AND the
+  role's position — its NEW position, for a reorder — must sit strictly
+  below the actor's own highest assigned-role position. An advisory lock
+  (`lockRoleGraph`, mirroring the old `lockPermissionGraph`) serializes
+  mutations to `roles.position`/`role_capabilities`; `assertActiveWildcardHolder`
+  keeps at least one active user resolving `*` to ALLOW after any mutation.
+- **Capability-possession authority** (`role-authority.ts`'s
+  `requireCapabilityPossessionForStateChange` and
+  `requireCapabilityPossessionForAssignment`): a second, independent guard on
+  the same routes, gating capability *content* rather than role *position* —
+  both checks must pass, neither substitutes for the other. An actor who
+  doesn't resolve `*` (ADMIN_ALL) themselves can only set a role's capability
+  to ALLOW or DENY for a capability they currently possess themselves
+  (`PUT /api/roles/:roleId/capabilities`); setting to INHERIT is exempt,
+  since it removes an override rather than asserting one. Assigning a role to
+  a user (`POST /api/roles/:roleId/users/:userId`) requires the actor to
+  already possess every capability the role's own `role_capabilities` rows
+  explicitly ALLOW (ignoring what the assignee's other roles would
+  contribute) — a pure-INHERIT scaffold role trivially passes. Holding
+  `permissions:manage` alone does not exempt an actor from this guard; only
+  an actual `*` resolution does. Unassigning a role needs no such guard —
+  revoking membership grants nothing.
+- **Migration** (`db/migrations/0800`–`0805`; see "`system:superadmin` is
+  CLI-only", "Soft-delete and restore", and "Default seeded role set" below
+  for 0804/0805): 0801 is a true DATA migration, not a seed — of the 20 H8
+  platform templates (`templates.ts`), a template becomes a named role with
+  its capabilities as ALLOW only if some pre-existing `permission_groups` row
+  actually instantiated it (`template_key` set, from 0105); every
+  `permission_group_members` row for such a group is mapped onto the
+  matching role (by `template_key`), and any custom/ad-hoc group gets a
+  bespoke role carrying its exact effective capability set. A fresh install
+  has zero `permission_groups` rows, so 0801 creates zero template-derived
+  roles there — 0805 alone supplies the fresh-install default set (see
+  below), and there is no role holding `*` until a CLI script provisions
+  `system:superadmin`. 0801 also always creates a "Sponsor" role (regardless
+  of any pre-existing data, since it isn't a template port) plus a
+  `sponsor.enterprise_linked`/`sponsor.enterprise_unlinked` `role_grant_rules`
+  pair, replacing the sponsor auto-link-grants-access behavior
+  (`sponsors/service.ts`'s `addEnterpriseMember`/`removeEnterpriseMember`
+  and `identity/routes/invites.ts`'s sponsor-invite acceptance branch, both
+  routed through the shared `applyRoleGrantRule` helper in
+  `identity/role-grants.ts`). `permission_groups`/`group_capabilities`/
+  `permission_group_includes`/`permission_group_members` were dropped once
+  the copy landed, in the same change.
+- **Sponsor/judge relationship-based access** is unaffected by this rewrite:
+  a sponsor rep's portal access and a judge's panel access still come from
+  the `sponsors`/`enterprise_judges` relationship tables, resource-bound as
+  before (see "Implementation result" below) — the Sponsor role from
+  `role_grant_rules` is additive (it exists so a sponsor rep also shows up
+  correctly in role-based UI and audit), not a replacement for that
+  relationship check.
+- **Admin routes**: `identity/routes/roles.ts` (replacing
+  `routes/permissions.ts`) exposes role CRUD, tri-state capability editing,
+  position reordering, and user assignment — the old capability-group CRUD
+  routes (`/api/permission-groups*`) are removed, not deprecated in place.
+- Capability groups no longer exist at all, cosmetic or otherwise — the H8
+  template catalogue (`templates.ts`) is reused only as a prefill/seed
+  source for creating a role, not as a separate authorization concept.
+
+### DerivedRole retired: badge_category and getEffectiveRole (H8 full replacement)
+
+The fixed `DerivedRole` enum (`admin | judge | sponsor | staff | mentor |
+participant | unassigned`) that `identity/role.ts`'s `computeDerivedRole`
+used to compute for display purposes — badge printing, wallet passes, scanner
+UI, stats, the `/api/me`/`/api/users` `role` field — is retired. Its
+mentor/participant branch read `manual_attendee_roles` and, failing that,
+guessed from `applications.type` (a static column on the application FORM
+itself, set once at form creation, unrelated to whether that applicant was
+ever actually granted anything). That guess is now stale information: forms
+grant real roles via `application_grants_roles` at confirmation (see the
+"Migration" bullet above and `identity/routes/admin.routes.ts`'s
+`grants_role_ids`), so the applicant's actual `user_roles` membership is the
+authoritative answer.
+
+- **`roles.badge_category`** (`role_badge_category` enum: `admin | judge |
+  sponsor | staff | mentor | participant` — 0800): every role, seeded or
+  custom, carries this fixed bucket alongside its free-form `name`. Default
+  `staff` (a custom role an admin creates is treated as operational unless
+  set otherwise). 0801/0805 assign it per seeded role: `Platform
+  administrator` → `admin`, `Sponsor` → `sponsor`, `Mentor`/`Participant` →
+  their own names, every other seeded template/catalogue role → `staff`
+  (the column default). `system:superadmin` (CLI-only, see below) is also
+  `admin`, though moot for display since it's never `is_visible`.
+- **`user_effective_badge_category`** (0800 SQL view): bulk equivalent of
+  `getEffectiveRole` below — one row per user who holds at least one visible
+  role, carrying that role's `(name, badge_category)`. Read-model queries
+  across many users (scanner snapshot, logistics stats, announcements
+  audience) join this instead of re-deriving per-user.
+- **`getEffectiveRole(db, userId)`** (`identity/role.ts`): the user's
+  highest-position `is_visible` role as `{ name, badgeCategory }`, or `null`.
+  `getHighestVisibleRoleName` is now a thin wrapper over this.
+- **`getBadgeCategory(db, userId)`** (`identity/role.ts`, replacing
+  `computeDerivedRole`): admin/judge/sponsor/staff still resolve from the
+  same authoritative sources as before — the `ADMIN_ALL` capability and the
+  `enterprise_judges`/`sponsors` relationship tables — because neither an
+  enterprise judge nor a sponsor rep is guaranteed a `user_roles` row (no
+  `role_grant_rules` wires `enterprise_judges` the way `sponsor.
+  enterprise_linked` does for sponsors); a pure role-hierarchy lookup for
+  those four would misclassify every judge and any sponsor rep predating the
+  Sponsor auto-grant role. Below that, `getEffectiveRole`'s `badgeCategory`
+  decides — covering Mentor/Participant and any custom role an admin
+  explicitly categorizes as admin/judge/sponsor/staff without a matching
+  relationship row. No visible role and none of the above: `unassigned`,
+  same fallback as the old `DerivedRole`.
+- **`mentorOrParticipantType(db, userId)`** (`identity/role.ts`): kept (same
+  name/signature) for H59 schedule-audience and announcements-audience
+  resolution, which need exactly "is this user's effective role categorized
+  mentor or participant" — its body now reads `getEffectiveRole`'s
+  `badgeCategory` instead of `manual_attendee_roles`/`applications.type`.
+- **`manual_attendee_roles` disposition**: NOT dropped, but no longer
+  written to. It was never a guess like `applications.type` — H10's manual
+  attendee classification (`PUT /api/users/:id/attendee-role`) and
+  accreditation's walk-in classification (`checkInUser`'s `attendeeRole`)
+  were explicit, staff-driven actions, which is exactly what the seeded
+  Mentor/Participant roles (zero capabilities, pure status markers — see
+  "Default seeded role set" below) are for. Both call sites now grant the
+  real role via `identity/role.ts`'s new `assignAttendeeRole` helper
+  instead. Migration `0808` backfills every pre-cutover
+  `manual_attendee_roles` row onto the equivalent `user_roles` grant.
+  `hasEventAccess` still reads `manual_attendee_roles` too, defensively,
+  since the table isn't dropped; `removal.ts`'s existing cleanup of it is
+  unaffected.
+- **Anonymization now collapses the departing identity's own roles to
+  visible-only** (H8/H53, resolved a gap flagged in an earlier round of this
+  audit): `finalizeAccountRemoval`'s anonymize branch deletes every
+  `user_roles` row for the target where the role's `is_visible = false`
+  before the identity scrub, keeping only visible-role rows. This is
+  ultimately moot for `user_roles` itself — the `users` row is fully deleted
+  at the end of the same transaction either way, cascading every remaining
+  `user_roles` row regardless of visibility (confirmed by
+  `apps/api/test/exports/deletion.test.ts`), so `getEffectiveRole`/
+  `getBadgeCategory` need no special-casing for a post-anonymization lookup.
+  The change is observable where it actually outlives the transaction: the
+  permanent `anonymous_participants` audit trail. The same `audit(client,
+  {entityType: "anonymous_participant", action: "anonymized", ...})` call
+  that already records `retainedFields` now also records `retainedRoles` —
+  the visible role names the user held (e.g. `["Staff"]`), never a hidden
+  operational role's name (e.g. "Door Operator"). This still doesn't touch
+  `assigned_by` on roles this user granted to OTHERS, which remains a
+  separate, correct cleanup elsewhere in the same flow. Covered by
+  `apps/api/test/identity/anonymization.test.ts`.
+- **API/UI surface**: `POST /api/roles` and `PATCH /api/roles/:roleId`
+  accept/return `badgeCategory`; `role-editor.tsx`'s Display tab and the
+  create-role modal expose it as a select (`apps/web/src/app/(app)/
+  permissions/`). `/api/me` and `/api/users/:id`'s `role` field is now typed
+  as the badge-category union (values unchanged) rather than the retired
+  `DerivedRole`; `/api/me` also gained `visibleRoleName` (the caller's actual
+  highest-visible role name) for parity with `/api/users/:id`, which already
+  had it. Web's `DerivedRole` type is renamed `BadgeCategory` (same values).
+  Mobile (`apps/mobile/lib/scanner-types.ts`/`types.ts`) needed no changes:
+  the wire values are unchanged, only how the server computes them.
+- **Filter-scoping convention (H8)**: a role's `is_visible` flag gates
+  whether that *individual* role name can appear in a browse/search/filter
+  surface — an admin management picker (the permissions page's role editor,
+  an application form's "grants roles" picker in `applications/new/` and
+  `applications/[id]/metadata-card.tsx`) always shows every role regardless
+  of `is_visible`, since managing/granting roles requires seeing all of
+  them. Every "filter people by role" surface audited so far
+  (`apps/web/src/app/(app)/users/page.tsx`'s role filter, the mobile
+  scanner's group filter in `general-scanner-screen.tsx`, and
+  `people-directory-screen.tsx`'s role filter, plus the accreditation stats
+  breakdown) turned out to filter on the fixed `BadgeCategory` enum
+  (admin/judge/sponsor/staff/mentor/participant/unassigned), not on
+  individual role names from `GET /api/roles` — a structurally different,
+  always-public classification. `getBadgeCategory`/`getEffectiveRole`
+  already only let a *visible* role influence a user's derived category (see
+  above), so these filters never leak a hidden role's existence and need no
+  further `is_visible` scoping. If a future surface ever lists individual
+  role names for browsing rather than management, scope it to
+  `is_visible = true` — server-side if the endpoint is search-heavy (to
+  avoid leaking a hidden role's name to the client at all), client-side if
+  the caller already holds the full `GET /api/roles` response for another
+  reason.
+
+### `applications.type` fully retired as a semantic driver (H8/H11)
+
+The previous round above already stopped `identity/role.ts` READING
+`applications.type` for display (`getEffectiveRole`/`getBadgeCategory`/
+`mentorOrParticipantType`). This round finishes the retirement: the column
+stops being a user-facing, API-settable field at all, and the one remaining
+place that actually branched on its VALUE — not just displayed it —
+`applications/service.ts`'s early-ticket-issuance special case — is re-keyed
+off the form's real role grants.
+
+- **The bug class this closes**: nothing stopped a form from being created
+  `type: "participant"` while its `grants_role_ids` actually granted the
+  Mentor role, or vice versa — the two were independently settable and could
+  silently drift. "What kind of applicant does this form produce" must now
+  be answered the same way everywhere: by which role(s) it grants
+  (`application_grants_roles` joined to `roles.badge_category`), never by a
+  separately-set static label.
+- **Schema**: `createApplicationSchema`/`updateApplicationSchema`
+  (`applications/schemas.ts`) no longer accept a `type` field at all (removed
+  `APPLICATION_TYPES`/`ApplicationType`). Migration `0809` drops the
+  column's `NOT NULL` constraint and marks it deprecated via `COMMENT ON
+  COLUMN` — the column itself is kept (existing rows' historical value stays
+  inspectable) but nothing reads it as authoritative and the API never
+  writes it again.
+- **Replacement for display**: every read path that used to surface `type`
+  (the applications list column/sort/search, the form detail page, the
+  public open-forms page, `my-applications`, a user's application tab, the
+  applicant-facing form list, `GET /api/applications/:id/stats`, the CSV/GDPR
+  bundle exports, the ticket QR payload) now derives `granted_badge_category`
+  (or a `_granted_badge_category`-suffixed sibling) live: a correlated
+  subquery over `application_grants_roles` joined to `roles`, picking the
+  `badge_category` of the highest-position granted role, or `null` if the
+  form grants none. This can never drift from `grants_role_ids` the way the
+  old column could, because it IS `grants_role_ids` read back.
+- **The behavioral fix — mentor early-ticket-issuance**: accepting a mentor
+  application (not confirming it) has always issued the entrance ticket
+  immediately, because a mentor's decision itself is the ticket-issuing
+  transition — they attend without the separate spot-confirmation step every
+  other applicant goes through (see the code comment at both call sites in
+  `sendOne`/`reAccept`, `applications/service.ts`). This was previously keyed
+  off `app.type === "mentor"`; it now calls `formGrantsMentorRole(client,
+  applicationId)`, which checks whether the form's `grants_role_ids` include
+  a role whose `badge_category = 'mentor'` — the same durable, editable-
+  name-proof identifier `roles.badge_category` already provides for every
+  other mentor/participant classification in this codebase. Note this does
+  **not** move the Mentor role's own grant earlier: role-granting is still
+  uniformly confirm-time only (`doConfirm` in `service.ts`), for every form
+  regardless of what it grants — a mentor gets an early ticket but is not
+  granted the Mentor `user_roles` row until they actually confirm, exactly
+  as before this change. Whether that decoupling (ticket now, role later)
+  is itself the right long-term shape, versus also moving the mentor role
+  grant to accept-time so "ticket follows role" holds uniformly, is a
+  product decision this round deliberately left alone — flagging it here
+  rather than guessing, since ticket-issuance timing is user-facing and
+  consequential.
+- **`hasEventAccess`** (`identity/role.ts`) already implements the general
+  "does this user hold a role (or another qualifying tie to the event)"
+  question this round's guidance describes, and predates it: it is an OR of
+  a confirmed application response, a `user_roles` row with
+  `badge_category IN ('mentor', 'participant')`, `manual_attendee_roles`,
+  a sponsor-rep tie, or any operational capability — never `applications.
+  type`. Mobile's wallet screen (`app/(tabs)/wallet.tsx`) does not compute
+  its own acceptance/pending state at all; it only renders whatever
+  `ticketToken`/`acceptedSpots` the API already returned, which are gated by
+  this same `hasEventAccess` call server-side. No mobile-side fix was needed.
+- **Wallet/badge role labels**: `logistics/wallet.ts`'s `ROLE_LABELS` was
+  already migrated to key off `getBadgeCategory` in the earlier round (see
+  above); `wallet-passes.ts`, `google-wallet.ts`, `cards.ts`, and `badge.ts`
+  render no role/type label at all. Re-verified none of them reference
+  `applications.type`.
+- **Tests**: `apps/api/test/applications/lifecycle.test.ts` covers the
+  re-keyed mentor early-issuance behavior directly (a form granting a
+  `badge_category = 'mentor'` role issues a ticket at accept-sent time and
+  again on re-accept; a form granting a non-mentor role does not) instead of
+  going through the retired `type: "mentor"` fixture value.
+
+### `badge_category` retired entirely — a user's badge/wallet/scanner label is just their role name (H8, this round)
+
+Everything described in the two sections above as `roles.badge_category` /
+`getBadgeCategory` / the `BadgeCategory` union no longer exists. The repo
+owner's own call: stop hardcoding a small fixed category, stop making it a
+selectable/stored property of a role — a user's badge/wallet/scanner display
+label is simply the NAME of their highest-position visible role. Concretely:
+
+- **Dropped**: the `role_badge_category` enum, `roles.badge_category` column,
+  the `user_effective_badge_category` view, `getBadgeCategory`,
+  `BadgeCategory`/`RoleBadgeCategory` types, and the `badgeCategory` field on
+  `POST/PATCH /api/roles` (its Display-tab "Role Style" select in
+  `role-editor.tsx` is removed — a role's badge label is now purely its name).
+  Since this branch had not merged to `main`, migrations 0800/0801/0804/0805
+  were edited in place rather than adding a new drop migration.
+- **Replacement**: `identity/role.ts`'s `getEffectiveRole`/
+  `getHighestVisibleRoleName` return just the role's `name`. The bulk-query
+  equivalent is now `user_effective_role_name` (same shape as the old view,
+  minus the category column). Every consumer that used to read a category —
+  `logistics/wallet.ts`'s pass `role` field, `scanner-sync.ts`'s roster
+  snapshot `role`, `logistics/stats.ts`'s `accreditationCountsByRole`/
+  `scannerRoleStats`, `/api/me` and `/api/users`'s `role` field (renamed
+  `visibleRoleName`, dropped from `/api/users` list response in favor of the
+  same field name), `applications/service.ts`'s `granted_badge_category`
+  (renamed `granted_role_name` everywhere it appears: `admin.routes.ts`,
+  `applications/stats.ts`, `logistics/tickets.ts`'s `grantedRoleName`,
+  `exports/csv.ts`/`exports/bundle.ts`) — now reads the role's `name` directly.
+- **Mentor/Participant, the two roles whose classification was functional
+  (not just cosmetic)**, are now identified by their own fixed seeded NAME
+  (`identity/role.ts`'s `ATTENDEE_ROLE_NAMES = { mentor: "Mentor", participant:
+  "Participant" }`) instead of `badge_category = 'mentor'/'participant'`:
+  `assignAttendeeRole`, `hasEventAccess`, `mentorOrParticipantType`,
+  `applications/service.ts`'s `formGrantsMentorRole`, and the announcements
+  audience resolver (`notifications/announcements-service.ts`) all match on
+  name now. **Known tradeoff, accepted deliberately**: an admin who renames
+  the seeded Mentor or Participant role breaks this matching until the
+  relevant config (`grants_role_ids`, announcement audiences) is redone
+  against the new name — `roles.badge_category` used to be immune to renames
+  by design; a plain name match is not. This is the explicit cost of "use the
+  role name," not an oversight.
+- **The admin/judge/sponsor/staff bucket's non-role-based fallback is GONE,
+  not re-derived another way.** The old `getBadgeCategory` special-cased the
+  `ADMIN_ALL` capability and the `enterprise_judges`/`sponsors` relationship
+  tables specifically because neither is guaranteed a `user_roles` row (no
+  `role_grant_rules` wires `enterprise_judges` to a role at all, and
+  `system:superadmin` is deliberately `is_visible = false` so it can never be
+  a "highest visible role"). Since `getEffectiveRole` is now the *entire*
+  answer, a user with real operational access but no VISIBLE role of their
+  own — most notably an enterprise judge, or a bootstrap superadmin with no
+  other role — now shows no badge/wallet/scanner label (`null`, rendered
+  "Unassigned") instead of "Judge"/"Admin". The `Sponsor` role is unaffected
+  in practice (0801's `role_grant_rules` already auto-grants it on
+  `sponsor.enterprise_linked`, so a sponsor rep normally does have a visible
+  role). `mobile-access.ts`'s `hasMobileAccess` and `logistics/stats.ts`'s
+  `scannerRoleStats` "eligible" calculation, which used to key off the same
+  bucket, now check the underlying facts directly (`getEffectiveCapabilities`
+  size, `computeMembershipFlags`) instead of re-deriving a role-name-based
+  proxy — those two are unaffected by the gap above. If judge badge/wallet
+  labeling turns out to matter operationally, the fix is to actually assign
+  enterprise judges a real (visible) role, not to reintroduce a bucket.
+- **Tests**: `apps/api/test/identity/profile.test.ts`'s old "derives the
+  illustrative role: admin > judge > sponsor > ..." priority test is replaced
+  with one asserting `visibleRoleName` is exactly the caller's highest-visible
+  role name (or `null` with none) — the priority-order concept it exercised no
+  longer exists. `applications/lifecycle.test.ts`'s mentor early-issuance
+  tests now grant a role literally named "Mentor" rather than one with
+  `badgeCategory: "mentor"`.
+
+### Mobile scanner grouping and role-filter dropdowns after badge_category (H8, this round)
+
+`apps/mobile`'s two dropdown styles both used to render from a
+`badge_category`-derived fixed array; neither the badge/category enum nor the
+array survives:
+
+- **`people-directory-screen.tsx`** (native menu, `MenuView` from
+  `@expo/ui/community/menu`): its `actions` prop is a plain `MenuAction[]`
+  with no documented or observed length limit (SwiftUI `Menu`/Compose
+  `DropdownMenu` under the hood, both natively scrollable; an existing
+  precedent, `schedule-form-modal.tsx`'s `ACTIVITY_KINDS.map(...)`, already
+  feeds it a runtime array). `lib/role-filters.ts`'s
+  `roleFilterOptionsFromRoster` now derives one filter row per distinct role
+  name actually present on the synced roster (alphabetized), rather than a
+  separate `GET /api/roles` catalogue fetch — a catalogue would list custom
+  role names nobody on the current roster holds, producing filter rows that
+  match nobody.
+- **`general-scanner-screen.tsx`** (custom panel): already a vertical
+  `Pressable` list in a `GlassView`, not a fixed-width horizontal row — no
+  layout change was needed for a longer, dynamic list.
+- **The scanner's `ScannerGroup` (participant/mentor/staff/sponsor)** used to
+  fold admin into staff and exclude judges because those were `badge_category`
+  buckets that don't badge-scan at doors. With `badge_category` gone, role
+  *names* can't carry this distinction either — the default seed has no role
+  literally named "Admin" or "Staff" (real staff roles are named things like
+  "Event Director" or "Day Staff"), so matching "staff" against a role-name
+  string would silently match nobody. The fix: `scanner-sync.ts`'s roster
+  snapshot and `stats.ts`'s `scannerRoleStats` now also expose
+  `hasCapabilities`/`isEnterpriseJudge` (the same real capability/relationship
+  facts `is_operational` in `scannerRoleStats` already computed) per
+  person/role-bucket; `scanner-group-filter.ts`'s `matchesScannerGroup`/
+  `isAccreditationEligible` match on those instead of a role-name guess for
+  "staff", while `sponsor`/`mentor`/`participant` stay name matches (Sponsor,
+  Mentor, Participant are real, reliably-named seeded/auto-granted roles).
+  Enterprise judges stay excluded from every scanner group, unchanged.
+
+### `is_protected` is the real, enforced lockout
+
+`is_protected` (0800) is the actual, DB-authoritative signal that a role is
+fully locked out of the HTTP API — not informational. Every mutation route on
+an EXISTING role by id (rename, reorder, capability edit, soft delete,
+restore, assign/unassign member) refuses a role with `is_protected = true`
+outright via `role-authority.ts`'s `assertNotProtectedRole`, using the row the
+handler already loaded, unconditional on the actor's own capabilities —
+including an actor who holds `*` themselves. `is_protected` is never a
+settable field in `POST`/`PATCH /api/roles`' request bodies, so it can only
+ever be flipped by direct DB/CLI action.
+
+`system:superadmin` is the only role that carries this flag today (set by
+`scripts/grant-superadmin.mjs`/`scripts/create-superadmin.ts`), but the check
+is generic: any role an operator protects this way in the future gets the
+identical lockout automatically, with no code change and no separate
+allowlist to maintain. 0801's "Platform administrator" template row
+originally set `is_protected = true` too (carried over from the pre-H8
+"protected roles can't be deleted" model); that was a bug given the new
+enforced semantics, since it would have made an ordinary, fully mutable
+default role permanently un-editable/un-deletable on an upgrade install that
+happened to instantiate it — fixed to `is_protected = false`, matching every
+other 0801/0805 default role.
+
+Role creation and rename ALSO separately refuse the reserved name
+`system:superadmin` itself via `assertNotSuperadminRole` — a distinct,
+identity-based check (never mint or rename a role into this name), kept apart
+from `assertNotProtectedRole`'s mutation-authority check. The two checks
+serve different purposes: one stops a decoy role under a reserved identity,
+the other blocks every mutation on whatever role the DB flag names. Its
+capability set stays exactly `{'*': allow}` because nothing can ever change
+it through the API.
+
+The only way to grant, look up, or revoke `system:superadmin` is a
+server-shell script, run with direct Postgres access:
+
+- `pnpm --filter @hackos/api superadmin:create` (`scripts/create-superadmin.ts`) —
+  create-or-upgrade an account to superadmin.
+- `pnpm --filter @hackos/api superadmin:grant` (`scripts/grant-superadmin.mjs`) —
+  attach it to an existing account (plain Node ESM, no build step, for
+  environments without `tsx`).
+- `pnpm --filter @hackos/api superadmin:list` (`scripts/list-superadmins.mjs`) —
+  read-only: lists every account currently holding `system:superadmin`
+  (`user_id`, email, name, grant timestamp), by joining `user_roles`/`roles`
+  on the role's fixed name rather than resolving `*` generically, so it can't
+  be confused by some other role an admin separately configured to also
+  carry the wildcard.
+- `pnpm --filter @hackos/api superadmin:revoke` (`scripts/revoke-superadmin.mjs`) —
+  remove it from an account. Refuses if that would leave zero active
+  superadmins, replicating `assertActiveWildcardHolder`'s resolved-tri-state
+  query scoped to `system:superadmin`'s `*` grant and excluding the target
+  user.
+
+None of these three are reachable through the HTTP API in any form — by
+design, seeing or changing who holds superadmin always requires shell access
+to the database host, never just an authenticated admin session.
+
+All three insert an `audit_log` row (`grant_superadmin` / `create_superadmin`
+/ `revoke_superadmin`) in the same transaction as the `user_roles` write.
+
+### Configurable, enterprise-scoped automatic role grants (H8, H43-H46, this round)
+
+`role_grant_rules` (0800) was originally a fixed, migration-only mechanism —
+only 0801's Sponsor rule ever populated it, and it applied to every
+occurrence of its trigger globally. This round makes the mechanism fully
+admin-configurable and adds enterprise scoping, closing the "adaptable to
+changes" gap the repo owner asked for: a developer's job is only to define
+*what can happen* (a trigger event) and wire *one* call to
+`applyRoleGrantRule` at the domain event that represents it; from then on an
+admin can freely configure *what results* (which role(s), grant or revoke,
+globally or scoped to one enterprise) with **no further code changes**.
+
+- **Trigger-event registry** (`packages/shared/src/role-grant-triggers.ts`,
+  `TRIGGER_EVENTS`): the fixed, developer-defined vocabulary of trigger
+  strings a rule may react to — the same single-source pattern as
+  `CAPABILITIES`/`EVENTS`, and importable identically by both the API and the
+  web admin UI (`@hackos/shared/role-grant-triggers`). Today's four events:
+  `sponsor.enterprise_linked`, `sponsor.enterprise_unlinked` (unchanged
+  behavior, just now admin-configurable rather than migration-only), and two
+  new ones, `judge.enterprise_assigned`/`judge.enterprise_removed`, fired from
+  `sponsors/service.ts`'s `addEnterpriseJudge`/`removeEnterpriseJudge` — the
+  genuine "this person is now a judge for this company" assignment action.
+  `identity/removal.ts`'s anonymization cleanup and `queue/reset.ts`'s event
+  reset also delete `enterprise_judges` rows, but deliberately do **not**
+  fire this trigger: both are destructive housekeeping on an unrelated
+  lifecycle (account removal, event reset), not a "judge assigned/removed"
+  business event, and firing an auto-revoke rule from a bulk cleanup path
+  could have surprising side effects far outside that cleanup's own scope.
+  Adding a fifth scenario in the future means adding one constant here and
+  one `applyRoleGrantRule` call at its domain event — nothing else.
+- **Enterprise scoping** (`role_grant_rules.enterprise_id`, nullable FK to
+  `enterprises`): `NULL` means "applies to this `trigger_event` for ANY
+  enterprise" (the original, still-default behavior); a specific id scopes
+  the rule to a trigger fired FOR that one enterprise only (e.g. a bespoke
+  role for one sponsor's own reps or judges). `applyRoleGrantRule`
+  (`identity/role-grants.ts`) takes an optional `context: { enterpriseId }`
+  and its lookup is `WHERE trigger_event = $1 AND enabled = true AND
+  (enterprise_id IS NULL OR enterprise_id = $2)` — a global and an
+  enterprise-specific rule for the same event can coexist and both apply,
+  intentionally (a rep linking to a specific sponsor can get both the
+  general Sponsor role and a bespoke one for that company). Every existing
+  call site (`sponsors/service.ts`'s `addEnterpriseMember`/
+  `removeEnterpriseMember`/`addEnterpriseJudge`/`removeEnterpriseJudge`,
+  `identity/routes/invites.ts`'s sponsor-invite acceptance) now passes the
+  relevant `enterpriseId` as context.
+- **Admin CRUD** (`identity/routes/role-grant-rules.ts`): `GET/POST
+  /api/role-grant-rules` and `PATCH/DELETE /api/role-grant-rules/:ruleId`,
+  gated by `permissions:manage` like every other role-administration route.
+  `GET` takes an optional `?roleId=` query param that scopes the list to
+  rules targeting that one role — the per-role Grant Rules tab uses it;
+  omitted, every rule in the system is returned (the read-only overview
+  uses this form).
+  `trigger_event` is validated against the `TRIGGER_EVENTS` registry (an
+  unknown string 400s) — this is a fixed vocabulary of *what can happen*, not
+  a free-text event system. `enterprise_id`, if given, must reference a real
+  enterprise (404 otherwise). Configuring a rule that grants/revokes role X
+  is exactly as privileged as assigning X directly, so creating, editing, or
+  deleting a rule re-runs the SAME two guards `roles.ts` uses for direct
+  assignment — `requireRoleMutationAuthority` (the actor's highest role must
+  sit strictly above X's position) and `requireCapabilityPossessionForAssignment`
+  (unless the actor holds the wildcard, they must already possess every
+  capability X's own rows explicitly ALLOW) — and refuses a protected role
+  outright via `assertNotProtectedRole`, mirroring the exact fix already
+  applied to `applications.grants_role_ids` for the same class of
+  privilege-escalation vector. Every mutation is audited
+  (`entityType: "role_grant_rule"`).
+- **Admin UI**: rule management lives on the per-role "Grant rules" tab of
+  `/permissions` (`apps/web/src/app/(app)/permissions/role-editor.tsx`,
+  content in `grant-rules-panel.tsx`) — a 4th section alongside
+  Display/Capabilities/Members on `RoleEditor`, both as a desktop tab and as
+  a `RoleNavRow` in the mobile drill-down, scoped to the rules that target
+  the role currently open (`GET /api/role-grant-rules?roleId=`). A rule is
+  targeting exactly one role's authority, so once creation happens from
+  inside that role's own screen the role picker is redundant and dropped
+  entirely — creating a rule there only asks for trigger + action + optional
+  enterprise scope, and the payload's `roleId` is always the current role's
+  id. This replaced an earlier standalone top-level "Automation" tab
+  (equal-weight sibling of "Roles", listing every rule referencing roles by
+  name with no other context) that a later UX pass found bolted-on relative
+  to the Discord-style role browser. The trigger picker is populated from
+  `TRIGGER_EVENTS`; the enterprise picker is populated from
+  `GET /api/enterprises` and degrades to "no enterprise options" (global
+  rules only) if the signed-in admin lacks the sponsor-side capability that
+  route also requires — enterprise scoping is additive, not a hard
+  requirement to use the feature. A protected role can never own a rule
+  (server-enforced), so its Grant Rules tab mirrors Capabilities/Members:
+  visible, but mutation-disabled.
+  What a per-role view can't answer — "every automatic rule in the system,
+  regardless of role" — survives as a read-only, filterable overview
+  (`grant-rules-overview.tsx`), opened from a plain "All rules" button next
+  to Trash/New role on the roles list screen rather than as a second
+  top-level tab; it has no create/edit/delete/enable-toggle of its own.
+
+### Soft-delete and restore (0804)
+
+`roles.deleted_at` (nullable `timestamptz`) replaces hard `DELETE` for every
+role except `system:superadmin` (still fully locked out — see above).
+`DELETE /api/roles/:roleId` now sets `deleted_at = now()`; the row, its
+`role_capabilities`, its `user_roles` memberships, and every audit entry that
+references it survive untouched. A deleted role stops granting access
+immediately — `user_effective_capabilities` and every hand-rolled resolution
+query in `role-authority.ts` filter `deleted_at IS NULL`, exactly as if the
+user held no such role.
+
+`roles_position_idx` became a partial unique index
+(`WHERE deleted_at IS NULL`) in the same migration: a deleted role's position
+is released for reuse rather than permanently reserved. `POST
+/api/roles/:roleId/restore` clears `deleted_at`, keeping the role's original
+position — if a still-live role has since taken that exact slot, restore
+409s instead of silently picking a new position; the actor moves one of the
+two roles via `PATCH .../position` and retries. `GET /api/roles` excludes
+deleted roles by default; `?includeDeleted=true` (gated by
+`permissions:manage`, same as every mutation) lists them too, powering the
+web permissions page's trash panel (`apps/web/src/app/(app)/permissions/page.tsx`).
+
+### Default seeded role set (0805)
+
+A fresh install's only source of default roles is 0805 (0801 ports over
+pre-existing template-origin `permission_groups` data on an upgrade, but
+creates nothing on a fresh database — see above) plus 0801's always-created
+`Sponsor` role and the CLI-only `system:superadmin`. Earlier drafts of this
+migration mechanically ported all 20 legacy platform templates as roles
+unconditionally (a fresh install ended up with roughly 25 roles nobody
+asked for), then narrowed to a six-role planning-to-operations ladder. 0805
+now seeds the repo owner's finalized **composable catalogue**: fifteen
+default roles (plus the unchanged `Sponsor` and the CLI-only
+`system:superadmin`) built so an organizer normally holds `Organizer` plus
+whichever functional team role(s) their job actually needs, rather than a
+single rung on a ladder.
+
+- **Event Director** — every catalogue capability except the admin wildcard
+  (`*`) and the deprecated `sponsor:portal` no-op. The single top
+  non-superadmin tier, and the default seed's sole owner of every
+  decide/override/broadcast-type action (see risk tiering below).
+- **Organizer** — the baseline every year-round organizer holds: `users:read`,
+  `applications:review`, `projects:read`, `accredit:scan`, `presence:scan`,
+  `activity:scan`, `logistics:stats`.
+- **Day Staff** — temporary/on-the-day staff: `accredit:scan`,
+  `presence:scan`, `activity:scan`, `logistics:stats` — substantially less
+  than Organizer, and deliberately **no** application response/review access.
+  (`logistics:stats` already covers the "aggregate application counts without
+  seeing individual responses" need via the existing `GET
+  /api/applications/:id/stats` route — no new stats capability was needed.)
+- **Applications Team** — `applications:manage`, `applications:review`.
+- **Applications Lead** — `applications:decide`, `applications:edit-response`,
+  sitting above Applications Team. `applications:confirm-override` stays
+  Event-Director-only, not here.
+- **Operations Team** — `accredit:scan`, `presence:scan`, `activity:scan`,
+  `logistics:stats`, `intolerances:manage`, `venue:manage`,
+  `presence:manage`.
+- **Hacker Experience** — `projects:read`, `activity:scan`,
+  `schedule:manage`, `tv:control`, `challenges:manage`.
+- **Sponsors Team** — INTERNAL organizers who run the sponsor relationship:
+  `sponsors:manage`, `challenges:manage`. Distinct from the EXTERNAL
+  `Sponsor` role below (a company representative, not an organizer).
+- **Judging Team** — `projects:read`, `projects:import`, `projects:edit`,
+  `queue:operate`, `judge:panel`.
+- **Judging Coordinator** — `queue:admin`, `judging:export`, sitting above
+  Judging Team.
+- **Media / Comms** — `schedule:manage`, `announcements:manage`,
+  `tv:control`. `notifications:send` stays Event-Director-only.
+- **Technical Team** — `users:read`, `users:write`, `audit:read` for hackOS
+  developers. Explicitly **not** `*`, `permissions:manage`, `wallet:manage`,
+  or `event:manage`.
+- **Mentor** — applicant-facing granted role (an `application_grants_roles`
+  target) for accepted mentors; carries no capabilities today. Mentor-facing
+  features (public mentor profiles, participants asking a mentor for help)
+  are future work, not yet built or scheduled — access isn't granted ahead
+  of the feature that would need it.
+- **Participant** — applicant-facing granted role for accepted participants;
+  carries no capabilities of its own, same pattern as `Sponsor` — a
+  relationship/status marker, not a permission grant.
+
+**Typical assignments** (operator guidance, not an enforced constraint):
+temporary volunteer → Day Staff; normal organizer → Organizer; ops organizer
+→ Organizer + Operations Team; sponsor organizer → Organizer + Sponsors Team;
+challenge/programme organizer → Organizer + Hacker Experience;
+cross-functional sponsor challenge organizer → Organizer + Sponsors Team +
+Hacker Experience; admissions organizer → Organizer + Applications Team;
+admissions lead → Organizer + Applications Team + Applications Lead; judging
+organizer → Organizer + Judging Team; judging lead → Organizer + Judging Team
++ Judging Coordinator; media organizer → Organizer + Media / Comms; hackOS
+developer → Organizer + Technical Team; external company representative →
+Sponsor.
+
+**Risk tiering: read/scan/score vs. decide/override/broadcast.** Capabilities
+split into two bands. The first band — reading, scoring, and scanning
+(`applications:review`, `activity:scan`, `logistics:stats`, `projects:read`,
+`users:read`, etc.) — is non-destructive and broadly useful, so it's spread
+across whichever functional team role matches that domain. The second band —
+deciding, overriding, and broadcasting (`applications:decide`,
+`applications:confirm-override`, `announcements:manage`,
+`notifications:send`) — sends outward communication to applicants/attendees
+or finalizes an outcome on someone else's behalf, so the default seed
+concentrates all of it in Event Director, the single top non-superadmin
+tier, rather than letting it leak into a functional team role alongside an
+adjacent read-only grant. No seeded role below Event Director holds any
+decide/override/broadcast capability by default; a real install can still
+grant one explicitly via the roles API if its org chart needs it.
+
+**The new `challenges:manage` capability** (`packages/shared/src/
+capabilities.ts`) exists because Hacker Experience and Sponsors Team both
+need to create/publish/manage sponsor challenges without full
+`sponsors:manage` (which would also hand them enterprise/tier/invite
+administration they don't need). It's wired into
+`challenges/routes.ts`'s `manageChallenges` guard and `challenges/access.ts`'s
+`isChallengeAdmin` as a third alternative alongside `sponsors:manage` and
+`queue:admin` — an org-wide grant, exactly like those two, not an
+enterprise-scoped one (a challenge's own ownership check still separately
+gates a sponsor representative's access to their own challenge, unaffected
+by this capability).
+
+**Sponsor-scoping investigation (external `Sponsor` role).** The repo owner
+asked for narrowly-scoped sponsor capabilities rather than global
+`sponsors:manage`/`projects:read`/`queue:admin` grants, and specifically
+asked whether existing relationship-based fallbacks already solve this.
+They do, for four of the five things an external sponsor representative
+needs, so the `Sponsor` role (0801, unchanged by 0805) carries **zero**
+capability grants, exactly as before this rewrite:
+
+- *View own enterprise details* — `sponsors/access.ts`'s
+  `assertCanEditEnterprise` already falls back to `ownsEnterprise()`
+  (a `sponsors` table row) alongside the `sponsors:manage` check.
+- *View/manage own enterprise's challenges* — `challenges/access.ts`'s
+  `assertCanEditChallenge`/`challengeAccessPolicy` already fall back to
+  `ownsChallenge()` for the same challenge. Creating a *new* challenge stays
+  admin-only by design (an org admin binds a hidden challenge template to an
+  enterprise; the rep then edits it) — that's not a gap, it's the intended
+  H44 flow.
+- *View projects submitted to own challenges* — `projects/access.ts`'s
+  `resolveRepositoryAccessScope` already scopes an unprivileged caller to
+  the challenges their `sponsors` or `enterprise_judges` row covers.
+- *Manage/use assigned judging rooms/panels* — `sponsors/access.ts`'s
+  `assertCanManageEnterpriseJudging` (judge roster) and
+  `queue/contextual-access.ts`'s `requireRoomAccessOrCapability`/
+  `requireRoomAssignmentsAccess` (room reads/assignments) already fall back
+  to `ownsEnterprise()`/`ownsRoomEnterprise()`.
+
+The fifth — *operate a judging queue* (`POST
+/api/queue/rooms/:roomId/call-next`, the room's call/skip/pause console) —
+is a **known, documented gap, left unchanged on purpose**: that route hard-
+requires `queue:operate` with no relationship fallback at all, not even for
+an enterprise's own assigned judges (`enterprise_judges`), let alone a
+sponsor representative who isn't a judge. `queue/contextual-access.ts`'s
+`requireEntryJudgeOrCapability` carries an explicit comment that ownership
+"authorizes the sponsor-facing review/export reads, not a judging-panel or
+queue-transition mutation" — i.e. this exclusion looks deliberate (queue
+orchestration is an operations-console job, kept separate from the judging
+relationship so a sponsor rep can't reorder their own challenge's queue).
+Given that documented intent, this migration does not add a
+`sponsor:judging:operate`-style capability or loosen `call-next`'s guard; if
+the org later wants sponsor reps to self-operate their own room's queue,
+that's a follow-up decision for the repo owner, not a default-seed change.
+
+All fifteen non-superadmin roles listed above are `is_protected = false` and
+fully deletable/editable via the normal roles API. The existing `Sponsor`
+auto-grant role (0801) is unchanged: still capability-less, still wired via
+`role_grant_rules` on enterprise link/unlink, positioned below every
+functional-team role. None of the fifteen are referenced by name in
+`role_grant_rules` or other seed data (only `Sponsor` is targeted by name),
+so they remain safe to rename later without a data migration.
+
+### Invite UI stops asking "account type" separately from role-picking (H8/H9/H10)
+
+The web invite dialog (`invite-dialog.tsx`) and the reusable-link form
+(`user-invite-links-section.tsx`) used to gate two things behind an explicit
+"account type" `<Select>` (`kind`: staff/sponsor/participant): whether the
+enterprise picker showed at all (sponsor-only), and whether the role
+multi-select showed at all (staff-only — a stale assumption from before this
+rewrite gave every account kind a real role graph). Both admin-facing forms
+now always show the role multi-select and the enterprise combobox, and
+derive `kind` on submit instead of asking for it directly: an enterprise
+picked -> `sponsor`; otherwise a "allow submitting to closed application
+forms" checkbox, checked -> `participant`; neither -> `staff`. The two are
+mutually exclusive in the UI (picking one clears the other), matching the
+single-column `kind` this still becomes on the wire — the `POST
+/api/invites` / `POST /api/invites/user-links` request bodies are otherwise
+unchanged.
+
+This intentionally decouples "does this invite pre-assign the seeded
+Participant role" from "does this invite bypass the closed-application-window
+check" — they used to be conflated by a single kind picker, but are
+independent in practice: most participant invites don't pre-assign any role
+at all (the application form's `grants_role_ids` does that at confirm time),
+while the bypass (`applications/service.ts`'s `isInvitedParticipant`, keyed
+on `email_verification_tokens.kind = 'participant'`) is about application-
+form *access*, not role membership. Roles can now be pre-assigned on any
+invite kind, composing freely (e.g. a sponsor rep who should also hold a
+staff-side role).
+
+The one load-bearing backend change this required: `user_invite_links` had a
+DB-level `CHECK (kind = 'staff' OR group_ids = '{}')` (0113) — reusable
+sponsor/participant links could never carry roles, unlike the single-email
+`/api/invites` flow, which never had that restriction. Migration 0810 drops
+that check; the route (`identity/routes/user-invite-links.ts`) still requires
+a staff-derived link (no enterprise, no bypass) to carry at least one role,
+since that's the only thing such a link is for — sponsor and participant
+links are meaningful with zero roles, so that requirement only applies when
+`kind === "staff"`. `isInvitedParticipant`'s query shape and every other
+caller of the accept endpoint are unchanged.
+
+### `is_seeded`, `role_seed_defaults`, and reset-to-default (0800/0807)
+
+`roles.is_seeded` (`boolean NOT NULL DEFAULT false`, added in 0800, set
+`true` by 0801's `Sponsor` insert and every 0805 default-catalogue insert)
+marks a role as coming from the seeded default set rather than from an admin
+using `POST /api/roles`. It's a durable column rather than a name match, so
+renaming a seeded role (e.g. "Organizer" → "Field Organizer") doesn't drop it
+out of this set. `system:superadmin` is never `is_seeded` — it's CLI-only,
+never created by a migration.
+
+Two behaviors key off it:
+
+- **Trash/restore scoping.** `GET /api/roles?includeDeleted=true` now
+  returns soft-deleted roles only where `is_seeded = true`, in addition to
+  every non-deleted role (that half is unchanged). A custom role an admin
+  creates and later soft-deletes no longer appears in the web permissions
+  page's trash panel — it's gone for good once deleted, same as before this
+  scoping existed for a truly custom role, but a seeded default role (someone
+  deletes "Day Staff" by mistake) is still recoverable there.
+- **Reset to default.** `role_seed_defaults` (0807) is a one-row-per-seeded-
+  role snapshot table (`role_id PRIMARY KEY, capabilities jsonb`), populated
+  once at seed time by copying each `is_seeded` role's live `role_capabilities`
+  ALLOW rows right after 0801/0805 insert them (`{"applications:review":
+  "allow", ...}` — every 0801/0805 role capability is ALLOW-only, per the
+  catalogue's "prefer ALLOW + implicit INHERIT, no DENY" convention, so the
+  snapshot only ever needs to record the ALLOW set; anything absent is
+  implicitly INHERIT, exactly like a fresh seed). Scope: capability drift
+  only — the snapshot doesn't cover name/visibility, so a rename or a
+  visibility toggle survives a reset untouched.
+
+  - `GET /api/roles/:roleId/seed-diff` → `{ isSeeded, hasDrifted, diff:
+    { capability, current, default }[] }`. `isSeeded=false` (no snapshot to
+    compare against) for a non-seeded/custom role or a seeded role with no
+    snapshot row; otherwise `diff` lists every capability whose live
+    tri-state differs from its seed-time state (a capability missing from
+    either side reads as `inherit`).
+  - `POST /api/roles/:roleId/reset-to-default` replaces the role's live
+    `role_capabilities` with exactly its snapshot (delete + re-insert,
+    transactional, audited as `reset_to_default`). Requires `is_seeded = true`
+    and an existing snapshot row (400/404 otherwise); refuses
+    `system:superadmin` the same way every other role-capability mutation
+    route does, though that's a non-issue in practice since it's never
+    seeded. Guarded exactly like `PUT .../capabilities`:
+    `requireRoleMutationAuthority` (position hierarchy) plus the wildcard-
+    holder invariant check when the reset adds/removes the `*` grant.
+  - **Possession-guard interaction.** The existing capability-possession
+    guard (`requireCapabilityPossessionForStateChange`) still applies, scoped
+    to only the capabilities the reset would **newly** turn ALLOW (i.e. ones
+    not already ALLOW on the live role) — a capability the actor didn't touch
+    because it was already ALLOW before the reset isn't re-checked. An actor
+    without the wildcard who doesn't currently possess a capability the
+    snapshot would restore cannot use reset to hand it back to themselves via
+    this role; they need someone who still holds it to run the reset, or to
+    edit the role's capabilities directly for whichever subset they do
+    possess. This is a deliberate tradeoff (consistent with the same
+    limitation on ordinary capability edits) rather than a bypass.
+
+  The web permissions page's Capabilities tab shows a "Reset to default"
+  banner+button when `hasDrifted` is true for the selected seeded role;
+  clicking it opens a confirmation modal listing each drifted capability's
+  current → default state before the admin confirms — the reset is never
+  applied without that preview step.
+
+## Goal and non-goals (capability-group era — superseded, see above)
 
 Every API route must declare one authoritative access policy, and every
 capability or relationship grant must be validated, bounded, immediately
@@ -30,7 +837,14 @@ permissions from the UI, auto-assign new templates, remap existing custom
 groups, or edit the normative files under `plan/`. Frontend gates remain
 usability controls; the API remains authoritative.
 
-## Implementation result
+> The role-hierarchy rewrite above is the one exception to "does not replace
+> capability-based authorization with roles" — it was a deliberate,
+> explicitly approved architecture inversion, done via new migrations and a
+> `plan/` update rather than an ad hoc edit, so it doesn't contradict the
+> spirit of this non-goal (`plan/` still wins on conflict; it was updated,
+> not silently overridden).
+
+## Implementation result (capability-group era — superseded, see above)
 
 - Strict startup enforcement records **278 non-HEAD route-policy rows** and
   exactly one logical Better Auth generated-route exemption, yielding **276
@@ -50,6 +864,10 @@ usability controls; the API remains authoritative.
   integration suite (**70 files / 614 tests**), web typecheck and tests
   (**28 files / 179 tests**), and mobile typecheck and tests
   (**15 suites / 68 tests**) passed.
+
+These specific counts predate the role-hierarchy rewrite (the route count,
+for instance, changed when `/api/permission-groups*` was replaced by
+`/api/roles*` — see the generated ledger for the current numbers).
 
 Run `pnpm --filter @hackos/api route-policy:audit` after route changes, then
 review the generated ledger before release. The route-policy tests plus API,

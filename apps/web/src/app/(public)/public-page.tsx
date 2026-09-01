@@ -46,17 +46,13 @@ const dateTime = (value: string, timezone: string, language: "es" | "gl" | "en")
     timeZone: timezone,
   }).format(new Date(value));
 
-function applicationTypeLabel(type: string, t: Translate): string {
-  return (
-    (
-      {
-        participant: t("applicationTypeParticipant"),
-        mentor: t("applicationTypeMentor"),
-        sponsor: t("applicationTypeSponsor"),
-        volunteer: t("applicationTypeVolunteer"),
-      } as Record<string, string>
-    )[type] ?? t("applicationTypeOther")
-  );
+/**
+ * H8: label for a public form's `granted_role_name` — the name of its
+ * highest-position granted role, or null if it grants none. Replaces the
+ * retired static `type` field's display.
+ */
+function grantedRoleNameLabel(roleName: string | null, t: Translate): string {
+  return roleName ?? t("roleUnassigned");
 }
 
 export function PublicPage() {
@@ -260,7 +256,7 @@ function PublicPageContent({
                 <div className="min-w-0">
                   <h3 className="font-medium">{form.name}</h3>
                   <p className="text-muted-foreground mt-1 text-sm">
-                    <span>{applicationTypeLabel(form.type, t)}</span>
+                    <span>{grantedRoleNameLabel(form.granted_role_name, t)}</span>
                     {form.close_at
                       ? ` · ${t("closes")} ${dateTime(form.close_at, event.timezone, language)}`
                       : ""}

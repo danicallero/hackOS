@@ -175,11 +175,11 @@ as written; this doc records the deliberate supersession instead. Two gates
 apply to every self-service mutation, on top of `participants_can_create_projects`:
 
 - **Admitted-participant eligibility** (`isAdmittedParticipant` in
-  `service.ts`) — a thin wrapper around `computeDerivedRole` +
-  `hasMobileAccess` (identity module), reused verbatim rather than
-  reimplemented. An account that isn't an accepted/confirmed applicant (or an
-  operational role) can't create, be invited into, or otherwise touch a
-  project this way.
+  `service.ts`) — a thin wrapper around `hasMobileAccess` (identity module),
+  reused verbatim rather than reimplemented. An account that isn't an
+  accepted/confirmed applicant (or a capability holder/enterprise judge/
+  sponsor rep) can't create, be invited into, or otherwise touch a project
+  this way.
 - **Hacking window** (`assertWithinHackingWindow` /
   `isWithinHackingWindow`, `src/lib/hacking-window.ts`) — both
   `event_config.hacking_starts_at` and `hacking_ends_at` must be set and

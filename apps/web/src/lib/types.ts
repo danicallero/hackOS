@@ -36,8 +36,11 @@ export interface Me {
       }
     | null;
   createdAt: string;
-  role: "admin" | "judge" | "sponsor" | "staff" | "mentor" | "participant" | "unassigned";
+  /** H8: the caller's actual highest-visible role name (null if they hold no visible role). */
+  role: string | null;
   capabilities: Capability[];
+  /** H8: the caller's complete assigned-role set, highest position first — additive next to `role`. */
+  roles: AssignedRoleSummary[];
   /** Association facts underlying `role` (H55) — a sponsor rep who also judges needs both workspaces. */
   isEnterpriseJudge: boolean;
   isSponsorRep: boolean;
@@ -54,14 +57,6 @@ export interface Me {
 }
 
 export type Language = "en" | "es" | "gl";
-export type DerivedRole =
-  | "admin"
-  | "judge"
-  | "sponsor"
-  | "staff"
-  | "mentor"
-  | "participant"
-  | "unassigned";
 
 export interface UserListItem {
   id: number;
@@ -70,7 +65,8 @@ export interface UserListItem {
   name: string | null;
   surname: string | null;
   badgeId: string | null;
-  role: DerivedRole;
+  /** H8: this user's actual highest-visible role name (null if they hold no visible role). */
+  role: string | null;
   language: string;
   shirtSize: string | null;
   applicationStatus: string | null;
@@ -83,31 +79,65 @@ export interface UserList {
   total: number;
 }
 
-export interface UserDetail extends Omit<Me, "role" | "capabilities"> {
-  role: DerivedRole;
-  capabilities: Capability[];
-  groups: { id: number; name: string }[];
-}
-
-/** GET /api/permission-groups item. */
-export interface PermissionGroupSummary {
+/** H8: an entry in a user's full assigned-role list (see `Me.roles`/`UserDetail.roles`). */
+export interface AssignedRoleSummary {
   id: number;
   name: string;
-  description: string | null;
-  /** Originating platform template, if this group was created from one. */
-  templateKey: string | null;
-  /** True when direct capabilities or includes no longer match the template. */
-  templateDrifted: boolean;
-}
-/** GET /api/permission-groups/:id — full group. */
-export interface PermissionGroupDetail extends PermissionGroupSummary {
-  capabilities: string[];
-  includes: number[];
-  members: number[];
+  position: number;
+  isVisible: boolean;
 }
 
-/** GET /api/permission-group-templates item. Keys select the web i18n catalogue. */
-export interface PermissionGroupTemplate {
+export interface UserDetail extends Omit<Me, "role" | "capabilities" | "roles"> {
+  role: string | null;
+  capabilities: Capability[];
+  roles: AssignedRoleSummary[];
+}
+
+export type PermissionState = "allow" | "deny" | "inherit";
+
+/** GET /api/roles item (H8: the hierarchical, position-ordered multi-role model). */
+export interface RoleSummary {
+  id: number;
+  name: string;
+  /** One global hierarchy — higher sorts first. */
+  position: number;
+  /** Whether this can be shown as a user's public role. */
+  isVisible: boolean;
+  /** Built-in roles (e.g. Platform administrator). Informational only — see deletedAt/name for what's actually locked. */
+  isProtected: boolean;
+  /** H8/0800: true for a role from the seeded default catalogue (0801 Sponsor / 0805). Scopes trash/restore and gates reset-to-default. */
+  isSeeded: boolean;
+  /** Sparse: a capability with no explicit row is implicitly 'inherit'. */
+  capabilities: { capability: string; state: PermissionState }[];
+  memberIds: number[];
+  /** H8/0804: soft-delete marker. Non-null means this role grants nothing and is hidden from the default list. */
+  deletedAt: string | null;
+}
+/** GET /api/roles/:id — identical shape to the list item. */
+export type RoleDetail = RoleSummary;
+
+/** GET /api/roles/:id/seed-diff — a seeded role's drift from its seed-time snapshot. */
+export interface RoleSeedDiff {
+  isSeeded: boolean;
+  hasDrifted: boolean;
+  diff: { capability: string; current: PermissionState; default: PermissionState }[];
+}
+
+/** GET/POST/PATCH /api/role-grant-rules item (H8: admin-configurable automatic role grant/revoke rules). */
+export interface RoleGrantRule {
+  id: number;
+  roleId: number;
+  roleName: string;
+  triggerEvent: string;
+  action: "grant" | "revoke";
+  enabled: boolean;
+  /** null = applies to every occurrence of triggerEvent, not just one enterprise. */
+  enterpriseId: number | null;
+  enterpriseName: string | null;
+}
+
+/** GET /api/role-templates item. Keys select the web i18n catalogue. */
+export interface RoleTemplate {
   key: string;
   labelKey: MessageKey;
   descriptionKey: MessageKey;
@@ -177,7 +207,7 @@ export interface Invite {
   email: string;
   kind: InviteKind;
   enterpriseId: number | null;
-  groupIds: number[];
+  roleIds: number[];
   expiresAt: string;
   usedAt: string | null;
   token: string | null;
@@ -189,7 +219,7 @@ export interface InviteListItem {
   email: string;
   kind: InviteKind;
   enterpriseId: number | null;
-  groupIds: number[];
+  roleIds: number[];
   expiresAt: string;
   createdAt: string;
 }
@@ -238,7 +268,7 @@ export interface UserInviteLink {
   kind: InviteKind;
   enterpriseId: number | null;
   enterpriseName: string | null;
-  groupIds: number[];
+  roleIds: number[];
   token: string;
   url: string;
   maxRedeems: number | null;

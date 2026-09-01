@@ -53,7 +53,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
     async (req) => {
       const { rows } = await pool.query(
         `SELECT fv.template,
-                a.type, a.ask_shirt_size, a.ask_food_intolerances,
+                a.ask_shirt_size, a.ask_food_intolerances,
                 r.*, t.expires_at AS confirmation_expires_at
          FROM application_responses r
          JOIN applications a ON a.id = r.application_id
@@ -65,7 +65,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
         [req.userId, req.params.id],
       );
       if (!rows[0]) throw new NotFoundError("No response yet for this application");
-      const { template, type, ask_shirt_size, ask_food_intolerances, ...row } = rows[0];
+      const { template, ask_shirt_size, ask_food_intolerances, ...row } = rows[0];
       const enriched = await enrichTemplate({ ask_shirt_size, ask_food_intolerances }, template);
       const { rows: userRows } = await pool.query(
         `SELECT shirt_size, food_intolerances, food_intolerance_notes, dietary_data_state

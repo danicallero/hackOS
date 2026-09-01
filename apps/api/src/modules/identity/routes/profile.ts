@@ -11,6 +11,7 @@ import {
   invalidateCapabilities,
   requireAuth,
   requireCapability,
+  userHasCapability,
 } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
 import { idempotencyGuard, replayCompletedIdempotency } from "../../../lib/idempotency.js";
@@ -30,7 +31,15 @@ import {
   runAccountRemoval,
 } from "../removal.js";
 import { issueRemovalPin } from "../removal-pin.js";
-import { computeDerivedRole, computeMembershipFlags, hasEventAccess } from "../role.js";
+import {
+  type AssignedRoleSummary,
+  assignAttendeeRole,
+  computeMembershipFlags,
+  getAssignedRoles,
+  getHighestVisibleRoleName,
+  hasEventAccess,
+} from "../role.js";
+import { SUPERADMIN_ROLE_NAME } from "../role-authority.js";
 
 /**
  * Profile routes (H7).
@@ -45,15 +54,13 @@ import { computeDerivedRole, computeMembershipFlags, hasEventAccess } from "../r
 const LANGUAGES = ["en", "es", "gl"] as const;
 const DIETARY_DATA_STATES = ["not_provided", "present"] as const;
 
-const derivedRoleSchema = z.enum([
-  "admin",
-  "judge",
-  "sponsor",
-  "staff",
-  "mentor",
-  "participant",
-  "unassigned",
-]);
+/** H8: a user's complete assigned-role set, for a secondary "all roles" list next to the single displayed role. */
+const assignedRoleSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  position: z.number(),
+  isVisible: z.boolean(),
+});
 
 /** Fields a user may edit on themself (H7: "consultar mis datos… y si detecto un error"). */
 const selfPatchSchema = z
@@ -449,17 +456,28 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           "the isEnterpriseJudge/isSponsorRep association facts nav uses for multi-capability " +
           "accounts (H55), whether they currently hold event access (confirmed spot or " +
           "manual attendee role), whether they have a project/queue entry of their own " +
-          "(drives hiding the My project/My queue nav items, issue #424), and mobile " +
-          "access eligibility.",
+          "(drives hiding the My project/My queue nav items, issue #424), mobile " +
+          "access eligibility, and the caller's complete assigned-role set (H8) alongside " +
+          "the single highest-visible `role` shown elsewhere.",
         summary: "Get my profile",
         response: {
           200: userResponseSchema.extend({
-            role: derivedRoleSchema,
+            // H8 full-replacement: the caller's badge/wallet/scanner display
+            // label IS simply their highest-visible role's name — no
+            // separate category. Same field name/shape /api/users/:id
+            // exposes for any other user.
+            visibleRoleName: z.string().nullable(),
             mobileAccess: z.boolean(),
             // Effective capabilities (H8) so the web/mobile UI can gate by
             // capability, never by the illustrative role (H55). Authoritative
             // enforcement still happens on every guarded route server-side.
             capabilities: z.array(z.string()),
+            // H8: the caller's FULL assigned-role set (highest position
+            // first), additive next to `role` (the single highest-visible
+            // one). Always the caller's own roles, so system:superadmin is
+            // included when they actually hold it — nothing to hide from
+            // yourself.
+            roles: z.array(assignedRoleSchema),
             // Additive association facts (H55): a multi-capability account
             // (e.g. sponsor rep + enterprise judge) needs both workspaces, which
             // the single-priority `role` above can't represent on its own.
@@ -489,7 +507,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       const userId = req.userId as number;
       const row = await fetchUser(userId, true);
       const [
-        role,
         capabilities,
         membership,
         eventAccess,
@@ -498,9 +515,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         canCreateProject,
         profileLocked,
         removalStatus,
+        roles,
       ] = await Promise.all([
-        computeDerivedRole(pool, userId),
-        getEffectiveCapabilities(userId),
+        getEffectiveCapabilities(userId, req),
         computeMembershipFlags(pool, userId),
         hasEventAccess(pool, userId),
         hasMyProject(userId),
@@ -508,14 +525,15 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         canCreateMyProject(userId),
         hasAcceptedApplication(userId),
         getPendingAccountRemovalStatus(pool, userId),
+        getAssignedRoles(pool, userId),
       ]);
-      const mobileAccess =
-        row.account_state === "active" && (await hasMobileAccess(pool, userId, role));
+      const mobileAccess = row.account_state === "active" && (await hasMobileAccess(pool, userId));
       return {
         ...serializeUser(row, removalStatus),
-        role,
+        visibleRoleName: roles.find((r) => r.isVisible)?.name ?? null,
         mobileAccess,
         capabilities: [...capabilities],
+        roles,
         ...membership,
         hasEventAccess: eventAccess,
         hasProject,
@@ -783,7 +801,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                 name: z.string().nullable(),
                 surname: z.string().nullable(),
                 badgeId: z.string().nullable(),
-                role: derivedRoleSchema,
+                visibleRoleName: z.string().nullable(),
                 language: z.string(),
                 shirtSize: z.string().nullable(),
                 applicationStatus: z.string().nullable(),
@@ -808,11 +826,19 @@ export function registerProfileRoutes(app: FastifyInstance): void {
              AND is_test_account = false`;
       const args = filter ? [filter, limit, offset] : [limit, offset];
       const p = filter ? 2 : 1;
-      const { rows } = await pool.query(
-        `SELECT id, email, email_verified, name, surname, badge_id, language, shirt_size,
-                is_test_account, created_at
-           FROM users ${where}
-           ORDER BY created_at DESC LIMIT $${p} OFFSET $${p + 1}`,
+      // H8 full-replacement: a user's badge/wallet/scanner display label is
+      // simply their highest-visible role name — resolved in this same query
+      // via a single join against the bulk-resolution view (avoids an N+1 of
+      // getHighestVisibleRoleName() calls), the same view logistics/stats.ts
+      // and scanner-sync.ts use.
+      const { rows } = await pool.query<UserRow & { role: string | null }>(
+        `SELECT u.id, u.email, u.email_verified, u.name, u.surname, u.badge_id, u.language,
+                u.shirt_size, u.is_test_account, u.created_at,
+                uern.role_name AS role
+           FROM users u
+           LEFT JOIN user_effective_role_name uern ON uern.user_id = u.id
+           ${where}
+           ORDER BY u.created_at DESC LIMIT $${p} OFFSET $${p + 1}`,
         args,
       );
       const { rows: countRows } = await pool.query(
@@ -847,23 +873,21 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         statusRows.map((r: { user_id: number; status: string }) => [r.user_id, r.status]),
       );
 
-      const users = await Promise.all(
-        rows.map(async (r: UserRow) => ({
-          id: r.id,
-          email: r.email,
-          emailVerified: r.email_verified,
-          name: r.name,
-          surname: r.surname,
-          badgeId: r.badge_id,
-          role: await computeDerivedRole(pool, r.id),
-          language: r.language,
-          shirtSize: r.shirt_size,
-          applicationStatus: statusByUser.get(r.id) ?? null,
-          confirmedSpot: statusByUser.get(r.id) === "confirmed",
-          isTestAccount: r.is_test_account,
-          createdAt: r.created_at.toISOString(),
-        })),
-      );
+      const users = rows.map((r) => ({
+        id: r.id,
+        email: r.email,
+        emailVerified: r.email_verified,
+        name: r.name,
+        surname: r.surname,
+        badgeId: r.badge_id,
+        visibleRoleName: r.role,
+        language: r.language,
+        shirtSize: r.shirt_size,
+        applicationStatus: statusByUser.get(r.id) ?? null,
+        confirmedSpot: statusByUser.get(r.id) === "confirmed",
+        isTestAccount: r.is_test_account,
+        createdAt: r.created_at.toISOString(),
+      }));
 
       return {
         users,
@@ -878,12 +902,18 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       preHandler: requireCapability(CAPABILITIES.USERS_READ),
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_READ }),
       schema: {
+        description:
+          "A staff member's view of another user's profile. `visibleRoleName` is the single " +
+          "highest-visible role also shown elsewhere; `roles` is that user's complete " +
+          "assigned-role set (H8) for a secondary role list — system:superadmin is stripped " +
+          "out of it unless the viewer holds PERMISSIONS_MANAGE (irrelevant to an ordinary " +
+          "USERS_READ viewer, and never advertised to them).",
         params: z.object({ id: z.coerce.number().int() }),
         response: {
           200: userResponseSchema.extend({
-            role: derivedRoleSchema,
+            visibleRoleName: z.string().nullable(),
             capabilities: z.array(z.string()),
-            groups: z.array(z.object({ id: z.number(), name: z.string() })),
+            roles: z.array(assignedRoleSchema),
           }),
         },
       },
@@ -891,19 +921,25 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => {
       await assertProfileSubjectScope(req.userId as number, req.params.id);
       const row = await fetchUser(req.params.id);
-      const [role, capabilities, groups] = await Promise.all([
-        computeDerivedRole(pool, req.params.id),
+      const [visibleRoleName, capabilities, allRoles, canSeeSuperadmin] = await Promise.all([
+        getHighestVisibleRoleName(pool, req.params.id),
         getEffectiveCapabilities(req.params.id),
-        pool
-          .query(
-            `SELECT g.id, g.name FROM permission_group_members m
-               JOIN permission_groups g ON g.id = m.group_id
-              WHERE m.user_id = $1 ORDER BY g.name`,
-            [req.params.id],
-          )
-          .then((r) => r.rows as { id: number; name: string }[]),
+        getAssignedRoles(pool, req.params.id),
+        userHasCapability(req.userId as number, CAPABILITIES.PERMISSIONS_MANAGE, req),
       ]);
-      return { ...serializeUser(row), role, capabilities: [...capabilities], groups };
+      // H8: system:superadmin is CLI-only and never advertised to a staff
+      // viewer browsing someone else's profile unless they themselves manage
+      // permissions — it carries no operational meaning to an ordinary
+      // USERS_READ viewer beyond "this account has every capability".
+      const roles: AssignedRoleSummary[] = canSeeSuperadmin
+        ? allRoles
+        : allRoles.filter((r) => r.name !== SUPERADMIN_ROLE_NAME);
+      return {
+        ...serializeUser(row),
+        visibleRoleName,
+        capabilities: [...capabilities],
+        roles,
+      };
     },
   );
 
@@ -952,7 +988,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         body: attendeeRoleBody,
         summary: "Set an attendee type manually",
         description:
-          "Classify an attendee as participant or mentor through an auditable relationship, never a permission role. The permanent ticket is issued in the same transaction.",
+          "Classify an attendee as participant or mentor by granting the matching seeded Mentor/Participant role (H8) — an auditable, explicit staff action, distinct from a capability-bearing permission role (both seeded roles carry zero capabilities). The permanent ticket is issued in the same transaction. Re-classifying replaces whichever of the two roles this action previously granted.",
         response: {
           200: z.object({ role: z.enum(["participant", "mentor"]), ticketIssued: z.literal(true) }),
         },
@@ -968,13 +1004,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           [req.params.id],
         );
         if (!rows[0]) throw new NotFoundError("User not found", { userId: req.params.id });
-        await client.query(
-          `INSERT INTO manual_attendee_roles (user_id, role, assigned_by)
-           VALUES ($1, $2, $3)
-           ON CONFLICT (user_id) DO UPDATE
-             SET role = EXCLUDED.role, assigned_by = EXCLUDED.assigned_by, assigned_at = now()`,
-          [req.params.id, req.body.role, req.userId],
-        );
+        await assignAttendeeRole(client, req.params.id, req.body.role, req.userId as number);
         await issueTicket(client, req.params.id);
         await audit(client, {
           actorId: req.userId,
@@ -1286,7 +1316,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                 id: z.number(),
                 applicationId: z.number(),
                 applicationName: z.string(),
-                applicationType: z.string(),
+                applicationGrantedRoleName: z.string().nullable(),
                 status: z.string(),
                 submittedAt: z.string().nullable(),
                 confirmedAt: z.string().nullable(),
@@ -1314,7 +1344,13 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       await fetchUser(userId);
 
       const { rows: responseRows } = await pool.query(
-        `SELECT r.*, a.name AS app_name, a.type AS app_type
+        `SELECT r.*, a.name AS app_name,
+                (SELECT ro.name
+                   FROM application_grants_roles agr
+                   JOIN roles ro ON ro.id = agr.role_id AND ro.deleted_at IS NULL
+                  WHERE agr.application_id = a.id
+                  ORDER BY ro.position DESC
+                  LIMIT 1) AS app_granted_role_name
          FROM application_responses r
          JOIN applications a ON a.id = r.application_id
          WHERE r.user_id = $1
@@ -1332,7 +1368,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             id: row.id as number,
             applicationId: row.application_id as number,
             applicationName: row.app_name as string,
-            applicationType: row.app_type as string,
+            applicationGrantedRoleName: (row.app_granted_role_name as string | null) ?? null,
             status: row.status as string,
             submittedAt: row.submitted_at ? (row.submitted_at as Date).toISOString() : null,
             confirmedAt: row.confirmed_at ? (row.confirmed_at as Date).toISOString() : null,

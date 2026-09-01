@@ -23,6 +23,11 @@ import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { emitManualActivityScan } from "@/lib/manual-activity-scan";
 import { safeBack } from "@/lib/navigation";
+import {
+  ROLE_FILTER_ALL_ICON,
+  roleDisplayName,
+  roleFilterOptionsFromRoster,
+} from "@/lib/role-filters";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { listScannerPeople } from "@/lib/scanner-db";
 import type { ScannerPerson } from "@/lib/scanner-types";
@@ -41,7 +46,7 @@ export function PeopleDirectoryScreen() {
   const sync = useScannerSync();
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [roleFilter, setRoleFilter] = useState<"all" | ScannerPerson["role"]>("all");
+  const [roleFilter, setRoleFilter] = useState<"all" | string>("all");
   const [people, setPeople] = useState<ScannerPerson[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -55,6 +60,11 @@ export function PeopleDirectoryScreen() {
   const listRef = useRef<FlatList<ScannerPerson>>(null);
 
   useScrollToTop(listRef);
+
+  const roleFilters = useMemo(() => {
+    const options = roleFilterOptionsFromRoster(people, (role) => roleDisplayName(role, t));
+    return [{ value: "all" as const, label: t("roleAll"), icon: ROLE_FILTER_ALL_ICON }, ...options];
+  }, [people, t]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -133,9 +143,9 @@ export function PeopleDirectoryScreen() {
       },
       headerRight: () => (
         <MenuView
-          actions={ROLE_FILTERS.map((filter) => ({
+          actions={roleFilters.map((filter) => ({
             id: filter.value,
-            title: t(filter.labelKey),
+            title: filter.label,
             image: filter.icon,
             state: roleFilter === filter.value ? "on" : "off",
           }))}
@@ -153,7 +163,7 @@ export function PeopleDirectoryScreen() {
         </MenuView>
       ),
     });
-  }, [glassAvailable, navigation, roleFilter, t, usesListTitle]);
+  }, [glassAvailable, navigation, roleFilter, roleFilters, t, usesListTitle]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
@@ -164,7 +174,13 @@ export function PeopleDirectoryScreen() {
       if (activityId && !person.badgeId) return false;
       if (roleFilter !== "all" && person.role !== roleFilter) return false;
       if (!needle) return true;
-      return [person.name, person.surname, person.email, person.badgeId, roleLabel(person.role, t)]
+      return [
+        person.name,
+        person.surname,
+        person.email,
+        person.badgeId,
+        roleDisplayName(person.role, t),
+      ]
         .filter(Boolean)
         .join(" ")
         .toLocaleLowerCase()
@@ -202,9 +218,9 @@ export function PeopleDirectoryScreen() {
           >
             <AndroidFilterMenu
               accessibilityLabel={t("scannerFilterGroups")}
-              items={ROLE_FILTERS.map((filter) => ({
+              items={roleFilters.map((filter) => ({
                 id: filter.value,
-                label: t(filter.labelKey),
+                label: filter.label,
                 selected: roleFilter === filter.value,
               }))}
               onSelect={(id) => setRoleFilter(id as typeof roleFilter)}
@@ -218,9 +234,9 @@ export function PeopleDirectoryScreen() {
             style={{ borderRadius: 22, height: 44, width: 44 }}
           >
             <MenuView
-              actions={ROLE_FILTERS.map((filter) => ({
+              actions={roleFilters.map((filter) => ({
                 id: filter.value,
-                title: t(filter.labelKey),
+                title: filter.label,
                 image: filter.icon,
                 state: (roleFilter === filter.value ? "on" : "off") as "on" | "off",
               }))}
@@ -347,32 +363,6 @@ export function PeopleDirectoryScreen() {
   );
 }
 
-const ROLE_FILTERS: Array<{
-  value: "all" | ScannerPerson["role"];
-  labelKey:
-    | "roleAll"
-    | "roleAdmin"
-    | "roleStaff"
-    | "roleSponsor"
-    | "roleMentor"
-    | "roleJudge"
-    | "roleParticipants";
-  icon:
-    | "person.2"
-    | "person.crop.circle.badge.checkmark"
-    | "checkmark.seal"
-    | "briefcase"
-    | "person";
-}> = [
-  { value: "all", labelKey: "roleAll", icon: "person.2" },
-  { value: "admin", labelKey: "roleAdmin", icon: "person.crop.circle.badge.checkmark" },
-  { value: "staff", labelKey: "roleStaff", icon: "person.crop.circle.badge.checkmark" },
-  { value: "sponsor", labelKey: "roleSponsor", icon: "briefcase" },
-  { value: "mentor", labelKey: "roleMentor", icon: "person.2" },
-  { value: "judge", labelKey: "roleJudge", icon: "checkmark.seal" },
-  { value: "participant", labelKey: "roleParticipants", icon: "person" },
-];
-
 function PersonRow({ person, onPress }: { person: ScannerPerson; onPress: () => void }) {
   const { t } = useLocale();
   const fullName = [person.name, person.surname].filter(Boolean).join(" ");
@@ -380,10 +370,11 @@ function PersonRow({ person, onPress }: { person: ScannerPerson; onPress: () => 
   // Only shown as its own line when it isn't already standing in for the
   // name above (someone with no name on file at all).
   const showEmailLine = Boolean(fullName) && Boolean(person.email);
+  const normalizedRole = person.role?.toLocaleLowerCase() ?? null;
   const participantWarning =
-    person.role === "unassigned" || (person.role === "participant" && !person.accepted)
+    normalizedRole === null || (normalizedRole === "participant" && !person.accepted)
       ? { label: t("scannerNoAcceptedPlace"), tone: "destructive" as const }
-      : person.role === "participant" && !person.confirmed
+      : normalizedRole === "participant" && !person.confirmed
         ? { label: t("scannerPlaceUnconfirmed"), tone: "warning" as const }
         : null;
 
@@ -393,7 +384,7 @@ function PersonRow({ person, onPress }: { person: ScannerPerson; onPress: () => 
       accessibilityLabel={[
         displayName,
         showEmailLine ? person.email : null,
-        roleLabel(person.role, t),
+        roleDisplayName(person.role, t),
         person.badgeId ?? t("scannerNoBadge"),
       ]
         .filter(Boolean)
@@ -445,7 +436,7 @@ function PersonRow({ person, onPress }: { person: ScannerPerson; onPress: () => 
           </Text>
         ) : null}
         <Text numberOfLines={1} selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
-          {roleLabel(person.role, t)} · {person.badgeId ?? t("scannerNoBadge")}
+          {roleDisplayName(person.role, t)} · {person.badgeId ?? t("scannerNoBadge")}
         </Text>
         {participantWarning ? (
           <View style={{ alignItems: "center", flexDirection: "row", gap: 5 }}>
@@ -468,18 +459,4 @@ function PersonRow({ person, onPress }: { person: ScannerPerson; onPress: () => 
       <SymbolView name="chevron.right" tintColor={colors.tertiaryLabel} size={14} />
     </Pressable>
   );
-}
-
-function roleLabel(role: ScannerPerson["role"], t: ReturnType<typeof useLocale>["t"]) {
-  return (
-    {
-      admin: t("roleAdmin"),
-      staff: t("roleStaff"),
-      sponsor: t("roleSponsor"),
-      mentor: t("roleMentor"),
-      judge: t("roleJudge"),
-      participant: t("roleParticipant"),
-      unassigned: t("roleUnassigned"),
-    } as const
-  )[role];
 }

@@ -117,19 +117,46 @@ to `apps/api/.env` and change only the values you need.
 
 ### Create the first administrator
 
-The bootstrap command creates a verified account and grants it the `*`
-capability through the normal permission-group model:
+`system:superadmin` is CLI-only (H8): a break-glass role that carries the `*`
+(all-capabilities) wildcard, sits above every other role, and can never be
+granted, revoked, edited, reordered, or deleted through the HTTP API — not
+even by another `*`-holding admin. It's also never shown as anyone's public
+role (`is_visible = false`) and is excluded from every role picker in the web
+app (invites, application role-grants, automatic grant rules). The only way
+to add, look up, or remove it is one of these three scripts, run on a machine
+with `DATABASE_URL` pointing at the target database:
 
 ```sh
+# Add — creates a brand-new account and grants it superadmin in one step.
 pnpm --filter @hackos/api superadmin:create \
   --email admin@example.com \
   --password 'choose-a-local-password' \
   --name Local \
   --surname Admin
+
+# Add — grants superadmin to an account that already exists.
+pnpm --filter @hackos/api superadmin:grant --email admin@example.com
+
+# Look up — lists every account currently holding superadmin.
+pnpm --filter @hackos/api superadmin:list
+
+# Remove — revokes superadmin from an account.
+pnpm --filter @hackos/api superadmin:revoke --email admin@example.com
 ```
 
-It refuses to create a second superadmin unless
-`--allow-existing-admin` is passed deliberately.
+`superadmin:create`/`superadmin:grant` both refuse to mint a second
+superadmin unless `--allow-existing-admin` is passed deliberately.
+`superadmin:revoke` refuses if it would leave zero active superadmins, so
+you can never accidentally lock yourself out of the platform. Every
+add/remove is written to `audit_log` (`grant_superadmin`/`create_superadmin`/
+`revoke_superadmin`).
+
+In production, run the same commands from a shell on the API container/host
+(`node scripts/grant-superadmin.mjs --email ...`, `node
+scripts/list-superadmins.mjs`, `node scripts/revoke-superadmin.mjs --email
+...` — no `tsx`/`pnpm` needed for the `.mjs` scripts) with `DATABASE_URL` set
+to the production database. See `docs/access-control-audit-plan.md`'s
+"`system:superadmin` is CLI-only" section for the full design rationale.
 
 ### Start the mobile app
 

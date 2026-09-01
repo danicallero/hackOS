@@ -11,6 +11,7 @@ import {
   createUser,
   createUserWithCapabilities,
   ensureApplicationFormVersion,
+  seedAttendeeRoles,
   truncateAll,
 } from "../helpers.js";
 
@@ -26,6 +27,11 @@ beforeEach(async () => {
   await valkey.flushdb();
   config.REVIEW_FIXTURE_PASSWORD = fixturePassword;
   config.REVIEW_FIXTURE_DELETION_PIN = fixturePin;
+  // H8 full-replacement: configureFixtureParticipant grants the real seeded
+  // Participant role (identity/role.ts's assignAttendeeRole) instead of
+  // writing manual_attendee_roles directly — truncateAll wipes 0805's seed
+  // data every test, so recreate it before regenerate() runs.
+  await seedAttendeeRoles();
 });
 
 afterEach(() => {

@@ -97,7 +97,7 @@ export default function WalletPage() {
               label={t("walletHolderName")}
               value={[me.name, me.surname].filter(Boolean).join(" ") || me.email}
             />
-            <Field label={t("walletHolderRole")} value={roleLabel(t)[me.role]} />
+            <Field label={t("walletHolderRole")} value={roleLabel(me.role, t)} />
           </div>
         </SectionCard>
       ) : null}
@@ -114,16 +114,9 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
-function roleLabel(t: Translate): Record<Me["role"], string> {
-  return {
-    admin: t("roleAdmin"),
-    judge: t("roleJudge"),
-    sponsor: t("roleSponsor"),
-    staff: t("roleStaff"),
-    mentor: t("roleMentor"),
-    participant: t("roleParticipant"),
-    unassigned: t("roleUnassigned"),
-  };
+/** H8: roles are arbitrary names now — show the name as-is. */
+function roleLabel(role: Me["role"], t: Translate): string {
+  return role ?? t("roleUnassigned");
 }
 
 function WalletPurposePanel({ purpose, value }: { purpose: Purpose; value?: string | null }) {

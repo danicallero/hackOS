@@ -520,10 +520,12 @@ export async function markAnnouncementRead(
 /**
  * Resolves who an announcement reaches: an explicit recipient list wins if
  * set; otherwise audience tags (sponsor/participant/mentor, same vocabulary
- * and "sponsor implies participant" rule as H59's schedule audiences —
- * see identity/role.ts's mentorOrParticipantType/computeMembershipFlags,
- * inlined here as one query to avoid an N+1 per user); otherwise everyone,
- * unchanged from before this feature existed.
+ * and "sponsor implies participant" rule as H59's schedule audiences — see
+ * identity/role.ts's mentorOrParticipantType/computeMembershipFlags, whose
+ * bulk-query equivalent (user_effective_role_name, matched by the seeded
+ * Mentor/Participant role's own name) is joined directly here to avoid an
+ * N+1 per user); otherwise everyone, unchanged from before this feature
+ * existed.
  */
 async function resolveRecipients(
   db: Queryable,
@@ -557,33 +559,19 @@ async function resolveRecipients(
   }
 
   const { rows } = await db.query(
-    `WITH RECURSIVE user_groups AS (
-       SELECT pgm.user_id, pgm.group_id
-       FROM permission_group_members pgm
-       UNION
-       SELECT ug.user_id, gi.child_group_id
-       FROM permission_group_includes gi
-       JOIN user_groups ug ON ug.group_id = gi.parent_group_id
-     ),
-     staff AS (
-       -- Same "holds at least one capability" definition as
-       -- getEffectiveCapabilities/computeDerivedRole's staff bucket.
-       SELECT DISTINCT ug.user_id
-       FROM user_groups ug
-       JOIN group_capabilities gc ON gc.group_id = ug.group_id
+    `WITH staff AS (
+       -- "holds at least one capability" — same definition
+       -- getEffectiveCapabilities uses.
+       SELECT DISTINCT user_id FROM user_effective_capabilities
      ),
      attendee AS (
-       SELECT u.id AS user_id,
-         COALESCE(
-           (SELECT mar.role FROM manual_attendee_roles mar
-             WHERE mar.user_id = u.id AND mar.role IN ('mentor', 'participant')),
-           (SELECT a.type FROM application_responses ar
-              JOIN applications a ON a.id = ar.application_id
-             WHERE ar.user_id = u.id AND ar.status <> 'draft' AND a.type IN ('mentor', 'participant')
-             ORDER BY CASE a.type WHEN 'mentor' THEN 0 ELSE 1 END
-             LIMIT 1)
-         ) AS type
-       FROM users u
+       -- H8 full-replacement: matched by the seeded role's own name — no
+       -- separate badge_category column — see identity/role.ts's
+       -- ATTENDEE_ROLE_NAMES.
+       SELECT user_id,
+              CASE role_name WHEN 'Mentor' THEN 'mentor' WHEN 'Participant' THEN 'participant' END AS type
+       FROM user_effective_role_name
+       WHERE role_name IN ('Mentor', 'Participant')
      ),
      sponsor AS (
        SELECT DISTINCT user_id FROM sponsors WHERE user_id IS NOT NULL

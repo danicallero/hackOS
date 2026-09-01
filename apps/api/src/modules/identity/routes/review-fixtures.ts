@@ -14,6 +14,7 @@ import { issueTicket } from "../../logistics/tickets.js";
 import { auth } from "../auth.js";
 import { purgeReviewFixtureAccount } from "../removal.js";
 import { purgeReviewFixtureQueue } from "../review-fixture-queues.js";
+import { assignAttendeeRole } from "../role.js";
 
 /**
  * Synthetic accounts used in the same deployed hackOS instance. The scenario
@@ -134,23 +135,27 @@ async function createFixtureUser(
   return { id: userId, email };
 }
 
-async function configureFixtureStaffGroup(client: import("pg").PoolClient): Promise<number> {
+async function configureFixtureStaffRole(client: import("pg").PoolClient): Promise<number> {
+  // A low, dedicated position: this synthetic fixture role should never be
+  // able to out-rank a real admin/staff role, and nothing else needs to
+  // manage it via requireRoleMutationAuthority (fixtures are seeded by an
+  // already-wildcard-holding reviewer flow, not through the roles API).
   const { rows } = await client.query<{ id: number }>(
-    `INSERT INTO permission_groups (name, description)
-     VALUES ('App review exit staff', 'Synthetic App Store/QA scanner account')
-     ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description
+    `INSERT INTO roles (name, position)
+     VALUES ('App review exit staff', -900000)
+     ON CONFLICT (name) DO UPDATE SET position = EXCLUDED.position
      RETURNING id`,
   );
-  const groupId = rows[0]?.id;
-  if (!groupId) throw new Error("Review fixture staff group was not created");
-  await client.query(`DELETE FROM group_capabilities WHERE group_id = $1`, [groupId]);
+  const roleId = rows[0]?.id;
+  if (!roleId) throw new Error("Review fixture staff role was not created");
+  await client.query(`DELETE FROM role_capabilities WHERE role_id = $1`, [roleId]);
   for (const capability of STAFF_CAPABILITIES) {
-    await client.query(`INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`, [
-      groupId,
-      capability,
-    ]);
+    await client.query(
+      `INSERT INTO role_capabilities (role_id, capability, state) VALUES ($1, $2, 'allow')`,
+      [roleId, capability],
+    );
   }
-  return groupId;
+  return roleId;
 }
 
 async function configureFixtureParticipant(
@@ -161,11 +166,7 @@ async function configureFixtureParticipant(
   actorId: number,
   staffId: number,
 ): Promise<void> {
-  await client.query(
-    `INSERT INTO manual_attendee_roles (user_id, role, assigned_by)
-     VALUES ($1, 'participant', $2)`,
-    [userId, actorId],
-  );
+  await assignAttendeeRole(client, userId, "participant", actorId);
   // A used account-claim token is the existing, non-application path that
   // grants a manually-created participant mobile access.
   await client.query(
@@ -370,7 +371,7 @@ export function registerReviewFixtureRoutes(app: FastifyInstance): void {
           // to carry into the next reviewer generation.
           await client.query(`DELETE FROM anonymous_participants WHERE is_test_account = true`);
 
-          const staffGroupId = await configureFixtureStaffGroup(client);
+          const staffRoleId = await configureFixtureStaffRole(client);
           const created = new Map<string, { id: number; email: string }>();
           for (const fixture of FIXTURE_DEFINITIONS) {
             const account = await createFixtureUser(client, fixture, generation, password);
@@ -380,9 +381,8 @@ export function registerReviewFixtureRoutes(app: FastifyInstance): void {
           const staff = created.get("staff-exit-operator");
           if (!staff) throw new Error("Review fixture staff account is missing");
           await client.query(
-            `INSERT INTO permission_group_members (user_id, group_id, assigned_by)
-             VALUES ($1, $2, $3)`,
-            [staff.id, staffGroupId, req.userId],
+            `INSERT INTO user_roles (user_id, role_id, assigned_by) VALUES ($1, $2, $3)`,
+            [staff.id, staffRoleId, req.userId],
           );
           for (const fixture of FIXTURE_DEFINITIONS) {
             if (fixture.kind !== "participant") continue;

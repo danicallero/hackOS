@@ -8,9 +8,6 @@ import { z } from "zod";
  * `field.key`. i18n labels carry en/es/gl per plan/07 §2.
  */
 
-export const APPLICATION_TYPES = ["participant", "mentor", "sponsor", "volunteer"] as const;
-export type ApplicationType = (typeof APPLICATION_TYPES)[number];
-
 export const FIELD_KINDS = [
   "text",
   "textarea",
@@ -158,7 +155,6 @@ const timestampCoerce = z.union([z.string(), z.null()]).optional();
 export const createApplicationSchema = z
   .object({
     name: z.string().min(1),
-    type: z.enum(APPLICATION_TYPES),
     template: templateSchema,
     sections: sectionsSchema.default([]),
     description: z.string().nullish(),
@@ -169,6 +165,9 @@ export const createApplicationSchema = z
     confirmation_window_hours: z.number().int().positive().default(168),
     ask_shirt_size: z.boolean().default(false),
     ask_food_intolerances: z.boolean().default(false),
+    // H8/H11: roles granted alongside ticket issuance on confirmation.
+    // Omitted/null grants nothing.
+    grants_role_ids: z.array(z.number().int().positive()).nullish(),
   })
   .strict()
   .refine((b) => fieldsReferenceKnownSections(b.template, b.sections), {
@@ -179,7 +178,6 @@ export const createApplicationSchema = z
 export const updateApplicationSchema = z
   .object({
     name: z.string().min(1).optional(),
-    type: z.enum(APPLICATION_TYPES).optional(),
     template: templateSchema.optional(),
     sections: sectionsSchema.optional(),
     description: z.string().nullish(),
@@ -190,6 +188,9 @@ export const updateApplicationSchema = z
     confirmation_window_hours: z.number().int().positive().optional(),
     ask_shirt_size: z.boolean().optional(),
     ask_food_intolerances: z.boolean().optional(),
+    // Omitted = leave the form's role grants unchanged; explicit [] clears
+    // every grant; a non-empty array replaces the full set (H8/H11).
+    grants_role_ids: z.array(z.number().int().positive()).nullish(),
   })
   .strict()
   .refine(

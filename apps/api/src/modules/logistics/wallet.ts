@@ -20,7 +20,7 @@ import {
   UnauthorizedError,
 } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
-import { computeDerivedRole, type DerivedRole } from "../identity/role.js";
+import { getHighestVisibleRoleName } from "../identity/role.js";
 import { logisticsTopicForFixture } from "./active-broadcast.js";
 import {
   ensurePassRecord,
@@ -28,16 +28,6 @@ import {
   type Purpose,
   resolvePassIdentity,
 } from "./wallet-passes.js";
-
-const ROLE_LABELS: Record<DerivedRole, string> = {
-  admin: "Admin",
-  judge: "Judge",
-  sponsor: "Sponsor",
-  staff: "Staff",
-  mentor: "Mentor",
-  participant: "Participant",
-  unassigned: "Unassigned",
-};
 
 // users.language is 'en' | 'es' | 'gl' (0001_initial) — the pass header's
 // month abbreviation follows the holder's language (H28).
@@ -164,7 +154,12 @@ async function passPayload(pass: PassRow) {
   const { fullName, barcode } = revoked
     ? { fullName: "Pass revoked", barcode: "REVOKED" }
     : resolvePassIdentity(u, pass.user_id, pass.purpose);
-  const role = revoked ? "Closed" : ROLE_LABELS[await computeDerivedRole(pool, pass.user_id)];
+  // H8 full-replacement: the pass's "role" field is simply the holder's
+  // highest-visible role name — no separate badge_category bucket. A holder
+  // with no visible role at all (e.g. a pure applicant) shows "Unassigned".
+  const role = revoked
+    ? "Closed"
+    : ((await getHighestVisibleRoleName(pool, pass.user_id)) ?? "Unassigned");
   // No primaryFields: the embedded strip image already carries "hackUDC"
   // branding text, and PassKit renders primaryFields overlaid on the strip —
   // putting the name there made it visually collide with the artwork.

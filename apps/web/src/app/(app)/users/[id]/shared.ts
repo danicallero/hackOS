@@ -2,30 +2,15 @@
  * Constants and name helpers shared across the user-profile route's files.
  */
 
-import { LOCALE_CODES, type MessageKey } from "@/lib/i18n";
-import type { Tone } from "@/lib/tones";
-import type { DerivedRole, UserDetail } from "@/lib/types";
+import { LOCALE_CODES, type Translate } from "@/lib/i18n";
+import type { UserDetail } from "@/lib/types";
 
-/** Illustrative role → tone (never used for gating, only for the header pill). */
-export const ROLE_TONE: Record<DerivedRole, Tone> = {
-  admin: "brand",
-  judge: "info",
-  sponsor: "warning",
-  staff: "success",
-  mentor: "info",
-  participant: "neutral",
-  unassigned: "neutral",
-};
+/** H8: the header pill just shows the user's actual role name (illustrative tone, never used for gating). */
+export const ROLE_TONE = "neutral";
 
-export const ROLE_COPY: Record<DerivedRole, MessageKey> = {
-  admin: "roleAdmin",
-  judge: "roleJudge",
-  sponsor: "roleSponsor",
-  staff: "roleStaff",
-  mentor: "roleMentor",
-  participant: "roleParticipant",
-  unassigned: "roleUnassigned",
-};
+export function roleDisplayName(role: UserDetail["role"], t: Translate): string {
+  return role ?? t("roleUnassigned");
+}
 
 export function fullName(u: Pick<UserDetail, "name" | "surname" | "email">): string {
   return [u.name, u.surname].filter(Boolean).join(" ").trim() || u.email;

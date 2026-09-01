@@ -15,7 +15,7 @@ import { issueTicket } from "../logistics/tickets.js";
 import { issueWalletAccessToken } from "../logistics/wallet-access.js";
 import { voidTicketPasses } from "../logistics/wallet-passes.js";
 import { enqueueWalletSync } from "../logistics/wallet-sync.js";
-import type { ApplicationType, FormSection, TemplateField } from "./schemas.js";
+import type { FormSection, TemplateField } from "./schemas.js";
 
 /**
  * Applications domain service (H11-H15, H27, H56). Holds the state-machine
@@ -28,7 +28,11 @@ import type { ApplicationType, FormSection, TemplateField } from "./schemas.js";
 export interface ApplicationRow {
   id: number;
   name: string;
-  type: ApplicationType;
+  /** DEPRECATED (H8): legacy static classification, no longer set by the API
+   *  or read as authoritative — see application_grants_roles + roles.name
+   *  (formGrantsMentorRole below, granted_role_name in admin.routes.ts) for
+   *  the real, drift-proof classification. */
+  type: string | null;
   template: TemplateField[];
   sections: FormSection[];
   current_form_version: number;
@@ -148,6 +152,33 @@ export async function requireApplication(db: Queryable, id: number): Promise<App
   const app = await getApplication(db, id);
   if (!app) throw new NotFoundError("Application not found");
   return app;
+}
+
+/**
+ * H8 full-replacement: whether a form's `grants_role_ids` include the seeded
+ * "Mentor" role, matched by name (identity/role.ts's ATTENDEE_ROLE_NAMES) now
+ * that the durable `badge_category` column is retired. Powers the
+ * early-ticket-issuance special case below (sendOne/reAccept): accepted
+ * mentors attend without a separate spot-confirmation step, so their
+ * decision itself is the ticket-issuing transition, unlike every other
+ * applicant who waits for confirm. Known tradeoff of the name-based match
+ * (same one identity/role.ts's assignAttendeeRole/hasEventAccess accept): an
+ * admin who renames the seeded Mentor role breaks this detection until
+ * `grants_role_ids` is reconfigured against its new name.
+ */
+async function formGrantsMentorRole(
+  client: pg.PoolClient,
+  applicationId: number,
+): Promise<boolean> {
+  const { rows } = await client.query(
+    `SELECT 1
+       FROM application_grants_roles agr
+       JOIN roles r ON r.id = agr.role_id AND r.deleted_at IS NULL
+      WHERE agr.application_id = $1 AND r.name = 'Mentor'
+      LIMIT 1`,
+    [applicationId],
+  );
+  return rows.length > 0;
 }
 
 /** Open for a NEW draft = active, past open_at, before close_at (close optional). */
@@ -1005,8 +1036,9 @@ async function sendOne(
   if (isAccepted) {
     token = await issueConfirmationToken(client, resp, app, user.email);
     // Accepted mentors attend without a separate spot-confirmation step, so
-    // their decision is the ticket-issuing transition.
-    if (app.type === "mentor") await issueTicket(client, resp.user_id);
+    // their decision is the ticket-issuing transition (H8: keyed off the
+    // form's actual grants_role_ids, not a static applications.type).
+    if (await formGrantsMentorRole(client, app.id)) await issueTicket(client, resp.user_id);
   }
   await client.query(
     `UPDATE application_responses SET status = $2, decision_sent_at = now() WHERE id = $1`,
@@ -1192,7 +1224,9 @@ export async function reAccept(
        WHERE id = $1`,
       [resp.id],
     );
-    if (app.type === "mentor") await issueTicket(client, resp.user_id);
+    // H8: keyed off the form's actual grants_role_ids, not a static
+    // applications.type — see formGrantsMentorRole's doc comment.
+    if (await formGrantsMentorRole(client, app.id)) await issueTicket(client, resp.user_id);
 
     await enqueueDecisionEmailRow(client, resp.user_id, user, app, "accepted", token);
 
@@ -1537,7 +1571,10 @@ export interface ResponseDetail {
   application: {
     id: number;
     name: string;
-    type: ApplicationType;
+    /** H8: the name of this form's highest-position granted role
+     *  (see granted_role_name doc in admin.routes.ts), or null if the
+     *  form grants no role — replaces the retired static `type` field. */
+    granted_role_name: string | null;
     template: TemplateField[];
     sections: FormSection[];
     ask_shirt_size: boolean;
@@ -1580,7 +1617,13 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
   const { rows } = await pool.query(
     `SELECT r.*, u.name, u.email, u.shirt_size,
             u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
-            a.id AS app_id, a.name AS app_name, a.type AS app_type,
+            a.id AS app_id, a.name AS app_name,
+            (SELECT r2.name
+               FROM application_grants_roles agr
+               JOIN roles r2 ON r2.id = agr.role_id AND r2.deleted_at IS NULL
+              WHERE agr.application_id = a.id
+              ORDER BY r2.position DESC
+              LIMIT 1) AS granted_role_name,
             fv.template,
             fv.sections,
             a.ask_shirt_size, a.ask_food_intolerances
@@ -1604,7 +1647,7 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
     dietary_data_state,
     app_id,
     app_name,
-    app_type,
+    granted_role_name,
     template,
     sections,
     ask_shirt_size,
@@ -1634,7 +1677,7 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
     application: {
       id: app_id,
       name: app_name,
-      type: app_type,
+      granted_role_name,
       template,
       sections,
       ask_shirt_size,
@@ -1772,6 +1815,21 @@ async function doConfirm(
   if (resp.confirmation_token_id) {
     await invalidateConfirmationToken(client, resp.confirmation_token_id);
   }
+  // H8/H11: grant every role the form is configured to grant alongside
+  // ticket issuance, in the same transaction as the confirmation write.
+  const { rows: grantRows } = await client.query(
+    `SELECT role_id FROM application_grants_roles WHERE application_id = $1`,
+    [resp.application_id],
+  );
+  const grantedRoleIds = grantRows.map((r) => r.role_id as number);
+  if (grantedRoleIds.length > 0) {
+    await client.query(
+      `INSERT INTO user_roles (user_id, role_id, assigned_by, source)
+       SELECT $1, unnest($2::int[]), $3, 'application_confirmed'
+       ON CONFLICT DO NOTHING`,
+      [resp.user_id, grantedRoleIds, actorId],
+    );
+  }
   await audit(client, {
     actorId,
     entityType: "application_response",
@@ -1779,7 +1837,7 @@ async function doConfirm(
     action: "confirmed",
     source: via,
     before: { status: "accepted" },
-    after: { status: "confirmed" },
+    after: { status: "confirmed", grantedRoleIds },
   });
   return { status: "confirmed", alreadyConfirmed: false, ticketToken, userId: resp.user_id };
 }
@@ -1988,14 +2046,22 @@ export async function listUserResponsesForStaff(userId: number): Promise<
     id: number;
     application_id: number;
     application_name: string;
-    application_type: ApplicationType;
+    /** H8: name of the form's highest-position granted role, or
+     *  null if it grants none — replaces the retired static `type` field. */
+    application_granted_role_name: string | null;
     status: string;
     decision_sent: boolean;
     submitted_at: Date | null;
   }>
 > {
   const { rows } = await pool.query(
-    `SELECT r.id, r.application_id, a.name AS application_name, a.type AS application_type,
+    `SELECT r.id, r.application_id, a.name AS application_name,
+            (SELECT r2.name
+               FROM application_grants_roles agr
+               JOIN roles r2 ON r2.id = agr.role_id AND r2.deleted_at IS NULL
+              WHERE agr.application_id = a.id
+              ORDER BY r2.position DESC
+              LIMIT 1) AS application_granted_role_name,
             r.status, r.decision_sent_at, r.submitted_at
      FROM application_responses r
      JOIN applications a ON a.id = r.application_id
@@ -2008,7 +2074,7 @@ export async function listUserResponsesForStaff(userId: number): Promise<
       id: number;
       application_id: number;
       application_name: string;
-      application_type: ApplicationType;
+      application_granted_role_name: string | null;
       status: string;
       decision_sent_at: Date | null;
       submitted_at: Date | null;
@@ -2016,7 +2082,7 @@ export async function listUserResponsesForStaff(userId: number): Promise<
       id: r.id,
       application_id: r.application_id,
       application_name: r.application_name,
-      application_type: r.application_type,
+      application_granted_role_name: r.application_granted_role_name,
       status: r.status,
       decision_sent: r.decision_sent_at !== null,
       submitted_at: r.submitted_at,

@@ -34,8 +34,7 @@ import { shortDateFmt } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
-import type { Tone } from "@/lib/tones";
-import type { DerivedRole, UserList, UserListItem } from "@/lib/types";
+import type { UserList, UserListItem } from "@/lib/types";
 import { initials } from "./[id]/shared";
 import { ActiveInvitationsModal } from "./active-invitations-modal";
 import { InviteUserDialog } from "./invite-dialog";
@@ -48,29 +47,12 @@ function fullName(u: UserListItem): string {
 
 const dateFmt = shortDateFmt;
 
-function roleLabel(t: Translate): Record<DerivedRole, string> {
-  return {
-    admin: t("roleAdmin"),
-    judge: t("roleJudge"),
-    sponsor: t("roleSponsor"),
-    staff: t("roleStaff"),
-    mentor: t("roleMentor"),
-    participant: t("roleParticipant"),
-    unassigned: t("roleUnassigned"),
-  };
+/** H8: roles are arbitrary names now, not a fixed category set — show the name as-is. */
+function roleLabel(role: UserListItem["role"], t: Translate): string {
+  return role ?? t("roleUnassigned");
 }
 
-/** Distinct tone per role so Admin/Judge/Sponsor/Staff never share a color.
- * Kept in sync with the profile header (users/[id]/page.tsx). */
-const ROLE_TONE: Record<DerivedRole, Tone> = {
-  admin: "brand",
-  judge: "info",
-  sponsor: "warning",
-  staff: "success",
-  mentor: "info",
-  participant: "neutral",
-  unassigned: "neutral",
-};
+const ROLE_TONE = "neutral";
 
 const COLUMN_OPTIONS = [
   "name",
@@ -166,7 +148,6 @@ function applicationTone(status: string | null): "success" | "warning" | "danger
 /** Presence needs the live occupancy set, so the column list is built per-render
  * (see `useCan(PRESENCE_SCAN | LOGISTICS_STATS)` in the page component). */
 function buildColumns(presentIds: Set<number> | null, t: Translate): Column<UserListItem>[] {
-  const roleLabels = roleLabel(t);
   return [
     {
       id: "name",
@@ -189,10 +170,10 @@ function buildColumns(presentIds: Set<number> | null, t: Translate): Column<User
     {
       id: "role",
       header: t("colRole"),
-      sortValue: (u) => u.role,
+      sortValue: (u) => u.role ?? "",
       cell: (u) => (
-        <StatusBadge tone={ROLE_TONE[u.role]} dot={false}>
-          {roleLabels[u.role]}
+        <StatusBadge tone={ROLE_TONE} dot={false}>
+          {roleLabel(u.role, t)}
         </StatusBadge>
       ),
     },
@@ -279,7 +260,6 @@ function buildColumns(presentIds: Set<number> | null, t: Translate): Column<User
 
 export default function UsersPage() {
   const { t } = useLocale();
-  const ROLE_LABEL = useMemo(() => roleLabel(t), [t]);
   const COLUMN_LABEL = useMemo(() => columnLabel(t), [t]);
   const [q, setQ] = usePersistedState("users-list:q", "");
   const [users, setUsers] = useState<UserListItem[]>([]);
@@ -398,6 +378,14 @@ export default function UsersPage() {
   const hasFilters =
     q.trim().length > 0 || emailFilter !== "all" || roleFilter !== "all" || spotFilter !== "all";
 
+  /** H8: role names are arbitrary now — the filter's option list is whatever
+   * distinct role names are actually present in the loaded page of users. */
+  const roleFilterOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const u of users) if (u.role) names.add(u.role);
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [users]);
+
   function clearUserFilters() {
     setQ("");
     setEmailFilter("all");
@@ -513,9 +501,9 @@ export default function UsersPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{t("anyRole")}</SelectItem>
-            {Object.entries(ROLE_LABEL).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
+            {roleFilterOptions.map((name) => (
+              <SelectItem key={name} value={name}>
+                {name}
               </SelectItem>
             ))}
           </SelectContent>

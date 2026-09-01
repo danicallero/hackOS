@@ -14,7 +14,19 @@ export type ScanKind =
 export interface ScannerPerson {
   userId: number;
   email: string;
-  role: "admin" | "staff" | "sponsor" | "mentor" | "judge" | "participant" | "unassigned";
+  /**
+   * The person's actual highest-visible role NAME (H8 — `badge_category`
+   * retired), or null when they have no visible role. Not a closed union any
+   * more: role names are admin-editable free text, so "admin"/"staff" no
+   * longer have a fixed spelling — use `hasCapabilities`/`isEnterpriseJudge`
+   * below for the scanner's own operational grouping instead of matching on
+   * this string.
+   */
+  role: string | null;
+  /** Real capability holder (admin/staff-equivalent) — see scanner-sync.ts. */
+  hasCapabilities: boolean;
+  /** Enterprise judge relationship — door scanners don't badge-scan judges. */
+  isEnterpriseJudge: boolean;
   ticketToken: string | null;
   badgeId: string | null;
   revokedBadgeIds: string[];

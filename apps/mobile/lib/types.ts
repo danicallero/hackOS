@@ -32,7 +32,8 @@ export interface Me {
       }
     | null;
   createdAt: string;
-  role: "admin" | "staff" | "sponsor" | "mentor" | "judge" | "participant" | "unassigned";
+  /** The user's actual highest-visible role name, or null when none (H8 — badge_category retired). */
+  role: string | null;
   mobileAccess: boolean;
   hasQueueItems: boolean;
   capabilities: string[];

@@ -266,7 +266,12 @@ describe("collaborative review (H36)", () => {
       url: "/api/me",
       headers: asUser(assignedJudge),
     });
-    expect(me.json().role).toBe("judge");
+    // H8 full-replacement: a roster judge with no visible role of their own
+    // (no role_grant_rules wires enterprise_judges to a role) has no
+    // badge/wallet/scanner display label — isEnterpriseJudge is the fact to
+    // check, not a retired "judge" bucket.
+    expect(me.json().isEnterpriseJudge).toBe(true);
+    expect(me.json().visibleRoleName).toBeNull();
     expect(me.json().capabilities).toEqual([]);
 
     const rooms = await app.inject({

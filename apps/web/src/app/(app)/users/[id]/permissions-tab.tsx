@@ -1,6 +1,6 @@
 "use client";
 
-// Group membership and effective capabilities (H8), plus sponsor/enterprise
+// Assigned roles and effective capabilities (H8), plus sponsor/enterprise
 // memberships (H43).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
@@ -23,46 +23,46 @@ import {
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
-import type { EnterpriseSummary, PermissionGroupSummary, UserDetail } from "@/lib/types";
+import type { EnterpriseSummary, RoleSummary, UserDetail } from "@/lib/types";
 
 export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChanged: () => void }) {
   const { t } = useLocale();
   const canManage = useCan(CAPABILITIES.PERMISSIONS_MANAGE);
-  const [allGroups, setAllGroups] = useState<PermissionGroupSummary[]>([]);
+  const [allRoles, setAllRoles] = useState<RoleSummary[]>([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!canManage) return;
     api
-      .get<PermissionGroupSummary[]>("/api/permission-groups")
-      .then(setAllGroups)
-      .catch(() => setAllGroups([]));
+      .get<RoleSummary[]>("/api/roles")
+      .then(setAllRoles)
+      .catch(() => setAllRoles([]));
   }, [canManage]);
 
-  const memberIds = new Set(user.groups.map((g) => g.id));
-  const addable = allGroups.filter((g) => !memberIds.has(g.id));
+  const assignedIds = new Set(user.roles.map((r) => r.id));
+  const addable = allRoles.filter((r) => !assignedIds.has(r.id));
 
-  async function addToGroup(groupId: string) {
+  async function addRole(roleId: string) {
     setBusy(true);
     try {
-      await api.post(`/api/permission-groups/${groupId}/members`, { userId: user.id });
-      toast.success(t("addedToGroup"));
+      await api.post(`/api/roles/${roleId}/users/${user.id}`, {});
+      toast.success(t("roleAdded"));
       onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotAddToGroup"));
+      toast.error(err instanceof ApiError ? err.message : t("couldNotAddRole"));
     } finally {
       setBusy(false);
     }
   }
 
-  async function removeFromGroup(groupId: number) {
+  async function removeRole(roleId: number) {
     setBusy(true);
     try {
-      await api.delete(`/api/permission-groups/${groupId}/members/${user.id}`);
-      toast.success(t("removedFromGroup"));
+      await api.delete(`/api/roles/${roleId}/users/${user.id}`);
+      toast.success(t("roleRemoved"));
       onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveFromGroup"));
+      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveRole"));
     } finally {
       setBusy(false);
     }
@@ -72,17 +72,17 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
     <div className="space-y-6">
       <SectionCard
         icon={UsersIcon}
-        title={t("permissionGroupsTitle")}
+        title={t("rolesTitle")}
         action={
           canManage && addable.length > 0 ? (
-            <Select value="" onValueChange={addToGroup} disabled={busy}>
+            <Select value="" onValueChange={addRole} disabled={busy}>
               <SelectTrigger className="w-52">
-                <SelectValue placeholder={t("addToGroupPlaceholder")} />
+                <SelectValue placeholder={t("addRolePlaceholder")} />
               </SelectTrigger>
               <SelectContent>
-                {addable.map((g) => (
-                  <SelectItem key={g.id} value={String(g.id)}>
-                    {g.name}
+                {addable.map((r) => (
+                  <SelectItem key={r.id} value={String(r.id)}>
+                    {r.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -90,26 +90,26 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
           ) : undefined
         }
       >
-        {user.groups.length === 0 ? (
-          <p className="text-muted-foreground text-sm">{t("noPermissionGroupsMember")}</p>
+        {user.roles.length === 0 ? (
+          <p className="text-muted-foreground text-sm">{t("noRolesForUser")}</p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {user.groups.map((g) => (
-              <Badge key={g.id} variant="outline" className="gap-1.5 py-1 pr-1">
+            {user.roles.map((r) => (
+              <Badge key={r.id} variant="outline" className="gap-1.5 py-1 pr-1">
                 <Link
-                  href={`/permissions/${g.id}`}
+                  href={`/permissions/${r.id}`}
                   className="inline-flex items-center gap-1.5 hover:underline"
                 >
                   <ShieldIcon className="size-3" />
-                  {g.name}
+                  {r.name}
                 </Link>
                 {canManage && (
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => removeFromGroup(g.id)}
+                    onClick={() => removeRole(r.id)}
                     className="hover:bg-muted text-muted-foreground hover:text-foreground rounded p-0.5"
-                    aria-label={t("removeFromGroupAria", { name: g.name })}
+                    aria-label={t("removeRoleAria", { name: r.name })}
                   >
                     <XIcon className="size-3" />
                   </button>

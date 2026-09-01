@@ -55,7 +55,9 @@ function snapshot(name: string): ScannerSnapshot {
       {
         userId: name === "A" ? 1 : 2,
         email: `${name.toLowerCase()}@example.test`,
-        role: "participant",
+        role: "Participant",
+        hasCapabilities: false,
+        isEnterpriseJudge: false,
         ticketToken: `ticket-${name}`,
         badgeId: `badge-${name}`,
         revokedBadgeIds: [],

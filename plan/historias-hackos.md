@@ -17,10 +17,13 @@ check-in app, and the judging queue system) that shared no data.
 
 ## 1. Account & identity
 
-Each account has an illustrative role (participant, staff, judge…), but real
-permissions depend on **capability groups** that administration grants and
-revokes. One person can hold multiple (a judge who also competes).
-See `CLAUDE.md` and `plan/07` for the full model.
+Each account has an illustrative label (participant, staff, judge…) for
+display, but real permissions come from **roles**: a global, reorderable
+hierarchy where each role holds an allow/deny/inherit tri-state per
+capability. A person can hold several roles at once (a judge who also
+competes); their effective permissions are resolved from their own assigned
+roles, highest position first. See `CLAUDE.md` and `plan/07` for the full
+model.
 
 **H1. Create an account**
 As a visitor I want to register with my name, surname, email and password to
@@ -64,12 +67,20 @@ restrictions…) and if I spot an error an organization member can correct it so
 check-in and meals work with accurate information. The platform runs in Spanish,
 Galician and English; the chosen language applies to emails and screens.
 
-**H8. Manage permissions by capability groups**
-As administration I want to create capability groups (and groups that nest other
-groups), and assign or remove people, to give each account exactly the access it
-needs: the check-in scanner for a one-day volunteer, read-only enrollment access
-for someone helping review, everything for an admin. The system always checks the
-concrete capability, never the role.
+**H8. Manage permissions with a hierarchical role system**
+As administration I want to create roles on one reorderable hierarchy — each
+role holding an allow/deny/inherit setting per capability — and assign or
+remove them from people, to give each account exactly the access it needs:
+the check-in scanner for a one-day volunteer, read-only enrollment access for
+someone helping review, everything for an admin. A person can hold several
+roles at once; for any capability, the system checks the person's own
+assigned roles from highest position to lowest, stopping at the first
+allow/deny — a role left on "inherit" simply passes the question down to the
+next role that person also holds. No roles, or every held role left on
+inherit, means no access. To assign, edit, or reorder a role, the actor needs
+permission-management access AND must already sit above that role in the
+hierarchy — nobody can grant themselves, or anyone else, a role at or above
+their own highest one.
 
 **H9. Join via company invitation link**
 As a sponsor company member I want to create my account from the invitation link

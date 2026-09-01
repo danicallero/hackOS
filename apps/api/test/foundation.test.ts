@@ -93,31 +93,20 @@ describe("foundation", () => {
     expect(ui.headers["content-type"]).toContain("text/html");
   });
 
-  it("resolves capabilities through nested groups (H8)", async () => {
-    const { pool } = await import("../src/db/pool.js");
+  it("resolves capabilities through the user's assigned-role chain (H8)", async () => {
+    const { createRole, assignRole } = await import("./helpers.js");
     const { getEffectiveCapabilities, userHasCapability } = await import(
       "../src/lib/capabilities.js"
     );
 
     const userId = await createUser();
-    const parent = await pool.query(
-      `INSERT INTO permission_groups (name) VALUES ('staff-day') RETURNING id`,
-    );
-    const child = await pool.query(
-      `INSERT INTO permission_groups (name) VALUES ('scanners') RETURNING id`,
-    );
-    await pool.query(`INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`, [
-      child.rows[0].id,
-      CAPABILITIES.ACCREDIT_SCAN,
-    ]);
-    await pool.query(
-      `INSERT INTO permission_group_includes (parent_group_id, child_group_id) VALUES ($1, $2)`,
-      [parent.rows[0].id, child.rows[0].id],
-    );
-    await pool.query(`INSERT INTO permission_group_members (user_id, group_id) VALUES ($1, $2)`, [
-      userId,
-      parent.rows[0].id,
-    ]);
+    // One assigned role leaves accredit:scan at the implicit INHERIT
+    // default; the other ALLOWs it — resolution must fall through to it
+    // regardless of relative position (no DENY exists to short-circuit).
+    const inheriting = await createRole([]);
+    const granting = await createRole([CAPABILITIES.ACCREDIT_SCAN]);
+    await assignRole(userId, inheriting);
+    await assignRole(userId, granting);
 
     const caps = await getEffectiveCapabilities(userId);
     expect(caps.has(CAPABILITIES.ACCREDIT_SCAN)).toBe(true);

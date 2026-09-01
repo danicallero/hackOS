@@ -192,15 +192,8 @@ describe("H10 invite creation", () => {
     const a = await getApp();
     const manager = await inviter();
     const wildcard = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
-    const { pool } = await import("../../src/db/pool.js");
-    const { rows } = await pool.query(
-      `INSERT INTO permission_groups (name) VALUES ('invite-platform-admin') RETURNING id`,
-    );
-    const groupId = rows[0].id as number;
-    await pool.query(`INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`, [
-      groupId,
-      CAPABILITIES.ADMIN_ALL,
-    ]);
+    const { createRole } = await import("../helpers.js");
+    const groupId = await createRole([CAPABILITIES.ADMIN_ALL], { name: "invite-platform-admin" });
 
     const anonymous = await a.inject({
       method: "POST",
@@ -213,7 +206,7 @@ describe("H10 invite creation", () => {
       method: "POST",
       url: "/api/invites",
       headers: asUser(manager),
-      payload: { email: "missing-group@example.com", kind: "staff", groupIds: [999_999] },
+      payload: { email: "missing-group@example.com", kind: "staff", roleIds: [999_999] },
     });
     expect(missingGroup.statusCode).toBe(404);
 
@@ -221,14 +214,14 @@ describe("H10 invite creation", () => {
       method: "POST",
       url: "/api/invites",
       headers: asUser(manager),
-      payload: { email: "escalation@example.com", kind: "staff", groupIds: [groupId] },
+      payload: { email: "escalation@example.com", kind: "staff", roleIds: [groupId] },
     });
     expect(escalation.statusCode).toBe(403);
 
     const delegated = await createInvite(a, wildcard, {
       email: "delegated@example.com",
       kind: "staff",
-      groupIds: [groupId],
+      roleIds: [groupId],
     });
     const accepted = await a.inject({
       method: "POST",
@@ -238,6 +231,38 @@ describe("H10 invite creation", () => {
     expect(accepted.statusCode).toBe(201);
     const { userHasCapability } = await import("../../src/lib/capabilities.js");
     expect(await userHasCapability(accepted.json().userId, CAPABILITIES.INVITES_MANAGE)).toBe(true);
+  });
+
+  it("refuses to pre-assign system:superadmin even to a wildcard-holding inviter (H8 CLI-only lockout)", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const { createRole } = await import("../helpers.js");
+    const wildcard = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    const superadminRoleId = await createRole([CAPABILITIES.ADMIN_ALL], {
+      name: "system:superadmin",
+      isProtected: true,
+    });
+    await pool.query(`UPDATE roles SET position = 999999999 WHERE id = $1`, [superadminRoleId]);
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/invites",
+      headers: asUser(wildcard),
+      payload: {
+        email: "sneaky-superadmin@example.com",
+        kind: "staff",
+        roleIds: [superadminRoleId],
+      },
+    });
+    expect(res.statusCode).toBe(403);
+
+    const linkRes = await a.inject({
+      method: "POST",
+      url: "/api/invites/user-links",
+      headers: asUser(wildcard),
+      payload: { kind: "staff", roleIds: [superadminRoleId] },
+    });
+    expect(linkRes.statusCode).toBe(403);
   });
 });
 
@@ -296,7 +321,7 @@ describe("GET /api/invites — list active invites", () => {
     ]);
   });
 
-  it("lists fields correctly including enterpriseId and groupIds", async () => {
+  it("lists fields correctly including enterpriseId and roleIds", async () => {
     const a = await getApp();
     const actor = await inviter();
     const entId = await createEnterprise("DetailCo");
@@ -305,7 +330,7 @@ describe("GET /api/invites — list active invites", () => {
       email: "detail@example.com",
       kind: "sponsor",
       enterpriseId: entId,
-      groupIds: [],
+      roleIds: [],
     });
 
     const res = await a.inject({
@@ -321,7 +346,7 @@ describe("GET /api/invites — list active invites", () => {
     expect(invite.email).toBe("detail@example.com");
     expect(invite.kind).toBe("sponsor");
     expect(invite.enterpriseId).toBe(entId);
-    expect(invite.groupIds).toEqual([]);
+    expect(invite.roleIds).toEqual([]);
     expect(invite.expiresAt).toBeDefined();
     expect(invite.createdAt).toBeDefined();
     expect(typeof invite.expiresAt).toBe("string");
@@ -1016,36 +1041,25 @@ describe("H9 invite regeneration", () => {
     expect([first.statusCode, second.statusCode].sort()).toEqual([201, 409]);
   });
 
-  it("fails closed if an ordinary deferred group later inherits wildcard access", async () => {
+  it("fails closed if an ordinary deferred role later gains wildcard access", async () => {
     const a = await getApp();
     const manager = await inviter();
     const wildcard = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
     const { pool } = await import("../../src/db/pool.js");
-    const createGroup = async (name: string) => {
-      const { rows } = await pool.query(
-        `INSERT INTO permission_groups (name) VALUES ($1) RETURNING id`,
-        [name],
-      );
-      return rows[0].id as number;
-    };
-    const parent = await createGroup("deferred-ordinary-parent");
-    const child = await createGroup("deferred-nested-child");
-    await pool.query(
-      `INSERT INTO permission_group_includes (parent_group_id, child_group_id) VALUES ($1, $2)`,
-      [parent, child],
-    );
+    const { createRole } = await import("../helpers.js");
+    const role = await createRole([]);
     const stale = await createInvite(a, manager, {
       email: "stale-wildcard@example.com",
       kind: "staff",
-      groupIds: [parent],
+      roleIds: [role],
     });
 
-    // The closure changes after issuance through a nested child, not by
-    // editing the invitation. Its default provenance must now fail closed.
-    await pool.query(`INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`, [
-      child,
-      CAPABILITIES.ADMIN_ALL,
-    ]);
+    // The role's own capabilities change after issuance, not the invitation
+    // itself. Its default provenance must now fail closed.
+    await pool.query(
+      `INSERT INTO role_capabilities (role_id, capability, state) VALUES ($1, $2, 'allow')`,
+      [role, CAPABILITIES.ADMIN_ALL],
+    );
     for (const action of [
       { url: `/api/invites/${stale.id}/regenerate` },
       { url: `/api/invites/${stale.id}/renew` },
@@ -1072,7 +1086,7 @@ describe("H9 invite regeneration", () => {
     const authorized = await createInvite(a, wildcard, {
       email: "authorized-wildcard@example.com",
       kind: "staff",
-      groupIds: [parent],
+      roleIds: [role],
     });
     const accepted = await a.inject({
       method: "POST",
@@ -1092,19 +1106,8 @@ describe("H9 invite regeneration", () => {
     const manager = await inviter();
     const wildcard = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
     const { pool } = await import("../../src/db/pool.js");
-    const createGroup = async (name: string) => {
-      const { rows } = await pool.query(
-        `INSERT INTO permission_groups (name) VALUES ($1) RETURNING id`,
-        [name],
-      );
-      return rows[0].id as number;
-    };
-    const parent = await createGroup("reauthorize-parent");
-    const child = await createGroup("reauthorize-child");
-    await pool.query(
-      `INSERT INTO permission_group_includes (parent_group_id, child_group_id) VALUES ($1, $2)`,
-      [parent, child],
-    );
+    const { createRole } = await import("../helpers.js");
+    const role = await createRole([]);
 
     const stale = await Promise.all(
       ["regenerate", "renew", "resend"].map(async (operation) => ({
@@ -1112,14 +1115,14 @@ describe("H9 invite regeneration", () => {
         invite: await createInvite(a, manager, {
           email: `reauthorize-${operation}@example.com`,
           kind: "staff",
-          groupIds: [parent],
+          roleIds: [role],
         }),
       })),
     );
-    await pool.query(`INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`, [
-      child,
-      CAPABILITIES.ADMIN_ALL,
-    ]);
+    await pool.query(
+      `INSERT INTO role_capabilities (role_id, capability, state) VALUES ($1, $2, 'allow')`,
+      [role, CAPABILITIES.ADMIN_ALL],
+    );
 
     for (const { operation, invite } of stale) {
       const response = await a.inject({
@@ -1147,16 +1150,16 @@ describe("H9 invite regeneration", () => {
 });
 
 describe("H10 reusable user invite links", () => {
-  it("requires a capability-backed group for a staff link", async () => {
+  it("requires a capability-backed role for a staff link", async () => {
     const a = await getApp();
     const actor = await inviter();
 
-    const groupOptions = await a.inject({
+    const roleOptions = await a.inject({
       method: "GET",
-      url: "/api/permission-groups",
+      url: "/api/roles",
       headers: asUser(actor),
     });
-    expect(groupOptions.statusCode).toBe(200);
+    expect(roleOptions.statusCode).toBe(200);
 
     const missingGroups = await a.inject({
       method: "POST",
@@ -1166,36 +1169,27 @@ describe("H10 reusable user invite links", () => {
     });
     expect(missingGroups.statusCode).toBe(400);
 
-    const { pool } = await import("../../src/db/pool.js");
-    const { rows } = await pool.query(
-      `INSERT INTO permission_groups (name) VALUES ('empty-link-group') RETURNING id`,
-    );
-    const emptyGroup = rows[0].id as number;
+    const { createRole } = await import("../helpers.js");
+    const emptyGroup = await createRole([], { name: "empty-link-group" });
     const noCapabilities = await a.inject({
       method: "POST",
       url: "/api/invites/user-links",
       headers: asUser(actor),
-      payload: { kind: "staff", groupIds: [emptyGroup] },
+      payload: { kind: "staff", roleIds: [emptyGroup] },
     });
     expect(noCapabilities.statusCode).toBe(400);
   });
 
-  it("creates and redeems a reusable staff link with capability groups", async () => {
+  it("creates and redeems a reusable staff link with a role", async () => {
     const a = await getApp();
     const actor = await inviter();
     const { pool } = await import("../../src/db/pool.js");
-    const { rows } = await pool.query(
-      `INSERT INTO permission_groups (name) VALUES ('reusable-staff-group') RETURNING id`,
-    );
-    const groupId = rows[0].id as number;
-    await pool.query(`INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`, [
-      groupId,
-      CAPABILITIES.QUEUE_OPERATE,
-    ]);
+    const { createRole } = await import("../helpers.js");
+    const groupId = await createRole([CAPABILITIES.QUEUE_OPERATE], { name: "reusable-staff-role" });
 
     const link = await createUserInviteLink(a, actor, {
       kind: "staff",
-      groupIds: [groupId],
+      roleIds: [groupId],
       maxRedeems: 2,
       expiresInMinutes: null,
     });
@@ -1257,7 +1251,7 @@ describe("H10 reusable user invite links", () => {
     const { userHasCapability } = await import("../../src/lib/capabilities.js");
     expect(await userHasCapability(first.json().userId, CAPABILITIES.QUEUE_OPERATE)).toBe(true);
     const { rows: memberships } = await pool.query(
-      `SELECT 1 FROM permission_group_members WHERE user_id = $1 AND group_id = $2`,
+      `SELECT 1 FROM user_roles WHERE user_id = $1 AND role_id = $2`,
       [first.json().userId, groupId],
     );
     expect(memberships).toHaveLength(1);
@@ -1334,18 +1328,11 @@ describe("H10 reusable user invite links", () => {
   it("serializes a one-redeem staff link so only one claimant wins", async () => {
     const a = await getApp();
     const actor = await inviter();
-    const { pool } = await import("../../src/db/pool.js");
-    const { rows } = await pool.query(
-      `INSERT INTO permission_groups (name) VALUES ('race-link-group') RETURNING id`,
-    );
-    const groupId = rows[0].id as number;
-    await pool.query(`INSERT INTO group_capabilities (group_id, capability) VALUES ($1, $2)`, [
-      groupId,
-      CAPABILITIES.ACTIVITY_SCAN,
-    ]);
+    const { createRole } = await import("../helpers.js");
+    const groupId = await createRole([CAPABILITIES.ACTIVITY_SCAN], { name: "race-link-role" });
     const link = await createUserInviteLink(a, actor, {
       kind: "staff",
-      groupIds: [groupId],
+      roleIds: [groupId],
       maxRedeems: 1,
       expiresInMinutes: null,
     });
@@ -1368,6 +1355,205 @@ describe("H10 reusable user invite links", () => {
       }),
     ]);
     expect([first.statusCode, second.statusCode].sort()).toEqual([201, 409]);
+  });
+});
+
+// H8/H9/H10: the web invite dialog no longer asks the admin to pick an
+// "account type" up front — it derives `kind` from what's actually filled
+// in (enterprise picked -> sponsor, closed-form bypass checked ->
+// participant, otherwise staff) and always lets roles be pre-assigned
+// regardless of kind. These tests exercise the resulting backend
+// combinations directly against the unchanged /api/invites contract.
+describe("H8/H9/H10 invite kind composes with pre-assigned roles", () => {
+  it("sponsor invite still auto-links its enterprise and fires the role-grant rule, even with extra roles", async () => {
+    const a = await getApp();
+    const actor = await inviter();
+    const { pool } = await import("../../src/db/pool.js");
+    const { createRole } = await import("../helpers.js");
+    const entId = await createEnterprise("SponsorCo Roles");
+    const extraRole = await createRole([CAPABILITIES.QUEUE_OPERATE], {
+      name: "sponsor-extra-role",
+    });
+    // truncateAll wipes the real 0801/0805 seed data (see helpers.ts), so
+    // recreate the Sponsor role + its role_grant_rules row the way
+    // roles.test.ts's "H8 sponsor auto-grant rule" describe block does.
+    const sponsorRole = await createRole([], { name: "Sponsor" });
+    await pool.query(
+      `INSERT INTO role_grant_rules (role_id, trigger_event, action) VALUES ($1, 'sponsor.enterprise_linked', 'grant')`,
+      [sponsorRole],
+    );
+
+    const invite = await createInvite(a, actor, {
+      email: "sponsor-with-role@example.com",
+      kind: "sponsor",
+      enterpriseId: entId,
+      roleIds: [extraRole],
+    });
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: { ...ACCEPT_BASE, token: invite.token, foodIntolerances: [], shirtSize: "M" },
+    });
+    expect(res.statusCode).toBe(201);
+    const { userId } = res.json();
+
+    // Auto-linked to the enterprise (H9/H43).
+    const { rows: sponsorRows } = await pool.query(
+      `SELECT 1 FROM sponsors WHERE user_id = $1 AND enterprise_id = $2`,
+      [userId, entId],
+    );
+    expect(sponsorRows).toHaveLength(1);
+
+    // The seeded Sponsor role's role_grant_rules entry fired (H8).
+    const { rows: roleRows } = await pool.query(
+      `SELECT r.name FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = $1`,
+      [userId],
+    );
+    const roleNames = roleRows.map((row: { name: string }) => row.name);
+    expect(roleNames).toContain("Sponsor");
+
+    // The extra pre-assigned role also landed.
+    const { rows: extraRows } = await pool.query(
+      `SELECT 1 FROM user_roles WHERE user_id = $1 AND role_id = $2`,
+      [userId, extraRole],
+    );
+    expect(extraRows).toHaveLength(1);
+  });
+
+  it("participant invite with pre-assigned roles still bypasses the closed window AND grants the roles", async () => {
+    const a = await getApp();
+    const actor = await inviter();
+    const { pool } = await import("../../src/db/pool.js");
+    const { createRole } = await import("../helpers.js");
+    const { createApplication } = await import("../applications/fixtures.js");
+    const { isInvitedParticipant } = await import("../../src/modules/applications/service.js");
+    const extraRole = await createRole([CAPABILITIES.QUEUE_OPERATE], {
+      name: "participant-extra-role",
+    });
+
+    const invite = await createInvite(a, actor, {
+      email: "participant-with-role@example.com",
+      kind: "participant",
+      roleIds: [extraRole],
+    });
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: { ...ACCEPT_BASE, token: invite.token, shirtSize: "M", foodIntolerances: [] },
+    });
+    expect(res.statusCode).toBe(201);
+    const { userId } = res.json();
+
+    // Closed-window bypass eligibility (H10) is unaffected by pre-assigned roles.
+    expect(await isInvitedParticipant(pool, userId)).toBe(true);
+
+    const past = new Date(Date.now() - 3600_000).toISOString();
+    const closedId = await createApplication({ name: "Closed", open_at: past, close_at: past });
+    const single = await a.inject({
+      method: "GET",
+      url: `/api/public/applications/${closedId}`,
+      headers: asUser(userId),
+    });
+    expect(single.statusCode).toBe(200);
+
+    // The pre-assigned role also landed.
+    const { rows: extraRows } = await pool.query(
+      `SELECT 1 FROM user_roles WHERE user_id = $1 AND role_id = $2`,
+      [userId, extraRole],
+    );
+    expect(extraRows).toHaveLength(1);
+  });
+
+  it("a bare staff-ish invite (no enterprise, no bypass) with pre-assigned roles grants those roles on accept", async () => {
+    const a = await getApp();
+    const actor = await inviter();
+    const { pool } = await import("../../src/db/pool.js");
+    const { createRole } = await import("../helpers.js");
+    const role = await createRole([CAPABILITIES.QUEUE_OPERATE], { name: "plain-staff-role" });
+
+    const invite = await createInvite(a, actor, {
+      email: "plain-staff@example.com",
+      kind: "staff",
+      roleIds: [role],
+    });
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: { ...ACCEPT_BASE, token: invite.token },
+    });
+    expect(res.statusCode).toBe(201);
+    const { userId } = res.json();
+
+    const { rows } = await pool.query(
+      `SELECT 1 FROM user_roles WHERE user_id = $1 AND role_id = $2`,
+      [userId, role],
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it("reusable sponsor and participant links also accept pre-assigned roles now (backend no longer restricts roles to staff links)", async () => {
+    const a = await getApp();
+    const actor = await inviter();
+    const { pool } = await import("../../src/db/pool.js");
+    const { createRole } = await import("../helpers.js");
+    const entId = await createEnterprise("ReusableSponsorRoles");
+    const sponsorExtraRole = await createRole([CAPABILITIES.QUEUE_OPERATE], {
+      name: "reusable-sponsor-extra-role",
+    });
+    const participantExtraRole = await createRole([CAPABILITIES.QUEUE_OPERATE], {
+      name: "reusable-participant-extra-role",
+    });
+
+    const sponsorLink = await createUserInviteLink(a, actor, {
+      kind: "sponsor",
+      enterpriseId: entId,
+      roleIds: [sponsorExtraRole],
+      maxRedeems: 1,
+      expiresInMinutes: null,
+    });
+    const sponsorAccept = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: {
+        ...ACCEPT_BASE,
+        token: sponsorLink.token,
+        email: "reusable-sponsor-role@example.com",
+        foodIntolerances: [],
+        shirtSize: "M",
+      },
+    });
+    expect(sponsorAccept.statusCode).toBe(201);
+    const { rows: sponsorRoleRows } = await pool.query(
+      `SELECT 1 FROM user_roles WHERE user_id = $1 AND role_id = $2`,
+      [sponsorAccept.json().userId, sponsorExtraRole],
+    );
+    expect(sponsorRoleRows).toHaveLength(1);
+
+    const participantLink = await createUserInviteLink(a, actor, {
+      kind: "participant",
+      roleIds: [participantExtraRole],
+      maxRedeems: 1,
+      expiresInMinutes: null,
+    });
+    const participantAccept = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: {
+        ...ACCEPT_BASE,
+        token: participantLink.token,
+        email: "reusable-participant-role@example.com",
+        shirtSize: "M",
+      },
+    });
+    expect(participantAccept.statusCode).toBe(201);
+    const { rows: participantRoleRows } = await pool.query(
+      `SELECT 1 FROM user_roles WHERE user_id = $1 AND role_id = $2`,
+      [participantAccept.json().userId, participantExtraRole],
+    );
+    expect(participantRoleRows).toHaveLength(1);
   });
 });
 
