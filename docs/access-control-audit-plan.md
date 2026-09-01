@@ -296,6 +296,110 @@ off the form's real role grants.
   again on re-accept; a form granting a non-mentor role does not) instead of
   going through the retired `type: "mentor"` fixture value.
 
+### `badge_category` retired entirely — a user's badge/wallet/scanner label is just their role name (H8, this round)
+
+Everything described in the two sections above as `roles.badge_category` /
+`getBadgeCategory` / the `BadgeCategory` union no longer exists. The repo
+owner's own call: stop hardcoding a small fixed category, stop making it a
+selectable/stored property of a role — a user's badge/wallet/scanner display
+label is simply the NAME of their highest-position visible role. Concretely:
+
+- **Dropped**: the `role_badge_category` enum, `roles.badge_category` column,
+  the `user_effective_badge_category` view, `getBadgeCategory`,
+  `BadgeCategory`/`RoleBadgeCategory` types, and the `badgeCategory` field on
+  `POST/PATCH /api/roles` (its Display-tab "Role Style" select in
+  `role-editor.tsx` is removed — a role's badge label is now purely its name).
+  Since this branch had not merged to `main`, migrations 0800/0801/0804/0805
+  were edited in place rather than adding a new drop migration.
+- **Replacement**: `identity/role.ts`'s `getEffectiveRole`/
+  `getHighestVisibleRoleName` return just the role's `name`. The bulk-query
+  equivalent is now `user_effective_role_name` (same shape as the old view,
+  minus the category column). Every consumer that used to read a category —
+  `logistics/wallet.ts`'s pass `role` field, `scanner-sync.ts`'s roster
+  snapshot `role`, `logistics/stats.ts`'s `accreditationCountsByRole`/
+  `scannerRoleStats`, `/api/me` and `/api/users`'s `role` field (renamed
+  `visibleRoleName`, dropped from `/api/users` list response in favor of the
+  same field name), `applications/service.ts`'s `granted_badge_category`
+  (renamed `granted_role_name` everywhere it appears: `admin.routes.ts`,
+  `applications/stats.ts`, `logistics/tickets.ts`'s `grantedRoleName`,
+  `exports/csv.ts`/`exports/bundle.ts`) — now reads the role's `name` directly.
+- **Mentor/Participant, the two roles whose classification was functional
+  (not just cosmetic)**, are now identified by their own fixed seeded NAME
+  (`identity/role.ts`'s `ATTENDEE_ROLE_NAMES = { mentor: "Mentor", participant:
+  "Participant" }`) instead of `badge_category = 'mentor'/'participant'`:
+  `assignAttendeeRole`, `hasEventAccess`, `mentorOrParticipantType`,
+  `applications/service.ts`'s `formGrantsMentorRole`, and the announcements
+  audience resolver (`notifications/announcements-service.ts`) all match on
+  name now. **Known tradeoff, accepted deliberately**: an admin who renames
+  the seeded Mentor or Participant role breaks this matching until the
+  relevant config (`grants_role_ids`, announcement audiences) is redone
+  against the new name — `roles.badge_category` used to be immune to renames
+  by design; a plain name match is not. This is the explicit cost of "use the
+  role name," not an oversight.
+- **The admin/judge/sponsor/staff bucket's non-role-based fallback is GONE,
+  not re-derived another way.** The old `getBadgeCategory` special-cased the
+  `ADMIN_ALL` capability and the `enterprise_judges`/`sponsors` relationship
+  tables specifically because neither is guaranteed a `user_roles` row (no
+  `role_grant_rules` wires `enterprise_judges` to a role at all, and
+  `system:superadmin` is deliberately `is_visible = false` so it can never be
+  a "highest visible role"). Since `getEffectiveRole` is now the *entire*
+  answer, a user with real operational access but no VISIBLE role of their
+  own — most notably an enterprise judge, or a bootstrap superadmin with no
+  other role — now shows no badge/wallet/scanner label (`null`, rendered
+  "Unassigned") instead of "Judge"/"Admin". The `Sponsor` role is unaffected
+  in practice (0801's `role_grant_rules` already auto-grants it on
+  `sponsor.enterprise_linked`, so a sponsor rep normally does have a visible
+  role). `mobile-access.ts`'s `hasMobileAccess` and `logistics/stats.ts`'s
+  `scannerRoleStats` "eligible" calculation, which used to key off the same
+  bucket, now check the underlying facts directly (`getEffectiveCapabilities`
+  size, `computeMembershipFlags`) instead of re-deriving a role-name-based
+  proxy — those two are unaffected by the gap above. If judge badge/wallet
+  labeling turns out to matter operationally, the fix is to actually assign
+  enterprise judges a real (visible) role, not to reintroduce a bucket.
+- **Tests**: `apps/api/test/identity/profile.test.ts`'s old "derives the
+  illustrative role: admin > judge > sponsor > ..." priority test is replaced
+  with one asserting `visibleRoleName` is exactly the caller's highest-visible
+  role name (or `null` with none) — the priority-order concept it exercised no
+  longer exists. `applications/lifecycle.test.ts`'s mentor early-issuance
+  tests now grant a role literally named "Mentor" rather than one with
+  `badgeCategory: "mentor"`.
+
+### Mobile scanner grouping and role-filter dropdowns after badge_category (H8, this round)
+
+`apps/mobile`'s two dropdown styles both used to render from a
+`badge_category`-derived fixed array; neither the badge/category enum nor the
+array survives:
+
+- **`people-directory-screen.tsx`** (native menu, `MenuView` from
+  `@expo/ui/community/menu`): its `actions` prop is a plain `MenuAction[]`
+  with no documented or observed length limit (SwiftUI `Menu`/Compose
+  `DropdownMenu` under the hood, both natively scrollable; an existing
+  precedent, `schedule-form-modal.tsx`'s `ACTIVITY_KINDS.map(...)`, already
+  feeds it a runtime array). `lib/role-filters.ts`'s
+  `roleFilterOptionsFromRoster` now derives one filter row per distinct role
+  name actually present on the synced roster (alphabetized), rather than a
+  separate `GET /api/roles` catalogue fetch — a catalogue would list custom
+  role names nobody on the current roster holds, producing filter rows that
+  match nobody.
+- **`general-scanner-screen.tsx`** (custom panel): already a vertical
+  `Pressable` list in a `GlassView`, not a fixed-width horizontal row — no
+  layout change was needed for a longer, dynamic list.
+- **The scanner's `ScannerGroup` (participant/mentor/staff/sponsor)** used to
+  fold admin into staff and exclude judges because those were `badge_category`
+  buckets that don't badge-scan at doors. With `badge_category` gone, role
+  *names* can't carry this distinction either — the default seed has no role
+  literally named "Admin" or "Staff" (real staff roles are named things like
+  "Event Director" or "Day Staff"), so matching "staff" against a role-name
+  string would silently match nobody. The fix: `scanner-sync.ts`'s roster
+  snapshot and `stats.ts`'s `scannerRoleStats` now also expose
+  `hasCapabilities`/`isEnterpriseJudge` (the same real capability/relationship
+  facts `is_operational` in `scannerRoleStats` already computed) per
+  person/role-bucket; `scanner-group-filter.ts`'s `matchesScannerGroup`/
+  `isAccreditationEligible` match on those instead of a role-name guess for
+  "staff", while `sponsor`/`mentor`/`participant` stay name matches (Sponsor,
+  Mentor, Participant are real, reliably-named seeded/auto-granted roles).
+  Enterprise judges stay excluded from every scanner group, unchanged.
+
 ### `is_protected` is the real, enforced lockout
 
 `is_protected` (0800) is the actual, DB-authoritative signal that a role is
