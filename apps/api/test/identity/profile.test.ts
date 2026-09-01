@@ -92,8 +92,9 @@ describe("GET /api/me (H7)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ role: "mentor", ticketIssued: true });
     expect(
-      (await a.inject({ method: "GET", url: "/api/me", headers: asUser(user) })).json().role,
-    ).toBe("mentor");
+      (await a.inject({ method: "GET", url: "/api/me", headers: asUser(user) })).json()
+        .visibleRoleName,
+    ).toBe("Mentor");
   });
 
   it("returns own data and 401 anonymously", async () => {
@@ -105,7 +106,7 @@ describe("GET /api/me (H7)", () => {
     const res = await a.inject({ method: "GET", url: "/api/me", headers: asUser(userId) });
     expect(res.statusCode).toBe(200);
     expect(res.json().name).toBe("Grace");
-    expect(res.json().role).toBe("unassigned");
+    expect(res.json().visibleRoleName).toBeNull();
     expect(res.json().mobileAccess).toBe(false);
     // H8/H55: /api/me carries the effective capabilities for UI gating.
     expect(res.json().capabilities).toEqual([]);
@@ -182,60 +183,40 @@ describe("GET /api/me (H7)", () => {
     expect(positions).toEqual([...positions].sort((x, y) => y - x));
   });
 
-  it("derives the illustrative role: admin > judge > sponsor > staff > mentor > participant > unassigned", async () => {
+  it("visibleRoleName is simply the caller's highest-visible role name, or null with no role (H8 full-replacement: the retired admin/judge/sponsor/staff/mentor/participant/unassigned badge_category bucket no longer exists)", async () => {
     const a = await getApp();
-    const { pool } = await import("../../src/db/pool.js");
+    const { createRole, assignRole } = await import("../helpers.js");
 
-    const admin = await createUserWithCapabilities(["*"]);
-    const staff = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
     const plain = await createUser();
-    // H8 full-replacement: mentor/participant is the holder's effective role
-    // (getEffectiveRole's badge_category), not a guess from an application's
-    // static `type` column — grant the real seeded Mentor/Participant role
-    // instead of just submitting an application of that type.
+    const plainRes = await a.inject({ method: "GET", url: "/api/me", headers: asUser(plain) });
+    expect(plainRes.json().visibleRoleName).toBeNull();
+
+    const named = await createUser();
+    const roleId = await createRole([CAPABILITIES.ACCREDIT_SCAN], { name: "Event Director" });
+    await assignRole(named, roleId);
+    const namedRes = await a.inject({ method: "GET", url: "/api/me", headers: asUser(named) });
+    expect(namedRes.json().visibleRoleName).toBe("Event Director");
+
+    // Mentor/Participant are the two seeded roles whose name is functionally
+    // meaningful elsewhere (assignAttendeeRole) but they show up here exactly
+    // like any other role: by name, nothing special.
     const participant = await createUser();
     await grantAttendeeRole(participant, "participant");
+    const pRes = await a.inject({ method: "GET", url: "/api/me", headers: asUser(participant) });
+    expect(pRes.json().visibleRoleName).toBe("Participant");
+
     const mentor = await createUser();
     await grantAttendeeRole(mentor, "mentor");
+    const mRes = await a.inject({ method: "GET", url: "/api/me", headers: asUser(mentor) });
+    expect(mRes.json().visibleRoleName).toBe("Mentor");
 
-    // judge: an enterprise_judges row (the roster is enterprise-scoped)
-    const judge = await createUser();
-    const { rows: judgeEnt } = await pool.query(
-      `INSERT INTO enterprises (name) VALUES ('JudgeCo') RETURNING id`,
-    );
-    const { rows: judgeSponsor } = await pool.query(
-      `INSERT INTO sponsors (enterprise_id) VALUES ($1) RETURNING id`,
-      [judgeEnt[0].id],
-    );
-    await pool.query(`INSERT INTO challenges (author, title) VALUES ($1, 'x') RETURNING id`, [
-      judgeSponsor[0].id,
-    ]);
-    await pool.query(`INSERT INTO enterprise_judges (enterprise_id, user_id) VALUES ($1, $2)`, [
-      judgeEnt[0].id,
-      judge,
-    ]);
-
-    // sponsor: a sponsors row linked to the user
-    const sponsorUser = await createUser();
-    const { rows: ent } = await pool.query(
-      `INSERT INTO enterprises (name) VALUES ('SponCo') RETURNING id`,
-    );
-    await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
-      ent[0].id,
-      sponsorUser,
-    ]);
-
-    const roleOf = async (id: number) => {
-      const res = await a.inject({ method: "GET", url: "/api/me", headers: asUser(id) });
-      return res.json().role;
-    };
-    expect(await roleOf(admin)).toBe("admin");
-    expect(await roleOf(judge)).toBe("judge");
-    expect(await roleOf(sponsorUser)).toBe("sponsor");
-    expect(await roleOf(staff)).toBe("staff");
-    expect(await roleOf(mentor)).toBe("mentor");
-    expect(await roleOf(participant)).toBe("participant");
-    expect(await roleOf(plain)).toBe("unassigned");
+    // A capability holder, enterprise judge, or sponsor rep with NO visible
+    // role of their own shows null here too — capabilities/relationships are
+    // exposed separately (`capabilities`, `isEnterpriseJudge`, `isSponsorRep`),
+    // not folded into an admin/judge/sponsor/staff display bucket anymore.
+    const admin = await createUserWithCapabilities(["*"]);
+    const adminRes = await a.inject({ method: "GET", url: "/api/me", headers: asUser(admin) });
+    expect(adminRes.json().visibleRoleName).toBe(adminRes.json().roles[0].name);
   });
 
   it("exposes isEnterpriseJudge/isSponsorRep independently so a sponsor rep who also judges keeps both (H8/H55, issue #187)", async () => {
@@ -243,9 +224,10 @@ describe("GET /api/me (H7)", () => {
     const { pool } = await import("../../src/db/pool.js");
 
     // One person: a sponsor representative (sponsors.user_id) who is also on
-    // an enterprise judge roster (enterprise_judges.user_id). The
-    // single-priority `role` field collapses this to "judge" — nav must not
-    // rely on it.
+    // an enterprise judge roster (enterprise_judges.user_id). Neither
+    // relationship grants a visible role on its own (H8 full-replacement:
+    // there is no single-priority `role` bucket to collapse into) — nav must
+    // read isEnterpriseJudge/isSponsorRep directly instead.
     const both = await createUser();
     const { rows: ent } = await pool.query(
       `INSERT INTO enterprises (name) VALUES ('BothCo') RETURNING id`,
@@ -262,7 +244,7 @@ describe("GET /api/me (H7)", () => {
 
     const res = await a.inject({ method: "GET", url: "/api/me", headers: asUser(both) });
     expect(res.statusCode).toBe(200);
-    expect(res.json().role).toBe("judge"); // priority order still collapses the display-only role
+    expect(res.json().visibleRoleName).toBeNull(); // no visible role of their own
     expect(res.json().isEnterpriseJudge).toBe(true);
     expect(res.json().isSponsorRep).toBe(true); // ...but both association facts survive independently
 
@@ -1941,7 +1923,7 @@ describe("staff user routes (H7)", () => {
     );
   });
 
-  it("GET /api/users/:id includes role, capabilities and roles", async () => {
+  it("GET /api/users/:id includes visibleRoleName, capabilities and roles", async () => {
     const a = await getApp();
     const target = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
     const reader = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
@@ -1951,7 +1933,10 @@ describe("staff user routes (H7)", () => {
       headers: asUser(reader),
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().role).toBe("staff");
+    // createUserWithCapabilities grants a throwaway visible role — its name
+    // is whatever createRole generated, so just assert it's the target's own
+    // role name (H8 full-replacement: no separate "staff" bucket anymore).
+    expect(res.json().visibleRoleName).toBe(res.json().roles[0].name);
     expect(res.json().capabilities).toContain(CAPABILITIES.ACCREDIT_SCAN);
     expect(Array.isArray(res.json().roles)).toBe(true);
     expect(res.json().roles[0]).toMatchObject({

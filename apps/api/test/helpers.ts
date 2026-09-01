@@ -46,21 +46,18 @@ export async function createRole(
     isVisible: boolean;
     isProtected: boolean;
     isSeeded: boolean;
-    /** H8 full-replacement: badge/wallet/scanner display bucket (roles.badge_category, 0800). */
-    badgeCategory: "admin" | "judge" | "sponsor" | "staff" | "mentor" | "participant";
   }> = {},
 ): Promise<number> {
   const name = overrides.name ?? `test-role-${crypto.randomUUID()}`;
   const { rows } = await pool.query(
-    `INSERT INTO roles (name, position, is_visible, is_protected, is_seeded, badge_category)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    `INSERT INTO roles (name, position, is_visible, is_protected, is_seeded)
+     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
     [
       name,
       randomRolePosition(),
       overrides.isVisible ?? true,
       overrides.isProtected ?? false,
       overrides.isSeeded ?? false,
-      overrides.badgeCategory ?? "staff",
     ],
   );
   const roleId = rows[0].id;
@@ -103,27 +100,27 @@ export async function assignRole(
   );
 }
 
+const ATTENDEE_ROLE_NAMES = { mentor: "Mentor", participant: "Participant" } as const;
+
 /**
- * H8 full-replacement: creates the seeded Mentor/Participant roles (badge_
- * category 'mentor'/'participant', is_seeded=true) if they don't already
- * exist — production's `identity/role.ts` assignAttendeeRole (PUT
- * /api/users/:id/attendee-role, accreditation's walk-in classification) and
- * review-fixtures' synthetic-account setup look these up by badge_category
- * and 409/throw if missing, but truncateAll wipes 0801/0805's real seed data
- * between every test. Call this in any test exercising either flow.
+ * H8 full-replacement: creates the seeded Mentor/Participant roles
+ * (is_seeded=true, matched by NAME — no separate badge_category column) if
+ * they don't already exist — production's `identity/role.ts`
+ * assignAttendeeRole (PUT /api/users/:id/attendee-role, accreditation's
+ * walk-in classification) and review-fixtures' synthetic-account setup look
+ * these up by name and 409/throw if missing, but truncateAll wipes
+ * 0801/0805's real seed data between every test. Call this in any test
+ * exercising either flow.
  */
 export async function seedAttendeeRoles(): Promise<void> {
   for (const category of ["mentor", "participant"] as const) {
+    const roleName = ATTENDEE_ROLE_NAMES[category];
     const { rows } = await pool.query(
-      `SELECT 1 FROM roles WHERE badge_category = $1 AND is_seeded = true AND deleted_at IS NULL LIMIT 1`,
-      [category],
+      `SELECT 1 FROM roles WHERE name = $1 AND is_seeded = true AND deleted_at IS NULL LIMIT 1`,
+      [roleName],
     );
     if (rows.length === 0) {
-      await createRole([], {
-        name: category === "mentor" ? "Mentor" : "Participant",
-        isSeeded: true,
-        badgeCategory: category,
-      });
+      await createRole([], { name: roleName, isSeeded: true });
     }
   }
 }
@@ -136,8 +133,8 @@ export async function grantAttendeeRole(
 ): Promise<void> {
   await seedAttendeeRoles();
   const { rows } = await pool.query(
-    `SELECT id FROM roles WHERE badge_category = $1 AND is_seeded = true AND deleted_at IS NULL LIMIT 1`,
-    [category],
+    `SELECT id FROM roles WHERE name = $1 AND is_seeded = true AND deleted_at IS NULL LIMIT 1`,
+    [ATTENDEE_ROLE_NAMES[category]],
   );
   await assignRole(userId, rows[0].id, assignedBy);
 }

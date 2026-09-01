@@ -34,10 +34,8 @@ import { issueRemovalPin } from "../removal-pin.js";
 import {
   type AssignedRoleSummary,
   assignAttendeeRole,
-  type BadgeCategory,
   computeMembershipFlags,
   getAssignedRoles,
-  getBadgeCategory,
   getHighestVisibleRoleName,
   hasEventAccess,
 } from "../role.js";
@@ -63,16 +61,6 @@ const assignedRoleSchema = z.object({
   position: z.number(),
   isVisible: z.boolean(),
 });
-
-const badgeCategorySchema = z.enum([
-  "admin",
-  "judge",
-  "sponsor",
-  "staff",
-  "mentor",
-  "participant",
-  "unassigned",
-]);
 
 /** Fields a user may edit on themself (H7: "consultar mis datos… y si detecto un error"). */
 const selfPatchSchema = z
@@ -474,11 +462,10 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         summary: "Get my profile",
         response: {
           200: userResponseSchema.extend({
-            role: badgeCategorySchema,
-            // H8 full-replacement: the caller's actual highest-visible role
-            // name (getEffectiveRole), alongside `role` (its fixed
-            // badge/wallet/scanner category) — same pairing /api/users/:id
-            // already exposes as visibleRoleName next to its own `role`.
+            // H8 full-replacement: the caller's badge/wallet/scanner display
+            // label IS simply their highest-visible role's name — no
+            // separate category. Same field name/shape /api/users/:id
+            // exposes for any other user.
             visibleRoleName: z.string().nullable(),
             mobileAccess: z.boolean(),
             // Effective capabilities (H8) so the web/mobile UI can gate by
@@ -520,7 +507,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       const userId = req.userId as number;
       const row = await fetchUser(userId, true);
       const [
-        role,
         capabilities,
         membership,
         eventAccess,
@@ -531,7 +517,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         removalStatus,
         roles,
       ] = await Promise.all([
-        getBadgeCategory(pool, userId, req),
         getEffectiveCapabilities(userId, req),
         computeMembershipFlags(pool, userId),
         hasEventAccess(pool, userId),
@@ -542,11 +527,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         getPendingAccountRemovalStatus(pool, userId),
         getAssignedRoles(pool, userId),
       ]);
-      const mobileAccess =
-        row.account_state === "active" && (await hasMobileAccess(pool, userId, role));
+      const mobileAccess = row.account_state === "active" && (await hasMobileAccess(pool, userId));
       return {
         ...serializeUser(row, removalStatus),
-        role,
         visibleRoleName: roles.find((r) => r.isVisible)?.name ?? null,
         mobileAccess,
         capabilities: [...capabilities],
@@ -818,7 +801,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                 name: z.string().nullable(),
                 surname: z.string().nullable(),
                 badgeId: z.string().nullable(),
-                role: badgeCategorySchema,
+                visibleRoleName: z.string().nullable(),
                 language: z.string(),
                 shirtSize: z.string().nullable(),
                 applicationStatus: z.string().nullable(),
@@ -843,28 +826,17 @@ export function registerProfileRoutes(app: FastifyInstance): void {
              AND is_test_account = false`;
       const args = filter ? [filter, limit, offset] : [limit, offset];
       const p = filter ? 2 : 1;
-      // H8: role is resolved in this same query via a single join, rather than
-      // one getBadgeCategory() call per row (was an N+1 capped at `limit`
-      // rows) — same admin/judge/sponsor/staff-then-effective-role priority
-      // as identity/role.ts's getBadgeCategory, via the same bulk-query views
-      // logistics/stats.ts and scanner-sync.ts already use.
-      const { rows } = await pool.query<UserRow & { role: BadgeCategory }>(
+      // H8 full-replacement: a user's badge/wallet/scanner display label is
+      // simply their highest-visible role name — resolved in this same query
+      // via a single join against the bulk-resolution view (avoids an N+1 of
+      // getHighestVisibleRoleName() calls), the same view logistics/stats.ts
+      // and scanner-sync.ts use.
+      const { rows } = await pool.query<UserRow & { role: string | null }>(
         `SELECT u.id, u.email, u.email_verified, u.name, u.surname, u.badge_id, u.language,
                 u.shirt_size, u.is_test_account, u.created_at,
-                CASE
-                  WHEN EXISTS (
-                    SELECT 1 FROM user_effective_capabilities uec
-                     WHERE uec.user_id = u.id AND uec.capability = '*'
-                  ) THEN 'admin'
-                  WHEN EXISTS (SELECT 1 FROM enterprise_judges ej WHERE ej.user_id = u.id) THEN 'judge'
-                  WHEN EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id) THEN 'sponsor'
-                  WHEN EXISTS (
-                    SELECT 1 FROM user_effective_capabilities uec WHERE uec.user_id = u.id
-                  ) THEN 'staff'
-                  ELSE COALESCE(uebc.badge_category::text, 'unassigned')
-                END AS role
+                uern.role_name AS role
            FROM users u
-           LEFT JOIN user_effective_badge_category uebc ON uebc.user_id = u.id
+           LEFT JOIN user_effective_role_name uern ON uern.user_id = u.id
            ${where}
            ORDER BY u.created_at DESC LIMIT $${p} OFFSET $${p + 1}`,
         args,
@@ -908,7 +880,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         name: r.name,
         surname: r.surname,
         badgeId: r.badge_id,
-        role: r.role,
+        visibleRoleName: r.role,
         language: r.language,
         shirtSize: r.shirt_size,
         applicationStatus: statusByUser.get(r.id) ?? null,
@@ -939,7 +911,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         params: z.object({ id: z.coerce.number().int() }),
         response: {
           200: userResponseSchema.extend({
-            role: badgeCategorySchema,
             visibleRoleName: z.string().nullable(),
             capabilities: z.array(z.string()),
             roles: z.array(assignedRoleSchema),
@@ -950,8 +921,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => {
       await assertProfileSubjectScope(req.userId as number, req.params.id);
       const row = await fetchUser(req.params.id);
-      const [role, visibleRoleName, capabilities, allRoles, canSeeSuperadmin] = await Promise.all([
-        getBadgeCategory(pool, req.params.id),
+      const [visibleRoleName, capabilities, allRoles, canSeeSuperadmin] = await Promise.all([
         getHighestVisibleRoleName(pool, req.params.id),
         getEffectiveCapabilities(req.params.id),
         getAssignedRoles(pool, req.params.id),
@@ -966,7 +936,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         : allRoles.filter((r) => r.name !== SUPERADMIN_ROLE_NAME);
       return {
         ...serializeUser(row),
-        role,
         visibleRoleName,
         capabilities: [...capabilities],
         roles,
@@ -1347,7 +1316,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                 id: z.number(),
                 applicationId: z.number(),
                 applicationName: z.string(),
-                applicationGrantedBadgeCategory: z.string().nullable(),
+                applicationGrantedRoleName: z.string().nullable(),
                 status: z.string(),
                 submittedAt: z.string().nullable(),
                 confirmedAt: z.string().nullable(),
@@ -1376,12 +1345,12 @@ export function registerProfileRoutes(app: FastifyInstance): void {
 
       const { rows: responseRows } = await pool.query(
         `SELECT r.*, a.name AS app_name,
-                (SELECT ro.badge_category::text
+                (SELECT ro.name
                    FROM application_grants_roles agr
                    JOIN roles ro ON ro.id = agr.role_id AND ro.deleted_at IS NULL
                   WHERE agr.application_id = a.id
                   ORDER BY ro.position DESC
-                  LIMIT 1) AS app_granted_badge_category
+                  LIMIT 1) AS app_granted_role_name
          FROM application_responses r
          JOIN applications a ON a.id = r.application_id
          WHERE r.user_id = $1
@@ -1399,8 +1368,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             id: row.id as number,
             applicationId: row.application_id as number,
             applicationName: row.app_name as string,
-            applicationGrantedBadgeCategory:
-              (row.app_granted_badge_category as string | null) ?? null,
+            applicationGrantedRoleName: (row.app_granted_role_name as string | null) ?? null,
             status: row.status as string,
             submittedAt: row.submitted_at ? (row.submitted_at as Date).toISOString() : null,
             confirmedAt: row.confirmed_at ? (row.confirmed_at as Date).toISOString() : null,

@@ -29,9 +29,9 @@ export interface ApplicationRow {
   id: number;
   name: string;
   /** DEPRECATED (H8): legacy static classification, no longer set by the API
-   *  or read as authoritative — see application_grants_roles +
-   *  roles.badge_category (formGrantsMentorRole below, granted_badge_category
-   *  in admin.routes.ts) for the real, drift-proof classification. */
+   *  or read as authoritative — see application_grants_roles + roles.name
+   *  (formGrantsMentorRole below, granted_role_name in admin.routes.ts) for
+   *  the real, drift-proof classification. */
   type: string | null;
   template: TemplateField[];
   sections: FormSection[];
@@ -155,15 +155,16 @@ export async function requireApplication(db: Queryable, id: number): Promise<App
 }
 
 /**
- * H8: whether a form's `grants_role_ids` include a role identified as the
- * real "Mentor" role by its durable `badge_category` (see roles.badge_category,
- * 0800_roles_schema.sql) — never by matching the role's editable display
- * name, which is exactly as driftable as the retired `applications.type ===
- * "mentor"` string check this replaces. Powers the early-ticket-issuance
- * special case below (sendOne/reAccept): accepted mentors attend without a
- * separate spot-confirmation step, so their decision itself is the
- * ticket-issuing transition, unlike every other applicant who waits for
- * confirm.
+ * H8 full-replacement: whether a form's `grants_role_ids` include the seeded
+ * "Mentor" role, matched by name (identity/role.ts's ATTENDEE_ROLE_NAMES) now
+ * that the durable `badge_category` column is retired. Powers the
+ * early-ticket-issuance special case below (sendOne/reAccept): accepted
+ * mentors attend without a separate spot-confirmation step, so their
+ * decision itself is the ticket-issuing transition, unlike every other
+ * applicant who waits for confirm. Known tradeoff of the name-based match
+ * (same one identity/role.ts's assignAttendeeRole/hasEventAccess accept): an
+ * admin who renames the seeded Mentor role breaks this detection until
+ * `grants_role_ids` is reconfigured against its new name.
  */
 async function formGrantsMentorRole(
   client: pg.PoolClient,
@@ -173,7 +174,7 @@ async function formGrantsMentorRole(
     `SELECT 1
        FROM application_grants_roles agr
        JOIN roles r ON r.id = agr.role_id AND r.deleted_at IS NULL
-      WHERE agr.application_id = $1 AND r.badge_category = 'mentor'
+      WHERE agr.application_id = $1 AND r.name = 'Mentor'
       LIMIT 1`,
     [applicationId],
   );
@@ -1570,10 +1571,10 @@ export interface ResponseDetail {
   application: {
     id: number;
     name: string;
-    /** H8: the badge_category of this form's highest-position granted role
-     *  (see granted_badge_category doc in admin.routes.ts), or null if the
+    /** H8: the name of this form's highest-position granted role
+     *  (see granted_role_name doc in admin.routes.ts), or null if the
      *  form grants no role — replaces the retired static `type` field. */
-    granted_badge_category: string | null;
+    granted_role_name: string | null;
     template: TemplateField[];
     sections: FormSection[];
     ask_shirt_size: boolean;
@@ -1617,12 +1618,12 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
     `SELECT r.*, u.name, u.email, u.shirt_size,
             u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
             a.id AS app_id, a.name AS app_name,
-            (SELECT r2.badge_category::text
+            (SELECT r2.name
                FROM application_grants_roles agr
                JOIN roles r2 ON r2.id = agr.role_id AND r2.deleted_at IS NULL
               WHERE agr.application_id = a.id
               ORDER BY r2.position DESC
-              LIMIT 1) AS granted_badge_category,
+              LIMIT 1) AS granted_role_name,
             fv.template,
             fv.sections,
             a.ask_shirt_size, a.ask_food_intolerances
@@ -1646,7 +1647,7 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
     dietary_data_state,
     app_id,
     app_name,
-    granted_badge_category,
+    granted_role_name,
     template,
     sections,
     ask_shirt_size,
@@ -1676,7 +1677,7 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
     application: {
       id: app_id,
       name: app_name,
-      granted_badge_category,
+      granted_role_name,
       template,
       sections,
       ask_shirt_size,
@@ -2045,9 +2046,9 @@ export async function listUserResponsesForStaff(userId: number): Promise<
     id: number;
     application_id: number;
     application_name: string;
-    /** H8: badge_category of the form's highest-position granted role, or
+    /** H8: name of the form's highest-position granted role, or
      *  null if it grants none — replaces the retired static `type` field. */
-    application_granted_badge_category: string | null;
+    application_granted_role_name: string | null;
     status: string;
     decision_sent: boolean;
     submitted_at: Date | null;
@@ -2055,12 +2056,12 @@ export async function listUserResponsesForStaff(userId: number): Promise<
 > {
   const { rows } = await pool.query(
     `SELECT r.id, r.application_id, a.name AS application_name,
-            (SELECT r2.badge_category::text
+            (SELECT r2.name
                FROM application_grants_roles agr
                JOIN roles r2 ON r2.id = agr.role_id AND r2.deleted_at IS NULL
               WHERE agr.application_id = a.id
               ORDER BY r2.position DESC
-              LIMIT 1) AS application_granted_badge_category,
+              LIMIT 1) AS application_granted_role_name,
             r.status, r.decision_sent_at, r.submitted_at
      FROM application_responses r
      JOIN applications a ON a.id = r.application_id
@@ -2073,7 +2074,7 @@ export async function listUserResponsesForStaff(userId: number): Promise<
       id: number;
       application_id: number;
       application_name: string;
-      application_granted_badge_category: string | null;
+      application_granted_role_name: string | null;
       status: string;
       decision_sent_at: Date | null;
       submitted_at: Date | null;
@@ -2081,7 +2082,7 @@ export async function listUserResponsesForStaff(userId: number): Promise<
       id: r.id,
       application_id: r.application_id,
       application_name: r.application_name,
-      application_granted_badge_category: r.application_granted_badge_category,
+      application_granted_role_name: r.application_granted_role_name,
       status: r.status,
       decision_sent: r.decision_sent_at !== null,
       submitted_at: r.submitted_at,

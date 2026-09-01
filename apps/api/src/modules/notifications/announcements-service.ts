@@ -522,9 +522,10 @@ export async function markAnnouncementRead(
  * set; otherwise audience tags (sponsor/participant/mentor, same vocabulary
  * and "sponsor implies participant" rule as H59's schedule audiences — see
  * identity/role.ts's mentorOrParticipantType/computeMembershipFlags, whose
- * bulk-query equivalent (user_effective_badge_category) is joined directly
- * here to avoid an N+1 per user); otherwise everyone, unchanged from before
- * this feature existed.
+ * bulk-query equivalent (user_effective_role_name, matched by the seeded
+ * Mentor/Participant role's own name) is joined directly here to avoid an
+ * N+1 per user); otherwise everyone, unchanged from before this feature
+ * existed.
  */
 async function resolveRecipients(
   db: Queryable,
@@ -559,14 +560,18 @@ async function resolveRecipients(
 
   const { rows } = await db.query(
     `WITH staff AS (
-       -- Same "holds at least one capability" definition as
-       -- getEffectiveCapabilities/getBadgeCategory's staff bucket.
+       -- "holds at least one capability" — same definition
+       -- getEffectiveCapabilities uses.
        SELECT DISTINCT user_id FROM user_effective_capabilities
      ),
      attendee AS (
-       SELECT user_id, badge_category::text AS type
-       FROM user_effective_badge_category
-       WHERE badge_category IN ('mentor', 'participant')
+       -- H8 full-replacement: matched by the seeded role's own name — no
+       -- separate badge_category column — see identity/role.ts's
+       -- ATTENDEE_ROLE_NAMES.
+       SELECT user_id,
+              CASE role_name WHEN 'Mentor' THEN 'mentor' WHEN 'Participant' THEN 'participant' END AS type
+       FROM user_effective_role_name
+       WHERE role_name IN ('Mentor', 'Participant')
      ),
      sponsor AS (
        SELECT DISTINCT user_id FROM sponsors WHERE user_id IS NOT NULL

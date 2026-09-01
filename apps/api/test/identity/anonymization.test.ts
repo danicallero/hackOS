@@ -73,7 +73,7 @@ describe("anonymization strips non-visible role assignments (H8, H53, H54)", () 
 
     // The users row (and every user_roles row referencing it, cascading) is
     // fully gone regardless of role visibility — confirming no special-casing
-    // is needed for getEffectiveRole/getBadgeCategory post-anonymization.
+    // is needed for getEffectiveRole/getHighestVisibleRoleName post-anonymization.
     const { rows: userRows } = await pool.query(`SELECT id FROM users WHERE id = $1`, [target]);
     expect(userRows).toHaveLength(0);
     const { rows: roleRows } = await pool.query(`SELECT 1 FROM user_roles WHERE user_id = $1`, [

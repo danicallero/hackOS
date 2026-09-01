@@ -84,12 +84,12 @@ export async function exportApplicationsCsv(applicationId?: number): Promise<str
   const { rows } = await pool.query(
     `SELECT ar.id AS response_id, u.id AS user_id, u.name, u.surname, u.email,
             app.name AS application_name,
-            (SELECT r.badge_category::text
+            (SELECT r.name
                FROM application_grants_roles agr
                JOIN roles r ON r.id = agr.role_id AND r.deleted_at IS NULL
               WHERE agr.application_id = app.id
               ORDER BY r.position DESC
-              LIMIT 1) AS application_granted_badge_category,
+              LIMIT 1) AS application_granted_role_name,
             ar.status, ar.submitted_at, ar.confirmed_at, ar.declined_at,
             u.dietary_data_state,
             (SELECT AVG(score) FROM applicant_reviews WHERE response_id = ar.id) AS avg_score
@@ -108,7 +108,7 @@ export async function exportApplicationsCsv(applicationId?: number): Promise<str
     "surname",
     "email",
     "application_name",
-    "application_granted_badge_category",
+    "application_granted_role_name",
     "status",
     "submitted_at",
     "confirmed_at",

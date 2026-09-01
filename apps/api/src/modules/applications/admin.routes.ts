@@ -106,23 +106,23 @@ export function registerAdminRoutes(app: FastifyInstance): void {
          WHERE ar.application_id = applications.id AND ar.status = 'confirmed'
       ) AS has_confirmed_responses`;
   // H8: replaces the retired static `type` column as the "is this a
-  // participant/mentor/... form" answer — the badge_category (durable, see
-  // roles.badge_category) of the form's highest-position granted role, or
-  // null if it grants none. Derived from grants_role_ids so it can never
-  // drift from what the form actually grants the way a separately-set
-  // `type` string could.
-  const GRANTED_BADGE_CATEGORY_EXPR = `(
-        SELECT r.badge_category::text
+  // participant/mentor/... form" answer — the NAME (no separate stored
+  // category) of the form's highest-position granted role, or null if it
+  // grants none. Derived from grants_role_ids so it can never drift from
+  // what the form actually grants the way a separately-set `type` string
+  // could.
+  const GRANTED_ROLE_NAME_EXPR = `(
+        SELECT r.name
           FROM application_grants_roles agr
           JOIN roles r ON r.id = agr.role_id AND r.deleted_at IS NULL
          WHERE agr.application_id = applications.id
          ORDER BY r.position DESC
          LIMIT 1
-      ) AS granted_badge_category`;
+      ) AS granted_role_name`;
   const COLUMNS = `id, name, template, sections, description, active, open_at, close_at,
                    capacity, confirmation_window_hours, ask_shirt_size, ask_food_intolerances,
                    current_form_version, created_at, ${GRANTS_ROLE_IDS_EXPR},
-                   ${HAS_CONFIRMED_RESPONSES_EXPR}, ${GRANTED_BADGE_CATEGORY_EXPR}`;
+                   ${HAS_CONFIRMED_RESPONSES_EXPR}, ${GRANTED_ROLE_NAME_EXPR}`;
 
   // ── public: open forms with their template ──────────────────────────────────
   // A late invited participant (H10) can also discover/fetch a closed form —
@@ -223,7 +223,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Create an application form",
         description:
-          "Defines a new application form (H11): its template, optional named sections that group template fields under a title/description, open/close window, capacity, confirmation window, whether it asks for a shirt size and/or dietary restrictions (H12, both off by default), and an optional `grants_role_ids` (H8) list of roles granted alongside ticket issuance when a response is confirmed. `grants_role_ids` is also the answer to 'what kind of application is this' — the legacy static `type` classification is retired; a returned form instead carries `granted_badge_category`, derived live from the badge_category of its highest-position granted role. Configuring a role into `grants_role_ids` is gated exactly like directly assigning that role (H8): the actor's highest assigned-role position must sit strictly above every requested role's position, and (unless they hold the wildcard) they must already possess every capability that role's own rows explicitly allow.",
+          "Defines a new application form (H11): its template, optional named sections that group template fields under a title/description, open/close window, capacity, confirmation window, whether it asks for a shirt size and/or dietary restrictions (H12, both off by default), and an optional `grants_role_ids` (H8) list of roles granted alongside ticket issuance when a response is confirmed. `grants_role_ids` is also the answer to 'what kind of application is this' — the legacy static `type` classification is retired; a returned form instead carries `granted_role_name`, derived live from the name of its highest-position granted role. Configuring a role into `grants_role_ids` is gated exactly like directly assigning that role (H8): the actor's highest assigned-role position must sit strictly above every requested role's position, and (unless they hold the wildcard) they must already possess every capability that role's own rows explicitly allow.",
         body: createApplicationSchema,
       },
     },

@@ -246,7 +246,9 @@ describe("enterprise judge roster", () => {
     expect(assigned.json().challenges.map((c: { id: number }) => c.id)).toContain(challengeId);
     const me = await a.inject({ method: "GET", url: "/api/me", headers: asUser(judge) });
     expect(me.json().isEnterpriseJudge).toBe(true);
-    expect(me.json().role).toBe("judge");
+    // H8 full-replacement: no visible role of their own -> no display label
+    // (isEnterpriseJudge is the fact to check, not a retired "judge" bucket).
+    expect(me.json().visibleRoleName).toBeNull();
 
     await a.inject({
       method: "DELETE",

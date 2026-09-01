@@ -10,7 +10,6 @@ import { assertWithinHackingWindow, isWithinHackingWindow } from "../../lib/hack
 import { broadcast } from "../../lib/sse.js";
 import { hasMobileAccess } from "../identity/mobile-access.js";
 import { enqueueAuthEmail } from "../identity/outbox.js";
-import { getBadgeCategory } from "../identity/role.js";
 import { assertSecondaryEmailAvailable } from "../identity/routes/secondary-email.js";
 import {
   assertFixtureQueueScope,
@@ -1045,8 +1044,7 @@ export async function myProjects(userId: number): Promise<RepoWithExtras[]> {
  * relationship) rather than reimplementing the underlying SQL.
  */
 export async function isAdmittedParticipant(db: Queryable, userId: number): Promise<boolean> {
-  const role = await getBadgeCategory(db, userId);
-  return hasMobileAccess(db, userId, role);
+  return hasMobileAccess(db, userId);
 }
 
 /**

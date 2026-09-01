@@ -106,10 +106,10 @@ async function main(): Promise<void> {
     // real, auditable state (who holds it), but is_visible = false keeps it
     // out of the highest-position-visible-role computation (role.ts).
     const { rows: roleRows } = await client.query(
-      `INSERT INTO roles (name, position, is_protected, is_visible, badge_category)
-       VALUES ($1, $2, true, false, 'admin')
+      `INSERT INTO roles (name, position, is_protected, is_visible)
+       VALUES ($1, $2, true, false)
        ON CONFLICT (name) DO UPDATE SET
-         position = EXCLUDED.position, is_protected = true, is_visible = false, badge_category = 'admin'
+         position = EXCLUDED.position, is_protected = true, is_visible = false
        RETURNING id`,
       [roleName, position],
     );

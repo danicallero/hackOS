@@ -758,7 +758,6 @@ describe("H8 0801's 'Platform administrator' template is not protected", () => {
       name: "Platform administrator",
       isVisible: true,
       isProtected: false,
-      badgeCategory: "admin",
     });
     await pool.query(`UPDATE roles SET position = 1 WHERE id = $1`, [roleId]);
     // Deleting a role that grants the wildcard must still leave one active

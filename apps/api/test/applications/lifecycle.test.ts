@@ -320,10 +320,10 @@ describe("review + decide (H13, H14)", () => {
 
 describe("confirm / decline (H15)", () => {
   it("issues a ticket when a mentor acceptance is sent, without waiting for confirmation", async () => {
-    // H8: mentor-ness is now the form actually granting a role with
-    // badge_category 'mentor' (see roles.badge_category), not a static
-    // applications.type — the retired field this replaces.
-    const mentorRoleId = await createRole([], { badgeCategory: "mentor" });
+    // H8: mentor-ness is now the form actually granting the role named
+    // "Mentor" (see identity/role.ts's formGrantsMentorRole/ATTENDEE_ROLE_NAMES),
+    // not a static applications.type — the retired field this replaces.
+    const mentorRoleId = await createRole([], { name: "Mentor" });
     const mentorAppId = await createApplication();
     await pool.query(
       `INSERT INTO application_grants_roles (application_id, role_id) VALUES ($1, $2)`,
@@ -335,7 +335,7 @@ describe("confirm / decline (H15)", () => {
   });
 
   it("does not early-issue a ticket for a form granting a non-mentor role", async () => {
-    const staffRoleId = await createRole([], { badgeCategory: "staff" });
+    const staffRoleId = await createRole([], { name: "Not Mentor" });
     const appId = await createApplication();
     await pool.query(
       `INSERT INTO application_grants_roles (application_id, role_id) VALUES ($1, $2)`,
@@ -860,7 +860,7 @@ describe("re-accept (admin)", () => {
 
   it("issues a ticket on re-accept for a form granting the mentor role (H8)", async () => {
     const a = await getApp();
-    const mentorRoleId = await createRole([], { badgeCategory: "mentor" });
+    const mentorRoleId = await createRole([], { name: "Mentor" });
     const appId = await createApplication();
     await pool.query(
       `INSERT INTO application_grants_roles (application_id, role_id) VALUES ($1, $2)`,

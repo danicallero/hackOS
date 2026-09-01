@@ -69,12 +69,6 @@ const readRoles = requireAnyCapability(
 const permissionState = z.enum(["allow", "deny", "inherit"]);
 const roleIdParams = z.object({ roleId: z.coerce.number().int() });
 
-// H8 full-replacement: the fixed bucket badge printing/wallet passes/scanner
-// UI/stats classify this role's holders into, decoupled from the role's own
-// (admin-chosen) name. See roles.badge_category (0800) and identity/role.ts's
-// getBadgeCategory/getEffectiveRole.
-const badgeCategory = z.enum(["admin", "judge", "sponsor", "staff", "mentor", "participant"]);
-
 const roleResponse = z.object({
   id: z.number(),
   name: z.string(),
@@ -85,7 +79,6 @@ const roleResponse = z.object({
   // Sponsor, every 0805 default) rather than created via POST /api/roles.
   // Scopes the trash/restore panel and gates the reset-to-default action.
   isSeeded: z.boolean(),
-  badgeCategory,
   // Sparse: capabilities with no explicit row are implicitly 'inherit' and
   // omitted (mirrors the role_capabilities table — a missing row IS inherit).
   capabilities: z.array(z.object({ capability: z.string(), state: permissionState })),
@@ -127,7 +120,6 @@ async function loadRole(db: pg.Pool | pg.PoolClient, roleId: number) {
     isVisible: rows[0].is_visible as boolean,
     isProtected: rows[0].is_protected as boolean,
     isSeeded: rows[0].is_seeded as boolean,
-    badgeCategory: rows[0].badge_category as z.infer<typeof badgeCategory>,
     capabilities: caps.rows as { capability: string; state: "allow" | "deny" | "inherit" }[],
     memberIds: members.rows.map((r: { user_id: number }) => r.user_id),
     deletedAt: rows[0].deleted_at ? new Date(rows[0].deleted_at).toISOString() : null,
@@ -222,10 +214,6 @@ export function registerRoleRoutes(app: FastifyInstance): void {
           name: z.string().min(1).max(200),
           position: z.number().int(),
           isVisible: z.boolean().default(true),
-          // H8 full-replacement: a freshly created custom role defaults to
-          // 'staff' — an operational role an admin adds is staff-like unless
-          // told otherwise (matches the roles.badge_category column DEFAULT).
-          badgeCategory: badgeCategory.default("staff"),
           templateKey: z.string().min(1).max(120).optional(),
           capabilities: z
             .array(z.object({ capability: z.string().min(1), state: permissionState }))
@@ -236,7 +224,6 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     },
     async (req, reply) => {
       const { name, position, isVisible, templateKey } = req.body;
-      const roleBadgeCategory = req.body.badgeCategory;
       assertNotSuperadminRole(name);
       let capabilities = req.body.capabilities;
       if (templateKey) {
@@ -264,9 +251,9 @@ export function registerRoleRoutes(app: FastifyInstance): void {
           throw new ConflictError("A role with this name already exists", { name });
         }
         const { rows } = await client.query(
-          `INSERT INTO roles (name, position, is_visible, badge_category)
-           VALUES ($1, $2, $3, $4) RETURNING id`,
-          [name, position, isVisible, roleBadgeCategory],
+          `INSERT INTO roles (name, position, is_visible)
+           VALUES ($1, $2, $3) RETURNING id`,
+          [name, position, isVisible],
         );
         const roleId = rows[0].id as number;
         for (const { capability, state } of capabilities) {
@@ -297,14 +284,13 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       preHandler: manage,
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
       schema: {
-        summary: "Rename, toggle visibility, or recategorize a role",
+        summary: "Rename or toggle visibility of a role",
         description:
-          "Updates a role's name, is_visible, and/or badge_category (H8) — the badge/wallet/scanner display bucket this role's holders render as, independent of the role's own name.",
+          "Updates a role's name and/or is_visible (H8). A role's public display label — badges, wallet passes, scanner UI, stats — is simply its name; there is no separate category to set.",
         params: roleIdParams,
         body: z.object({
           name: z.string().min(1).max(200).optional(),
           isVisible: z.boolean().optional(),
-          badgeCategory: badgeCategory.optional(),
         }),
         response: { 200: roleResponse },
       },
@@ -319,23 +305,19 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         const name = req.body.name ?? before.name;
         assertNotSuperadminRole(name);
         const isVisible = req.body.isVisible ?? before.isVisible;
-        const nextBadgeCategory = req.body.badgeCategory ?? before.badgeCategory;
-        await client.query(
-          `UPDATE roles SET name = $2, is_visible = $3, badge_category = $4 WHERE id = $1`,
-          [roleId, name, isVisible, nextBadgeCategory],
-        );
+        await client.query(`UPDATE roles SET name = $2, is_visible = $3 WHERE id = $1`, [
+          roleId,
+          name,
+          isVisible,
+        ]);
         await audit(client, {
           actorId: req.userId,
           entityType: "role",
           entityId: roleId,
           action: "update",
           source: "admin",
-          before: {
-            name: before.name,
-            isVisible: before.isVisible,
-            badgeCategory: before.badgeCategory,
-          },
-          after: { name, isVisible, badgeCategory: nextBadgeCategory },
+          before: { name: before.name, isVisible: before.isVisible },
+          after: { name, isVisible },
         });
         return loadRole(client, roleId);
       });

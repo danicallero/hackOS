@@ -21,11 +21,11 @@ export async function createMeal(name = "Dinner"): Promise<number> {
 /**
  * Issue an entrance ticket for a user; returns the QR token. Also grants the
  * seeded Participant role (H8 full-replacement — identity/role.ts's
- * assignAttendeeRole/getBadgeCategory), mirroring how a real ticket is never
- * issued without some form of event access (confirmed application or a real
- * attendee-role grant) — otherwise wallet-pass issuance would reject it as
- * not currently entitled, and badge/wallet/scanner code would classify the
- * holder as 'unassigned' instead of 'participant'.
+ * assignAttendeeRole), mirroring how a real ticket is never issued without
+ * some form of event access (confirmed application or a real attendee-role
+ * grant) — otherwise wallet-pass issuance would reject it as not currently
+ * entitled, and badge/wallet/scanner code would show no role name instead of
+ * "Participant".
  */
 export async function issueTicket(userId: number, token?: string): Promise<string> {
   const t = token ?? `tkt-${crypto.randomUUID()}`;

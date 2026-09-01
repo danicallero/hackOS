@@ -1,56 +1,41 @@
-import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyRequest } from "fastify";
 import type { Queryable } from "../../db/pool.js";
 import { getEffectiveCapabilities } from "../../lib/capabilities.js";
 import { ConflictError } from "../../lib/errors.js";
 
 /**
- * H8 full-replacement: the fixed display/behavior bucket badge printing,
- * wallet passes, scanner UI and stats classify a user into — decoupled from
- * the arbitrary name an admin gives a role (see roles.badge_category,
- * 0800). 'unassigned' is never a role's own category (CHECK-constrained out
- * of role_badge_category); it's what a user with no visible role, and no
- * qualifying relationship below, falls back to.
+ * H8 full-replacement: the fixed admin/judge/sponsor/staff/mentor/
+ * participant/unassigned bucket badge printing, wallet passes, scanner UI
+ * and stats used to classify a user into (roles.badge_category) is retired —
+ * a user's badge/wallet/scanner display label is simply the NAME of their
+ * highest-position visible role, with no separate stored/selectable
+ * category. The two seeded roles ('Mentor', 'Participant') that used to
+ * carry a functional (not just cosmetic) badge_category are now identified
+ * by name below.
  */
-export type BadgeCategory =
-  | "admin"
-  | "judge"
-  | "sponsor"
-  | "staff"
-  | "mentor"
-  | "participant"
-  | "unassigned";
-
-/** A role-bearing role_badge_category value — every BadgeCategory except the no-role fallback. */
-export type RoleBadgeCategory = Exclude<BadgeCategory, "unassigned">;
+const ATTENDEE_ROLE_NAMES = { mentor: "Mentor", participant: "Participant" } as const;
 
 export interface EffectiveRole {
   name: string;
-  badgeCategory: RoleBadgeCategory;
 }
 
 /**
  * H8's actual "public role" concept: the user's highest-position role among
- * their assigned roles that is marked `is_visible`, together with that
- * role's badge_category — or null if they hold no visible role at all. This
- * is the literal multi-role hierarchy answer: every consumer that used to
- * switch on the fixed DerivedRole enum now resolves through this (or its
- * thin wrapper getBadgeCategory below) instead of guessing from
- * capabilities/relationship tables and a stale applications.type snapshot.
+ * their assigned roles that is marked `is_visible` — or null if they hold no
+ * visible role at all. Every consumer that used to switch on the fixed
+ * DerivedRole enum (or its badge_category successor) now resolves through
+ * this (or its thin wrapper getHighestVisibleRoleName below) instead of
+ * guessing from capabilities/relationship tables and a stale
+ * applications.type snapshot.
  */
 export async function getEffectiveRole(
   db: Queryable,
   userId: number,
-  // Accepted for interface consistency with getBadgeCategory/
-  // mentorOrParticipantType below (H8) — this function itself never calls
-  // getEffectiveCapabilities, but its callers do, so a caller already
-  // holding a request can thread it through uniformly without knowing which
-  // function in the chain actually needs it.
   request?: FastifyRequest,
 ): Promise<EffectiveRole | null> {
   void request;
   const { rows } = await db.query(
-    `SELECT r.name, r.badge_category
+    `SELECT r.name
        FROM user_roles ur
        JOIN roles r ON r.id = ur.role_id
       WHERE ur.user_id = $1 AND r.is_visible = true AND r.deleted_at IS NULL
@@ -58,59 +43,19 @@ export async function getEffectiveRole(
       LIMIT 1`,
     [userId],
   );
-  const row = rows[0] as { name: string; badge_category: RoleBadgeCategory } | undefined;
+  const row = rows[0] as { name: string } | undefined;
   if (!row) return null;
-  return { name: row.name, badgeCategory: row.badge_category };
+  return { name: row.name };
 }
 
 /**
- * The full BadgeCategory resolution (H8 full-replacement for the old
- * computeDerivedRole): admin/judge/sponsor/staff still come first from the
- * same authoritative sources as before (the ADMIN_ALL capability and the
- * enterprise_judges/sponsors relationship tables) — neither enterprise
- * judges nor sponsor reps are guaranteed to hold a `user_roles` row at all
- * (no role_grant_rules wires enterprise_judges the way sponsors.enterprise_
- * linked does), so dropping these checks in favor of a pure role lookup
- * would misclassify every judge and any sponsor rep who predates the
- * Sponsor auto-grant role. Below that, the user's highest-visible role's own
- * badge_category decides — covering Mentor/Participant AND any custom role
- * an admin explicitly categorizes as admin/judge/sponsor/staff without a
- * matching relationship row. No visible role and none of the above:
- * 'unassigned', same as the old DerivedRole's fallback.
- */
-export async function getBadgeCategory(
-  db: Queryable,
-  userId: number,
-  request?: FastifyRequest,
-): Promise<BadgeCategory> {
-  const { rows: activeRows } = await db.query(
-    `SELECT 1 FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
-    [userId],
-  );
-  if (!activeRows[0]) return "unassigned";
-  const capabilities = await getEffectiveCapabilities(userId, request);
-  if (capabilities.has(CAPABILITIES.ADMIN_ALL)) return "admin";
-
-  const { isEnterpriseJudge, isSponsorRep } = await computeMembershipFlags(db, userId);
-  if (isEnterpriseJudge) return "judge";
-  if (isSponsorRep) return "sponsor";
-
-  // "any staff-ish capability" — anyone holding a capability at all is doing
-  // *something* operational beyond being a plain participant.
-  if (capabilities.size > 0) return "staff";
-
-  const effective = await getEffectiveRole(db, userId, request);
-  return effective?.badgeCategory ?? "unassigned";
-}
-
-/**
- * Whether this user's effective role (see getEffectiveRole) is categorized
- * mentor or participant — kept as its own lookup (not just inlined into
- * getBadgeCategory's callers) because the schedule module's audience
+ * Whether this user's effective role (see getEffectiveRole) is the seeded
+ * Mentor or Participant role, by name — kept as its own lookup (not just
+ * inlined into its callers) because the schedule module's audience
  * resolution (H59: a schedule item's `participant`/`mentor` audience
  * toggles) and the announcements audience resolver need exactly this
- * question, decoupled from the admin/judge/sponsor/staff branches above.
- * Mutually exclusive by construction (badge_category is a single column).
+ * question. Mutually exclusive: a user holds at most one of these two roles
+ * at a time (identity/role.ts's assignAttendeeRole enforces the switch).
  */
 export async function mentorOrParticipantType(
   db: Queryable,
@@ -123,15 +68,15 @@ export async function mentorOrParticipantType(
   );
   if (!activeRows[0]) return null;
   const effective = await getEffectiveRole(db, userId, request);
-  if (effective?.badgeCategory === "mentor") return "mentor";
-  if (effective?.badgeCategory === "participant") return "participant";
+  if (effective?.name === ATTENDEE_ROLE_NAMES.mentor) return "mentor";
+  if (effective?.name === ATTENDEE_ROLE_NAMES.participant) return "participant";
   return null;
 }
 
 /**
- * H8's actual "public role" concept, name only (kept for callers that only
- * ever wanted the display name, not the category — e.g. profile.ts's
- * visibleRoleName). See getEffectiveRole for the (name, badgeCategory) pair.
+ * H8's actual "public role" concept, name only — the badge/wallet/scanner/
+ * stats display label for a user. See getEffectiveRole for the underlying
+ * lookup.
  */
 export async function getHighestVisibleRoleName(
   db: Queryable,
@@ -230,20 +175,21 @@ export async function hasEventAccess(db: Queryable, userId: number): Promise<boo
         -- attendee-role route, accreditation's walk-in classification) now
         -- grant the real Mentor/Participant role instead (0808 backfilled
         -- every pre-cutover row) — this is the equivalent check over
-        -- user_roles. manual_attendee_roles itself is read here too, purely
-        -- defensively: the table is not dropped, so a row surviving from
-        -- before the cutover (or a direct DB write bypassing the API) still
-        -- counts.
+        -- user_roles, matched by the seeded roles' own names rather than a
+        -- retired badge_category column. manual_attendee_roles itself is
+        -- read here too, purely defensively: the table is not dropped, so a
+        -- row surviving from before the cutover (or a direct DB write
+        -- bypassing the API) still counts.
         SELECT 1 FROM user_roles ur
           JOIN roles r ON r.id = ur.role_id
-         WHERE ur.user_id = $1 AND r.badge_category IN ('mentor', 'participant')
+         WHERE ur.user_id = $1 AND r.name = ANY($2::text[])
            AND r.deleted_at IS NULL
       ) OR EXISTS (
         SELECT 1 FROM manual_attendee_roles WHERE user_id = $1
       ) OR EXISTS (
         SELECT 1 FROM sponsors WHERE user_id = $1
       ))`,
-    [userId],
+    [userId, [ATTENDEE_ROLE_NAMES.mentor, ATTENDEE_ROLE_NAMES.participant]],
   );
   if (rows.length > 0) return true;
   const capabilities = await getEffectiveCapabilities(userId);
@@ -270,16 +216,17 @@ export async function assignAttendeeRole(
   category: "mentor" | "participant",
   actorId: number,
 ): Promise<void> {
+  const targetRoleName = ATTENDEE_ROLE_NAMES[category];
   const { rows: targetRows } = await client.query(
     `SELECT id FROM roles
-      WHERE badge_category = $1 AND is_seeded = true AND deleted_at IS NULL
+      WHERE name = $1 AND is_seeded = true AND deleted_at IS NULL
       ORDER BY position DESC LIMIT 1`,
-    [category],
+    [targetRoleName],
   );
   const targetRoleId = targetRows[0]?.id as number | undefined;
   if (!targetRoleId) {
     throw new ConflictError(
-      `The seeded ${category} role is missing or deleted — restore it before classifying attendees`,
+      `The seeded ${targetRoleName} role is missing or deleted — restore it before classifying attendees`,
       { category },
     );
   }
@@ -290,8 +237,8 @@ export async function assignAttendeeRole(
     `DELETE FROM user_roles ur
       USING roles r
      WHERE ur.role_id = r.id AND ur.user_id = $1
-       AND r.badge_category IN ('mentor', 'participant') AND r.id <> $2`,
-    [userId, targetRoleId],
+       AND r.name = ANY($3::text[]) AND r.id <> $2`,
+    [userId, targetRoleId, [ATTENDEE_ROLE_NAMES.mentor, ATTENDEE_ROLE_NAMES.participant]],
   );
   await client.query(
     `INSERT INTO user_roles (user_id, role_id, assigned_by, source)

@@ -137,13 +137,13 @@ describe("H22 accreditation lookup + check-in", () => {
     expect(
       (
         await pool.query(
-          `SELECT r.badge_category FROM user_roles ur
+          `SELECT r.name FROM user_roles ur
              JOIN roles r ON r.id = ur.role_id
-            WHERE ur.user_id = $1 AND r.badge_category = 'mentor'`,
+            WHERE ur.user_id = $1 AND r.name = 'Mentor'`,
           [uid],
         )
-      ).rows[0]?.badge_category,
-    ).toBe("mentor");
+      ).rows[0]?.name,
+    ).toBe("Mentor");
     expect(
       (await pool.query(`SELECT token FROM tickets WHERE user_id = $1`, [uid])).rows,
     ).toHaveLength(1);
@@ -237,7 +237,7 @@ describe("H22 accreditation lookup + check-in", () => {
     // that grant to simulate the same "no more event access" state.
     await pool.query(
       `DELETE FROM user_roles ur USING roles r
-        WHERE ur.role_id = r.id AND ur.user_id = $1 AND r.badge_category = 'participant'`,
+        WHERE ur.role_id = r.id AND ur.user_id = $1 AND r.name = 'Participant'`,
       [uid],
     );
 
