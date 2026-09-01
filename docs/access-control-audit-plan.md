@@ -450,6 +450,81 @@ run with direct Postgres access:
 All three insert an `audit_log` row (`grant_superadmin` / `create_superadmin`
 / `revoke_superadmin`) in the same transaction as the `user_roles` write.
 
+### Configurable, enterprise-scoped automatic role grants (H8, H43-H46, this round)
+
+`role_grant_rules` (0800) was originally a fixed, migration-only mechanism —
+only 0801's Sponsor rule ever populated it, and it applied to every
+occurrence of its trigger globally. This round makes the mechanism fully
+admin-configurable and adds enterprise scoping, closing the "adaptable to
+changes" gap the repo owner asked for: a developer's job is only to define
+*what can happen* (a trigger event) and wire *one* call to
+`applyRoleGrantRule` at the domain event that represents it; from then on an
+admin can freely configure *what results* (which role(s), grant or revoke,
+globally or scoped to one enterprise) with **no further code changes**.
+
+- **Trigger-event registry** (`packages/shared/src/role-grant-triggers.ts`,
+  `TRIGGER_EVENTS`): the fixed, developer-defined vocabulary of trigger
+  strings a rule may react to — the same single-source pattern as
+  `CAPABILITIES`/`EVENTS`, and importable identically by both the API and the
+  web admin UI (`@hackos/shared/role-grant-triggers`). Today's four events:
+  `sponsor.enterprise_linked`, `sponsor.enterprise_unlinked` (unchanged
+  behavior, just now admin-configurable rather than migration-only), and two
+  new ones, `judge.enterprise_assigned`/`judge.enterprise_removed`, fired from
+  `sponsors/service.ts`'s `addEnterpriseJudge`/`removeEnterpriseJudge` — the
+  genuine "this person is now a judge for this company" assignment action.
+  `identity/removal.ts`'s anonymization cleanup and `queue/reset.ts`'s event
+  reset also delete `enterprise_judges` rows, but deliberately do **not**
+  fire this trigger: both are destructive housekeeping on an unrelated
+  lifecycle (account removal, event reset), not a "judge assigned/removed"
+  business event, and firing an auto-revoke rule from a bulk cleanup path
+  could have surprising side effects far outside that cleanup's own scope.
+  Adding a fifth scenario in the future means adding one constant here and
+  one `applyRoleGrantRule` call at its domain event — nothing else.
+- **Enterprise scoping** (`role_grant_rules.enterprise_id`, nullable FK to
+  `enterprises`): `NULL` means "applies to this `trigger_event` for ANY
+  enterprise" (the original, still-default behavior); a specific id scopes
+  the rule to a trigger fired FOR that one enterprise only (e.g. a bespoke
+  role for one sponsor's own reps or judges). `applyRoleGrantRule`
+  (`identity/role-grants.ts`) takes an optional `context: { enterpriseId }`
+  and its lookup is `WHERE trigger_event = $1 AND enabled = true AND
+  (enterprise_id IS NULL OR enterprise_id = $2)` — a global and an
+  enterprise-specific rule for the same event can coexist and both apply,
+  intentionally (a rep linking to a specific sponsor can get both the
+  general Sponsor role and a bespoke one for that company). Every existing
+  call site (`sponsors/service.ts`'s `addEnterpriseMember`/
+  `removeEnterpriseMember`/`addEnterpriseJudge`/`removeEnterpriseJudge`,
+  `identity/routes/invites.ts`'s sponsor-invite acceptance) now passes the
+  relevant `enterpriseId` as context.
+- **Admin CRUD** (`identity/routes/role-grant-rules.ts`): `GET/POST
+  /api/role-grant-rules` and `PATCH/DELETE /api/role-grant-rules/:ruleId`,
+  gated by `permissions:manage` like every other role-administration route.
+  `trigger_event` is validated against the `TRIGGER_EVENTS` registry (an
+  unknown string 400s) — this is a fixed vocabulary of *what can happen*, not
+  a free-text event system. `enterprise_id`, if given, must reference a real
+  enterprise (404 otherwise). Configuring a rule that grants/revokes role X
+  is exactly as privileged as assigning X directly, so creating, editing, or
+  deleting a rule re-runs the SAME two guards `roles.ts` uses for direct
+  assignment — `requireRoleMutationAuthority` (the actor's highest role must
+  sit strictly above X's position) and `requireCapabilityPossessionForAssignment`
+  (unless the actor holds the wildcard, they must already possess every
+  capability X's own rows explicitly ALLOW) — and refuses a protected role
+  outright via `assertNotProtectedRole`, mirroring the exact fix already
+  applied to `applications.grants_role_ids` for the same class of
+  privilege-escalation vector. Every mutation is audited
+  (`entityType: "role_grant_rule"`).
+- **Admin UI**: a new "Automation" tab on `/permissions`
+  (`apps/web/src/app/(app)/permissions/grant-rules-panel.tsx`), alongside the
+  existing "Roles" tab — kept as a sibling top-level tab rather than folded
+  into the per-role editor, since a rule is keyed off a trigger event first
+  and a role second. Lists every rule (trigger, role, enterprise scope,
+  grant/revoke, enabled), and supports create/edit/delete/enable-toggle. The
+  role picker excludes protected roles (mirrors the roles list); the trigger
+  picker is populated from `TRIGGER_EVENTS`; the enterprise picker is
+  populated from `GET /api/enterprises` and degrades to "no enterprise
+  options" (global rules only) if the signed-in admin lacks the sponsor-side
+  capability that route also requires — enterprise scoping is additive, not
+  a hard requirement to use the feature.
+
 ### Soft-delete and restore (0804)
 
 `roles.deleted_at` (nullable `timestamptz`) replaces hard `DELETE` for every
