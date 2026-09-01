@@ -449,6 +449,100 @@ describe("H8 sponsor auto-grant rule and application-confirmation role grant", (
     expect(afterRevoke).toHaveLength(0);
   });
 
+  it("a global rule (enterprise_id NULL) fires for any enterprise passed as context", async () => {
+    const { pool, withTransaction } = await import("../../src/db/pool.js");
+    const { applyRoleGrantRule } = await import("../../src/modules/identity/role-grants.js");
+    const role = await createRole([], { name: "global-trigger-role" });
+    await pool.query(
+      `INSERT INTO role_grant_rules (role_id, trigger_event, action) VALUES ($1, 'sponsor.enterprise_linked', 'grant')`,
+      [role],
+    );
+    const { rows: entRows } = await pool.query(
+      `INSERT INTO enterprises (name) VALUES ('GlobalCo') RETURNING id`,
+    );
+    const enterpriseId = entRows[0].id as number;
+    const userId = await createUser();
+
+    await withTransaction((client) =>
+      applyRoleGrantRule(client, userId, "sponsor.enterprise_linked", null, { enterpriseId }),
+    );
+    const { rows } = await pool.query(
+      `SELECT 1 FROM user_roles WHERE user_id = $1 AND role_id = $2`,
+      [userId, role],
+    );
+    expect(rows).toHaveLength(1);
+  });
+
+  it("an enterprise-scoped rule only fires for that specific enterprise", async () => {
+    const { pool, withTransaction } = await import("../../src/db/pool.js");
+    const { applyRoleGrantRule } = await import("../../src/modules/identity/role-grants.js");
+    const role = await createRole([], { name: "scoped-trigger-role" });
+    const { rows: entRows } = await pool.query(
+      `INSERT INTO enterprises (name) VALUES ('ScopedCo'), ('OtherCo') RETURNING id`,
+    );
+    const scopedEnterpriseId = entRows[0].id as number;
+    const otherEnterpriseId = entRows[1].id as number;
+    await pool.query(
+      `INSERT INTO role_grant_rules (role_id, trigger_event, action, enterprise_id)
+       VALUES ($1, 'sponsor.enterprise_linked', 'grant', $2)`,
+      [role, scopedEnterpriseId],
+    );
+
+    const scopedUser = await createUser();
+    const otherUser = await createUser();
+    await withTransaction((client) =>
+      applyRoleGrantRule(client, scopedUser, "sponsor.enterprise_linked", null, {
+        enterpriseId: scopedEnterpriseId,
+      }),
+    );
+    await withTransaction((client) =>
+      applyRoleGrantRule(client, otherUser, "sponsor.enterprise_linked", null, {
+        enterpriseId: otherEnterpriseId,
+      }),
+    );
+
+    const { rows: scopedGrant } = await pool.query(
+      `SELECT 1 FROM user_roles WHERE user_id = $1 AND role_id = $2`,
+      [scopedUser, role],
+    );
+    expect(scopedGrant).toHaveLength(1);
+    const { rows: otherGrant } = await pool.query(
+      `SELECT 1 FROM user_roles WHERE user_id = $1 AND role_id = $2`,
+      [otherUser, role],
+    );
+    expect(otherGrant).toHaveLength(0);
+  });
+
+  it("a global and an enterprise-specific rule for the same trigger both apply", async () => {
+    const { pool, withTransaction } = await import("../../src/db/pool.js");
+    const { applyRoleGrantRule } = await import("../../src/modules/identity/role-grants.js");
+    const globalRole = await createRole([], { name: "coexist-global-role" });
+    const scopedRole = await createRole([], { name: "coexist-scoped-role" });
+    const { rows: entRows } = await pool.query(
+      `INSERT INTO enterprises (name) VALUES ('CoexistCo') RETURNING id`,
+    );
+    const enterpriseId = entRows[0].id as number;
+    await pool.query(
+      `INSERT INTO role_grant_rules (role_id, trigger_event, action) VALUES ($1, 'sponsor.enterprise_linked', 'grant')`,
+      [globalRole],
+    );
+    await pool.query(
+      `INSERT INTO role_grant_rules (role_id, trigger_event, action, enterprise_id)
+       VALUES ($1, 'sponsor.enterprise_linked', 'grant', $2)`,
+      [scopedRole, enterpriseId],
+    );
+    const userId = await createUser();
+
+    await withTransaction((client) =>
+      applyRoleGrantRule(client, userId, "sponsor.enterprise_linked", null, { enterpriseId }),
+    );
+    const { rows } = await pool.query(
+      `SELECT role_id FROM user_roles WHERE user_id = $1 ORDER BY role_id`,
+      [userId],
+    );
+    expect(rows.map((r) => r.role_id).sort()).toEqual([globalRole, scopedRole].sort());
+  });
+
   it("grants every one of a form's configured roles on confirmation, alongside ticket issuance", async () => {
     const { pool } = await import("../../src/db/pool.js");
     const grantedRoleA = await createRole([], { name: "confirmed-applicant-role-a" });
@@ -1607,5 +1701,149 @@ describe("H8 seed-diff and reset-to-default (0807)", () => {
     });
     expect(res.statusCode).toBe(403);
     expect(res.json().error.message).toMatch(/possess/i);
+  });
+});
+
+describe("H8 role-grant-rules CRUD API", () => {
+  async function highPositionManager(extraCapabilities: string[] = []): Promise<number> {
+    const actor = await createUserWithCapabilities([
+      CAPABILITIES.PERMISSIONS_MANAGE,
+      ...extraCapabilities,
+    ]);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE roles SET position = 1000000 WHERE id IN (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+      [actor],
+    );
+    return actor;
+  }
+
+  it("creates, lists, updates and deletes a rule, auditing every mutation", async () => {
+    const a = await getApp();
+    const actor = await highPositionManager([CAPABILITIES.ACCREDIT_SCAN]);
+    const role = await createRole([CAPABILITIES.ACCREDIT_SCAN], { name: "grant-rule-target" });
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [role]);
+
+    const created = await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: { roleId: role, triggerEvent: "sponsor.enterprise_linked", action: "grant" },
+    });
+    expect(created.statusCode).toBe(201);
+    const ruleId = created.json().id as number;
+    expect(created.json()).toMatchObject({
+      roleId: role,
+      triggerEvent: "sponsor.enterprise_linked",
+      action: "grant",
+      enabled: true,
+      enterpriseId: null,
+    });
+
+    const listed = await a.inject({
+      method: "GET",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+    });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json().map((r: { id: number }) => r.id)).toContain(ruleId);
+
+    const updated = await a.inject({
+      method: "PATCH",
+      url: `/api/role-grant-rules/${ruleId}`,
+      headers: asUser(actor),
+      payload: { enabled: false },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().enabled).toBe(false);
+
+    const deleted = await a.inject({
+      method: "DELETE",
+      url: `/api/role-grant-rules/${ruleId}`,
+      headers: asUser(actor),
+    });
+    expect(deleted.statusCode).toBe(200);
+
+    const audits = await pool.query(
+      `SELECT action FROM audit_log WHERE entity_type = 'role_grant_rule' AND entity_id = $1 ORDER BY id`,
+      [String(ruleId)],
+    );
+    expect(audits.rows.map((r) => r.action)).toEqual(["create", "update", "delete"]);
+  });
+
+  it("rejects an unknown trigger_event string", async () => {
+    const a = await getApp();
+    const actor = await highPositionManager();
+    const role = await createRole([], { name: "unknown-trigger-target" });
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: { roleId: role, triggerEvent: "made.up_event", action: "grant" },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("rejects creating a rule for a role at/above the actor's own highest role", async () => {
+    const a = await getApp();
+    const actor = await createUserWithCapabilities([CAPABILITIES.PERMISSIONS_MANAGE]);
+    const { pool } = await import("../../src/db/pool.js");
+    // Actor sits at a low position; the target role sits above it.
+    await pool.query(
+      `UPDATE roles SET position = 5 WHERE id IN (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+      [actor],
+    );
+    const highRole = await createRole([], { name: "above-actor-role" });
+    await pool.query(`UPDATE roles SET position = 999999 WHERE id = $1`, [highRole]);
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: { roleId: highRole, triggerEvent: "sponsor.enterprise_linked", action: "grant" },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("rejects creating a rule granting a role with capabilities the actor doesn't possess", async () => {
+    const a = await getApp();
+    const actor = await highPositionManager();
+    const role = await createRole([CAPABILITIES.ACCREDIT_SCAN], {
+      name: "unpossessed-capability-role",
+    });
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [role]);
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: { roleId: role, triggerEvent: "sponsor.enterprise_linked", action: "grant" },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.message).toMatch(/possess/i);
+  });
+
+  it("rejects targeting a protected role", async () => {
+    const a = await getApp();
+    const actor = await highPositionManager();
+    const protectedRole = await createRole([], {
+      name: "protected-grant-rule-target",
+      isProtected: true,
+    });
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: {
+        roleId: protectedRole,
+        triggerEvent: "sponsor.enterprise_linked",
+        action: "grant",
+      },
+    });
+    expect(res.statusCode).toBe(403);
   });
 });
