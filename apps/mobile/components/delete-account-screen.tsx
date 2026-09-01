@@ -7,6 +7,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -34,6 +35,7 @@ import {
   requestAccountRemovalPin,
 } from "@/lib/self-service";
 import { clearAccountData } from "@/lib/storage-usage";
+import { useRetryOnReconnect } from "@/lib/use-retry-on-reconnect";
 import { colors } from "@/theme/colors";
 
 type AccountRemovalAction = AccountRemovalEligibility["action"];
@@ -112,6 +114,10 @@ export default function DeleteAccountScreen() {
   useEffect(() => {
     void loadRemovalEligibility();
   }, [loadRemovalEligibility]);
+
+  // No connection when this screen first loaded — keep checking instead of
+  // leaving the user stuck behind a manual Retry tap.
+  useRetryOnReconnect(removalErrorKind === "load", loadRemovalEligibility);
 
   // Each visit starts with the explanation again. A PIN sent during a previous
   // visit must not silently turn the next visit into a confirmation screen.
@@ -543,6 +549,12 @@ export default function DeleteAccountScreen() {
             }}
             keyboardDismissMode="interactive"
             keyboardShouldPersistTaps="handled"
+            refreshControl={
+              <RefreshControl
+                refreshing={removalLoading && removalEligibility !== null}
+                onRefresh={() => void loadRemovalEligibility()}
+              />
+            }
             style={{ flex: 1 }}
           >
             {error ? <RequestFeedback error={error} onRetry={() => void refetch()} /> : null}

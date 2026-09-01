@@ -528,9 +528,9 @@ export function ScannerTransactionStatus({
               fontSize: 13,
             }}
           >
-            {scan.status === "failed" ? t("scannerBusinessRejected") : t("scannerOfflineWaiting")}
-            {": "}
-            {scan.lastError}
+            {scan.status === "failed"
+              ? `${t("scannerBusinessRejected")}: ${scan.lastError}`
+              : t("scannerOfflineWaiting")}
           </Text>
         ) : state === "saved" ? (
           <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>

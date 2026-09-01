@@ -340,7 +340,7 @@ function QueueRow({
           selectable
           style={{ color: colors.destructive, fontSize: 13, lineHeight: 18, paddingLeft: 29 }}
         >
-          {scan.lastError}
+          {scan.status === "failed" ? scan.lastError : t("scannerOfflineWaiting")}
         </Text>
       ) : null}
       {scan.status === "failed" || scan.lastError ? (

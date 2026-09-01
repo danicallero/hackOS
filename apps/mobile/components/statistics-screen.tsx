@@ -1,6 +1,13 @@
 import { useRouter, useScrollToTop } from "expo-router";
-import { useEffect, useRef, useState } from "react";
-import { ScrollView, Text, type TextStyle, useColorScheme, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  RefreshControl,
+  ScrollView,
+  Text,
+  type TextStyle,
+  useColorScheme,
+  View,
+} from "react-native";
 
 import { ActionButton, InfoRow, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -10,6 +17,7 @@ import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { fetchMyScanStats, type MyScanStats } from "@/lib/scan-log";
 import { SCAN_LOG_ROUTES } from "@/lib/scan-log-navigation";
 import { canViewStaffStatistics } from "@/lib/tabs";
+import { useRetryOnReconnect } from "@/lib/use-retry-on-reconnect";
 import { colors } from "@/theme/colors";
 
 /** Personal scan statistics and staff operations (H22-H27). */
@@ -22,31 +30,39 @@ export default function StatisticsScreen() {
   const { me, loading, error, refetch } = useMeContext();
   const [myStats, setMyStats] = useState<MyScanStats | null>(null);
   const [statsError, setStatsError] = useState<Error | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useScrollToTop(scrollRef);
 
   const canViewStats = canViewStaffStatistics(me?.capabilities ?? []);
 
-  useEffect(() => {
+  const loadStats = useCallback(async () => {
     if (!canViewStats) {
       setMyStats(null);
       setStatsError(null);
       return;
     }
-
-    let active = true;
     setStatsError(null);
-    fetchMyScanStats()
-      .then((stats) => {
-        if (active) setMyStats(stats);
-      })
-      .catch((cause) => {
-        if (active) setStatsError(cause instanceof Error ? cause : new Error());
-      });
-    return () => {
-      active = false;
-    };
+    try {
+      setMyStats(await fetchMyScanStats());
+    } catch (cause) {
+      setStatsError(cause instanceof Error ? cause : new Error());
+    }
   }, [canViewStats]);
+
+  useEffect(() => {
+    void loadStats();
+  }, [loadStats]);
+
+  // No connection yet when this screen first loaded — keep checking instead
+  // of leaving the error on screen until the user manually retries.
+  useRetryOnReconnect(statsError !== null, loadStats);
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await Promise.all([refetch(), loadStats()]);
+    setRefreshing(false);
+  }
 
   if (loading && !me) {
     return (
@@ -89,6 +105,7 @@ export default function StatisticsScreen() {
         padding: 16,
         paddingBottom: Math.max(32, tabBarBottomInset + 16),
       }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
     >
       <Text
         style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 21, paddingHorizontal: 4 }}
@@ -100,13 +117,7 @@ export default function StatisticsScreen() {
         <RequestFeedback
           error={statsError}
           message={t("statisticsCouldNotLoad")}
-          onRetry={() => {
-            setMyStats(null);
-            setStatsError(null);
-            void fetchMyScanStats()
-              .then(setMyStats)
-              .catch((cause) => setStatsError(cause instanceof Error ? cause : new Error()));
-          }}
+          onRetry={() => void loadStats()}
         />
       ) : null}
 
