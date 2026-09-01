@@ -1,7 +1,28 @@
 import { ALL_CAPABILITIES } from "@hackos/shared/capabilities";
+import { ALL_TRIGGER_EVENTS, TRIGGER_EVENTS } from "@hackos/shared/role-grant-triggers";
 import type { MultiSelectOption } from "@/components/common/multi-select";
 import type { MessageKey, Translate } from "@/lib/i18n";
 import type { RoleTemplate, UserListItem } from "@/lib/types";
+
+export { ALL_TRIGGER_EVENTS };
+
+/**
+ * Human label for a trigger_event constant (H8). The registry itself
+ * (packages/shared/src/role-grant-triggers.ts) is the single source of the
+ * event strings; this maps each one to its own translated label, the same
+ * pattern prettifyCapability uses for the capability catalogue below.
+ */
+const TRIGGER_EVENT_LABEL_KEYS: Record<string, MessageKey> = {
+  [TRIGGER_EVENTS.SPONSOR_ENTERPRISE_LINKED]: "triggerEventSponsorEnterpriseLinked",
+  [TRIGGER_EVENTS.SPONSOR_ENTERPRISE_UNLINKED]: "triggerEventSponsorEnterpriseUnlinked",
+  [TRIGGER_EVENTS.JUDGE_ENTERPRISE_ASSIGNED]: "triggerEventJudgeEnterpriseAssigned",
+  [TRIGGER_EVENTS.JUDGE_ENTERPRISE_REMOVED]: "triggerEventJudgeEnterpriseRemoved",
+};
+
+export function triggerEventLabel(event: string, t: Translate): string {
+  const key = TRIGGER_EVENT_LABEL_KEYS[event];
+  return key ? t(key) : event;
+}
 
 /**
  * Capability presentation helpers (H8). The catalogue is derived entirely from

@@ -123,6 +123,19 @@ export interface RoleSeedDiff {
   diff: { capability: string; current: PermissionState; default: PermissionState }[];
 }
 
+/** GET/POST/PATCH /api/role-grant-rules item (H8: admin-configurable automatic role grant/revoke rules). */
+export interface RoleGrantRule {
+  id: number;
+  roleId: number;
+  roleName: string;
+  triggerEvent: string;
+  action: "grant" | "revoke";
+  enabled: boolean;
+  /** null = applies to every occurrence of triggerEvent, not just one enterprise. */
+  enterpriseId: number | null;
+  enterpriseName: string | null;
+}
+
 /** GET /api/role-templates item. Keys select the web i18n catalogue. */
 export interface RoleTemplate {
   key: string;

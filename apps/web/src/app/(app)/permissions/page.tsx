@@ -15,6 +15,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
+import { TabBar } from "@/components/common/tab-bar";
 import type { UserOption } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -35,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Section } from "@/components/ui/surface";
+import { Tabs, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError, api } from "@/lib/api";
@@ -48,6 +50,7 @@ import type {
   UserList,
   UserListItem,
 } from "@/lib/types";
+import { GrantRulesPanel } from "./grant-rules-panel";
 import { permissionTemplateName } from "./helpers";
 import { DrilldownBackButton, RoleEditor } from "./role-editor";
 import { RoleList } from "./role-list";
@@ -95,6 +98,11 @@ export default function PermissionsPage() {
   const [deletedRoles, setDeletedRoles] = useState<RoleSummary[]>([]);
   const [trashLoading, setTrashLoading] = useState(false);
   const [restoringId, setRestoringId] = useState<number | null>(null);
+  // H8: a top-level Roles/Automation switch, kept as plain local state rather
+  // than URL-tied — RoleEditor already owns the `?tab=` param for its own
+  // Display/Capabilities/Members sub-tabs, and a second tab group can't share
+  // that same query key.
+  const [view, setView] = useState<"roles" | "automation">("roles");
 
   const selectedId = (() => {
     const raw = searchParams.get("role");
@@ -383,63 +391,82 @@ export default function PermissionsPage() {
     />
   );
 
+  // The Roles/Automation switch only makes sense from the top-level list
+  // screen — a mobile drill-down into a role or the trash already owns its
+  // own back button, so it stays hidden there (matches showHeader's logic).
+  const topLevel = showHeader;
+
   return (
     <div className="space-y-8">
-      {showHeader && (
-        <PageHeader
-          title={t("rolesTitle")}
-          primaryAction={
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={toggleTrash}>
-                <Trash2Icon /> {t("trashTitle")}
-              </Button>
-              <Button onClick={() => setCreateOpen(true)}>
-                <PlusIcon /> {t("newRole")}
-              </Button>
-            </div>
-          }
-        />
+      {topLevel && (
+        <Tabs value={view} onValueChange={(v) => setView(v as "roles" | "automation")}>
+          <TabBar aria-label={t("rolesTitle")}>
+            <TabsTrigger value="roles">{t("rolesTitle")}</TabsTrigger>
+            <TabsTrigger value="automation">{t("automationTab")}</TabsTrigger>
+          </TabBar>
+        </Tabs>
       )}
 
-      {isMobile ? (
-        showTrash ? (
-          <div className="space-y-4">
-            <DrilldownBackButton label={t("backToRoles")} onClick={() => setShowTrash(false)} />
-            {trashPanel}
-          </div>
-        ) : selectedRole ? (
-          roleEditor
-        ) : loadError ? (
-          <ContextualError message={loadError} onRetry={() => void load()} />
-        ) : (
-          <Section padding="none" className="overflow-hidden">
-            {rolesListBody}
-          </Section>
-        )
+      {view === "automation" ? (
+        <GrantRulesPanel roles={roles} />
       ) : (
         <>
-          {showTrash && trashPanel}
+          {showHeader && (
+            <PageHeader
+              title={t("rolesTitle")}
+              primaryAction={
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={toggleTrash}>
+                    <Trash2Icon /> {t("trashTitle")}
+                  </Button>
+                  <Button onClick={() => setCreateOpen(true)}>
+                    <PlusIcon /> {t("newRole")}
+                  </Button>
+                </div>
+              }
+            />
+          )}
 
-          {loadError ? (
-            <ContextualError message={loadError} onRetry={() => void load()} />
-          ) : (
-            <div className="grid gap-6 lg:grid-cols-[320px_1fr] lg:items-start">
+          {isMobile ? (
+            showTrash ? (
+              <div className="space-y-4">
+                <DrilldownBackButton label={t("backToRoles")} onClick={() => setShowTrash(false)} />
+                {trashPanel}
+              </div>
+            ) : selectedRole ? (
+              roleEditor
+            ) : loadError ? (
+              <ContextualError message={loadError} onRetry={() => void load()} />
+            ) : (
               <Section padding="none" className="overflow-hidden">
                 {rolesListBody}
               </Section>
+            )
+          ) : (
+            <>
+              {showTrash && trashPanel}
 
-              {selectedRole
-                ? roleEditor
-                : !loading && (
-                    <Section>
-                      <EmptyState icon={ShieldCheckIcon} title={t("selectRoleHint")} />
-                    </Section>
-                  )}
-            </div>
+              {loadError ? (
+                <ContextualError message={loadError} onRetry={() => void load()} />
+              ) : (
+                <div className="grid gap-6 lg:grid-cols-[320px_1fr] lg:items-start">
+                  <Section padding="none" className="overflow-hidden">
+                    {rolesListBody}
+                  </Section>
+
+                  {selectedRole
+                    ? roleEditor
+                    : !loading && (
+                        <Section>
+                          <EmptyState icon={ShieldCheckIcon} title={t("selectRoleHint")} />
+                        </Section>
+                      )}
+                </div>
+              )}
+            </>
           )}
         </>
       )}
-
       <Modal
         open={createOpen}
         onOpenChange={setCreateOpen}
