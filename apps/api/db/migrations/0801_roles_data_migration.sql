@@ -168,10 +168,13 @@ SELECT id, 'sponsor.enterprise_unlinked', 'revoke', true FROM roles WHERE name =
 
 -- Backfill: every user already linked to an enterprise gets the Sponsor role
 -- too, so migration doesn't regress the enterprise-membership-implies-access
--- behavior for accounts that predate this cutover.
+-- behavior for accounts that predate this cutover. A `sponsors` row can have
+-- a NULL user_id in real data — the anonymization flow nulls it out while
+-- keeping the row itself when it's still referenced by challenges.author —
+-- so those rows must be excluded, not just deduplicated.
 INSERT INTO user_roles (user_id, role_id, assigned_by, assigned_at, source)
 SELECT DISTINCT s.user_id, r.id, NULL::integer, now(), 'sponsor.enterprise_linked'
 FROM sponsors s
 CROSS JOIN roles r
-WHERE r.name = 'Sponsor'
+WHERE r.name = 'Sponsor' AND s.user_id IS NOT NULL
 ON CONFLICT (user_id, role_id) DO NOTHING;
