@@ -15,7 +15,7 @@ import {
 import { TEST_DATABASE_URL } from "../test-env.js";
 
 /**
- * H8: the Discord-style hierarchical role model — tri-state (ALLOW/DENY/
+ * H8: the hierarchical, position-ordered multi-role model — tri-state (ALLOW/DENY/
  * INHERIT) resolution over a user's own assigned roles, admin-hierarchy
  * mutation authority, and the roles CRUD/assignment API that replaced
  * capability-group management.

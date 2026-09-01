@@ -1,4 +1,4 @@
--- 0800_roles_schema.sql — DELTA(H8): Discord-style hierarchical roles replace
+-- 0800_roles_schema.sql — DELTA(H8): a hierarchical, position-ordered multi-role model replaces
 -- capability groups as the authorization source. A user may hold several
 -- roles; roles sit on one global reorderable hierarchy (`position`, higher =
 -- more priority); each role holds ALLOW/DENY/INHERIT per capability.

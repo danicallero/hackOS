@@ -141,7 +141,7 @@ export async function roleGrantsWildcard(
 }
 
 /**
- * Discord-style admin-hierarchy authority guard (H8): to assign, remove,
+ * The multi-role hierarchy's admin-authority guard (H8): to assign, remove,
  * edit, or reorder a role, the actor's highest assigned-role position must
  * be STRICTLY greater than the role's position (the NEW position, for a
  * reorder — validate the post-update value, never just the current one).

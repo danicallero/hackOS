@@ -4,7 +4,7 @@ import { pool, type Queryable } from "../db/pool.js";
 import { BadRequestError, ForbiddenError, UnauthorizedError } from "./errors.js";
 
 /**
- * Capability resolution (H8). Discord-style hierarchical roles replace
+ * Capability resolution (H8). A hierarchical, position-ordered multi-role model replaces
  * capability groups as the authorization source: a user may hold several
  * roles; roles sit on one global reorderable hierarchy (`roles.position`,
  * higher = more priority); each role holds an ALLOW/DENY/INHERIT tri-state

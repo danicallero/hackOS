@@ -111,7 +111,7 @@ export interface UserDetail extends Omit<Me, "role" | "capabilities" | "roles"> 
 
 export type PermissionState = "allow" | "deny" | "inherit";
 
-/** GET /api/roles item (H8: the Discord-style hierarchical role model). */
+/** GET /api/roles item (H8: the hierarchical, position-ordered multi-role model). */
 export interface RoleSummary {
   id: number;
   name: string;

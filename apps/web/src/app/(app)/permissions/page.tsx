@@ -51,7 +51,7 @@ import { permissionTemplateName } from "./helpers";
 import { BADGE_CATEGORIES, badgeCategoryLabel, RoleEditor } from "./role-editor";
 import { RoleList } from "./role-list";
 
-// H8: admins manage a Discord-style hierarchical role model on a single
+// H8: admins manage a hierarchical, position-ordered multi-role model on a single
 // master-detail page — the left column lists every role on one reorderable
 // hierarchy, the right column edits whichever role is selected (persisted as
 // ?role=<id> for deep links, e.g. from a user's permissions tab). This

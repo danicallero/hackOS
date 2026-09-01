@@ -32,7 +32,7 @@ export interface EffectiveRole {
  * H8's actual "public role" concept: the user's highest-position role among
  * their assigned roles that is marked `is_visible`, together with that
  * role's badge_category — or null if they hold no visible role at all. This
- * is the literal Discord-style hierarchy answer: every consumer that used to
+ * is the literal multi-role hierarchy answer: every consumer that used to
  * switch on the fixed DerivedRole enum now resolves through this (or its
  * thin wrapper getBadgeCategory below) instead of guessing from
  * capabilities/relationship tables and a stale applications.type snapshot.

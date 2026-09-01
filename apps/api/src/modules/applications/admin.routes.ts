@@ -36,7 +36,7 @@ async function assertRolesExist(client: Queryable, roleIds: number[]): Promise<v
 /**
  * H8/H11: configuring a form to grant role X on confirmation is functionally
  * equivalent to being able to hand X to anyone who gets confirmed through it
- * — so it's gated by the exact same Discord-style hierarchy + capability-
+ * — so it's gated by the exact same multi-role hierarchy + capability-
  * content authority that direct role assignment uses (routes/roles.ts), not
  * merely applications:manage. Rejects the whole request (throws on the first
  * failing role) rather than applying any grants partially. Assumes

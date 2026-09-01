@@ -98,7 +98,7 @@ function toStateMap(role: RoleSummary): CapabilityStateMap {
 }
 
 /**
- * The right-hand editor panel of the Discord-style master-detail roles page
+ * The right-hand editor panel of the multi-role hierarchy's master-detail roles page
  * (H8): Display / Permissions / Manage members tabs for one selected role.
  * Every save calls back into the parent, which owns the roles list and
  * re-syncs this role in place — this component holds only in-progress edits.

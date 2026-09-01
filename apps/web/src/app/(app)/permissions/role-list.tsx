@@ -27,7 +27,7 @@ import { cn } from "@/lib/utils";
 const SUPERADMIN_NAME = "system:superadmin";
 
 /**
- * Discord-style flat, reorderable role list (H8). Drag or keyboard-move a row
+ * A flat, reorderable role list (H8). Drag or keyboard-move a row
  * to reorder — the new position is the midpoint between its new neighbors'
  * `position` values; when there isn't room, `onReorder` reports failure and
  * the caller reverts. `system:superadmin` is real state worth seeing (who

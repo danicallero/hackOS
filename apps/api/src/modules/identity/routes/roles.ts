@@ -30,7 +30,7 @@ import {
 import { getPermissionGroupTemplate, PERMISSION_GROUP_TEMPLATES } from "../templates.js";
 
 /**
- * Role management (H8): a Discord-style hierarchical role model replaces
+ * Role management (H8): a hierarchical, position-ordered multi-role model replaces
  * capability groups as the authorization source. A user may hold several
  * roles; roles sit on one global reorderable hierarchy (`position`, higher =
  * more priority); each role holds an ALLOW/DENY/INHERIT tri-state per
