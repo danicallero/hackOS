@@ -3,7 +3,7 @@ import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Stack } from "expo-router/stack";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { AdaptiveBackButton, AdaptiveToolbarButton } from "@/components/native-ui";
@@ -342,6 +342,8 @@ function ActivityResultPanel({
   onRegisterAnother: () => void;
 }) {
   const { t } = useLocale();
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const meal = isMealActivityKind(activity?.category);
   const repeatPending = result.state === "repeat_pending";
   const fullName =
@@ -351,6 +353,10 @@ function ActivityResultPanel({
     (result.person.intolerances.length > 0 ||
       result.person.foodIntoleranceNotes ||
       result.person.notes);
+  // Long dietary notes can otherwise push the close/confirm buttons off the
+  // bottom of the screen with no way to scroll to them — cap the card and
+  // let its body scroll instead, keeping the buttons always reachable.
+  const cardMaxHeight = windowHeight - insets.top - insets.bottom - tabBarBottomInset - 40;
 
   return (
     <View
@@ -374,12 +380,13 @@ function ActivityResultPanel({
         style={{
           borderCurve: "continuous",
           borderRadius: 28,
+          maxHeight: cardMaxHeight,
           maxWidth: 390,
           overflow: "hidden",
           width: "100%",
         }}
       >
-        <View style={{ gap: 18, padding: 20 }}>
+        <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 18, padding: 20 }}>
           <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 16 }}>
             <View style={{ flex: 1, gap: 5 }}>
               <View style={{ alignItems: "center", flexDirection: "row", gap: 7 }}>
@@ -526,7 +533,9 @@ function ActivityResultPanel({
               {t("scannerBusinessRejected")}: {result.error}
             </Text>
           ) : null}
+        </ScrollView>
 
+        <View style={{ paddingBottom: 20, paddingHorizontal: 20, paddingTop: 4 }}>
           {repeatPending ? (
             <View style={{ flexDirection: "row", gap: 10 }}>
               <ResultActionButton

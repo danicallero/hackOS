@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 
 import { readCachedValue, writeCachedValue } from "./offline-cache";
+import { useRetryOnReconnect } from "./use-retry-on-reconnect";
 
 type Updater<T> = T | ((current: T | null) => T | null);
 
@@ -63,6 +64,11 @@ export function useCachedApi<T>(cacheKey: string, fetcher: () => Promise<T>) {
       if (currentRequest === requestId.current) setLoading(false);
     }
   }, [cacheKey, fetcher]);
+
+  // A hard error (no cache to fall back to) recovers on its own once
+  // connectivity returns, instead of leaving the screen stuck behind a
+  // manual Retry tap.
+  useRetryOnReconnect(error !== null, load);
 
   return { data, error, loading, staleSince, load, setData };
 }
