@@ -17,6 +17,7 @@
     "superadmin:create": "tsx scripts/create-superadmin.ts",
     "superadmin:grant": "node scripts/grant-superadmin.mjs",
     "superadmin:revoke": "node scripts/revoke-superadmin.mjs",
+    "superadmin:list": "node scripts/list-superadmins.mjs",
     "route-policy:audit": "tsx scripts/route-policy-audit.ts",
     "test": "vitest run",
     "test:watch": "vitest"

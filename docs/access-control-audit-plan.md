@@ -433,19 +433,29 @@ the other blocks every mutation on whatever role the DB flag names. Its
 capability set stays exactly `{'*': allow}` because nothing can ever change
 it through the API.
 
-The only way to grant or revoke `system:superadmin` is a server-shell script,
-run with direct Postgres access:
+The only way to grant, look up, or revoke `system:superadmin` is a
+server-shell script, run with direct Postgres access:
 
 - `pnpm --filter @hackos/api superadmin:create` (`scripts/create-superadmin.ts`) —
   create-or-upgrade an account to superadmin.
 - `pnpm --filter @hackos/api superadmin:grant` (`scripts/grant-superadmin.mjs`) —
   attach it to an existing account (plain Node ESM, no build step, for
   environments without `tsx`).
+- `pnpm --filter @hackos/api superadmin:list` (`scripts/list-superadmins.mjs`) —
+  read-only: lists every account currently holding `system:superadmin`
+  (`user_id`, email, name, grant timestamp), by joining `user_roles`/`roles`
+  on the role's fixed name rather than resolving `*` generically, so it can't
+  be confused by some other role an admin separately configured to also
+  carry the wildcard.
 - `pnpm --filter @hackos/api superadmin:revoke` (`scripts/revoke-superadmin.mjs`) —
   remove it from an account. Refuses if that would leave zero active
   superadmins, replicating `assertActiveWildcardHolder`'s resolved-tri-state
   query scoped to `system:superadmin`'s `*` grant and excluding the target
   user.
+
+None of these three are reachable through the HTTP API in any form — by
+design, seeing or changing who holds superadmin always requires shell access
+to the database host, never just an authenticated admin session.
 
 All three insert an `audit_log` row (`grant_superadmin` / `create_superadmin`
 / `revoke_superadmin`) in the same transaction as the `user_roles` write.
