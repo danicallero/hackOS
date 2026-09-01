@@ -5,9 +5,9 @@
 -- actually granted on confirmation (`application_grants_roles`, H8) — a form
 -- could be typed 'participant' while actually granting the Mentor role, or
 -- vice versa. The real, drift-proof answer is now always "which role(s) does
--- this form grant" (application_grants_roles joined to roles.badge_category,
--- the same durable per-role classification identity/role.ts already uses for
--- badge/wallet/scanner display — see 0800_roles_schema.sql).
+-- this form grant" (application_grants_roles joined to roles.name, the same
+-- durable per-role identity identity/role.ts already uses for badge/wallet/
+-- scanner display — see 0800_roles_schema.sql).
 --
 -- The column is kept (nullable) purely so existing rows' historical value is
 -- still inspectable — it is never written by the API anymore (create/update
@@ -15,4 +15,4 @@
 ALTER TABLE applications ALTER COLUMN type DROP NOT NULL;
 
 COMMENT ON COLUMN applications.type IS
-  'DEPRECATED (H8): legacy static classification, no longer set by the API or read as authoritative for any behavior. See application_grants_roles + roles.badge_category (granted_badge_category in admin.routes.ts COLUMNS) for the real, drift-proof classification.';
+  'DEPRECATED (H8): legacy static classification, no longer set by the API or read as authoritative for any behavior. See application_grants_roles + roles.name (granted_role_name in admin.routes.ts COLUMNS) for the real, drift-proof classification.';

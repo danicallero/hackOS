@@ -46,11 +46,11 @@ SELECT user_id, capability
  WHERE state = 'allow';
 
 -- H8 full-replacement: same soft-delete fix as user_effective_capabilities
--- above, applied to user_effective_badge_category (0800), which couldn't
+-- above, applied to user_effective_role_name (0800), which couldn't
 -- filter deleted_at itself since the column didn't exist yet at that point.
-CREATE OR REPLACE VIEW user_effective_badge_category AS
+CREATE OR REPLACE VIEW user_effective_role_name AS
 SELECT DISTINCT ON (ur.user_id)
-       ur.user_id, r.badge_category, r.name AS role_name
+       ur.user_id, r.name AS role_name
   FROM user_roles ur
   JOIN roles r ON r.id = ur.role_id
  WHERE r.is_visible = true AND r.deleted_at IS NULL

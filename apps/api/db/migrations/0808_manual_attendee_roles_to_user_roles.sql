@@ -10,8 +10,8 @@
 -- EXISTING manual_attendee_roles row onto the equivalent user_roles grant so
 -- an account classified before this cutover doesn't lose its badge/wallet/
 -- scanner category the moment this ships. manual_attendee_roles itself is
--- NOT dropped — see role.ts's hasEventAccess/getBadgeCategory doc comment
--- for why a couple of read paths still reference it defensively.
+-- NOT dropped — see role.ts's hasEventAccess doc comment for why a couple of
+-- read paths still reference it defensively.
 INSERT INTO user_roles (user_id, role_id, assigned_by, assigned_at, source)
 SELECT mar.user_id, r.id, mar.assigned_by, mar.assigned_at, 'manual_attendee_roles_migration'
   FROM manual_attendee_roles mar

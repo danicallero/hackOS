@@ -46,15 +46,6 @@ Enum queue_status {
   disqualified
 }
 
-Enum role_badge_category {
-  admin
-  judge
-  sponsor
-  staff
-  mentor
-  participant
-}
-
 Enum token_type {
   primary_email
   secondary_email
@@ -248,7 +239,7 @@ Table application_responses {
 Table applications {
   id integer [pk, increment, not null]
   name text [not null]
-  type text [note: 'DEPRECATED (H8): legacy static classification, no longer set by the API or read as authoritative for any behavior. See application_grants_roles + roles.badge_category (granted_badge_category in admin.routes.ts COLUMNS) for the real, drift-proof classification.']
+  type text [note: 'DEPRECATED (H8): legacy static classification, no longer set by the API or read as authoritative for any behavior. See application_grants_roles + roles.name (granted_role_name in admin.routes.ts COLUMNS) for the real, drift-proof classification.']
   template jsonb [not null]
   description text
   active boolean [not null, default: `true`]
@@ -747,7 +738,6 @@ Table roles {
   is_visible boolean [not null, default: `true`]
   is_protected boolean [not null, default: `false`, note: 'H8: the real, enforced lockout — every HTTP mutation route (rename/reorder/capability-edit/delete/restore/assign/unassign) refuses a role with is_protected = true outright, unconditional on the actor\'s own capabilities (role-authority.ts assertNotProtectedRole). Never settable via POST/PATCH /api/roles; only ever flipped by direct DB/CLI action. Only system:superadmin carries it as of this migration (0801\'s "Platform administrator" template row was corrected to false — every default role stays deletable/editable like any other role), but any future role given this flag gets the identical lockout automatically.']
   is_seeded boolean [not null, default: `false`]
-  badge_category role_badge_category [not null, default: `'staff'::role_badge_category`]
   created_at "timestamp with time zone" [not null, default: `now()`]
   updated_at "timestamp with time zone" [not null, default: `now()`]
   deleted_at "timestamp with time zone" [note: 'H8: soft-delete marker. Non-null excludes the role from capability resolution (user_effective_capabilities), from default GET /api/roles listings, and from every "highest role" / wildcard-holder computation, as if the user held no such role. A deleted role\'s position becomes available for reuse (see roles_position_idx below); POST .../restore 409s only if a still-live role has since taken that exact slot.']
