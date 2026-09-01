@@ -28,6 +28,7 @@ import { REPO_MEMBER_RELATION_SQL } from "../queue/membership.js";
 import { type DeletedQueueEntryNotification, notifyDeletedQueueEntries } from "../queue/notify.js";
 import { consumeRemovalPin } from "./removal-pin.js";
 import { purgeReviewFixtureQueuesForUser } from "./review-fixture-queues.js";
+import { getAssignedRoles } from "./role.js";
 import {
   assertActiveWildcardHolder,
   lockRoleGraph,
@@ -1760,10 +1761,29 @@ export async function finalizeAccountRemoval(
   const wasWildcardHolder = await userHasWildcardRegardlessOfState(client, user.id);
   let anonymousId: string | null = null;
   let retainedApplicationFields: AnonymousAuditField[] = [];
+  let retainedRoleNames: string[] = [];
   if (options.action === "anonymize") {
     anonymousId = randomUUID();
     retainedApplicationFields = await extractAnonymousAuditFields(client, user);
     const guaranteedMinutes = await guaranteedMinutesAtRemoval(client, user.id);
+    // H8/H53: the departing identity's own role assignments collapse to
+    // visible-only before the users row (and therefore every user_roles row,
+    // via ON DELETE CASCADE) is gone below. The org's stated intent is
+    // coarse — "I care they were staff", not the granular internal role name
+    // a hidden role like "Door Operator" would otherwise carry — so the
+    // hidden-role rows are dropped explicitly here and only the visible
+    // role names are copied into the permanent anonymous_participant audit
+    // trail (below), the one place that outlives this transaction's final
+    // DELETE FROM users. This never touches roles this person assigned to
+    // OTHERS (assigned_by is nulled separately in scrubRelationships).
+    const assignedRoles = await getAssignedRoles(client, user.id);
+    retainedRoleNames = assignedRoles.filter((role) => role.isVisible).map((role) => role.name);
+    await client.query(
+      `DELETE FROM user_roles ur
+         USING roles r
+        WHERE ur.role_id = r.id AND ur.user_id = $1 AND r.is_visible = false`,
+      [user.id],
+    );
     await client.query(
       `INSERT INTO anonymous_participants
          (id, guaranteed_presence_minutes, is_test_account)
@@ -1841,6 +1861,10 @@ export async function finalizeAccountRemoval(
       ip: null,
       userAgent: null,
       after: {
+        // H8: the coarse visible-role names this identity held (e.g.
+        // "Staff"), never a hidden role's name — those user_roles rows were
+        // dropped above rather than copied here.
+        retainedRoles: retainedRoleNames,
         retainedFields: [
           ...new Set([
             ...retainedApplicationFields.map((field) => field.dimension ?? field.fieldKey),
