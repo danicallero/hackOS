@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/select";
 import { Section } from "@/components/ui/surface";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError, api } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
 import type {
@@ -48,7 +49,12 @@ import type {
   UserListItem,
 } from "@/lib/types";
 import { permissionTemplateName } from "./helpers";
-import { BADGE_CATEGORIES, badgeCategoryLabel, RoleEditor } from "./role-editor";
+import {
+  BADGE_CATEGORIES,
+  badgeCategoryLabel,
+  DrilldownBackButton,
+  RoleEditor,
+} from "./role-editor";
 import { RoleList } from "./role-list";
 
 // H8: admins manage a hierarchical, position-ordered multi-role model on a single
@@ -58,6 +64,11 @@ import { RoleList } from "./role-list";
 // replaced a separate full-page /permissions/[roleId] route per the design
 // review: selecting a role should feel like flipping a tab, not navigating
 // away from the list.
+//
+// Below the `md` breakpoint (`useIsMobile`, this app's existing mobile/desktop
+// split convention), the same data/state instead drives a drill-down
+// presentation — one screen at a time with a back button — instead of the
+// always-visible two-pane split. Desktop is unchanged.
 
 const createSchema = (t: Translate) =>
   z.object({
@@ -78,6 +89,7 @@ export default function PermissionsPage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const isMobile = useIsMobile();
 
   const [roles, setRoles] = useState<RoleSummary[]>([]);
   const [users, setUsers] = useState<Map<number, UserListItem>>(new Map());
@@ -310,99 +322,134 @@ export default function PermissionsPage() {
 
   const selectedRole = roles.find((r) => r.id === selectedId) ?? null;
 
+  // Mobile drill-down: the roles list screen is the only one with the page
+  // header (search/+/trash); the role, permissions and members screens each
+  // carry their own back button instead (H8).
+  const showHeader = !isMobile || (!showTrash && selectedRole === null);
+
+  const trashPanel = (
+    <SectionCard icon={Trash2Icon} title={t("trashTitle")} bodyClassName="p-0">
+      {trashLoading ? (
+        <p className="text-muted-foreground p-6 text-sm">…</p>
+      ) : deletedRoles.length === 0 ? (
+        <p className="text-muted-foreground p-6 text-sm">{t("noDeletedRoles")}</p>
+      ) : (
+        <ul className="divide-border divide-y">
+          {deletedRoles.map((r) => (
+            <li key={r.id} className="flex items-center justify-between gap-3 px-6 py-3">
+              <span className="truncate text-sm font-medium">{r.name}</span>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={restoringId === r.id}
+                onClick={() => restoreRole(r.id)}
+              >
+                <UndoIcon /> {t("restoreRole")}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SectionCard>
+  );
+
+  const rolesListBody = loading ? (
+    <div className="flex items-center justify-center py-12">
+      <Spinner className="size-6" />
+    </div>
+  ) : roles.length === 0 ? (
+    <EmptyState
+      icon={ShieldCheckIcon}
+      title={t("noRolesYetTitle")}
+      action={
+        <Button type="button" onClick={() => setCreateOpen(true)}>
+          <PlusIcon aria-hidden="true" />
+          {t("createRole")}
+        </Button>
+      }
+    />
+  ) : (
+    <RoleList
+      roles={roles}
+      selectedId={selectedId}
+      onSelect={selectRole}
+      onReorder={onReorder}
+      mobile={isMobile}
+    />
+  );
+
+  const roleEditor = selectedRole && (
+    <RoleEditor
+      role={selectedRole}
+      users={users}
+      onSaveDetails={(values) => onSaveDetails(selectedRole.id, values)}
+      onSaveCapabilities={(caps) => onSaveCapabilities(selectedRole.id, caps)}
+      onAddMember={(userId, user) => onAddMember(selectedRole.id, userId, user)}
+      onRemoveMember={(userId) => onRemoveMember(selectedRole.id, userId)}
+      onDelete={() => onDelete(selectedRole.id)}
+      searchUsers={searchUsers}
+      loadSeedDiff={() => api.get<RoleSeedDiff>(`/api/roles/${selectedRole.id}/seed-diff`)}
+      onResetToDefault={() => onResetToDefault(selectedRole.id)}
+      mobile={isMobile}
+      onBack={() => selectRole(null)}
+    />
+  );
+
   return (
     <div className="space-y-8">
-      <PageHeader
-        title={t("rolesTitle")}
-        primaryAction={
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={toggleTrash}>
-              <Trash2Icon /> {t("trashTitle")}
-            </Button>
-            <Button onClick={() => setCreateOpen(true)}>
-              <PlusIcon /> {t("newRole")}
-            </Button>
-          </div>
-        }
-      />
-
-      {showTrash && (
-        <SectionCard icon={Trash2Icon} title={t("trashTitle")} bodyClassName="p-0">
-          {trashLoading ? (
-            <p className="text-muted-foreground p-6 text-sm">…</p>
-          ) : deletedRoles.length === 0 ? (
-            <p className="text-muted-foreground p-6 text-sm">{t("noDeletedRoles")}</p>
-          ) : (
-            <ul className="divide-border divide-y">
-              {deletedRoles.map((r) => (
-                <li key={r.id} className="flex items-center justify-between gap-3 px-6 py-3">
-                  <span className="truncate text-sm font-medium">{r.name}</span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={restoringId === r.id}
-                    onClick={() => restoreRole(r.id)}
-                  >
-                    <UndoIcon /> {t("restoreRole")}
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </SectionCard>
+      {showHeader && (
+        <PageHeader
+          title={t("rolesTitle")}
+          primaryAction={
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={toggleTrash}>
+                <Trash2Icon /> {t("trashTitle")}
+              </Button>
+              <Button onClick={() => setCreateOpen(true)}>
+                <PlusIcon /> {t("newRole")}
+              </Button>
+            </div>
+          }
+        />
       )}
 
-      {loadError ? (
-        <ContextualError message={loadError} onRetry={() => void load()} />
-      ) : (
-        <div className="grid gap-6 lg:grid-cols-[320px_1fr] lg:items-start">
+      {isMobile ? (
+        showTrash ? (
+          <div className="space-y-4">
+            <DrilldownBackButton label={t("backToRoles")} onClick={() => setShowTrash(false)} />
+            {trashPanel}
+          </div>
+        ) : selectedRole ? (
+          roleEditor
+        ) : loadError ? (
+          <ContextualError message={loadError} onRetry={() => void load()} />
+        ) : (
           <Section padding="none" className="overflow-hidden">
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Spinner className="size-6" />
-              </div>
-            ) : roles.length === 0 ? (
-              <EmptyState
-                icon={ShieldCheckIcon}
-                title={t("noRolesYetTitle")}
-                action={
-                  <Button type="button" onClick={() => setCreateOpen(true)}>
-                    <PlusIcon aria-hidden="true" />
-                    {t("createRole")}
-                  </Button>
-                }
-              />
-            ) : (
-              <RoleList
-                roles={roles}
-                selectedId={selectedId}
-                onSelect={selectRole}
-                onReorder={onReorder}
-              />
-            )}
+            {rolesListBody}
           </Section>
+        )
+      ) : (
+        <>
+          {showTrash && trashPanel}
 
-          {selectedRole ? (
-            <RoleEditor
-              role={selectedRole}
-              users={users}
-              onSaveDetails={(values) => onSaveDetails(selectedRole.id, values)}
-              onSaveCapabilities={(caps) => onSaveCapabilities(selectedRole.id, caps)}
-              onAddMember={(userId, user) => onAddMember(selectedRole.id, userId, user)}
-              onRemoveMember={(userId) => onRemoveMember(selectedRole.id, userId)}
-              onDelete={() => onDelete(selectedRole.id)}
-              searchUsers={searchUsers}
-              loadSeedDiff={() => api.get<RoleSeedDiff>(`/api/roles/${selectedRole.id}/seed-diff`)}
-              onResetToDefault={() => onResetToDefault(selectedRole.id)}
-            />
+          {loadError ? (
+            <ContextualError message={loadError} onRetry={() => void load()} />
           ) : (
-            !loading && (
-              <Section>
-                <EmptyState icon={ShieldCheckIcon} title={t("selectRoleHint")} />
+            <div className="grid gap-6 lg:grid-cols-[320px_1fr] lg:items-start">
+              <Section padding="none" className="overflow-hidden">
+                {rolesListBody}
               </Section>
-            )
+
+              {selectedRole
+                ? roleEditor
+                : !loading && (
+                    <Section>
+                      <EmptyState icon={ShieldCheckIcon} title={t("selectRoleHint")} />
+                    </Section>
+                  )}
+            </div>
           )}
-        </div>
+        </>
       )}
 
       <Modal

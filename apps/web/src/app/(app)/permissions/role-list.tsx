@@ -15,7 +15,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { LockIcon, SearchIcon } from "lucide-react";
+import { ChevronRightIcon, LockIcon, SearchIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { DragHandle, SortableItem } from "@/components/common/drag-handle";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -39,11 +39,14 @@ export function RoleList({
   selectedId,
   onSelect,
   onReorder,
+  mobile,
 }: {
   roles: RoleSummary[];
   selectedId: number | null;
   onSelect: (id: number) => void;
   onReorder: (roleId: number, newPosition: number) => void;
+  /** Narrow-viewport drill-down presentation: an avatar circle + chevron per row (H8). */
+  mobile?: boolean;
 }) {
   const { t } = useLocale();
   const [query, setQuery] = useState("");
@@ -97,6 +100,7 @@ export function RoleList({
             selected={selectedId === superadmin.id}
             onSelect={() => onSelect(superadmin.id)}
             locked
+            mobile={mobile}
           />
         )}
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -111,6 +115,7 @@ export function RoleList({
                     role={role}
                     selected={selectedId === role.id}
                     onSelect={() => onSelect(role.id)}
+                    mobile={mobile}
                     dragHandle={
                       <DragHandle
                         attributes={attributes}
@@ -135,12 +140,14 @@ function RoleRow({
   onSelect,
   dragHandle,
   locked,
+  mobile,
 }: {
   role: RoleSummary;
   selected: boolean;
   onSelect: () => void;
   dragHandle?: React.ReactNode;
   locked?: boolean;
+  mobile?: boolean;
 }) {
   const { t } = useLocale();
   return (
@@ -153,6 +160,14 @@ function RoleRow({
         className="flex min-w-0 flex-1 items-center justify-between gap-2 py-2.5 text-left"
       >
         <span className="flex min-w-0 items-center gap-2">
+          {mobile && (
+            <span
+              aria-hidden="true"
+              className="bg-muted text-muted-foreground grid size-8 shrink-0 place-items-center rounded-full text-xs font-medium"
+            >
+              {role.name.charAt(0).toUpperCase()}
+            </span>
+          )}
           <span className="truncate text-sm font-medium">{role.name}</span>
           {locked && (
             <StatusBadge tone="neutral" dot={false} className="shrink-0">
@@ -165,8 +180,13 @@ function RoleRow({
             </StatusBadge>
           )}
         </span>
-        <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
-          {role.memberIds.length}
+        <span className="flex shrink-0 items-center gap-1.5">
+          <span className="text-muted-foreground text-xs tabular-nums">
+            {role.memberIds.length}
+          </span>
+          {mobile && (
+            <ChevronRightIcon aria-hidden="true" className="text-muted-foreground size-4" />
+          )}
         </span>
       </button>
     </li>

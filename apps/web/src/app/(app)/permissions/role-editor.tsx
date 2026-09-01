@@ -2,7 +2,9 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  ArrowLeftIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
   History,
   KeyRoundIcon,
   LockIcon,
@@ -102,6 +104,14 @@ function toStateMap(role: RoleSummary): CapabilityStateMap {
  * (H8): Display / Permissions / Manage members tabs for one selected role.
  * Every save calls back into the parent, which owns the roles list and
  * re-syncs this role in place — this component holds only in-progress edits.
+ *
+ * Below the `md` breakpoint (`mobile`), the same state/hooks instead drive a
+ * drill-down presentation (role screen → Permissions/Members sub-screens via
+ * `tab`, back via `onBack`) matching this page's narrow-viewport layout —
+ * see `page.tsx`. Nothing here forks state per layout: `tab` already comes
+ * from the URL (`useUrlTab`), so switching screens on mobile is the same
+ * re-render as switching tabs on desktop, and in-progress edits (e.g. an
+ * unsaved capability toggle) survive navigating between them.
  */
 export function RoleEditor({
   role,
@@ -114,6 +124,8 @@ export function RoleEditor({
   searchUsers,
   loadSeedDiff,
   onResetToDefault,
+  mobile,
+  onBack,
 }: {
   role: RoleSummary;
   users: Map<number, UserListItem>;
@@ -128,6 +140,10 @@ export function RoleEditor({
   /** H8: only meaningful when role.isSeeded — reports drift from role_seed_defaults. */
   loadSeedDiff: () => Promise<RoleSeedDiff>;
   onResetToDefault: () => Promise<void>;
+  /** Narrow-viewport drill-down presentation instead of the tabbed master-detail one. */
+  mobile?: boolean;
+  /** Mobile only: returns to the roles list screen. */
+  onBack?: () => void;
 }) {
   const { t } = useLocale();
   const { tab, setTab } = useUrlTab({
@@ -225,21 +241,260 @@ export function RoleEditor({
     }
   }
 
+  const roleHeader = (
+    <div className="flex flex-wrap items-center gap-2">
+      <h1 className="type-page-title text-balance">{role.name}</h1>
+      {isSuperadmin && (
+        <StatusBadge tone="neutral" dot={false}>
+          <LockIcon className="size-3" /> {t("systemRoleBadge")}
+        </StatusBadge>
+      )}
+      {!isSuperadmin && role.isProtected && (
+        <StatusBadge tone="neutral" dot={false}>
+          {t("protectedRoleBadge")}
+        </StatusBadge>
+      )}
+    </div>
+  );
+
+  const displaySection = (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(submitDetails)}>
+        <SectionCard
+          title={t("roleDetailsTitle")}
+          description={isSuperadmin ? t("superadminLockedDesc") : undefined}
+          footer={
+            !isSuperadmin ? (
+              <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
+            ) : undefined
+          }
+        >
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("name")}</FormLabel>
+                <FormControl>
+                  <Input {...field} disabled={isSuperadmin} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="isVisible"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between gap-2 space-y-0">
+                <FormLabel className="font-normal">{t("isVisibleLabel")}</FormLabel>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    disabled={isSuperadmin}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="badgeCategory"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("badgeCategoryLabel")}</FormLabel>
+                <Select value={field.value} onValueChange={field.onChange} disabled={isSuperadmin}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {BADGE_CATEGORIES.map((category) => (
+                      <SelectItem key={category} value={category}>
+                        {badgeCategoryLabel(t)[category]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </SectionCard>
+      </form>
+    </Form>
+  );
+
+  const dangerZoneSection = (
+    <SectionCard
+      icon={Trash2Icon}
+      title={t("dangerZoneTitle")}
+      description={isSuperadmin ? t("superadminLockedDesc") : t("deletingRoleRemovesDesc")}
+      action={
+        !isSuperadmin ? (
+          <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
+            {t("deleteRole")}
+          </Button>
+        ) : undefined
+      }
+    >
+      {!isSuperadmin && (
+        <p className="text-muted-foreground text-sm">{t("cannotBeUndoneMembersLoseRole")}</p>
+      )}
+    </SectionCard>
+  );
+
+  const capabilitiesSection = (
+    <>
+      {seedDiff?.hasDrifted && (
+        <SectionCard
+          icon={History}
+          title={t("roleDriftedFromDefault")}
+          action={
+            <Button variant="outline" size="sm" onClick={() => setResetOpen(true)}>
+              {t("resetToDefault")}
+            </Button>
+          }
+        >
+          {null}
+        </SectionCard>
+      )}
+      {/* No title here — the "Capabilities" tab label / nav row already names this panel (H8). */}
+      <SectionCard
+        icon={KeyRoundIcon}
+        description={isSuperadmin ? t("superadminLockedDesc") : t("capabilitiesChangeDesc")}
+        bodyClassName="p-0"
+        footer={
+          !isSuperadmin ? (
+            <Button onClick={submitCaps} disabled={!capsDirty || savingCaps}>
+              {t("saveCapabilities")}
+            </Button>
+          ) : undefined
+        }
+      >
+        <div className="relative border-b p-4">
+          <SearchIcon className="text-muted-foreground absolute top-1/2 left-7 size-4 -translate-y-1/2" />
+          <Input
+            value={capQuery}
+            onChange={(e) => setCapQuery(e.target.value)}
+            placeholder={t("searchCapabilitiesPlaceholder")}
+            className="pl-8"
+          />
+        </div>
+        {groups.length === 0 ? (
+          <p className="text-muted-foreground p-6 text-sm">{t("noMatchingCapability")}</p>
+        ) : (
+          <div className="divide-border divide-y">
+            {groups.map((group) => (
+              <CapabilityGroup
+                key={group.domain}
+                domain={group.domain}
+                capabilities={group.capabilities}
+                caps={caps}
+                disabled={isSuperadmin}
+                onChange={(cap, state) => setCaps((prev) => ({ ...prev, [cap]: state }))}
+              />
+            ))}
+          </div>
+        )}
+      </SectionCard>
+    </>
+  );
+
+  const membersSection = (
+    <MembersPanel
+      role={role}
+      users={users}
+      disabled={isSuperadmin}
+      onAdd={onAddMember}
+      onRemove={onRemoveMember}
+      search={searchUsers}
+    />
+  );
+
+  const deleteModal = (
+    <AlertModal
+      open={deleteOpen}
+      onOpenChange={setDeleteOpen}
+      title={t("deleteRoleQuestionInline", { name: role.name })}
+      description={t("permanentlyRemovesRoleDesc")}
+      cancelLabel={t("cancel")}
+      confirmLabel={t("deleteRole")}
+      destructive
+      pending={deleting}
+      onConfirm={confirmDelete}
+    />
+  );
+
+  const resetModal = (
+    <AlertModal
+      open={resetOpen}
+      onOpenChange={setResetOpen}
+      title={t("resetToDefaultTitle", { name: role.name })}
+      description={t("resetToDefaultDescription")}
+      cancelLabel={t("cancel")}
+      confirmLabel={t("resetToDefault")}
+      pending={resetting}
+      onConfirm={confirmReset}
+    >
+      {seedDiff && seedDiff.diff.length > 0 && (
+        <ul className="divide-border max-h-64 divide-y overflow-y-auto rounded-md border text-sm">
+          {seedDiff.diff.map((entry) => (
+            <li
+              key={entry.capability}
+              className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+            >
+              <span className="truncate font-mono text-xs">{entry.capability}</span>
+              <span className="text-muted-foreground shrink-0 text-xs">
+                {t(capabilityStateKey(entry.current))} → {t(capabilityStateKey(entry.default))}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </AlertModal>
+  );
+
+  if (mobile) {
+    if (tab === "capabilities") {
+      return (
+        <div className="space-y-4">
+          <DrilldownBackButton label={role.name} onClick={() => setTab("display")} />
+          {capabilitiesSection}
+          {resetModal}
+        </div>
+      );
+    }
+    if (tab === "members") {
+      return (
+        <div className="space-y-4">
+          <DrilldownBackButton label={role.name} onClick={() => setTab("display")} />
+          {membersSection}
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-6">
+        <DrilldownBackButton label={t("backToRoles")} onClick={() => onBack?.()} />
+        {roleHeader}
+        {displaySection}
+        <SectionCard bodyClassName="p-0">
+          <div className="divide-border divide-y">
+            <RoleNavRow label={t("capabilitiesLabel")} onClick={() => setTab("capabilities")} />
+            <RoleNavRow label={t("membersTitle")} onClick={() => setTab("members")} />
+          </div>
+        </SectionCard>
+        {dangerZoneSection}
+        {deleteModal}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <h1 className="type-page-title text-balance">{role.name}</h1>
-        {isSuperadmin && (
-          <StatusBadge tone="neutral" dot={false}>
-            <LockIcon className="size-3" /> {t("systemRoleBadge")}
-          </StatusBadge>
-        )}
-        {!isSuperadmin && role.isProtected && (
-          <StatusBadge tone="neutral" dot={false}>
-            {t("protectedRoleBadge")}
-          </StatusBadge>
-        )}
-      </div>
+      {roleHeader}
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabBar aria-label={t("roleSections")} className="w-full justify-start">
@@ -249,204 +504,56 @@ export function RoleEditor({
         </TabBar>
 
         <TabsContent value="display" className="space-y-6 pt-2">
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(submitDetails)}>
-              <SectionCard
-                title={t("roleDetailsTitle")}
-                description={isSuperadmin ? t("superadminLockedDesc") : undefined}
-                footer={
-                  !isSuperadmin ? (
-                    <SubmitButton pending={form.formState.isSubmitting}>
-                      {t("saveChanges")}
-                    </SubmitButton>
-                  ) : undefined
-                }
-              >
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("name")}</FormLabel>
-                      <FormControl>
-                        <Input {...field} disabled={isSuperadmin} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="isVisible"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between gap-2 space-y-0">
-                      <FormLabel className="font-normal">{t("isVisibleLabel")}</FormLabel>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                          disabled={isSuperadmin}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="badgeCategory"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("badgeCategoryLabel")}</FormLabel>
-                      <Select
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        disabled={isSuperadmin}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {BADGE_CATEGORIES.map((category) => (
-                            <SelectItem key={category} value={category}>
-                              {badgeCategoryLabel(t)[category]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </SectionCard>
-            </form>
-          </Form>
-
-          <SectionCard
-            icon={Trash2Icon}
-            title={t("dangerZoneTitle")}
-            description={isSuperadmin ? t("superadminLockedDesc") : t("deletingRoleRemovesDesc")}
-            action={
-              !isSuperadmin ? (
-                <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
-                  {t("deleteRole")}
-                </Button>
-              ) : undefined
-            }
-          >
-            {!isSuperadmin && (
-              <p className="text-muted-foreground text-sm">{t("cannotBeUndoneMembersLoseRole")}</p>
-            )}
-          </SectionCard>
+          {displaySection}
+          {dangerZoneSection}
         </TabsContent>
 
         <TabsContent value="capabilities" className="space-y-4 pt-2">
-          {seedDiff?.hasDrifted && (
-            <SectionCard
-              icon={History}
-              title={t("roleDriftedFromDefault")}
-              action={
-                <Button variant="outline" size="sm" onClick={() => setResetOpen(true)}>
-                  {t("resetToDefault")}
-                </Button>
-              }
-            >
-              {null}
-            </SectionCard>
-          )}
-          {/* No title here — the "Capabilities" tab label above already names this panel (H8). */}
-          <SectionCard
-            icon={KeyRoundIcon}
-            description={isSuperadmin ? t("superadminLockedDesc") : t("capabilitiesChangeDesc")}
-            bodyClassName="p-0"
-            footer={
-              !isSuperadmin ? (
-                <Button onClick={submitCaps} disabled={!capsDirty || savingCaps}>
-                  {t("saveCapabilities")}
-                </Button>
-              ) : undefined
-            }
-          >
-            <div className="relative border-b p-4">
-              <SearchIcon className="text-muted-foreground absolute top-1/2 left-7 size-4 -translate-y-1/2" />
-              <Input
-                value={capQuery}
-                onChange={(e) => setCapQuery(e.target.value)}
-                placeholder={t("searchCapabilitiesPlaceholder")}
-                className="pl-8"
-              />
-            </div>
-            {groups.length === 0 ? (
-              <p className="text-muted-foreground p-6 text-sm">{t("noMatchingCapability")}</p>
-            ) : (
-              <div className="divide-border divide-y">
-                {groups.map((group) => (
-                  <CapabilityGroup
-                    key={group.domain}
-                    domain={group.domain}
-                    capabilities={group.capabilities}
-                    caps={caps}
-                    disabled={isSuperadmin}
-                    onChange={(cap, state) => setCaps((prev) => ({ ...prev, [cap]: state }))}
-                  />
-                ))}
-              </div>
-            )}
-          </SectionCard>
+          {capabilitiesSection}
         </TabsContent>
 
         <TabsContent value="members" className="pt-2">
-          <MembersPanel
-            role={role}
-            users={users}
-            disabled={isSuperadmin}
-            onAdd={onAddMember}
-            onRemove={onRemoveMember}
-            search={searchUsers}
-          />
+          {membersSection}
         </TabsContent>
       </Tabs>
 
-      <AlertModal
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
-        title={t("deleteRoleQuestionInline", { name: role.name })}
-        description={t("permanentlyRemovesRoleDesc")}
-        cancelLabel={t("cancel")}
-        confirmLabel={t("deleteRole")}
-        destructive
-        pending={deleting}
-        onConfirm={confirmDelete}
-      />
-
-      <AlertModal
-        open={resetOpen}
-        onOpenChange={setResetOpen}
-        title={t("resetToDefaultTitle", { name: role.name })}
-        description={t("resetToDefaultDescription")}
-        cancelLabel={t("cancel")}
-        confirmLabel={t("resetToDefault")}
-        pending={resetting}
-        onConfirm={confirmReset}
-      >
-        {seedDiff && seedDiff.diff.length > 0 && (
-          <ul className="divide-border max-h-64 divide-y overflow-y-auto rounded-md border text-sm">
-            {seedDiff.diff.map((entry) => (
-              <li
-                key={entry.capability}
-                className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
-              >
-                <span className="truncate font-mono text-xs">{entry.capability}</span>
-                <span className="text-muted-foreground shrink-0 text-xs">
-                  {t(capabilityStateKey(entry.current))} → {t(capabilityStateKey(entry.default))}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </AlertModal>
+      {deleteModal}
+      {resetModal}
     </div>
+  );
+}
+
+/**
+ * Visually matches `BackLink` (same icon/label/classes) but is wired to an
+ * in-page state transition rather than route navigation — the mobile
+ * drill-down never changes route, only `?role=`/`tab` state, so `BackLink`'s
+ * `router.back()`/`history`-depth logic (built for actual page-to-page nav,
+ * see `components/common/back-link.tsx`) doesn't apply here.
+ */
+export function DrilldownBackButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
+    >
+      <ArrowLeftIcon className="size-4" />
+      {label}
+    </button>
+  );
+}
+
+/** A plain navigation row (name + chevron) into a mobile drill-down sub-screen. */
+function RoleNavRow({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="hover:bg-muted/50 flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-sm font-medium"
+    >
+      {label}
+      <ChevronRightIcon aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
+    </button>
   );
 }
 
