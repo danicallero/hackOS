@@ -23,8 +23,8 @@ export async function scannerSnapshot(actorId?: number) {
   const subjectScope = fixtureOnly
     ? ` AND u.is_test_account = true
               AND EXISTS (
-                SELECT 1 FROM user_effective_badge_category uebc
-                 WHERE uebc.user_id = u.id AND uebc.badge_category = 'participant'
+                SELECT 1 FROM user_effective_role_name uern
+                 WHERE uern.user_id = u.id AND uern.role_name = 'Participant'
               )`
     : " AND u.is_test_account = false";
   // The snapshot is replace-all. Retired credentials are represented by
@@ -34,29 +34,26 @@ export async function scannerSnapshot(actorId?: number) {
   // for immediate operator feedback.
   const [peopleResult, activitiesResult, statesResult] = await Promise.all([
     pool.query(
-      `WITH user_caps AS (
-         SELECT uec.user_id,
-                bool_or(uec.capability = '*') AS is_admin,
-                count(uec.capability) > 0 AS has_capability
-           FROM user_effective_capabilities uec
-          GROUP BY uec.user_id
-       )
-       SELECT u.id, u.email, u.name, u.surname, u.badge_id, u.badge_id_history,
+      `SELECT u.id, u.email, u.name, u.surname, u.badge_id, u.badge_id_history,
               u.food_intolerance_notes, u.notes, t.token AS ticket_token,
-              -- H8 full-replacement: admin/judge/sponsor/staff still come
-              -- from the same authoritative capability/relationship sources
-              -- as the old DerivedRole (neither enterprise_judges nor a
-              -- pre-Sponsor-role sponsor rep is guaranteed a user_roles row);
-              -- everyone else falls through to their effective role's
-              -- badge_category (identity/role.ts's getBadgeCategory — this
-              -- is its bulk-query equivalent via user_effective_badge_category).
-              CASE
-                WHEN COALESCE(uc.is_admin, false) THEN 'admin'
-                WHEN EXISTS (SELECT 1 FROM enterprise_judges ej WHERE ej.user_id = u.id) THEN 'judge'
-                WHEN EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id) THEN 'sponsor'
-                WHEN COALESCE(uc.has_capability, false) THEN 'staff'
-                ELSE COALESCE(uebc.badge_category::text, 'unassigned')
-              END AS role,
+              -- H8 full-replacement: a person's scanner-facing "role" is
+              -- simply their highest-visible role name (identity/role.ts's
+              -- getHighestVisibleRoleName — this is its bulk-query
+              -- equivalent via user_effective_role_name). No separate
+              -- admin/judge/sponsor/staff bucket.
+              uern.role_name AS role,
+              -- H8: the scanner's own operational grouping (door-scan
+              -- relevance) can no longer read this off a badge_category
+              -- column, since role names are now free text with no fixed
+              -- "admin"/"staff" spelling. These mirror stats.ts's
+              -- scannerRoleStats is_operational/enterprise-judge checks --
+              -- the real underlying data those groupings always used.
+              EXISTS (
+                SELECT 1 FROM user_effective_capabilities uec WHERE uec.user_id = u.id
+              ) AS has_capabilities,
+              EXISTS (
+                SELECT 1 FROM enterprise_judges ej WHERE ej.user_id = u.id
+              ) AS is_enterprise_judge,
               EXISTS (
                 SELECT 1 FROM application_responses ar
                  WHERE ar.user_id = u.id
@@ -74,8 +71,7 @@ export async function scannerSnapshot(actorId?: number) {
               last_presence.kind AS last_presence_kind,
               last_presence.scanned_at AS last_presence_at
          FROM users u
-         LEFT JOIN user_caps uc ON uc.user_id = u.id
-         LEFT JOIN user_effective_badge_category uebc ON uebc.user_id = u.id
+         LEFT JOIN user_effective_role_name uern ON uern.user_id = u.id
          LEFT JOIN tickets t ON t.user_id = u.id
          -- Anonymized profiles (H54) must never reach a scanner's local store.
          LEFT JOIN LATERAL (
@@ -115,14 +111,9 @@ export async function scannerSnapshot(actorId?: number) {
     people: peopleResult.rows.map((row) => ({
       userId: row.id as number,
       email: row.email as string,
-      role: row.role as
-        | "admin"
-        | "judge"
-        | "sponsor"
-        | "staff"
-        | "mentor"
-        | "participant"
-        | "unassigned",
+      role: (row.role as string | null) ?? null,
+      hasCapabilities: Boolean(row.has_capabilities),
+      isEnterpriseJudge: Boolean(row.is_enterprise_judge),
       ticketToken: (row.ticket_token as string | null) ?? null,
       badgeId: (row.badge_id as string | null) ?? null,
       revokedBadgeIds: (row.badge_id_history as string[]) ?? [],

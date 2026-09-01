@@ -87,34 +87,19 @@ export async function scannableActivities(
   return aggregateActivities(where, [[...MEAL_ACTIVITY_KINDS]]);
 }
 
-/** Accreditation totals by operational role; admins are included in staff. */
+/**
+ * Accreditation totals by role name (H8 full-replacement: a user's role for
+ * this breakdown is simply their highest-visible role name, `Unassigned` for
+ * anyone with none — no separate admin/judge/sponsor/staff bucket).
+ */
 export async function accreditationCountsByRole() {
   const { rows } = await pool.query(
-    `WITH classified AS (
-       SELECT u.id,
-              -- H8 full-replacement: see scanner-sync.ts's scannerSnapshot
-              -- for the same pattern/rationale (admin/judge/sponsor/staff
-              -- from capabilities+relationship tables, everyone else from
-              -- their effective role's badge_category).
-              CASE
-                WHEN EXISTS (
-                  SELECT 1 FROM user_effective_capabilities uec
-                  WHERE uec.user_id = u.id AND uec.capability = '*'
-                ) THEN 'staff'
-                WHEN EXISTS (SELECT 1 FROM enterprise_judges ej WHERE ej.user_id = u.id) THEN 'judge'
-                WHEN EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id) THEN 'sponsor'
-                WHEN EXISTS (
-                  SELECT 1 FROM user_effective_capabilities uec WHERE uec.user_id = u.id
-                ) THEN 'staff'
-                ELSE COALESCE(uebc.badge_category::text, 'unassigned')
-              END AS role
-         FROM users u
-         LEFT JOIN user_effective_badge_category uebc ON uebc.user_id = u.id
-        WHERE u.badge_id IS NOT NULL AND u.account_state = 'active' AND u.anonymized_at IS NULL
-          AND u.is_test_account = false
-     )
-     SELECT role, count(*)::int AS count
-       FROM classified GROUP BY role ORDER BY role`,
+    `SELECT COALESCE(uern.role_name, 'Unassigned') AS role, count(*)::int AS count
+       FROM users u
+       LEFT JOIN user_effective_role_name uern ON uern.user_id = u.id
+      WHERE u.badge_id IS NOT NULL AND u.account_state = 'active' AND u.anonymized_at IS NULL
+        AND u.is_test_account = false
+      GROUP BY role ORDER BY role`,
   );
   return rows.map((row) => ({ role: String(row.role), count: Number(row.count) }));
 }
@@ -161,30 +146,35 @@ export async function logisticsStats() {
 /**
  * Per-role scanner stats tile (mobile scanner home screen): eligible
  * (accreditable), accredited, and currently-inside counts, broken down by
- * the same role classification the scanner roster snapshot uses (H22-H26 —
- * see `scannerSnapshot` in scanner-sync.ts), so the client can sum whatever
- * combination of role groups the operator has filtered to. Answered as a
- * direct read from Postgres; freshness comes from the existing logistics SSE
- * events rather than a global cache version.
+ * role name (H8 full-replacement — no separate admin/judge/sponsor/staff
+ * bucket; `Unassigned` covers anyone with no visible role), so the client
+ * can sum whatever combination of role groups the operator has filtered to.
+ * "Eligible" is the same underlying fact `hasEventAccess`/`hasMobileAccess`
+ * use: any capability holder, sponsor rep, or enterprise judge is eligible
+ * regardless of application status; anyone else (a pure applicant) needs a
+ * confirmed spot. Answered as a direct read from Postgres; freshness comes
+ * from the existing logistics SSE events rather than a global cache version.
  */
-export type ScannerRole =
-  | "admin"
-  | "judge"
-  | "sponsor"
-  | "staff"
-  | "mentor"
-  | "participant"
-  | "unassigned";
+export type ScannerRole = string;
 
-export async function scannerRoleStats(
-  actorId?: number,
-): Promise<Array<{ role: ScannerRole; eligible: number; accredited: number; inside: number }>> {
+export async function scannerRoleStats(actorId?: number): Promise<
+  Array<{
+    role: ScannerRole;
+    eligible: number;
+    accredited: number;
+    inside: number;
+    /** H8: at least one member of this role bucket is a real capability
+     * holder — the mobile scanner's "staff" grouping key, since role names
+     * no longer have a fixed admin/staff spelling to match on. */
+    hasCapabilities: boolean;
+  }>
+> {
   const fixtureOnly = actorId != null && (await isSyntheticOperator(pool, actorId));
   const subjectScope = fixtureOnly
     ? `AND u.is_test_account = true
           AND EXISTS (
-            SELECT 1 FROM user_effective_badge_category uebc
-             WHERE uebc.user_id = u.id AND uebc.badge_category = 'participant'
+            SELECT 1 FROM user_effective_role_name uern
+             WHERE uern.user_id = u.id AND uern.role_name = 'Participant'
           )`
     : "AND u.is_test_account = false";
   const { rows } = await pool.query<{
@@ -192,36 +182,28 @@ export async function scannerRoleStats(
     eligible: number;
     accredited: number;
     user_ids: number[];
+    has_capabilities: boolean;
   }>(
-    `WITH user_caps AS (
-       SELECT uec.user_id,
-              bool_or(uec.capability = '*') AS is_admin,
-              count(uec.capability) > 0 AS has_capability
-         FROM user_effective_capabilities uec
-        GROUP BY uec.user_id
-     ), classified AS (
+    `WITH classified AS (
        SELECT u.id, u.badge_id,
-              -- H8 full-replacement: see scanner-sync.ts's scannerSnapshot.
-              CASE
-                WHEN COALESCE(uc.is_admin, false) THEN 'admin'
-                WHEN EXISTS (SELECT 1 FROM enterprise_judges ej WHERE ej.user_id = u.id) THEN 'judge'
-                WHEN EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id) THEN 'sponsor'
-                WHEN COALESCE(uc.has_capability, false) THEN 'staff'
-                ELSE COALESCE(uebc.badge_category::text, 'unassigned')
-              END AS role,
+              COALESCE(uern.role_name, 'Unassigned') AS role,
+              EXISTS (SELECT 1 FROM user_effective_capabilities uec WHERE uec.user_id = u.id) AS has_capabilities,
+              (EXISTS (SELECT 1 FROM user_effective_capabilities uec WHERE uec.user_id = u.id)
+                OR EXISTS (SELECT 1 FROM enterprise_judges ej WHERE ej.user_id = u.id)
+                OR EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id)) AS is_operational,
               EXISTS (
                 SELECT 1 FROM application_responses ar
                  WHERE ar.user_id = u.id AND ar.status = 'confirmed'
               ) AS confirmed
          FROM users u
-         LEFT JOIN user_caps uc ON uc.user_id = u.id
-         LEFT JOIN user_effective_badge_category uebc ON uebc.user_id = u.id
+         LEFT JOIN user_effective_role_name uern ON uern.user_id = u.id
         WHERE u.account_state = 'active' AND u.anonymized_at IS NULL ${subjectScope}
      )
      SELECT role,
-            count(*) FILTER (WHERE role IN ('staff', 'admin', 'sponsor') OR confirmed)::int AS eligible,
+            count(*) FILTER (WHERE is_operational OR confirmed)::int AS eligible,
             count(*) FILTER (WHERE badge_id IS NOT NULL)::int AS accredited,
-            array_agg(id) AS user_ids
+            array_agg(id) AS user_ids,
+            bool_or(has_capabilities) AS has_capabilities
        FROM classified
       GROUP BY role
       ORDER BY role`,
@@ -235,5 +217,6 @@ export async function scannerRoleStats(
     eligible: row.eligible,
     accredited: row.accredited,
     inside: row.user_ids.filter((id) => present.has(id)).length,
+    hasCapabilities: Boolean(row.has_capabilities),
   }));
 }
