@@ -386,178 +386,185 @@ function ActivityResultPanel({
           width: "100%",
         }}
       >
-        <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 18, padding: 20 }}>
-          <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 16 }}>
-            <View style={{ flex: 1, gap: 5 }}>
-              <View style={{ alignItems: "center", flexDirection: "row", gap: 7 }}>
-                <SymbolView
-                  accessible={false}
-                  name={
-                    repeatPending
-                      ? "clock.badge.exclamationmark"
-                      : result.state === "confirmed"
-                        ? "checkmark.circle.fill"
-                        : result.state === "attention"
-                          ? "exclamationmark.triangle.fill"
-                          : "internaldrive.fill"
-                  }
-                  tintColor={
-                    repeatPending || result.state === "saved"
-                      ? colors.warning
-                      : result.state === "attention"
-                        ? colors.destructive
-                        : colors.success
-                  }
-                  size={18}
-                />
-                <Text
-                  selectable
-                  style={{
-                    color:
+        {/* A single child keeps this predictable on the native Liquid Glass
+            container (ExpoGlassView) — passing it the ScrollView and the
+            footer as two siblings directly let the glass surface size to
+            only the first one, silently dropping the footer with the
+            close/confirm buttons off screen. */}
+        <View style={{ flexShrink: 1 }}>
+          <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 18, padding: 20 }}>
+            <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 16 }}>
+              <View style={{ flex: 1, gap: 5 }}>
+                <View style={{ alignItems: "center", flexDirection: "row", gap: 7 }}>
+                  <SymbolView
+                    accessible={false}
+                    name={
+                      repeatPending
+                        ? "clock.badge.exclamationmark"
+                        : result.state === "confirmed"
+                          ? "checkmark.circle.fill"
+                          : result.state === "attention"
+                            ? "exclamationmark.triangle.fill"
+                            : "internaldrive.fill"
+                    }
+                    tintColor={
                       repeatPending || result.state === "saved"
                         ? colors.warning
                         : result.state === "attention"
                           ? colors.destructive
-                          : colors.success,
-                    fontSize: 13,
-                    fontWeight: "700",
-                  }}
-                >
-                  {repeatPending
-                    ? t("scannerRepeatFound")
-                    : result.state === "confirmed"
-                      ? t("scannerStateConfirmed")
-                      : result.state === "attention"
-                        ? t("scannerStateAttention")
-                        : t("scannerStateSaved")}
+                          : colors.success
+                    }
+                    size={18}
+                  />
+                  <Text
+                    selectable
+                    style={{
+                      color:
+                        repeatPending || result.state === "saved"
+                          ? colors.warning
+                          : result.state === "attention"
+                            ? colors.destructive
+                            : colors.success,
+                      fontSize: 13,
+                      fontWeight: "700",
+                    }}
+                  >
+                    {repeatPending
+                      ? t("scannerRepeatFound")
+                      : result.state === "confirmed"
+                        ? t("scannerStateConfirmed")
+                        : result.state === "attention"
+                          ? t("scannerStateAttention")
+                          : t("scannerStateSaved")}
+                  </Text>
+                </View>
+                <Text selectable style={{ color: "white", fontSize: 23, fontWeight: "700" }}>
+                  {fullName}
+                </Text>
+                <Text selectable style={{ color: "rgba(255,255,255,0.68)", fontSize: 15 }}>
+                  {result.person.email || t("accountNotSet")}
                 </Text>
               </View>
-              <Text selectable style={{ color: "white", fontSize: 23, fontWeight: "700" }}>
-                {fullName}
-              </Text>
-              <Text selectable style={{ color: "rgba(255,255,255,0.68)", fontSize: 15 }}>
-                {result.person.email || t("accountNotSet")}
-              </Text>
-            </View>
-            <View
-              style={{
-                alignItems: "center",
-                backgroundColor: repeatPending ? "rgba(255,149,0,0.18)" : "rgba(52,199,89,0.18)",
-                borderRadius: 18,
-                height: 64,
-                justifyContent: "center",
-                width: 64,
-              }}
-            >
-              <Text
-                selectable
+              <View
                 style={{
-                  color: repeatPending ? colors.warning : colors.success,
-                  fontSize: 32,
-                  fontVariant: ["tabular-nums"],
-                  fontWeight: "800",
+                  alignItems: "center",
+                  backgroundColor: repeatPending ? "rgba(255,149,0,0.18)" : "rgba(52,199,89,0.18)",
+                  borderRadius: 18,
+                  height: 64,
+                  justifyContent: "center",
+                  width: 64,
                 }}
               >
-                {result.count}
-              </Text>
+                <Text
+                  selectable
+                  style={{
+                    color: repeatPending ? colors.warning : colors.success,
+                    fontSize: 32,
+                    fontVariant: ["tabular-nums"],
+                    fontWeight: "800",
+                  }}
+                >
+                  {result.count}
+                </Text>
+              </View>
             </View>
-          </View>
 
-          {hasMealDetails ? (
-            <View
-              style={{
-                backgroundColor: "rgba(255,255,255,0.09)",
-                borderCurve: "continuous",
-                borderRadius: 16,
-                gap: 12,
-                padding: 14,
-              }}
-            >
-              <Text selectable style={{ color: "rgba(255,255,255,0.62)", fontWeight: "700" }}>
-                {t("scannerDietaryGroup")}
-              </Text>
-              {result.person.intolerances.length > 0 ? (
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
-                  {result.person.intolerances.map((item) => (
-                    <View
-                      key={item.id}
-                      style={{
-                        backgroundColor: "rgba(255,149,0,0.18)",
-                        borderRadius: 999,
-                        paddingHorizontal: 10,
-                        paddingVertical: 6,
-                      }}
+            {hasMealDetails ? (
+              <View
+                style={{
+                  backgroundColor: "rgba(255,255,255,0.09)",
+                  borderCurve: "continuous",
+                  borderRadius: 16,
+                  gap: 12,
+                  padding: 14,
+                }}
+              >
+                <Text selectable style={{ color: "rgba(255,255,255,0.62)", fontWeight: "700" }}>
+                  {t("scannerDietaryGroup")}
+                </Text>
+                {result.person.intolerances.length > 0 ? (
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
+                    {result.person.intolerances.map((item) => (
+                      <View
+                        key={item.id}
+                        style={{
+                          backgroundColor: "rgba(255,149,0,0.18)",
+                          borderRadius: 999,
+                          paddingHorizontal: 10,
+                          paddingVertical: 6,
+                        }}
+                      >
+                        <Text selectable style={{ color: colors.warning, fontWeight: "700" }}>
+                          {item.label[language] ?? item.label.en}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+                {result.person.foodIntoleranceNotes ? (
+                  <View style={{ gap: 3 }}>
+                    <Text
+                      selectable
+                      style={{ color: colors.warning, fontSize: 12, fontWeight: "700" }}
                     >
-                      <Text selectable style={{ color: colors.warning, fontWeight: "700" }}>
-                        {item.label[language] ?? item.label.en}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-              {result.person.foodIntoleranceNotes ? (
-                <View style={{ gap: 3 }}>
-                  <Text
-                    selectable
-                    style={{ color: colors.warning, fontSize: 12, fontWeight: "700" }}
-                  >
-                    {t("personFoodNotes")}
-                  </Text>
-                  <Text selectable style={{ color: "white", lineHeight: 20 }}>
-                    {result.person.foodIntoleranceNotes}
-                  </Text>
-                </View>
-              ) : null}
-              {result.person.notes ? (
-                <View style={{ gap: 3 }}>
-                  <Text
-                    selectable
-                    style={{ color: "rgba(255,255,255,0.62)", fontSize: 12, fontWeight: "700" }}
-                  >
-                    {t("personNotes")}
-                  </Text>
-                  <Text selectable style={{ color: "white", lineHeight: 20 }}>
-                    {result.person.notes}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-          ) : null}
+                      {t("personFoodNotes")}
+                    </Text>
+                    <Text selectable style={{ color: "white", lineHeight: 20 }}>
+                      {result.person.foodIntoleranceNotes}
+                    </Text>
+                  </View>
+                ) : null}
+                {result.person.notes ? (
+                  <View style={{ gap: 3 }}>
+                    <Text
+                      selectable
+                      style={{ color: "rgba(255,255,255,0.62)", fontSize: 12, fontWeight: "700" }}
+                    >
+                      {t("personNotes")}
+                    </Text>
+                    <Text selectable style={{ color: "white", lineHeight: 20 }}>
+                      {result.person.notes}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
 
-          {result.error ? (
-            <Text
-              accessibilityLiveRegion="assertive"
-              selectable
-              style={{ color: colors.destructive, fontSize: 14, fontWeight: "700" }}
-            >
-              {t("scannerBusinessRejected")}: {result.error}
-            </Text>
-          ) : null}
-        </ScrollView>
+            {result.error ? (
+              <Text
+                accessibilityLiveRegion="assertive"
+                selectable
+                style={{ color: colors.destructive, fontSize: 14, fontWeight: "700" }}
+              >
+                {t("scannerBusinessRejected")}: {result.error}
+              </Text>
+            ) : null}
+          </ScrollView>
 
-        <View style={{ paddingBottom: 20, paddingHorizontal: 20, paddingTop: 4 }}>
-          {repeatPending ? (
-            <View style={{ flexDirection: "row", gap: 10 }}>
+          <View style={{ paddingBottom: 20, paddingHorizontal: 20, paddingTop: 4 }}>
+            {repeatPending ? (
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <ResultActionButton
+                  testID={UI_TEST_IDS.scanner.confirmRepeat}
+                  disabled={registering}
+                  label={t("cancel")}
+                  onPress={onCancel}
+                  secondary
+                />
+                <ResultActionButton
+                  disabled={registering}
+                  label={t("scannerRegisterAnother")}
+                  onPress={onRegisterAnother}
+                />
+              </View>
+            ) : (
               <ResultActionButton
-                testID={UI_TEST_IDS.scanner.confirmRepeat}
-                disabled={registering}
-                label={t("cancel")}
-                onPress={onCancel}
-                secondary
+                testID={UI_TEST_IDS.scanner.continue}
+                label={t("close")}
+                onPress={onContinue}
               />
-              <ResultActionButton
-                disabled={registering}
-                label={t("scannerRegisterAnother")}
-                onPress={onRegisterAnother}
-              />
-            </View>
-          ) : (
-            <ResultActionButton
-              testID={UI_TEST_IDS.scanner.continue}
-              label={t("close")}
-              onPress={onContinue}
-            />
-          )}
+            )}
+          </View>
         </View>
       </GlassView>
     </View>
