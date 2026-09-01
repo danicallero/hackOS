@@ -26,7 +26,7 @@ COPY apps/web/package.json ./apps/web/
 RUN --mount=type=cache,id=pnpm-store-web,target=/root/.local/share/pnpm/store/v10 \
     pnpm install --no-frozen-lockfile --filter @hackos/web...
 # Copy only what's needed for the build — skip tests, .next cache, etc.
-COPY apps/web/next.config.ts apps/web/tsconfig.json apps/web/postcss.config.mjs apps/web/eslint.config.mjs apps/web/components.json ./apps/web/
+COPY apps/web/next.config.ts apps/web/tsconfig.json apps/web/postcss.config.mjs apps/web/components.json ./apps/web/
 COPY apps/web/src ./apps/web/src
 COPY apps/web/public ./apps/web/public
 
