@@ -136,12 +136,18 @@ export function registerRoleGrantRuleRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List automatic role grant/revoke rules",
         description:
-          "Lists every role_grant_rules row (H8): which trigger_event grants or revokes which role, optionally scoped to one enterprise (enterpriseId null = applies to every occurrence of that trigger). See packages/shared/src/role-grant-triggers.ts for the fixed vocabulary of trigger events a rule may react to.",
+          "Lists role_grant_rules rows (H8): which trigger_event grants or revokes which role, optionally scoped to one enterprise (enterpriseId null = applies to every occurrence of that trigger). Pass roleId to list only the rules that grant/revoke that one role — the per-role Grant Rules tab on the role editor uses this; omitted, every rule in the system is returned (the read-only cross-role audit view). See packages/shared/src/role-grant-triggers.ts for the fixed vocabulary of trigger events a rule may react to.",
+        querystring: z.object({ roleId: z.coerce.number().int().optional() }),
         response: { 200: z.array(ruleResponse) },
       },
     },
-    async () => {
-      const { rows } = await pool.query(`${ROW_QUERY} ORDER BY rr.trigger_event, rr.id`);
+    async (req) => {
+      const { roleId } = req.query;
+      const { rows } = roleId
+        ? await pool.query(`${ROW_QUERY} WHERE rr.role_id = $1 ORDER BY rr.trigger_event, rr.id`, [
+            roleId,
+          ])
+        : await pool.query(`${ROW_QUERY} ORDER BY rr.trigger_event, rr.id`);
       return rows.map(toResponse);
     },
   );

@@ -1772,6 +1772,43 @@ describe("H8 role-grant-rules CRUD API", () => {
     expect(audits.rows.map((r) => r.action)).toEqual(["create", "update", "delete"]);
   });
 
+  it("filters the list by roleId (H8 per-role Grant Rules tab)", async () => {
+    const a = await getApp();
+    const actor = await highPositionManager([CAPABILITIES.ACCREDIT_SCAN]);
+    const roleA = await createRole([CAPABILITIES.ACCREDIT_SCAN], { name: "grant-rule-filter-a" });
+    const roleB = await createRole([CAPABILITIES.ACCREDIT_SCAN], { name: "grant-rule-filter-b" });
+    const { pool } = await import("../../src/db/pool.js");
+    // Distinct positions — `roles.position` has a unique index.
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [roleA]);
+    await pool.query(`UPDATE roles SET position = 11 WHERE id = $1`, [roleB]);
+
+    const ruleA = await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: { roleId: roleA, triggerEvent: "sponsor.enterprise_linked", action: "grant" },
+    });
+    expect(ruleA.statusCode).toBe(201);
+    const ruleB = await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: { roleId: roleB, triggerEvent: "sponsor.enterprise_unlinked", action: "revoke" },
+    });
+    expect(ruleB.statusCode).toBe(201);
+
+    const filtered = await a.inject({
+      method: "GET",
+      url: `/api/role-grant-rules?roleId=${roleA}`,
+      headers: asUser(actor),
+    });
+    expect(filtered.statusCode).toBe(200);
+    const ids = filtered.json().map((r: { id: number; roleId: number }) => r.roleId);
+    expect(ids.every((id: number) => id === roleA)).toBe(true);
+    expect(filtered.json().map((r: { id: number }) => r.id)).toContain(ruleA.json().id);
+    expect(filtered.json().map((r: { id: number }) => r.id)).not.toContain(ruleB.json().id);
+  });
+
   it("rejects an unknown trigger_event string", async () => {
     const a = await getApp();
     const actor = await highPositionManager();

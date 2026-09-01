@@ -38,6 +38,7 @@ import { type MessageKey, type Translate, useLocale } from "@/lib/i18n";
 import type { PermissionState, RoleSeedDiff, RoleSummary, UserListItem } from "@/lib/types";
 import { useUrlTab } from "@/lib/url-tab";
 import { cn } from "@/lib/utils";
+import { GrantRulesPanel } from "./grant-rules-panel";
 import {
   capabilityDescription,
   filterCapabilitiesByDomain,
@@ -110,7 +111,7 @@ export function RoleEditor({
 }) {
   const { t } = useLocale();
   const { tab, setTab } = useUrlTab({
-    values: ["display", "capabilities", "members"] as const,
+    values: ["display", "capabilities", "members", "grantRules"] as const,
     defaultValue: "display",
     aliases: { overview: "display", advanced: "display" },
   });
@@ -351,6 +352,15 @@ export function RoleEditor({
     />
   );
 
+  // H8: per-role automatic grant/revoke rules — scoped to `role` (the rules
+  // that target it), reusing GrantRulesPanel's list/create/edit/delete logic
+  // in its scoped mode. The role picker in that mode is dropped entirely
+  // (you're already looking at the role), so no roles catalogue is passed
+  // down here. A protected role can never be a rule's target (server-
+  // enforced), so this mirrors Capabilities/Members and disables mutation
+  // rather than hiding the tab.
+  const grantRulesSection = <GrantRulesPanel scopedRole={role} disabled={isProtected} />;
+
   const deleteModal = (
     <AlertModal
       open={deleteOpen}
@@ -412,6 +422,14 @@ export function RoleEditor({
         </div>
       );
     }
+    if (tab === "grantRules") {
+      return (
+        <div className="space-y-4">
+          <DrilldownBackButton label={role.name} onClick={() => setTab("display")} />
+          {grantRulesSection}
+        </div>
+      );
+    }
     return (
       <div className="space-y-6">
         <DrilldownBackButton label={t("backToRoles")} onClick={() => onBack?.()} />
@@ -421,6 +439,7 @@ export function RoleEditor({
           <div className="divide-border divide-y">
             <RoleNavRow label={t("capabilitiesLabel")} onClick={() => setTab("capabilities")} />
             <RoleNavRow label={t("membersTitle")} onClick={() => setTab("members")} />
+            <RoleNavRow label={t("grantRulesTitle")} onClick={() => setTab("grantRules")} />
           </div>
         </SectionCard>
         {dangerZoneSection}
@@ -438,6 +457,7 @@ export function RoleEditor({
           <TabsTrigger value="display">{t("displayTab")}</TabsTrigger>
           <TabsTrigger value="capabilities">{t("capabilitiesLabel")}</TabsTrigger>
           <TabsTrigger value="members">{t("membersTitle")}</TabsTrigger>
+          <TabsTrigger value="grantRules">{t("grantRulesTitle")}</TabsTrigger>
         </TabBar>
 
         <TabsContent value="display" className="space-y-6 pt-2">
@@ -451,6 +471,10 @@ export function RoleEditor({
 
         <TabsContent value="members" className="pt-2">
           {membersSection}
+        </TabsContent>
+
+        <TabsContent value="grantRules" className="space-y-4 pt-2">
+          {grantRulesSection}
         </TabsContent>
       </Tabs>
 

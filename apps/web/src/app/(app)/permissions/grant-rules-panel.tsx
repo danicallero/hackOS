@@ -37,6 +37,15 @@ import { ALL_TRIGGER_EVENTS, triggerEventLabel } from "./helpers";
  * authority (position hierarchy + capability possession) to every mutation
  * here that direct role assignment uses, so the role picker below excludes
  * protected roles the same way the roles list already does.
+ *
+ * Lives per-role now (H8 verification round): mounted as the "Grant rules"
+ * tab/nav-row on `RoleEditor`, scoped to the rules that target `scopedRole`
+ * via `GET /api/role-grant-rules?roleId=`. A rule's role is inherently the
+ * role you're already looking at, so the role picker is dropped entirely in
+ * this mode — creating a rule here only asks for trigger + action + optional
+ * enterprise scope, and always targets `scopedRole.id`. The read-only,
+ * cross-role "every rule in the system" view lives separately, in
+ * `grant-rules-overview.tsx`.
  */
 
 const ruleSchema = z.object({
@@ -48,8 +57,14 @@ const ruleSchema = z.object({
 });
 type RuleValues = z.infer<typeof ruleSchema>;
 
-function emptyValues(): RuleValues {
-  return { roleId: "", triggerEvent: "", action: "grant", enterpriseId: "", enabled: true };
+function emptyValues(defaultRoleId?: number): RuleValues {
+  return {
+    roleId: defaultRoleId ? String(defaultRoleId) : "",
+    triggerEvent: "",
+    action: "grant",
+    enterpriseId: "",
+    enabled: true,
+  };
 }
 
 function ruleToValues(rule: RoleGrantRule): RuleValues {
@@ -62,7 +77,18 @@ function ruleToValues(rule: RoleGrantRule): RuleValues {
   };
 }
 
-export function GrantRulesPanel({ roles }: { roles: RoleSummary[] }) {
+export function GrantRulesPanel({
+  roles = [],
+  scopedRole,
+  disabled = false,
+}: {
+  /** Full role catalogue for the role picker — unused (and omittable) when `scopedRole` is set. */
+  roles?: RoleSummary[];
+  /** Scopes the list/create/edit to rules targeting this one role and locks the role picker to it (H8). */
+  scopedRole?: RoleSummary;
+  /** True for a protected role, whose rules can never be created/edited (mirrors Capabilities/Members). */
+  disabled?: boolean;
+}) {
   const { t } = useLocale();
   const [rules, setRules] = useState<RoleGrantRule[]>([]);
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
@@ -79,7 +105,9 @@ export function GrantRulesPanel({ roles }: { roles: RoleSummary[] }) {
   const load = useCallback(async () => {
     setLoading(true);
     const [rulesResult, enterprisesResult] = await Promise.allSettled([
-      api.get<RoleGrantRule[]>("/api/role-grant-rules"),
+      api.get<RoleGrantRule[]>("/api/role-grant-rules", {
+        query: scopedRole ? { roleId: scopedRole.id } : undefined,
+      }),
       api.get<{ enterprises: EnterpriseSummary[] }>("/api/enterprises"),
     ]);
     if (rulesResult.status === "fulfilled") setRules(rulesResult.value);
@@ -89,7 +117,7 @@ export function GrantRulesPanel({ roles }: { roles: RoleSummary[] }) {
     if (enterprisesResult.status === "fulfilled")
       setEnterprises(enterprisesResult.value.enterprises);
     setLoading(false);
-  }, [t]);
+  }, [t, scopedRole]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -97,11 +125,14 @@ export function GrantRulesPanel({ roles }: { roles: RoleSummary[] }) {
   }, [load]);
 
   const schema = ruleSchema;
-  const form = useForm<RuleValues>({ resolver: zodResolver(schema), defaultValues: emptyValues() });
+  const form = useForm<RuleValues>({
+    resolver: zodResolver(schema),
+    defaultValues: emptyValues(scopedRole?.id),
+  });
 
   function openCreate() {
     setEditing(null);
-    form.reset(emptyValues());
+    form.reset(emptyValues(scopedRole?.id));
     setModalOpen(true);
   }
 
@@ -113,7 +144,9 @@ export function GrantRulesPanel({ roles }: { roles: RoleSummary[] }) {
 
   async function onSubmit(values: RuleValues) {
     const payload = {
-      roleId: Number(values.roleId),
+      // Scoped mode has no role field to submit a stale value from — always
+      // the role this panel is mounted on.
+      roleId: scopedRole ? scopedRole.id : Number(values.roleId),
       triggerEvent: values.triggerEvent,
       action: values.action,
       enterpriseId: values.enterpriseId ? Number(values.enterpriseId) : null,
@@ -166,13 +199,20 @@ export function GrantRulesPanel({ roles }: { roles: RoleSummary[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button onClick={openCreate}>
-          <PlusIcon /> {t("newGrantRule")}
-        </Button>
-      </div>
+      {!disabled && (
+        <div className="flex justify-end">
+          <Button onClick={openCreate}>
+            <PlusIcon /> {t("newGrantRule")}
+          </Button>
+        </div>
+      )}
 
-      <SectionCard icon={ZapIcon} title={t("grantRulesTitle")} bodyClassName="p-0">
+      <SectionCard
+        icon={scopedRole ? undefined : ZapIcon}
+        title={scopedRole ? undefined : t("grantRulesTitle")}
+        description={disabled ? t("superadminLockedDesc") : undefined}
+        bodyClassName="p-0"
+      >
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Spinner className="size-6" />
@@ -189,32 +229,36 @@ export function GrantRulesPanel({ roles }: { roles: RoleSummary[] }) {
                 <button
                   type="button"
                   className="min-w-0 flex-1 text-left"
+                  disabled={disabled}
                   onClick={() => openEdit(rule)}
                 >
                   <p className="truncate text-sm font-medium">
                     {triggerEventLabel(rule.triggerEvent, t)}
                   </p>
                   <p className="text-muted-foreground truncate text-xs">
-                    {t(rule.action === "grant" ? "grantActionGrant" : "grantActionRevoke")} ·{" "}
-                    {rule.roleName}
+                    {t(rule.action === "grant" ? "grantActionGrant" : "grantActionRevoke")}
+                    {/* The role is redundant once the panel is already scoped to it. */}
+                    {scopedRole ? "" : ` · ${rule.roleName}`}
                     {rule.enterpriseName ? ` · ${rule.enterpriseName}` : ""}
                   </p>
                 </button>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Switch
-                    checked={rule.enabled}
-                    onCheckedChange={(checked) => toggleEnabled(rule, checked)}
-                    aria-label={t("grantRuleEnabledLabel")}
-                  />
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    className="text-muted-foreground hover:text-destructive"
-                    onClick={() => setDeleteTarget(rule)}
-                  >
-                    <Trash2Icon />
-                  </Button>
-                </div>
+                {!disabled && (
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Switch
+                      checked={rule.enabled}
+                      onCheckedChange={(checked) => toggleEnabled(rule, checked)}
+                      aria-label={t("grantRuleEnabledLabel")}
+                    />
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() => setDeleteTarget(rule)}
+                    >
+                      <Trash2Icon />
+                    </Button>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -282,29 +326,32 @@ export function GrantRulesPanel({ roles }: { roles: RoleSummary[] }) {
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="roleId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("grantRuleRoleLabel")}</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {assignableRoles.map((role) => (
-                        <SelectItem key={role.id} value={String(role.id)}>
-                          {role.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FormItem>
-              )}
-            />
+            {/* Redundant once the panel is scoped to a single role — you're already looking at it. */}
+            {!scopedRole && (
+              <FormField
+                control={form.control}
+                name="roleId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("grantRuleRoleLabel")}</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {assignableRoles.map((role) => (
+                          <SelectItem key={role.id} value={String(role.id)}>
+                            {role.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )}
+              />
+            )}
             <FormField
               control={form.control}
               name="enterpriseId"

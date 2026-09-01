@@ -5,6 +5,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PermissionState, RoleSummary } from "@/lib/types";
 import { RoleEditor } from "./role-editor";
 
+// GrantRulesPanel (the Grant Rules tab's content) fetches its own data via
+// `api`; this suite only exercises drill-down navigation, so stub the API
+// surface it touches rather than pulling in a real fetch mock.
+vi.mock("@/lib/api", () => ({
+  api: {
+    get: vi.fn((path: string) =>
+      Promise.resolve(path.startsWith("/api/enterprises") ? { enterprises: [] } : []),
+    ),
+    post: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+  ApiError: class ApiError extends Error {},
+}));
+
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
@@ -37,13 +52,16 @@ vi.mock("next/navigation", () => ({
 
 // Returns the raw message key (interpolating `{name}`-style values), which
 // keeps assertions readable without hand-maintaining a translation table.
+// `t` is a module-level constant (not created inside useLocale) so its
+// identity is stable across renders — the real useLocale memoizes it the
+// same way (useMemo), and GrantRulesPanel's data-loading effect depends on
+// it transitively (via a useCallback keyed on `t`); an unstable mock `t`
+// would re-fire that effect every render and hang the test in an infinite
+// loop.
+const t = (key: string, values?: Record<string, string | number>) =>
+  values ? Object.entries(values).reduce((s, [k, v]) => s.replace(`{${k}}`, String(v)), key) : key;
 vi.mock("@/lib/i18n", () => ({
-  useLocale: () => ({
-    t: (key: string, values?: Record<string, string | number>) =>
-      values
-        ? Object.entries(values).reduce((s, [k, v]) => s.replace(`{${k}}`, String(v)), key)
-        : key,
-  }),
+  useLocale: () => ({ t }),
 }));
 
 const role: RoleSummary = {
@@ -104,10 +122,25 @@ describe("RoleEditor mobile drill-down", () => {
     container.remove();
   });
 
-  it("starts on the role screen with nav rows into Permissions and Members", () => {
+  it("starts on the role screen with nav rows into Permissions, Members and Grant Rules", () => {
     expect(container.querySelector("h1")?.textContent).toBe("Judges");
     expect(() => buttonWithText(container, "capabilitiesLabel")).not.toThrow();
     expect(() => buttonWithText(container, "membersTitle")).not.toThrow();
+    expect(() => buttonWithText(container, "grantRulesTitle")).not.toThrow();
+  });
+
+  it("walks list → role → grant rules → back", async () => {
+    const user = userEvent.setup();
+
+    await act(async () => user.click(buttonWithText(container, "grantRulesTitle")));
+    // the back button on a sub-screen is labeled with the role's name
+    const backFromGrantRules = buttonWithText(container, "Judges");
+    // GrantRulesPanel's own empty state, scoped to this role's rules
+    expect(container.textContent).toContain("noGrantRulesYetTitle");
+
+    await act(async () => user.click(backFromGrantRules));
+    expect(container.querySelector("h1")?.textContent).toBe("Judges");
+    expect(() => buttonWithText(container, "grantRulesTitle")).not.toThrow();
   });
 
   it("walks list → role → permissions → back → role → members → back → role → back", async () => {
@@ -171,6 +204,10 @@ describe("RoleEditor mobile drill-down", () => {
 
     // The desktop tab strip is present, and there is no nav-row into
     // Permissions/Members — that content is reached via the tabs instead.
-    expect(container.querySelector('[role="tablist"]')).not.toBeNull();
+    const tablist = container.querySelector('[role="tablist"]');
+    expect(tablist).not.toBeNull();
+    // Grant Rules is a tab alongside Display/Capabilities/Members (H8),
+    // not a separate top-level "Automation" tab.
+    expect(tablist?.textContent).toContain("grantRulesTitle");
   });
 });

@@ -2,7 +2,14 @@
 
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { KeyRoundIcon, PlusIcon, ShieldCheckIcon, Trash2Icon, UndoIcon } from "lucide-react";
+import {
+  KeyRoundIcon,
+  PlusIcon,
+  ShieldCheckIcon,
+  Trash2Icon,
+  UndoIcon,
+  ZapIcon,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -15,7 +22,6 @@ import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
-import { TabBar } from "@/components/common/tab-bar";
 import type { UserOption } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -36,7 +42,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Section } from "@/components/ui/surface";
-import { Tabs, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError, api } from "@/lib/api";
@@ -50,7 +55,7 @@ import type {
   UserList,
   UserListItem,
 } from "@/lib/types";
-import { GrantRulesPanel } from "./grant-rules-panel";
+import { GrantRulesOverviewModal } from "./grant-rules-overview";
 import { permissionTemplateName } from "./helpers";
 import { DrilldownBackButton, RoleEditor } from "./role-editor";
 import { RoleList } from "./role-list";
@@ -67,6 +72,17 @@ import { RoleList } from "./role-list";
 // split convention), the same data/state instead drives a drill-down
 // presentation — one screen at a time with a back button — instead of the
 // always-visible two-pane split. Desktop is unchanged.
+//
+// role_grant_rules admin (H8, H43-H46) originally lived here as a standalone
+// "Automation" tab, an equal-weight sibling of "Roles" showing a flat,
+// ungrouped, id-referencing list of every rule in the system. A later UX
+// pass found that bolted-on: a rule is inherently about ONE role, so
+// create/edit/delete now lives on that role's own "Grant rules" tab
+// (role-editor.tsx), scoped via `GET /api/role-grant-rules?roleId=`. What a
+// per-role view genuinely can't answer — "show me every automatic rule in
+// the system" — survives as a lightweight, read-only, filterable overview
+// (`grant-rules-overview.tsx`), opened from a plain button here rather than
+// competing as a second top-level tab.
 
 const createSchema = (t: Translate) =>
   z.object({
@@ -98,11 +114,9 @@ export default function PermissionsPage() {
   const [deletedRoles, setDeletedRoles] = useState<RoleSummary[]>([]);
   const [trashLoading, setTrashLoading] = useState(false);
   const [restoringId, setRestoringId] = useState<number | null>(null);
-  // H8: a top-level Roles/Automation switch, kept as plain local state rather
-  // than URL-tied — RoleEditor already owns the `?tab=` param for its own
-  // Display/Capabilities/Members sub-tabs, and a second tab group can't share
-  // that same query key.
-  const [view, setView] = useState<"roles" | "automation">("roles");
+  // H8: the read-only cross-role rules overview (see the file-level comment
+  // above) is a plain modal, not a routed view.
+  const [allRulesOpen, setAllRulesOpen] = useState(false);
 
   const selectedId = (() => {
     const raw = searchParams.get("role");
@@ -391,82 +405,66 @@ export default function PermissionsPage() {
     />
   );
 
-  // The Roles/Automation switch only makes sense from the top-level list
-  // screen — a mobile drill-down into a role or the trash already owns its
-  // own back button, so it stays hidden there (matches showHeader's logic).
-  const topLevel = showHeader;
-
   return (
     <div className="space-y-8">
-      {topLevel && (
-        <Tabs value={view} onValueChange={(v) => setView(v as "roles" | "automation")}>
-          <TabBar aria-label={t("rolesTitle")}>
-            <TabsTrigger value="roles">{t("rolesTitle")}</TabsTrigger>
-            <TabsTrigger value="automation">{t("automationTab")}</TabsTrigger>
-          </TabBar>
-        </Tabs>
+      {showHeader && (
+        <PageHeader
+          title={t("rolesTitle")}
+          primaryAction={
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setAllRulesOpen(true)}>
+                <ZapIcon /> {t("allGrantRulesButton")}
+              </Button>
+              <Button variant="outline" onClick={toggleTrash}>
+                <Trash2Icon /> {t("trashTitle")}
+              </Button>
+              <Button onClick={() => setCreateOpen(true)}>
+                <PlusIcon /> {t("newRole")}
+              </Button>
+            </div>
+          }
+        />
       )}
 
-      {view === "automation" ? (
-        <GrantRulesPanel roles={roles} />
+      {isMobile ? (
+        showTrash ? (
+          <div className="space-y-4">
+            <DrilldownBackButton label={t("backToRoles")} onClick={() => setShowTrash(false)} />
+            {trashPanel}
+          </div>
+        ) : selectedRole ? (
+          roleEditor
+        ) : loadError ? (
+          <ContextualError message={loadError} onRetry={() => void load()} />
+        ) : (
+          <Section padding="none" className="overflow-hidden">
+            {rolesListBody}
+          </Section>
+        )
       ) : (
         <>
-          {showHeader && (
-            <PageHeader
-              title={t("rolesTitle")}
-              primaryAction={
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={toggleTrash}>
-                    <Trash2Icon /> {t("trashTitle")}
-                  </Button>
-                  <Button onClick={() => setCreateOpen(true)}>
-                    <PlusIcon /> {t("newRole")}
-                  </Button>
-                </div>
-              }
-            />
-          )}
+          {showTrash && trashPanel}
 
-          {isMobile ? (
-            showTrash ? (
-              <div className="space-y-4">
-                <DrilldownBackButton label={t("backToRoles")} onClick={() => setShowTrash(false)} />
-                {trashPanel}
-              </div>
-            ) : selectedRole ? (
-              roleEditor
-            ) : loadError ? (
-              <ContextualError message={loadError} onRetry={() => void load()} />
-            ) : (
+          {loadError ? (
+            <ContextualError message={loadError} onRetry={() => void load()} />
+          ) : (
+            <div className="grid gap-6 lg:grid-cols-[320px_1fr] lg:items-start">
               <Section padding="none" className="overflow-hidden">
                 {rolesListBody}
               </Section>
-            )
-          ) : (
-            <>
-              {showTrash && trashPanel}
 
-              {loadError ? (
-                <ContextualError message={loadError} onRetry={() => void load()} />
-              ) : (
-                <div className="grid gap-6 lg:grid-cols-[320px_1fr] lg:items-start">
-                  <Section padding="none" className="overflow-hidden">
-                    {rolesListBody}
-                  </Section>
-
-                  {selectedRole
-                    ? roleEditor
-                    : !loading && (
-                        <Section>
-                          <EmptyState icon={ShieldCheckIcon} title={t("selectRoleHint")} />
-                        </Section>
-                      )}
-                </div>
-              )}
-            </>
+              {selectedRole
+                ? roleEditor
+                : !loading && (
+                    <Section>
+                      <EmptyState icon={ShieldCheckIcon} title={t("selectRoleHint")} />
+                    </Section>
+                  )}
+            </div>
           )}
         </>
       )}
+      <GrantRulesOverviewModal open={allRulesOpen} onOpenChange={setAllRulesOpen} />
       <Modal
         open={createOpen}
         onOpenChange={setCreateOpen}

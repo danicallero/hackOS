@@ -508,6 +508,10 @@ globally or scoped to one enterprise) with **no further code changes**.
 - **Admin CRUD** (`identity/routes/role-grant-rules.ts`): `GET/POST
   /api/role-grant-rules` and `PATCH/DELETE /api/role-grant-rules/:ruleId`,
   gated by `permissions:manage` like every other role-administration route.
+  `GET` takes an optional `?roleId=` query param that scopes the list to
+  rules targeting that one role — the per-role Grant Rules tab uses it;
+  omitted, every rule in the system is returned (the read-only overview
+  uses this form).
   `trigger_event` is validated against the `TRIGGER_EVENTS` registry (an
   unknown string 400s) — this is a fixed vocabulary of *what can happen*, not
   a free-text event system. `enterprise_id`, if given, must reference a real
@@ -522,18 +526,32 @@ globally or scoped to one enterprise) with **no further code changes**.
   applied to `applications.grants_role_ids` for the same class of
   privilege-escalation vector. Every mutation is audited
   (`entityType: "role_grant_rule"`).
-- **Admin UI**: a new "Automation" tab on `/permissions`
-  (`apps/web/src/app/(app)/permissions/grant-rules-panel.tsx`), alongside the
-  existing "Roles" tab — kept as a sibling top-level tab rather than folded
-  into the per-role editor, since a rule is keyed off a trigger event first
-  and a role second. Lists every rule (trigger, role, enterprise scope,
-  grant/revoke, enabled), and supports create/edit/delete/enable-toggle. The
-  role picker excludes protected roles (mirrors the roles list); the trigger
-  picker is populated from `TRIGGER_EVENTS`; the enterprise picker is
-  populated from `GET /api/enterprises` and degrades to "no enterprise
-  options" (global rules only) if the signed-in admin lacks the sponsor-side
-  capability that route also requires — enterprise scoping is additive, not
-  a hard requirement to use the feature.
+- **Admin UI**: rule management lives on the per-role "Grant rules" tab of
+  `/permissions` (`apps/web/src/app/(app)/permissions/role-editor.tsx`,
+  content in `grant-rules-panel.tsx`) — a 4th section alongside
+  Display/Capabilities/Members on `RoleEditor`, both as a desktop tab and as
+  a `RoleNavRow` in the mobile drill-down, scoped to the rules that target
+  the role currently open (`GET /api/role-grant-rules?roleId=`). A rule is
+  targeting exactly one role's authority, so once creation happens from
+  inside that role's own screen the role picker is redundant and dropped
+  entirely — creating a rule there only asks for trigger + action + optional
+  enterprise scope, and the payload's `roleId` is always the current role's
+  id. This replaced an earlier standalone top-level "Automation" tab
+  (equal-weight sibling of "Roles", listing every rule referencing roles by
+  name with no other context) that a later UX pass found bolted-on relative
+  to the Discord-style role browser. The trigger picker is populated from
+  `TRIGGER_EVENTS`; the enterprise picker is populated from
+  `GET /api/enterprises` and degrades to "no enterprise options" (global
+  rules only) if the signed-in admin lacks the sponsor-side capability that
+  route also requires — enterprise scoping is additive, not a hard
+  requirement to use the feature. A protected role can never own a rule
+  (server-enforced), so its Grant Rules tab mirrors Capabilities/Members:
+  visible, but mutation-disabled.
+  What a per-role view can't answer — "every automatic rule in the system,
+  regardless of role" — survives as a read-only, filterable overview
+  (`grant-rules-overview.tsx`), opened from a plain "All rules" button next
+  to Trash/New role on the roles list screen rather than as a second
+  top-level tab; it has no create/edit/delete/enable-toggle of its own.
 
 ### Soft-delete and restore (0804)
 
