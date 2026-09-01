@@ -87,8 +87,8 @@ describe("anonymization strips non-visible role assignments (H8, H53, H54)", () 
         ORDER BY id DESC LIMIT 1`,
     );
     expect(auditRows).toHaveLength(1);
-    expect(auditRows[0].after?.retainedRoles).toEqual(["Staff"]);
-    expect(auditRows[0].after?.retainedRoles).not.toContain("Door Operator");
+    expect(auditRows[0]?.after?.retainedRoles).toEqual(["Staff"]);
+    expect(auditRows[0]?.after?.retainedRoles).not.toContain("Door Operator");
   });
 
   it("retains every visible role name when a user holds more than one", async () => {
@@ -121,7 +121,7 @@ describe("anonymization strips non-visible role assignments (H8, H53, H54)", () 
         WHERE entity_type = 'anonymous_participant' AND action = 'anonymized'
         ORDER BY id DESC LIMIT 1`,
     );
-    expect(new Set(auditRows[0].after?.retainedRoles)).toEqual(new Set(["Staff", "Mentor"]));
+    expect(new Set(auditRows[0]?.after?.retainedRoles)).toEqual(new Set(["Staff", "Mentor"]));
   });
 
   it("retains no role names when the user only ever held hidden roles", async () => {
@@ -152,6 +152,6 @@ describe("anonymization strips non-visible role assignments (H8, H53, H54)", () 
         WHERE entity_type = 'anonymous_participant' AND action = 'anonymized'
         ORDER BY id DESC LIMIT 1`,
     );
-    expect(auditRows[0].after?.retainedRoles).toEqual([]);
+    expect(auditRows[0]?.after?.retainedRoles).toEqual([]);
   });
 });
