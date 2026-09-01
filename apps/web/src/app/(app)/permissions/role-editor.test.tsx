@@ -2,7 +2,7 @@ import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { RoleSummary } from "@/lib/types";
+import type { PermissionState, RoleSummary } from "@/lib/types";
 import { RoleEditor } from "./role-editor";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -69,8 +69,10 @@ function buttonWithText(container: HTMLElement, text: string): HTMLButtonElement
 describe("RoleEditor mobile drill-down", () => {
   let container: HTMLDivElement;
   let root: Root;
-  let onBack: ReturnType<typeof vi.fn>;
-  let onSaveCapabilities: ReturnType<typeof vi.fn>;
+  let onBack: () => void;
+  let onSaveCapabilities: (
+    capabilities: { capability: string; state: PermissionState }[],
+  ) => Promise<void>;
 
   beforeEach(() => {
     container = document.createElement("div");
