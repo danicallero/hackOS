@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { TRIGGER_EVENTS } from "@hackos/shared/role-grant-triggers";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -808,8 +809,12 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           );
           await issueTicket(client, userId);
           // H8: the Sponsor role is granted through the generic
-          // role_grant_rules mechanism, not an ad hoc user_roles write.
-          await applyRoleGrantRule(client, userId, "sponsor.enterprise_linked", null);
+          // role_grant_rules mechanism, not an ad hoc user_roles write. The
+          // enterprise is passed as context so an admin can additionally (or
+          // instead) configure a rule scoped to this one enterprise.
+          await applyRoleGrantRule(client, userId, TRIGGER_EVENTS.SPONSOR_ENTERPRISE_LINKED, null, {
+            enterpriseId,
+          });
         }
 
         if (enterpriseLink) {

@@ -1,3 +1,4 @@
+import { TRIGGER_EVENTS } from "@hackos/shared/role-grant-triggers";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
@@ -339,8 +340,12 @@ export async function addEnterpriseMember(
     );
     await issueTicket(client, userId);
     // H8: the Sponsor role is granted through the generic role_grant_rules
-    // mechanism, not an ad hoc user_roles write — see role-grants.ts.
-    await applyRoleGrantRule(client, userId, "sponsor.enterprise_linked", actorId);
+    // mechanism, not an ad hoc user_roles write — see role-grants.ts. The
+    // enterprise is passed as context so an admin can additionally (or
+    // instead) configure a rule scoped to this one enterprise.
+    await applyRoleGrantRule(client, userId, TRIGGER_EVENTS.SPONSOR_ENTERPRISE_LINKED, actorId, {
+      enterpriseId,
+    });
     await audit(client, {
       actorId,
       entityType: "enterprise",
@@ -385,7 +390,15 @@ export async function removeEnterpriseMember(
       [userId],
     );
     if (remaining.length === 0) {
-      await applyRoleGrantRule(client, userId, "sponsor.enterprise_unlinked", actorId);
+      await applyRoleGrantRule(
+        client,
+        userId,
+        TRIGGER_EVENTS.SPONSOR_ENTERPRISE_UNLINKED,
+        actorId,
+        {
+          enterpriseId,
+        },
+      );
     }
     await audit(client, {
       actorId,
@@ -472,6 +485,15 @@ export async function addEnterpriseJudge(
         userId,
       });
     }
+    // H8: mirrors the sponsor-link grant — being handed judging perms on an
+    // enterprise's rooms is a genuine "this person is now a judge for this
+    // company" event, so it routes through the same generic rule mechanism
+    // (unlike removal.ts's anonymization cleanup and queue/reset.ts's event
+    // reset, which delete enterprise_judges rows incidentally and
+    // deliberately do NOT fire this trigger).
+    await applyRoleGrantRule(client, userId, TRIGGER_EVENTS.JUDGE_ENTERPRISE_ASSIGNED, actorId, {
+      enterpriseId,
+    });
     await audit(client, {
       actorId,
       entityType: "enterprise",
@@ -507,6 +529,9 @@ export async function removeEnterpriseJudge(
     if (!rowCount) {
       throw new NotFoundError("User is not a judge for this enterprise", { enterpriseId, userId });
     }
+    await applyRoleGrantRule(client, userId, TRIGGER_EVENTS.JUDGE_ENTERPRISE_REMOVED, actorId, {
+      enterpriseId,
+    });
     await audit(client, {
       actorId,
       entityType: "enterprise",
