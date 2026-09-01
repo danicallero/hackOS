@@ -34,6 +34,7 @@ import { issueRemovalPin } from "../removal-pin.js";
 import {
   type AssignedRoleSummary,
   assignAttendeeRole,
+  type BadgeCategory,
   computeMembershipFlags,
   getAssignedRoles,
   getBadgeCategory,
@@ -842,11 +843,30 @@ export function registerProfileRoutes(app: FastifyInstance): void {
              AND is_test_account = false`;
       const args = filter ? [filter, limit, offset] : [limit, offset];
       const p = filter ? 2 : 1;
-      const { rows } = await pool.query(
-        `SELECT id, email, email_verified, name, surname, badge_id, language, shirt_size,
-                is_test_account, created_at
-           FROM users ${where}
-           ORDER BY created_at DESC LIMIT $${p} OFFSET $${p + 1}`,
+      // H8: role is resolved in this same query via a single join, rather than
+      // one getBadgeCategory() call per row (was an N+1 capped at `limit`
+      // rows) — same admin/judge/sponsor/staff-then-effective-role priority
+      // as identity/role.ts's getBadgeCategory, via the same bulk-query views
+      // logistics/stats.ts and scanner-sync.ts already use.
+      const { rows } = await pool.query<UserRow & { role: BadgeCategory }>(
+        `SELECT u.id, u.email, u.email_verified, u.name, u.surname, u.badge_id, u.language,
+                u.shirt_size, u.is_test_account, u.created_at,
+                CASE
+                  WHEN EXISTS (
+                    SELECT 1 FROM user_effective_capabilities uec
+                     WHERE uec.user_id = u.id AND uec.capability = '*'
+                  ) THEN 'admin'
+                  WHEN EXISTS (SELECT 1 FROM enterprise_judges ej WHERE ej.user_id = u.id) THEN 'judge'
+                  WHEN EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id) THEN 'sponsor'
+                  WHEN EXISTS (
+                    SELECT 1 FROM user_effective_capabilities uec WHERE uec.user_id = u.id
+                  ) THEN 'staff'
+                  ELSE COALESCE(uebc.badge_category::text, 'unassigned')
+                END AS role
+           FROM users u
+           LEFT JOIN user_effective_badge_category uebc ON uebc.user_id = u.id
+           ${where}
+           ORDER BY u.created_at DESC LIMIT $${p} OFFSET $${p + 1}`,
         args,
       );
       const { rows: countRows } = await pool.query(
@@ -881,23 +901,21 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         statusRows.map((r: { user_id: number; status: string }) => [r.user_id, r.status]),
       );
 
-      const users = await Promise.all(
-        rows.map(async (r: UserRow) => ({
-          id: r.id,
-          email: r.email,
-          emailVerified: r.email_verified,
-          name: r.name,
-          surname: r.surname,
-          badgeId: r.badge_id,
-          role: await getBadgeCategory(pool, r.id),
-          language: r.language,
-          shirtSize: r.shirt_size,
-          applicationStatus: statusByUser.get(r.id) ?? null,
-          confirmedSpot: statusByUser.get(r.id) === "confirmed",
-          isTestAccount: r.is_test_account,
-          createdAt: r.created_at.toISOString(),
-        })),
-      );
+      const users = rows.map((r) => ({
+        id: r.id,
+        email: r.email,
+        emailVerified: r.email_verified,
+        name: r.name,
+        surname: r.surname,
+        badgeId: r.badge_id,
+        role: r.role,
+        language: r.language,
+        shirtSize: r.shirt_size,
+        applicationStatus: statusByUser.get(r.id) ?? null,
+        confirmedSpot: statusByUser.get(r.id) === "confirmed",
+        isTestAccount: r.is_test_account,
+        createdAt: r.created_at.toISOString(),
+      }));
 
       return {
         users,
