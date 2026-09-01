@@ -2,6 +2,7 @@
 
 import { LogOutIcon, UserIcon } from "lucide-react";
 import Link from "next/link";
+import { initials } from "@/app/(app)/users/[id]/shared";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,12 +16,6 @@ import {
 import { signOut } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
-
-function initials(name: string | null, surname: string | null, email: string) {
-  const a = name?.[0] ?? email[0] ?? "?";
-  const b = surname?.[0] ?? "";
-  return (a + b).toUpperCase();
-}
 
 /** Avatar dropdown: identity summary + sign out (H4). */
 export function UserMenu() {
@@ -41,9 +36,7 @@ export function UserMenu() {
         <Button variant="ghost" className="h-9 gap-2 px-2">
           <Avatar className="size-7">
             {me.image && <AvatarImage src={me.image} alt="" />}
-            <AvatarFallback className="text-xs">
-              {initials(me.name, me.surname, me.email)}
-            </AvatarFallback>
+            <AvatarFallback className="text-xs">{initials(me)}</AvatarFallback>
           </Avatar>
           <span className="hidden max-w-32 truncate text-sm sm:inline">{me.name ?? me.email}</span>
         </Button>

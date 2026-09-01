@@ -13,6 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { ApiError, api } from "@/lib/api";
 import { shortDateTimeFmt } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
@@ -32,6 +33,7 @@ const STATUS_TONE: Record<
 
 export function InviteLinksCard({ enterpriseId }: { enterpriseId: number }) {
   const { t } = useLocale();
+  const copyToClipboard = useCopyToClipboard();
   const [links, setLinks] = useState<EnterpriseInviteLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -123,14 +125,7 @@ export function InviteLinksCard({ enterpriseId }: { enterpriseId: number }) {
     }
   }
 
-  async function copyLink(url: string) {
-    try {
-      await navigator.clipboard.writeText(url);
-      toast.success(t("copied"));
-    } catch {
-      toast.error(t("couldNotCopyLink"));
-    }
-  }
+  const copyLink = copyToClipboard;
 
   return (
     <SectionCard

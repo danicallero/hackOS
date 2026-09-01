@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import type { EnterpriseSummary, Invite, InviteKind, RoleSummary } from "@/lib/types";
@@ -30,6 +31,7 @@ import type { EnterpriseSummary, Invite, InviteKind, RoleSummary } from "@/lib/t
  */
 export function InviteUserDialog() {
   const { t } = useLocale();
+  const copyToClipboard = useCopyToClipboard();
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [enterpriseId, setEnterpriseId] = useState<string>("");
@@ -130,8 +132,7 @@ export function InviteUserDialog() {
               aria-label={t("copyInviteLink")}
               title={t("copyInviteLink")}
               onClick={() => {
-                navigator.clipboard.writeText(claimUrl);
-                toast.success(t("copied"));
+                void copyToClipboard(claimUrl);
               }}
             >
               <CopyIcon className="size-4" aria-hidden="true" />

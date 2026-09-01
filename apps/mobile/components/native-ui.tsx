@@ -5,6 +5,7 @@ import {
   type ColorValue,
   Modal,
   Pressable,
+  Switch,
   Text,
   TextInput,
   type TextStyle,
@@ -96,6 +97,38 @@ export function Separator({
         marginRight: trailingInset,
       }}
     />
+  );
+}
+
+export function ToggleRow({
+  label,
+  value,
+  onChange,
+  disabled = false,
+}: {
+  label: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <View
+      style={{
+        alignItems: "center",
+        flexDirection: "row",
+        gap: 12,
+        minHeight: 50,
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+      }}
+    >
+      <Text
+        style={{ color: disabled ? colors.tertiaryLabel : colors.label, flex: 1, fontSize: 16 }}
+      >
+        {label}
+      </Text>
+      <Switch disabled={disabled} onValueChange={onChange} value={value} />
+    </View>
   );
 }
 

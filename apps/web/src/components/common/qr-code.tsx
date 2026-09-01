@@ -1,7 +1,7 @@
 import { CopyIcon } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +18,7 @@ export function QrCode({
   className?: string;
 }) {
   const { t } = useLocale();
+  const copyToClipboard = useCopyToClipboard();
   if (!value) {
     return (
       <div className={cn("rounded-lg border p-4 text-center", className)}>
@@ -50,8 +51,7 @@ export function QrCode({
             size="sm"
             className="w-full"
             onClick={() => {
-              void navigator.clipboard.writeText(value);
-              toast.success(t("copied"));
+              void copyToClipboard(value);
             }}
           >
             <CopyIcon className="size-4" />

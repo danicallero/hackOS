@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { ApiError, api } from "@/lib/api";
 import { shortDateTimeFmt } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
@@ -56,6 +57,7 @@ export function UserInviteLinksSection({
   onChanged,
 }: UserInviteLinksSectionProps) {
   const { t } = useLocale();
+  const copyLink = useCopyToClipboard();
   const [createOpen, setCreateOpen] = useState(false);
   const [enterpriseId, setEnterpriseId] = useState("");
   const [allowClosedForms, setAllowClosedForms] = useState(false);
@@ -139,15 +141,6 @@ export function UserInviteLinksSection({
           used: link.redeemedCount,
           maximum: link.maxRedeems,
         });
-  }
-
-  async function copyLink(url: string) {
-    try {
-      await navigator.clipboard.writeText(url);
-      toast.success(t("copied"));
-    } catch {
-      toast.error(t("couldNotCopyLink"));
-    }
   }
 
   async function withdrawLink(link: UserInviteLink) {
