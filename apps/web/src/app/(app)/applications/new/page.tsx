@@ -31,30 +31,17 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import type { RoleSummary } from "@/lib/types";
-import {
-  APPLICATION_TYPES,
-  type ApplicationForm,
-  DEFAULT_SHIRT_DIETARY_TYPES,
-  fromLocalInput,
-} from "../lib";
+import { type ApplicationForm, fromLocalInput } from "../lib";
 
 // Runtime validator is built inside the component with useMemo so its error
 // message can be localized via t("required"). Type is defined separately.
 type CreateValues = {
   name: string;
-  type: (typeof APPLICATION_TYPES)[number];
   open_at: string;
   close_at: string;
   capacity: string;
@@ -66,13 +53,12 @@ type CreateValues = {
 
 const EMPTY: CreateValues = {
   name: "",
-  type: "participant",
   open_at: "",
   close_at: "",
   capacity: "",
   confirmation_window_hours: "168",
-  ask_shirt_size: DEFAULT_SHIRT_DIETARY_TYPES.includes("participant"),
-  ask_food_intolerances: DEFAULT_SHIRT_DIETARY_TYPES.includes("participant"),
+  ask_shirt_size: false,
+  ask_food_intolerances: false,
   grants_role_ids: [],
 };
 
@@ -94,7 +80,6 @@ export default function NewApplicationFormPage() {
     () =>
       z.object({
         name: z.string().min(1, t("required")).max(200),
-        type: z.enum(APPLICATION_TYPES),
         open_at: z.string(),
         close_at: z.string(),
         capacity: z.string(),
@@ -129,7 +114,6 @@ export default function NewApplicationFormPage() {
       // questions editor on the detail page fills it in (H11).
       const created = await api.post<ApplicationForm>("/api/applications", {
         name: values.name.trim(),
-        type: values.type,
         template: [],
         open_at: fromLocalInput(values.open_at),
         close_at: fromLocalInput(values.close_at),
@@ -173,42 +157,6 @@ export default function NewApplicationFormPage() {
                   <FormControl>
                     <Input placeholder={t("exampleFormNamePlaceholder")} {...field} />
                   </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="type"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("personTypeLabel")}</FormLabel>
-                  <Select
-                    onValueChange={(value) => {
-                      field.onChange(value);
-                      // Re-suggest the logistics defaults for the new type —
-                      // still just a starting point, editable below.
-                      const asksByDefault = DEFAULT_SHIRT_DIETARY_TYPES.includes(
-                        value as CreateValues["type"],
-                      );
-                      form.setValue("ask_shirt_size", asksByDefault);
-                      form.setValue("ask_food_intolerances", asksByDefault);
-                    }}
-                    value={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="w-full capitalize">
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {APPLICATION_TYPES.map((type) => (
-                        <SelectItem key={type} value={type} className="capitalize">
-                          {type}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -300,7 +248,22 @@ export default function NewApplicationFormPage() {
                     <MultiSelect
                       options={roles.map((role) => ({ value: String(role.id), label: role.name }))}
                       value={field.value}
-                      onChange={field.onChange}
+                      onChange={(next) => {
+                        field.onChange(next);
+                        // Re-suggest the logistics defaults from the roles
+                        // actually being granted (H8) — still just a
+                        // starting point, editable below. Replaces the
+                        // retired static `type`-keyed default.
+                        const selectedCategories = new Set(
+                          roles
+                            .filter((role) => next.includes(String(role.id)))
+                            .map((role) => role.badgeCategory),
+                        );
+                        const asksByDefault =
+                          selectedCategories.has("participant") || selectedCategories.has("mentor");
+                        form.setValue("ask_shirt_size", asksByDefault);
+                        form.setValue("ask_food_intolerances", asksByDefault);
+                      }}
                       placeholder={t("grantsRolesPlaceholder")}
                       searchPlaceholder={t("searchRolesPlaceholder")}
                       emptyText={t("noRolesYet")}

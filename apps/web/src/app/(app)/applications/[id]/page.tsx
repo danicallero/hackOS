@@ -1,7 +1,7 @@
 "use client";
 
 // Application form detail (H11–H15, H57). Up to four tabs, gated per capability:
-//   • Form (applications:manage) — edit metadata (window, quota, type) and a
+//   • Form (applications:manage) — edit metadata (window, quota, granted roles) and a
 //     questions editor (add/remove/reorder template fields with i18n labels).
 //     Persists via PATCH /api/applications/:id.
 //   • Review (applications:review) — submitted responses: my-review score/
@@ -41,7 +41,12 @@ import {
   confirmDiscardUnsavedChanges,
   useUnsavedChangesGuard,
 } from "@/lib/use-unsaved-changes-guard";
-import { type ApplicationForm, type ApplicationStats, windowState } from "../lib";
+import {
+  type ApplicationForm,
+  type ApplicationStats,
+  grantedBadgeCategoryLabel,
+  windowState,
+} from "../lib";
 
 import { MetadataCard } from "./metadata-card";
 import { QuestionsCard } from "./questions-card";
@@ -181,8 +186,8 @@ export default function ApplicationDetailPage() {
         state={
           form && w ? (
             <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge tone="neutral" className="capitalize">
-                {form.type}
+              <StatusBadge tone="neutral">
+                {grantedBadgeCategoryLabel(form.granted_badge_category, t)}
               </StatusBadge>
               <StatusBadge tone={w.tone} dot={false}>
                 {w.label}
@@ -223,8 +228,10 @@ export default function ApplicationDetailPage() {
               {form ? (
                 <dl className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <dt className="text-muted-foreground text-sm">{t("applicationTypeLabel")}</dt>
-                    <dd className="mt-1 font-medium capitalize">{form.type}</dd>
+                    <dt className="text-muted-foreground text-sm">{t("colGrantedRole")}</dt>
+                    <dd className="mt-1 font-medium">
+                      {grantedBadgeCategoryLabel(form.granted_badge_category, t)}
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-muted-foreground text-sm">{t("statusColumn")}</dt>

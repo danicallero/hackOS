@@ -25,26 +25,18 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
 import type { RoleSummary } from "@/lib/types";
-import { APPLICATION_TYPES, type ApplicationForm, fromLocalInput, toLocalInput } from "../lib";
+import { type ApplicationForm, fromLocalInput, toLocalInput } from "../lib";
 
 // Runtime validator is built inside the component with useMemo so its error
 // message can be localized via t("required"). Type is defined separately.
 type MetaValues = {
   name: string;
-  type: (typeof APPLICATION_TYPES)[number];
   description: string;
   active: boolean;
   open_at: string;
@@ -72,7 +64,6 @@ export function MetadataCard({
     () =>
       z.object({
         name: z.string().min(1, t("required")).max(200),
-        type: z.enum(APPLICATION_TYPES),
         description: z.string(),
         active: z.boolean(),
         open_at: z.string(),
@@ -89,7 +80,6 @@ export function MetadataCard({
     resolver: zodResolver(localizedMetaSchema),
     defaultValues: {
       name: form.name,
-      type: form.type,
       description: form.description ?? "",
       active: form.active,
       open_at: toLocalInput(form.open_at),
@@ -130,7 +120,6 @@ export function MetadataCard({
       // PATCH /api/applications/:id (APPLICATIONS_MANAGE) — audited server-side (H11/H53).
       await api.patch<ApplicationForm>(`/api/applications/${form.id}`, {
         name: values.name.trim(),
-        type: values.type,
         description: values.description.trim() || null,
         active: values.active,
         open_at: fromLocalInput(values.open_at),
@@ -185,30 +174,6 @@ export function MetadataCard({
                 <FormControl>
                   <Input {...field} />
                 </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={rhf.control}
-            name="type"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("personTypeLabel")}</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="w-full capitalize">
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {APPLICATION_TYPES.map((type) => (
-                      <SelectItem key={type} value={type} className="capitalize">
-                        {type}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
                 <FormMessage />
               </FormItem>
             )}

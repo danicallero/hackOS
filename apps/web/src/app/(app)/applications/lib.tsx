@@ -11,18 +11,13 @@
 
 import type { Translate } from "@/lib/i18n";
 import type { Tone } from "@/lib/tones";
+import { ROLE_COPY } from "../users/[id]/shared";
 
 export interface I18nText {
   en: string;
   es: string;
   gl: string;
 }
-
-export const APPLICATION_TYPES = ["participant", "mentor", "sponsor", "volunteer"] as const;
-export type ApplicationType = (typeof APPLICATION_TYPES)[number];
-
-/** Types that ask for a shirt size/dietary data by default when creating a new form. */
-export const DEFAULT_SHIRT_DIETARY_TYPES: ApplicationType[] = ["participant", "mentor"];
 
 export const FIELD_KINDS = [
   "text",
@@ -108,7 +103,11 @@ export interface FormSection {
 export interface ApplicationForm {
   id: number;
   name: string;
-  type: ApplicationType;
+  /** H8: badge_category of the form's highest-position granted role, or null
+   *  if it grants none — derived live from `grants_role_ids` so it can never
+   *  drift from what the form actually grants. Replaces the retired static
+   *  `type` field. */
+  granted_badge_category: string | null;
   template: TemplateField[];
   sections: FormSection[];
   /** Immutable snapshot used by newly-created drafts/submissions. */
@@ -157,7 +156,12 @@ export interface ResponseRow {
 
 /** Shape of GET /api/applications/:id/stats (subset we render). */
 export interface ApplicationStats {
-  application: { id: number; name: string; type: string; capacity: number | null };
+  application: {
+    id: number;
+    name: string;
+    granted_badge_category: string | null;
+    capacity: number | null;
+  };
   counts_by_status: Record<string, number>;
   funnel: {
     sent: number;
@@ -185,6 +189,24 @@ const STATUS_TONE: Record<string, Tone> = {
 
 export function statusTone(status: string): Tone {
   return STATUS_TONE[status] ?? "neutral";
+}
+
+// ── granted-role display (H8) ─────────────────────────────────────────────────
+
+/**
+ * Label for a form's `granted_badge_category` (see ApplicationForm doc) —
+ * reuses the same role-copy dictionary the user-profile header uses for a
+ * person's own effective role, since it's the same fixed badge_category
+ * vocabulary. Replaces the retired static `type` field's display.
+ */
+export function grantedBadgeCategoryLabel(
+  category: string | null | undefined,
+  t: Translate,
+): string {
+  if (category && category in ROLE_COPY) {
+    return t(ROLE_COPY[category as keyof typeof ROLE_COPY]);
+  }
+  return t("roleUnassigned");
 }
 
 // ── datetime-local <-> ISO helpers ────────────────────────────────────────────

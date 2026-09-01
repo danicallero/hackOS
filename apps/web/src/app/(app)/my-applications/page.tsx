@@ -162,7 +162,7 @@ export default function MyApplicationsPage() {
               <div className="min-w-0 space-y-0.5">
                 <div className="text-pretty font-medium">{f.name}</div>
                 <div className="text-muted-foreground text-xs">
-                  <span>{formTypeLabel(f.type, t)}</span>
+                  <span>{formTypeLabel(f.granted_badge_category, t)}</span>
                   {f.close_at ? t("closesInline", { date: fmtDateTime(f.close_at, language) }) : ""}
                 </div>
               </div>
