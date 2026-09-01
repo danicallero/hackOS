@@ -197,6 +197,28 @@ authoritative answer.
   had it. Web's `DerivedRole` type is renamed `BadgeCategory` (same values).
   Mobile (`apps/mobile/lib/scanner-types.ts`/`types.ts`) needed no changes:
   the wire values are unchanged, only how the server computes them.
+- **Filter-scoping convention (H8)**: a role's `is_visible` flag gates
+  whether that *individual* role name can appear in a browse/search/filter
+  surface — an admin management picker (the permissions page's role editor,
+  an application form's "grants roles" picker in `applications/new/` and
+  `applications/[id]/metadata-card.tsx`) always shows every role regardless
+  of `is_visible`, since managing/granting roles requires seeing all of
+  them. Every "filter people by role" surface audited so far
+  (`apps/web/src/app/(app)/users/page.tsx`'s role filter, the mobile
+  scanner's group filter in `general-scanner-screen.tsx`, and
+  `people-directory-screen.tsx`'s role filter, plus the accreditation stats
+  breakdown) turned out to filter on the fixed `BadgeCategory` enum
+  (admin/judge/sponsor/staff/mentor/participant/unassigned), not on
+  individual role names from `GET /api/roles` — a structurally different,
+  always-public classification. `getBadgeCategory`/`getEffectiveRole`
+  already only let a *visible* role influence a user's derived category (see
+  above), so these filters never leak a hidden role's existence and need no
+  further `is_visible` scoping. If a future surface ever lists individual
+  role names for browsing rather than management, scope it to
+  `is_visible = true` — server-side if the endpoint is search-heavy (to
+  avoid leaking a hidden role's name to the client at all), client-side if
+  the caller already holds the full `GET /api/roles` response for another
+  reason.
 
 ### `system:superadmin` is CLI-only, not just protected
 
