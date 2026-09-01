@@ -39,7 +39,7 @@ export async function loadScannerGroupFilter(): Promise<ScannerGroup[]> {
     const parsed: unknown = JSON.parse(stored);
     if (!Array.isArray(parsed)) return [];
     return parsed.filter((value): value is ScannerGroup =>
-      GROUP_VALUES.includes(value as ScannerGroup),
+      SCANNER_GROUP_VALUES.includes(value as ScannerGroup),
     );
   } catch {
     return [];
@@ -50,4 +50,5 @@ export async function saveScannerGroupFilter(groups: ScannerGroup[]): Promise<vo
   await SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(groups));
 }
 
-const GROUP_VALUES: ScannerGroup[] = ["participant", "mentor", "staff", "sponsor"];
+/** Exported so `lib/role-filters.ts` can derive the scanner's filter-row subset from the same list. */
+export const SCANNER_GROUP_VALUES: ScannerGroup[] = ["participant", "mentor", "staff", "sponsor"];

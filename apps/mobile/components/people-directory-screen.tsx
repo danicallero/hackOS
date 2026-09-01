@@ -23,6 +23,7 @@ import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { emitManualActivityScan } from "@/lib/manual-activity-scan";
 import { safeBack } from "@/lib/navigation";
+import { ROLE_FILTER_ALL, ROLE_FILTER_OPTIONS } from "@/lib/role-filters";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { listScannerPeople } from "@/lib/scanner-db";
 import type { ScannerPerson } from "@/lib/scanner-types";
@@ -349,29 +350,9 @@ export function PeopleDirectoryScreen() {
 
 const ROLE_FILTERS: Array<{
   value: "all" | ScannerPerson["role"];
-  labelKey:
-    | "roleAll"
-    | "roleAdmin"
-    | "roleStaff"
-    | "roleSponsor"
-    | "roleMentor"
-    | "roleJudge"
-    | "roleParticipants";
-  icon:
-    | "person.2"
-    | "person.crop.circle.badge.checkmark"
-    | "checkmark.seal"
-    | "briefcase"
-    | "person";
-}> = [
-  { value: "all", labelKey: "roleAll", icon: "person.2" },
-  { value: "admin", labelKey: "roleAdmin", icon: "person.crop.circle.badge.checkmark" },
-  { value: "staff", labelKey: "roleStaff", icon: "person.crop.circle.badge.checkmark" },
-  { value: "sponsor", labelKey: "roleSponsor", icon: "briefcase" },
-  { value: "mentor", labelKey: "roleMentor", icon: "person.2" },
-  { value: "judge", labelKey: "roleJudge", icon: "checkmark.seal" },
-  { value: "participant", labelKey: "roleParticipants", icon: "person" },
-];
+  labelKey: "roleAll" | (typeof ROLE_FILTER_OPTIONS)[number]["labelKey"];
+  icon: "person.2" | (typeof ROLE_FILTER_OPTIONS)[number]["icon"];
+}> = [{ value: "all", ...ROLE_FILTER_ALL }, ...ROLE_FILTER_OPTIONS];
 
 function PersonRow({ person, onPress }: { person: ScannerPerson; onPress: () => void }) {
   const { t } = useLocale();

@@ -12,6 +12,7 @@ import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { safeBack } from "@/lib/navigation";
+import { ROLE_FILTER_ALL, SCANNER_GROUP_FILTER_OPTIONS } from "@/lib/role-filters";
 import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import { findPersonByBadge, findPersonByTicket, listScannerPeople } from "@/lib/scanner-db";
 import {
@@ -237,17 +238,6 @@ export function GeneralScannerScreen() {
 /** Keeps the filter's outside-tap backdrop and panel above every other floating control (stats tiles, sync pill, camera controls). */
 const FILTER_PANEL_Z_INDEX = 1000;
 
-const GROUP_FILTERS: Array<{
-  value: ScannerGroup;
-  labelKey: "roleParticipants" | "roleMentor" | "roleStaff" | "roleSponsor";
-  icon: "person" | "person.2" | "person.crop.circle.badge.checkmark" | "briefcase";
-}> = [
-  { value: "participant", labelKey: "roleParticipants", icon: "person" },
-  { value: "mentor", labelKey: "roleMentor", icon: "person.2" },
-  { value: "staff", labelKey: "roleStaff", icon: "person.crop.circle.badge.checkmark" },
-  { value: "sponsor", labelKey: "roleSponsor", icon: "briefcase" },
-];
-
 /**
  * The group-filter and people-finder controls, side by side in one
  * elongated glass pill — see `ScannerGroupFilterButton`.
@@ -318,10 +308,7 @@ function ScannerGroupFilterButton({
   const [open, setOpen] = useState(false);
   const filterIcon =
     groups.length === 0 ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill";
-  const rows = [
-    { value: null, labelKey: "roleAll" as const, icon: "person.2" as const },
-    ...GROUP_FILTERS,
-  ];
+  const rows = [{ value: null, ...ROLE_FILTER_ALL }, ...SCANNER_GROUP_FILTER_OPTIONS];
 
   return (
     <>
