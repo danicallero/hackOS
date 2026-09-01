@@ -167,10 +167,26 @@ authoritative answer.
   `manual_attendee_roles` row onto the equivalent `user_roles` grant.
   `hasEventAccess` still reads `manual_attendee_roles` too, defensively,
   since the table isn't dropped; `removal.ts`'s existing cleanup of it is
-  unaffected. A pre-existing, unrelated gap noticed but out of scope here:
-  `removal.ts`'s anonymization flow doesn't strip an anonymized user's own
-  `user_roles` rows (only reassigns `assigned_by` on rows they granted to
-  others) — worth a follow-up, not introduced by this change.
+  unaffected.
+- **Anonymization now collapses the departing identity's own roles to
+  visible-only** (H8/H53, resolved a gap flagged in an earlier round of this
+  audit): `finalizeAccountRemoval`'s anonymize branch deletes every
+  `user_roles` row for the target where the role's `is_visible = false`
+  before the identity scrub, keeping only visible-role rows. This is
+  ultimately moot for `user_roles` itself — the `users` row is fully deleted
+  at the end of the same transaction either way, cascading every remaining
+  `user_roles` row regardless of visibility (confirmed by
+  `apps/api/test/exports/deletion.test.ts`), so `getEffectiveRole`/
+  `getBadgeCategory` need no special-casing for a post-anonymization lookup.
+  The change is observable where it actually outlives the transaction: the
+  permanent `anonymous_participants` audit trail. The same `audit(client,
+  {entityType: "anonymous_participant", action: "anonymized", ...})` call
+  that already records `retainedFields` now also records `retainedRoles` —
+  the visible role names the user held (e.g. `["Staff"]`), never a hidden
+  operational role's name (e.g. "Door Operator"). This still doesn't touch
+  `assigned_by` on roles this user granted to OTHERS, which remains a
+  separate, correct cleanup elsewhere in the same flow. Covered by
+  `apps/api/test/identity/anonymization.test.ts`.
 - **API/UI surface**: `POST /api/roles` and `PATCH /api/roles/:roleId`
   accept/return `badgeCategory`; `role-editor.tsx`'s Display tab and the
   create-role modal expose it as a select (`apps/web/src/app/(app)/
