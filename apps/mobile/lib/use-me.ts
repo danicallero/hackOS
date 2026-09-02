@@ -47,7 +47,13 @@ export function useMe(enabled: boolean) {
     if (!hasData.current) setLoading(true);
     try {
       setError(null);
-      const data = await apiFetch<Me>("/api/me");
+      // The API names this field `visibleRoleName` (matching the web client
+      // and its own `getEffectiveRole` SQL) — remap it to `role` here so it
+      // lines up with `ScannerPerson.role` (fed by a differently-named SQL
+      // view) and every mobile screen that reads `Me.role` gets the actual
+      // highest-visible role instead of silently seeing `undefined`.
+      const raw = await apiFetch<Omit<Me, "role"> & { visibleRoleName: string | null }>("/api/me");
+      const data: Me = { ...raw, role: raw.visibleRoleName };
       if (currentRequest !== requestId.current) return;
       hasData.current = true;
       setMe(data);

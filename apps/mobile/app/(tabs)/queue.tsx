@@ -125,9 +125,7 @@ export default function QueueScreen() {
         paddingTop: 16 + androidTopInset,
       }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      ListHeaderComponent={
-        <StaleDataBanner updatedAt={staleSince} onRetry={() => void load()} retrying={loading} />
-      }
+      ListHeaderComponent={<StaleDataBanner updatedAt={staleSince} />}
       ListEmptyComponent={
         loading ? (
           <RequestFeedback loading />

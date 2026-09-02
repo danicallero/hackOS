@@ -166,7 +166,7 @@ export default function ScheduleDetailScreen() {
         style={{ backgroundColor: colors.background }}
       >
         <View style={{ gap: 8 }}>
-          <StaleDataBanner updatedAt={staleSince} onRetry={() => void load()} retrying={loading} />
+          <StaleDataBanner updatedAt={staleSince} />
           {notifications.error ? (
             <RequestFeedback
               error={notifications.error}

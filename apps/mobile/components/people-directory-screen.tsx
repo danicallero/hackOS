@@ -19,6 +19,7 @@ import {
   Separator,
 } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { emitManualActivityScan } from "@/lib/manual-activity-scan";
@@ -321,13 +322,16 @@ export function PeopleDirectoryScreen() {
                 retrying={loading || refreshing || sync.syncing}
               />
             ) : null}
-            {syncError ? (
+            {syncError?.conflict ? (
               <RequestFeedback
                 error={new Error(syncError.message)}
-                message={t(syncError.conflict ? "scannerSyncRejected" : "scannerSyncFailed")}
+                message={t("scannerSyncRejected")}
                 onRetry={() => void sync.sync()}
                 retrying={sync.syncing}
               />
+            ) : null}
+            {syncError && !syncError.conflict ? (
+              <StaleDataBanner updatedAt={sync.lastSync} />
             ) : null}
           </View>
         ) : null

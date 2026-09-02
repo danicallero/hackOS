@@ -5,7 +5,16 @@ import { File, Paths } from "expo-file-system";
 import { useScrollToTop } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Linking, Platform, ScrollView, Text, useColorScheme, View } from "react-native";
+import {
+  Alert,
+  Linking,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  Text,
+  useColorScheme,
+  View,
+} from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { ActionButton, EmptyState, InfoRow, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -59,6 +68,16 @@ export default function WalletScreen() {
     staleSince,
     load,
   } = useCachedApi(me ? walletCacheKey(me.id) : "user:unknown:wallet", fetchTicket);
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   useEffect(() => {
     void load();
@@ -193,8 +212,9 @@ export default function WalletScreen() {
         paddingBottom: Math.max(32, tabBarBottomInset + 16),
         paddingTop: 16 + androidTopInset,
       }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
     >
-      <StaleDataBanner updatedAt={staleSince} onRetry={() => void load()} retrying={loading} />
+      <StaleDataBanner updatedAt={staleSince} />
       {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
       {actionError ? (
         <RequestFeedback

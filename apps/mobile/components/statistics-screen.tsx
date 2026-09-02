@@ -114,57 +114,57 @@ export default function StatisticsScreen() {
       </Text>
 
       {statsError ? (
-        <RequestFeedback
-          error={statsError}
-          message={t("statisticsCouldNotLoad")}
-          onRetry={() => void loadStats()}
-        />
+        <RequestFeedback error={statsError} message={t("statisticsCouldNotLoad")} />
       ) : null}
 
-      <Section title={t("statisticsActivityTitle")} footer={t("statisticsActivityFooter")}>
-        <InfoRow
-          icon="chart.bar.xaxis"
-          label={t("statisticsTotalScans")}
-          value={displayCount(totalScans)}
-          valueStyle={{ color: colors.label, fontVariant: ["tabular-nums"], fontWeight: "700" }}
-        />
-        <Separator inset={48} />
-        <InfoRow
-          icon="person.2.fill"
-          label={t("statisticsPeopleReached")}
-          value={displayCount(myStats?.uniquePeopleCount)}
-          valueStyle={{ color: colors.label, fontVariant: ["tabular-nums"], fontWeight: "700" }}
-        />
-        <Separator inset={48} />
-        <InfoRow
-          icon="clock.arrow.circlepath"
-          label={t("statisticsLastScan")}
-          value={formatLastScan(myStats?.lastScanAt ?? null, t)}
-        />
-      </Section>
+      {statsError ? null : (
+        <>
+          <Section title={t("statisticsActivityTitle")} footer={t("statisticsActivityFooter")}>
+            <InfoRow
+              icon="chart.bar.xaxis"
+              label={t("statisticsTotalScans")}
+              value={displayCount(totalScans)}
+              valueStyle={{ color: colors.label, fontVariant: ["tabular-nums"], fontWeight: "700" }}
+            />
+            <Separator inset={48} />
+            <InfoRow
+              icon="person.2.fill"
+              label={t("statisticsPeopleReached")}
+              value={displayCount(myStats?.uniquePeopleCount)}
+              valueStyle={{ color: colors.label, fontVariant: ["tabular-nums"], fontWeight: "700" }}
+            />
+            <Separator inset={48} />
+            <InfoRow
+              icon="clock.arrow.circlepath"
+              label={t("statisticsLastScan")}
+              value={formatLastScan(myStats?.lastScanAt ?? null, t)}
+            />
+          </Section>
 
-      <Section title={t("statisticsBreakdownTitle")}>
-        <InfoRow
-          icon="person.badge.key.fill"
-          label={t("myStatsAccreditation")}
-          value={displayCount(myStats?.accreditationCount)}
-          valueStyle={{ color: colors.secondaryLabel, ...countStyle }}
-        />
-        <Separator inset={48} />
-        <InfoRow
-          icon="door.left.hand.open"
-          label={t("myStatsPresence")}
-          value={displayCount(myStats?.presenceCount)}
-          valueStyle={{ color: colors.secondaryLabel, ...countStyle }}
-        />
-        <Separator inset={48} />
-        <InfoRow
-          icon="list.bullet.rectangle"
-          label={t("myStatsActivity")}
-          value={displayCount(myStats?.activityCount)}
-          valueStyle={{ color: colors.secondaryLabel, ...countStyle }}
-        />
-      </Section>
+          <Section title={t("statisticsBreakdownTitle")}>
+            <InfoRow
+              icon="person.badge.key.fill"
+              label={t("myStatsAccreditation")}
+              value={displayCount(myStats?.accreditationCount)}
+              valueStyle={{ color: colors.secondaryLabel, ...countStyle }}
+            />
+            <Separator inset={48} />
+            <InfoRow
+              icon="door.left.hand.open"
+              label={t("myStatsPresence")}
+              value={displayCount(myStats?.presenceCount)}
+              valueStyle={{ color: colors.secondaryLabel, ...countStyle }}
+            />
+            <Separator inset={48} />
+            <InfoRow
+              icon="list.bullet.rectangle"
+              label={t("myStatsActivity")}
+              value={displayCount(myStats?.activityCount)}
+              valueStyle={{ color: colors.secondaryLabel, ...countStyle }}
+            />
+          </Section>
+        </>
+      )}
 
       <Section title={t("statisticsHistoryTitle")}>
         <ActionButton
