@@ -277,7 +277,11 @@ distributed to other Expo Router apps without importing hackOS code.
   loading, retryable error, and empty states without leaking rejected promises.
   The account screen displays the shared `/api/me` profile and keeps the
   participant-facing overview short. Pulling down refreshes `/api/me` and the
-  food-intolerance labels. The overview is grouped into Profile, Contact, Event
+  food-intolerance labels; the label dictionary is also cached on device
+  (`lib/offline-cache.ts`) so a device that goes offline before its first
+  successful fetch still shows dietary labels instead of bare numeric ids.
+  Signing out while offline with a scanning capability warns first that
+  re-authentication needs a live server. The overview is grouped into Profile, Contact, Event
   details, App, Account, and Session; staff with personal logistics-statistics
   access also see a Staff section. Its Storage row opens
   `app/(tabs)/others/storage.tsx`, which contains storage controls only. Staff
@@ -288,7 +292,10 @@ distributed to other Expo Router apps without importing hackOS code.
   account row opens a
   dedicated page that reads `GET /api/me/removal-eligibility`: the page has a
   consequence screen and an inline verification screen, with no progress
-  indicator or verification modal. It keeps the server-selected distinction
+  indicator or verification modal. Deletion has no offline fallback — if the
+  eligibility fetch fails, the screen shows a plain "no internet connection"
+  message (deletion cannot proceed without a live server) and recovers on its
+  own via pull-to-refresh or reconnection, with no retry button. It keeps the server-selected distinction
   between full account deletion and account closure with anonymous audit-data
   retention (H54), while the user-facing action remains "Delete my account".
   The first screen discloses the possible retained audit fields; the second
@@ -306,7 +313,10 @@ distributed to other Expo Router apps without importing hackOS code.
   (`/api/me/logistics/stats`) with totals, a type breakdown, the searchable
   scan-history screen (`app/(tabs)/others/scan-log.tsx`,
   `/api/logistics/scan-log`, grouped by day into `Section`s with a native list
-  look). The full sync-queue reconciliation screen
+  look). If the stats fetch fails, the totals/breakdown sections are hidden
+  entirely (rather than showing "—" placeholders) behind a "couldn't load"
+  message, and pull-to-refresh — not a retry button — is how the screen
+  recovers. The full sync-queue reconciliation screen
   (`app/(tabs)/others/sync-queue.tsx`) is kept separate from Statistics. The
   Storage screen carries the
   "App storage" section (`lib/storage-usage.ts`) showing the size of the offline API
@@ -319,8 +329,14 @@ distributed to other Expo Router apps without importing hackOS code.
   best-effort startup warmup stores the `/api/me/ticket` payload under an
   account-scoped cache key; the screen still refreshes online and falls back to
   that payload with a stale-data banner (`components/stale-data-banner.tsx`,
-  reused across 7 screens for this offline pattern) when the connection
-  fails. Accepted
+  reused across schedule, queue, wallet, notifications, sponsor announcement
+  management, queue operations, and the scanner's sync-queue/activities/people
+  screens for this offline pattern) when the connection fails. The banner has
+  no retry button — every screen that can show it also wires pull-to-refresh
+  (`RefreshControl`) to the same reload, and `lib/format-date.ts` renders its
+  "last update" timestamp as a bare time for today, "Yesterday, <time>" for
+  yesterday, a weekday name for the rest of the week, and a short date beyond
+  that. Accepted
   spots also expose the existing authenticated decline endpoint after a final,
   destructive confirmation; success refreshes both ticket and profile state
   (H15). When an existing Apple pass is opened, the app
@@ -598,7 +614,11 @@ discards that scan, so a transient or business failure is never silently lost.
 Failed queue rows retain the operation, person or user ID, badge when it was
 available, log ID, timestamp, source, activity/direction, and notes needed to
 reconcile the original action even when the local roster can no longer resolve
-the person.
+the person. A transient sync failure (not a business rejection) surfaces via
+the same stale-data banner used elsewhere in the app, on the sync-queue,
+Activities, and People screens; a genuine server rejection (a conflict, where
+auto-retry pauses) keeps its own message with a manual retry action, since
+that case needs a person to look at it rather than wait for reconnection.
 
 ### Activities
 

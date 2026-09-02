@@ -19,11 +19,13 @@ import {
   StatusPill,
 } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { StaleDataBanner } from "@/components/stale-data-banner";
 import { apiFetch } from "@/lib/api";
 import { signOut } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";
 import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
+import { readCachedValue, writeCachedValue } from "@/lib/offline-cache";
 import { roleDisplayName } from "@/lib/role-filters";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { wipeAttendanceRoster } from "@/lib/scanner-db";
@@ -37,6 +39,7 @@ interface Intolerance {
 }
 
 const LANGUAGES: Lang[] = ["en", "es", "gl"];
+const INTOLERANCES_CACHE_KEY = "food-intolerances";
 
 /** Account overview with the same participant-owned profile fields exposed on web. */
 export default function AccountScreen() {
@@ -47,7 +50,7 @@ export default function AccountScreen() {
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
-  const { me, loading, error, refetch } = useMeContext();
+  const { me, loading, error, offline, staleSince, refetch } = useMeContext();
   const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
   const [savingLanguage, setSavingLanguage] = useState(false);
   const [languageError, setLanguageError] = useState<Error | null>(null);
@@ -63,8 +66,13 @@ export default function AccountScreen() {
         "/api/public/food-intolerances",
       );
       setIntolerances(list);
+      void writeCachedValue(INTOLERANCES_CACHE_KEY, list);
     } catch {
-      /* The rest of the profile remains usable without intolerance labels. */
+      // The rest of the profile remains usable without intolerance labels —
+      // fall back to whatever was cached from the last successful fetch so
+      // an offline first launch shows labels instead of raw numeric ids.
+      const cached = await readCachedValue<Intolerance[]>(INTOLERANCES_CACHE_KEY);
+      if (cached) setIntolerances(cached.data);
     }
   }, [me]);
 
@@ -121,6 +129,22 @@ export default function AccountScreen() {
   }
 
   function confirmSignOut() {
+    // Staff still able to scan offline (using a cached profile) could lock
+    // themselves out entirely by signing out with no server reachable to
+    // re-authenticate against — warn them before that happens.
+    const capabilities = me?.capabilities ?? [];
+    const isStaff =
+      capabilities.includes("*") ||
+      capabilities.some((capability) =>
+        ["accredit:scan", "presence:scan", "activity:scan"].includes(capability),
+      );
+    if (offline && isStaff) {
+      Alert.alert(t("signOutOfflineConfirmTitle"), t("signOutOfflineConfirmBody"), [
+        { text: t("cancel"), style: "cancel" },
+        { text: t("signOut"), style: "destructive", onPress: () => void endSession() },
+      ]);
+      return;
+    }
     Alert.alert(t("signOutConfirmTitle"), t("signOutConfirmBody"), [
       { text: t("cancel"), style: "cancel" },
       { text: t("signOut"), style: "destructive", onPress: () => void endSession() },
@@ -159,7 +183,11 @@ export default function AccountScreen() {
           <RefreshControl refreshing={refreshingAccount} onRefresh={() => void refreshAccount()} />
         }
       >
-        {error ? <RequestFeedback error={error} onRetry={() => void refetch()} /> : null}
+        {offline ? (
+          <StaleDataBanner updatedAt={staleSince} />
+        ) : error ? (
+          <RequestFeedback error={error} onRetry={() => void refetch()} />
+        ) : null}
         {languageError ? (
           <RequestFeedback
             error={languageError}

@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { ActionButton, AndroidStatusBarScrim } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
 import { ApiError } from "@/lib/api";
 import { signOut } from "@/lib/auth-client";
@@ -77,7 +78,7 @@ export default function DeleteAccountScreen() {
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
-  const { me, loading, error, refetch } = useMeContext();
+  const { me, loading, error, offline, staleSince, refetch } = useMeContext();
   const [screen, setScreen] = useState<RemovalScreen>("intro");
   const [retainedDataExpanded, setRetainedDataExpanded] = useState(false);
   const [removalEligibility, setRemovalEligibility] = useState<AccountRemovalEligibility | null>(
@@ -104,6 +105,10 @@ export default function DeleteAccountScreen() {
     try {
       setRemovalEligibility(await fetchAccountRemovalEligibility());
     } catch {
+      // A destructive, security-sensitive action must never keep showing a
+      // previously confirmed outcome (e.g. "Full account deletion") once
+      // that confirmation can no longer be verified against the server.
+      setRemovalEligibility(null);
       setRemovalError(new Error(t("accountRemovalLoadError")));
       setRemovalErrorKind("load");
     } finally {
@@ -497,7 +502,12 @@ export default function DeleteAccountScreen() {
   if (loading && !me) return <RequestFeedback loading />;
   if (!me) return <RequestFeedback error={error} onRetry={() => void refetch()} />;
 
-  const isAnonymizedOutcome = removalEligibility?.action === "anonymize";
+  // Deliberately `undefined` (not `false`) when eligibility hasn't been
+  // confirmed by the server, so the outcome panel below stays hidden instead
+  // of defaulting to "Full account deletion" as if that were a real answer.
+  const isAnonymizedOutcome = removalEligibility
+    ? removalEligibility.action === "anonymize"
+    : undefined;
   const retainedFields = [
     t("accountRetainedAge"),
     t("accountRetainedGender"),
@@ -557,7 +567,11 @@ export default function DeleteAccountScreen() {
             }
             style={{ flex: 1 }}
           >
-            {error ? <RequestFeedback error={error} onRetry={() => void refetch()} /> : null}
+            {offline ? (
+              <StaleDataBanner updatedAt={staleSince} />
+            ) : error ? (
+              <RequestFeedback error={error} onRetry={() => void refetch()} />
+            ) : null}
             <IntroScreen
               expanded={retainedDataExpanded}
               isAnonymizedOutcome={isAnonymizedOutcome}
@@ -568,7 +582,6 @@ export default function DeleteAccountScreen() {
               integrityWarning={removalEligibility?.integrityWarning ?? false}
               retainedFields={retainedFields}
               onContinue={() => void beginRemoval(removalEligibility?.action ?? "delete")}
-              onRetry={() => void loadRemovalEligibility()}
               onToggleRetained={() => setRetainedDataExpanded((expanded) => !expanded)}
               disabled={!removalEligibility || removalLoading || removalErrorKind === "load"}
               busy={requestingRemovalPin || deletingAccount}
@@ -595,7 +608,11 @@ export default function DeleteAccountScreen() {
               style={{ flex: 1 }}
               testID="account-deletion-verification"
             >
-              {error ? <RequestFeedback error={error} onRetry={() => void refetch()} /> : null}
+              {offline ? (
+                <StaleDataBanner updatedAt={staleSince} />
+              ) : error ? (
+                <RequestFeedback error={error} onRetry={() => void refetch()} />
+              ) : null}
               <View style={{ maxWidth: 520, width: "100%" }}>
                 <VerificationScreen
                   credential={credential}
@@ -636,7 +653,6 @@ function IntroScreen({
   integrityWarning,
   retainedFields,
   onContinue,
-  onRetry,
   onToggleRetained,
   disabled,
   busy,
@@ -651,7 +667,6 @@ function IntroScreen({
   integrityWarning: boolean;
   retainedFields: string[];
   onContinue: () => void;
-  onRetry: () => void;
   onToggleRetained: () => void;
   disabled: boolean;
   busy: boolean;
@@ -694,7 +709,7 @@ function IntroScreen({
       </View>
 
       {loading ? <RequestFeedback loading /> : null}
-      {eligibilityError ? <RequestFeedback error={eligibilityError} onRetry={onRetry} /> : null}
+      {eligibilityError ? <RequestFeedback error={eligibilityError} /> : null}
       {actionError ? <DestructiveNotice message={actionError.message} urgent /> : null}
 
       <View style={{ gap: 14 }}>

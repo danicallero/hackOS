@@ -191,13 +191,13 @@ export function ActivityScannerScreen() {
         scanningEnabled={Boolean(activity) && !result}
       />
       <AdaptiveBackButton
-        top={insets.top + 12}
+        top={insets.top}
         colorScheme="dark"
         tintColor="white"
         onPress={() => safeBack(router, "/(tabs)/activities")}
       />
       <AdaptiveToolbarButton
-        top={insets.top + 12}
+        top={insets.top}
         side="right"
         icon="person.crop.badge.magnifyingglass"
         colorScheme="dark"
@@ -224,7 +224,7 @@ export function ActivityScannerScreen() {
           paddingHorizontal: 16,
           position: "absolute",
           right: "22.5%",
-          top: insets.top + 12,
+          top: insets.top,
         }}
       >
         <Text
@@ -390,9 +390,16 @@ function ActivityResultPanel({
             container (ExpoGlassView) — passing it the ScrollView and the
             footer as two siblings directly let the glass surface size to
             only the first one, silently dropping the footer with the
-            close/confirm buttons off screen. */}
-        <View style={{ flexShrink: 1 }}>
-          <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 18, padding: 20 }}>
+            close/confirm buttons off screen. The native container doesn't
+            reliably propagate its own maxHeight into plain-Yoga flex-shrink
+            math for its children, so the same cap is repeated here on an
+            ordinary View — that's what actually lets the ScrollView give up
+            space to the footer instead of just being clipped along with it. */}
+        <View style={{ flexShrink: 1, maxHeight: cardMaxHeight, overflow: "hidden" }}>
+          <ScrollView
+            style={{ flexGrow: 0, flexShrink: 1, minHeight: 0 }}
+            contentContainerStyle={{ gap: 18, padding: 20 }}
+          >
             <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 16 }}>
               <View style={{ flex: 1, gap: 5 }}>
                 <View style={{ alignItems: "center", flexDirection: "row", gap: 7 }}>
@@ -542,28 +549,30 @@ function ActivityResultPanel({
           </ScrollView>
 
           <View style={{ paddingBottom: 20, paddingHorizontal: 20, paddingTop: 4 }}>
-            {repeatPending ? (
-              <View style={{ flexDirection: "row", gap: 10 }}>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              {repeatPending ? (
+                <>
+                  <ResultActionButton
+                    testID={UI_TEST_IDS.scanner.confirmRepeat}
+                    disabled={registering}
+                    label={t("cancel")}
+                    onPress={onCancel}
+                    secondary
+                  />
+                  <ResultActionButton
+                    disabled={registering}
+                    label={t("scannerRegisterAnother")}
+                    onPress={onRegisterAnother}
+                  />
+                </>
+              ) : (
                 <ResultActionButton
-                  testID={UI_TEST_IDS.scanner.confirmRepeat}
-                  disabled={registering}
-                  label={t("cancel")}
-                  onPress={onCancel}
-                  secondary
+                  testID={UI_TEST_IDS.scanner.continue}
+                  label={t("close")}
+                  onPress={onContinue}
                 />
-                <ResultActionButton
-                  disabled={registering}
-                  label={t("scannerRegisterAnother")}
-                  onPress={onRegisterAnother}
-                />
-              </View>
-            ) : (
-              <ResultActionButton
-                testID={UI_TEST_IDS.scanner.continue}
-                label={t("close")}
-                onPress={onContinue}
-              />
-            )}
+              )}
+            </View>
           </View>
         </View>
       </GlassView>

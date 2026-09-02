@@ -1,6 +1,14 @@
 import { useScrollToTop } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, type TextStyle, View } from "react-native";
+import {
+  Alert,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Text,
+  type TextStyle,
+  View,
+} from "react-native";
 
 import {
   ActionButton,
@@ -18,6 +26,7 @@ import {
   subjectLabel,
 } from "@/components/scanner-transaction-status";
 import { SegmentedControl } from "@/components/segmented-control";
+import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -46,8 +55,18 @@ export default function SyncQueueScreen() {
   const [filter, setFilter] = useState<QueueFilter>("all");
   const [people, setPeople] = useState<ScannerPerson[]>([]);
   const [activities, setActivities] = useState<ScannerActivity[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
   useScrollToTop(scrollRef);
+
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      await sync.sync();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   useEffect(() => {
     // The local roster can be replaced by a completed sync, so keep the
@@ -129,6 +148,7 @@ export default function SyncQueueScreen() {
         padding: 16,
         paddingBottom: Math.max(32, tabBarBottomInset + 16),
       }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
     >
       <Text
         style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 21, paddingHorizontal: 4 }}
@@ -136,14 +156,15 @@ export default function SyncQueueScreen() {
         {t("scannerSyncQueueDescription")}
       </Text>
 
-      {syncError ? (
+      {syncError?.conflict ? (
         <RequestFeedback
           error={new Error(syncError.message)}
-          message={t(syncError.conflict ? "scannerSyncRejected" : "scannerSyncFailed")}
+          message={t("scannerSyncRejected")}
           onRetry={() => void sync.sync()}
           retrying={sync.syncing}
         />
       ) : null}
+      {syncError && !syncError.conflict ? <StaleDataBanner updatedAt={sync.lastSync} /> : null}
 
       <Section title={t("scannerReconciliationTitle")}>
         <InfoRow

@@ -155,7 +155,7 @@ export function ManageAnnouncementsView({
         }
       >
         {tabSwitcher}
-        <StaleDataBanner updatedAt={staleSince} onRetry={() => void load()} retrying={loading} />
+        <StaleDataBanner updatedAt={staleSince} />
 
         {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
         {loading && !data ? <RequestFeedback loading /> : null}

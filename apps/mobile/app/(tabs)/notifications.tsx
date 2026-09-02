@@ -629,7 +629,7 @@ const MessagesView = memo(function MessagesView({
       scrollEventThrottle={1}
     >
       {tabSwitcher}
-      <StaleDataBanner updatedAt={staleSince} onRetry={() => void load()} retrying={loading} />
+      <StaleDataBanner updatedAt={staleSince} />
 
       {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
       {actionError ? (
@@ -1143,7 +1143,7 @@ const PreferencesView = memo(function PreferencesView({
   return (
     <ScrollView {...scrollProps}>
       {tabSwitcher}
-      <StaleDataBanner updatedAt={staleSince} onRetry={() => void load()} retrying={loading} />
+      <StaleDataBanner updatedAt={staleSince} />
       {actionError ? (
         <RequestFeedback
           error={actionError}

@@ -506,11 +506,7 @@ export default function ScheduleScreen() {
         onScrollToIndexFailed={(info) => retryScrollToActive(info)}
         ListHeaderComponent={
           <View style={{ gap: 8 }}>
-            <StaleDataBanner
-              updatedAt={staleSince}
-              onRetry={() => void load()}
-              retrying={loading}
-            />
+            <StaleDataBanner updatedAt={staleSince} />
             {notifications.error ? (
               <RequestFeedback
                 error={notifications.error}
