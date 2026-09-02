@@ -1923,6 +1923,24 @@ describe("staff user routes (H7)", () => {
     );
   });
 
+  it("GET /api/users resolves each row's visibleRoleName via the bulk view, not just capability holders (H8 regression: the web /users page previously read a stale `role` field name and always showed everyone as unassigned)", async () => {
+    const a = await getApp();
+    const { createRole, assignRole } = await import("../helpers.js");
+
+    const reader = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
+    const named = await createUser({ name: "Visible", email: "visible-role@example.test" });
+    const roleId = await createRole([], { name: "Organizer" });
+    await assignRole(named, roleId);
+
+    const res = await a.inject({ method: "GET", url: "/api/users", headers: asUser(reader) });
+    expect(res.statusCode).toBe(200);
+    const row = res.json().users.find((u: { id: number }) => u.id === named);
+    expect(row).toBeDefined();
+    // The bug: the row's role resolved to null/undefined for everyone
+    // regardless of their actual assigned roles.
+    expect(row.visibleRoleName).toBe("Organizer");
+  });
+
   it("GET /api/users/:id includes visibleRoleName, capabilities and roles", async () => {
     const a = await getApp();
     const target = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);

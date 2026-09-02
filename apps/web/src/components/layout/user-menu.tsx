@@ -48,7 +48,7 @@ export function UserMenu() {
           </span>
           <span className="text-muted-foreground truncate text-xs font-normal">{me.email}</span>
           <span className="text-muted-foreground mt-1 text-xs font-normal capitalize">
-            {me.role}
+            {me.visibleRoleName}
           </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />

@@ -110,6 +110,15 @@ every workspace and every item (`apps/web/src/lib/session.tsx`).
   message key. `/timetable` is **Schedule** (the read-only programme every
   participant uses) and `/schedule` is **Manage schedule** (the editor); no
   multi-destination workspace is labelled with one of its own items.
+- `/timetable` and the public `/horario` (both rendered by
+  `PublicScheduleView`) get a client-side audience filter (H59 follow-up,
+  `components/public/schedule-audience-filter.tsx`) whenever the caller's own
+  feed from `/api/public/activities` actually spans more than one segment —
+  its options are derived from the distinct `audiences` tags (plus a `staff`
+  pseudo-segment for empty-audience items) already present in what that
+  caller received, never a separate capability lookup, so it can only ever
+  offer segments the viewer already has access to. A pure participant (whose
+  feed is 100% `participant`-tagged) gets no filter at all.
 - Every href in `nav.ts` is a stable, published URL: existing deep links and
   bookmarks must keep working without a redirect.
 

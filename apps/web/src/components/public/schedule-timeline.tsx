@@ -94,12 +94,15 @@ export function ScheduleTimeline({
   timezone,
   className,
   showResponsible = false,
+  emptyTitle,
 }: {
   items: PublicScheduleItem[];
   timezone: string;
   className?: string;
   /** Reveal each item's responsible person(s)/contact note in its detail modal (H59) — for the sponsor-only view, never the public one. */
   showResponsible?: boolean;
+  /** Overrides the empty-state title — e.g. when `items` is empty because the viewer's own audience filter matched nothing (H59 follow-up), rather than because the schedule itself is empty. */
+  emptyTitle?: string;
 }) {
   const { language, t } = useLocale();
   // Track now as state to avoid impure Date.now() during render; updates every second to keep timeline current.
@@ -136,7 +139,7 @@ export function ScheduleTimeline({
   }, []);
 
   if (!ordered.length) {
-    return <EmptyState icon={CalendarDaysIcon} title={t("schedulePending")} />;
+    return <EmptyState icon={CalendarDaysIcon} title={emptyTitle ?? t("schedulePending")} />;
   }
 
   const dateFormatter = new Intl.DateTimeFormat(LOCALE_CODES[language], {

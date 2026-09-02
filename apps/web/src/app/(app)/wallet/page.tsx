@@ -97,7 +97,7 @@ export default function WalletPage() {
               label={t("walletHolderName")}
               value={[me.name, me.surname].filter(Boolean).join(" ") || me.email}
             />
-            <Field label={t("walletHolderRole")} value={roleLabel(me.role, t)} />
+            <Field label={t("walletHolderRole")} value={roleLabel(me.visibleRoleName, t)} />
           </div>
         </SectionCard>
       ) : null}
@@ -115,7 +115,7 @@ function Field({ label, value }: { label: string; value: string }) {
 }
 
 /** H8: roles are arbitrary names now — show the name as-is. */
-function roleLabel(role: Me["role"], t: Translate): string {
+function roleLabel(role: Me["visibleRoleName"], t: Translate): string {
   return role ?? t("roleUnassigned");
 }
 

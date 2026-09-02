@@ -18,7 +18,14 @@ const payload: WalletTicketPayload = {
   badgeId: "badge-42",
   applePassTypeIdentifier: "pass.hackos",
   applePassSerialNumbers: { ticket: "ticket-serial", badge: "badge-serial" },
-  acceptedSpots: [],
+  acceptedSpots: [
+    {
+      responseId: 1,
+      applicationName: "Mentor track",
+      grantedRoleName: "Mentor",
+      expiresAt: null,
+    },
+  ],
 };
 
 describe("wallet cache", () => {

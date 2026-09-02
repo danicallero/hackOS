@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import type { RoleGrantRule } from "@/lib/types";
-import { triggerEventLabel } from "./helpers";
+import { ruleTriggerLabel } from "./helpers";
 
 /**
  * Read-only, cross-role audit view of every role_grant_rules row (H8
@@ -25,13 +25,22 @@ import { triggerEventLabel } from "./helpers";
  * plain button next to Trash/New role rather than as an equal-weight sibling
  * tab to the role browser, since it's an occasional audit lookup, not a
  * primary workflow.
+ *
+ * Each row is clickable (H8 follow-up): a rule is owned/edited by its
+ * `roleId`'s own "Grant rules" tab, so `onSelectRule` hands the clicked
+ * rule's roleId back to the caller (`page.tsx`), which already has a
+ * role-selection mechanism (the `?role=` URL param) — this modal just
+ * navigates there and closes itself, it doesn't own routing.
  */
 export function GrantRulesOverviewModal({
   open,
   onOpenChange,
+  onSelectRule,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Called with the clicked rule so the caller can navigate to its owning role's Grant Rules tab. */
+  onSelectRule: (rule: RoleGrantRule) => void;
 }) {
   const { t } = useLocale();
   const [rules, setRules] = useState<RoleGrantRule[]>([]);
@@ -60,7 +69,7 @@ export function GrantRulesOverviewModal({
     const needle = query.trim().toLowerCase();
     if (!needle) return rules;
     return rules.filter((rule) =>
-      [rule.roleName, rule.enterpriseName ?? "", triggerEventLabel(rule.triggerEvent, t)]
+      [rule.roleName, rule.enterpriseName ?? "", ruleTriggerLabel(rule, t)]
         .join(" ")
         .toLowerCase()
         .includes(needle),
@@ -95,20 +104,24 @@ export function GrantRulesOverviewModal({
         ) : (
           <ul className="divide-border max-h-[60vh] divide-y overflow-y-auto rounded-md border">
             {filtered.map((rule) => (
-              <li key={rule.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">
-                    {triggerEventLabel(rule.triggerEvent, t)}
-                  </p>
-                  <p className="text-muted-foreground truncate text-xs">
-                    {t(rule.action === "grant" ? "grantActionGrant" : "grantActionRevoke")} ·{" "}
-                    {rule.roleName}
-                    {rule.enterpriseName ? ` · ${rule.enterpriseName}` : ""}
-                  </p>
-                </div>
-                <StatusBadge tone={rule.enabled ? "success" : "neutral"}>
-                  {t(rule.enabled ? "grantRuleEnabledLabel" : "grantRuleDisabledLabel")}
-                </StatusBadge>
+              <li key={rule.id}>
+                <button
+                  type="button"
+                  onClick={() => onSelectRule(rule)}
+                  className="hover:bg-muted/50 flex w-full flex-wrap items-center justify-between gap-3 p-3 text-left"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{ruleTriggerLabel(rule, t)}</p>
+                    <p className="text-muted-foreground truncate text-xs">
+                      {t(rule.action === "grant" ? "grantActionGrant" : "grantActionRevoke")} ·{" "}
+                      {rule.roleName}
+                      {rule.enterpriseName ? ` · ${rule.enterpriseName}` : ""}
+                    </p>
+                  </div>
+                  <StatusBadge tone={rule.enabled ? "success" : "neutral"}>
+                    {t(rule.enabled ? "grantRuleEnabledLabel" : "grantRuleDisabledLabel")}
+                  </StatusBadge>
+                </button>
               </li>
             ))}
           </ul>

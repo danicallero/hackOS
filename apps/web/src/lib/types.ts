@@ -37,11 +37,11 @@ export interface Me {
     | null;
   createdAt: string;
   /** H8: the caller's actual highest-visible role name (null if they hold no visible role). */
-  role: string | null;
+  visibleRoleName: string | null;
   capabilities: Capability[];
-  /** H8: the caller's complete assigned-role set, highest position first — additive next to `role`. */
+  /** H8: the caller's complete assigned-role set, highest position first — additive next to `visibleRoleName`. */
   roles: AssignedRoleSummary[];
-  /** Association facts underlying `role` (H55) — a sponsor rep who also judges needs both workspaces. */
+  /** Association facts underlying `visibleRoleName` (H55) — a sponsor rep who also judges needs both workspaces. */
   isEnterpriseJudge: boolean;
   isSponsorRep: boolean;
   /** Confirmed spot or manual attendee role — drives ticket/wallet exposure and participant-only nav. */
@@ -66,7 +66,7 @@ export interface UserListItem {
   surname: string | null;
   badgeId: string | null;
   /** H8: this user's actual highest-visible role name (null if they hold no visible role). */
-  role: string | null;
+  visibleRoleName: string | null;
   language: string;
   shirtSize: string | null;
   applicationStatus: string | null;
@@ -87,8 +87,8 @@ export interface AssignedRoleSummary {
   isVisible: boolean;
 }
 
-export interface UserDetail extends Omit<Me, "role" | "capabilities" | "roles"> {
-  role: string | null;
+export interface UserDetail extends Omit<Me, "visibleRoleName" | "capabilities" | "roles"> {
+  visibleRoleName: string | null;
   capabilities: Capability[];
   roles: AssignedRoleSummary[];
 }
@@ -128,7 +128,11 @@ export interface RoleGrantRule {
   id: number;
   roleId: number;
   roleName: string;
-  triggerEvent: string;
+  /** Mutually exclusive with sourceRoleId — null when this rule fires off sourceRoleId instead (0812). */
+  triggerEvent: string | null;
+  /** Mutually exclusive with triggerEvent — set means "fires when this role is assigned/removed" (H8 role-assignment-as-trigger, 0812). */
+  sourceRoleId: number | null;
+  sourceRoleName: string | null;
   action: "grant" | "revoke";
   enabled: boolean;
   /** null = applies to every occurrence of triggerEvent, not just one enterprise. */

@@ -48,7 +48,7 @@ function fullName(u: UserListItem): string {
 const dateFmt = shortDateFmt;
 
 /** H8: roles are arbitrary names now, not a fixed category set — show the name as-is. */
-function roleLabel(role: UserListItem["role"], t: Translate): string {
+function roleLabel(role: UserListItem["visibleRoleName"], t: Translate): string {
   return role ?? t("roleUnassigned");
 }
 
@@ -170,10 +170,10 @@ function buildColumns(presentIds: Set<number> | null, t: Translate): Column<User
     {
       id: "role",
       header: t("colRole"),
-      sortValue: (u) => u.role ?? "",
+      sortValue: (u) => u.visibleRoleName ?? "",
       cell: (u) => (
         <StatusBadge tone={ROLE_TONE} dot={false}>
-          {roleLabel(u.role, t)}
+          {roleLabel(u.visibleRoleName, t)}
         </StatusBadge>
       ),
     },
@@ -361,7 +361,7 @@ export default function UsersPage() {
       users.filter((user) => {
         if (emailFilter === "verified" && !user.emailVerified) return false;
         if (emailFilter === "unverified" && user.emailVerified) return false;
-        if (roleFilter !== "all" && user.role !== roleFilter) return false;
+        if (roleFilter !== "all" && user.visibleRoleName !== roleFilter) return false;
         if (spotFilter === "confirmed" && user.applicationStatus !== "confirmed") return false;
         if (
           spotFilter === "accepted_pending" &&
@@ -382,7 +382,7 @@ export default function UsersPage() {
    * distinct role names are actually present in the loaded page of users. */
   const roleFilterOptions = useMemo(() => {
     const names = new Set<string>();
-    for (const u of users) if (u.role) names.add(u.role);
+    for (const u of users) if (u.visibleRoleName) names.add(u.visibleRoleName);
     return [...names].sort((a, b) => a.localeCompare(b));
   }, [users]);
 

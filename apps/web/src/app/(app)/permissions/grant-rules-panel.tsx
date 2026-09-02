@@ -25,7 +25,7 @@ import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import type { EnterpriseSummary, RoleGrantRule, RoleSummary } from "@/lib/types";
-import { ALL_TRIGGER_EVENTS, triggerEventLabel } from "./helpers";
+import { ALL_TRIGGER_EVENTS, ruleTriggerLabel, triggerEventLabel } from "./helpers";
 
 /**
  * Admin CRUD for role_grant_rules (H8, H43-H46): configurable "when X
@@ -46,21 +46,40 @@ import { ALL_TRIGGER_EVENTS, triggerEventLabel } from "./helpers";
  * enterprise scope, and always targets `scopedRole.id`. The read-only,
  * cross-role "every rule in the system" view lives separately, in
  * `grant-rules-overview.tsx`.
+ *
+ * A rule's trigger is one of two mutually-exclusive kinds (H8
+ * role-assignment-as-trigger, 0812): a fixed domain `triggerEvent` (the
+ * original sponsor/judge events) or `sourceRoleId` — "when this OTHER role
+ * is assigned/removed", where the role itself is the admin-chosen parameter,
+ * so it needs its own picker rather than a registry entry. `triggerMode`
+ * below is local form state only (not sent to the API) that decides which
+ * one of the two fields the submit payload carries.
  */
 
-const ruleSchema = z.object({
-  roleId: z.string().min(1),
-  triggerEvent: z.string().min(1),
-  action: z.enum(["grant", "revoke"]),
-  enterpriseId: z.string(),
-  enabled: z.boolean(),
-});
+const ruleSchema = z
+  .object({
+    roleId: z.string().min(1),
+    triggerMode: z.enum(["event", "role"]),
+    triggerEvent: z.string(),
+    sourceRoleId: z.string(),
+    action: z.enum(["grant", "revoke"]),
+    enterpriseId: z.string(),
+    enabled: z.boolean(),
+  })
+  .refine((v) => (v.triggerMode === "event" ? v.triggerEvent.length > 0 : true), {
+    path: ["triggerEvent"],
+  })
+  .refine((v) => (v.triggerMode === "role" ? v.sourceRoleId.length > 0 : true), {
+    path: ["sourceRoleId"],
+  });
 type RuleValues = z.infer<typeof ruleSchema>;
 
 function emptyValues(defaultRoleId?: number): RuleValues {
   return {
     roleId: defaultRoleId ? String(defaultRoleId) : "",
+    triggerMode: "event",
     triggerEvent: "",
+    sourceRoleId: "",
     action: "grant",
     enterpriseId: "",
     enabled: true,
@@ -70,7 +89,9 @@ function emptyValues(defaultRoleId?: number): RuleValues {
 function ruleToValues(rule: RoleGrantRule): RuleValues {
   return {
     roleId: String(rule.roleId),
-    triggerEvent: rule.triggerEvent,
+    triggerMode: rule.sourceRoleId !== null ? "role" : "event",
+    triggerEvent: rule.triggerEvent ?? "",
+    sourceRoleId: rule.sourceRoleId !== null ? String(rule.sourceRoleId) : "",
     action: rule.action,
     enterpriseId: rule.enterpriseId === null ? "" : String(rule.enterpriseId),
     enabled: rule.enabled,
@@ -92,6 +113,11 @@ export function GrantRulesPanel({
   const { t } = useLocale();
   const [rules, setRules] = useState<RoleGrantRule[]>([]);
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
+  // The role catalogue for the "when role assigned" source-role picker
+  // (H8 role-assignment-as-trigger, 0812) — fetched here regardless of
+  // `roles`/`scopedRole` so this mode works whether the panel is scoped to
+  // one role or (unscoped, legacy path) shows the full role picker too.
+  const [allRoles, setAllRoles] = useState<RoleSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<RoleGrantRule | null>(null);
@@ -101,14 +127,18 @@ export function GrantRulesPanel({
   // A protected role (system:superadmin) can never be a rule's target — the
   // API refuses it outright, so it's excluded from the picker too.
   const assignableRoles = roles.filter((r) => !r.isProtected);
+  const sourceRoleOptions = allRoles.filter(
+    (r) => !r.isProtected && (!scopedRole || r.id !== scopedRole.id),
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [rulesResult, enterprisesResult] = await Promise.allSettled([
+    const [rulesResult, enterprisesResult, rolesResult] = await Promise.allSettled([
       api.get<RoleGrantRule[]>("/api/role-grant-rules", {
         query: scopedRole ? { roleId: scopedRole.id } : undefined,
       }),
       api.get<{ enterprises: EnterpriseSummary[] }>("/api/enterprises"),
+      api.get<RoleSummary[]>("/api/roles"),
     ]);
     if (rulesResult.status === "fulfilled") setRules(rulesResult.value);
     else toast.error(t("couldNotLoadGrantRules"));
@@ -116,6 +146,7 @@ export function GrantRulesPanel({
     // simply doesn't get the enterprise picker populated.
     if (enterprisesResult.status === "fulfilled")
       setEnterprises(enterprisesResult.value.enterprises);
+    if (rolesResult.status === "fulfilled") setAllRoles(rolesResult.value);
     setLoading(false);
   }, [t, scopedRole]);
 
@@ -147,9 +178,13 @@ export function GrantRulesPanel({
       // Scoped mode has no role field to submit a stale value from — always
       // the role this panel is mounted on.
       roleId: scopedRole ? scopedRole.id : Number(values.roleId),
-      triggerEvent: values.triggerEvent,
+      // Exactly one of the two is sent — the API rejects both/neither (H8).
+      triggerEvent: values.triggerMode === "event" ? values.triggerEvent : null,
+      sourceRoleId: values.triggerMode === "role" ? Number(values.sourceRoleId) : null,
       action: values.action,
-      enterpriseId: values.enterpriseId ? Number(values.enterpriseId) : null,
+      // Enterprise scoping only makes sense for a domain trigger_event.
+      enterpriseId:
+        values.triggerMode === "event" && values.enterpriseId ? Number(values.enterpriseId) : null,
       enabled: values.enabled,
     };
     try {
@@ -232,9 +267,7 @@ export function GrantRulesPanel({
                   disabled={disabled}
                   onClick={() => openEdit(rule)}
                 >
-                  <p className="truncate text-sm font-medium">
-                    {triggerEventLabel(rule.triggerEvent, t)}
-                  </p>
+                  <p className="truncate text-sm font-medium">{ruleTriggerLabel(rule, t)}</p>
                   <p className="text-muted-foreground truncate text-xs">
                     {t(rule.action === "grant" ? "grantActionGrant" : "grantActionRevoke")}
                     {/* The role is redundant once the panel is already scoped to it. */}
@@ -285,10 +318,10 @@ export function GrantRulesPanel({
           <form id="grant-rule-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
             <FormField
               control={form.control}
-              name="triggerEvent"
+              name="triggerMode"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t("grantRuleTriggerLabel")}</FormLabel>
+                  <FormLabel>{t("grantRuleTriggerModeLabel")}</FormLabel>
                   <Select value={field.value} onValueChange={field.onChange}>
                     <FormControl>
                       <SelectTrigger className="w-full">
@@ -296,16 +329,62 @@ export function GrantRulesPanel({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {ALL_TRIGGER_EVENTS.map((event) => (
-                        <SelectItem key={event} value={event}>
-                          {triggerEventLabel(event, t)}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="event">{t("grantRuleTriggerModeEvent")}</SelectItem>
+                      <SelectItem value="role">{t("grantRuleTriggerModeRole")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </FormItem>
               )}
             />
+            {form.watch("triggerMode") === "event" ? (
+              <FormField
+                control={form.control}
+                name="triggerEvent"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("grantRuleTriggerLabel")}</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {ALL_TRIGGER_EVENTS.map((event) => (
+                          <SelectItem key={event} value={event}>
+                            {triggerEventLabel(event, t)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )}
+              />
+            ) : (
+              <FormField
+                control={form.control}
+                name="sourceRoleId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("grantRuleSourceRoleLabel")}</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {sourceRoleOptions.map((role) => (
+                          <SelectItem key={role.id} value={String(role.id)}>
+                            {role.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )}
+              />
+            )}
             <FormField
               control={form.control}
               name="action"
@@ -352,33 +431,37 @@ export function GrantRulesPanel({
                 )}
               />
             )}
-            <FormField
-              control={form.control}
-              name="enterpriseId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("grantRuleEnterpriseLabel")}</FormLabel>
-                  <Select
-                    value={field.value === "" ? "any" : field.value}
-                    onValueChange={(v) => field.onChange(v === "any" ? "" : v)}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="any">{t("anyEnterpriseOption")}</SelectItem>
-                      {enterprises.map((enterprise) => (
-                        <SelectItem key={enterprise.id} value={String(enterprise.id)}>
-                          {enterprise.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FormItem>
-              )}
-            />
+            {/* Enterprise scoping only applies to a domain trigger_event — role
+                assignment isn't tied to an enterprise. */}
+            {form.watch("triggerMode") === "event" && (
+              <FormField
+                control={form.control}
+                name="enterpriseId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("grantRuleEnterpriseLabel")}</FormLabel>
+                    <Select
+                      value={field.value === "" ? "any" : field.value}
+                      onValueChange={(v) => field.onChange(v === "any" ? "" : v)}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="any">{t("anyEnterpriseOption")}</SelectItem>
+                        {enterprises.map((enterprise) => (
+                          <SelectItem key={enterprise.id} value={String(enterprise.id)}>
+                            {enterprise.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )}
+              />
+            )}
             <FormField
               control={form.control}
               name="enabled"
@@ -399,7 +482,7 @@ export function GrantRulesPanel({
         open={deleteTarget !== null}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
         title={t("deleteGrantRuleQuestion")}
-        description={deleteTarget ? triggerEventLabel(deleteTarget.triggerEvent, t) : ""}
+        description={deleteTarget ? ruleTriggerLabel(deleteTarget, t) : ""}
         cancelLabel={t("cancel")}
         confirmLabel={t("deleteGrantRule")}
         destructive

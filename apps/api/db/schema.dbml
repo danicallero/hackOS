@@ -719,9 +719,13 @@ Table role_capabilities {
 Table role_grant_rules {
   id integer [pk, increment, not null]
   role_id integer [not null]
-  trigger_event text [not null]
+  trigger_event text
   action text [not null]
   enabled boolean [not null, default: `true`]
+  enterprise_id integer
+  source_role_id integer [note: 'H8: alternative to trigger_event — a rule fires when THIS role is assigned (action=grant) or removed (action=revoke) from a user, instead of on a domain trigger_event. Exactly one of the two columns is set. See identity/role-grants.ts applyRoleAssignmentGrantRules/applyRoleAssignmentRevokeRules.']
+
+  Note: 'H8: admin-configurable automatic role grant/revoke rules keyed off a fixed developer-defined trigger_event vocabulary (packages/shared/src/role-grant-triggers.ts). enterprise_id NULL scopes a rule to every occurrence of trigger_event; a specific enterprise_id scopes it to that one enterprise only, and can coexist with a global rule for the same event.'
 }
 
 Table role_seed_defaults {
@@ -1131,7 +1135,9 @@ Ref: review_fixture_queues.queue_entry_id > queue_entries.id
 Ref: review_fixture_queues.repo_id > repos.id
 Ref: review_fixture_queues.sponsor_id > sponsors.id
 Ref: role_capabilities.role_id > roles.id
+Ref: role_grant_rules.enterprise_id > enterprises.id
 Ref: role_grant_rules.role_id > roles.id
+Ref: role_grant_rules.source_role_id > roles.id
 Ref: role_seed_defaults.role_id > roles.id
 Ref: room_enterprises.assigned_by > users.id
 Ref: room_enterprises.enterprise_id > enterprises.id

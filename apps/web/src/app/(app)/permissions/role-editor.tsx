@@ -12,6 +12,7 @@ import {
   Trash2Icon,
   UserPlusIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -22,6 +23,7 @@ import { SubmitButton } from "@/components/common/submit-button";
 import { TabBar } from "@/components/common/tab-bar";
 import { type UserOption, UserPicker } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Form,
@@ -84,6 +86,7 @@ export function RoleEditor({
   onSaveCapabilities,
   onAddMember,
   onRemoveMember,
+  onRemoveMembers,
   onDelete,
   searchUsers,
   loadSeedDiff,
@@ -99,6 +102,8 @@ export function RoleEditor({
   ) => Promise<void>;
   onAddMember: (userId: number, user?: UserListItem) => Promise<void>;
   onRemoveMember: (userId: number) => Promise<void>;
+  /** Bulk removal (H8): parallelizes the same per-user DELETE, surfaces partial failures. */
+  onRemoveMembers: (userIds: number[]) => Promise<void>;
   onDelete: () => Promise<void>;
   searchUsers: (query: string) => Promise<UserOption[]>;
   /** H8: only meaningful when role.isSeeded — reports drift from role_seed_defaults. */
@@ -348,6 +353,7 @@ export function RoleEditor({
       disabled={isProtected}
       onAdd={onAddMember}
       onRemove={onRemoveMember}
+      onRemoveMany={onRemoveMembers}
       search={searchUsers}
     />
   );
@@ -625,6 +631,7 @@ function MembersPanel({
   disabled,
   onAdd,
   onRemove,
+  onRemoveMany,
   search,
 }: {
   role: RoleSummary;
@@ -632,18 +639,30 @@ function MembersPanel({
   disabled: boolean;
   onAdd: (userId: number, user?: UserListItem) => Promise<void>;
   onRemove: (userId: number) => Promise<void>;
+  onRemoveMany: (userIds: number[]) => Promise<void>;
   search: (query: string) => Promise<UserOption[]>;
 }) {
   const { t } = useLocale();
   const [pickedId, setPickedId] = useState("");
   const [pickedUser, setPickedUser] = useState<UserListItem | null>(null);
   const [adding, setAdding] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkRemoving, setBulkRemoving] = useState(false);
 
   const existingSet = useMemo(() => new Set(role.memberIds), [role.memberIds]);
   const searchExcludingMembers = useMemo(
     () => async (query: string) => (await search(query)).filter((u) => !existingSet.has(u.id)),
     [search, existingSet],
   );
+
+  // Drop any selected id that's no longer a member (removed elsewhere, or
+  // this role's membership changed under us via the live refresh).
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const next = new Set([...prev].filter((id) => existingSet.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [existingSet]);
 
   async function handleAdd() {
     if (!pickedId) return;
@@ -656,6 +675,30 @@ function MembersPanel({
       setAdding(false);
     }
   }
+
+  function toggleOne(id: number, checked: boolean) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  async function handleBulkRemove() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setBulkRemoving(true);
+    try {
+      await onRemoveMany(ids);
+      setSelectedIds(new Set());
+    } finally {
+      setBulkRemoving(false);
+    }
+  }
+
+  const allSelected =
+    role.memberIds.length > 0 && role.memberIds.every((id) => selectedIds.has(id));
 
   return (
     // No title here — the "Members" tab label above already names this panel (H8).
@@ -680,17 +723,60 @@ function MembersPanel({
         <p className="text-muted-foreground p-6 text-sm">{t("noMembersYetPeriod")}</p>
       ) : (
         <ul className="divide-border divide-y">
+          {!disabled && role.memberIds.length > 1 && (
+            <li className="flex items-center justify-between gap-3 px-4 py-2">
+              <span className="flex items-center gap-3">
+                <Checkbox
+                  checked={allSelected}
+                  onCheckedChange={(checked) =>
+                    setSelectedIds(checked ? new Set(role.memberIds) : new Set())
+                  }
+                  aria-label={t("selectAll")}
+                />
+                {selectedIds.size > 0 && (
+                  <span className="text-muted-foreground text-xs">
+                    {t("selectedCount", { count: selectedIds.size })}
+                  </span>
+                )}
+              </span>
+              {selectedIds.size > 0 && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={bulkRemoving}
+                  onClick={handleBulkRemove}
+                >
+                  <Trash2Icon />
+                  {selectedIds.size === 1
+                    ? t("removeRoleFromMembersOne", { count: selectedIds.size })
+                    : t("removeRoleFromMembersOther", { count: selectedIds.size })}
+                </Button>
+              )}
+            </li>
+          )}
           {role.memberIds.map((id) => {
             const user = users.get(id);
             return (
               <li key={id} className="flex items-center justify-between gap-3 px-4 py-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">
-                    {user ? userDisplayName(user, t) : t("userNumberFallback", { id })}
-                  </p>
-                  {user?.email && (
-                    <p className="text-muted-foreground truncate text-xs">{user.email}</p>
+                <div className="flex min-w-0 items-center gap-3">
+                  {!disabled && (
+                    <Checkbox
+                      checked={selectedIds.has(id)}
+                      onCheckedChange={(checked) => toggleOne(id, Boolean(checked))}
+                      aria-label={t("selectRow")}
+                    />
                   )}
+                  <div className="min-w-0">
+                    <Link
+                      href={`/users/${id}`}
+                      className="block truncate text-sm font-medium hover:underline"
+                    >
+                      {user ? userDisplayName(user, t) : t("userNumberFallback", { id })}
+                    </Link>
+                    {user?.email && (
+                      <p className="text-muted-foreground truncate text-xs">{user.email}</p>
+                    )}
+                  </div>
                 </div>
                 {!disabled && (
                   <Button

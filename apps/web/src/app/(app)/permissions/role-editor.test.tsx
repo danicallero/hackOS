@@ -2,7 +2,8 @@ import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PermissionState, RoleSummary } from "@/lib/types";
+import { api } from "@/lib/api";
+import type { PermissionState, RoleSummary, UserListItem } from "@/lib/types";
 import { RoleEditor } from "./role-editor";
 
 // GrantRulesPanel (the Grant Rules tab's content) fetches its own data via
@@ -106,6 +107,7 @@ describe("RoleEditor mobile drill-down", () => {
           onSaveCapabilities={onSaveCapabilities}
           onAddMember={vi.fn().mockResolvedValue(undefined)}
           onRemoveMember={vi.fn().mockResolvedValue(undefined)}
+          onRemoveMembers={vi.fn().mockResolvedValue(undefined)}
           onDelete={vi.fn().mockResolvedValue(undefined)}
           searchUsers={vi.fn().mockResolvedValue([])}
           loadSeedDiff={vi.fn().mockRejectedValue(new Error("not seeded"))}
@@ -194,6 +196,7 @@ describe("RoleEditor mobile drill-down", () => {
           onSaveCapabilities={vi.fn().mockResolvedValue(undefined)}
           onAddMember={vi.fn().mockResolvedValue(undefined)}
           onRemoveMember={vi.fn().mockResolvedValue(undefined)}
+          onRemoveMembers={vi.fn().mockResolvedValue(undefined)}
           onDelete={vi.fn().mockResolvedValue(undefined)}
           searchUsers={vi.fn().mockResolvedValue([])}
           loadSeedDiff={vi.fn().mockRejectedValue(new Error("not seeded"))}
@@ -209,5 +212,109 @@ describe("RoleEditor mobile drill-down", () => {
     // Grant Rules is a tab alongside Display/Capabilities/Members (H8),
     // not a separate top-level "Automation" tab.
     expect(tablist?.textContent).toContain("grantRulesTitle");
+  });
+});
+
+describe("RoleEditor members panel", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+  let onRemoveMember: (userId: number) => Promise<void>;
+  let onRemoveMembers: (userIds: number[]) => Promise<void>;
+
+  const roleWithMembers: RoleSummary = { ...role, memberIds: [10, 20, 30] };
+  const users = new Map<number, UserListItem>([
+    [10, makeUser(10, "Ada")],
+    [20, makeUser(20, "Bea")],
+    [30, makeUser(30, "Cid")],
+  ]);
+
+  function makeUser(id: number, name: string): UserListItem {
+    return {
+      id,
+      email: `${name.toLowerCase()}@example.com`,
+      emailVerified: true,
+      name,
+      surname: null,
+      badgeId: null,
+      visibleRoleName: null,
+      language: "en",
+      shirtSize: null,
+      applicationStatus: null,
+      confirmedSpot: false,
+      isTestAccount: false,
+      createdAt: "2026-01-01T00:00:00Z",
+    };
+  }
+
+  beforeEach(() => {
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    onRemoveMember = vi.fn().mockResolvedValue(undefined);
+    // Mirrors page.tsx's real onRemoveMembers: parallel per-user DELETEs.
+    onRemoveMembers = vi.fn(async (userIds: number[]) => {
+      await Promise.all(
+        userIds.map((userId) => api.delete(`/api/roles/${roleWithMembers.id}/users/${userId}`)),
+      );
+    });
+
+    act(() => {
+      root.render(
+        <RoleEditor
+          role={roleWithMembers}
+          users={users}
+          onSaveDetails={vi.fn().mockResolvedValue(undefined)}
+          onSaveCapabilities={vi.fn().mockResolvedValue(undefined)}
+          onAddMember={vi.fn().mockResolvedValue(undefined)}
+          onRemoveMember={onRemoveMember}
+          onRemoveMembers={onRemoveMembers}
+          onDelete={vi.fn().mockResolvedValue(undefined)}
+          searchUsers={vi.fn().mockResolvedValue([])}
+          loadSeedDiff={vi.fn().mockRejectedValue(new Error("not seeded"))}
+          onResetToDefault={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+    });
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+    vi.mocked(api.delete).mockClear();
+  });
+
+  function goToMembersTab(user: ReturnType<typeof userEvent.setup>) {
+    return act(async () => user.click(buttonWithText(container, "membersTitle")));
+  }
+
+  it("renders each member's name as a link to their profile", async () => {
+    const user = userEvent.setup();
+    await goToMembersTab(user);
+
+    const link = [...container.querySelectorAll("a")].find((a) => a.textContent === "Ada");
+    expect(link).toBeDefined();
+    expect(link?.getAttribute("href")).toBe("/users/10");
+  });
+
+  it("selects 2 of 3 members and bulk-removes them, leaving the third", async () => {
+    const user = userEvent.setup();
+    await goToMembersTab(user);
+
+    const checkboxes = [...container.querySelectorAll('[role="checkbox"]')];
+    // First checkbox is "select all"; the next three are Ada, Bea, Cid in order.
+    await act(async () => user.click(checkboxes[1]));
+    await act(async () => user.click(checkboxes[2]));
+
+    await act(async () => user.click(buttonWithText(container, "removeRoleFromMembersOther")));
+
+    expect(onRemoveMembers).toHaveBeenCalledTimes(1);
+    expect(onRemoveMembers).toHaveBeenCalledWith([10, 20]);
+    expect(api.delete).toHaveBeenCalledWith("/api/roles/1/users/10");
+    expect(api.delete).toHaveBeenCalledWith("/api/roles/1/users/20");
+    expect(api.delete).not.toHaveBeenCalledWith("/api/roles/1/users/30");
+
+    // Cid's row is untouched — role.memberIds itself only changes once the
+    // parent re-syncs (applyRole), which this fixture doesn't simulate.
+    expect(container.textContent).toContain("Cid");
   });
 });

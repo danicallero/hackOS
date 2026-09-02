@@ -136,6 +136,32 @@ describe("H8 role resolution semantics", () => {
     expect(await userHasCapability(admin, CAPABILITIES.QUEUE_ADMIN)).toBe(true);
     expect(await userHasCapability(admin, CAPABILITIES.AUDIT_READ)).toBe(true);
   });
+
+  it("a user holding a non-visible role alongside a visible one resolves to the visible role everywhere (0813: mirrors real Event Director + Organizer): getEffectiveRole, getHighestVisibleRoleName, and the bulk user_effective_role_name view all agree", async () => {
+    const { getEffectiveRole, getHighestVisibleRoleName } = await import(
+      "../../src/modules/identity/role.js"
+    );
+    const { pool } = await import("../../src/db/pool.js");
+    const userId = await createUser();
+    // Higher position, NOT visible — mirrors the real "Event Director"
+    // (0813: is_visible=false) sitting above the real "Organizer"
+    // (is_visible=true, higher position wins the ALLOW/DENY chain but not
+    // here — this is about the *displayed* role, not capabilities).
+    const hiddenTop = await createRole([], { name: "hidden-top", isVisible: false });
+    const visibleBelow = await createRole([], { name: "visible-below", isVisible: true });
+    await pool.query(`UPDATE roles SET position = 18700 WHERE id = $1`, [hiddenTop]);
+    await pool.query(`UPDATE roles SET position = 5000 WHERE id = $1`, [visibleBelow]);
+    await assignRole(userId, hiddenTop);
+    await assignRole(userId, visibleBelow);
+
+    expect((await getEffectiveRole(pool, userId))?.name).toBe("visible-below");
+    expect(await getHighestVisibleRoleName(pool, userId)).toBe("visible-below");
+    const { rows } = await pool.query(
+      `SELECT role_name FROM user_effective_role_name WHERE user_id = $1`,
+      [userId],
+    );
+    expect(rows[0]?.role_name).toBe("visible-below");
+  });
 });
 
 describe("H8 admin-hierarchy mutation authority", () => {
@@ -1259,6 +1285,36 @@ describe("H8 default seeded role set (0805)", () => {
     }
   });
 
+  it("marks only the public-facing default roles is_visible (0813): Organizer/Day Staff/Mentor/Sponsor/Participant true, the ten internal functional/team roles false", async () => {
+    const pool = await seededRoles();
+    const visible = ["Organizer", "Day Staff", "Mentor", "Sponsor", "Participant"];
+    const notVisible = [
+      "Event Director",
+      "Judging Coordinator",
+      "Applications Lead",
+      "Judging Team",
+      "Applications Team",
+      "Operations Team",
+      "Hacker Experience",
+      "Sponsors Team",
+      "Media / Comms",
+      "Technical Team",
+    ];
+    const { rows } = await pool.query(
+      `SELECT name, is_visible FROM roles WHERE name = ANY($1::text[])`,
+      [[...visible, ...notVisible]],
+    );
+    const byName = new Map(
+      rows.map((r: { name: string; is_visible: boolean }) => [r.name, r.is_visible]),
+    );
+    for (const name of visible) {
+      expect(byName.get(name), `${name} should be is_visible = true`).toBe(true);
+    }
+    for (const name of notVisible) {
+      expect(byName.get(name), `${name} should be is_visible = false`).toBe(false);
+    }
+  });
+
   it("concentrates decide/override/broadcast capabilities at Event Director, not any functional team role (H8 risk tiering)", async () => {
     const pool = await seededRoles();
     const riskyCapabilities = [
@@ -1440,6 +1496,82 @@ describe("H8 default seeded role set (0805)", () => {
     );
     expect(mentor).toHaveLength(1);
     expect(mentor[0].capabilities).toEqual({});
+  });
+
+  it("seeds ten role-assignment-triggered rules (0812) that all imply Organizer, and one fires end-to-end", async () => {
+    const pool = await seededRoles();
+    const { rows: organizerRows } = await pool.query(
+      `SELECT id FROM roles WHERE name = 'Organizer'`,
+    );
+    const organizerId = organizerRows[0].id as number;
+
+    const { rows: implicationRows } = await pool.query(
+      `SELECT r.name AS source_name, rr.action, rr.enabled
+         FROM role_grant_rules rr
+         JOIN roles r ON r.id = rr.source_role_id
+        WHERE rr.role_id = $1`,
+      [organizerId],
+    );
+    const impliedBy = implicationRows.map((r: { source_name: string }) => r.source_name).sort();
+    expect(impliedBy).toEqual(
+      [
+        "Applications Lead",
+        "Applications Team",
+        "Event Director",
+        "Hacker Experience",
+        "Judging Coordinator",
+        "Judging Team",
+        "Media / Comms",
+        "Operations Team",
+        "Sponsors Team",
+        "Technical Team",
+      ].sort(),
+    );
+    for (const row of implicationRows as { action: string; enabled: boolean }[]) {
+      expect(row.action).toBe("grant");
+      expect(row.enabled).toBe(true);
+    }
+
+    // End-to-end: assigning "Event Director" to a fresh user, through the
+    // exact runtime helper the roles route calls, also grants Organizer.
+    const { randomUUID } = await import("node:crypto");
+    const { rows: userRows } = await pool.query(
+      `INSERT INTO users (email, name, email_verified) VALUES ($1, $2, true) RETURNING id`,
+      [`seed-implication-${randomUUID()}@test.local`, "Seed Implication Test"],
+    );
+    const userId = userRows[0].id as number;
+    const { rows: eventDirectorRows } = await pool.query(
+      `SELECT id FROM roles WHERE name = 'Event Director'`,
+    );
+    const eventDirectorId = eventDirectorRows[0].id as number;
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `INSERT INTO user_roles (user_id, role_id, source) VALUES ($1, $2, 'manual')`,
+        [userId, eventDirectorId],
+      );
+      const { applyRoleAssignmentGrantRules } = await import(
+        "../../src/modules/identity/role-grants.js"
+      );
+      await applyRoleAssignmentGrantRules(client, userId, eventDirectorId, null);
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    const { rows: finalRoles } = await pool.query(
+      `SELECT r.name FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = $1`,
+      [userId],
+    );
+    expect(finalRoles.map((r: { name: string }) => r.name).sort()).toEqual([
+      "Event Director",
+      "Organizer",
+    ]);
   });
 });
 
@@ -1880,6 +2012,345 @@ describe("H8 role-grant-rules CRUD API", () => {
         triggerEvent: "sponsor.enterprise_linked",
         action: "grant",
       },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+});
+
+describe("H8 role-assignment-triggered grant rules (0812)", () => {
+  async function highPositionManager(extraCapabilities: string[] = []): Promise<number> {
+    const actor = await createUserWithCapabilities([
+      CAPABILITIES.PERMISSIONS_MANAGE,
+      ...extraCapabilities,
+    ]);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE roles SET position = 1000000 WHERE id IN (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+      [actor],
+    );
+    return actor;
+  }
+
+  it("fires on assignment: assigning the source role also grants the implied role, audited", async () => {
+    const a = await getApp();
+    const actor = await highPositionManager();
+    const { pool } = await import("../../src/db/pool.js");
+    const sourceRole = await createRole([], { name: "implies-target-source" });
+    const targetRole = await createRole([], { name: "implies-target-target" });
+    await pool.query(`UPDATE roles SET position = 20 WHERE id = $1`, [sourceRole]);
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [targetRole]);
+
+    const created = await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: { roleId: targetRole, sourceRoleId: sourceRole, action: "grant" },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({
+      roleId: targetRole,
+      sourceRoleId: sourceRole,
+      triggerEvent: null,
+      action: "grant",
+    });
+
+    const userId = await createUser();
+    const assigned = await a.inject({
+      method: "POST",
+      url: `/api/roles/${sourceRole}/users/${userId}`,
+      headers: asUser(actor),
+    });
+    expect(assigned.statusCode).toBe(200);
+
+    const { rows } = await pool.query(
+      `SELECT role_id FROM user_roles WHERE user_id = $1 ORDER BY role_id`,
+      [userId],
+    );
+    expect(rows.map((r: { role_id: number }) => r.role_id).sort()).toEqual(
+      [sourceRole, targetRole].sort(),
+    );
+
+    const audits = await pool.query(
+      `SELECT action, source FROM audit_log
+        WHERE entity_type = 'role' AND entity_id = $1 AND action = 'assign_user'
+        ORDER BY id`,
+      [String(targetRole)],
+    );
+    expect(audits.rows.some((r) => r.source === "system")).toBe(true);
+  });
+
+  it("revokes the implied role on removal when nothing else justifies it, via a matching revoke rule", async () => {
+    const a = await getApp();
+    const actor = await highPositionManager();
+    const { pool } = await import("../../src/db/pool.js");
+    const sourceRole = await createRole([], { name: "revoke-source" });
+    const targetRole = await createRole([], { name: "revoke-target" });
+    await pool.query(`UPDATE roles SET position = 20 WHERE id = $1`, [sourceRole]);
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [targetRole]);
+
+    await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: { roleId: targetRole, sourceRoleId: sourceRole, action: "grant" },
+    });
+    await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: { roleId: targetRole, sourceRoleId: sourceRole, action: "revoke" },
+    });
+
+    const userId = await createUser();
+    await a.inject({
+      method: "POST",
+      url: `/api/roles/${sourceRole}/users/${userId}`,
+      headers: asUser(actor),
+    });
+    const midway = await pool.query(`SELECT role_id FROM user_roles WHERE user_id = $1`, [userId]);
+    expect(midway.rows.map((r: { role_id: number }) => r.role_id).sort()).toEqual(
+      [sourceRole, targetRole].sort(),
+    );
+
+    const removed = await a.inject({
+      method: "DELETE",
+      url: `/api/roles/${sourceRole}/users/${userId}`,
+      headers: asUser(actor),
+    });
+    expect(removed.statusCode).toBe(200);
+
+    const after = await pool.query(`SELECT role_id FROM user_roles WHERE user_id = $1`, [userId]);
+    expect(after.rows.map((r: { role_id: number }) => r.role_id)).toEqual([]);
+  });
+
+  it("does NOT revoke the implied role on removal when another held role still implies it", async () => {
+    const a = await getApp();
+    const actor = await highPositionManager();
+    const { pool } = await import("../../src/db/pool.js");
+    const sourceA = await createRole([], { name: "revoke-safety-a" });
+    const sourceB = await createRole([], { name: "revoke-safety-b" });
+    const targetRole = await createRole([], { name: "revoke-safety-target" });
+    await pool.query(`UPDATE roles SET position = 30 WHERE id = $1`, [sourceA]);
+    await pool.query(`UPDATE roles SET position = 20 WHERE id = $1`, [sourceB]);
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [targetRole]);
+
+    // A implies target and revokes it on removal; B ALSO implies target
+    // (grant-only, no revoke rule of its own).
+    await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: { roleId: targetRole, sourceRoleId: sourceA, action: "grant" },
+    });
+    await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: { roleId: targetRole, sourceRoleId: sourceA, action: "revoke" },
+    });
+    await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: { roleId: targetRole, sourceRoleId: sourceB, action: "grant" },
+    });
+
+    const userId = await createUser();
+    await a.inject({
+      method: "POST",
+      url: `/api/roles/${sourceA}/users/${userId}`,
+      headers: asUser(actor),
+    });
+    await a.inject({
+      method: "POST",
+      url: `/api/roles/${sourceB}/users/${userId}`,
+      headers: asUser(actor),
+    });
+
+    await a.inject({
+      method: "DELETE",
+      url: `/api/roles/${sourceA}/users/${userId}`,
+      headers: asUser(actor),
+    });
+
+    const { rows } = await pool.query(`SELECT role_id FROM user_roles WHERE user_id = $1`, [
+      userId,
+    ]);
+    // sourceA is gone, but targetRole survives (sourceB still implies it) and sourceB is held.
+    expect(rows.map((r: { role_id: number }) => r.role_id).sort()).toEqual(
+      [sourceB, targetRole].sort(),
+    );
+  });
+
+  it("does NOT revoke a manually-assigned implied role even when a revoke rule matches", async () => {
+    const a = await getApp();
+    const actor = await highPositionManager();
+    const { pool } = await import("../../src/db/pool.js");
+    const sourceRole = await createRole([], { name: "manual-guard-source" });
+    const targetRole = await createRole([], { name: "manual-guard-target" });
+    await pool.query(`UPDATE roles SET position = 20 WHERE id = $1`, [sourceRole]);
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [targetRole]);
+
+    await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: { roleId: targetRole, sourceRoleId: sourceRole, action: "revoke" },
+    });
+
+    const userId = await createUser();
+    // Manually assign the target role FIRST (source = 'manual'), independent
+    // of any rule.
+    await a.inject({
+      method: "POST",
+      url: `/api/roles/${targetRole}/users/${userId}`,
+      headers: asUser(actor),
+    });
+    await a.inject({
+      method: "POST",
+      url: `/api/roles/${sourceRole}/users/${userId}`,
+      headers: asUser(actor),
+    });
+    await a.inject({
+      method: "DELETE",
+      url: `/api/roles/${sourceRole}/users/${userId}`,
+      headers: asUser(actor),
+    });
+
+    const { rows } = await pool.query(`SELECT role_id, source FROM user_roles WHERE user_id = $1`, [
+      userId,
+    ]);
+    expect(rows.map((r: { role_id: number }) => r.role_id)).toEqual([targetRole]);
+    expect(rows[0].source).toBe("manual");
+  });
+
+  it("rejects a rule with both triggerEvent and sourceRoleId set", async () => {
+    const a = await getApp();
+    const actor = await highPositionManager();
+    const { pool } = await import("../../src/db/pool.js");
+    const role = await createRole([], { name: "both-trigger-fields" });
+    const source = await createRole([], { name: "both-trigger-fields-source" });
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [role]);
+    await pool.query(`UPDATE roles SET position = 11 WHERE id = $1`, [source]);
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: {
+        roleId: role,
+        triggerEvent: "sponsor.enterprise_linked",
+        sourceRoleId: source,
+        action: "grant",
+      },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("rejects a rule with neither triggerEvent nor sourceRoleId set", async () => {
+    const a = await getApp();
+    const actor = await highPositionManager();
+    const { pool } = await import("../../src/db/pool.js");
+    const role = await createRole([], { name: "no-trigger-fields" });
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [role]);
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: { roleId: role, action: "grant" },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("rejects sourceRoleId equal to roleId (self-implication)", async () => {
+    const a = await getApp();
+    const actor = await highPositionManager();
+    const { pool } = await import("../../src/db/pool.js");
+    const role = await createRole([], { name: "self-implication" });
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [role]);
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: { roleId: role, sourceRoleId: role, action: "grant" },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("rejects a rule that would create a cycle of role implications", async () => {
+    const a = await getApp();
+    const actor = await highPositionManager();
+    const { pool } = await import("../../src/db/pool.js");
+    const roleA = await createRole([], { name: "cycle-a" });
+    const roleB = await createRole([], { name: "cycle-b" });
+    const roleC = await createRole([], { name: "cycle-c" });
+    await pool.query(`UPDATE roles SET position = 30 WHERE id = $1`, [roleA]);
+    await pool.query(`UPDATE roles SET position = 20 WHERE id = $1`, [roleB]);
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [roleC]);
+
+    // A implies B implies C already.
+    const ab = await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: { roleId: roleB, sourceRoleId: roleA, action: "grant" },
+    });
+    expect(ab.statusCode).toBe(201);
+    const bc = await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: { roleId: roleC, sourceRoleId: roleB, action: "grant" },
+    });
+    expect(bc.statusCode).toBe(201);
+
+    // C implies A would close the loop (A -> B -> C -> A).
+    const ca = await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: { roleId: roleA, sourceRoleId: roleC, action: "grant" },
+    });
+    expect(ca.statusCode).toBe(400);
+  });
+
+  it("applies the same role-mutation authority guard to sourceRoleId rule creation as to triggerEvent rules", async () => {
+    const a = await getApp();
+    const actor = await createUserWithCapabilities([CAPABILITIES.PERMISSIONS_MANAGE]);
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE roles SET position = 5 WHERE id IN (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+      [actor],
+    );
+    const source = await createRole([], { name: "authority-guard-source" });
+    const highRole = await createRole([], { name: "authority-guard-target" });
+    await pool.query(`UPDATE roles SET position = 999999 WHERE id = $1`, [highRole]);
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: { roleId: highRole, sourceRoleId: source, action: "grant" },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("rejects a sourceRoleId rule whose source role is protected", async () => {
+    const a = await getApp();
+    const actor = await highPositionManager();
+    const protectedSource = await createRole([], {
+      name: "protected-source-role",
+      isProtected: true,
+    });
+    const target = await createRole([], { name: "protected-source-target" });
+
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/role-grant-rules",
+      headers: asUser(actor),
+      payload: { roleId: target, sourceRoleId: protectedSource, action: "grant" },
     });
     expect(res.statusCode).toBe(403);
   });

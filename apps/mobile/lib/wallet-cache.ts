@@ -10,7 +10,9 @@ export interface WalletTicketPayload {
   acceptedSpots: Array<{
     responseId: number;
     applicationName: string;
-    grantedBadgeCategory: string | null;
+    // H8: `badge_category` retired — the API now returns the granted role's
+    // real (admin-editable) name here instead of a fixed category value.
+    grantedRoleName: string | null;
     expiresAt: string | null;
   }>;
 }

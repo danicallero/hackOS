@@ -17,14 +17,62 @@ import {
 } from "../role-authority.js";
 
 /**
+ * A rule keyed off `source_role_id` fires when THAT role is assigned/removed
+ * (H8, role-assignment-as-trigger) — a parallel matching key to
+ * `trigger_event`, mutually exclusive with it (0812's CHECK constraint).
+ * Detects a longer cycle (A implies B implies ... implies A) that the CHECK
+ * constraint can't express on its own: walks OUTWARD from `targetRoleId`
+ * (the role the candidate rule would grant) along existing ENABLED
+ * `action = 'grant'` edges — if that walk ever reaches `sourceRoleId` (the
+ * role the candidate rule would fire on), granting `sourceRoleId` would
+ * eventually re-imply itself. Disabled rows still count: a disabled rule can
+ * be re-enabled later, so a structurally-cyclic graph is rejected even while
+ * dormant. `excludeRuleId` skips a rule's own row so PATCHing a rule against
+ * itself doesn't trivially "detect" its own existing edge.
+ */
+async function wouldCreateRoleImplicationCycle(
+  client: RoleGraphClient,
+  sourceRoleId: number,
+  targetRoleId: number,
+  excludeRuleId: number | null = null,
+): Promise<boolean> {
+  if (sourceRoleId === targetRoleId) return true;
+  const visited = new Set<number>([targetRoleId]);
+  let frontier = [targetRoleId];
+  while (frontier.length > 0) {
+    const { rows } = await client.query(
+      `SELECT role_id FROM role_grant_rules
+        WHERE source_role_id = ANY($1::int[]) AND action = 'grant'
+          AND ($2::int IS NULL OR id <> $2)`,
+      [frontier, excludeRuleId],
+    );
+    const next: number[] = [];
+    for (const row of rows as { role_id: number }[]) {
+      const roleId = Number(row.role_id);
+      if (roleId === sourceRoleId) return true;
+      if (!visited.has(roleId)) {
+        visited.add(roleId);
+        next.push(roleId);
+      }
+    }
+    frontier = next;
+  }
+  return false;
+}
+
+/**
  * Admin CRUD for `role_grant_rules` (H8, H43-H46): configurable automatic
  * role grant/revoke rules, decoupled from any one domain trigger. A rule
- * maps a fixed, developer-defined `trigger_event`
- * (packages/shared/src/role-grant-triggers.ts — the vocabulary of "what can
- * happen") to an admin-chosen role and action ("what results"), optionally
- * scoped to one enterprise. `identity/role-grants.ts`'s applyRoleGrantRule
- * is the runtime side that reads this table; this file is the only way to
- * write to it via HTTP.
+ * fires off either of two mutually-exclusive keys: a fixed, developer-
+ * defined `trigger_event` (packages/shared/src/role-grant-triggers.ts — the
+ * vocabulary of "what can happen") OR `source_role_id`, an admin-chosen role
+ * whose own assignment/removal fires the rule (role-assignment-as-trigger,
+ * 0812 — "assigning role X also grants role Y"). Either way the rule maps
+ * onto an admin-chosen role and action ("what results"), optionally scoped
+ * to one enterprise (trigger_event rules only). `identity/role-grants.ts`'s
+ * applyRoleGrantRule/applyRoleAssignmentGrantRules/
+ * applyRoleAssignmentRevokeRules are the runtime side that reads this table;
+ * this file is the only way to write to it via HTTP.
  *
  * This is the SAME privilege-escalation surface as directly assigning a
  * role, or configuring `applications.grants_role_ids` (applications/
@@ -48,7 +96,11 @@ const ruleResponse = z.object({
   id: z.number(),
   roleId: z.number(),
   roleName: z.string(),
-  triggerEvent: z.string(),
+  /** Null when this rule's trigger is `sourceRoleId` instead (mutually exclusive, H8). */
+  triggerEvent: z.string().nullable(),
+  /** Null when this rule's trigger is `triggerEvent` instead. Set = "fires on this role's assign/removal" (H8). */
+  sourceRoleId: z.number().nullable(),
+  sourceRoleName: z.string().nullable(),
   action: ruleAction,
   enabled: z.boolean(),
   enterpriseId: z.number().nullable(),
@@ -59,17 +111,21 @@ const ruleIdParams = z.object({ ruleId: z.coerce.number().int() });
 
 const ROW_QUERY = `
   SELECT rr.id, rr.role_id, r.name AS role_name, rr.trigger_event, rr.action, rr.enabled,
-         rr.enterprise_id, e.name AS enterprise_name
+         rr.enterprise_id, e.name AS enterprise_name,
+         rr.source_role_id, sr.name AS source_role_name
     FROM role_grant_rules rr
     JOIN roles r ON r.id = rr.role_id
-    LEFT JOIN enterprises e ON e.id = rr.enterprise_id`;
+    LEFT JOIN enterprises e ON e.id = rr.enterprise_id
+    LEFT JOIN roles sr ON sr.id = rr.source_role_id`;
 
 function toResponse(row: Record<string, unknown>) {
   return {
     id: Number(row.id),
     roleId: Number(row.role_id),
     roleName: String(row.role_name),
-    triggerEvent: String(row.trigger_event),
+    triggerEvent: row.trigger_event === null ? null : String(row.trigger_event),
+    sourceRoleId: row.source_role_id === null ? null : Number(row.source_role_id),
+    sourceRoleName: row.source_role_name === null ? null : String(row.source_role_name),
     action: row.action as "grant" | "revoke",
     enabled: Boolean(row.enabled),
     enterpriseId: row.enterprise_id === null ? null : Number(row.enterprise_id),
@@ -99,6 +155,55 @@ async function assertEnterpriseExists(
   if (enterpriseId == null) return;
   const { rows } = await client.query(`SELECT 1 FROM enterprises WHERE id = $1`, [enterpriseId]);
   if (!rows[0]) throw new NotFoundError("Enterprise not found", { enterpriseId });
+}
+
+/**
+ * Validates a candidate (sourceRoleId, roleId) pair for a role-assignment-
+ * triggered rule (H8): the source role must exist, can't equal the target
+ * role (also a DB CHECK, but this gives a clean 400 instead of a constraint
+ * violation), and can't create a longer implication cycle through existing
+ * rules. `excludeRuleId` is the rule being edited, so it doesn't collide
+ * with its own current edge.
+ */
+async function assertValidSourceRole(
+  client: RoleGraphClient,
+  sourceRoleId: number,
+  roleId: number,
+  excludeRuleId: number | null = null,
+): Promise<void> {
+  const { rows } = await client.query(`SELECT is_protected, name FROM roles WHERE id = $1`, [
+    sourceRoleId,
+  ]);
+  if (!rows[0]) throw new NotFoundError("Source role not found", { sourceRoleId });
+  assertNotProtectedRole({ isProtected: rows[0].is_protected as boolean, name: rows[0].name });
+  if (sourceRoleId === roleId) {
+    throw new BadRequestError("A role cannot imply itself", { sourceRoleId, roleId });
+  }
+  if (await wouldCreateRoleImplicationCycle(client, sourceRoleId, roleId, excludeRuleId)) {
+    throw new BadRequestError(
+      "This rule would create a cycle of role implications (A implies B implies ... implies A)",
+      { sourceRoleId, roleId },
+    );
+  }
+}
+
+/**
+ * Validates a create/update request body's trigger fields (H8): exactly one
+ * of triggerEvent/sourceRoleId must resolve to non-null. Returns the
+ * resolved pair so callers write a single source of truth to the DB.
+ */
+function resolveTrigger(
+  triggerEvent: string | null,
+  sourceRoleId: number | null,
+): { triggerEvent: string | null; sourceRoleId: number | null } {
+  if ((triggerEvent === null) === (sourceRoleId === null)) {
+    throw new BadRequestError("Exactly one of triggerEvent or sourceRoleId must be set", {
+      triggerEvent,
+      sourceRoleId,
+    });
+  }
+  if (triggerEvent !== null) assertKnownTriggerEvent(triggerEvent);
+  return { triggerEvent, sourceRoleId };
 }
 
 /**
@@ -160,10 +265,11 @@ export function registerRoleGrantRuleRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Create an automatic role grant/revoke rule",
         description:
-          "Creates a rule mapping a trigger_event (from the fixed registry, packages/shared/src/role-grant-triggers.ts — unknown strings are rejected) to a role and grant/revoke action, optionally scoped to one enterpriseId. Configuring a rule that grants/revokes role X is gated exactly like assigning X directly (H8): the actor's highest role must sit strictly above X's position, and (unless they hold the wildcard) they must already possess every capability X's own rows explicitly allow. A protected role can never be targeted.",
+          "Creates a rule that fires either off a trigger_event (from the fixed registry, packages/shared/src/role-grant-triggers.ts — unknown strings are rejected) or off sourceRoleId — a role whose own assignment (action=grant) or removal (action=revoke) fires the rule instead (H8 role-assignment-as-trigger). Exactly one of triggerEvent/sourceRoleId must be set. A sourceRoleId rule is rejected if it would create a cycle of role implications (A implies B implies ... implies A). Either way the rule grants/revokes `roleId`, optionally scoped to one enterpriseId. Configuring a rule that grants/revokes role X is gated exactly like assigning X directly (H8): the actor's highest role must sit strictly above X's position, and (unless they hold the wildcard) they must already possess every capability X's own rows explicitly allow. A protected role can never be targeted (as roleId or sourceRoleId).",
         body: z.object({
           roleId: z.number().int(),
-          triggerEvent: z.string().min(1),
+          triggerEvent: z.string().min(1).nullish(),
+          sourceRoleId: z.number().int().nullish(),
           action: ruleAction,
           enabled: z.boolean().default(true),
           enterpriseId: z.number().int().nullish(),
@@ -172,17 +278,21 @@ export function registerRoleGrantRuleRoutes(app: FastifyInstance): void {
       },
     },
     async (req, reply) => {
-      const { roleId, triggerEvent, action, enabled, enterpriseId } = req.body;
-      assertKnownTriggerEvent(triggerEvent);
+      const { roleId, action, enabled, enterpriseId } = req.body;
+      const { triggerEvent, sourceRoleId } = resolveTrigger(
+        req.body.triggerEvent ?? null,
+        req.body.sourceRoleId ?? null,
+      );
       const actorId = req.userId as number;
       const rule = await withTransaction(async (client) => {
         await lockRoleGraph(client);
         await assertActorCanConfigureRule(client, actorId, roleId);
         await assertEnterpriseExists(client, enterpriseId ?? null);
+        if (sourceRoleId !== null) await assertValidSourceRole(client, sourceRoleId, roleId);
         const { rows } = await client.query(
-          `INSERT INTO role_grant_rules (role_id, trigger_event, action, enabled, enterprise_id)
-           VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-          [roleId, triggerEvent, action, enabled, enterpriseId ?? null],
+          `INSERT INTO role_grant_rules (role_id, trigger_event, source_role_id, action, enabled, enterprise_id)
+           VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+          [roleId, triggerEvent, sourceRoleId, action, enabled, enterpriseId ?? null],
         );
         const ruleId = rows[0].id as number;
         const created = await loadRule(client, ruleId);
@@ -208,11 +318,12 @@ export function registerRoleGrantRuleRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update an automatic role grant/revoke rule",
         description:
-          "Partial update of a rule's role, trigger_event, action, enabled flag, or enterprise scope (H8). Fields omitted are left unchanged. Changing roleId re-runs the same role-mutation authority + capability-possession guard as creation, evaluated against the NEW role.",
+          "Partial update of a rule's role, trigger (triggerEvent XOR sourceRoleId), action, enabled flag, or enterprise scope (H8). Fields omitted are left unchanged; setting one trigger field to a non-null value clears the other. Changing roleId re-runs the same role-mutation authority + capability-possession guard as creation, evaluated against the NEW role. Changing roleId or sourceRoleId on a sourceRoleId-triggered rule re-runs the cycle check.",
         params: ruleIdParams,
         body: z.object({
           roleId: z.number().int().optional(),
-          triggerEvent: z.string().min(1).optional(),
+          triggerEvent: z.string().min(1).nullish(),
+          sourceRoleId: z.number().int().nullish(),
           action: ruleAction.optional(),
           enabled: z.boolean().optional(),
           enterpriseId: z.number().int().nullish(),
@@ -222,7 +333,6 @@ export function registerRoleGrantRuleRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const { ruleId } = req.params;
-      if (req.body.triggerEvent !== undefined) assertKnownTriggerEvent(req.body.triggerEvent);
       const actorId = req.userId as number;
       return withTransaction(async (client) => {
         await lockRoleGraph(client);
@@ -239,14 +349,27 @@ export function registerRoleGrantRuleRoutes(app: FastifyInstance): void {
           ? (req.body.enterpriseId ?? null)
           : before.enterpriseId;
         await assertEnterpriseExists(client, enterpriseId);
-        const triggerEvent = req.body.triggerEvent ?? before.triggerEvent;
+
+        // Setting either trigger field to a non-null value clears the other
+        // — see resolveTrigger's doc comment for the mutual-exclusivity rule.
+        let triggerEvent =
+          "triggerEvent" in req.body ? (req.body.triggerEvent ?? null) : before.triggerEvent;
+        let sourceRoleId =
+          "sourceRoleId" in req.body ? (req.body.sourceRoleId ?? null) : before.sourceRoleId;
+        if ("triggerEvent" in req.body && req.body.triggerEvent != null) sourceRoleId = null;
+        if ("sourceRoleId" in req.body && req.body.sourceRoleId != null) triggerEvent = null;
+        ({ triggerEvent, sourceRoleId } = resolveTrigger(triggerEvent, sourceRoleId));
+        if (sourceRoleId !== null) {
+          await assertValidSourceRole(client, sourceRoleId, roleId, ruleId);
+        }
+
         const action = req.body.action ?? before.action;
         const enabled = req.body.enabled ?? before.enabled;
         await client.query(
           `UPDATE role_grant_rules
-              SET role_id = $2, trigger_event = $3, action = $4, enabled = $5, enterprise_id = $6
+              SET role_id = $2, trigger_event = $3, source_role_id = $4, action = $5, enabled = $6, enterprise_id = $7
             WHERE id = $1`,
-          [ruleId, roleId, triggerEvent, action, enabled, enterpriseId],
+          [ruleId, roleId, triggerEvent, sourceRoleId, action, enabled, enterpriseId],
         );
         const updated = await loadRule(client, ruleId);
         await audit(client, {

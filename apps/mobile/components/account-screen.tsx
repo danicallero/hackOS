@@ -24,6 +24,7 @@ import { signOut } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";
 import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
+import { roleDisplayName } from "@/lib/role-filters";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { wipeAttendanceRoster } from "@/lib/scanner-db";
 import { canViewStaffStatistics } from "@/lib/tabs";
@@ -191,7 +192,7 @@ export default function AccountScreen() {
               {fullName}
             </Text>
             <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15 }}>
-              {roleLabel(me.role, t)}
+              {roleDisplayName(me.role, t)}
             </Text>
             <StatusPill tone={me.badgeId ? "success" : "neutral"} style={{ alignSelf: "center" }}>
               {me.badgeId ? t("accountAccredited") : t("accountNotAccredited")}
@@ -382,11 +383,4 @@ function languageName(language: string) {
   return (
     ({ en: "English", es: "Español", gl: "Galego" } as Record<string, string>)[language] ?? language
   );
-}
-
-function roleLabel(
-  role: NonNullable<ReturnType<typeof useMeContext>["me"]>["role"],
-  t: ReturnType<typeof useLocale>["t"],
-) {
-  return role ?? t("roleUnassigned");
 }

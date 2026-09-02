@@ -30,6 +30,7 @@ import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { transparentDetailHeaderOptions } from "@/lib/navigation";
 import type { PresenceDivergence } from "@/lib/presence-timeline";
+import { roleDisplayName } from "@/lib/role-filters";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import {
   enqueueLocalScan,
@@ -140,7 +141,7 @@ function personRolePill(
 ): { label: string; tone: "accent" | "warning" } | null {
   const normalizedRole = person.role?.toLocaleLowerCase() ?? null;
   if (person.hasCapabilities || person.isEnterpriseJudge) {
-    return { label: person.role ?? t("roleUnassigned"), tone: "accent" };
+    return { label: roleDisplayName(person.role, t), tone: "accent" };
   }
   if (normalizedRole === "sponsor" || normalizedRole === "mentor") {
     return { label: person.role as string, tone: "accent" };
