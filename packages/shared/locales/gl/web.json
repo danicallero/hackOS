@@ -1439,6 +1439,12 @@
   "noOwnersYet": "Aínda non hai ninguén asignado.",
   "ownerFreeTextPlaceholder": "Ou escribe un nome sen conta en hackOS",
   "memberAdded": "Membro engadido.",
+  "removeRoleFromMembersOne": "Quitar o rol a {count} membro",
+  "removeRoleFromMembersOther": "Quitar o rol a {count} membros",
+  "membersRemovedOne": "Quitouse o rol a {count} membro.",
+  "membersRemovedOther": "Quitouse o rol a {count} membros.",
+  "someMembersFailedToRemoveOne": "Non se puido quitar o rol a {count} membro.",
+  "someMembersFailedToRemoveOther": "Non se puido quitar o rol a {count} membros.",
   "couldNotAddMember": "Non se puido engadir o membro.",
   "noChallengesAvailableAdd": "Non hai retos dispoñibles para engadir.",
   "addChallengeLabel": "Engadir reto",
@@ -2740,5 +2746,10 @@
   "triggerEventSponsorEnterpriseLinked": "Patrocinador vinculado a unha empresa",
   "triggerEventSponsorEnterpriseUnlinked": "Patrocinador desvinculado dunha empresa",
   "triggerEventJudgeEnterpriseAssigned": "Xurado asignado ás salas dunha empresa",
-  "triggerEventJudgeEnterpriseRemoved": "Xurado retirado das salas dunha empresa"
+  "triggerEventJudgeEnterpriseRemoved": "Xurado retirado das salas dunha empresa",
+  "grantRuleTriggerModeLabel": "Tipo de disparador",
+  "grantRuleTriggerModeEvent": "Evento do dominio",
+  "grantRuleTriggerModeRole": "Rol asignado",
+  "grantRuleSourceRoleLabel": "Rol de orixe",
+  "triggerSourceRoleAssigned": "Asígnase {roleName}"
 }

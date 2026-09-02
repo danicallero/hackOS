@@ -11,7 +11,7 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -149,27 +149,38 @@ export default function PermissionsPage() {
     },
   });
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    const [rolesResult, templatesResult, usersResult] = await Promise.allSettled([
-      api.get<RoleSummary[]>("/api/roles"),
-      api.get<RoleTemplate[]>("/api/role-templates"),
-      api.get<UserList>("/api/users", { query: { limit: 200 } }),
-    ]);
-    if (rolesResult.status === "fulfilled") {
-      setRoles(rolesResult.value);
-    } else {
-      setLoadError(
-        rolesResult.reason instanceof ApiError
-          ? rolesResult.reason.message
-          : t("couldNotLoadRoles"),
-      );
-    }
-    if (templatesResult.status === "fulfilled") setTemplates(templatesResult.value);
-    if (usersResult.status === "fulfilled") mergeUsers(usersResult.value.users);
-    setLoading(false);
-  }, [t, mergeUsers]);
+  // `silent`: a background re-sync (e.g. the live SSE refresh below, which
+  // also fires for the admin's OWN mutations — every role write broadcasts
+  // DOMAIN_CHANGED, see roles.ts) must NOT toggle `loading`. Doing so used to
+  // swap the whole left column from <RoleList> to a bare <Spinner/> and back
+  // a couple hundred ms after every mutation (reorder, save, etc.), tearing
+  // down and rebuilding RoleList's DndContext for a visible flicker even
+  // though the mutation itself had already updated state optimistically.
+  // `loading` now only gates the true first paint.
+  const load = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!opts?.silent) setLoading(true);
+      setLoadError(null);
+      const [rolesResult, templatesResult, usersResult] = await Promise.allSettled([
+        api.get<RoleSummary[]>("/api/roles"),
+        api.get<RoleTemplate[]>("/api/role-templates"),
+        api.get<UserList>("/api/users", { query: { limit: 200 } }),
+      ]);
+      if (rolesResult.status === "fulfilled") {
+        setRoles(rolesResult.value);
+      } else {
+        setLoadError(
+          rolesResult.reason instanceof ApiError
+            ? rolesResult.reason.message
+            : t("couldNotLoadRoles"),
+        );
+      }
+      if (templatesResult.status === "fulfilled") setTemplates(templatesResult.value);
+      if (usersResult.status === "fulfilled") mergeUsers(usersResult.value.users);
+      if (!opts?.silent) setLoading(false);
+    },
+    [t, mergeUsers],
+  );
 
   const loadTrash = useCallback(async () => {
     setTrashLoading(true);
@@ -207,10 +218,15 @@ export default function PermissionsPage() {
   // creates/edits a role elsewhere.
   const liveRefresh = useAutoRefresh("/api/events/stream?topic=identity", [EVENTS.DOMAIN_CHANGED]);
 
+  // Only the very first run is a real (spinner-showing) load; every
+  // subsequent retrigger is the liveRefresh nonce bumping, which must stay
+  // silent (see the comment on `load`).
+  const isFirstLoad = useRef(true);
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
+    void load({ silent: !isFirstLoad.current });
+    isFirstLoad.current = false;
   }, [load, liveRefresh]);
 
   function applyRole(updated: RoleSummary) {
@@ -295,6 +311,40 @@ export default function PermissionsPage() {
       applyRole(r);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveMemberRole"));
+    }
+  }
+
+  // Bulk member removal (H8): the existing single-user DELETE already carries
+  // the right authority checks (assertNotProtectedRole + PERMISSIONS_MANAGE),
+  // so this parallelizes it client-side rather than adding a bulk endpoint —
+  // role rosters here are small (admin-curated), and each DELETE is already
+  // serialized through the role row's lock server-side. One re-fetch of the
+  // role afterward (not the whole page) picks up the authoritative final
+  // memberIds regardless of completion order.
+  async function onRemoveMembers(roleId: number, userIds: number[]) {
+    const results = await Promise.allSettled(
+      userIds.map((userId) => api.delete<RoleDetail>(`/api/roles/${roleId}/users/${userId}`)),
+    );
+    try {
+      applyRole(await api.get<RoleDetail>(`/api/roles/${roleId}`));
+    } catch {
+      // Best-effort resync; the per-item results below already drive the toast.
+    }
+    const failedCount = results.filter((r) => r.status === "rejected").length;
+    const succeededCount = userIds.length - failedCount;
+    if (succeededCount > 0) {
+      toast.success(
+        succeededCount === 1
+          ? t("membersRemovedOne", { count: succeededCount })
+          : t("membersRemovedOther", { count: succeededCount }),
+      );
+    }
+    if (failedCount > 0) {
+      toast.error(
+        failedCount === 1
+          ? t("someMembersFailedToRemoveOne", { count: failedCount })
+          : t("someMembersFailedToRemoveOther", { count: failedCount }),
+      );
     }
   }
 
@@ -396,6 +446,7 @@ export default function PermissionsPage() {
       onSaveCapabilities={(caps) => onSaveCapabilities(selectedRole.id, caps)}
       onAddMember={(userId, user) => onAddMember(selectedRole.id, userId, user)}
       onRemoveMember={(userId) => onRemoveMember(selectedRole.id, userId)}
+      onRemoveMembers={(userIds) => onRemoveMembers(selectedRole.id, userIds)}
       onDelete={() => onDelete(selectedRole.id)}
       searchUsers={searchUsers}
       loadSeedDiff={() => api.get<RoleSeedDiff>(`/api/roles/${selectedRole.id}/seed-diff`)}

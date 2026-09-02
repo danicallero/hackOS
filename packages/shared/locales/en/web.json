@@ -1439,6 +1439,12 @@
   "noOwnersYet": "No one assigned yet.",
   "ownerFreeTextPlaceholder": "Or type a name with no hackOS account",
   "memberAdded": "Member added.",
+  "removeRoleFromMembersOne": "Remove role from {count} member",
+  "removeRoleFromMembersOther": "Remove role from {count} members",
+  "membersRemovedOne": "Removed the role from {count} member.",
+  "membersRemovedOther": "Removed the role from {count} members.",
+  "someMembersFailedToRemoveOne": "Couldn't remove the role from {count} member.",
+  "someMembersFailedToRemoveOther": "Couldn't remove the role from {count} members.",
   "couldNotAddMember": "Could not add member.",
   "noChallengesAvailableAdd": "No challenges available to add.",
   "addChallengeLabel": "Add challenge",
@@ -2740,5 +2746,10 @@
   "triggerEventSponsorEnterpriseLinked": "Sponsor linked to an enterprise",
   "triggerEventSponsorEnterpriseUnlinked": "Sponsor unlinked from an enterprise",
   "triggerEventJudgeEnterpriseAssigned": "Judge assigned to an enterprise's rooms",
-  "triggerEventJudgeEnterpriseRemoved": "Judge removed from an enterprise's rooms"
+  "triggerEventJudgeEnterpriseRemoved": "Judge removed from an enterprise's rooms",
+  "grantRuleTriggerModeLabel": "Trigger type",
+  "grantRuleTriggerModeEvent": "Domain event",
+  "grantRuleTriggerModeRole": "Role assigned",
+  "grantRuleSourceRoleLabel": "Source role",
+  "triggerSourceRoleAssigned": "{roleName} is assigned"
 }
