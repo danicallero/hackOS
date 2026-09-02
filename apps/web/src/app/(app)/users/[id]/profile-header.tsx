@@ -41,7 +41,7 @@ export function ProfileHeader({ user }: { user: UserDetail }) {
           <StatusBadge tone={user.emailVerified ? "success" : "warning"} dot={false}>
             {user.emailVerified ? t("verified") : t("unverified")}
           </StatusBadge>
-          <StatusBadge tone={ROLE_TONE}>{roleDisplayName(user.role, t)}</StatusBadge>
+          <StatusBadge tone={ROLE_TONE}>{roleDisplayName(user.visibleRoleName, t)}</StatusBadge>
           {user.badgeId && (
             <span className="text-muted-foreground font-mono text-xs">
               {t("badgeIdInline", { id: user.badgeId })}

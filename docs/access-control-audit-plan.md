@@ -633,6 +633,26 @@ single rung on a ladder.
   carries no capabilities of its own, same pattern as `Sponsor` — a
   relationship/status marker, not a permission grant.
 
+**Default visibility (`is_visible`, 0813).** Only five of the fifteen default
+roles are public-facing: **Organizer**, **Day Staff**, **Mentor**,
+**Participant** (all 0805), and **Sponsor** (0801) — these are legitimately
+someone's public/badge identity, so they stay `is_visible = true`. The other
+ten — **Event Director**, **Judging Coordinator**, **Applications Lead**,
+**Judging Team**, **Applications Team**, **Operations Team**, **Hacker
+Experience**, **Sponsors Team**, **Media / Comms**, **Technical Team** — are
+deliberately internal/functional: an admin can hold one purely for its
+capability grants without it being shown as their public identity. 0805
+originally seeded all fifteen as `is_visible = true`; 0813 corrected the ten
+functional roles above to `false` after 0805 had already shipped. Concretely,
+a user holding both Event Director and Organizer now displays as
+**"Organizer"** everywhere a single role label is shown (ticket/wallet
+display, the `/users` list and its role filter, their own account display) —
+Event Director is no longer visible, so Organizer (their highest-position
+role that still is) wins. See identity/role.ts's
+`getEffectiveRole`/`getHighestVisibleRoleName` and the bulk
+`user_effective_role_name` view for the resolution itself, which was already
+correct — only the underlying `is_visible` data needed fixing.
+
 **Typical assignments** (operator guidance, not an enforced constraint):
 temporary volunteer → Day Staff; normal organizer → Organizer; ops organizer
 → Organizer + Operations Team; sponsor organizer → Organizer + Sponsors Team;

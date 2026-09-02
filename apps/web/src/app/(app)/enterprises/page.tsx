@@ -248,7 +248,16 @@ export default function EnterprisesPage() {
     return () => {
       alive = false;
     };
-  }, [canManage, load, me?.isSponsorRep, me?.role, router, liveRefresh, sponsorRetryNonce, t]);
+  }, [
+    canManage,
+    load,
+    me?.isSponsorRep,
+    me?.visibleRoleName,
+    router,
+    liveRefresh,
+    sponsorRetryNonce,
+    t,
+  ]);
 
   if (!canManage && me?.isSponsorRep && loading) {
     return (

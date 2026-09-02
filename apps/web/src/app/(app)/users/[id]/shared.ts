@@ -8,7 +8,7 @@ import type { UserDetail } from "@/lib/types";
 /** H8: the header pill just shows the user's actual role name (illustrative tone, never used for gating). */
 export const ROLE_TONE = "neutral";
 
-export function roleDisplayName(role: UserDetail["role"], t: Translate): string {
+export function roleDisplayName(role: UserDetail["visibleRoleName"], t: Translate): string {
   return role ?? t("roleUnassigned");
 }
 

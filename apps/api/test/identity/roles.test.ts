@@ -136,6 +136,32 @@ describe("H8 role resolution semantics", () => {
     expect(await userHasCapability(admin, CAPABILITIES.QUEUE_ADMIN)).toBe(true);
     expect(await userHasCapability(admin, CAPABILITIES.AUDIT_READ)).toBe(true);
   });
+
+  it("a user holding a non-visible role alongside a visible one resolves to the visible role everywhere (0813: mirrors real Event Director + Organizer): getEffectiveRole, getHighestVisibleRoleName, and the bulk user_effective_role_name view all agree", async () => {
+    const { getEffectiveRole, getHighestVisibleRoleName } = await import(
+      "../../src/modules/identity/role.js"
+    );
+    const { pool } = await import("../../src/db/pool.js");
+    const userId = await createUser();
+    // Higher position, NOT visible — mirrors the real "Event Director"
+    // (0813: is_visible=false) sitting above the real "Organizer"
+    // (is_visible=true, higher position wins the ALLOW/DENY chain but not
+    // here — this is about the *displayed* role, not capabilities).
+    const hiddenTop = await createRole([], { name: "hidden-top", isVisible: false });
+    const visibleBelow = await createRole([], { name: "visible-below", isVisible: true });
+    await pool.query(`UPDATE roles SET position = 18700 WHERE id = $1`, [hiddenTop]);
+    await pool.query(`UPDATE roles SET position = 5000 WHERE id = $1`, [visibleBelow]);
+    await assignRole(userId, hiddenTop);
+    await assignRole(userId, visibleBelow);
+
+    expect((await getEffectiveRole(pool, userId))?.name).toBe("visible-below");
+    expect(await getHighestVisibleRoleName(pool, userId)).toBe("visible-below");
+    const { rows } = await pool.query(
+      `SELECT role_name FROM user_effective_role_name WHERE user_id = $1`,
+      [userId],
+    );
+    expect(rows[0]?.role_name).toBe("visible-below");
+  });
 });
 
 describe("H8 admin-hierarchy mutation authority", () => {
@@ -1256,6 +1282,36 @@ describe("H8 default seeded role set (0805)", () => {
       expect(capRows.map((r: { capability: string }) => r.capability).sort()).toEqual(
         [...caps].sort(),
       );
+    }
+  });
+
+  it("marks only the public-facing default roles is_visible (0813): Organizer/Day Staff/Mentor/Sponsor/Participant true, the ten internal functional/team roles false", async () => {
+    const pool = await seededRoles();
+    const visible = ["Organizer", "Day Staff", "Mentor", "Sponsor", "Participant"];
+    const notVisible = [
+      "Event Director",
+      "Judging Coordinator",
+      "Applications Lead",
+      "Judging Team",
+      "Applications Team",
+      "Operations Team",
+      "Hacker Experience",
+      "Sponsors Team",
+      "Media / Comms",
+      "Technical Team",
+    ];
+    const { rows } = await pool.query(
+      `SELECT name, is_visible FROM roles WHERE name = ANY($1::text[])`,
+      [[...visible, ...notVisible]],
+    );
+    const byName = new Map(
+      rows.map((r: { name: string; is_visible: boolean }) => [r.name, r.is_visible]),
+    );
+    for (const name of visible) {
+      expect(byName.get(name), `${name} should be is_visible = true`).toBe(true);
+    }
+    for (const name of notVisible) {
+      expect(byName.get(name), `${name} should be is_visible = false`).toBe(false);
     }
   });
 
