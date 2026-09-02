@@ -929,6 +929,7 @@
   "show": "Mostrar",
   "hide": "Ocultar",
   "noScheduleItemsYet": "Aún no hay elementos en el programa",
+  "scheduleFilterNoMatches": "Ningún elemento coincide con este filtro.",
   "newScheduleItem": "Nuevo elemento del programa",
   "scheduleItemCreated": "Elemento del programa creado.",
   "editScheduleItem": "Editar elemento del programa",

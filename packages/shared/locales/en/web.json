@@ -929,6 +929,7 @@
   "show": "Show",
   "hide": "Hide",
   "noScheduleItemsYet": "No schedule items yet",
+  "scheduleFilterNoMatches": "No items match this filter.",
   "newScheduleItem": "New schedule item",
   "scheduleItemCreated": "Schedule item created.",
   "editScheduleItem": "Edit schedule item",

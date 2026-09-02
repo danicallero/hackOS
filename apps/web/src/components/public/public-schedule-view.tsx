@@ -1,9 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { Spinner } from "@/components/common/spinner";
 import type { PublicEvent } from "@/components/public/public-types";
+import {
+  deriveViewerScheduleSegments,
+  matchesScheduleSegmentFilter,
+  ScheduleAudienceFilterPopover,
+  type ViewerScheduleSegment,
+} from "@/components/public/schedule-audience-filter";
 import { ScheduleTimeline } from "@/components/public/schedule-timeline";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -32,6 +38,11 @@ export function PublicScheduleView({
   const [scheduleLoading, setScheduleLoading] = useState(true);
   const [eventError, setEventError] = useState<string | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
+  // The viewer's own audience filter (H59 follow-up) — options are exactly
+  // the segments actually present in what this caller received, never a
+  // static list, so it's always as permissive (and no more) as their real
+  // access. See schedule-audience-filter.tsx.
+  const [segmentFilter, setSegmentFilter] = useState<Set<ViewerScheduleSegment>>(new Set());
 
   const loadEvent = useCallback(async () => {
     setEventLoading(true);
@@ -68,6 +79,12 @@ export function PublicScheduleView({
     void Promise.all([loadEvent(), loadSchedule()]);
   }, [loadEvent, loadSchedule]);
 
+  const availableSegments = useMemo(() => deriveViewerScheduleSegments(items ?? []), [items]);
+  const displayedItems = useMemo(
+    () => items?.filter((item) => matchesScheduleSegmentFilter(item, segmentFilter)) ?? null,
+    [items, segmentFilter],
+  );
+
   return (
     <>
       {header?.(event)}
@@ -85,15 +102,39 @@ export function PublicScheduleView({
         </div>
       ) : (
         event &&
-        items && (
-          // showResponsible is safe unconditionally: the API only ever
-          // includes contactNote/owners for callers entitled to see them
-          // (staff, or a sponsor rep on their own sponsor-tagged items) —
-          // this page reuses that same /api/public/activities payload for
-          // both /timetable and /horario, so a sponsor rep landing here
-          // (the "schedule" nav item has no sponsor gate) still sees the
-          // contact info the API already sent, matching sponsor-faq.
-          <ScheduleTimeline items={items} timezone={event.timezone} showResponsible />
+        displayedItems && (
+          <div className="space-y-4">
+            {/* A single segment means every item the caller can see already
+                shares it (e.g. a pure participant) — nothing meaningful to
+                filter, so the control only appears once there's a real
+                choice (H59 follow-up). */}
+            {availableSegments.length > 1 && (
+              <div className="flex justify-end">
+                <ScheduleAudienceFilterPopover
+                  segments={availableSegments}
+                  selected={segmentFilter}
+                  onChange={setSegmentFilter}
+                />
+              </div>
+            )}
+            {/* showResponsible is safe unconditionally: the API only ever
+                includes contactNote/owners for callers entitled to see them
+                (staff, or a sponsor rep on their own sponsor-tagged items) —
+                this page reuses that same /api/public/activities payload for
+                both /timetable and /horario, so a sponsor rep landing here
+                (the "schedule" nav item has no sponsor gate) still sees the
+                contact info the API already sent, matching sponsor-faq. */}
+            <ScheduleTimeline
+              items={displayedItems}
+              timezone={event.timezone}
+              showResponsible
+              emptyTitle={
+                items && items.length > 0 && displayedItems.length === 0
+                  ? t("scheduleFilterNoMatches")
+                  : undefined
+              }
+            />
+          </div>
         )
       )}
     </>
