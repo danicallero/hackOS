@@ -552,6 +552,98 @@ globally or scoped to one enterprise) with **no further code changes**.
   (`grant-rules-overview.tsx`), opened from a plain "All rules" button next
   to Trash/New role on the roles list screen rather than as a second
   top-level tab; it has no create/edit/delete/enable-toggle of its own.
+  Every row is clickable — it navigates to the rule's owning role's Grant
+  Rules tab (`?role=<roleId>&tab=grantRules`, reusing `page.tsx`'s existing
+  `?role=` selection mechanism and `role-editor.tsx`'s `useUrlTab`) and
+  closes the overview modal, since a rule can only actually be edited from
+  there.
+
+### Role-assignment as a trigger source (H8, 0812, this round)
+
+The repo owner asked for a rule of the shape "assigning role X to a user also
+grants role Y" — concretely, every functional/leadership role (Event
+Director, Judging Coordinator, Applications Lead, Judging Team, Applications
+Team, Operations Team, Hacker Experience, Sponsors Team, Media/Comms,
+Technical Team) should also resolve the baseline `Organizer` role. Unlike
+`sponsor.enterprise_linked`/`judge.enterprise_assigned`, this trigger's
+parameter — *which* role was assigned — is itself admin-chosen, not a single
+developer-defined event string, so it doesn't fit `TRIGGER_EVENTS`'s "fixed
+vocabulary, admin configures the mapping" shape directly. Rather than
+fragmenting into a second table (e.g. a separate `role_implies_role`), this
+unifies into `role_grant_rules` as a second, mutually-exclusive matching key
+— the repo owner's own framing ("I want to be able to make that kind of
+rule") treats this as the SAME kind of rule as the sponsor/judge ones, and
+one CRUD surface, one authority story, and one overview beat maintaining two
+independent systems that both grant roles automatically.
+
+- **Schema** (`0812_role_grant_rules_source_role.sql`): `trigger_event`
+  becomes nullable; a new nullable `source_role_id` (FK to `roles`,
+  `ON DELETE CASCADE`) is the alternative key. A CHECK constraint enforces
+  exactly one of the two is set per row
+  (`role_grant_rules_trigger_xor_source_role`), and a second CHECK rejects
+  `source_role_id = role_id` (a role can't imply itself,
+  `role_grant_rules_source_role_not_self`). A row with `source_role_id` set
+  fires when THAT role is assigned (`action = 'grant'`) or removed
+  (`action = 'revoke'`) from a user, instead of on a domain `trigger_event`.
+- **Runtime** (`identity/role-grants.ts`): two new functions parallel
+  `applyRoleGrantRule` — `applyRoleAssignmentGrantRules(client, userId,
+  assignedRoleId, actorId)` (queries `WHERE source_role_id = $1 AND
+  action = 'grant' AND enabled = true`, grants each matched `role_id`,
+  `ON CONFLICT DO NOTHING`, `user_roles.source = 'role_assigned:<id>'`) and
+  `applyRoleAssignmentRevokeRules(client, userId, removedRoleId, actorId)`
+  (the removal counterpart). Both are called from
+  `identity/routes/roles.ts`'s `POST`/`DELETE
+  /api/roles/:roleId/users/:userId` in the SAME transaction as the
+  assignment/removal, audited the same way as every other automatic grant.
+- **Revoke is conditional, unlike the existing sponsor/judge revoke branch**:
+  `applyRoleGrantRule`'s existing revoke path (sponsor/judge unlink) is
+  unconditional — those two triggers only ever fire once the LAST such
+  relationship is gone, so there's no "other path" to check. Role-assignment
+  revoke doesn't have that guarantee (a user can hold Organizer via more than
+  one team role), so `applyRoleAssignmentRevokeRules` checks, before
+  deleting: (1) the `user_roles` row's `source` isn't `'manual'` (an admin
+  granted it directly, for a possibly-unrelated reason — never touched by an
+  automatic rule), and (2) no OTHER role the user still holds has its own
+  enabled `action = 'grant'` rule targeting the same role. Only if neither
+  holds does it delete the row and audit the revocation. The ten seeded
+  Organizer-implication rules below are grant-only (no matching revoke rule),
+  so removing a team role never strips Organizer by default — an admin who
+  wants that behavior configures the mirror `action = 'revoke'` rule
+  themselves.
+- **Cycle detection** (`identity/routes/role-grant-rules.ts`,
+  `wouldCreateRoleImplicationCycle`): a CHECK constraint can catch a rule
+  implying itself but not a longer cycle spanning multiple rows (A implies B
+  implies C implies A). Before inserting/updating a `source_role_id` rule,
+  a BFS walks OUTWARD from the CANDIDATE role being granted, along every
+  existing `action = 'grant'` edge (disabled rows included — a disabled rule
+  can be re-enabled later, so a dormant cycle is still rejected); if that
+  walk reaches the candidate's own `source_role_id`, the rule is refused
+  (400) before it's written.
+- **Authority guards**: identical to every other `role_grant_rules`
+  mutation — `requireRoleMutationAuthority` +
+  `requireCapabilityPossessionForAssignment` against the GRANTED role
+  (`roleId`), and `assertNotProtectedRole` against BOTH `roleId` and
+  `source_role_id` (a protected role can't be the trigger any more than the
+  target). No additional authority check runs against `source_role_id`
+  itself beyond "not protected" — the actual privilege check for assigning
+  the source role happens at the normal role-assignment call site, same as
+  a domain `trigger_event` rule needs no authority check over "an enterprise
+  got linked."
+- **Seeded data, not application logic** (same migration): the ten
+  Organizer-implication rules the repo owner asked for are `INSERT`ed as
+  ordinary `role_grant_rules` rows (`action = 'grant'`, `enabled = true`),
+  looked up by role name against the 0805 default catalogue — fully visible
+  and editable via the same Grant Rules tab as any other rule, matching this
+  feature's point of being admin-configurable rather than hardcoded.
+- **Admin UI** (`grant-rules-panel.tsx`): the create/edit form gets a
+  `triggerMode` toggle ("domain event" / "role assigned") — local form state
+  only, not sent to the API — that swaps the trigger picker between the
+  existing `TRIGGER_EVENTS` select and a role select (fetched from
+  `GET /api/roles`, excluding protected roles and the role already being
+  edited). Enterprise scoping is hidden in role-assignment mode since
+  assignment isn't tied to an enterprise. `helpers.ts`'s `ruleTriggerLabel`
+  renders either kind's label ("Sponsor linked to an enterprise" vs. "Event
+  Director is assigned"), used by both the panel and the overview.
 
 ### Soft-delete and restore (0804)
 

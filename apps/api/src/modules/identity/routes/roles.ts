@@ -28,6 +28,7 @@ import {
   roleGrantsWildcard,
   userHasAnyCapability,
 } from "../role-authority.js";
+import { applyRoleAssignmentGrantRules, applyRoleAssignmentRevokeRules } from "../role-grants.js";
 import { getPermissionGroupTemplate, PERMISSION_GROUP_TEMPLATES } from "../templates.js";
 
 /**
@@ -685,6 +686,11 @@ export function registerRoleRoutes(app: FastifyInstance): void {
            ON CONFLICT DO NOTHING`,
           [userId, roleId, actorId],
         );
+        // H8: role-assignment-as-trigger — assigning `roleId` may itself be
+        // configured (role_grant_rules.source_role_id) to imply granting one
+        // or more further roles (e.g. every functional team role implies
+        // Organizer). Same transaction, same audit trail as the assignment.
+        await applyRoleAssignmentGrantRules(client, userId, roleId, actorId);
         // A capability holder is staff (H8); issue their permanent entrance
         // ticket in the same transaction as the role-producing assignment.
         if (await userHasAnyCapability(client, userId)) await issueTicket(client, userId);
@@ -730,6 +736,10 @@ export function registerRoleRoutes(app: FastifyInstance): void {
           userId,
           roleId,
         ]);
+        // H8: the removal-side counterpart of applyRoleAssignmentGrantRules
+        // above — revokes an implied role ONLY if no other role the user
+        // still holds justifies it (see role-grants.ts for the full guard).
+        await applyRoleAssignmentRevokeRules(client, userId, roleId, actorId);
         if (removesWildcard) await assertActiveWildcardHolder(client, undefined);
         await audit(client, {
           actorId,

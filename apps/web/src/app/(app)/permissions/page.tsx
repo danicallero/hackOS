@@ -130,6 +130,18 @@ export default function PermissionsPage() {
     router.replace(params.size > 0 ? `${pathname}?${params.toString()}` : pathname);
   }
 
+  // H8: "view all rules" navigation-on-click — a rule is owned/edited by its
+  // roleId's own Grant Rules tab (role-editor.tsx's useUrlTab), so jumping to
+  // a rule from the overview means selecting its role AND landing on that
+  // tab, not just the role's default "display" tab.
+  function selectRuleRole(roleId: number) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("role", String(roleId));
+    params.set("tab", "grantRules");
+    router.replace(`${pathname}?${params.toString()}`);
+    setAllRulesOpen(false);
+  }
+
   const mergeUsers = useCallback((list: UserListItem[]) => {
     setUsers((prev) => {
       const next = new Map(prev);
@@ -515,7 +527,11 @@ export default function PermissionsPage() {
           )}
         </>
       )}
-      <GrantRulesOverviewModal open={allRulesOpen} onOpenChange={setAllRulesOpen} />
+      <GrantRulesOverviewModal
+        open={allRulesOpen}
+        onOpenChange={setAllRulesOpen}
+        onSelectRule={(rule) => selectRuleRole(rule.roleId)}
+      />
       <Modal
         open={createOpen}
         onOpenChange={setCreateOpen}

@@ -2,7 +2,7 @@ import { ALL_CAPABILITIES } from "@hackos/shared/capabilities";
 import { ALL_TRIGGER_EVENTS, TRIGGER_EVENTS } from "@hackos/shared/role-grant-triggers";
 import type { MultiSelectOption } from "@/components/common/multi-select";
 import type { MessageKey, Translate } from "@/lib/i18n";
-import type { RoleTemplate, UserListItem } from "@/lib/types";
+import type { RoleGrantRule, RoleTemplate, UserListItem } from "@/lib/types";
 
 export { ALL_TRIGGER_EVENTS };
 
@@ -22,6 +22,22 @@ const TRIGGER_EVENT_LABEL_KEYS: Record<string, MessageKey> = {
 export function triggerEventLabel(event: string, t: Translate): string {
   const key = TRIGGER_EVENT_LABEL_KEYS[event];
   return key ? t(key) : event;
+}
+
+/**
+ * Human label for a rule's trigger, covering BOTH mutually-exclusive kinds
+ * (H8, 0812): a fixed trigger_event (triggerEventLabel above) or
+ * sourceRoleId — "when this role is assigned" — which has no fixed registry
+ * entry since the role itself IS the admin-chosen parameter.
+ */
+export function ruleTriggerLabel(
+  rule: Pick<RoleGrantRule, "triggerEvent" | "sourceRoleId" | "sourceRoleName">,
+  t: Translate,
+): string {
+  if (rule.sourceRoleId !== null) {
+    return t("triggerSourceRoleAssigned", { roleName: rule.sourceRoleName ?? "" });
+  }
+  return triggerEventLabel(rule.triggerEvent ?? "", t);
 }
 
 /**
