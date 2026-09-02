@@ -63,3 +63,62 @@ describe("SCANNER_GROUP_OPTIONS", () => {
     expect(values).not.toContain("judge");
   });
 });
+
+/**
+ * Regression guard against re-drift (H8): every screen that renders or
+ * filters by a person's role must derive it through this module (or
+ * scanner-group-filter.ts's roster-fact-based grouping for the scanner's own
+ * coarser staff/sponsor buckets) instead of quietly growing its own
+ * hardcoded badge_category-era enum again. A prior round already unified
+ * these screens onto the shared derivation; this locks that in at the
+ * source-text level so a future change can't reintroduce a second,
+ * inconsistent code path without failing a test.
+ */
+describe("role-derivation consistency across screens", () => {
+  // Untyped `require` (no @types/node in this workspace) rather than an ES
+  // `import` of node:fs/node:path, which would need type declarations this
+  // package doesn't carry.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const fs = require("node:fs");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const path = require("node:path");
+  // process.cwd() rather than __dirname: this workspace has no @types/node,
+  // so __dirname isn't ambient-typed here. Jest's rootDir is this package
+  // (apps/mobile), so cwd resolves the same "../components" either way.
+  const componentsDir = path.join(process.cwd(), "components");
+  const read = (file: string): string => fs.readFileSync(path.join(componentsDir, file), "utf8");
+
+  it("people-directory-screen derives its filter from the shared roster-based catalogue", () => {
+    const source = read("people-directory-screen.tsx");
+    expect(source).toMatch(/roleFilterOptionsFromRoster/);
+    expect(source).toMatch(/roleDisplayName/);
+  });
+
+  it("general-scanner-screen derives its operational grouping from the shared scanner-group-filter module", () => {
+    const source = read("general-scanner-screen.tsx");
+    expect(source).toMatch(/SCANNER_GROUP_OPTIONS/);
+    expect(source).toMatch(/matchesScannerGroup/);
+    // The old badge_category-era rework this replaced kept its own
+    // "ScannerGroup"-shaped literal array inline instead of importing
+    // SCANNER_GROUP_VALUES/SCANNER_GROUP_OPTIONS — guard against that
+    // reappearing as a second, divergent source of the same four groups.
+    expect(source).not.toMatch(/\["participant",\s*"mentor",\s*"staff",\s*"sponsor"\]/);
+  });
+
+  it("person-operations-screen renders a person's role via the shared roleDisplayName/role string, never a fixed category match", () => {
+    const source = read("person-operations-screen.tsx");
+    expect(source).toMatch(/roleDisplayName/);
+    // Historically this screen matched on a fixed admin/staff/sponsor/mentor
+    // role-name spelling; only sponsor/mentor (real, reliably-named seeded
+    // roles) and the capability/enterprise-judge facts should ever be
+    // matched by string here.
+    expect(source).not.toMatch(/"admin"/);
+    expect(source).not.toMatch(/"judge"/);
+  });
+
+  it("account-screen shows the signed-in user's role via the shared roleDisplayName, not a local reimplementation", () => {
+    const source = read("account-screen.tsx");
+    expect(source).toMatch(/roleDisplayName/);
+    expect(source).not.toMatch(/function roleLabel/);
+  });
+});
