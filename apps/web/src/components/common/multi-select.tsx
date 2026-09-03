@@ -3,6 +3,7 @@
 import { CheckIcon, ChevronsUpDownIcon, XIcon } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { useId, useState } from "react";
+import { IconButton } from "@/components/common/icon-button";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import {
@@ -125,7 +126,8 @@ export function MultiSelect({
         <div
           ref={boxRef}
           className={cn(
-            "flex min-h-10 w-full items-center gap-2 rounded-control border bg-background px-3 py-2",
+            "flex min-h-[var(--control-height-default)] w-full items-center gap-2 rounded-control border bg-background px-2",
+            value.length > 0 && "py-1",
             disabled && "opacity-50",
             className,
           )}
@@ -138,15 +140,16 @@ export function MultiSelect({
               {value.map((v) => (
                 <Badge key={v} variant="secondary" className="gap-1">
                   {labelOf(v)}
-                  <button
-                    type="button"
+                  <IconButton
                     disabled={disabled}
-                    aria-label={t("removeItemLabel", { name: labelOf(v) })}
+                    label={t("removeItemLabel", { name: labelOf(v) })}
+                    size="icon-xs"
+                    variant="ghost"
                     onClick={() => toggle(v)}
-                    className="hover:text-foreground text-muted-foreground inline-flex size-6 items-center justify-center rounded-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    className="text-muted-foreground hover:text-foreground rounded-full"
                   >
                     <XIcon aria-hidden="true" className="size-3" />
-                  </button>
+                  </IconButton>
                 </Badge>
               ))}
             </span>
@@ -166,7 +169,7 @@ export function MultiSelect({
               aria-describedby={ariaDescribedBy}
               aria-invalid={ariaInvalid}
               className={cn(
-                buttonVariants({ variant: "ghost" }),
+                buttonVariants({ variant: "ghost", size: "default" }),
                 "min-w-0 flex-1 px-1 text-left font-normal",
                 // With badges the label is sr-only, so the chevron is the only
                 // visible child: pin it to the far edge of the control instead

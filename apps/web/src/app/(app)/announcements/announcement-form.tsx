@@ -373,9 +373,10 @@ export function AnnouncementFormModal({
             <Collapsible open={translationsOpen} onOpenChange={setTranslationsOpen}>
               <div className="flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3">
                 <CollapsibleTrigger asChild>
-                  <button
+                  <Button
                     type="button"
-                    className="flex min-h-10 items-center gap-2 text-sm font-medium"
+                    variant="ghost"
+                    className="justify-start px-0 text-sm font-medium"
                     aria-label={t("translationsAndSettings")}
                   >
                     <ChevronDownIcon
@@ -385,7 +386,7 @@ export function AnnouncementFormModal({
                       )}
                     />
                     {t("translationsAndSettings")}
-                  </button>
+                  </Button>
                 </CollapsibleTrigger>
                 {translateAvailable ? (
                   <Button

@@ -26,7 +26,7 @@ export function Field({
 }) {
   return (
     <div className="grid gap-2">
-      <div className="flex min-h-9 flex-col justify-start">
+      <div className="flex min-h-[var(--control-height-default)] flex-col justify-start">
         <Label htmlFor={id}>{label}</Label>
         {hint && <p className="text-muted-foreground text-xs text-pretty">{hint}</p>}
       </div>

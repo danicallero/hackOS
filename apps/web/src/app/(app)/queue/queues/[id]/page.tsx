@@ -401,11 +401,13 @@ export default function QueueDetailPage() {
                           if (event.key === "Escape") setEditingPosition(null);
                         }}
                         onBlur={() => setEditingPosition(null)}
-                        className="h-9 w-14 text-center tabular-nums"
+                        className="w-14 text-center tabular-nums"
                       />
                     ) : (
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="sm"
                         disabled={!movable || busy}
                         aria-label={t("positionHash", { position: displayPosition })}
                         onClick={() => {
@@ -415,10 +417,10 @@ export default function QueueDetailPage() {
                           }));
                           setEditingPosition(entry.id);
                         }}
-                        className="text-foreground hover:bg-muted/60 w-10 shrink-0 rounded px-1.5 py-1 text-sm font-semibold tabular-nums transition-colors disabled:pointer-events-none disabled:opacity-100"
+                        className="text-foreground hover:bg-muted/60 w-10 shrink-0 px-1.5 text-sm font-semibold tabular-nums disabled:pointer-events-none disabled:opacity-100"
                       >
                         #{displayPosition}
-                      </button>
+                      </Button>
                     )}
                     <div className="min-w-0 flex-1">
                       <Link

@@ -5,6 +5,7 @@
 // application review) can reuse the same interaction without pulling in
 // judging's own dependency chain.
 
+import { ActionGroup } from "@/components/common/action-group";
 import { Button } from "@/components/ui/button";
 import { useLocale } from "@/lib/i18n";
 
@@ -21,14 +22,14 @@ export function ScaleButtons({
 }) {
   const { t } = useLocale();
   return (
-    <div className="flex flex-wrap gap-1">
+    <ActionGroup>
       {SCALE.map((score) => (
         <Button
           key={score}
           type="button"
-          size="sm"
+          size="icon-sm"
           variant={value === score ? "default" : "outline"}
-          className="size-8 p-0 text-xs font-semibold"
+          className="text-xs font-semibold"
           disabled={disabled}
           onClick={() => onChange(score)}
         >
@@ -46,6 +47,6 @@ export function ScaleButtons({
           {t("clear")}
         </Button>
       )}
-    </div>
+    </ActionGroup>
   );
 }

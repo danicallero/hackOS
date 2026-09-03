@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/common/icon-button";
 import { useLocale } from "@/lib/i18n";
 
 const STORAGE_KEY = "hackos.cookie-notice.dismissed";
@@ -33,16 +33,16 @@ export function CookieNotice() {
         right: "max(1rem, env(safe-area-inset-right))",
       }}
     >
-      <Button
-        aria-label={t("dismissCookieNotice")}
+      <IconButton
+        label={t("dismissCookieNotice")}
         className="text-muted-foreground hover:bg-accent hover:text-accent-foreground absolute right-4 top-4 z-10"
         onClick={dismiss}
-        size="icon"
+        size="icon-sm"
         type="button"
         variant="ghost"
       >
         <X className="size-4" aria-hidden="true" />
-      </Button>
+      </IconButton>
 
       <Image
         alt=""

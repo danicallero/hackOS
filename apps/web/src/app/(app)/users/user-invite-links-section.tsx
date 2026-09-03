@@ -8,6 +8,7 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
 import { EntityCombobox } from "@/components/common/entity-combobox";
+import { IconButton } from "@/components/common/icon-button";
 import { MultiSelect } from "@/components/common/multi-select";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -460,30 +461,28 @@ export function UserInviteLinksSection({
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
-                      <Button
+                      <IconButton
                         type="button"
                         variant="ghost"
-                        size="icon"
-                        className="size-10"
-                        aria-label={t("copyInviteLink")}
+                        size="icon-lg"
+                        label={t("copyInviteLink")}
                         title={t("copyInviteLink")}
                         onClick={() => void copyLink(link.url)}
                       >
                         <CopyIcon className="size-4" aria-hidden="true" />
-                      </Button>
+                      </IconButton>
                       {link.status === "active" && (
                         <AlertModal
                           trigger={
-                            <Button
+                            <IconButton
                               type="button"
                               variant="ghost"
-                              size="icon"
-                              className="size-10"
-                              aria-label={t("withdrawLink")}
+                              size="icon-lg"
+                              label={t("withdrawLink")}
                               title={t("withdrawLink")}
                             >
                               <BanIcon className="size-4" aria-hidden="true" />
-                            </Button>
+                            </IconButton>
                           }
                           open={withdrawLinkId === link.id}
                           onOpenChange={(nextOpen) => setWithdrawLinkId(nextOpen ? link.id : null)}
@@ -539,29 +538,27 @@ export function UserInviteLinksSection({
           searchPlaceholder={t("searchUserInviteLinks")}
           rowActions={(link) => (
             <div className="flex items-center justify-end gap-1">
-              <Button
+              <IconButton
                 type="button"
                 variant="ghost"
-                size="icon"
-                className="size-8"
-                aria-label={t("copyInviteLink")}
+                size="icon-sm"
+                label={t("copyInviteLink")}
                 title={t("copyInviteLink")}
                 onClick={() => void copyLink(link.url)}
               >
                 <CopyIcon className="size-4" aria-hidden="true" />
-              </Button>
+              </IconButton>
               {link.status === "active" && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button
+                    <IconButton
                       type="button"
                       variant="ghost"
-                      size="icon"
-                      className="size-8"
-                      aria-label={t("openMenuAria")}
+                      size="icon-sm"
+                      label={t("openMenuAria")}
                     >
                       <MoreHorizontalIcon className="size-4" aria-hidden="true" />
-                    </Button>
+                    </IconButton>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem

@@ -3,6 +3,7 @@
 import { ArrowLeftIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import { canGoBackInApp } from "@/lib/nav-history";
 
 /**
@@ -23,13 +24,15 @@ export function BackLink({
 }) {
   const router = useRouter();
   return (
-    <button
+    <Button
       type="button"
+      variant="ghost"
+      size="sm"
       onClick={() => (canGoBackInApp() ? router.back() : router.push(href))}
-      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
+      className="text-muted-foreground hover:text-foreground -ml-2 px-2"
     >
-      <ArrowLeftIcon className="size-4" />
+      <ArrowLeftIcon className="size-4" aria-hidden="true" />
       {label}
-    </button>
+    </Button>
   );
 }

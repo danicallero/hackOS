@@ -460,11 +460,7 @@ export function ScanTab({
                 </div>
 
                 <div className="border-t pt-4">
-                  <Button
-                    variant="link"
-                    className="h-auto p-0"
-                    onClick={() => setManualOpen((v) => !v)}
-                  >
+                  <Button variant="link" size="sm" onClick={() => setManualOpen((v) => !v)}>
                     <ClockIcon className="size-4" />
                     {manualOpen ? t("cancelManualRecord") : t("addManualRecord")}
                   </Button>

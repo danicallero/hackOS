@@ -10,6 +10,7 @@ import { FileIcon, PaperclipIcon, UploadIcon, XIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { FileLink } from "@/components/common/file-link";
+import { IconButton } from "@/components/common/icon-button";
 import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
 import { API_URL } from "@/lib/env";
@@ -132,16 +133,15 @@ export function FileUploadField({
             <span className="truncate">{fileName}</span>
           </FileLink>
           {!disabled && (
-            <Button
+            <IconButton
               type="button"
               variant="ghost"
-              size="icon"
-              className="size-7"
+              size="icon-sm"
+              label={t("removeFile")}
               onClick={() => onChange("")}
             >
               <XIcon aria-hidden="true" className="size-4" />
-              <span className="sr-only">{t("removeFile")}</span>
-            </Button>
+            </IconButton>
           )}
         </div>
       ) : (

@@ -10,7 +10,7 @@ import { ACTIVITY_KINDS, isMealActivityKind } from "@hackos/shared/activity-kind
 import { CopyIcon, GripVerticalIcon, PencilIcon, Trash2Icon } from "lucide-react";
 import { useCallback } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/common/icon-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { ApiError } from "@/lib/api";
@@ -407,15 +407,15 @@ export function ActivityRow({
           data-schedule-column={SELECT_COLUMN}
         >
           <div className="flex items-center gap-0.5">
-            <button
-              type="button"
-              className="text-muted-foreground hover:bg-muted hover:text-foreground -ml-1.5 flex size-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-md active:cursor-grabbing"
+            <IconButton
+              size="icon-sm"
+              label={t("dragItemAria")}
+              className="text-muted-foreground hover:bg-muted hover:text-foreground -ml-1.5 shrink-0 cursor-grab touch-none active:cursor-grabbing"
               {...attributes}
               {...listeners}
             >
-              <GripVerticalIcon className="size-4" />
-              <span className="sr-only">{t("dragItemAria")}</span>
-            </button>
+              <GripVerticalIcon className="size-4" aria-hidden="true" />
+            </IconButton>
             <Checkbox
               checked={selected}
               aria-label={t("selectRowAria")}
@@ -448,11 +448,10 @@ export function ActivityRow({
           data-schedule-column={ACTIONS_COLUMN}
         >
           <div className="flex justify-end gap-0.5">
-            <Button
+            <IconButton
               variant="ghost"
-              size="icon"
-              aria-label={t("editItemAria")}
-              className="size-7"
+              size="icon-sm"
+              label={t("editItemAria")}
               data-schedule-focusable="true"
               onKeyDown={(event) => {
                 if (event.key === "Tab") return;
@@ -460,26 +459,20 @@ export function ActivityRow({
               }}
               onClick={onOpenEdit}
             >
-              <PencilIcon className="size-3.5" />
-            </Button>
-            <Button
+              <PencilIcon className="size-3.5" aria-hidden="true" />
+            </IconButton>
+            <IconButton variant="ghost" size="icon-sm" label={t("duplicate")} onClick={onDuplicate}>
+              <CopyIcon className="size-3.5" aria-hidden="true" />
+            </IconButton>
+            <IconButton
               variant="ghost"
-              size="icon"
-              aria-label={t("duplicate")}
-              className="size-7"
-              onClick={onDuplicate}
-            >
-              <CopyIcon className="size-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={t("deleteItemAria")}
-              className="text-destructive size-7"
+              size="icon-sm"
+              label={t("deleteItemAria")}
+              className="text-destructive"
               onClick={onDelete}
             >
-              <Trash2Icon className="size-3.5" />
-            </Button>
+              <Trash2Icon className="size-3.5" aria-hidden="true" />
+            </IconButton>
           </div>
         </TableCell>
       )}

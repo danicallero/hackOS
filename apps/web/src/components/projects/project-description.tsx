@@ -41,7 +41,7 @@ export function ProjectDescription({ text }: { text: string }) {
         <Button
           variant="ghost"
           size="sm"
-          className="mt-1 h-auto p-0 text-xs"
+          className="mt-1 text-xs"
           onClick={() => setExpanded((v) => !v)}
         >
           {expanded ? (

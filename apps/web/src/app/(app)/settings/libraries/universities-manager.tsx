@@ -162,14 +162,14 @@ export function UniversitiesManager() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t("searchUniversitiesPlaceholder")}
-            className="h-9 pr-9 pl-9"
+            className="pr-9 pl-9"
           />
           {search && (
             <Button
               type="button"
               variant="ghost"
-              size="icon"
-              className="absolute top-1/2 right-0.5 size-8 -translate-y-1/2"
+              size="icon-sm"
+              className="absolute top-1/2 right-0.5 -translate-y-1/2"
               onClick={() => {
                 setSearch("");
                 document.getElementById("university-search")?.focus();
@@ -209,7 +209,7 @@ export function UniversitiesManager() {
         rowActions={(row) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="size-8">
+              <Button variant="ghost" size="icon-sm">
                 <MoreHorizontalIcon />
                 <span className="sr-only">{t("openMenuAria")}</span>
               </Button>

@@ -1,3 +1,4 @@
+import { ActionGroup } from "@/components/common/action-group";
 import { cn } from "@/lib/utils";
 
 /**
@@ -62,9 +63,7 @@ export function PageHeader({
         </div>
       </div>
       {actionContent && (
-        <div className="flex flex-wrap items-center gap-(--space-related) sm:shrink-0 sm:justify-end">
-          {actionContent}
-        </div>
+        <ActionGroup className="sm:shrink-0 sm:justify-end">{actionContent}</ActionGroup>
       )}
     </header>
   );

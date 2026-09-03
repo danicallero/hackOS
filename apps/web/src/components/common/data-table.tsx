@@ -12,8 +12,10 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef } from "react";
+import { ActionGroup } from "@/components/common/action-group";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
+import { IconButton } from "@/components/common/icon-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -269,19 +271,19 @@ export function DataTable<T>({
                     setPage(0);
                   }}
                   placeholder={searchPlaceholder ?? t("filterPlaceholder")}
-                  className="h-9 pr-9 pl-9"
+                  className="pr-9 pl-9"
                 />
                 {query && (
-                  <Button
+                  <IconButton
                     type="button"
                     variant="ghost"
-                    size="icon"
-                    className="absolute top-1/2 right-0.5 size-8 -translate-y-1/2"
+                    size="icon-sm"
+                    className="absolute top-1/2 right-0.5 -translate-y-1/2"
                     onClick={clearSearch}
-                    aria-label={t("clearSearch")}
+                    label={t("clearSearch")}
                   >
                     <XIcon className="size-4" aria-hidden="true" />
-                  </Button>
+                  </IconButton>
                 )}
               </div>
               <span
@@ -293,7 +295,7 @@ export function DataTable<T>({
               </span>
             </div>
           )}
-          {toolbar && <div className="ml-auto flex items-center gap-2">{toolbar}</div>}
+          {toolbar && <ActionGroup className="ml-auto">{toolbar}</ActionGroup>}
         </div>
       )}
       {mutationError && (
@@ -424,22 +426,28 @@ export function DataTable<T>({
                     {rowInteractionCol > 0 && (
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         {getRowHref ? (
-                          <Button variant="ghost" size="icon" className="size-11 md:size-8" asChild>
+                          <IconButton
+                            variant="ghost"
+                            size="icon-lg"
+                            className="md:size-[var(--control-height-compact)]"
+                            asChild
+                            label={getRowLabel?.(row) ?? rowId}
+                          >
                             <Link href={getRowHref(row)} aria-label={getRowLabel?.(row) ?? rowId}>
                               <ChevronRightIcon className="size-4" aria-hidden="true" />
                             </Link>
-                          </Button>
+                          </IconButton>
                         ) : (
-                          <Button
+                          <IconButton
                             type="button"
                             variant="ghost"
-                            size="icon"
-                            className="size-11 md:size-8"
+                            size="icon-lg"
+                            className="md:size-[var(--control-height-compact)]"
                             onClick={() => onRowClick?.(row)}
-                            aria-label={getRowLabel?.(row) ?? rowId}
+                            label={getRowLabel?.(row) ?? rowId}
                           >
                             <ChevronRightIcon className="size-4" aria-hidden="true" />
-                          </Button>
+                          </IconButton>
                         )}
                       </TableCell>
                     )}

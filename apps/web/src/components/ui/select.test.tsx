@@ -25,7 +25,7 @@ describe("SelectTrigger", () => {
     act(() => {
       root.render(
         <Select>
-          <SelectTrigger>
+          <SelectTrigger size="content">
             <SelectValue placeholder="A very long translated selected value" />
           </SelectTrigger>
         </Select>,
@@ -33,10 +33,10 @@ describe("SelectTrigger", () => {
     });
 
     const trigger = container.querySelector("button");
-    expect(trigger?.className).toContain("whitespace-normal");
-    expect(trigger?.className).toContain("h-auto");
-    expect(trigger?.className).toContain("*:data-[slot=select-value]:wrap-break-word");
-    expect(trigger?.className).not.toContain("whitespace-nowrap");
-    expect(trigger?.className).not.toContain("line-clamp-1");
+    expect(trigger?.getAttribute("data-size")).toBe("content");
+    expect(trigger?.className).toContain("data-[size=content]:whitespace-normal");
+    expect(trigger?.className).toContain("data-[size=content]:h-auto");
+    expect(trigger?.className).toContain("data-[size=content]:*:data-[slot=select-value]:whitespace-normal");
+    expect(trigger?.className).toContain("*:data-[slot=select-value]:truncate");
   });
 });

@@ -2,7 +2,7 @@
 
 import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/common/icon-button";
 import { Input } from "@/components/ui/input";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -17,13 +17,13 @@ export function PasswordInput({ className, ...props }: React.ComponentProps<type
   return (
     <div className="relative">
       <Input type={visible ? "text" : "password"} className={cn("pr-10", className)} {...props} />
-      <Button
+      <IconButton
         type="button"
         variant="ghost"
-        size="icon"
+        size="icon-sm"
         onClick={() => setVisible((v) => !v)}
-        className="text-muted-foreground absolute top-1/2 right-1 size-7 -translate-y-1/2"
-        aria-label={visible ? t("hidePassword") : t("showPassword")}
+        className="text-muted-foreground absolute top-1/2 right-1 -translate-y-1/2"
+        label={visible ? t("hidePassword") : t("showPassword")}
         aria-pressed={visible}
       >
         {visible ? (
@@ -31,7 +31,7 @@ export function PasswordInput({ className, ...props }: React.ComponentProps<type
         ) : (
           <EyeIcon className="size-4" aria-hidden="true" />
         )}
-      </Button>
+      </IconButton>
     </div>
   );
 }

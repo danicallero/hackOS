@@ -117,7 +117,7 @@ export function EntityCombobox<T>({
           aria-haspopup="listbox"
           aria-labelledby={ariaLabelledBy}
           aria-describedby={ariaDescribedBy}
-          className={cn("h-auto min-h-10 w-full justify-between px-3 py-2 font-normal", className)}
+          className={cn("w-full justify-between font-normal", className)}
         >
           <span className={cn("flex-1 truncate text-left", !label && "text-muted-foreground")}>
             {label ?? placeholder ?? t("typeToFilterEllipsis")}

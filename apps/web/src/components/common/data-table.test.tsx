@@ -106,8 +106,8 @@ describe("DataTable accessibility and interactions", () => {
     const link = container.querySelector<HTMLAnchorElement>('a[aria-label="Open Ada"]');
     const row = link?.closest("tr");
     expect(link?.getAttribute("href")).toBe("/people/1");
-    expect(link?.classList.contains("size-11")).toBe(true);
-    expect(link?.classList.contains("md:size-8")).toBe(true);
+    expect(link?.getAttribute("data-size")).toBe("icon-lg");
+    expect(link?.classList.contains("md:size-[var(--control-height-compact)]")).toBe(true);
     expect(row?.getAttribute("role")).toBeNull();
     expect(row?.getAttribute("tabindex")).toBeNull();
     act(() => {
@@ -213,8 +213,8 @@ describe("DataTable accessibility and interactions", () => {
     const action = container.querySelector<HTMLButtonElement>('button[aria-label="Review Ada"]');
     expect(action?.tagName).toBe("BUTTON");
     expect(action?.type).toBe("button");
-    expect(action?.classList.contains("size-11")).toBe(true);
-    expect(action?.classList.contains("md:size-8")).toBe(true);
+    expect(action?.getAttribute("data-size")).toBe("icon-lg");
+    expect(action?.classList.contains("md:size-[var(--control-height-compact)]")).toBe(true);
     const nestedButton = [...container.querySelectorAll("button")].find(
       (button) => button.textContent === "More",
     );
