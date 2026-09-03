@@ -36,6 +36,15 @@ beforeEach(async () => {
   await truncateAll();
   const { valkey } = await import("../../src/lib/valkey.js");
   await valkey.flushdb();
+  // queue_settings is the one table truncateAll preserves. Restore the
+  // judging window so H29/H35's automatic refill cannot inherit a closed
+  // window from another queue suite (H29, H35).
+  const { pool } = await import("../../src/db/pool.js");
+  await pool.query(
+    `UPDATE queue_settings
+        SET schedule_start_at = NULL, schedule_end_at = NULL
+      WHERE id = 1`,
+  );
   operatorId = await createUserWithCapabilities([CAPABILITIES.QUEUE_OPERATE]);
   judgeId = await createUserWithCapabilities([CAPABILITIES.JUDGE_PANEL]);
   adminId = await createUserWithCapabilities([CAPABILITIES.QUEUE_ADMIN]);
