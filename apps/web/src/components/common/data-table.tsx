@@ -60,6 +60,8 @@ interface DataTableProps<T> {
   getRowHref?: (row: T) => string;
   /** Accessible name for the row link or button. */
   getRowLabel?: (row: T) => string;
+  /** Render a drill-down row for narrow screens instead of the table. */
+  renderMobileRow?: (row: T) => React.ReactNode;
   /** Provide searchable text per row to show a filter box. */
   searchable?: (row: T) => string;
   searchPlaceholder?: string;
@@ -99,7 +101,9 @@ const alignClass = { left: "text-left", right: "text-right", center: "text-cente
  * actions, loading and empty states are all built in and prop-driven — so
  * every list (containers, users, applications, queue…) looks and behaves the
  * same. It never assumes a data shape: `cell`/`sortValue`/`searchable` are
- * callbacks over your row type.
+ * callbacks over your row type. Routes can provide `renderMobileRow` for a
+ * narrow-screen drill-down list while keeping the sortable table on wider
+ * screens.
  */
 export function DataTable<T>({
   columns,
@@ -109,6 +113,7 @@ export function DataTable<T>({
   onRowClick,
   getRowHref,
   getRowLabel,
+  renderMobileRow,
   searchable,
   searchPlaceholder,
   searchLabel,
@@ -205,6 +210,31 @@ export function DataTable<T>({
 
   const selectedCount = selectedIds?.size ?? 0;
 
+  function renderEmptyState() {
+    return query.trim() || filteredEmpty?.active ? (
+      <EmptyState
+        title={filteredEmpty?.title ?? t("noFilteredResults")}
+        action={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={filteredEmpty?.active ? filteredEmpty.onClear : clearSearch}
+          >
+            {t("clearFilters")}
+          </Button>
+        }
+      />
+    ) : (
+      <EmptyState
+        icon={empty?.icon}
+        title={empty?.title ?? t("nothingToShow")}
+        description={empty?.description}
+        action={empty?.action}
+      />
+    );
+  }
+
   return (
     <Card className={cn("gap-0 overflow-hidden py-0", className)}>
       {showToolbar && (
@@ -263,7 +293,7 @@ export function DataTable<T>({
           className="m-4"
         />
       )}
-      <div className="overflow-x-auto">
+      <div className={cn("overflow-x-auto", renderMobileRow && "hidden md:block")}>
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -346,28 +376,7 @@ export function DataTable<T>({
             ) : rows.length === 0 ? (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={colCount} className="p-0">
-                  {query.trim() || filteredEmpty?.active ? (
-                    <EmptyState
-                      title={filteredEmpty?.title ?? t("noFilteredResults")}
-                      action={
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={filteredEmpty?.active ? filteredEmpty.onClear : clearSearch}
-                        >
-                          {t("clearFilters")}
-                        </Button>
-                      }
-                    />
-                  ) : (
-                    <EmptyState
-                      icon={empty?.icon}
-                      title={empty?.title ?? t("nothingToShow")}
-                      description={empty?.description}
-                      action={empty?.action}
-                    />
-                  )}
+                  {renderEmptyState()}
                 </TableCell>
               </TableRow>
             ) : (
@@ -436,6 +445,36 @@ export function DataTable<T>({
           </TableBody>
         </Table>
       </div>
+      {renderMobileRow && (
+        <div className="md:hidden">
+          {error ? (
+            <div className="p-4">
+              <ContextualError message={error.message} onRetry={error.onRetry} />
+            </div>
+          ) : loading ? (
+            <div className="space-y-3 p-4">
+              {Array.from(
+                { length: Math.min(pageSize ?? 5, 5) },
+                (_, i) => `mobile-skeleton-${i}`,
+              ).map((rowKey) => (
+                <div key={rowKey} className="space-y-2 rounded-md border p-3">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-full max-w-56" />
+                  <Skeleton className="h-3 w-2/3" />
+                </div>
+              ))}
+            </div>
+          ) : rows.length === 0 ? (
+            <div className="p-4">{renderEmptyState()}</div>
+          ) : (
+            <ul className="divide-border divide-y">
+              {rows.map((row) => (
+                <li key={getRowId(row)}>{renderMobileRow(row)}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       {pageSize && sorted.length > pageSize && (
         <nav
           className="flex items-center justify-between gap-2 border-t p-3"

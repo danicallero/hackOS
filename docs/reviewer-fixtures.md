@@ -66,14 +66,18 @@ exports and are not permanent anonymous audit data.
 ## Checking whether credentials were used
 
 The admin dialog reads `GET /api/admin/review-fixtures` and displays the
-generation, current synthetic email and the timestamp of the last successful
-email sign-in for each scenario. This is an operational signal, not an audit
-identity bridge. The registry stores no password, PIN, IP address, user-agent,
-sign-in response or participant answer. Regeneration resets the signal.
+generation, current synthetic email, availability and the timestamp plus
+trusted IP origin of the most recent successful email sign-in for each
+scenario. This is an operational signal, not an audit identity bridge. The
+registry stores no password, PIN, user-agent, sign-in response or participant
+answer, and it keeps only that one bounded timestamp/IP pair. Regeneration
+resets the signal.
 
-The timestamp records only successful Better Auth email sign-ins observed by
-the API. It does not prove that a particular person completed a scenario, and
-it does not capture failed attempts. This is intentional data minimization.
+The timestamp and IP origin record only successful Better Auth email sign-ins
+observed by the API. The origin is Fastify's trust-proxy-aware `request.ip`,
+not a client-provided field. This does not prove that a particular person
+completed a scenario, and it does not capture failed attempts or a history of
+sign-ins. This is intentional data minimization.
 
 ## Operational rules
 
@@ -114,9 +118,10 @@ These are implementation assumptions, not legal conclusions:
 - The current generated queue is intentionally small and participant-facing;
   future synthetic workflows need their own marked graph and cleanup pointers
   rather than reusing real event rows.
-- The last-authenticated timestamp is sufficient for the operational question
-  “was this current fixture credential used?”; stronger reviewer telemetry is
-  optional hardening and must not store new participant identity data.
+- The last-authenticated timestamp and trusted IP are sufficient for the
+  operational question “was this current fixture credential used, and where
+  did the latest successful sign-in originate?”; no sign-in history or new
+  participant identity data is stored.
 - The static deletion PIN remains synthetic-only. If a product owner requests
   a universal real-user PIN, security review must explicitly replace this
   boundary rather than silently broadening it.

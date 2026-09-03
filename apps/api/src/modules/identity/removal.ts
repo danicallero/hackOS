@@ -28,6 +28,7 @@ import { REPO_MEMBER_RELATION_SQL } from "../queue/membership.js";
 import { type DeletedQueueEntryNotification, notifyDeletedQueueEntries } from "../queue/notify.js";
 import { consumeRemovalPin } from "./removal-pin.js";
 import { purgeReviewFixtureQueuesForUser } from "./review-fixture-queues.js";
+import { clearReviewFixtureAuthentication } from "./review-fixture-usage.js";
 import { getAssignedRoles } from "./role.js";
 import {
   assertActiveWildcardHolder,
@@ -1723,6 +1724,8 @@ export async function purgeReviewFixtureAccount(
   const wasWildcardHolder = await userHasWildcardRegardlessOfState(client, user.id);
   if (wasWildcardHolder) await assertActiveWildcardHolder(client, user.id);
   await scrubRelationships(client, user);
+  // H54: an unavailable fixture must not retain a stale address-use signal.
+  await clearReviewFixtureAuthentication(client, user.id);
   await client.query(`DELETE FROM users WHERE id = $1`, [user.id]);
   if (wasWildcardHolder) await assertActiveWildcardHolder(client);
 }
@@ -1829,6 +1832,8 @@ export async function finalizeAccountRemoval(
       ],
     );
   }
+  // H54: an unavailable fixture must not retain a stale address-use signal.
+  await clearReviewFixtureAuthentication(client, user.id);
   if (user.removal_idempotency_key) {
     const completionScope =
       options.action === "anonymize"

@@ -147,6 +147,28 @@ describe("DataTable accessibility and interactions", () => {
     expect(onRowClick).not.toHaveBeenCalled();
   });
 
+  it("renders an accessible mobile drill-down row when configured", () => {
+    render(
+      <DataTable
+        columns={columns}
+        data={rows}
+        getRowId={(row) => row.id}
+        getRowHref={(row) => `/people/${row.id}`}
+        renderMobileRow={(row) => (
+          <a href={`/people/${row.id}`} aria-label={`Open ${row.name}`}>
+            {row.name}
+          </a>
+        )}
+      />,
+    );
+
+    expect(container.querySelector("ul")?.textContent).toContain("Ada");
+    expect(container.querySelector('ul a[href="/people/1"]')?.getAttribute("aria-label")).toBe(
+      "Open Ada",
+    );
+    expect(container.querySelector("table")).not.toBeNull();
+  });
+
   it("falls back to onRowClick when the row has no href", async () => {
     const onRowClick = vi.fn();
     render(

@@ -8,7 +8,10 @@ import { Modal } from "@/components/common/modal";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { ApiError, api } from "@/lib/api";
-import { useLocale } from "@/lib/i18n";
+import { shortDateTimeFmt } from "@/lib/datetime";
+import { type Translate, useLocale } from "@/lib/i18n";
+
+const dateFmt = shortDateTimeFmt;
 
 type FixtureAccount = {
   fixtureKey: string;
@@ -26,12 +29,23 @@ type FixtureStatusAccount = Omit<FixtureAccount, "email"> & {
   email: string | null;
   active: boolean;
   lastAuthenticatedAt: string | null;
+  lastAuthenticatedIp: string | null;
 };
 
 type FixtureStatusResponse = {
   generation: number;
   accounts: FixtureStatusAccount[];
 };
+
+function fixtureKindLabel(kind: FixtureAccount["kind"], t: Translate): string {
+  return kind === "staff" ? t("staff") : t("participant");
+}
+
+function formatLastSignIn(value: string | null): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : dateFmt.format(date);
+}
 
 /** Admin-only control for the synthetic accounts used by App Store review. */
 export function ReviewFixturesDialog() {
@@ -91,6 +105,7 @@ export function ReviewFixturesDialog() {
           ...account,
           active: true,
           lastAuthenticatedAt: null,
+          lastAuthenticatedIp: null,
         })),
       });
       setConfirmOpen(false);
@@ -118,6 +133,7 @@ export function ReviewFixturesDialog() {
         title={t("reviewFixturesTitle")}
         description={t("reviewFixturesDescription")}
         icon={ShieldCheckIcon}
+        size="xl"
         footer={
           <>
             <Button type="button" variant="outline" onClick={closeFlow} disabled={pending}>
@@ -138,31 +154,75 @@ export function ReviewFixturesDialog() {
             </p>
           </div>
           <div className="space-y-2 rounded-md border p-3 text-sm">
-            <div>
-              <p className="font-medium">{t("reviewFixturesUsage")}</p>
-              <p className="text-muted-foreground mt-1 text-pretty">
-                {t("reviewFixturesUsageDescription")}
-              </p>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="font-medium">{t("reviewFixturesUsage")}</p>
+                <p className="text-muted-foreground mt-1 text-pretty">
+                  {t("reviewFixturesUsageDescription")}
+                </p>
+              </div>
+              {status && status.generation > 0 && (
+                <StatusBadge tone="neutral" dot={false}>
+                  {t("reviewFixturesGeneration", { generation: status.generation })}
+                </StatusBadge>
+              )}
             </div>
             {statusLoading ? (
               <p className="text-muted-foreground">{t("reviewFixturesUsageLoading")}</p>
             ) : status ? (
               <ul className="divide-y rounded-md border">
-                {status.accounts.map((account) => (
-                  <li
-                    key={account.fixtureKey}
-                    className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
-                  >
-                    <span className="font-medium">{account.fixtureKey}</span>
-                    <span className="text-muted-foreground text-xs">
-                      {account.lastAuthenticatedAt
-                        ? t("reviewFixturesLastUsed", {
-                            time: new Date(account.lastAuthenticatedAt).toLocaleString(),
-                          })
-                        : t("reviewFixturesNeverUsed")}
-                    </span>
-                  </li>
-                ))}
+                {status.accounts.map((account) => {
+                  const available = account.active && account.email !== null;
+                  return (
+                    <li key={account.fixtureKey} className="space-y-3 p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-medium text-pretty">{account.fixtureKey}</p>
+                          <p className="text-muted-foreground mt-1 text-xs">
+                            {fixtureKindLabel(account.kind, t)}
+                          </p>
+                        </div>
+                        <StatusBadge tone={available ? "success" : "neutral"} dot={false}>
+                          {available
+                            ? t("reviewFixturesAvailable")
+                            : t("reviewFixturesUnavailable")}
+                        </StatusBadge>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-muted-foreground text-xs font-medium">
+                          {t("reviewFixturesAddress")}
+                        </p>
+                        <p className="mt-1 break-all font-mono text-xs">
+                          {account.email ?? (
+                            <span className="text-muted-foreground font-sans">
+                              {t("reviewFixturesNoAddress")}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                      <dl className="grid gap-3 sm:grid-cols-2">
+                        <div className="min-w-0">
+                          <dt className="text-muted-foreground text-xs font-medium">
+                            {t("reviewFixturesLastSignIn")}
+                          </dt>
+                          <dd className="mt-1 text-sm tabular-nums">
+                            {account.lastAuthenticatedAt
+                              ? formatLastSignIn(account.lastAuthenticatedAt)
+                              : t("reviewFixturesNeverUsed")}
+                          </dd>
+                        </div>
+                        <div className="min-w-0">
+                          <dt className="text-muted-foreground text-xs font-medium">
+                            {t("reviewFixturesIpOrigin")}
+                          </dt>
+                          <dd className="mt-1 break-all font-mono text-xs">
+                            <bdi>{account.lastAuthenticatedIp ?? "—"}</bdi>
+                          </dd>
+                        </div>
+                      </dl>
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <p className="text-muted-foreground">{t("reviewFixturesUsageUnavailable")}</p>
@@ -178,17 +238,6 @@ export function ReviewFixturesDialog() {
                   {t("reviewFixturesCredentialsHint")}
                 </span>
               </div>
-              <ul className="divide-y rounded-md border text-sm">
-                {result.accounts.map((account) => (
-                  <li
-                    key={account.fixtureKey}
-                    className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
-                  >
-                    <span className="font-medium">{account.fixtureKey}</span>
-                    <span className="text-muted-foreground font-mono text-xs">{account.email}</span>
-                  </li>
-                ))}
-              </ul>
             </div>
           )}
         </div>

@@ -1,6 +1,6 @@
 # H54 — account deletion and irreversible anonymization audit
 
-**Review date:** 2026-08-29
+**Review date:** 2026-09-03
 **Scope:** `apps/api`, `apps/mobile`, `apps/web`, Postgres migrations, object
 storage references, offline scanner paths, notification workers, audit/export
 paths, and the account/privacy copy.  This is a code and data-lifecycle audit,
@@ -540,8 +540,8 @@ used to exercise these states are documented separately in
 [Synthetic reviewer fixtures](./reviewer-fixtures.md). That fixture system is
 isolated by persisted markers from real participant operations, statistics,
 exports and the permanent anonymous audit dataset while running in the same
-deployed API/database; its admin-only usage signal records only a last
-successful sign-in timestamp.
+deployed API/database; its admin-only usage signal records only the current
+generation's most recent successful sign-in timestamp and trusted IP origin.
 
 ## 14. Required data-lifecycle analysis
 
@@ -574,7 +574,7 @@ synthetic identity-shaped `users` row.
 | `anonymous_participants`: random UUID, guaranteed minutes, created timestamp | None | None until finalization | Created only for an accredited anonymization; no user FK or mapping | Random anonymous subject + system-generated verified minutes | Stable anonymous grouping without an identity bridge. |
 | `anonymous_participant_fields`: anonymous subject, form/application context, field key, open dimension, field kind, typed value | None | None until finalization | Survives only for explicitly retained, sanitized answers; no user/response FK | Dynamic retained application values; missing answers create no row | Normalized/queryable schema avoids fixed demographic columns and supports future dimensions. |
 | `users.is_test_account`, `anonymous_participants.is_test_account`: synthetic marker | QA marker | Isolated review fixture marker | Purge with the fixture; never convert a marker into a real participant attribute | No | The marker scopes synthetic data and keeps it out of ordinary operations, statistics and the permanent audit dataset. |
-| `review_fixture_accounts`: fixture key, replaceable user FK, generation, last successful sign-in | QA registry | Admin fixture provisioning/usage signal | Null or replace the user pointer during purge/regeneration; retain only the bounded registry metadata needed to operate fixtures | No | This is deployment/QA control data, not a participant or audit record; it contains no password, PIN, response, IP or user-agent history. |
+| `review_fixture_accounts`: fixture key, replaceable user FK, generation, last successful sign-in timestamp/IP | QA registry | Admin fixture provisioning/usage signal | Null or replace the user pointer during purge/regeneration; retain only the bounded registry metadata needed to operate fixtures | No | This is deployment/QA control data, not a participant or audit record; it contains no password, PIN, response or user-agent/sign-in history. |
 | `review_fixture_queues`: fixture key and synthetic enterprise/sponsor/challenge/repo/queue pointers | None | Participant-facing synthetic judging queue | Purge the marked queue/project graph before fixture regeneration or closure | No | Synthetic judging state exists only to exercise the participant flow and must not affect ordinary queues, statistics or audit counts. |
 | `applicant_reviews`: response/author, score, notes | Review workflow | Selection workflow | Delete subject response reviews and subject-authored reviews | No | Identity/free text; not audit requirement. |
 | Application upload objects: `responses` file keys, `uploads/<app>/<user>/...` | Personal file | Review/operations | Delete exact keys/prefixes | No | Personal files and identifying object paths. |
@@ -739,7 +739,7 @@ silently converted into a legal conclusion.
 | A40 | The current fixture generation contains four scenarios: full deletion before accreditation, anonymization outside the venue, anonymization pending exit inside the venue, and a synthetic exit-capable operator. The outside fixture owns the participant-facing judging queue; future scenarios must create and clean up their own marked graph. | Release + product owners |
 | A41 | A synthetic operator has ordinary capability checks plus a marked-subject boundary and may act only on synthetic accounts. Real administrators and staff cannot discover or mutate those subjects by changing an ID in a normal endpoint. | Security + operations owners |
 | A42 | The configured static deletion PIN is accepted only for marked synthetic accounts. Verified real accounts require an emailed one-time PIN; no universal real-user bypass is implemented. | Security/product owner |
-| A43 | The admin fixture status signal records only the current generation, synthetic email and last successful sign-in time. It is not proof of scenario completion and does not retain secrets, failed-attempt details, IPs, user agents or participant answers. | Security + release owners |
+| A43 | The admin fixture status signal records only the current generation, synthetic email, availability and the most recent successful sign-in time/IP from the API's trusted request context. It is not proof of scenario completion and does not retain secrets, failed-attempt details, user agents, sign-in history or participant answers. | Security + release owners |
 | A44 | The H54 migrations must upgrade the latest main schema in place, including populated rows and the existing `_migrations` ledger. The squashed baseline and the allow-listed pre-squash compatibility path are transactional and one-way; applied migration checksums remain immutable after deployment and later corrections use a new migration. | Release/DB owner |
 | A45 | The current credential-retirement denylist stores stable keyed HMAC digests, not raw badge/ticket values and has no expiry path. It prevents late offline credential replay, while ordinary physical badge reuse is governed by the server-side assignment timestamp fence. | Security + event-operations owners |
 | A46 | Legal copy may describe synthetic accounts as authorised testing/quality-assurance fixtures, but it must not name a specific review channel. The detailed fixture procedure belongs in the private/operational runbook. | GPUL/privacy + release owners |

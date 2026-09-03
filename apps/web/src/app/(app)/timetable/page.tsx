@@ -8,7 +8,7 @@ export default function TimetablePage() {
   const { t } = useLocale();
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       <PublicScheduleView
         header={(event) => <PageHeader context={event?.name ?? "hackOS"} title={t("schedule")} />}
       />

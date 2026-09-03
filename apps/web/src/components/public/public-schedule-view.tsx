@@ -109,7 +109,7 @@ export function PublicScheduleView({
                 filter, so the control only appears once there's a real
                 choice (H59 follow-up). */}
             {availableSegments.length > 1 && (
-              <div className="flex justify-end">
+              <div className="flex justify-start sm:justify-end">
                 <ScheduleAudienceFilterPopover
                   segments={availableSegments}
                   selected={segmentFilter}

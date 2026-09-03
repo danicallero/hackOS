@@ -686,6 +686,7 @@ Table review_fixture_accounts {
   user_id integer [unique]
   generation integer [not null, default: `0`]
   last_authenticated_at "timestamp with time zone" [note: 'Last synthetic fixture sign-in signal; no credential or participant response is stored.']
+  last_authenticated_ip text [note: 'Most recent trusted request IP for a successful synthetic fixture sign-in; no failed-attempt or user-agent history is stored.']
   created_at "timestamp with time zone" [not null, default: `clock_timestamp()`]
   updated_at "timestamp with time zone" [not null, default: `clock_timestamp()`]
 

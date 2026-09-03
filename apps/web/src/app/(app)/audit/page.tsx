@@ -7,7 +7,7 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { ScrollTextIcon } from "lucide-react";
+import { ChevronRightIcon, ScrollTextIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -25,7 +25,7 @@ import { usePersistedState } from "@/hooks/use-persisted-state";
 import { ApiError } from "@/lib/api";
 import { getActionLabel } from "@/lib/audit-labels";
 import { fromDatetimeLocal, shortDateTimeFmt } from "@/lib/datetime";
-import { useLocale } from "@/lib/i18n";
+import { type Translate, useLocale } from "@/lib/i18n";
 import { type AuditRow, type AuditVocabularyEntry, notificationsApi } from "@/lib/notifications";
 import { useCan } from "@/lib/session";
 
@@ -38,6 +38,55 @@ export function auditActorLabel(
 ) {
   const fullName = [row.actor_name, row.actor_surname].filter(Boolean).join(" ").trim();
   return fullName || row.actor_email || null;
+}
+
+function AuditMobileRow({ row, t }: { row: AuditRow; t: Translate }) {
+  const entityLabel = `${row.entity_type} #${row.entity_id}`;
+  const actorLabel = row.actor_id ? (auditActorLabel(row) ?? `#${row.actor_id}`) : t("systemActor");
+  return (
+    <Link
+      href={`/audit/${row.id}`}
+      className="focus-visible:ring-ring block px-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 space-y-2">
+          <time
+            className="text-muted-foreground block text-xs tabular-nums"
+            dateTime={row.created_at}
+          >
+            {auditTimeFmt.format(new Date(row.created_at))}
+          </time>
+          <Badge variant="secondary">{getActionLabel(row.action, t)}</Badge>
+        </div>
+        <ChevronRightIcon
+          className="text-muted-foreground mt-1 size-4 shrink-0"
+          aria-hidden="true"
+        />
+      </div>
+      <dl className="mt-3 grid min-w-0 gap-2 text-sm sm:grid-cols-2">
+        <div className="min-w-0">
+          <dt className="text-muted-foreground text-xs">{t("colEntity")}</dt>
+          <dd className="mt-0.5 break-words">{entityLabel}</dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-muted-foreground text-xs">{t("colActor")}</dt>
+          <dd className="mt-0.5 break-words">{actorLabel}</dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-muted-foreground text-xs">{t("colSource")}</dt>
+          <dd className="mt-0.5">
+            {row.source ? (
+              <Badge variant="outline" className="capitalize">
+                {row.source}
+              </Badge>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </dd>
+        </div>
+      </dl>
+    </Link>
+  );
 }
 
 interface FilterState {
@@ -227,8 +276,8 @@ export default function AuditPage() {
     <div className="space-y-6">
       <PageHeader title={t("auditLog")} />
 
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
+      <div className="grid min-w-0 gap-3 sm:flex sm:flex-wrap sm:items-end">
+        <div className="min-w-0 space-y-1">
           <Label htmlFor="audit-action" className="text-muted-foreground text-xs">
             {t("colAction")}
           </Label>
@@ -240,10 +289,10 @@ export default function AuditPage() {
             getId={(o) => o.action}
             getLabel={(o) => o.label}
             placeholder={t("allActionsPlaceholder")}
-            className="h-9 w-48"
+            className="h-9 w-full sm:w-48"
           />
         </div>
-        <div className="space-y-1">
+        <div className="min-w-0 space-y-1">
           <Label htmlFor="audit-entity-type" className="text-muted-foreground text-xs">
             {t("entityTypeLabel")}
           </Label>
@@ -255,10 +304,10 @@ export default function AuditPage() {
             getId={(o) => o.entityType}
             getLabel={(o) => o.entityType}
             placeholder={t("allEntityTypesPlaceholder")}
-            className="h-9 w-48"
+            className="h-9 w-full sm:w-48"
           />
         </div>
-        <div className="space-y-1">
+        <div className="min-w-0 space-y-1">
           <Label htmlFor="audit-entity-id" className="text-muted-foreground text-xs">
             {t("entityIdLabel")}
           </Label>
@@ -266,10 +315,10 @@ export default function AuditPage() {
             id="audit-entity-id"
             value={filters.entityId}
             onChange={(e) => setFilters((f) => ({ ...f, entityId: e.target.value }))}
-            className="h-9 w-28"
+            className="h-9 w-full sm:w-28"
           />
         </div>
-        <div className="space-y-1">
+        <div className="min-w-0 space-y-1">
           <Label htmlFor="audit-actor" className="text-muted-foreground text-xs">
             {t("actorUserIdLabel")}
           </Label>
@@ -278,10 +327,10 @@ export default function AuditPage() {
             value={filters.actorQuery}
             onChange={(e) => setFilters((f) => ({ ...f, actorQuery: e.target.value }))}
             placeholder={`${t("egPrefix")} Daniel, daniel@...`}
-            className="h-9 w-44"
+            className="h-9 w-full sm:w-44"
           />
         </div>
-        <div className="space-y-1">
+        <div className="min-w-0 space-y-1">
           <Label htmlFor="audit-from" className="text-muted-foreground text-xs">
             {t("fromLabel")}
           </Label>
@@ -289,10 +338,10 @@ export default function AuditPage() {
             id="audit-from"
             value={filters.dateFrom}
             onChange={(v) => setFilters((f) => ({ ...f, dateFrom: v }))}
-            className="h-9"
+            className="h-9 w-full sm:w-auto"
           />
         </div>
-        <div className="space-y-1">
+        <div className="min-w-0 space-y-1">
           <Label htmlFor="audit-to" className="text-muted-foreground text-xs">
             {t("toLabel")}
           </Label>
@@ -300,7 +349,7 @@ export default function AuditPage() {
             id="audit-to"
             value={filters.dateTo}
             onChange={(v) => setFilters((f) => ({ ...f, dateTo: v }))}
-            className="h-9"
+            className="h-9 w-full sm:w-auto"
           />
         </div>
         {hasFilters && (
@@ -323,6 +372,7 @@ export default function AuditPage() {
         }
         getRowHref={(r) => `/audit/${r.id}`}
         getRowLabel={(r) => `${getActionLabel(r.action, t)} ${r.entity_type} ${r.entity_id}`}
+        renderMobileRow={(r) => <AuditMobileRow row={r} t={t} />}
         empty={{
           icon: ScrollTextIcon,
           title: t("noAuditEntriesTitle"),
@@ -332,7 +382,7 @@ export default function AuditPage() {
       />
 
       {total > 0 && (
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
           <span className="text-muted-foreground text-xs">
             {t("rangeOfTotal", { start: rangeStart, end: rangeEnd, total })}
           </span>
