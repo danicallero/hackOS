@@ -2145,7 +2145,7 @@ describe("staff user routes (H7)", () => {
       [target, applications[0].id, formVersionId],
     );
     await pool.query(
-      `INSERT INTO applicant_reviews (response_id, author_id, score) VALUES ($1, $2, 50)`,
+      `INSERT INTO applicant_reviews (response_id, author_id, score) VALUES ($1, $2, 5)`,
       [responseRows[0].id, admin],
     );
 
@@ -2323,8 +2323,8 @@ describe("staff user routes (H7)", () => {
     const editor = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
 
     const { rows: appRows } = await pool.query(
-      `INSERT INTO applications (name, type, template, description, active, confirmation_window_hours)
-       VALUES ('F', 'participant', '[]'::jsonb, '', true, 168) RETURNING id`,
+      `INSERT INTO applications (name, type, template, description, confirmation_window_hours)
+       VALUES ('F', 'participant', '[]'::jsonb, '', 168) RETURNING id`,
     );
     const appId = appRows[0].id;
     const formVersionId = await ensureApplicationFormVersion(appId);

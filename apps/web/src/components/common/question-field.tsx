@@ -8,7 +8,7 @@
 import type { AnswerValue, Question } from "@hackos/shared/questions";
 // Label picker lives with the challenge types that define TranslatedText.
 import { textForDisplay } from "@/app/(app)/challenges/shared";
-import { Button } from "@/components/ui/button";
+import { ScaleButtons } from "@/components/common/scale-buttons";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,8 +23,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { useLocale } from "@/lib/i18n";
 
 export type Answers = Record<string, AnswerValue>;
-
-const SCORE_SCALE = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 
 export function defaultValue(question: Question): AnswerValue {
   switch (question.kind) {
@@ -96,32 +94,11 @@ export function QuestionField({
       </Label>
       {description && <p className="text-muted-foreground text-sm text-pretty">{description}</p>}
       {question.kind === "scale" && question.min === 0 && question.max === 10 ? (
-        <div className="flex flex-wrap gap-1">
-          {SCORE_SCALE.map((score) => (
-            <Button
-              key={score}
-              type="button"
-              size="sm"
-              variant={value === score ? "default" : "outline"}
-              className="size-8 p-0 text-xs font-semibold"
-              disabled={disabled}
-              onClick={() => onChange(score)}
-            >
-              {score}
-            </Button>
-          ))}
-          {value !== undefined && value !== null && (
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              disabled={disabled}
-              onClick={() => onChange("")}
-            >
-              {t("clear")}
-            </Button>
-          )}
-        </div>
+        <ScaleButtons
+          value={typeof value === "number" ? value : null}
+          onChange={(v) => onChange(v ?? "")}
+          disabled={disabled}
+        />
       ) : question.kind === "scale" || question.kind === "integer" || question.kind === "float" ? (
         <Input
           id={id}

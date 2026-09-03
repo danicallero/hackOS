@@ -158,7 +158,6 @@ export const createApplicationSchema = z
     template: templateSchema,
     sections: sectionsSchema.default([]),
     description: z.string().nullish(),
-    active: z.boolean().default(true),
     open_at: timestampCoerce,
     close_at: timestampCoerce,
     capacity: z.number().int().positive().nullish(),
@@ -181,7 +180,6 @@ export const updateApplicationSchema = z
     template: templateSchema.optional(),
     sections: sectionsSchema.optional(),
     description: z.string().nullish(),
-    active: z.boolean().optional(),
     open_at: timestampCoerce,
     close_at: timestampCoerce,
     capacity: z.number().int().positive().nullish(),
@@ -222,7 +220,7 @@ export const submitSchema = z.object({
 });
 
 export const reviewUpsertSchema = z.object({
-  score: z.number().int().min(0).max(100).nullish(),
+  score: z.number().int().min(0).max(10).nullish(),
   notes: z.string().nullish(),
 });
 

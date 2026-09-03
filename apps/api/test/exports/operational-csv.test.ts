@@ -127,7 +127,7 @@ describe("applications.csv", () => {
     const staff = await createUserWithCapabilities([CAPABILITIES.EXPORTS_RUN]);
     const userA = await createUser({ name: "Applicant One" });
     const userB = await createUser({ name: "Applicant Two" });
-    await createApplicationResponse(userA, { appName: "App One", status: "submitted" });
+    await createApplicationResponse(userA, { appName: "App One", status: "review" });
     await createApplicationResponse(userB, { appName: "App Two", status: "confirmed" });
 
     const res = await app.inject({

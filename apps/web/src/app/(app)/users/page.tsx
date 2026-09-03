@@ -121,8 +121,6 @@ function applicationLabel(status: string | null, t: Translate): string {
   switch (status) {
     case "draft":
       return t("dataStatusDraft");
-    case "submitted":
-      return t("dataStatusSubmitted");
     case "review":
       return t("dataStatusReview");
     case "accepted_internal":

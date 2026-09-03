@@ -9,7 +9,7 @@ This document summarizes ERS rules to keep as development guardrails.
 3. Evaluation is 1:1 with its queue entry.
 4. Badge identifier is unique while assigned.
 5. Each queue action generates exactly one history row and one broadcast.
-8. Without a verified primary email, an application cannot advance past `submitted`.
+8. Without a verified primary email, an application cannot advance past `draft` into `review`.
 10. One ticket per confirmed user; it is neither consumed nor revoked.
 11. Wallet pass exists only if the user has a badge and a staff member with accredit capability issues a virtual badge (wallet/Google API).
 12. No room capacity at the logical system level.
@@ -37,7 +37,7 @@ This document summarizes ERS rules to keep as development guardrails.
 
 ## 3) Application state machine (reference)
 
-`draft -> submitted -> review -> accepted|rejected`
+`draft -> review -> accepted|rejected`
 
 `accepted -> confirmed|declined|expired`
 

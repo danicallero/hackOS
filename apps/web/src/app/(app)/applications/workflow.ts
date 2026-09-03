@@ -35,7 +35,7 @@ export function defaultApplicationWorkspace(
 }
 
 const WORKSPACE_STATUSES: Record<ApplicationWorkspace, ReadonlySet<string>> = {
-  review: new Set(["submitted", "review"]),
+  review: new Set(["review"]),
   outbox: new Set(["accepted_internal", "rejected_internal"]),
   sent: new Set(["accepted", "rejected", "confirmed", "declined", "expired"]),
 };
@@ -56,7 +56,6 @@ export function statusesForWorkspace(workspace: ApplicationWorkspace): string[] 
 export function applicationStatusLabel(status: string, t: Translate): string {
   const labels: Record<string, string> = {
     draft: t("dataStatusDraft"),
-    submitted: t("dataStatusSubmitted"),
     review: t("dataStatusReview"),
     accepted_internal: t("acceptedInternalOnly"),
     rejected_internal: t("rejectedInternalOnly"),

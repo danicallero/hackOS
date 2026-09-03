@@ -18,6 +18,7 @@ import {
   type FormSection,
   grantedRoleNameLabel,
   type ResponseRow,
+  type ReviewEntry,
   type TemplateField,
 } from "../../applications/lib";
 import { applicationStatusLabel } from "../../applications/workflow";
@@ -47,7 +48,9 @@ interface ResponseDetailPayload {
     ask_shirt_size: boolean;
     ask_food_intolerances: boolean;
   };
-  reviews: { score: number | null }[];
+  reviews: ReviewEntry[];
+  avg_score: number | string | null;
+  review_count: number;
 }
 
 export function ApplicationTab({ userId }: { userId: number }) {
@@ -89,13 +92,6 @@ export function ApplicationTab({ userId }: { userId: number }) {
     setOpeningId(responseId);
     try {
       const detail = await api.get<ResponseDetailPayload>(`/api/responses/${responseId}`);
-      const scores = detail.reviews
-        .map((review) => review.score)
-        .filter((score): score is number => typeof score === "number");
-      const avgScore =
-        scores.length > 0
-          ? scores.reduce((total, score) => total + score, 0) / scores.length
-          : null;
       setSelected({
         response: {
           ...detail.response,
@@ -104,8 +100,9 @@ export function ApplicationTab({ userId }: { userId: number }) {
           shirt_size: detail.user.shirt_size,
           food_intolerances: detail.user.food_intolerances,
           food_intolerance_notes: detail.user.food_intolerance_notes,
-          avg_score: avgScore,
-          review_count: detail.reviews.length,
+          avg_score: detail.avg_score,
+          review_count: detail.review_count,
+          reviews: detail.reviews,
         },
         applicationId: detail.application.id,
         template: detail.application.template,

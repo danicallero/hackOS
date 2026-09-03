@@ -108,7 +108,7 @@ describe("scanner role stats", () => {
     await pool.query(
       `INSERT INTO application_responses
          (user_id, application_id, application_form_version_id, status)
-       VALUES ($1, $2, $3, 'submitted')`,
+       VALUES ($1, $2, $3, 'review')`,
       [unconfirmed, app_.rows[0].id, formVersionId],
     );
 

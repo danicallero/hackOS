@@ -119,7 +119,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
          ORDER BY r.position DESC
          LIMIT 1
       ) AS granted_role_name`;
-  const COLUMNS = `id, name, template, sections, description, active, open_at, close_at,
+  const COLUMNS = `id, name, template, sections, description, open_at, close_at,
                    capacity, confirmation_window_hours, ask_shirt_size, ask_food_intolerances,
                    current_form_version, created_at, ${GRANTS_ROLE_IDS_EXPR},
                    ${HAS_CONFIRMED_RESPONSES_EXPR}, ${GRANTED_ROLE_NAME_EXPR}`;
@@ -134,11 +134,11 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List open application forms",
         description:
-          "Anonymous read of every active application form (H11). A form is included once its window is open, OR the caller is authenticated and already invited (H10) — the invitee bypass an admin/review capability would otherwise gate.",
+          "Anonymous read of every application form whose window is open (H11), OR the caller is authenticated and already invited (H10) — the invitee bypass an admin/review capability would otherwise gate.",
       },
     },
     async (req) => {
-      const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications WHERE active = true`);
+      const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications`);
       const invited = req.userId ? await isInvitedParticipant(pool, req.userId) : false;
       const open = rows.filter((a) => isWindowOpen(a) || invited);
       return { applications: open };
@@ -239,16 +239,15 @@ export function registerAdminRoutes(app: FastifyInstance): void {
         }
         const { rows } = await client.query(
           `INSERT INTO applications
-             (name, template, sections, description, active, open_at, close_at, capacity,
+             (name, template, sections, description, open_at, close_at, capacity,
               confirmation_window_hours, ask_shirt_size, ask_food_intolerances, current_form_version)
-           VALUES ($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7, $8, $9, $10, $11, 1)
+           VALUES ($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7, $8, $9, $10, 1)
            RETURNING id`,
           [
             b.name,
             JSON.stringify(template),
             JSON.stringify(b.sections),
             b.description ?? null,
-            b.active,
             b.open_at ?? null,
             b.close_at ?? null,
             b.capacity ?? null,
@@ -296,7 +295,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update an application form",
         description:
-          "Partial update of a form's template, named sections grouping template fields, window, capacity, active flag, shirt-size/dietary-restriction toggles (H11, H12), or the roles granted on confirmation (`grants_role_ids`, H8). Fields omitted from the body are left unchanged; passing `grants_role_ids` replaces the full set of granted roles for the form (an empty array clears every grant). Adding a role to `grants_role_ids` requires the same role-mutation authority (position hierarchy + capability possession, H8) as assigning that role directly.",
+          "Partial update of a form's template, named sections grouping template fields, window, capacity, shirt-size/dietary-restriction toggles (H11, H12), or the roles granted on confirmation (`grants_role_ids`, H8). Fields omitted from the body are left unchanged; passing `grants_role_ids` replaces the full set of granted roles for the form (an empty array clears every grant). Adding a role to `grants_role_ids` requires the same role-mutation authority (position hierarchy + capability possession, H8) as assigning that role directly.",
         params: idParamSchema,
         body: updateApplicationSchema,
       },
@@ -333,7 +332,6 @@ export function registerAdminRoutes(app: FastifyInstance): void {
           put("current_form_version", nextVersion);
         }
         if (b.description !== undefined) put("description", b.description ?? null);
-        if (b.active !== undefined) put("active", b.active);
         if (b.open_at !== undefined) put("open_at", b.open_at ?? null);
         if (b.close_at !== undefined) put("close_at", b.close_at ?? null);
         if (b.capacity !== undefined) put("capacity", b.capacity ?? null);
@@ -420,7 +418,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Delete an application form",
         description:
-          "Hard-deletes a form (H11). 409 if it already has responses — deactivate it (active: false) instead of deleting once people have applied.",
+          "Hard-deletes a form (H11). 409 if it already has responses — close its window (set `close_at`) instead of deleting once people have applied.",
         params: idParamSchema,
       },
     },

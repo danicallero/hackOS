@@ -44,7 +44,7 @@ describe("buildExportBundle (H54)", () => {
 
     await createApplicationResponse(a, { appName: "Alice App" });
     const { responseId: bResponseId } = await createApplicationResponse(b, { appName: "Bob App" });
-    await addReview(bResponseId, a, 80, "Bob's secret review notes");
+    await addReview(bResponseId, a, 8, "Bob's secret review notes");
 
     const bundleA = await buildExportBundle(a);
     const serialized = JSON.stringify(bundleA);

@@ -197,8 +197,8 @@ confirmed|declined|expired`).
   `hasEventAccess` is false. Web nav hides wallet/queue/project/inbox for a
   "pure applicant" (`isPureApplicant` in `apps/web/src/lib/session.tsx` — no
   confirmed spot, no capability, not an enterprise judge or sponsor rep).
-- Back to submitted / accept-pending-confirmation already existed
-  (`revertDecision(…, "submitted")`, `decide` + `send-decision`) — verified.
+- Back to review / accept-pending-confirmation already existed
+  (`revertDecision(…, "review")`, `decide` + `send-decision`) — verified.
 
 **Batch (fixed "flaky" behaviour).**
 - `service.ts:runBatch` — shared helper: deterministic id order, one row's
@@ -349,7 +349,7 @@ status in one tab with all of its applicable actions.
 **IA change — 4 tabs → 3 (review / outbox / sent decisions).**
 `(app)/applications/workflow.ts` `WORKSPACE_STATUSES` collapsed
 "Review"/"Decisions"/"Communication"/"Confirmation" into:
-- **Review** (`submitted`, `review`) — scoring/notes, *and* the accept/reject
+- **Review** (`review`) — scoring/notes, *and* the accept/reject
   call itself (moved here from the old "Decisions" tab, which duplicated
   Review's own row set).
 - **Outbox** (`accepted_internal`, `rejected_internal`) — internal decisions
@@ -388,8 +388,56 @@ and suspenders, so nothing can strand there again). Removed the dead
 
 **State transitions.** `resendDecision` now also accepts `rejected` as a
 starting status (previously only reachable via the removed
-`resendRejectedDecision`). `decide()` now also accepts `submitted` (deprecated
-alias of `review`, see above).
+`resendRejectedDecision`).
+
+**Follow-up — `submitted` removed entirely.** The deprecated-alias handling
+above was a stopgap; `submitted` never had any code path that could produce
+it (`submitResponse` always lands on `review`/`confirmed`), so it was pure
+dead weight — `decide()`'s alias branch, the duplicate `computeAvailableActions`
+copies (`applications/service.ts` and `identity/routes/profile.ts`), and the
+`WORKSPACE_STATUSES.review`/label/tone maps mentioning it. A migration
+(`0209_remove_submitted_status.sql`) rebuilds the `app_response_status` enum
+without the value (Postgres has no `DROP VALUE`), guarded by a check that
+fails loudly if any row still holds it. `plan/07-datos-relevantes-ers.md` §3
+and invariant 8 were updated to match — they still documented `submitted` as
+a real step, which had drifted from the code well before this cleanup.
+
+**Follow-up — availability replaces the `active` flag (H11).** Forms used to
+have both an `active` boolean and an `open_at`/`close_at` window — two
+independent "is this open" gates with two different UI controls. Removed
+entirely (`0207_remove_application_active.sql`); "open" is now derived purely
+from the window (`service.ts:isWindowOpen`). An admin who wants a form closed
+sets `close_at` instead of toggling a separate switch.
+
+**Follow-up — review modal redesign (H13).**
+- **Score scale**: the free-text 0-100 input is now the same 0-10 button
+  scale as judging (`components/common/scale-buttons.tsx`, extracted from
+  `question-field.tsx`'s `SCORE_SCALE` so applications doesn't pull in
+  judging's own dependency chain). `applicant_reviews.score` CHECK tightened
+  to 0-10 (`0208_review_score_scale.sql`, existing scores rescaled `/10`).
+- **Two-column layout**: `review-modal.tsx` now renders answers (left,
+  through `TemplateFieldControl` in the same per-section bordered-card format
+  the applicant's own `my-applications/[id]/page.tsx` uses — previously a
+  flat divided list) alongside a right column with status/shirt-size badges,
+  the average score, internal notes, the reviewer's own score/notes, and a
+  review wall.
+- **Review wall**: `getResponseDetail` and the list endpoint
+  (`GET /api/applications/:id/responses`) both now return every reviewer's
+  row (`author_id`, `author_name`, `score`, `notes`, `updated_at`) instead of
+  just the caller's own — the modal already discarded the rest before. The
+  list embeds this as a `jsonb_agg` per row so an "already reviewed by me"
+  indicator and the wall need no extra request.
+- **Internal notes**: `sharedStaffNotes` copy renamed — reuses the existing
+  `internalNotesLabel` i18n key already used elsewhere (announcements, the
+  schedule form) rather than adding a duplicate.
+- **Prev/next**: `DataTable` gained an optional `onVisibleRowsChange` prop,
+  fired with its search/sort-applied (pre-pagination) row order;
+  `responses-tab.tsx` uses it to page `ReviewModal` through the currently
+  visible list via new `onNavigate`/`canGoPrev`/`canGoNext` props.
+- No new SSE broadcast: `/api/applications/*` and `/api/responses/*` already
+  emit `EVENTS.DOMAIN_CHANGED` on the `applications` topic for every mutating
+  request (`lib/sse-routing.ts`), and `responses-tab.tsx` already reloads on
+  it — extending the payload was enough for the wall to stay live.
 
 ---
 
@@ -428,8 +476,10 @@ changed — it stays the plain string object key it always was.
   shareable, renders a consent checkbox under the upload widget in
   applicant-editable contexts, or a read-only "shared/not shared" note in
   staff-only contexts.
-- `components/applications/review-modal.tsx` `AnswerValue` — shows the same
-  read-only consent note next to a submitted file answer.
+- `components/applications/review-modal.tsx` `AnswersSection` — renders every
+  answer (including "file") through `TemplateFieldControl` itself, `disabled`
+  when read-only, so the same consent note/upload widget shows either way
+  instead of a separate answer-rendering path.
 - `(app)/applications/[id]/responses-tab.tsx` — an "Export files" menu (only
   for staff holding `exports:run`, and only when the form has at least one
   file field) offers "Export all" and, for shareable fields, "Export

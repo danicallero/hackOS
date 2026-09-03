@@ -123,9 +123,9 @@ describe("pre-event stats (H27)", () => {
     const u3 = await createUser({ emailVerified: true });
     await createResponse(u3, appId, { status: "declined", responses: { credits: "yes" } });
 
-    // still submitted (in funnel-ish), not confirmed
+    // still in review (in funnel-ish), not confirmed
     const u4 = await createUser({ emailVerified: true });
-    await createResponse(u4, appId, { status: "submitted", responses: { credits: "yes" } });
+    await createResponse(u4, appId, { status: "review", responses: { credits: "yes" } });
 
     const res = await a.inject({
       method: "GET",
@@ -137,7 +137,7 @@ describe("pre-event stats (H27)", () => {
 
     expect(body.counts_by_status.confirmed).toBe(2);
     expect(body.counts_by_status.declined).toBe(1);
-    expect(body.counts_by_status.submitted).toBe(1);
+    expect(body.counts_by_status.review).toBe(1);
 
     // confirmed-only intolerances: nut-free x2, gluten-free x1 (u3 declined, excluded)
     const intoleranceMap = Object.fromEntries(

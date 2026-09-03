@@ -29,7 +29,6 @@ export async function createApplication(
     name: string;
     type: string;
     template: TemplateField[];
-    active: boolean;
     open_at: string | null;
     close_at: string | null;
     capacity: number | null;
@@ -48,14 +47,13 @@ export async function createApplication(
   const asksByDefault = type === "participant" || type === "mentor";
   const { rows } = await pool.query(
     `INSERT INTO applications
-       (name, type, template, description, active, open_at, close_at, capacity,
+       (name, type, template, description, open_at, close_at, capacity,
         confirmation_window_hours, ask_shirt_size, ask_food_intolerances)
-     VALUES ($1, $2, $3::jsonb, '', $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+     VALUES ($1, $2, $3::jsonb, '', $4, $5, $6, $7, $8, $9) RETURNING id`,
     [
       overrides.name ?? "Participant form",
       type,
       JSON.stringify(template),
-      overrides.active ?? true,
       overrides.open_at ?? null,
       overrides.close_at ?? null,
       overrides.capacity ?? null,

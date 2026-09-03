@@ -147,20 +147,20 @@ describe("review + decide (H13, H14)", () => {
       method: "PUT",
       url: `/api/responses/${responseId}/my-review`,
       headers: asUser(reviewer),
-      payload: { score: 80, notes: "strong" },
+      payload: { score: 8, notes: "strong" },
     });
     await a.inject({
       method: "PUT",
       url: `/api/responses/${responseId}/my-review`,
       headers: asUser(reviewer2),
-      payload: { score: 40 },
+      payload: { score: 4 },
     });
     const { rows } = await pool.query(
       `SELECT count(*)::int AS n, avg(score)::float AS avg FROM applicant_reviews WHERE response_id = $1`,
       [responseId],
     );
     expect(rows[0].n).toBe(2);
-    expect(rows[0].avg).toBe(60);
+    expect(rows[0].avg).toBe(6);
 
     await a.inject({
       method: "PATCH",
@@ -170,6 +170,57 @@ describe("review + decide (H13, H14)", () => {
     });
     const r = await getResponse(responseId);
     expect(r.status).toBe("review");
+
+    // H13: the detail endpoint surfaces every reviewer's row (author_name
+    // included), not just the caller's own, for the review wall.
+    const detail = await a.inject({
+      method: "GET",
+      url: `/api/responses/${responseId}`,
+      headers: asUser(reviewer),
+    });
+    expect(detail.statusCode).toBe(200);
+    const body = detail.json();
+    expect(body.review_count).toBe(2);
+    expect(body.avg_score).toBe(6);
+    expect(body.reviews).toHaveLength(2);
+    for (const review of body.reviews) {
+      expect(typeof review.author_name).toBe("string");
+    }
+
+    // The list endpoint embeds the same per-reviewer array, so the client
+    // can show an "already reviewed by me" indicator without another call.
+    const list = await a.inject({
+      method: "GET",
+      url: `/api/applications/${appId}/responses`,
+      headers: asUser(reviewer),
+    });
+    const listed = list.json().responses.find((row: { id: number }) => row.id === responseId);
+    expect(listed.reviews).toHaveLength(2);
+    expect(
+      listed.reviews.some((review: { author_id: number }) => review.author_id === reviewer),
+    ).toBe(true);
+  });
+
+  it("rejects a score outside 0-10", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { responseId } = await submittedApplicant(appId);
+
+    const tooHigh = await a.inject({
+      method: "PUT",
+      url: `/api/responses/${responseId}/my-review`,
+      headers: asUser(reviewer),
+      payload: { score: 11 },
+    });
+    expect(tooHigh.statusCode).toBe(400);
+
+    const atMax = await a.inject({
+      method: "PUT",
+      url: `/api/responses/${responseId}/my-review`,
+      headers: asUser(reviewer),
+      payload: { score: 10 },
+    });
+    expect(atMax.statusCode).toBe(200);
   });
 
   it("decision is internal until sent: applicant sees 'review' while decision_sent_at is null", async () => {

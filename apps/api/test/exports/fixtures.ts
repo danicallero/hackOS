@@ -26,7 +26,7 @@ export async function createApplicationResponse(
       userId,
       applicationId,
       formVersionId,
-      overrides.status ?? "submitted",
+      overrides.status ?? "review",
       JSON.stringify(overrides.responses ?? {}),
     ],
   );

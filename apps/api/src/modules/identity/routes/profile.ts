@@ -862,8 +862,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                     WHEN 'rejected' THEN 6
                     WHEN 'rejected_internal' THEN 7
                     WHEN 'review' THEN 8
-                    WHEN 'submitted' THEN 9
-                    ELSE 10
+                    ELSE 9
                   END,
                   id DESC`,
               [ids],
@@ -1399,7 +1398,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
 function computeAvailableActions(status: string): string[] {
   const actions: string[] = ["staff-notes"];
   switch (status) {
-    case "submitted":
     case "review":
       actions.push("my-review");
       break;
