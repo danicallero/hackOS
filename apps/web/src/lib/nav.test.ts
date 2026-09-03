@@ -186,7 +186,7 @@ describe("capability-gated workspace, no association or wildcard", () => {
   it("a bare accreditation scanner sees Logistics plus Programme's Manage schedule view (H59)", () => {
     const ctx = contextFor([CAPABILITIES.ACCREDIT_SCAN]);
     expect(visibleWorkspaceIds(ctx)).toEqual(["logistics", "programme"]);
-    expect(visibleHrefs(ctx)).toEqual(["/logistics/accreditation", "/schedule"]);
+    expect(visibleHrefs(ctx)).toEqual(["/logistics/presence", "/schedule"]);
   });
 
   it("puts announcement management in Programme, alongside Manage schedule and TV control", () => {
@@ -218,7 +218,10 @@ describe("route stability (deep links, issue #187)", () => {
       "/queue",
       "/judging",
       "/queue/rooms",
-      "/logistics/accreditation",
+      // /logistics/accreditation is deliberately gone from here: accreditation
+      // and presence scanning were merged into one nav entry (H22, H24), and
+      // the old href now redirects server-side (see its page.tsx) instead of
+      // being a live nav item — deep links still resolve, just not via nav.
       "/logistics/meals",
       "/logistics/activities",
       "/logistics/presence",

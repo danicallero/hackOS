@@ -83,6 +83,20 @@ export const scannableActivitiesQuery = z.object({
   category: z.enum(["meal", "activity"]).optional(),
 });
 
+/** H24/H54: bulk hours CSV export filters — `userIds` scopes to an already-filtered client-side list. */
+export const hoursExportQuery = z.object({
+  format: z.enum(["reduced", "full"]).default("reduced"),
+  minHours: z.coerce.number().min(0).optional(),
+  userIds: z
+    .string()
+    .optional()
+    .transform((v) => (v ? v.split(",").map((id) => Number(id.trim())) : undefined)),
+});
+
+export const userHoursExportQuery = z.object({
+  format: z.enum(["reduced", "full"]).default("full"),
+});
+
 export const scanLogQuery = z.object({
   staffId: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),

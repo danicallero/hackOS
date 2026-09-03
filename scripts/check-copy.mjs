@@ -48,7 +48,9 @@ const RAW_COPY_GUARDS = [
     message: "the university example must use i18n",
   },
   {
-    file: "apps/web/src/app/(app)/logistics/accreditation/page.tsx",
+    // Accreditation's check-in method select merged into the unified
+    // logistics scan page (H22, H24).
+    file: "apps/web/src/app/(app)/logistics/presence/page.tsx",
     pattern: /<SelectItem value=["'](?:qr|nfc)["']>\s*(?:QR|NFC)\s*<\//,
     message: "scanner method labels must use i18n",
   },
