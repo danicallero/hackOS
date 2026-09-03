@@ -171,7 +171,7 @@ async function betterAuthPassthrough(
   if (request.method === "POST" && request.url.split("?", 1)[0] === "/api/auth/sign-in/email") {
     const email = signInEmail(request.body);
     if (email && response.ok) {
-      await recordReviewFixtureAuthentication(pool, email).catch(() => undefined);
+      await recordReviewFixtureAuthentication(pool, email, request.ip).catch(() => undefined);
     }
   }
 

@@ -63,6 +63,7 @@ const fixtureStatusAccountSchema = z.object({
   email: z.string().email().nullable(),
   active: z.boolean(),
   lastAuthenticatedAt: z.string().nullable(),
+  lastAuthenticatedIp: z.string().nullable(),
 });
 
 const regenerateResponseSchema = z.object({
@@ -413,6 +414,7 @@ export function registerReviewFixtureRoutes(app: FastifyInstance): void {
               `UPDATE review_fixture_accounts
                   SET user_id = $2, generation = $3,
                       last_authenticated_at = NULL,
+                      last_authenticated_ip = NULL,
                       updated_at = clock_timestamp()
                 WHERE fixture_key = $1`,
               [fixture.key, account.id, generation],
@@ -451,7 +453,7 @@ export function registerReviewFixtureRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Read synthetic reviewer fixture status",
         description:
-          "Returns only the current synthetic fixture scenario, generation and last successful sign-in time. It never returns passwords, PINs, user ids or participant response values.",
+          "Returns only the current synthetic fixture scenario, generation, current email address, availability and the most recent successful sign-in time with its trusted request IP. It never returns passwords, PINs, user ids, user agents or participant response values.",
         response: { 200: fixtureStatusResponseSchema },
       },
     },
@@ -462,9 +464,11 @@ export function registerReviewFixtureRoutes(app: FastifyInstance): void {
         generation: number;
         email: string | null;
         last_authenticated_at: Date | null;
+        last_authenticated_ip: string | null;
       }>(
         `SELECT fixture.fixture_key, fixture.user_id, fixture.generation,
-                account.email, fixture.last_authenticated_at
+                account.email, fixture.last_authenticated_at,
+                fixture.last_authenticated_ip
            FROM review_fixture_accounts fixture
            LEFT JOIN users account ON account.id = fixture.user_id
           ORDER BY fixture.fixture_key`,
@@ -479,7 +483,9 @@ export function registerReviewFixtureRoutes(app: FastifyInstance): void {
           kind: kindByKey.get(row.fixture_key) ?? "participant",
           email: row.email,
           active: row.user_id !== null,
-          lastAuthenticatedAt: row.last_authenticated_at?.toISOString() ?? null,
+          lastAuthenticatedAt:
+            row.user_id !== null ? (row.last_authenticated_at?.toISOString() ?? null) : null,
+          lastAuthenticatedIp: row.user_id !== null ? row.last_authenticated_ip : null,
         })),
       };
     },

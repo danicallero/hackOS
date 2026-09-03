@@ -2,7 +2,14 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { SearchIcon, SlidersHorizontalIcon, UsersIcon, XIcon } from "lucide-react";
+import {
+  ChevronRightIcon,
+  SearchIcon,
+  SlidersHorizontalIcon,
+  UsersIcon,
+  XIcon,
+} from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CapabilityGate } from "@/components/common/capability-gate";
@@ -258,6 +265,49 @@ function buildColumns(presentIds: Set<number> | null, t: Translate): Column<User
   ];
 }
 
+function UserMobileRow({ user, t }: { user: UserListItem; t: Translate }) {
+  const name = fullName(user);
+  return (
+    <Link
+      href={`/users/${user.id}`}
+      className="focus-visible:ring-ring flex min-w-0 items-start gap-3 px-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset"
+    >
+      <Avatar size="sm">
+        <AvatarFallback>{initials(user)}</AvatarFallback>
+      </Avatar>
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className="flex min-w-0 flex-wrap items-start gap-2">
+          <span className="min-w-0 flex-1 wrap-break-word font-medium">{name}</span>
+          {user.isTestAccount && (
+            <StatusBadge tone="warning" dot={false}>
+              {t("reviewFixture")}
+            </StatusBadge>
+          )}
+        </div>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <StatusBadge tone={ROLE_TONE} dot={false}>
+            {roleLabel(user.visibleRoleName, t)}
+          </StatusBadge>
+          <StatusBadge tone={user.emailVerified ? "success" : "warning"} dot={false}>
+            {user.emailVerified ? t("verified") : t("unverified")}
+          </StatusBadge>
+        </div>
+        <span className="text-muted-foreground block break-all font-mono text-xs">
+          {user.email}
+        </span>
+        <StatusBadge
+          tone={applicationTone(user.applicationStatus)}
+          dot={false}
+          className="capitalize"
+        >
+          {applicationLabel(user.applicationStatus, t)}
+        </StatusBadge>
+      </div>
+      <ChevronRightIcon className="text-muted-foreground mt-1 size-4 shrink-0" aria-hidden="true" />
+    </Link>
+  );
+}
+
 export default function UsersPage() {
   const { t } = useLocale();
   const COLUMN_LABEL = useMemo(() => columnLabel(t), [t]);
@@ -445,8 +495,8 @@ export default function UsersPage() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-full max-w-sm">
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+        <div className="relative col-span-2 w-full sm:max-w-sm">
           <label htmlFor="user-search" className="sr-only">
             {t("searchUsers")}
           </label>
@@ -481,12 +531,12 @@ export default function UsersPage() {
         <span
           role="status"
           aria-live="polite"
-          className="text-muted-foreground text-xs tabular-nums"
+          className="text-muted-foreground col-span-2 text-xs tabular-nums sm:col-span-1"
         >
           {t("tableResultCount", { count: filteredUsers.length })}
         </span>
         <Select value={emailFilter} onValueChange={setEmailFilter}>
-          <SelectTrigger className="h-9 w-40">
+          <SelectTrigger className="h-9 w-full sm:w-40">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -496,7 +546,7 @@ export default function UsersPage() {
           </SelectContent>
         </Select>
         <Select value={roleFilter} onValueChange={setRoleFilter}>
-          <SelectTrigger className="h-9 w-40">
+          <SelectTrigger className="h-9 w-full sm:w-40">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -509,7 +559,7 @@ export default function UsersPage() {
           </SelectContent>
         </Select>
         <Select value={spotFilter} onValueChange={setSpotFilter}>
-          <SelectTrigger className="h-9 w-44">
+          <SelectTrigger className="h-9 w-full sm:w-44">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -522,7 +572,7 @@ export default function UsersPage() {
         </Select>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="h-9">
+            <Button variant="outline" size="sm" className="h-9 w-full sm:w-auto">
               <SlidersHorizontalIcon />
               {t("columnsLabel")}
             </Button>
@@ -551,6 +601,7 @@ export default function UsersPage() {
         stateKey="users-list"
         getRowHref={(u) => `/users/${u.id}`}
         getRowLabel={(u) => `${u.name ?? ""} ${u.surname ?? ""}`.trim() || u.email}
+        renderMobileRow={(u) => <UserMobileRow user={u} t={t} />}
         pageSize={15}
         loading={loading}
         error={

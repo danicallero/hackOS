@@ -3,7 +3,6 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { config } from "../../src/config.js";
-import { recordReviewFixtureAuthentication } from "../../src/modules/identity/review-fixture-usage.js";
 import { logisticsStats } from "../../src/modules/logistics/stats.js";
 import {
   asUser,
@@ -230,12 +229,19 @@ describe("review fixture regeneration", () => {
           email: outside.email,
           active: true,
           lastAuthenticatedAt: null,
+          lastAuthenticatedIp: null,
         }),
       ]),
     );
 
     const { pool } = await import("../../src/db/pool.js");
-    await recordReviewFixtureAuthentication(pool, outside.email);
+    const login = await a.inject({
+      method: "POST",
+      url: "/api/auth/sign-in/email",
+      remoteAddress: "203.0.113.17",
+      payload: { email: outside.email, password: fixturePassword },
+    });
+    expect(login.statusCode).toBe(200);
     const statusAfter = await a.inject({
       method: "GET",
       url: "/api/admin/review-fixtures",
@@ -248,6 +254,7 @@ describe("review fixture regeneration", () => {
         (account: { fixtureKey: string }) => account.fixtureKey === outside.fixtureKey,
       );
     expect(used.lastAuthenticatedAt).toEqual(expect.any(String));
+    expect(used.lastAuthenticatedIp).toBe("203.0.113.17");
 
     const ordinaryList = await a.inject({
       method: "GET",
