@@ -155,3 +155,10 @@ export const judgingDataResetBody = z
   .strict();
 
 export const tvSlotPatchBody = tvSlotBody.partial();
+
+/** The venue TV's fixed display language (H42) — null clears the override. */
+export const tvConfigBody = z
+  .object({
+    language: z.enum(["es", "gl", "en"]).nullable(),
+  })
+  .strict();

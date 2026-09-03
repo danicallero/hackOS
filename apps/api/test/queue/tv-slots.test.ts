@@ -225,7 +225,7 @@ describe("tv venue config (H42)", () => {
     const { pool } = await import("../../src/db/pool.js");
 
     const before = await app.inject({ method: "GET", url: "/api/tv/config" });
-    expect(before.json()).toEqual({ wifi: null });
+    expect(before.json()).toEqual({ wifi: null, language: null });
 
     await pool.query(
       `INSERT INTO event_config (id, wifi_ssid, wifi_password)
@@ -235,7 +235,10 @@ describe("tv venue config (H42)", () => {
     );
 
     const after = await app.inject({ method: "GET", url: "/api/tv/config" });
-    expect(after.json()).toEqual({ wifi: { ssid: "hackos-guest", password: "s3cr3t" } });
+    expect(after.json()).toEqual({
+      wifi: { ssid: "hackos-guest", password: "s3cr3t" },
+      language: null,
+    });
 
     // The website's feed must not start carrying venue credentials.
     const publicEvent = await app.inject({ method: "GET", url: "/api/public/event" });

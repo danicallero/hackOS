@@ -2,7 +2,7 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { MonitorUpIcon, RadioIcon } from "lucide-react";
+import { GlobeIcon, MonitorUpIcon, RadioIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
@@ -23,19 +23,22 @@ import {
 import { useEventSource } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { formatScheduledDateTime } from "@/lib/datetime";
-import { useLocale } from "@/lib/i18n";
+import { isLanguage, languageName, useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import {
   clearTvOverride,
   DEFAULT_LIVE_CONFIG,
   getTvState,
+  getTvVenueConfig,
   type LiveScreenConfig,
   liveConfigFrom,
+  setTvLanguage,
   setTvMode,
   TV_CONTROL_MODES,
   type TvControlMode,
   type TvState,
 } from "@/lib/tv";
+import type { Language } from "@/lib/types";
 import { LiveModePreview } from "./live-preview";
 import { LiveSettings } from "./live-settings";
 import { Timetable } from "./timetable";
@@ -71,12 +74,15 @@ export default function TvControlPage() {
   const [busy, setBusy] = useState(false);
   const [timetableKey, setTimetableKey] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [tvLanguage, setTvLanguageState] = useState<Language | null>(null);
+  const [languageBusy, setLanguageBusy] = useState(false);
   const initializedRef = useRef(false);
 
   const load = useCallback(async () => {
     try {
-      const next = await getTvState();
+      const [next, venue] = await Promise.all([getTvState(), getTvVenueConfig()]);
       setCurrent(next);
+      setTvLanguageState(venue.language);
       setLoadError(null);
       // Only seed the draft from reality on first load — later live updates
       // (another admin changing the mode, or a timetable slot taking over)
@@ -102,16 +108,31 @@ export default function TvControlPage() {
     if (canControl) void load();
   }, [canControl, load]);
 
-  // Reflects the actual delivery pathway to the fleet: if this drops, the TV
-  // wall isn't receiving live changes either (they share the same SSE topic).
-  const { connected } = useEventSource("/api/tv/stream", {
-    events: [EVENTS.TV_MODE_CHANGED, EVENTS.TV_SCHEDULE_CHANGED],
+  // Authenticated tv-topic stream so this page (and other operators watching
+  // it) picks up mode/timetable/language changes broadcast by anyone, not
+  // just this tab's own PATCH response. The public wall gets the same
+  // broadcast via its own payload-free /api/tv/stream mirror.
+  const { connected } = useEventSource("/api/events/stream?topic=tv", {
+    events: [EVENTS.TV_MODE_CHANGED, EVENTS.TV_SCHEDULE_CHANGED, EVENTS.TV_CONFIG_CHANGED],
     onEvent: (event) => {
       void load();
       if (event.type === EVENTS.TV_SCHEDULE_CHANGED) setTimetableKey((key) => key + 1);
     },
     enabled: canControl,
   });
+
+  async function changeTvLanguage(next: Language | null) {
+    setLanguageBusy(true);
+    try {
+      const venue = await setTvLanguage(next);
+      setTvLanguageState(venue.language);
+      toast.success(t("tvLanguageUpdated"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateTvLanguage"));
+    } finally {
+      setLanguageBusy(false);
+    }
+  }
 
   function expiresAtFor(option: ExpiryOption): string | null {
     if (option === "none") return null;
@@ -322,6 +343,34 @@ export default function TvControlPage() {
             <p className="text-muted-foreground text-sm">{t("autoRevertHint")}</p>
           </div>
         )}
+      </SectionCard>
+
+      <SectionCard
+        icon={GlobeIcon}
+        title={t("tvDisplayLanguage")}
+        description={t("tvDisplayLanguageDesc")}
+      >
+        <div className="grid gap-2 sm:max-w-xs">
+          <Select
+            value={tvLanguage ?? "default"}
+            disabled={languageBusy}
+            onValueChange={(value) =>
+              void changeTvLanguage(value === "default" ? null : isLanguage(value) ? value : null)
+            }
+          >
+            <SelectTrigger aria-label={t("tvDisplayLanguage")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="default">{t("tvDisplayLanguageDefault")}</SelectItem>
+              {(["es", "gl", "en"] as const).map((item) => (
+                <SelectItem key={item} value={item}>
+                  {languageName(item)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </SectionCard>
 
       {/* Remounted (not just refetched) when another admin edits the

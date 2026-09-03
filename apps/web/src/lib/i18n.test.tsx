@@ -1,17 +1,20 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import vm from "node:vm";
+import { usePathname } from "next/navigation";
 import { act } from "react";
-import { hydrateRoot, type Root } from "react-dom/client";
+import { createRoot, hydrateRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LocaleProvider, useLocale } from "./i18n";
+import { useMe } from "./session";
 import type { Language } from "./types";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
-vi.mock("./session", () => ({ useMe: () => null }));
+vi.mock("./session", () => ({ useMe: vi.fn(() => null) }));
+vi.mock("next/navigation", () => ({ usePathname: vi.fn(() => "/") }));
 
 const bootstrapScript = readFileSync(resolve(process.cwd(), "public/locale-bootstrap.js"), "utf8");
 const globalStyles = readFileSync(resolve(process.cwd(), "src/app/globals.css"), "utf8");
@@ -191,5 +194,51 @@ describe("LocaleProvider hydration", () => {
     expect(document.documentElement.dataset.localeReady).toBe("true");
     expect(document.documentElement.matches('html[data-locale-ready="false"]')).toBe(false);
     expect(consoleError.mock.calls.flat().join("\n")).not.toContain("Hydration failed");
+  });
+});
+
+describe("LocaleProvider kiosk guard", () => {
+  let root: Root | undefined;
+
+  afterEach(() => {
+    if (root) act(() => root?.unmount());
+    root = undefined;
+    document.body.replaceChildren();
+    document.documentElement.lang = "es";
+    document.documentElement.dataset.localeReady = "false";
+    vi.mocked(usePathname).mockReturnValue("/");
+    vi.mocked(useMe).mockReturnValue(null);
+  });
+
+  async function renderLocalized() {
+    const container = document.createElement("div");
+    document.body.append(container);
+    await act(async () => {
+      root = createRoot(container);
+      root.render(
+        <LocaleProvider>
+          <LocalizedCopy />
+        </LocaleProvider>,
+      );
+    });
+    return container;
+  }
+
+  it("ignores the signed-in caller's language preference on the public TV kiosk (/tv)", async () => {
+    vi.mocked(usePathname).mockReturnValue("/tv");
+    vi.mocked(useMe).mockReturnValue({ language: "en" } as ReturnType<typeof useMe>);
+
+    const container = await renderLocalized();
+
+    expect(container.textContent).toBe(welcome.es);
+  });
+
+  it("still follows the caller's language preference off the kiosk route", async () => {
+    vi.mocked(usePathname).mockReturnValue("/settings");
+    vi.mocked(useMe).mockReturnValue({ language: "en" } as ReturnType<typeof useMe>);
+
+    const container = await renderLocalized();
+
+    expect(container.textContent).toBe(welcome.en);
   });
 });

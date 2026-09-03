@@ -122,6 +122,24 @@ whatever is running stays visible, past entries dim and scroll away — and stop
 scrolling once the last page would show blank rows (`upcomingWindow()`, unit
 tested in `apps/web/src/lib/tv.test.ts`).
 
+## Display language
+
+The wall renders in a fixed, operator-chosen language — never a signed-in
+caller's own account preference. A staff session cookie sitting in the kiosk
+browser must never change what a public screen shows, so `LocaleProvider`
+(`apps/web/src/lib/i18n.ts`) skips its usual "follow the caller's own
+language" sync on `/tv`; `TvDisplay`'s own `load()` is the only thing that
+calls `setLanguage` there, driven by the venue config it already fetches.
+
+`language` lives in `event_config.tv_language` (migration 0009, nullable —
+null means "no override", the wall falls back to Spanish) alongside the Wi-Fi
+fields, so it survives control-page reloads and applies even when nobody is
+at the control page. `GET /api/tv/config` serves it publicly; `PATCH
+/api/tv/config` (capability `TV_CONTROL`, audited under `event_config`)
+sets it from the **Display language** section of `/tv/control` and broadcasts
+`tv.config.changed` on the `tv` topic, mirrored to the public wall like every
+other TV change.
+
 ## Venue Wi-Fi
 
 Credentials live in `event_config` (`wifi_ssid`, `wifi_password`,
@@ -195,7 +213,7 @@ fewer than two (`bestSponsorColumns`).
 
 ## Control panel
 
-`/tv/control` (capability `TV_CONTROL`) has three parts:
+`/tv/control` (capability `TV_CONTROL`) has four parts:
 
 1. **Current broadcast** — live preview, SSE connection state, and *why* the
    screens show what they show (override / timetable slot / default), with
@@ -203,14 +221,16 @@ fewer than two (`bestSponsorColumns`).
 2. **Display mode** — the manual broadcast for live, rooms, schedule, sponsors,
    and Wi-Fi. Wi-Fi has no credential editor; it reads event configuration.
    Announcements and standalone countdowns are not selectable modes.
-3. **Screen timetable** — slot CRUD. Slot mutations are audited (H53) and
+3. **Display language** — sets the wall's fixed render language (or clears the
+   override back to the default), independent of mode/timetable state.
+4. **Screen timetable** — slot CRUD. Slot mutations are audited (H53) and
    broadcast `tv.schedule.changed`; editing the running slot changes the wall
    immediately rather than at the next tick.
 
 ## Related
 
-- Events: `TV_MODE_CHANGED`, `TV_SCHEDULE_CHANGED` in
-  `packages/shared/src/events.ts`, both on the `tv` SSE topic.
+- Events: `TV_MODE_CHANGED`, `TV_SCHEDULE_CHANGED`, `TV_CONFIG_CHANGED` in
+  `packages/shared/src/events.ts`, all on the `tv` SSE topic.
 - [Design rulebook](./DESIGN.md) — TV surface rules.
 - [Event config & Wallet pass](./event-config-wallet.md) — the `event_config`
   singleton the Wi-Fi fields join.

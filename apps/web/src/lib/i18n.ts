@@ -7,6 +7,7 @@ import webEs from "@hackos/shared/locales/es/web.json";
 import commonGl from "@hackos/shared/locales/gl/common.json";
 import webGl from "@hackos/shared/locales/gl/web.json";
 import i18next from "i18next";
+import { usePathname } from "next/navigation";
 import {
   createContext,
   createElement,
@@ -101,6 +102,10 @@ declare global {
 
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const me = useMe();
+  // The venue TV (H41) must render identically no matter whose session cookie
+  // happens to be in that browser — never follow a signed-in caller's own
+  // language preference there.
+  const isKiosk = usePathname() === "/tv";
   // Keep the first client render identical to the Spanish SSR shell (H7). The
   // bootstrap script's language is applied in a layout effect before paint,
   // so a persisted non-Spanish preference never causes a hydration mismatch.
@@ -125,10 +130,11 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   }, [language]);
 
   useEffect(() => {
+    if (isKiosk) return;
     // Safe: syncing language state to async user preference loaded after mount.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (isLanguage(me?.language)) setLanguage(me.language);
-  }, [me?.language]);
+  }, [me?.language, isKiosk]);
   useEffect(() => {
     try {
       window.localStorage.setItem(LANGUAGE_PREFERENCE_KEY, language);

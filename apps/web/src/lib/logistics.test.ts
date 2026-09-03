@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { type PublicScheduleItem, resolveScheduleText } from "./logistics";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { logisticsApi, type PublicScheduleItem, resolveScheduleText } from "./logistics";
 
 function item(overrides: Partial<PublicScheduleItem> = {}): PublicScheduleItem {
   return {
@@ -17,6 +17,44 @@ function item(overrides: Partial<PublicScheduleItem> = {}): PublicScheduleItem {
     ...overrides,
   };
 }
+
+describe("logisticsApi.publicSchedule", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("omits credentials for the venue TV so a staff session cookie never widens the projection", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      text: async () => JSON.stringify({ items: [] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await logisticsApi.publicSchedule({ anonymous: true });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ credentials: "omit" }),
+    );
+  });
+
+  it("keeps the caller's session by default", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      text: async () => JSON.stringify({ items: [] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await logisticsApi.publicSchedule();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ credentials: "include" }),
+    );
+  });
+});
 
 describe("resolveScheduleText", () => {
   it("resolves translated descriptions independently from titles", () => {

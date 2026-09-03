@@ -588,6 +588,46 @@ describe("TV mode (H42)", () => {
   });
 });
 
+describe("TV display language (H42)", () => {
+  it("defaults to null, PATCH requires TV_CONTROL, persists in event_config and broadcasts on tv", async () => {
+    const initial = await app.inject({ method: "GET", url: "/api/tv/config" }); // public
+    expect(initial.statusCode).toBe(200);
+    expect(initial.json()).toMatchObject({ language: null });
+
+    const forbidden = await app.inject({
+      method: "PATCH",
+      url: "/api/tv/config",
+      headers: asUser(operatorId),
+      payload: { language: "gl" },
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const tvController = await createUserWithCapabilities([CAPABILITIES.TV_CONTROL]);
+    const before = await broadcastCount("tv");
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/api/tv/config",
+      headers: asUser(tvController),
+      payload: { language: "gl" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ language: "gl" });
+    expect(await broadcastCount("tv")).toBe(before + 1); // TV_CONFIG_CHANGED
+
+    const read = await app.inject({ method: "GET", url: "/api/tv/config" });
+    expect(read.json()).toMatchObject({ language: "gl" });
+
+    // Clearing the override goes back to null (the TV's own default).
+    const cleared = await app.inject({
+      method: "PATCH",
+      url: "/api/tv/config",
+      headers: asUser(tvController),
+      payload: { language: null },
+    });
+    expect(cleared.json()).toMatchObject({ language: null });
+  });
+});
+
 describe("SSE streams (H41/H42)", () => {
   it("keeps the operational queue stream authorized while the TV stream remains public", async () => {
     const anonymousQueue = await app.inject({ method: "GET", url: "/api/queue/stream" });
@@ -615,5 +655,28 @@ describe("SSE streams (H41/H42)", () => {
       expect(firstChunk.toString()).toContain(": connected");
       res.stream().destroy();
     }
+  });
+
+  it("gates the authenticated tv refresh stream behind TV_CONTROL (H42)", async () => {
+    const anonymous = await app.inject({ method: "GET", url: "/api/events/stream?topic=tv" });
+    expect(anonymous.statusCode).toBe(401);
+
+    const forbidden = await app.inject({
+      method: "GET",
+      url: "/api/events/stream?topic=tv",
+      headers: asUser(operatorId),
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const tvController = await createUserWithCapabilities([CAPABILITIES.TV_CONTROL]);
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/events/stream?topic=tv",
+      headers: asUser(tvController),
+      payloadAsStream: true,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toBe("text/event-stream");
+    res.stream().destroy();
   });
 });

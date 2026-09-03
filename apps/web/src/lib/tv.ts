@@ -1,5 +1,6 @@
 import type { PublicEvent } from "@/components/public/public-types";
 import { api } from "@/lib/api";
+import type { Language } from "@/lib/types";
 
 /**
  * TV display model (H41/H42): what the venue screens show, the timetable that
@@ -51,6 +52,8 @@ export interface TvState {
 
 export interface TvVenueConfig {
   wifi: { ssid: string; password: string | null } | null;
+  /** Operator-chosen language every screen renders in; null follows the default. */
+  language: Language | null;
 }
 
 // ── api ──────────────────────────────────────────────────────────────────
@@ -63,6 +66,9 @@ export const setTvMode = (
 /** "Back to schedule": drops the override so the timetable takes over again. */
 export const clearTvOverride = () => api.delete<TvState>("/api/tv/mode");
 export const getTvVenueConfig = () => api.get<TvVenueConfig>("/api/tv/config");
+/** Sets the wall's fixed display language; null clears the override. */
+export const setTvLanguage = (language: Language | null) =>
+  api.patch<TvVenueConfig>("/api/tv/config", { language });
 
 export interface TvSlotInput {
   label?: string | null;
