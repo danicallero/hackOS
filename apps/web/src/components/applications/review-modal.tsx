@@ -387,7 +387,7 @@ export function ReviewModal({
     >
       <div className="space-y-4">
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="min-w-0">
+          <div className="min-w-0 lg:max-h-[65vh] lg:overflow-y-auto lg:pr-1">
             <AnswersSection
               template={template}
               applicationId={applicationId}
@@ -407,7 +407,7 @@ export function ReviewModal({
             />
           </div>
 
-          <div className="min-w-0 space-y-4">
+          <div className="min-w-0 space-y-4 lg:max-h-[65vh] lg:overflow-y-auto lg:pr-1">
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge tone={statusTone(st)}>{applicationStatusLabel(st, t)}</StatusBadge>
               {reviewedByMe && (
@@ -427,15 +427,6 @@ export function ReviewModal({
               {response.review_count === 1 ? t("reviewWord") : t("reviewsWord")}
             </p>
 
-            {canReview && (
-              <StaffNotesCard
-                staffNotes={staffNotes}
-                setStaffNotes={setStaffNotes}
-                savingNotes={savingNotes}
-                saveStaffNotes={saveStaffNotes}
-              />
-            )}
-
             {canScore && (
               <MyReviewCard
                 myScore={myScore}
@@ -447,6 +438,15 @@ export function ReviewModal({
             )}
 
             {otherReviews.length > 0 && <ReviewWall reviews={otherReviews} />}
+
+            {canReview && (
+              <StaffNotesCard
+                staffNotes={staffNotes}
+                setStaffNotes={setStaffNotes}
+                savingNotes={savingNotes}
+                saveStaffNotes={saveStaffNotes}
+              />
+            )}
 
             {/* Accept/reject inline here (H13/H14) — no separate "decisions" tab. */}
             {workspace === "review" && st === "review" && (
