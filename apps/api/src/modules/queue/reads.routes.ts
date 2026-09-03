@@ -54,6 +54,7 @@ const scopedRefreshTopic = z.enum([
   SSE_TOPICS.SPONSORS,
   SSE_TOPICS.LOGISTICS,
   SSE_TOPICS.AUDIT,
+  SSE_TOPICS.TV,
 ]);
 const scopedRefreshQuery = z.object({ topic: scopedRefreshTopic });
 
@@ -76,6 +77,14 @@ async function requireScopedRefreshAccess(
     if (!(await userHasCapability(userId, CAPABILITIES.AUDIT_READ, request))) {
       throw new ForbiddenError(`Missing capability: ${CAPABILITIES.AUDIT_READ}`, {
         capability: CAPABILITIES.AUDIT_READ,
+      });
+    }
+    return;
+  }
+  if (topic === SSE_TOPICS.TV) {
+    if (!(await userHasCapability(userId, CAPABILITIES.TV_CONTROL, request))) {
+      throw new ForbiddenError(`Missing capability: ${CAPABILITIES.TV_CONTROL}`, {
+        capability: CAPABILITIES.TV_CONTROL,
       });
     }
     return;
@@ -270,7 +279,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
         querystring: scopedRefreshQuery,
         summary: "Authenticated domain refresh stream",
         description:
-          "Payload-free, domain-scoped refresh stream for signed-in clients. The topic is required; sensitive audit and logistics streams retain their capability boundary, while domain events disclose no mutation payload.",
+          "Payload-free, domain-scoped refresh stream for signed-in clients. The topic is required; sensitive audit, logistics and tv streams retain their capability boundary, while domain events disclose no mutation payload.",
       },
     },
     async (req, reply) => {

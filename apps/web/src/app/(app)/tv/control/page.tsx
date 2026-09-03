@@ -102,9 +102,11 @@ export default function TvControlPage() {
     if (canControl) void load();
   }, [canControl, load]);
 
-  // Reflects the actual delivery pathway to the fleet: if this drops, the TV
-  // wall isn't receiving live changes either (they share the same SSE topic).
-  const { connected } = useEventSource("/api/tv/stream", {
+  // Authenticated tv-topic stream so this page (and other operators watching
+  // it) picks up mode/timetable changes broadcast by anyone, not just this
+  // tab's own PATCH response. The public wall gets the same broadcast via its
+  // own payload-free /api/tv/stream mirror.
+  const { connected } = useEventSource("/api/events/stream?topic=tv", {
     events: [EVENTS.TV_MODE_CHANGED, EVENTS.TV_SCHEDULE_CHANGED],
     onEvent: (event) => {
       void load();

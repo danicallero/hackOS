@@ -970,7 +970,7 @@ export function TvDisplay() {
           getTvState(),
           api.get<PublicEvent>("/api/public/event"),
           getAllRoomViews(),
-          logisticsApi.publicSchedule(),
+          logisticsApi.publicSchedule({ anonymous: true }),
           api.get<{ items: PublicSponsor[] }>("/api/public/sponsors"),
           api.get<{ items: PublicAnnouncement[] }>("/api/announcements/public"),
           getTvVenueConfig(),

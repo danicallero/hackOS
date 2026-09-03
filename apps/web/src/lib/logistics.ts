@@ -406,7 +406,16 @@ export const logisticsApi = {
     api.get<{ items: ScannableActivity[] }>("/api/activities/scannable", {
       query: category ? { category } : undefined,
     }),
-  publicSchedule: () => api.get<{ items: PublicScheduleItem[] }>("/api/public/activities"),
+  /**
+   * `anonymous: true` strips the session cookie so a caller with a staff
+   * session never gets the staff-only draft/run-of-show projection (the venue
+   * TV wall must render identically no matter who is signed into that
+   * browser) — see the route's schema description for the staff branch.
+   */
+  publicSchedule: (options?: { anonymous?: boolean }) =>
+    api.get<{ items: PublicScheduleItem[] }>("/api/public/activities", {
+      ...(options?.anonymous ? { credentials: "omit" } : {}),
+    }),
   schedule: () => api.get<{ items: PublicScheduleItem[] }>("/api/schedule"),
   createSchedule: (body: ScheduleInput) =>
     api.post<PublicScheduleItem>("/api/schedule", { ...body }),

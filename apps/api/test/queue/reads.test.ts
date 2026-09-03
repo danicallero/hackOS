@@ -616,4 +616,27 @@ describe("SSE streams (H41/H42)", () => {
       res.stream().destroy();
     }
   });
+
+  it("gates the authenticated tv refresh stream behind TV_CONTROL (H42)", async () => {
+    const anonymous = await app.inject({ method: "GET", url: "/api/events/stream?topic=tv" });
+    expect(anonymous.statusCode).toBe(401);
+
+    const forbidden = await app.inject({
+      method: "GET",
+      url: "/api/events/stream?topic=tv",
+      headers: asUser(operatorId),
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const tvController = await createUserWithCapabilities([CAPABILITIES.TV_CONTROL]);
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/events/stream?topic=tv",
+      headers: asUser(tvController),
+      payloadAsStream: true,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toBe("text/event-stream");
+    res.stream().destroy();
+  });
 });
