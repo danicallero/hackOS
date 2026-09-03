@@ -6,7 +6,6 @@ import {
   CalendarDaysIcon,
   ChartColumnIcon,
   ClipboardListIcon,
-  DoorOpenIcon,
   FileTextIcon,
   FolderGitIcon,
   GavelIcon,
@@ -288,11 +287,13 @@ export const WORKSPACES: Workspace[] = [
     items: [
       // Logistics is split per physical station (H22-H27); each entry shows
       // only for operators who hold that station's capability (H55).
+      // Accreditation and presence share one station/page (unified scan +
+      // people finder), so this entry shows for either capability.
       {
-        title: "accreditation",
-        href: "/logistics/accreditation",
+        title: "accreditationAndPresence",
+        href: "/logistics/presence",
         icon: BadgeCheckIcon,
-        capability: CAPABILITIES.ACCREDIT_SCAN,
+        anyCapability: [CAPABILITIES.ACCREDIT_SCAN, CAPABILITIES.PRESENCE_SCAN],
       },
       {
         title: "meals",
@@ -305,12 +306,6 @@ export const WORKSPACES: Workspace[] = [
         href: "/logistics/activities",
         icon: ActivityIcon,
         capability: CAPABILITIES.ACTIVITY_SCAN,
-      },
-      {
-        title: "presence",
-        href: "/logistics/presence",
-        icon: DoorOpenIcon,
-        capability: CAPABILITIES.PRESENCE_SCAN,
       },
       {
         title: "logisticsStats",

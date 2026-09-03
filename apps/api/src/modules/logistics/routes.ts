@@ -31,7 +31,7 @@ import { logisticsTopicForFixture } from "./active-broadcast.js";
 import { activityScan } from "./activities.js";
 import { buildGoogleSaveUrl } from "./google-wallet.js";
 import { enqueueMealScanBatch } from "./offline-meals.js";
-import { searchPeople } from "./people.js";
+import { listPeople, searchPeople } from "./people.js";
 import {
   allHours,
   createPresenceSignal,
@@ -47,6 +47,7 @@ import {
   updateTimeLog,
   userHours,
 } from "./presence.js";
+import { exportHoursCsv } from "./presence-export.js";
 import { isSyntheticOperator } from "./review-fixture-scope.js";
 import { queryScanLog, staffScanCounts, staffScanRanking } from "./scan-log.js";
 import { scannerSnapshot } from "./scanner-sync.js";
@@ -76,6 +77,7 @@ import {
   appleRegistrationsQuery,
   checkInBody,
   checkInUserBody,
+  hoursExportQuery,
   languageSchema,
   lookupBody,
   lookupUserBody,
@@ -107,6 +109,7 @@ import {
   ticketResponse,
   timeLogIdParam,
   timeLogPatchBody,
+  userHoursExportQuery,
   userIdParam,
   walletAccessQuery,
   walletPurposeParam,
@@ -327,6 +330,20 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     }),
   );
 
+  typed.get(
+    "/api/logistics/people",
+    {
+      ...routeAccess(access.logisticsRead),
+      preHandler: logisticsRead,
+      schema: {
+        summary: "Full people roster for the logistics people finder",
+        description:
+          "Unlike /api/logistics/people/search (query-required), this returns the whole active roster — id, name, surname, email, current badge, DNI, effective role name, confirmed-spot flag, and ground-truth present flag (last door scan, not an estimate) — for a client-side directory that filters locally, mirroring the mobile app's offline-synced people finder (H22-H24). Capped at 2000 rows (no pagination UI is planned for this list). Anonymized accounts (H54) are excluded. Read-only; any logistics capability grants access.",
+      },
+    },
+    async (req) => ({ items: await listPeople(actor(req.userId)) }),
+  );
+
   // ── H22 accreditation ────────────────────────────────────────────────────
 
   typed.post(
@@ -492,6 +509,61 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: { params: userIdParam },
     },
     async (req) => userHours(req.params.userId, undefined, actor(req.userId)),
+  );
+
+  // H24/H54: bulk + single-user hours CSV exports, gated stricter than plain
+  // presence:scan since the export carries DNI + email for many people at once.
+  typed.get(
+    "/api/presence/hours/export.csv",
+    {
+      ...routeAccess(access.stats),
+      preHandler: stats,
+      schema: {
+        querystring: hoursExportQuery,
+        summary: "Export presence hours as CSV",
+        description:
+          "Bulk hours export for the presence Hours tab (H24/H54). `format=reduced` (default) is one row per participant: user_id, name, surname, email, dni, hours. `format=full` adds one `detail` row per presence interval under each participant's `summary` row (row_type column distinguishes them; summary-only and detail-only columns are blank on the other kind), so the interval breakdown stays inside one valid CSV table. `userIds` (comma-separated) scopes the export to an already-filtered client-side list; `minHours` is an additional server-side floor applied on top. Requires logistics:stats.",
+      },
+    },
+    async (req, reply) => {
+      const csv = await exportHoursCsv({
+        format: req.query.format,
+        minHours: req.query.minHours,
+        userIds: req.query.userIds,
+        actorId: actor(req.userId),
+      });
+      reply.header("content-type", "text/csv; charset=utf-8");
+      reply.header("content-disposition", 'attachment; filename="presence-hours.csv"');
+      return reply.send(csv);
+    },
+  );
+
+  typed.get(
+    "/api/presence/hours/:userId/export.csv",
+    {
+      ...routeAccess(access.stats),
+      preHandler: stats,
+      schema: {
+        params: userIdParam,
+        querystring: userHoursExportQuery,
+        summary: "Export one participant's presence hours as CSV",
+        description:
+          "Same shape as GET /api/presence/hours/export.csv but scoped to a single participant (H24/H54) — used from that person's profile page. Requires logistics:stats.",
+      },
+    },
+    async (req, reply) => {
+      const csv = await exportHoursCsv({
+        format: req.query.format,
+        userIds: [req.params.userId],
+        actorId: actor(req.userId),
+      });
+      reply.header("content-type", "text/csv; charset=utf-8");
+      reply.header(
+        "content-disposition",
+        `attachment; filename="presence-hours-${req.params.userId}.csv"`,
+      );
+      return reply.send(csv);
+    },
   );
 
   // Raw scan admin — view/correct individual door scans (H24 usability).

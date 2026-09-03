@@ -43,6 +43,19 @@ export interface PersonSearchResult {
   confirmed?: boolean;
 }
 
+/** Full roster row for the logistics people finder — mirrors the mobile scanner directory. */
+export interface PersonDirectoryEntry {
+  userId: number;
+  name: string | null;
+  surname: string | null;
+  email: string | null;
+  badgeId: string | null;
+  dni: string | null;
+  role: string | null;
+  confirmed: boolean;
+  present: boolean;
+}
+
 export interface CheckInResult {
   userId: number;
   badgeId: string;
@@ -345,6 +358,7 @@ export function idempotencyHeaders(prefix: string): Record<string, string> {
 export const logisticsApi = {
   searchPeople: (q: string, fields?: PersonSearchField[]) =>
     api.post<{ results: PersonSearchResult[] }>("/api/logistics/people/search", { q, fields }),
+  listPeople: () => api.get<{ items: PersonDirectoryEntry[] }>("/api/logistics/people"),
   lookup: (ticketToken: string) =>
     api.post<AccreditationLookup>("/api/accreditation/lookup", { ticketToken }),
   lookupUser: (userId: number) =>

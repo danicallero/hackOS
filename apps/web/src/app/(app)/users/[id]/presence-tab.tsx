@@ -4,7 +4,7 @@
 // four modals that edit or delete a log.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { ClockIcon, PlusIcon } from "lucide-react";
+import { ClockIcon, DownloadIcon, PlusIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
+import { API_URL } from "@/lib/env";
 import { LOCALE_CODES, useLocale } from "@/lib/i18n";
 import {
   logisticsApi,
@@ -62,6 +63,7 @@ export function PresenceSection({ userId, refreshKey }: { userId: number; refres
   const { canAny } = useSessionContext();
   const canRead = canAny(CAPABILITIES.PRESENCE_SCAN, CAPABILITIES.LOGISTICS_STATS);
   const canEdit = useCan(CAPABILITIES.PRESENCE_SCAN);
+  const canExport = useCan(CAPABILITIES.LOGISTICS_STATS);
   const [data, setData] = useState<PresenceData | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "forbidden" | "error">("loading");
   const [loadError, setLoadError] = useState("");
@@ -130,11 +132,23 @@ export function PresenceSection({ userId, refreshKey }: { userId: number; refres
       icon={ClockIcon}
       title={t("presence")}
       action={
-        canEdit ? (
-          <Button type="button" onClick={() => setAddingSignal(true)}>
-            <PlusIcon className="size-4" aria-hidden="true" />
-            {t("addPresenceSignal")}
-          </Button>
+        canEdit || canExport ? (
+          <div className="flex flex-wrap gap-2">
+            {canExport && (
+              <Button asChild variant="outline">
+                <a href={`${API_URL}/api/presence/hours/${userId}/export.csv?format=full`}>
+                  <DownloadIcon className="size-4" aria-hidden="true" />
+                  {t("exportHoursDetailed")}
+                </a>
+              </Button>
+            )}
+            {canEdit && (
+              <Button type="button" onClick={() => setAddingSignal(true)}>
+                <PlusIcon className="size-4" aria-hidden="true" />
+                {t("addPresenceSignal")}
+              </Button>
+            )}
+          </div>
         ) : undefined
       }
     >

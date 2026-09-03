@@ -510,6 +510,60 @@ export async function allHours(cutoff?: number, actorId?: number) {
     .sort((a, b) => a.userId - b.userId);
 }
 
+/**
+ * H24/H54: bulk hours WITH per-record breakdown, for CSV export. `userIds`
+ * scopes to a subset (e.g. the caller's currently-filtered hours table) —
+ * omitted, every user with presence signals is included. Reuses the same
+ * interval math as `userHours`/`allHours` instead of duplicating it.
+ */
+export async function hoursWithBreakdown(userIds?: number[], cutoff?: number, actorId?: number) {
+  const now = cutoff ?? (await databaseNow()).getTime();
+  const syntheticOperator = actorId != null && (await isSyntheticOperator(pool, actorId));
+  const map = await loadEvents(undefined, {
+    accountScope: syntheticOperator ? "synthetic" : "real",
+  });
+  const suspiciousGapMs = await certaintyWindowMs();
+  const wantedIds = userIds != null ? new Set(userIds) : null;
+  const allIds = [...map.keys()].filter((id) => wantedIds == null || wantedIds.has(id));
+  if (allIds.length === 0) return [];
+
+  const fixtureFilter = await fixtureReadFilter(pool, actorId, "u");
+  const { rows: people } = await pool.query(
+    `SELECT u.id, u.name, u.surname, u.dni FROM users u
+      WHERE u.id = ANY($1) AND u.account_state = 'active' AND u.anonymized_at IS NULL
+        ${syntheticOperator ? fixtureFilter : "AND u.is_test_account = false"}`,
+    [allIds],
+  );
+  const byId = new Map(
+    (
+      people as { id: number; name: string | null; surname: string | null; dni: string | null }[]
+    ).map((p) => [p.id, p]),
+  );
+
+  return allIds
+    .filter((userId) => byId.has(userId))
+    .map((userId) => {
+      const events = map.get(userId) ?? [];
+      const person = byId.get(userId)!;
+      const intervals = buildPresenceIntervals(events, now, { suspiciousGapMs });
+      return {
+        userId,
+        name: person.name,
+        surname: person.surname,
+        dni: person.dni,
+        hours: round2(totalPresenceMs(events, now, { suspiciousGapMs }) / MS_PER_HOUR),
+        intervals: intervals.map((i) => ({
+          kind: "in_out" as const,
+          start: new Date(i.start).toISOString(),
+          end: new Date(i.end).toISOString(),
+          confirmed: i.confirmed,
+          contributedHours: round2((i.end - i.start) / MS_PER_HOUR),
+        })),
+      };
+    })
+    .sort((a, b) => a.userId - b.userId);
+}
+
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }

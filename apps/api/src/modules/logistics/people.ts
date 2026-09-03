@@ -111,6 +111,72 @@ export async function searchPeople(
   );
 }
 
+export interface RosterEntry {
+  userId: number;
+  name: string | null;
+  surname: string | null;
+  email: string;
+  badgeId: string | null;
+  dni: string | null;
+  role: string | null;
+  confirmed: boolean;
+  present: boolean;
+}
+
+/**
+ * Full active roster for a client-side people finder (mirrors the mobile
+ * scanner's offline-synced directory, apps/mobile/lib/scanner-db.ts). Unlike
+ * `searchPeople`, this has no query — the caller filters locally. Capped so
+ * an unbounded roster can't turn this into an unpaginated full-table read.
+ * `role`/`present` reuse the same read models as scanner-sync.ts's snapshot
+ * (H8 effective role name; ground-truth last door scan, not an estimate).
+ */
+export async function listPeople(actorId?: number): Promise<RosterEntry[]> {
+  const fixtureFilter = await fixtureReadFilter(pool, actorId, "u");
+  const { rows } = await pool.query(
+    `SELECT u.id, u.name, u.surname, u.email, u.badge_id, u.dni, uern.role_name AS role,
+            EXISTS (
+              SELECT 1 FROM application_responses ar
+               WHERE ar.user_id = u.id AND ar.status = 'confirmed'
+            ) AS confirmed,
+            last_presence.kind = 'in' AS present
+       FROM users u
+       LEFT JOIN user_effective_role_name uern ON uern.user_id = u.id
+       LEFT JOIN LATERAL (
+         SELECT tl.kind FROM time_logs tl
+          WHERE tl.user_id = u.id AND tl.scanned_at <= now()
+          ORDER BY tl.scanned_at DESC, tl.id DESC
+          LIMIT 1
+       ) last_presence ON true
+      WHERE u.account_state = 'active' AND u.anonymized_at IS NULL${fixtureFilter}
+      ORDER BY u.surname NULLS LAST, u.name NULLS LAST, u.id
+      LIMIT 2000`,
+  );
+  return (
+    rows as {
+      id: number;
+      name: string | null;
+      surname: string | null;
+      email: string;
+      badge_id: string | null;
+      dni: string | null;
+      role: string | null;
+      confirmed: boolean;
+      present: boolean | null;
+    }[]
+  ).map((r) => ({
+    userId: r.id,
+    name: r.name,
+    surname: r.surname,
+    email: r.email,
+    badgeId: r.badge_id,
+    dni: r.dni,
+    role: r.role,
+    confirmed: r.confirmed,
+    present: Boolean(r.present),
+  }));
+}
+
 async function loadResults(
   userIds: number[],
   matchedBy: PersonMatch,
