@@ -9,6 +9,12 @@ import { Button } from "@/components/ui/button"
 import { overlayVariants } from "@/components/ui/surface"
 import { useLocale } from "@/lib/i18n"
 
+/** Bare icon-button treatment shared by the dialog's close button and any
+ *  other icon-only controls placed in the header (e.g. prev/next paging) —
+ *  keeps them visually identical: same size, no box, same opacity/hover. */
+export const dialogIconButtonClass =
+  "flex size-[var(--control-height-compact)] items-center justify-center rounded-control opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none disabled:opacity-30 data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+
 function Dialog({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
@@ -74,7 +80,7 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="absolute top-3 right-3 flex size-[var(--control-height-compact)] items-center justify-center rounded-control opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            className={cn("absolute top-3 right-3", dialogIconButtonClass)}
           >
             <XIcon />
             <span className="sr-only">{t("close")}</span>

@@ -38,6 +38,7 @@ import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { type FieldValue, TemplateFieldControl } from "@/components/common/template-field-control";
 import { Button } from "@/components/ui/button";
+import { dialogIconButtonClass } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -362,33 +363,31 @@ export function ReviewModal({
       headerActions={
         onNavigate && (
           <div className="flex shrink-0 items-center gap-1">
-            <Button
+            <button
               type="button"
-              size="icon"
-              variant="outline"
+              className={dialogIconButtonClass}
               disabled={!canGoPrev}
               onClick={() => onNavigate("prev")}
               aria-label={t("previousCandidate")}
             >
               <ChevronLeftIcon />
-            </Button>
-            <Button
+            </button>
+            <button
               type="button"
-              size="icon"
-              variant="outline"
+              className={dialogIconButtonClass}
               disabled={!canGoNext}
               onClick={() => onNavigate("next")}
               aria-label={t("nextCandidate")}
             >
               <ChevronRightIcon />
-            </Button>
+            </button>
           </div>
         )
       }
     >
       <div className="space-y-4">
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="max-h-[65vh] min-w-0 overflow-y-auto pr-1">
+          <div className="min-w-0">
             <AnswersSection
               template={template}
               applicationId={applicationId}
@@ -408,7 +407,7 @@ export function ReviewModal({
             />
           </div>
 
-          <div className="max-h-[65vh] min-w-0 space-y-4 overflow-y-auto pr-1">
+          <div className="min-w-0 space-y-4">
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge tone={statusTone(st)}>{applicationStatusLabel(st, t)}</StatusBadge>
               {reviewedByMe && (
