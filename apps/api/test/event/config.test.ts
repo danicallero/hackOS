@@ -227,7 +227,10 @@ describe("event config (H45/H47)", () => {
 
     // …but the screens standing in the venue do, via the TV feed.
     const tv = await a.inject({ method: "GET", url: "/api/tv/config" });
-    expect(tv.json()).toEqual({ wifi: { ssid: "hackos-guest", password: "s3cr3t" } });
+    expect(tv.json()).toEqual({
+      wifi: { ssid: "hackos-guest", password: "s3cr3t" },
+      language: null,
+    });
   });
 
   it("audits a Wi-Fi password change without recording the password (H53)", async () => {

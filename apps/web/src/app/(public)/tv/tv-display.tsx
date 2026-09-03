@@ -953,7 +953,7 @@ function useAnnouncementRotationTick(): void {
 }
 
 export function TvDisplay() {
-  const { t, language } = useLocale();
+  const { t, setLanguage } = useLocale();
   const [data, setData] = useState<TvData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
@@ -978,6 +978,11 @@ export function TvDisplay() {
       // A slower older response must never overwrite the state obtained after
       // an SSE event (for example, a mode change followed by a queue update).
       if (currentRequest !== requestId.current) return;
+      // The wall's language is an operator setting (TV control), never a
+      // signed-in caller's own account preference — LocaleProvider skips that
+      // sync on this route, so this is the only place `language` changes here.
+      const language = venue.language ?? "es";
+      setLanguage(language);
       setData({
         state,
         event,
@@ -999,7 +1004,7 @@ export function TvDisplay() {
         setError(t("tvReconnecting"));
       }
     }
-  }, [t, language]);
+  }, [t, setLanguage]);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();

@@ -35,11 +35,19 @@ import {
   idParam,
   repoIdParam,
   roomIdParam,
+  tvConfigBody,
   tvModeBody,
   tvSlotBody,
   tvSlotPatchBody,
 } from "./schemas.js";
-import { clearTvOverride, listTvSlots, resolveTvState, setTvMode, tvVenueConfig } from "./tv.js";
+import {
+  clearTvOverride,
+  listTvSlots,
+  resolveTvState,
+  setTvLanguage,
+  setTvMode,
+  tvVenueConfig,
+} from "./tv.js";
 import { createTvSlot, deleteTvSlot, updateTvSlot } from "./tv-slots.js";
 
 const tvControlPolicy = {
@@ -352,12 +360,27 @@ export function registerReadsRoutes(app: FastifyInstance): void {
     {
       config: { routeAccessPolicy: { kind: "public", anonymousCategory: "public-tv" } },
       schema: {
-        summary: "Venue details the screens render (Wi-Fi credentials).",
+        summary: "Venue details the screens render (Wi-Fi credentials, display language).",
         description:
-          "Public TV companion feed for venue Wi-Fi details printed on the wall. It is intentionally separate from the public event site projection.",
+          "Public TV companion feed for venue Wi-Fi details and the operator-chosen display language printed/rendered on the wall. It is intentionally separate from the public event site projection.",
       },
     },
     async () => tvVenueConfig(),
+  );
+
+  typed.patch(
+    "/api/tv/config",
+    {
+      preHandler: requireCapability(CAPABILITIES.TV_CONTROL),
+      config: { routeAccessPolicy: tvControlPolicy },
+      schema: {
+        summary: "Set the language every venue screen renders in.",
+        description:
+          "Persists the wall's display language, overriding the default. Applies regardless of who — if anyone — is signed into a kiosk browser; a null language clears the override.",
+        body: tvConfigBody,
+      },
+    },
+    async (req) => setTvLanguage(req.body.language, req.userId),
   );
 
   typed.get(

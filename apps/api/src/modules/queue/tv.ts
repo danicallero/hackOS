@@ -1,5 +1,6 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { pool } from "../../db/pool.js";
+import { pool, withTransaction } from "../../db/pool.js";
+import { audit } from "../../lib/audit.js";
 import { broadcast } from "../../lib/sse.js";
 import { valkey } from "../../lib/valkey.js";
 
@@ -127,8 +128,16 @@ export async function listTvSlots(): Promise<TvSlot[]> {
   return rows.map(rowToSlot);
 }
 
+export type TvLanguage = "es" | "gl" | "en";
+
 export interface TvVenueConfig {
   wifi: { ssid: string; password: string | null } | null;
+  /** Operator-chosen language every screen renders in; null follows the default. */
+  language: TvLanguage | null;
+}
+
+function toTvLanguage(value: unknown): TvLanguage | null {
+  return value === "es" || value === "gl" || value === "en" ? value : null;
 }
 
 /**
@@ -138,12 +147,49 @@ export interface TvVenueConfig {
  */
 export async function tvVenueConfig(): Promise<TvVenueConfig> {
   const { rows } = await pool.query(
-    `SELECT wifi_ssid, wifi_password FROM event_config WHERE id = 1`,
+    `SELECT wifi_ssid, wifi_password, tv_language FROM event_config WHERE id = 1`,
   );
   const row = rows[0];
   const ssid = (row?.wifi_ssid as string | null) ?? null;
-  if (!ssid) return { wifi: null };
-  return { wifi: { ssid, password: (row.wifi_password as string | null) || null } };
+  return {
+    wifi: ssid ? { ssid, password: (row.wifi_password as string | null) || null } : null,
+    language: toTvLanguage(row?.tv_language),
+  };
+}
+
+/**
+ * The wall's language is an operator setting, not a signed-in caller's own
+ * preference — a staff session cookie in the kiosk browser must never change
+ * what a public screen shows. Persisted so it survives control-page reloads
+ * and a scheduled slot with nobody at the control page.
+ */
+export async function setTvLanguage(
+  language: TvLanguage | null,
+  actorId: number | null,
+): Promise<TvVenueConfig> {
+  const config = await withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `INSERT INTO event_config (id, tv_language) VALUES (1, $1)
+       ON CONFLICT (id) DO UPDATE SET tv_language = EXCLUDED.tv_language
+       RETURNING wifi_ssid, wifi_password, tv_language`,
+      [language],
+    );
+    const row = rows[0];
+    const next: TvVenueConfig = {
+      wifi: row?.wifi_ssid ? { ssid: row.wifi_ssid, password: row.wifi_password || null } : null,
+      language: toTvLanguage(row?.tv_language),
+    };
+    await audit(client, {
+      actorId,
+      entityType: "event_config",
+      entityId: 1,
+      action: "update",
+      after: { tvLanguage: next.language },
+    });
+    return next;
+  });
+  await broadcast(SSE_TOPICS.TV, EVENTS.TV_CONFIG_CHANGED, {});
+  return config;
 }
 
 /** Override → covering slot → default. */

@@ -13,7 +13,7 @@ describe("final route-policy ledger", () => {
   it("has the exact classified rows, allowlists, and sole Better Auth exemption", async () => {
     app = await buildTestApp();
     const rows = app.routePolicyLedger.filter((row) => row.method !== "HEAD");
-    expect(rows).toHaveLength(345);
+    expect(rows).toHaveLength(346);
     expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(18);
     expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(12);
     expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(47);
@@ -22,7 +22,9 @@ describe("final route-policy ledger", () => {
     // +4 (H8): GET/POST /api/role-grant-rules and PATCH/DELETE
     // /api/role-grant-rules/:ruleId, the admin CRUD for configurable
     // automatic role grant/revoke rules — all gated by permissions:manage.
-    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(201);
+    // +1 (H42): PATCH /api/tv/config sets the wall's display-language
+    // override, gated by tv:control like the rest of TV control.
+    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(202);
     expect(rows.filter((row) => row.policy.kind === "contextual")).toHaveLength(67);
     expect(app.routePolicyExemptions).toEqual([
       { url: "/api/auth/*", exemption: "better-auth-generated" },
