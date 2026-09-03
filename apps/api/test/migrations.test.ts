@@ -254,7 +254,7 @@ async function installLegacyH54Shape(client: pg.Client): Promise<void> {
     if (applicationId == null) throw new Error("Expected legacy compatibility application");
     await client.query(
       `INSERT INTO application_responses (user_id, application_id, status)
-       VALUES ($1, $2, 'submitted')`,
+       VALUES ($1, $2, 'review')`,
       [userId, applicationId],
     );
     await client.query("ALTER TABLE _migrations ALTER COLUMN checksum DROP NOT NULL");
@@ -463,7 +463,7 @@ describe("migration history (H53)", () => {
       if (applicationId == null) throw new Error("Expected upgrade application");
       await client.query(
         `INSERT INTO application_responses (user_id, application_id, status)
-         VALUES ($1, $2, 'submitted'), ($3, $2, 'submitted')`,
+         VALUES ($1, $2, 'review'), ($3, $2, 'review')`,
         [activeUserId, applicationId, legacyUserId],
       );
       await client.query(

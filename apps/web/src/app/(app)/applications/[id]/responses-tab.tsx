@@ -7,6 +7,7 @@ import { EVENTS } from "@hackos/shared/events";
 import {
   AlertCircleIcon,
   CheckCheckIcon,
+  CircleCheckIcon,
   DownloadIcon,
   FileTextIcon,
   RotateCcwIcon,
@@ -42,7 +43,7 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { pickText, useLocale } from "@/lib/i18n";
-import { useCan } from "@/lib/session";
+import { useCan, useMe } from "@/lib/session";
 import {
   type FormSection,
   fmtDateTime,
@@ -96,6 +97,7 @@ export function ResponsesTab({
   workspace: ApplicationWorkspace;
 }) {
   const { t, language } = useLocale();
+  const me = useMe();
   const canDecide = useCan(CAPABILITIES.APPLICATIONS_DECIDE);
   const canExportFiles = useCan(CAPABILITIES.EXPORTS_RUN);
   const fileFields = useMemo(() => (template ?? []).filter((f) => f.kind === "file"), [template]);
@@ -117,6 +119,8 @@ export function ResponsesTab({
   const [confirmBatchRevoke, setConfirmBatchRevoke] = useState(false);
   const [exportingKey, setExportingKey] = useState<string | null>(null);
   const [exportFailures, setExportFailures] = useState<ExportFailuresState | null>(null);
+  // The table's own search/sort-applied row order, for modal prev/next.
+  const [visibleRows, setVisibleRows] = useState<ResponseRow[]>([]);
 
   const rows = useMemo(() => rowsForWorkspace(allRows, workspace), [allRows, workspace]);
 
@@ -175,6 +179,10 @@ export function ResponsesTab({
   }, [rows, pendingResponseId]);
 
   const selected = useMemo(() => rows.find((r) => r.id === selectedId) ?? null, [rows, selectedId]);
+  const selectedIndex = useMemo(
+    () => visibleRows.findIndex((r) => r.id === selectedId),
+    [visibleRows, selectedId],
+  );
 
   const columns: Column<ResponseRow>[] = [
     {
@@ -202,7 +210,10 @@ export function ResponsesTab({
       align: "right",
       sortValue: (r) => Number(r.avg_score ?? -1),
       cell: (r) => (
-        <span className="text-sm">
+        <span className="inline-flex items-center gap-1.5 text-sm">
+          {r.reviews.some((review) => review.author_id === me?.id && review.score != null) && (
+            <CircleCheckIcon className="text-success size-3.5" aria-label={t("reviewedByYou")} />
+          )}
           {fmtScore(r.avg_score)}
           {r.review_count > 0 && (
             <span className="text-muted-foreground text-xs"> · {r.review_count}</span>
@@ -730,6 +741,7 @@ export function ResponsesTab({
         selectable={canDecide}
         selectedIds={selectedIds}
         onSelectionChange={setSelectedIds}
+        onVisibleRowsChange={setVisibleRows}
         pageSize={15}
         empty={{
           icon: FileTextIcon,
@@ -760,6 +772,13 @@ export function ResponsesTab({
           onClose={() => setSelectedId(null)}
           onChanged={load}
           workspace={workspace}
+          onNavigate={(dir) => {
+            if (selectedIndex < 0) return;
+            const next = visibleRows[selectedIndex + (dir === "next" ? 1 : -1)];
+            if (next) setSelectedId(next.id);
+          }}
+          canGoPrev={selectedIndex > 0}
+          canGoNext={selectedIndex >= 0 && selectedIndex < visibleRows.length - 1}
         />
       )}
 

@@ -94,10 +94,20 @@ export function registerReviewRoutes(app: FastifyInstance): void {
                 r.staff_notes, r.submitted_at, r.decision_sent_at,
                 r.confirmed_at, r.declined_at, t.expires_at AS confirmation_expires_at,
                 COALESCE(avg(ar.score), NULL) AS avg_score,
-                count(ar.author_id)::int AS review_count
+                count(ar.author_id)::int AS review_count,
+                COALESCE(
+                  jsonb_agg(
+                    jsonb_build_object(
+                      'author_id', ar.author_id, 'author_name', u2.name,
+                      'score', ar.score, 'notes', ar.notes, 'updated_at', ar.updated_at
+                    ) ORDER BY ar.updated_at DESC
+                  ) FILTER (WHERE ar.author_id IS NOT NULL),
+                  '[]'
+                ) AS reviews
          FROM application_responses r
          JOIN users u ON u.id = r.user_id
          LEFT JOIN applicant_reviews ar ON ar.response_id = r.id
+         LEFT JOIN users u2 ON u2.id = ar.author_id
          LEFT JOIN email_verification_tokens t ON t.id = r.confirmation_token_id
          WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
            AND u.is_test_account = false

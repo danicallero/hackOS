@@ -19,10 +19,10 @@ import type { FormSection, TemplateField } from "./schemas.js";
 
 /**
  * Applications domain service (H11-H15, H27, H56). Holds the state-machine
- * transitions (plan/07 §3: draft -> submitted -> review -> accepted|rejected;
- * accepted -> confirmed|declined|expired), the sensitive-data privacy
- * semantics (H12) and the confirm/decline/expire mechanics shared by the
- * three confirmation routes (H15) and the expirer worker (plan/07 §5.2).
+ * transitions (plan/07 §3: draft -> review -> accepted|rejected; accepted ->
+ * confirmed|declined|expired), the sensitive-data privacy semantics (H12)
+ * and the confirm/decline/expire mechanics shared by the three confirmation
+ * routes (H15) and the expirer worker (plan/07 §5.2).
  */
 
 export interface ApplicationRow {
@@ -37,7 +37,6 @@ export interface ApplicationRow {
   sections: FormSection[];
   current_form_version: number;
   description: string | null;
-  active: boolean;
   open_at: Date | null;
   close_at: Date | null;
   capacity: number | null;
@@ -181,9 +180,8 @@ async function formGrantsMentorRole(
   return rows.length > 0;
 }
 
-/** Open for a NEW draft = active, past open_at, before close_at (close optional). */
+/** Open for a NEW draft (H11) = past open_at, before close_at (close optional). */
 export function isWindowOpen(app: ApplicationRow, now = new Date()): boolean {
-  if (!app.active) return false;
   if (app.open_at && app.open_at > now) return false;
   if (app.close_at && app.close_at <= now) return false;
   return true;
@@ -892,12 +890,7 @@ export async function decide(
     );
     const app = appRows[0] as ApplicationRow;
 
-    // "submitted" is a deprecated pre-review state — submitResponse now always
-    // lands directly on "review" (or "confirmed" if invited), but rows created
-    // before that change can still be stuck at "submitted" with no other path
-    // forward (there's no separate start-review step anymore). Treat it as an
-    // alias of "review" here so those don't get permanently stranded.
-    if (resp.status !== "review" && resp.status !== "submitted") {
+    if (resp.status !== "review") {
       throw new ConflictError("Only reviewed responses can be decided", { status: resp.status });
     }
 
@@ -1580,7 +1573,15 @@ export interface ResponseDetail {
     ask_shirt_size: boolean;
     ask_food_intolerances: boolean;
   };
-  reviews: Array<{ author_id: number; score: number | null; notes: string | null }>;
+  reviews: Array<{
+    author_id: number;
+    author_name: string | null;
+    score: number | null;
+    notes: string | null;
+    updated_at: Date;
+  }>;
+  avg_score: number | null;
+  review_count: number;
   available_actions: string[];
 }
 
@@ -1588,7 +1589,6 @@ export interface ResponseDetail {
 function computeAvailableActions(status: string): string[] {
   const actions: string[] = ["staff-notes"];
   switch (status) {
-    case "submitted": // deprecated alias of "review" — see decide()
     case "review":
       actions.push("my-review", "decide");
       break;
@@ -1656,9 +1656,16 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
   } = rows[0];
 
   const { rows: reviews } = await pool.query(
-    `SELECT author_id, score, notes FROM applicant_reviews WHERE response_id = $1 ORDER BY author_id`,
+    `SELECT ar.author_id, u2.name AS author_name, ar.score, ar.notes, ar.updated_at
+       FROM applicant_reviews ar
+       JOIN users u2 ON u2.id = ar.author_id
+      WHERE ar.response_id = $1
+      ORDER BY ar.updated_at DESC`,
     [responseId],
   );
+  const scored = reviews.filter((r) => r.score != null);
+  const avgScore =
+    scored.length > 0 ? scored.reduce((sum, r) => sum + r.score, 0) / scored.length : null;
 
   // Raw (un-enriched) template + the logistics flags/sections, matching what
   // GET /api/applications/:id returns — the web builds the shirt-size/dietary
@@ -1684,6 +1691,8 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
       ask_food_intolerances,
     },
     reviews,
+    avg_score: avgScore,
+    review_count: reviews.length,
     available_actions: computeAvailableActions(response.status),
   };
 }

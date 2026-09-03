@@ -112,7 +112,6 @@ export interface ApplicationForm {
   /** Immutable snapshot used by newly-created drafts/submissions. */
   current_form_version: number;
   description: string | null;
-  active: boolean;
   open_at: string | null;
   close_at: string | null;
   capacity: number | null;
@@ -151,6 +150,17 @@ export interface ResponseRow {
   /** pg avg() arrives as a numeric string or null. */
   avg_score: number | string | null;
   review_count: number;
+  /** Every reviewer's own score/notes (H13) — used for the review wall and
+   *  "already reviewed by me" indicators, newest first. */
+  reviews: ReviewEntry[];
+}
+
+export interface ReviewEntry {
+  author_id: number;
+  author_name: string | null;
+  score: number | null;
+  notes: string | null;
+  updated_at: string;
 }
 
 /** Shape of GET /api/applications/:id/stats (subset we render). */
@@ -175,7 +185,6 @@ export interface ApplicationStats {
 
 const STATUS_TONE: Record<string, Tone> = {
   draft: "neutral",
-  submitted: "info",
   review: "warning",
   accepted_internal: "warning",
   rejected_internal: "warning",
@@ -244,7 +253,6 @@ export function windowState(
   t: Translate,
   now = new Date(),
 ): { label: string; tone: Tone } {
-  if (!form.active) return { label: t("windowInactive"), tone: "neutral" };
   if (form.open_at && new Date(form.open_at) > now)
     return { label: t("dataStatusScheduled"), tone: "info" };
   if (form.close_at && new Date(form.close_at) <= now)

@@ -91,6 +91,10 @@ interface DataTableProps<T> {
    * Must be unique per table instance on the page (e.g. "audit-list").
    */
   stateKey?: string;
+  /** Fires with the current search/sort-applied (but not yet paginated) row
+   *  order — lets a caller page through rows in the order actually on
+   *  screen, e.g. prev/next inside a detail modal. */
+  onVisibleRowsChange?: (rows: T[]) => void;
 }
 
 const alignClass = { left: "text-left", right: "text-right", center: "text-center" } as const;
@@ -129,6 +133,7 @@ export function DataTable<T>({
   selectedIds,
   onSelectionChange,
   stateKey,
+  onVisibleRowsChange,
 }: DataTableProps<T>) {
   const { t } = useLocale();
   const [query, setQuery] = usePersistedState(stateKey ? `${stateKey}:query` : null, "");
@@ -166,6 +171,11 @@ export function DataTable<T>({
       return av < bv ? -dir : av > bv ? dir : 0;
     });
   }, [filtered, sort, columns]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: onVisibleRowsChange is a caller-supplied setState-style callback, not a value this effect should re-fire on.
+  useEffect(() => {
+    onVisibleRowsChange?.(sorted);
+  }, [sorted]);
 
   const pageCount = pageSize ? Math.max(1, Math.ceil(sorted.length / pageSize)) : 1;
   const current = Math.min(page, pageCount - 1);

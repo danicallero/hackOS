@@ -82,7 +82,6 @@ export interface PublicForm {
   template: TemplateField[];
   sections: FormSection[];
   description: string | null;
-  active: boolean;
   open_at: string | null;
   close_at: string | null;
   capacity: number | null;
@@ -328,7 +327,6 @@ export function groupFieldsBySections(
 
 const STATUS_TONE: Record<string, Tone> = {
   draft: "neutral",
-  submitted: "info",
   review: "info",
   accepted: "success",
   confirmed: "success",
@@ -344,7 +342,6 @@ export function statusTone(status: string): Tone {
 export function statusLabel(status: string, t: Translate): string {
   const map: Record<string, string> = {
     draft: t("dataStatusDraft"),
-    submitted: t("dataStatusSubmitted"),
     review: t("dataStatusReview"),
     accepted: t("statusAccepted"),
     confirmed: t("confirmed"),

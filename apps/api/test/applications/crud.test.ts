@@ -85,15 +85,16 @@ describe("applications CRUD (H11)", () => {
     expect(create.json().capacity).toBe(100);
     expect(create.json().confirmation_window_hours).toBe(168);
 
+    const pastClose = new Date(Date.now() - 60_000).toISOString();
     const patch = await a.inject({
       method: "PATCH",
       url: `/api/applications/${id}`,
       headers: asUser(manager),
-      payload: { capacity: 50, active: false },
+      payload: { capacity: 50, close_at: pastClose },
     });
     expect(patch.statusCode).toBe(200);
     expect(patch.json().capacity).toBe(50);
-    expect(patch.json().active).toBe(false);
+    expect(patch.json().close_at).toBe(pastClose);
 
     const list = await a.inject({
       method: "GET",
@@ -269,14 +270,13 @@ describe("applications CRUD (H11)", () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it("public endpoint lists only active forms inside their window, with template", async () => {
+  it("public endpoint lists only forms inside their window, with template", async () => {
     const a = await getApp();
     const past = new Date(Date.now() - 3600_000).toISOString();
     const future = new Date(Date.now() + 3600_000).toISOString();
 
     const openId = await createApplication({ name: "Open", open_at: past, close_at: future });
     await createApplication({ name: "Closed", open_at: past, close_at: past });
-    await createApplication({ name: "Inactive", active: false });
     await createApplication({ name: "NotYet", open_at: future });
 
     const res = await a.inject({ method: "GET", url: "/api/public/applications" });
@@ -604,7 +604,7 @@ describe("applications CRUD (H11)", () => {
     const appId = await createApplication();
     const applicant = await createUser();
     const { createResponse } = await import("./fixtures.js");
-    await createResponse(applicant, appId, { status: "submitted" });
+    await createResponse(applicant, appId, { status: "review" });
 
     const res = await a.inject({
       method: "DELETE",

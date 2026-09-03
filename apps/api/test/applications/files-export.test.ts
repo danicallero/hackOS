@@ -139,11 +139,11 @@ describe("bulk file export (H56)", () => {
     const decliningKey = await putUpload(appId, declining, "resume.txt");
 
     await createResponse(consenting, appId, {
-      status: "submitted",
+      status: "review",
       responses: { cv: consentingKey, [sponsorShareKey("cv")]: true },
     });
     await createResponse(declining, appId, {
-      status: "submitted",
+      status: "review",
       responses: { cv: decliningKey, [sponsorShareKey("cv")]: false },
     });
 
@@ -192,7 +192,7 @@ describe("bulk file export (H56)", () => {
     await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [fixture]);
     const fixtureKey = await putUpload(appId, fixture, "resume.pdf");
     await createResponse(fixture, appId, {
-      status: "submitted",
+      status: "review",
       responses: { cv: fixtureKey, [sponsorShareKey("cv")]: true },
     });
 
@@ -221,11 +221,11 @@ describe("bulk file export (H56)", () => {
     const missingKey = `uploads/${appId}/${missing}/cv/${Date.now()}-${missing}/never-uploaded.pdf`;
 
     await createResponse(ok, appId, {
-      status: "submitted",
+      status: "review",
       responses: { cv: okKey, [sponsorShareKey("cv")]: true },
     });
     const missingResponseId = await createResponse(missing, appId, {
-      status: "submitted",
+      status: "review",
       // No putObject for this key — simulates an object gone from storage.
       responses: { cv: missingKey, [sponsorShareKey("cv")]: true },
     });
@@ -274,7 +274,7 @@ describe("bulk file export (H56)", () => {
     const ok = await createUser({ email: "clean@test.local" });
     const okKey = await putUpload(appId, ok, "resume.pdf");
     await createResponse(ok, appId, {
-      status: "submitted",
+      status: "review",
       responses: { cv: okKey, [sponsorShareKey("cv")]: true },
     });
 
@@ -301,15 +301,15 @@ describe("bulk file export (H56)", () => {
     const withFileKey = await putUpload(appId, withFile, "resume.pdf");
 
     await createResponse(withFile, appId, {
-      status: "submitted",
+      status: "review",
       responses: { cv: withFileKey, [sponsorShareKey("cv")]: true },
     });
     await createResponse(noKeyAtAll, appId, {
-      status: "submitted",
+      status: "review",
       responses: { motivation: "no cv field touched" },
     });
     await createResponse(emptyValue, appId, {
-      status: "submitted",
+      status: "review",
       responses: { cv: "" },
     });
 

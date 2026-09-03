@@ -31,6 +31,7 @@ const row = (id: number, status: string): ResponseRow => ({
   declined_at: null,
   avg_score: null,
   review_count: 0,
+  reviews: [],
 });
 
 describe("application capability workspaces", () => {

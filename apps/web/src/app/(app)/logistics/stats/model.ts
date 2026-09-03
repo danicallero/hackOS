@@ -38,7 +38,6 @@ export function defaultDataPhase(event: PublicEvent | null, now = Date.now()): D
 export function applicationStatusLabel(status: string, t: Translate): string {
   const key: Record<string, MessageKey> = {
     draft: "dataStatusDraft",
-    submitted: "dataStatusSubmitted",
     review: "dataStatusReview",
     accepted_internal: "acceptedUnsentStatus",
     rejected_internal: "rejectedUnsentStatus",

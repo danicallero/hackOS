@@ -38,7 +38,6 @@ import { type ApplicationForm, fromLocalInput, toLocalInput } from "../lib";
 type MetaValues = {
   name: string;
   description: string;
-  active: boolean;
   open_at: string;
   close_at: string;
   capacity: string;
@@ -65,7 +64,6 @@ export function MetadataCard({
       z.object({
         name: z.string().min(1, t("required")).max(200),
         description: z.string(),
-        active: z.boolean(),
         open_at: z.string(),
         close_at: z.string(),
         capacity: z.string(),
@@ -81,7 +79,6 @@ export function MetadataCard({
     defaultValues: {
       name: form.name,
       description: form.description ?? "",
-      active: form.active,
       open_at: toLocalInput(form.open_at),
       close_at: toLocalInput(form.close_at),
       capacity: form.capacity != null ? String(form.capacity) : "",
@@ -122,7 +119,6 @@ export function MetadataCard({
       await api.patch<ApplicationForm>(`/api/applications/${form.id}`, {
         name: values.name.trim(),
         description: values.description.trim() || null,
-        active: values.active,
         open_at: fromLocalInput(values.open_at),
         close_at: fromLocalInput(values.close_at),
         capacity: capacityNum,
@@ -165,189 +161,191 @@ export function MetadataCard({
             </>
           }
         >
-          <h3 className="text-balance text-sm font-semibold">{t("builderBasics")}</h3>
-          <FormField
-            control={rhf.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("name")}</FormLabel>
-                <FormControl>
-                  <Input {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={rhf.control}
-            name="description"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("descriptionLabel")}</FormLabel>
-                <FormControl>
-                  <Textarea rows={2} placeholder={t("shownToApplicantsPlaceholder")} {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <h3 className="border-t pt-4 text-balance text-sm font-semibold">
-            {t("builderLogistics")}
-          </h3>
-          <FormField
-            control={rhf.control}
-            name="ask_shirt_size"
-            render={({ field }) => (
-              <FormItem className="flex items-center justify-between gap-4 rounded-md border p-3">
-                <div className="space-y-0.5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <FormLabel className="font-normal">{t("askShirtSizeLabel")}</FormLabel>
-                    {field.value && (
-                      <StatusBadge tone="neutral" dot={false}>
-                        {t("requiredAtSubmitBadge")}
-                      </StatusBadge>
-                    )}
-                  </div>
-                  <FormDescription>{t("askShirtSizeDesc")}</FormDescription>
-                </div>
-                <FormControl>
-                  <Switch checked={field.value} onCheckedChange={field.onChange} />
-                </FormControl>
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={rhf.control}
-            name="ask_food_intolerances"
-            render={({ field }) => (
-              <FormItem className="flex items-center justify-between gap-4 rounded-md border p-3">
-                <div className="space-y-0.5">
-                  <FormLabel className="font-normal">{t("askFoodIntolerancesLabel")}</FormLabel>
-                  <FormDescription>{t("askFoodIntolerancesDesc")}</FormDescription>
-                </div>
-                <FormControl>
-                  <Switch checked={field.value} onCheckedChange={field.onChange} />
-                </FormControl>
-              </FormItem>
-            )}
-          />
-          <h3 className="border-t pt-4 text-balance text-sm font-semibold">
-            {t("builderAvailability")}
-          </h3>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField
-              control={rhf.control}
-              name="open_at"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("colOpens")}</FormLabel>
-                  <FormControl>
-                    <DateTimeInput
-                      value={field.value}
-                      onChange={field.onChange}
-                      nullOption={{ label: t("openImmediately") }}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={rhf.control}
-              name="close_at"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("colCloses")}</FormLabel>
-                  <FormControl>
-                    <DateTimeInput
-                      value={field.value}
-                      onChange={field.onChange}
-                      nullOption={{ label: t("neverCloses") }}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField
-              control={rhf.control}
-              name="capacity"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("colQuota")}</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      min={1}
-                      placeholder={t("unlimitedPlaceholder")}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>{t("optionalCapDesc")}</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={rhf.control}
-              name="confirmation_window_hours"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("confirmWindowLabel")}</FormLabel>
-                  <FormControl>
-                    <Input type="number" min={1} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-          <h3 className="border-t pt-4 text-balance text-sm font-semibold">{t("builderReview")}</h3>
-          <FormField
-            control={rhf.control}
-            name="grants_role_ids"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("grantsRolesLabel")}</FormLabel>
-                <FormControl>
-                  <MultiSelect
-                    options={roles.map((role) => ({ value: String(role.id), label: role.name }))}
-                    value={field.value}
-                    onChange={field.onChange}
-                    placeholder={t("grantsRolesPlaceholder")}
-                    searchPlaceholder={t("searchRolesPlaceholder")}
-                    emptyText={t("noRolesYet")}
-                  />
-                </FormControl>
-                <FormDescription>{t("grantsRolesDesc")}</FormDescription>
-                {form.has_confirmed_responses && (
-                  <Alert>
-                    <InfoIcon aria-hidden="true" />
-                    <AlertDescription>{t("grantsRolesNotRetroactiveNotice")}</AlertDescription>
-                  </Alert>
+          <div className="grid gap-x-8 gap-y-6 lg:grid-cols-2">
+            <div className="space-y-4">
+              <h3 className="text-balance text-sm font-semibold">{t("builderBasics")}</h3>
+              <FormField
+                control={rhf.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("name")}</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
                 )}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={rhf.control}
-            name="active"
-            render={({ field }) => (
-              <FormItem className="flex items-center justify-between gap-4">
-                <div className="space-y-0.5">
-                  <FormLabel>{t("activeLabel")}</FormLabel>
-                  <FormDescription>{t("inactiveFormsDesc")}</FormDescription>
-                </div>
-                <FormControl>
-                  <Switch checked={field.value} onCheckedChange={field.onChange} />
-                </FormControl>
-              </FormItem>
-            )}
-          />
+              />
+              <FormField
+                control={rhf.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("descriptionLabel")}</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        rows={2}
+                        placeholder={t("shownToApplicantsPlaceholder")}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="space-y-4">
+              <h3 className="border-t pt-4 text-balance text-sm font-semibold lg:border-t-0 lg:pt-0">
+                {t("builderLogistics")}
+              </h3>
+              <FormField
+                control={rhf.control}
+                name="ask_shirt_size"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between gap-4 rounded-md border p-3">
+                    <div className="space-y-0.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <FormLabel className="font-normal">{t("askShirtSizeLabel")}</FormLabel>
+                        {field.value && (
+                          <StatusBadge tone="neutral" dot={false}>
+                            {t("requiredAtSubmitBadge")}
+                          </StatusBadge>
+                        )}
+                      </div>
+                      <FormDescription>{t("askShirtSizeDesc")}</FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={rhf.control}
+                name="ask_food_intolerances"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between gap-4 rounded-md border p-3">
+                    <div className="space-y-0.5">
+                      <FormLabel className="font-normal">{t("askFoodIntolerancesLabel")}</FormLabel>
+                      <FormDescription>{t("askFoodIntolerancesDesc")}</FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="space-y-4 lg:col-span-2">
+              <h3 className="border-t pt-4 text-balance text-sm font-semibold">
+                {t("builderAvailability")}
+              </h3>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <FormField
+                  control={rhf.control}
+                  name="open_at"
+                  render={({ field }) => (
+                    <FormItem className="lg:col-span-2">
+                      <FormLabel>{t("colOpens")}</FormLabel>
+                      <FormControl>
+                        <DateTimeInput
+                          value={field.value}
+                          onChange={field.onChange}
+                          nullOption={{ label: t("openImmediately") }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={rhf.control}
+                  name="close_at"
+                  render={({ field }) => (
+                    <FormItem className="lg:col-span-2">
+                      <FormLabel>{t("colCloses")}</FormLabel>
+                      <FormControl>
+                        <DateTimeInput
+                          value={field.value}
+                          onChange={field.onChange}
+                          nullOption={{ label: t("neverCloses") }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={rhf.control}
+                  name="capacity"
+                  render={({ field }) => (
+                    <FormItem className="lg:col-span-2">
+                      <FormLabel>{t("colQuota")}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={1}
+                          placeholder={t("unlimitedPlaceholder")}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>{t("optionalCapDesc")}</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={rhf.control}
+                  name="confirmation_window_hours"
+                  render={({ field }) => (
+                    <FormItem className="lg:col-span-2">
+                      <FormLabel>{t("confirmWindowLabel")}</FormLabel>
+                      <FormControl>
+                        <Input type="number" min={1} {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+            <div className="space-y-4 lg:col-span-2">
+              <h3 className="border-t pt-4 text-balance text-sm font-semibold">
+                {t("builderReview")}
+              </h3>
+              <FormField
+                control={rhf.control}
+                name="grants_role_ids"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("grantsRolesLabel")}</FormLabel>
+                    <FormControl>
+                      <MultiSelect
+                        options={roles.map((role) => ({
+                          value: String(role.id),
+                          label: role.name,
+                        }))}
+                        value={field.value}
+                        onChange={field.onChange}
+                        placeholder={t("grantsRolesPlaceholder")}
+                        searchPlaceholder={t("searchRolesPlaceholder")}
+                        emptyText={t("noRolesYet")}
+                      />
+                    </FormControl>
+                    <FormDescription>{t("grantsRolesDesc")}</FormDescription>
+                    {form.has_confirmed_responses && (
+                      <Alert>
+                        <InfoIcon aria-hidden="true" />
+                        <AlertDescription>{t("grantsRolesNotRetroactiveNotice")}</AlertDescription>
+                      </Alert>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </div>
         </SectionCard>
       </form>
     </Form>
