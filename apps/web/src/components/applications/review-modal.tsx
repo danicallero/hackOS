@@ -10,8 +10,8 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CircleCheckIcon,
+  DownloadIcon,
   FileTextIcon,
-  LockIcon,
   PencilIcon,
   SendIcon,
 } from "lucide-react";
@@ -37,13 +37,12 @@ import { ScaleButtons } from "@/components/common/scale-buttons";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { type FieldValue, TemplateFieldControl } from "@/components/common/template-field-control";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
-import { LOCALE_CODES, pickText, useLocale } from "@/lib/i18n";
+import { LOCALE_CODES, pickText, type Translate, useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
 import { useCan, useMe } from "@/lib/session";
 import type { Intolerance, Language } from "@/lib/types";
@@ -116,6 +115,63 @@ function groupFieldsBySections(fields: TemplateField[], sections: FormSection[])
     groups.push({ section, fields: fields.filter((f) => f.section_key === section.key) });
   }
   return groups.filter((g) => g.fields.length > 0);
+}
+
+/** Renders one field's value as plain text for the answers export — mirrors
+ *  TemplateFieldControl's read-only display for kinds with an option lookup. */
+function fieldValueText(
+  field: TemplateField,
+  value: unknown,
+  lang: Language,
+  t: Translate,
+): string {
+  if (value == null || value === "") return "";
+  switch (field.kind) {
+    case "select": {
+      const opt = field.options?.find((o) => o.value === value);
+      return opt ? pickText(opt.label, lang) : String(value);
+    }
+    case "multiselect": {
+      const values = Array.isArray(value) ? value : [];
+      return values
+        .map((v) => {
+          const opt = field.options?.find((o) => o.value === v);
+          return opt ? pickText(opt.label, lang) : String(v);
+        })
+        .join(", ");
+    }
+    case "checkbox":
+      return value === true ? t("yesLabel") : t("noLabel");
+    default:
+      return typeof value === "object" ? JSON.stringify(value) : String(value);
+  }
+}
+
+/** Downloads every answer for one applicant as a plain-text file, grouped the
+ *  same way the read-only view shows them. */
+function exportAnswers(
+  response: ResponseRow,
+  answerFields: TemplateField[],
+  answerSections: FormSection[],
+  answerValues: Record<string, unknown>,
+  lang: Language,
+  t: Translate,
+) {
+  const lines: string[] = [`${response.name ?? response.email} <${response.email}>`, ""];
+  for (const group of groupFieldsBySections(answerFields, answerSections)) {
+    if (group.section) lines.push(pickText(group.section.title, lang), "");
+    for (const field of group.fields) {
+      const text = fieldValueText(field, answerValues[field.key], lang, t);
+      lines.push(pickText(field.label, lang), text || "—", "");
+    }
+  }
+  const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${(response.name ?? response.email).replace(/[^a-z0-9]+/gi, "-")}-answers.txt`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export function ReviewModal({
@@ -303,10 +359,9 @@ export function ReviewModal({
       icon={FileTextIcon}
       title={response.name ?? response.email}
       description={response.name ? response.email : undefined}
-    >
-      <div className="space-y-4">
-        {onNavigate && (
-          <div className="flex items-center justify-end gap-1">
+      headerActions={
+        onNavigate && (
+          <div className="flex shrink-0 items-center gap-1">
             <Button
               type="button"
               size="icon"
@@ -328,16 +383,10 @@ export function ReviewModal({
               <ChevronRightIcon />
             </Button>
           </div>
-        )}
-
-        {(st === "accepted_internal" || st === "rejected_internal") && (
-          <Alert>
-            <LockIcon aria-hidden="true" />
-            <AlertTitle>{applicationStatusLabel(st, t)}</AlertTitle>
-            <AlertDescription>{t("internalDecisionNotice")}</AlertDescription>
-          </Alert>
-        )}
-
+        )
+      }
+    >
+      <div className="space-y-4">
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <div className="max-h-[65vh] min-w-0 overflow-y-auto pr-1">
             <AnswersSection
@@ -481,17 +530,31 @@ function AnswersSection({
   response: ResponseRow;
   lang: Language;
 }) {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-medium">{t("answersLabel")}</p>
-        {canEdit && template && template.length > 0 && !editing && (
-          <Button size="sm" variant="outline" onClick={startEdit}>
-            <PencilIcon />
-            {t("editAnswers")}
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {answerFields.length > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                exportAnswers(response, answerFields, answerSections, answerValues, language, t)
+              }
+            >
+              <DownloadIcon />
+              {t("exportAnswers")}
+            </Button>
+          )}
+          {canEdit && template && template.length > 0 && !editing && (
+            <Button size="sm" variant="outline" onClick={startEdit}>
+              <PencilIcon />
+              {t("editAnswers")}
+            </Button>
+          )}
+        </div>
       </div>
       {answerFields.length > 0 ? (
         <div className="space-y-4">

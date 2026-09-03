@@ -88,7 +88,8 @@ export function registerReviewRoutes(app: FastifyInstance): void {
         filters.push(`(u.name ILIKE $${params.length} OR u.email ILIKE $${params.length})`);
       }
       const { rows } = await pool.query(
-        `SELECT r.id, r.user_id, u.name, u.email, u.shirt_size,
+        `SELECT r.id, r.user_id, NULLIF(concat_ws(' ', u.name, u.surname), '') AS name,
+                u.email, u.shirt_size,
                 u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
                 r.status, r.responses,
                 r.staff_notes, r.submitted_at, r.decision_sent_at,
@@ -112,7 +113,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
          WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
            AND u.is_test_account = false
            AND ${filters.join(" AND ")}
-         GROUP BY r.id, u.name, u.email, u.shirt_size, u.food_intolerances,
+         GROUP BY r.id, u.name, u.surname, u.email, u.shirt_size, u.food_intolerances,
                   u.food_intolerance_notes, u.dietary_data_state,
                   t.expires_at
          ORDER BY r.id`,

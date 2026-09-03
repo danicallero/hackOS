@@ -1615,7 +1615,7 @@ function computeAvailableActions(status: string): string[] {
 
 export async function getResponseDetail(responseId: number): Promise<ResponseDetail> {
   const { rows } = await pool.query(
-    `SELECT r.*, u.name, u.email, u.shirt_size,
+    `SELECT r.*, NULLIF(concat_ws(' ', u.name, u.surname), '') AS name, u.email, u.shirt_size,
             u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
             a.id AS app_id, a.name AS app_name,
             (SELECT r2.name
