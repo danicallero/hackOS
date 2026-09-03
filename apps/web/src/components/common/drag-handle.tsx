@@ -9,6 +9,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVerticalIcon } from "lucide-react";
+import { IconButton } from "@/components/common/icon-button";
 import { cn } from "@/lib/utils";
 
 /** Grip handle: pointer-draggable, and focusable/operable via keyboard (dnd-kit's
@@ -25,16 +26,16 @@ export function DragHandle({
   disabled?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      className="text-muted-foreground hover:bg-muted hover:text-foreground -ml-1.5 flex size-8 shrink-0 cursor-grab touch-none items-center justify-center rounded-md active:cursor-grabbing"
+    <IconButton
+      size="icon-sm"
+      label={label}
+      className="text-muted-foreground hover:bg-muted hover:text-foreground -ml-1.5 cursor-grab touch-none active:cursor-grabbing"
       {...attributes}
       {...listeners}
       disabled={disabled}
     >
-      <GripVerticalIcon className="size-4" />
-      <span className="sr-only">{label}</span>
-    </button>
+      <GripVerticalIcon className="size-4" aria-hidden="true" />
+    </IconButton>
   );
 }
 

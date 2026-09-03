@@ -81,7 +81,7 @@ export function buildProjectColumns(t: Translate): Column<RepoWithExtras>[] {
 
 export function ProjectLink({ href, label }: { href: string; label: string }) {
   return (
-    <Button variant="ghost" size="sm" asChild className="h-7 px-2">
+    <Button variant="ghost" size="sm" asChild className="px-2">
       <a href={href} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
         <ExternalLinkIcon className="size-3.5" />
         {label}

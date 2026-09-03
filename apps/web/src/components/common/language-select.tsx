@@ -15,7 +15,7 @@ export function LanguageSelect() {
   const { language, setLanguage, t } = useLocale();
   return (
     <Select value={language} onValueChange={(value) => setLanguage(value as Language)}>
-      <SelectTrigger className="h-8 w-18 px-2.5" aria-label={t("language")}>
+      <SelectTrigger size="sm" className="w-18 px-2.5" aria-label={t("language")}>
         <SelectValue>{language.toUpperCase()}</SelectValue>
       </SelectTrigger>
       <SelectContent align="end">

@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CapabilityGate } from "@/components/common/capability-gate";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -508,22 +509,22 @@ export default function UsersPage() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={t("searchUsersPlaceholder")}
-            className="h-9 pr-9 pl-9"
+            className="pr-9 pl-9"
           />
           {q && (
-            <Button
+            <IconButton
               type="button"
               variant="ghost"
-              size="icon"
-              className="absolute top-1/2 right-0.5 size-8 -translate-y-1/2"
+              size="icon-sm"
+              className="absolute top-1/2 right-0.5 -translate-y-1/2"
               onClick={() => {
                 setQ("");
                 document.getElementById("user-search")?.focus();
               }}
-              aria-label={t("clearSearch")}
+              label={t("clearSearch")}
             >
               <XIcon className="size-4" aria-hidden="true" />
-            </Button>
+            </IconButton>
           )}
         </div>
         <span
@@ -534,7 +535,7 @@ export default function UsersPage() {
           {t("tableResultCount", { count: filteredUsers.length })}
         </span>
         <Select value={emailFilter} onValueChange={setEmailFilter}>
-          <SelectTrigger className="h-9 w-full sm:w-40">
+          <SelectTrigger className="w-full sm:w-40">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -544,7 +545,7 @@ export default function UsersPage() {
           </SelectContent>
         </Select>
         <Select value={roleFilter} onValueChange={setRoleFilter}>
-          <SelectTrigger className="h-9 w-full sm:w-40">
+          <SelectTrigger className="w-full sm:w-40">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -557,7 +558,7 @@ export default function UsersPage() {
           </SelectContent>
         </Select>
         <Select value={spotFilter} onValueChange={setSpotFilter}>
-          <SelectTrigger className="h-9 w-full sm:w-44">
+          <SelectTrigger className="w-full sm:w-44">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -570,7 +571,7 @@ export default function UsersPage() {
         </Select>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="h-9 w-full sm:w-auto">
+            <Button variant="outline" size="sm" className="w-full sm:w-auto">
               <SlidersHorizontalIcon />
               {t("columnsLabel")}
             </Button>

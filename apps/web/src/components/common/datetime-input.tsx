@@ -2,7 +2,7 @@
 
 import { XIcon } from "lucide-react";
 import { useId, useRef } from "react";
-import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/common/icon-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { toDatetimeLocal } from "@/lib/datetime";
@@ -73,6 +73,7 @@ export function DateTimeInput({
   min,
   max,
   step,
+  size = "default",
   ...props
 }: {
   value: string;
@@ -141,6 +142,7 @@ export function DateTimeInput({
       )}
       <div className="relative flex min-w-0 gap-2">
         <Input
+          size={size}
           id={inputId}
           type="date"
           value={datePart}
@@ -171,6 +173,7 @@ export function DateTimeInput({
             string at the value/onChange boundary. */}
         {type === "datetime-local" && (
           <Input
+            size={size}
             type="time"
             value={timePart}
             onChange={(e) => handleTimeChange(e.target.value)}
@@ -187,21 +190,21 @@ export function DateTimeInput({
           />
         )}
         {value && !disabled && (
-          <Button
+          <IconButton
             type="button"
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             tabIndex={-1}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => {
               onChange("");
               onClear?.();
             }}
-            className="text-muted-foreground absolute top-1/2 right-1 size-7 -translate-y-1/2"
-            aria-label={t("clearDate")}
+            className="text-muted-foreground absolute top-1/2 right-1 -translate-y-1/2"
+            label={t("clearDate")}
           >
             <XIcon className="size-4" />
-          </Button>
+          </IconButton>
         )}
       </div>
     </div>

@@ -81,11 +81,12 @@ export function NewDayDropzoneRow({
         <TableCell colSpan={colSpan} className="border-t border-dashed py-2">
           <div className="flex flex-wrap items-center gap-2">
             <Input
+              size="sm"
               autoFocus
               type="date"
               value={date}
               aria-label={t("newDayDateLabel")}
-              className="h-8 w-auto"
+              className="w-auto"
               onChange={(e) => setDate(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && date) {
@@ -122,7 +123,7 @@ export function NewDayDropzoneRow({
       >
         <span className="inline-flex flex-wrap items-center justify-center gap-2">
           {t("dropNewDayLabel")}
-          <Button variant="ghost" size="sm" className="h-6 gap-1 px-2 text-xs" onClick={onOpen}>
+          <Button variant="ghost" size="sm" onClick={onOpen}>
             <PlusIcon className="size-3" />
             {t("newDateAction")}
           </Button>
@@ -147,9 +148,9 @@ export function InsertRowDivider({ colSpan, onInsert }: { colSpan: number; onIns
           onClick={onInsert}
           aria-label={t("insertActivityHere")}
           title={t("insertActivityHere")}
-          className="absolute inset-x-0 top-1/2 flex h-4 -translate-y-1/2 cursor-pointer items-center gap-1 px-3 opacity-0 transition-opacity group-hover/insert:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
+          className="absolute inset-x-0 top-1/2 flex h-[var(--control-height-tiny)] -translate-y-1/2 cursor-pointer items-center gap-1 px-3 opacity-0 transition-opacity group-hover/insert:opacity-100 focus-visible:opacity-100 focus-visible:outline-none"
         >
-          <span className="bg-primary text-primary-foreground flex size-4 shrink-0 items-center justify-center rounded-full">
+          <span className="bg-primary text-primary-foreground flex size-[var(--control-height-tiny)] shrink-0 items-center justify-center rounded-full">
             <PlusIcon className="size-3" />
           </span>
           <span className="bg-primary/40 h-px flex-1" />
@@ -186,11 +187,12 @@ export function DraftActivityRow({
       <TableCell colSpan={colSpan} className="py-2">
         <div className="flex flex-wrap items-center gap-2">
           <Input
+            size="sm"
             autoFocus
             value={title}
             aria-label={t("newActivityTitleLabel")}
             placeholder={t("newActivityTitlePlaceholder")}
-            className="h-8 w-full max-w-sm"
+            className="w-full max-w-sm"
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && trimmed && !saving) {

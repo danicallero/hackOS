@@ -312,11 +312,12 @@ export function RoomQueueCard({
             <div className="relative">
               <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
               <Input
+                size="sm"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 disabled={!canOperate || !challengeId}
                 placeholder={t("searchProjectPlaceholder")}
-                className="h-8 pl-8 text-sm"
+                className="pl-8 text-sm"
               />
             </div>
             {query.trim() && (

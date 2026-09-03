@@ -46,6 +46,7 @@ import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
+import { IconButton } from "@/components/common/icon-button";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -850,34 +851,32 @@ export function FieldEditor({
   const topRow = (
     <div className="flex items-center gap-1">
       {dragHandle}
-      <Button
+      <IconButton
         type="button"
         variant="ghost"
-        size="icon"
-        className="size-7"
+        size="icon-sm"
+        label={t("moveUp")}
         disabled={index === 0}
         onClick={(e) => {
           e.stopPropagation();
           onMove(-1);
         }}
       >
-        <ArrowUpIcon className="size-3.5" />
-        <span className="sr-only">{t("moveUp")}</span>
-      </Button>
-      <Button
+        <ArrowUpIcon className="size-3.5" aria-hidden="true" />
+      </IconButton>
+      <IconButton
         type="button"
         variant="ghost"
-        size="icon"
-        className="size-7"
+        size="icon-sm"
+        label={t("moveDown")}
         disabled={index === count - 1}
         onClick={(e) => {
           e.stopPropagation();
           onMove(1);
         }}
       >
-        <ArrowDownIcon className="size-3.5" />
-        <span className="sr-only">{t("moveDown")}</span>
-      </Button>
+        <ArrowDownIcon className="size-3.5" aria-hidden="true" />
+      </IconButton>
     </div>
   );
 
@@ -1111,21 +1110,26 @@ export function FieldEditor({
       <Separator />
 
       <div className="flex flex-wrap items-center gap-1">
-        <Button type="button" variant="ghost" size="icon" className="size-8" onClick={onDuplicate}>
-          <CopyIcon className="size-4" />
-          <span className="sr-only">{t("duplicateQuestion")}</span>
-        </Button>
-        <Button
+        <IconButton
           type="button"
           variant="ghost"
-          size="icon"
-          className="text-destructive size-8"
+          size="icon-sm"
+          label={t("duplicateQuestion")}
+          onClick={onDuplicate}
+        >
+          <CopyIcon className="size-4" aria-hidden="true" />
+        </IconButton>
+        <IconButton
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          label={t("remove")}
+          className="text-destructive"
           onClick={onRemove}
         >
-          <Trash2Icon className="size-4" />
-          <span className="sr-only">{t("remove")}</span>
-        </Button>
-        <Separator orientation="vertical" className="mx-1 h-6" />
+          <Trash2Icon className="size-4" aria-hidden="true" />
+        </IconButton>
+        <Separator orientation="vertical" className="mx-1 h-[var(--control-height-tiny)]" />
         <Switch
           checked={field.required}
           onCheckedChange={(v) => onChange({ required: v })}
@@ -1136,10 +1140,15 @@ export function FieldEditor({
         </Label>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button type="button" variant="ghost" size="icon" className="ml-auto size-8">
-              <MoreVerticalIcon className="size-4" />
-              <span className="sr-only">{t("moreOptions")}</span>
-            </Button>
+            <IconButton
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              label={t("moreOptions")}
+              className="ml-auto"
+            >
+              <MoreVerticalIcon className="size-4" aria-hidden="true" />
+            </IconButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             {TYPED_KINDS.has(field.kind) && (
@@ -1209,7 +1218,7 @@ function ValidationEditor({
         onChange={(e) =>
           onChange({ [key]: e.target.value ? Number(e.target.value) : undefined, ...extra })
         }
-        className="h-8"
+        size="sm"
       />
     </div>
   );
@@ -1227,7 +1236,7 @@ function ValidationEditor({
             error_message: { ...(v.error_message ?? EMPTY_I18N), [primaryLocale]: e.target.value },
           })
         }
-        className="h-8"
+        size="sm"
       />
     </div>
   );
@@ -1269,7 +1278,7 @@ function ValidationEditor({
             value={category}
             onValueChange={(val) => setCategory(val as TextValidationCategory)}
           >
-            <SelectTrigger className="h-8 w-full">
+            <SelectTrigger size="sm" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1296,7 +1305,7 @@ function ValidationEditor({
                   })
                 }
               >
-                <SelectTrigger className="h-8 w-full">
+                <SelectTrigger size="sm" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1316,7 +1325,7 @@ function ValidationEditor({
                   id={`validation-${uid}-text-value`}
                   value={v.text_value ?? ""}
                   onChange={(e) => onChange({ text_value: e.target.value })}
-                  className="h-8"
+                  size="sm"
                 />
               </div>
             )}
@@ -1339,7 +1348,7 @@ function ValidationEditor({
               id={`validation-${uid}-pattern`}
               value={v.pattern ?? ""}
               onChange={(e) => onChange({ pattern: e.target.value })}
-              className="h-8"
+              size="sm"
             />
           </div>
         )}
@@ -1372,7 +1381,7 @@ function ValidationEditor({
               value={condition}
               onValueChange={(c) => setCondition(c as SelectCountCondition, count)}
             >
-              <SelectTrigger className="h-8 w-full">
+              <SelectTrigger size="sm" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1389,7 +1398,7 @@ function ValidationEditor({
             <Input
               id={`validation-${uid}-count`}
               type="number"
-              className="h-8"
+              size="sm"
               value={count ?? ""}
               onChange={(e) =>
                 setCondition(condition, e.target.value ? Number(e.target.value) : undefined)
@@ -1458,38 +1467,36 @@ export function SectionEditor({
         {dragHandle}
         <span className="text-muted-foreground text-xs font-medium">#{index + 1}</span>
         <div className="ml-auto flex items-center gap-1">
-          <Button
+          <IconButton
             type="button"
             variant="ghost"
-            size="icon"
-            className="size-8"
+            size="icon-sm"
+            label={t("moveUp")}
             disabled={index === 0}
             onClick={() => onMove(-1)}
           >
-            <ArrowUpIcon className="size-4" />
-            <span className="sr-only">{t("moveUp")}</span>
-          </Button>
-          <Button
+            <ArrowUpIcon className="size-4" aria-hidden="true" />
+          </IconButton>
+          <IconButton
             type="button"
             variant="ghost"
-            size="icon"
-            className="size-8"
+            size="icon-sm"
+            label={t("moveDown")}
             disabled={index === count - 1}
             onClick={() => onMove(1)}
           >
-            <ArrowDownIcon className="size-4" />
-            <span className="sr-only">{t("moveDown")}</span>
-          </Button>
-          <Button
+            <ArrowDownIcon className="size-4" aria-hidden="true" />
+          </IconButton>
+          <IconButton
             type="button"
             variant="ghost"
-            size="icon"
-            className="text-destructive size-8"
+            size="icon-sm"
+            label={t("removeSection")}
+            className="text-destructive"
             onClick={onRemove}
           >
-            <Trash2Icon className="size-4" />
-            <span className="sr-only">{t("removeSection")}</span>
-          </Button>
+            <Trash2Icon className="size-4" aria-hidden="true" />
+          </IconButton>
         </div>
       </div>
 
@@ -1601,16 +1608,16 @@ export function OptionsEditor({
                 value={opt.label[primaryLocale]}
                 onChange={(e) => updateLabel(primaryLocale, e.target.value)}
               />
-              <Button
+              <IconButton
                 type="button"
                 variant="ghost"
-                size="icon"
-                className="text-muted-foreground hover:text-destructive size-8 shrink-0"
+                size="icon-sm"
+                className="text-muted-foreground hover:text-destructive shrink-0"
                 onClick={() => remove(i)}
-                aria-label={t("removeOption")}
+                label={t("removeOption")}
               >
-                <XIcon className="size-4" />
-              </Button>
+                <XIcon className="size-4" aria-hidden="true" />
+              </IconButton>
             </div>
             <details className="ml-6">
               <summary className="text-muted-foreground cursor-pointer text-xs">

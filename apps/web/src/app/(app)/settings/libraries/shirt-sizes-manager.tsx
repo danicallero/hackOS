@@ -83,8 +83,8 @@ export function ShirtSizesManager() {
   if (status === "loading") {
     return (
       <div className="space-y-4" role="status" aria-busy="true" aria-label={t("loading")}>
-        <Skeleton className="h-9 w-full" />
-        <Skeleton className="h-9 w-2/3" />
+        <Skeleton className="h-[var(--control-height-default)] w-full" />
+        <Skeleton className="h-[var(--control-height-default)] w-2/3" />
       </div>
     );
   }
@@ -109,7 +109,7 @@ export function ShirtSizesManager() {
               name={`shirtSizes.${index}.value`}
               render={({ field }) => (
                 <FormItem className="gap-1">
-                  <div className="border-input bg-background focus-within:border-ring focus-within:ring-ring/50 flex h-9 items-center gap-0.5 rounded-full border pl-3 pr-1 focus-within:ring-[3px]">
+                  <div className="border-input bg-background focus-within:border-ring focus-within:ring-ring/50 flex h-[var(--control-height-default)] items-center gap-0.5 rounded-full border pl-3 pr-1 focus-within:ring-[3px]">
                     <FormControl>
                       <input
                         {...field}
@@ -120,9 +120,9 @@ export function ShirtSizesManager() {
                     <Button
                       type="button"
                       variant="ghost"
-                      size="icon"
+                      size="icon-xs"
                       aria-label={t("removeItemLabel", { name: field.value })}
-                      className="hover:text-foreground text-muted-foreground size-6 shrink-0 rounded-full"
+                      className="hover:text-foreground text-muted-foreground shrink-0 rounded-full"
                       disabled={shirtSizeFields.fields.length <= 1}
                       onClick={() => shirtSizeFields.remove(index)}
                     >
@@ -138,7 +138,7 @@ export function ShirtSizesManager() {
             type="button"
             variant="outline"
             size="sm"
-            className="h-9 rounded-full"
+            className="rounded-full"
             onClick={() => shirtSizeFields.append({ value: "" })}
           >
             <PlusIcon />

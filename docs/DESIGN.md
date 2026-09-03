@@ -82,7 +82,7 @@ Each row: value → intent → boundary.
 | Label | 13/18 medium (`type-label`) | Form labels and control captions. |
 | Meta | 12/16 muted (`type-meta`) | Timestamps, counts, secondary facts. **No artificial tracking** — never add `tracking-*` to shared headings or metadata. |
 | Data | `tabular-nums` | Any column of numbers. Monospace only for identifiers and timers — never for prose. |
-| Controls | 36 px default, 32 px compact, 40 px prominent; 6 px radius | Compact only in dense staff tables; prominent for mobile-friendly/primary flows. |
+| Controls | 24 px tiny/icon-xs, 32 px compact, 36 px default, 40 px prominent; 6 px radius | Tiny is for icon-only remove/inline affordances; compact is for dense staff tables; prominent is for mobile-friendly/primary flows. Use component `size` variants, never one-off height utilities. Multiline `Textarea` uses a separate 64 px minimum token. |
 | Surfaces | 8 px radius, semantic border + background | **No shadow for inline grouping** — border-only. |
 | Overlays | 8 px radius; small shadow (menus/popovers), large shadow (modals) | Elevation communicates "floating above the page" and nothing else. |
 | Full radius | pills, avatars | Nowhere else. |
@@ -210,6 +210,8 @@ anything else.
 | A metric | `StatCard` (delta/footer slots for meters/sparklines) | Bare big numbers in a `Surface` |
 | Comparative data, sorting, bulk selection | `DataTable<T>` | Custom table markup |
 | A horizontal tab bar | `TabBar` (scrolls itself when the triggers outgrow the container) | Bare `TabsList` with a per-page `overflow-x-auto` wrapper or `flex-wrap`, which the fixed pill height clips |
+| A group of adjacent actions | `ActionGroup` (wraps with the shared 8 px gap) | Repeated per-page flex/gap wrappers with divergent wrapping |
+| An icon-only action | `IconButton` (localized `label`, token-backed hit area) | A bare `<button>` or `Button` with a hand-written `size-*` override |
 | A combobox/multi-select inside a `Modal` | `MultiSelect`/`UniversityPicker`/`UserPicker`/`EntityCombobox` with `inDialog` | The same control without it — its list then either can't scroll or spills outside the dialog |
 | Pick one row from a table-backed list (users, enterprises, activities, …) | `UserPicker` (server-searched) or `EntityCombobox` (client-filtered, already-fetched list) | A `Select` dumping every row flat — unusable once the table grows past a handful of rows |
 | A set of same-shaped objects users drill into (esp. mobile) | Cards / drill-down list rows | A horizontally scrolling table |
@@ -218,10 +220,13 @@ anything else.
 | Application-template fields (any kind) | `TemplateFieldControl` — the single renderer both applicant form and staff review use | A second field renderer |
 | Gate UI by permission | `<CapabilityGate>` / `useCan(cap)` | Checking `me.role` |
 
-The primitives layer (`components/ui/*`, shadcn) is **vendored/generated —
-never hand-edited**; project variants wrap primitives in `components/common/`.
-If a widget is needed twice, it moves to `components/common/` — one canonical
-component configured by props, never a forked second version.
+The primitives layer (`components/ui/*`, shadcn) keeps vendored behavior and
+structure. Its token-backed visual defaults are maintained as part of the web
+design contract, so control geometry and interaction states may be aligned
+there; domain behavior never belongs in the primitives. Project-specific
+compositions wrap them in `components/common/`. If a widget is needed twice,
+it moves to `components/common/` — one canonical component configured by props,
+never a forked second version.
 
 ## 6. Tables, forms, and states
 
@@ -413,8 +418,10 @@ workspaces with per-device persistence; conventions in
   reachable. Route hrefs are stable — deep links and bookmarks must keep
   working; don't move routes for IA reasons.
 - Primitives (`components/ui/*`) come from the shadcn CLI
-  (`pnpm dlx shadcn@latest add <name> -y`), are biome-ignored, and are never
-  hand-edited; wrap them in `components/common/` for project variants.
+  (`pnpm dlx shadcn@latest add <name> -y`) and are biome-ignored. Keep their
+  behavior/structure vendored; token-backed visual defaults may be maintained
+  there as part of the shared control contract. Wrap project variants in
+  `components/common/`.
 - The `/components` route in the running app is the live gallery of every
   shared widget with variations — check it before building UI.
 - Errors from the API surface `ApiError.message` verbatim (already
@@ -590,6 +597,7 @@ Every UI change, web or mobile:
 | Page hierarchy | `apps/web/src/components/common/page-header.tsx` |
 | Sections/surfaces | `apps/web/src/components/common/section-card.tsx` |
 | Tables, search, rows | `apps/web/src/components/common/data-table.tsx` |
+| Shared actions and control geometry | `apps/web/src/components/common/action-group.tsx`, `icon-button.tsx`, `apps/web/src/components/ui/{button,input,select,tabs}.tsx` |
 | Web navigation | `apps/web/src/lib/nav.ts` |
 | Mobile tabs | `apps/mobile/lib/tabs.ts` |
 | Mobile pseudo-tab navigation | `apps/mobile/lib/operations-navigation.ts` |
@@ -619,12 +627,14 @@ The system never does these. Treat a diff that introduces one as a bug:
    copy.
 5. No shadows on inline surfaces; elevation belongs to overlays only.
 6. No second version of a shared component — extend by props or wrap.
-7. No mouse-only interactions: no clickable rows without keyboard semantics,
+7. No one-off control geometry — use the shared `size` variants and tokens;
+   `SelectTrigger size="content"` is the only wrapping opt-in.
+8. No mouse-only interactions: no clickable rows without keyboard semantics,
    no hover-only data.
-8. No colour-alone state communication, and no toast-only critical failures.
-9. No descriptions that restate the title or enumerate visible content;
+9. No colour-alone state communication, and no toast-only critical failures.
+10. No descriptions that restate the title or enumerate visible content;
    no "Soon" badges as attention devices.
-10. No UI that makes a locally queued scan look server-confirmed, or an
+11. No UI that makes a locally queued scan look server-confirmed, or an
     internal decision look communicated.
 
 ## 16. History

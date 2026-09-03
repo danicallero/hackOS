@@ -375,7 +375,7 @@ export default function SchedulePage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t("searchSchedulePlaceholder")}
-              className="h-9 pl-9"
+              className="pl-9"
               aria-label={t("searchSchedulePlaceholder")}
             />
           </div>

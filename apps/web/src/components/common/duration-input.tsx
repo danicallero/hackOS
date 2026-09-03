@@ -5,7 +5,10 @@ import { Input } from "@/components/ui/input";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
-type DurationInputProps = Omit<React.ComponentProps<"input">, "onChange" | "type" | "value"> & {
+type DurationInputProps = Omit<
+  React.ComponentProps<typeof Input>,
+  "onChange" | "type" | "value"
+> & {
   /** Total duration in whole seconds, as a string (e.g. "125"), or "" for unset. */
   value: string;
   /** Fires with the new total-seconds string whenever minutes or seconds changes. */
@@ -39,7 +42,7 @@ function toDurationSeconds(minutes: string, seconds: string) {
 
 /** Minutes + seconds pair of native inputs backed by a single total-seconds value. */
 const DurationInput = React.forwardRef<HTMLInputElement, DurationInputProps>(
-  ({ value, onChange, className, disabled, id, ...props }, ref) => {
+  ({ value, onChange, className, disabled, id, size = "default", ...props }, ref) => {
     const { t } = useLocale();
     const {
       "aria-describedby": ariaDescribedBy,
@@ -84,6 +87,7 @@ const DurationInput = React.forwardRef<HTMLInputElement, DurationInputProps>(
         <div className="relative">
           <Input
             {...inputProps}
+            size={size}
             ref={ref}
             id={id}
             aria-describedby={ariaDescribedBy}
@@ -102,6 +106,7 @@ const DurationInput = React.forwardRef<HTMLInputElement, DurationInputProps>(
         </div>
         <div className="relative">
           <Input
+            size={size}
             aria-describedby={ariaDescribedBy}
             aria-invalid={ariaInvalid}
             inputMode="numeric"

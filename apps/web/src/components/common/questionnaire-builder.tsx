@@ -39,6 +39,7 @@ import {
 import { useMemo, useState } from "react";
 import { i18nWithEnglishFallback, type Prize } from "@/app/(app)/challenges/shared";
 import { DragHandle, SortableItem } from "@/components/common/drag-handle";
+import { IconButton } from "@/components/common/icon-button";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -520,29 +521,24 @@ function JudgingQuestionRow({
       <Separator />
 
       <div className="flex flex-wrap items-center gap-1">
-        <Button
+        <IconButton
           type="button"
-          variant="ghost"
-          size="icon"
-          className="size-8"
+          label={t("duplicateQuestion")}
           onClick={onDuplicate}
           disabled={disabled}
         >
-          <CopyIcon className="size-4" />
-          <span className="sr-only">{t("duplicateQuestion")}</span>
-        </Button>
-        <Button
+          <CopyIcon className="size-4" aria-hidden="true" />
+        </IconButton>
+        <IconButton
           type="button"
-          variant="ghost"
-          size="icon"
-          className="text-destructive size-8"
+          label={t("removeField")}
+          className="text-destructive"
           onClick={onRemove}
           disabled={disabled}
         >
-          <Trash2Icon className="size-4" />
-          <span className="sr-only">{t("removeField")}</span>
-        </Button>
-        <Separator orientation="vertical" className="mx-1 h-6" />
+          <Trash2Icon className="size-4" aria-hidden="true" />
+        </IconButton>
+        <Separator orientation="vertical" className="mx-1 h-[var(--control-height-tiny)]" />
         <Switch
           checked={question.required}
           onCheckedChange={(required) => onChange({ ...question, required })}
@@ -766,7 +762,7 @@ export function MultilingualInput({
   const setOpen = onOpenChange ?? setOpenState;
   return (
     <div className="space-y-2">
-      <div className="flex min-h-8 items-center justify-between gap-2">
+      <div className="flex min-h-[var(--control-height-compact)] items-center justify-between gap-2">
         <p className="text-sm font-medium">
           {label}
           {optional ? t("optionalSuffix") : ""}
@@ -885,31 +881,6 @@ function FieldHint({ text }: { text: string }) {
         <TooltipContent className="max-w-60 text-pretty">{text}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
-  );
-}
-
-function IconButton({
-  label,
-  disabled,
-  onClick,
-  children,
-}: {
-  label: string;
-  disabled?: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      aria-label={label}
-      disabled={disabled}
-      onClick={onClick}
-    >
-      {children}
-    </Button>
   );
 }
 

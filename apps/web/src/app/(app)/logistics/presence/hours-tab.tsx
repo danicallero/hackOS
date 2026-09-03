@@ -3,6 +3,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { DownloadIcon, UsersIcon } from "lucide-react";
 import { useMemo, useState } from "react";
+import { ActionGroup } from "@/components/common/action-group";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { SectionCard } from "@/components/common/section-card";
 import { Field } from "@/components/logistics/ui";
@@ -69,7 +70,7 @@ export function HoursTab({
       description={t("attendanceHoursDesc")}
       icon={UsersIcon}
       action={
-        <div className="flex flex-wrap items-end gap-2">
+        <ActionGroup className="items-end">
           <Field id="min-hours" label={t("minHoursLabel")}>
             <Input
               id="min-hours"
@@ -98,7 +99,7 @@ export function HoursTab({
               </Button>
             </>
           )}
-        </div>
+        </ActionGroup>
       }
     >
       <DataTable

@@ -38,7 +38,7 @@ describe("logistics form primitives", () => {
     const label = container.querySelector<HTMLLabelElement>('label[for="badge"]');
     const labelBlock = label?.parentElement;
     expect(label).not.toBeNull();
-    expect(labelBlock?.className).toContain("min-h-9");
+    expect(labelBlock?.className).toContain("min-h-[var(--control-height-default)]");
     expect(container.querySelector('label[for="direction"]')).not.toBeNull();
   });
 

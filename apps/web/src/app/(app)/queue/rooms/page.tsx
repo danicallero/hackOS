@@ -327,7 +327,7 @@ export default function QueueRoomsPage() {
             pageSize={10}
             toolbar={
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="h-9 w-40">
+                <SelectTrigger className="w-40">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

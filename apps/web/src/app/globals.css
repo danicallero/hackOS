@@ -14,15 +14,17 @@
   --radius: 0.5rem;
 
   /*
-   * Shared visual contract (docs/design-system-migration.md).
+   * Shared visual contract (docs/DESIGN.md).
    * Keep spacing on the 4px grid and reserve elevation for floating UI.
    */
   --space-related: 0.5rem;
   --space-within-section: 1rem;
   --space-between-sections: 1.5rem;
+  --control-height-tiny: 1.5rem;
   --control-height-compact: 2rem;
   --control-height-default: 2.25rem;
   --control-height-prominent: 2.5rem;
+  --control-height-textarea: 4rem;
   --hackos-radius-control: 0.375rem;
   --hackos-radius-surface: 0.5rem;
   --hackos-radius-overlay: 0.5rem;

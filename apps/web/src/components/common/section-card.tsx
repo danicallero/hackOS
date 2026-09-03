@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { useId } from "react";
+import { ActionGroup } from "@/components/common/action-group";
 import { Section } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 
@@ -68,11 +69,7 @@ export function SectionCard({
               )}
             </div>
           </div>
-          {action && (
-            <div className="flex flex-wrap items-center gap-(--space-related) sm:shrink-0">
-              {action}
-            </div>
-          )}
+          {action && <ActionGroup className="sm:shrink-0">{action}</ActionGroup>}
         </div>
       )}
       <div className="border-border border-t" />
@@ -80,7 +77,7 @@ export function SectionCard({
         {children}
       </div>
       {footer && (
-        <div className="flex flex-wrap justify-end gap-2 px-4 pb-4 sm:px-5 sm:pb-5">{footer}</div>
+        <ActionGroup className="justify-end px-4 pb-4 sm:px-5 sm:pb-5">{footer}</ActionGroup>
       )}
     </Section>
   );

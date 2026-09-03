@@ -225,6 +225,7 @@ export function EditableTextCell({
       style={{ width: "max(100%, 12rem)" }}
     >
       <Input
+        size="sm"
         ref={inputRef}
         value={draft}
         disabled={saving}
@@ -246,7 +247,7 @@ export function EditableTextCell({
             refocusScheduleCell(input);
           }
         }}
-        className="h-7 w-full border-0 bg-transparent text-sm shadow-none"
+        className="w-full border-0 bg-transparent text-sm shadow-none"
       />
     </div>
   );
@@ -325,6 +326,7 @@ export function EditableTimeCell({
       style={{ width: "max(100%, 6rem)" }}
     >
       <Input
+        size="sm"
         ref={inputRef}
         type="text"
         inputMode="numeric"
@@ -349,7 +351,7 @@ export function EditableTimeCell({
             refocusScheduleCell(input);
           }
         }}
-        className="h-7 w-full border-0 bg-transparent font-mono text-sm tabular-nums shadow-none"
+        className="w-full border-0 bg-transparent font-mono text-sm tabular-nums shadow-none"
       />
     </div>
   );
@@ -546,7 +548,7 @@ export function EditableScannableCell({
 
   return (
     <div
-      className="flex min-h-8 items-center gap-2 rounded px-1 py-0.5 text-sm"
+      className="flex min-h-[var(--control-height-compact)] items-center gap-2 rounded px-1 py-0.5 text-sm"
       title={disabledHint}
     >
       <Checkbox
@@ -629,6 +631,7 @@ export function EditablePublishDateCell({
       style={{ width: "max(100%, 15rem)" }}
     >
       <DateTimeInput
+        size="sm"
         value={draft}
         onChange={setDraft}
         onBlur={(event) => {
@@ -655,7 +658,7 @@ export function EditablePublishDateCell({
         disabled={saving}
         aria-label={fieldLabel}
         data-schedule-focusable="true"
-        className="h-7 border-0 bg-transparent shadow-none"
+        className="border-0 bg-transparent shadow-none"
       />
     </div>
   );
@@ -779,8 +782,7 @@ export function EditableOwnersCell({
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon"
-                  className="size-6"
+                  size="icon-xs"
                   aria-label={t("remove")}
                   disabled={busy}
                   onClick={() => remove(owner.id)}

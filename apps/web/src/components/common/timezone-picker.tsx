@@ -144,7 +144,7 @@ export function TimezonePicker({
           type="button"
           variant="outline"
           disabled={disabled}
-          className={cn("h-auto min-h-10 w-full justify-between px-3 py-2 font-normal", className)}
+          className={cn("w-full justify-between font-normal", className)}
         >
           <span className={cn("flex-1 truncate text-left", !value && "text-muted-foreground")}>
             {value ? value.replace(/_/g, " ") : t("selectTimezonePlaceholder")}

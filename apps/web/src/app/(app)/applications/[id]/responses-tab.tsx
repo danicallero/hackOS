@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { ReviewModal } from "@/components/applications/review-modal";
 import { AlertModal } from "@/components/common/alert-modal";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { IconButton } from "@/components/common/icon-button";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -351,22 +352,22 @@ export function ResponsesTab({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t("searchByNameOrEmailPlaceholder")}
-            className="h-9 pr-9"
+            className="pr-9"
           />
           {search && (
-            <Button
+            <IconButton
               type="button"
               variant="ghost"
-              size="icon"
-              className="absolute top-1/2 right-0.5 size-8 -translate-y-1/2"
+              size="icon-sm"
+              className="absolute top-1/2 right-0.5 -translate-y-1/2"
               onClick={() => {
                 setSearch("");
                 document.getElementById("response-search")?.focus();
               }}
-              aria-label={t("clearSearch")}
+              label={t("clearSearch")}
             >
               <XIcon aria-hidden="true" />
-            </Button>
+            </IconButton>
           )}
         </div>
         <span
@@ -377,7 +378,7 @@ export function ResponsesTab({
           {t("tableResultCount", { count: rows.length })}
         </span>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="h-9 w-40 capitalize">
+          <SelectTrigger className="w-40 capitalize">
             <SelectValue placeholder={t("allStatuses")} />
           </SelectTrigger>
           <SelectContent>

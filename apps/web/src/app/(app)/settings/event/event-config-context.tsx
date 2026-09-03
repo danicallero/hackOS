@@ -94,9 +94,9 @@ export function EventConfigLoadState({ icon, title }: { icon: LucideIcon; title:
         <ContextualError message={error ?? t("couldNotLoadEventSettings")} onRetry={retry} />
       ) : (
         <div className="space-y-4" role="status" aria-busy="true" aria-label={t("loading")}>
-          <Skeleton className="h-9 w-full" />
-          <Skeleton className="h-9 w-full" />
-          <Skeleton className="h-9 w-2/3" />
+          <Skeleton className="h-[var(--control-height-default)] w-full" />
+          <Skeleton className="h-[var(--control-height-default)] w-full" />
+          <Skeleton className="h-[var(--control-height-default)] w-2/3" />
         </div>
       )}
     </SectionCard>

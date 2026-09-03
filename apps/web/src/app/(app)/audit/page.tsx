@@ -289,7 +289,7 @@ export default function AuditPage() {
             getId={(o) => o.action}
             getLabel={(o) => o.label}
             placeholder={t("allActionsPlaceholder")}
-            className="h-9 w-full sm:w-48"
+            className="w-full sm:w-48"
           />
         </div>
         <div className="min-w-0 space-y-1">
@@ -304,7 +304,7 @@ export default function AuditPage() {
             getId={(o) => o.entityType}
             getLabel={(o) => o.entityType}
             placeholder={t("allEntityTypesPlaceholder")}
-            className="h-9 w-full sm:w-48"
+            className="w-full sm:w-48"
           />
         </div>
         <div className="min-w-0 space-y-1">
@@ -315,7 +315,7 @@ export default function AuditPage() {
             id="audit-entity-id"
             value={filters.entityId}
             onChange={(e) => setFilters((f) => ({ ...f, entityId: e.target.value }))}
-            className="h-9 w-full sm:w-28"
+            className="w-full sm:w-28"
           />
         </div>
         <div className="min-w-0 space-y-1">
@@ -327,7 +327,7 @@ export default function AuditPage() {
             value={filters.actorQuery}
             onChange={(e) => setFilters((f) => ({ ...f, actorQuery: e.target.value }))}
             placeholder={`${t("egPrefix")} Daniel, daniel@...`}
-            className="h-9 w-full sm:w-44"
+            className="w-full sm:w-44"
           />
         </div>
         <div className="min-w-0 space-y-1">
@@ -338,7 +338,7 @@ export default function AuditPage() {
             id="audit-from"
             value={filters.dateFrom}
             onChange={(v) => setFilters((f) => ({ ...f, dateFrom: v }))}
-            className="h-9 w-full sm:w-auto"
+            className="w-full sm:w-auto"
           />
         </div>
         <div className="min-w-0 space-y-1">
@@ -349,7 +349,7 @@ export default function AuditPage() {
             id="audit-to"
             value={filters.dateTo}
             onChange={(v) => setFilters((f) => ({ ...f, dateTo: v }))}
-            className="h-9 w-full sm:w-auto"
+            className="w-full sm:w-auto"
           />
         </div>
         {hasFilters && (

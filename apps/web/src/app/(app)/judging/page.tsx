@@ -283,7 +283,7 @@ export default function QueuePage() {
               Change it from the room admin surface, not here. */}
           <div className="min-w-44 flex-[1.2] space-y-2">
             <p className="text-sm font-medium">{t("challengeLabel")}</p>
-            <div className="border-input bg-muted/40 text-muted-foreground flex h-9 w-full min-w-0 items-center gap-2 rounded-md border px-3 text-sm">
+            <div className="border-input bg-muted/40 text-muted-foreground flex h-[var(--control-height-default)] w-full min-w-0 items-center gap-2 rounded-control border px-3 text-sm">
               <LockIcon className="size-3.5 shrink-0" />
               <span className="text-foreground truncate font-medium">{challengeLabel}</span>
             </div>

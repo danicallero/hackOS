@@ -29,7 +29,7 @@ export function VerificationBanner() {
     <div className="border-warning/40 bg-warning/10 text-warning-foreground flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2 text-sm sm:px-6">
       <MailWarningIcon className="text-warning size-4 shrink-0" />
       <span className="text-foreground">{t("emailNotVerified")}</span>
-      <Button asChild size="sm" variant="outline" className="ml-auto h-7">
+      <Button asChild size="sm" variant="outline" className="ml-auto">
         <Link href={verifyHref}>{t("verifyNow")}</Link>
       </Button>
     </div>
