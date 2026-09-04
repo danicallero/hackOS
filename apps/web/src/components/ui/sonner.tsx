@@ -16,7 +16,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
-      className="toaster group"
+      className="toaster group z-[100]"
       closeButton
       // Keep action buttons visually secondary but discoverable. Sonner's
       // closeButton remains enabled so every toast still has an explicit
