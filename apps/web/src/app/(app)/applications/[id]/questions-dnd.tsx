@@ -28,7 +28,7 @@ export function SortableField({
   }) => React.ReactNode;
 }) {
   return (
-    <SortableItem id={id} data={{ type: "field" }}>
+    <SortableItem id={id} data={{ type: "field" }} hideWhileDragging>
       {children}
     </SortableItem>
   );
@@ -59,7 +59,7 @@ export function SortableSection({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn(isDragging && "z-10 opacity-60")}
+      className={cn(isDragging && "opacity-0")}
     >
       {children({ attributes, listeners, setActivatorNodeRef })}
     </div>
