@@ -27,6 +27,7 @@ export function DragHandle({
 }) {
   return (
     <IconButton
+      variant="ghost"
       size="icon-sm"
       label={label}
       className="text-muted-foreground hover:bg-muted hover:text-foreground -ml-1.5 cursor-grab touch-none active:cursor-grabbing"
