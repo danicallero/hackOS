@@ -4,6 +4,8 @@ import {
   closestCenter,
   DndContext,
   type DragEndEvent,
+  DragOverlay,
+  type DragStartEvent,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -36,9 +38,13 @@ import {
   Trash2Icon,
   TypeIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { i18nWithEnglishFallback, type Prize } from "@/app/(app)/challenges/shared";
-import { DragHandle, SortableItem } from "@/components/common/drag-handle";
+import {
+  DragHandle,
+  dragOverlayDropAnimation,
+  SortableItem,
+} from "@/components/common/drag-handle";
 import { IconButton } from "@/components/common/icon-button";
 import { Button } from "@/components/ui/button";
 import {
@@ -61,6 +67,7 @@ import { Surface } from "@/components/ui/surface";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useClickOutside } from "@/hooks/use-click-outside";
 import { type Translate, useLocale } from "@/lib/i18n";
 
 /** Fixed locale order for translation inputs — English is always the primary
@@ -229,6 +236,7 @@ export function JudgingPanelBuilder({
   const { t } = useLocale();
   const questionTypes = useMemo(() => buildQuestionTypes(t), [t]);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
   const dndSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -260,7 +268,12 @@ export function JudgingPanelBuilder({
     setActiveIndex(index + 1);
   };
 
+  function handleDragStart(event: DragStartEvent) {
+    setDragIndex(Number(event.active.id));
+  }
+
   function handleDragEnd(event: DragEndEvent) {
+    setDragIndex(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const oldIndex = Number(active.id);
@@ -309,13 +322,19 @@ export function JudgingPanelBuilder({
 
   return (
     <div className="space-y-4">
-      <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <DndContext
+        sensors={dndSensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragCancel={() => setDragIndex(null)}
+      >
         <SortableContext
           items={value.map((_, index) => String(index))}
           strategy={verticalListSortingStrategy}
         >
           {value.map((question, index) => (
-            <SortableItem key={String(index)} id={String(index)}>
+            <SortableItem key={String(index)} id={String(index)} hideWhileDragging>
               {(drag) => (
                 <JudgingQuestionRow
                   question={question}
@@ -328,6 +347,7 @@ export function JudgingPanelBuilder({
                   disabled={disabled}
                   active={activeIndex === index}
                   onActivate={() => setActiveIndex(index)}
+                  onDeactivate={() => setActiveIndex(null)}
                   onChange={(next) => update(index, next)}
                   onMove={(dir) => move(index, dir)}
                   onDuplicate={() => duplicate(index)}
@@ -337,8 +357,29 @@ export function JudgingPanelBuilder({
             </SortableItem>
           ))}
         </SortableContext>
+        <DragOverlay dropAnimation={dragOverlayDropAnimation}>
+          {dragIndex !== null && (
+            <Surface padding="compact" className="shadow-floating">
+              <QuestionRowPreview question={value[dragIndex]} index={dragIndex} />
+            </Surface>
+          )}
+        </DragOverlay>
       </DndContext>
       {addField}
+    </div>
+  );
+}
+
+/** Collapsed-row content, also reused as the floating `DragOverlay` clone
+ *  while a question is being dragged. */
+function QuestionRowPreview({ question, index }: { question: Question; index: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      <QuestionIcon kind={question.kind} />
+      <div>
+        <div className="font-medium">{question.label.en || `Field ${index + 1}`}</div>
+        <div className="text-muted-foreground text-xs">{question.key}</div>
+      </div>
     </div>
   );
 }
@@ -351,6 +392,7 @@ function JudgingQuestionRow({
   dragHandle,
   active,
   onActivate,
+  onDeactivate,
   onChange,
   onMove,
   onDuplicate,
@@ -364,6 +406,7 @@ function JudgingQuestionRow({
   dragHandle: React.ReactNode;
   active: boolean;
   onActivate: () => void;
+  onDeactivate: () => void;
   onChange: (question: Question) => void;
   onMove: (dir: -1 | 1) => void;
   onDuplicate: () => void;
@@ -371,6 +414,8 @@ function JudgingQuestionRow({
   disabled: boolean;
 }) {
   const { t } = useLocale();
+  const cardRef = useRef<HTMLDivElement>(null);
+  useClickOutside(cardRef, onDeactivate, active);
 
   const topRow = (
     <div className="flex items-center gap-1">
@@ -397,13 +442,7 @@ function JudgingQuestionRow({
       <Surface padding="compact" className="hover:border-primary/40 space-y-3 transition-colors">
         {topRow}
         <button type="button" onClick={onActivate} disabled={disabled} className="w-full text-left">
-          <div className="flex items-center gap-2">
-            <QuestionIcon kind={question.kind} />
-            <div>
-              <div className="font-medium">{question.label.en || `Field ${index + 1}`}</div>
-              <div className="text-muted-foreground text-xs">{question.key}</div>
-            </div>
-          </div>
+          <QuestionRowPreview question={question} index={index} />
         </button>
       </Surface>
     );
@@ -419,6 +458,7 @@ function JudgingQuestionRow({
 
   return (
     <Surface
+      ref={cardRef}
       padding="compact"
       onClick={(e) => e.stopPropagation()}
       className="border-l-primary space-y-4 border-l-4"

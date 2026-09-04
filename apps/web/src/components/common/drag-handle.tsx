@@ -40,14 +40,23 @@ export function DragHandle({
   );
 }
 
-/** Sortable wrapper for one item in a flat (or grouped) drag-and-drop list. */
+/** Sortable wrapper for one item in a flat (or grouped) drag-and-drop list.
+ *
+ *  `hideWhileDragging` is for callers that render a `DragOverlay` clone of
+ *  the active item: the real item goes fully transparent (instead of the
+ *  default translucent-in-place look) so only the overlay clone is visible
+ *  while dragging, which is what avoids the snap/jump on drop — without an
+ *  overlay, the real item's position resets one frame before the reordered
+ *  array commits. */
 export function SortableItem({
   id,
   data,
+  hideWhileDragging = false,
   children,
 }: {
   id: string;
   data?: Record<string, unknown>;
+  hideWhileDragging?: boolean;
   children: (drag: {
     attributes: ReturnType<typeof useSortable>["attributes"];
     listeners: ReturnType<typeof useSortable>["listeners"];
@@ -61,9 +70,17 @@ export function SortableItem({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn(isDragging && "z-10 opacity-60")}
+      className={cn(isDragging && (hideWhileDragging ? "opacity-0" : "z-10 opacity-60"))}
     >
       {children({ attributes, listeners })}
     </div>
   );
 }
+
+/** Standard drop animation for a `DragOverlay` clone: eases into its final
+ *  slot instead of just vanishing, without the sidewaysScale dnd-kit uses by
+ *  default (which reads as a jump on short list rows). */
+export const dragOverlayDropAnimation = {
+  duration: 200,
+  easing: "cubic-bezier(0.2, 0, 0, 1)",
+};

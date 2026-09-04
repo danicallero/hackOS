@@ -8,6 +8,8 @@ import {
   closestCenter,
   DndContext,
   type DragEndEvent,
+  DragOverlay,
+  type DragStartEvent,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -42,9 +44,10 @@ import {
   TypeIcon,
   XIcon,
 } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
+import { dragOverlayDropAnimation } from "@/components/common/drag-handle";
 import { EmptyState } from "@/components/common/empty-state";
 import { IconButton } from "@/components/common/icon-button";
 import { SaveStatus } from "@/components/common/save-status";
@@ -70,6 +73,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Surface } from "@/components/ui/surface";
 import { Switch } from "@/components/ui/switch";
+import { useClickOutside } from "@/hooks/use-click-outside";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
 import { type MessageKey, type Translate, useLocale } from "@/lib/i18n";
@@ -194,9 +198,13 @@ export function QuestionsCard({
   // Only the question you're editing expands into the full editor; every
   // other question just shows its live preview.
   const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
-  // Only true while a question is being dragged, so the "drop here" empty
-  // placeholder only shows up during a drag instead of sitting there always.
-  const [dragging, setDragging] = useState(false);
+  // Set only while a question/section is being dragged, so the "drop here"
+  // empty placeholder only shows up during a drag instead of sitting there
+  // always, and the DragOverlay clone knows which item to render.
+  const [dragActive, setDragActive] = useState<{ id: string; type: "field" | "section" } | null>(
+    null,
+  );
+  const dragging = dragActive !== null;
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("saved");
@@ -413,12 +421,15 @@ export function QuestionsCard({
     setSaveState("unsaved");
   }
 
-  function handleDragStart() {
-    setDragging(true);
+  function handleDragStart(event: DragStartEvent) {
+    const type = event.active.data.current?.type;
+    if (type === "section" || type === "field") {
+      setDragActive({ id: String(event.active.id), type });
+    }
   }
 
   function handleDragEnd(event: DragEndEvent) {
-    setDragging(false);
+    setDragActive(null);
     const { active, over } = event;
     if (!over) return;
     const activeId = String(active.id);
@@ -623,7 +634,7 @@ export function QuestionsCard({
           collisionDetection={closestCenter}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
-          onDragCancel={() => setDragging(false)}
+          onDragCancel={() => setDragActive(null)}
         >
           {
             // biome-ignore lint/a11y/noStaticElementInteractions: click-outside-to-collapse convenience only, every field stays reachable via its own controls
@@ -656,6 +667,7 @@ export function QuestionsCard({
                           dragHandle={<DragHandle {...drag} label={t("dragToReorder")} />}
                           active={activeFieldId === field._id}
                           onActivate={() => setActiveFieldId(field._id)}
+                          onDeactivate={() => setActiveFieldId(null)}
                           onChange={(patch) => updateUnsaved(field._id, patch)}
                           onKind={(k) => setKind(field._id, k)}
                           onMove={(dir) => moveWithinBlock(field._id, dir)}
@@ -721,6 +733,7 @@ export function QuestionsCard({
                                       }
                                       active={activeFieldId === field._id}
                                       onActivate={() => setActiveFieldId(field._id)}
+                                      onDeactivate={() => setActiveFieldId(null)}
                                       onChange={(patch) => updateUnsaved(field._id, patch)}
                                       onKind={(k) => setKind(field._id, k)}
                                       onMove={(dir) => moveWithinBlock(field._id, dir)}
@@ -770,6 +783,33 @@ export function QuestionsCard({
               </div>
             </div>
           }
+          <DragOverlay dropAnimation={dragOverlayDropAnimation}>
+            {dragActive?.type === "field" &&
+              (() => {
+                const field = fields.find((f) => f._id === dragActive.id);
+                return (
+                  field && (
+                    <Surface padding="compact" className="shadow-floating">
+                      <FieldPreviewRow field={field} locale={language} />
+                    </Surface>
+                  )
+                );
+              })()}
+            {dragActive?.type === "section" &&
+              (() => {
+                const section = sections.find((s) => s._id === dragActive.id);
+                return (
+                  section && (
+                    <Surface
+                      padding="compact"
+                      className="border-l-primary shadow-floating border-l-4"
+                    >
+                      <div className="font-medium">{section.title[language] || section.key}</div>
+                    </Surface>
+                  )
+                );
+              })()}
+          </DragOverlay>
         </DndContext>
       )}
     </SectionCard>
@@ -825,6 +865,7 @@ export function FieldEditor({
   dragHandle,
   active,
   onActivate,
+  onDeactivate,
   onChange,
   onKind,
   onMove,
@@ -839,6 +880,7 @@ export function FieldEditor({
   dragHandle?: React.ReactNode;
   active: boolean;
   onActivate: () => void;
+  onDeactivate: () => void;
   onChange: (patch: Partial<TemplateField>) => void;
   onKind: (kind: FieldKind) => void;
   onMove: (dir: -1 | 1) => void;
@@ -847,6 +889,8 @@ export function FieldEditor({
 }) {
   const { t } = useLocale();
   const uid = useId();
+  const cardRef = useRef<HTMLDivElement>(null);
+  useClickOutside(cardRef, onDeactivate, active);
 
   const topRow = (
     <div className="flex items-center gap-1">
@@ -916,6 +960,7 @@ export function FieldEditor({
 
   return (
     <Surface
+      ref={cardRef}
       padding="compact"
       onClick={(e) => e.stopPropagation()}
       className="border-l-primary space-y-4 border-l-4"
