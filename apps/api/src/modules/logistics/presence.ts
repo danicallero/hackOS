@@ -393,34 +393,36 @@ export async function openSessions(at?: number, actorId?: number) {
 
 /**
  * Load raw presence signals (door in/out + activity scans) grouped per user.
- * Passing a userId scopes to that user.
+ * Passing a single userId or a userIds array scopes the query accordingly;
+ * omitted, every active participant's signals are loaded (bulk endpoints).
  */
 async function loadEvents(
-  userId?: number,
+  userIds?: number | number[],
   options: { accountScope?: "real" | "synthetic" | "all" } = {},
 ): Promise<Map<number, PresenceEvent[]>> {
-  const scoped = userId != null;
+  const scoped = userIds != null;
   const testAccountFilter =
     options.accountScope === "real"
       ? " AND u.is_test_account = false"
       : options.accountScope === "synthetic"
         ? " AND u.is_test_account = true"
         : "";
+  const idCondition = Array.isArray(userIds) ? "= ANY($1)" : "= $1";
   const timeFilter = scoped
-    ? `WHERE tl.user_id = $1
+    ? `WHERE tl.user_id ${idCondition}
          AND EXISTS (SELECT 1 FROM users u WHERE u.id = tl.user_id
           AND u.account_state = 'active' AND u.anonymized_at IS NULL${testAccountFilter})`
     : `WHERE tl.user_id IS NOT NULL
          AND EXISTS (SELECT 1 FROM users u WHERE u.id = tl.user_id
           AND u.account_state = 'active' AND u.anonymized_at IS NULL${testAccountFilter})`;
   const activityFilter = scoped
-    ? `WHERE al.user_id = $1
+    ? `WHERE al.user_id ${idCondition}
          AND EXISTS (SELECT 1 FROM users u WHERE u.id = al.user_id
           AND u.account_state = 'active' AND u.anonymized_at IS NULL${testAccountFilter})`
     : `WHERE al.user_id IS NOT NULL
          AND EXISTS (SELECT 1 FROM users u WHERE u.id = al.user_id
           AND u.account_state = 'active' AND u.anonymized_at IS NULL${testAccountFilter})`;
-  const params = scoped ? [userId] : [];
+  const params = scoped ? [userIds] : [];
   const { rows } = await pool.query(
     `SELECT tl.user_id, extract(epoch from tl.scanned_at) * 1000 AS t, tl.kind,
             NULL::text AS activity_name
@@ -534,7 +536,11 @@ export async function allHours(cutoff?: number, actorId?: number) {
 export async function hoursWithBreakdown(userIds?: number[], cutoff?: number, actorId?: number) {
   const now = cutoff ?? (await databaseNow()).getTime();
   const syntheticOperator = actorId != null && (await isSyntheticOperator(pool, actorId));
-  const map = await loadEvents(undefined, {
+  // Scope the signals query itself when a subset is requested (e.g. the
+  // single-participant export) instead of loading every participant's whole
+  // event history and filtering in memory — that made even a one-person
+  // export as slow as the full bulk export.
+  const map = await loadEvents(userIds, {
     accountScope: syntheticOperator ? "synthetic" : "real",
   });
   const suspiciousGapMs = await certaintyWindowMs();
