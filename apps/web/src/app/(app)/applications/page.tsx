@@ -8,7 +8,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { ClipboardListIcon, PlusIcon } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
@@ -26,6 +26,7 @@ export default function ApplicationsPage() {
   const [forms, setForms] = useState<ApplicationForm[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -37,6 +38,7 @@ export default function ApplicationsPage() {
         "/api/applications",
       );
       setForms(applications);
+      hasLoadedRef.current = true;
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("couldNotLoadApplicationForms");
       setLoadError(message);
@@ -136,8 +138,13 @@ export default function ApplicationsPage() {
         data={forms}
         getRowId={(f) => String(f.id)}
         stateKey="applications-list"
-        loading={loading}
-        error={loadError ? { message: loadError, onRetry: load } : undefined}
+        loading={loading && !hasLoadedRef.current}
+        error={
+          !hasLoadedRef.current && loadError ? { message: loadError, onRetry: load } : undefined
+        }
+        mutationError={
+          hasLoadedRef.current && loadError ? { message: loadError, onRetry: load } : undefined
+        }
         getRowHref={(f) => `/applications/${f.id}`}
         getRowLabel={(f) => f.name}
         searchable={(f) => `${f.name} ${grantedRoleNameLabel(f.granted_role_name, t)}`}

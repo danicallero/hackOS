@@ -59,11 +59,16 @@ function DialogContent({
   children,
   showCloseButton = true,
   headerActions,
+  floatingContent,
+  onInteractOutside,
+  onPointerDownOutside,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
   /** Header controls share the top-right row with the close button (H13). */
   headerActions?: React.ReactNode
+  /** Content that visually escapes the dialog while staying in its portal. */
+  floatingContent?: React.ReactNode
 }) {
   const { t } = useLocale()
   return (
@@ -76,11 +81,31 @@ function DialogContent({
           "fixed top-[50%] left-[50%] z-50 flex max-h-[85vh] w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] flex-col gap-4 overflow-hidden bg-background p-6 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
           className
         )}
+        onInteractOutside={(event) => {
+          if (
+            floatingContent &&
+            event.target instanceof Element &&
+            event.target.closest("[data-dialog-floating]")
+          ) {
+            event.preventDefault()
+          }
+          onInteractOutside?.(event)
+        }}
+        onPointerDownOutside={(event) => {
+          if (
+            floatingContent &&
+            event.target instanceof Element &&
+            event.target.closest("[data-dialog-floating]")
+          ) {
+            event.preventDefault()
+          }
+          onPointerDownOutside?.(event)
+        }}
         {...props}
       >
         {children}
         {(headerActions || showCloseButton) && (
-          <div className="absolute top-3 right-3 flex items-center gap-1">
+          <div className="absolute top-3 right-3 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center justify-end gap-1 sm:max-w-none">
             {headerActions}
             {showCloseButton && (
               <DialogPrimitive.Close
@@ -95,6 +120,7 @@ function DialogContent({
           </div>
         )}
       </DialogPrimitive.Content>
+      {floatingContent}
     </DialogPortal>
   )
 }

@@ -15,7 +15,7 @@ import {
   XIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ReviewModal } from "@/components/applications/review-modal";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -110,6 +110,7 @@ export function ResponsesTab({
   const [allRows, setAllRows] = useState<ResponseRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
   const [statusFilter, setStatusFilter] = useState<string>(ALL);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -149,6 +150,7 @@ export function ResponsesTab({
         setAllRows(responses);
         setDecisionStatusOverrides({});
         setSelectedIds(new Set());
+        hasLoadedRef.current = true;
       } catch (err) {
         const message = err instanceof ApiError ? err.message : t("couldNotLoadResponses");
         setLoadError(message);
@@ -751,8 +753,13 @@ export function ResponsesTab({
         columns={columns}
         data={rows}
         getRowId={(r) => String(r.id)}
-        loading={loading}
-        error={loadError ? { message: loadError, onRetry: load } : undefined}
+        loading={loading && !hasLoadedRef.current}
+        error={
+          !hasLoadedRef.current && loadError ? { message: loadError, onRetry: load } : undefined
+        }
+        mutationError={
+          hasLoadedRef.current && loadError ? { message: loadError, onRetry: load } : undefined
+        }
         onRowClick={(r) => setSelectedId(r.id)}
         getRowLabel={(r) => r.name ?? r.email}
         selectable={canDecide}

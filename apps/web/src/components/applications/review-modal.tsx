@@ -16,6 +16,8 @@ import {
   FileTextIcon,
   GavelIcon,
   GripVerticalIcon,
+  Maximize2Icon,
+  Minimize2Icon,
   PencilIcon,
   SendIcon,
 } from "lucide-react";
@@ -35,7 +37,7 @@ import {
   applicationStatusLabel,
 } from "@/app/(app)/applications/workflow";
 import { AlertModal } from "@/components/common/alert-modal";
-import { FileLink, fileDownloadUrl } from "@/components/common/file-link";
+import { fileDownloadUrl } from "@/components/common/file-link";
 import { Modal } from "@/components/common/modal";
 import { SaveStatus } from "@/components/common/save-status";
 import { ScaleButtons } from "@/components/common/scale-buttons";
@@ -268,6 +270,7 @@ function ApplicationFileViewer({
   onSideChange,
   onDragStart,
   onDragEnd,
+  className,
 }: {
   files: ApplicationFile[];
   activeIndex: number;
@@ -276,28 +279,70 @@ function ApplicationFileViewer({
   onSideChange: (side: FileViewerSide) => void;
   onDragStart: (event: DragEvent<HTMLButtonElement>) => void;
   onDragEnd: () => void;
+  className?: string;
 }) {
   const { t } = useLocale();
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    function syncFullscreen() {
+      setIsFullscreen(document.fullscreenElement === previewRef.current);
+    }
+    document.addEventListener("fullscreenchange", syncFullscreen);
+    return () => document.removeEventListener("fullscreenchange", syncFullscreen);
+  }, []);
+
   if (files.length === 0) return null;
 
   const file = files[activeIndex] ?? files[0];
   const fileTitle = `${file.label}: ${file.filename}`;
   const nextSide = side === "left" ? "right" : "left";
+
+  async function toggleFullscreen() {
+    const preview = previewRef.current;
+    if (!preview) return;
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await preview.requestFullscreen();
+    } catch {
+      // Fullscreen can be denied by the browser or an embedding context.
+    }
+  }
+
   return (
     <section
-      aria-labelledby="application-files-title"
-      className="border-border bg-muted/20 space-y-3 rounded-xl border p-4 sm:p-5"
+      aria-label={t("applicationFilesLabel")}
+      className={cn(
+        "border-border bg-card flex min-h-0 flex-col space-y-3 overflow-hidden rounded-xl border p-4 sm:p-5",
+        className,
+      )}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 id="application-files-title" className="type-section-title text-balance">
-            {t("applicationFilesLabel")}
-          </h3>
-          <p className="text-muted-foreground mt-1 truncate text-xs" title={fileTitle}>
-            {fileTitle}
-          </p>
-        </div>
+        <p className="type-section-title min-w-0 truncate text-balance" title={file.label}>
+          {file.label}
+        </p>
         <div className="flex shrink-0 items-center gap-1">
+          <a
+            href={file.href}
+            target="_blank"
+            rel="noreferrer"
+            className={dialogIconButtonClass}
+            aria-label={t("viewFileLabel")}
+            title={t("viewFileLabel")}
+          >
+            <ExternalLinkIcon />
+          </a>
+          <button
+            type="button"
+            className={dialogIconButtonClass}
+            onClick={() => void toggleFullscreen()}
+            aria-label={t(isFullscreen ? "exitFullscreenFile" : "fullscreenFile")}
+            aria-pressed={isFullscreen}
+            title={t(isFullscreen ? "exitFullscreenFile" : "fullscreenFile")}
+          >
+            {isFullscreen ? <Minimize2Icon /> : <Maximize2Icon />}
+          </button>
           <Button
             type="button"
             size="xs"
@@ -350,22 +395,34 @@ function ApplicationFileViewer({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-control border bg-background">
+      <div
+        ref={previewRef}
+        className={cn(
+          "min-h-0 flex-1 overflow-auto rounded-control border bg-background",
+          isFullscreen &&
+            "flex h-screen w-screen items-center justify-center rounded-none border-0 p-6",
+        )}
+      >
         {file.preview === "pdf" ? (
           <iframe
             key={file.value}
             src={file.href}
             title={fileTitle}
-            className="h-[min(62vh,48rem)] w-full"
+            className={cn("h-[min(62vh,48rem)] w-full", isFullscreen && "h-full")}
           />
         ) : file.preview === "image" ? (
-          <div className="flex min-h-64 items-center justify-center bg-muted/10 p-3 sm:p-6">
+          <div
+            className={cn(
+              "flex min-h-64 items-center justify-center bg-muted p-3 sm:p-6",
+              isFullscreen && "h-full w-full min-h-0",
+            )}
+          >
             {/* biome-ignore lint/performance/noImgElement: private authenticated file proxy cannot be optimized by Next Image */}
             <img
               key={file.value}
               src={file.href}
               alt={fileTitle}
-              className="max-h-[62vh] max-w-full object-contain"
+              className={cn("max-h-[62vh] max-w-full object-contain", isFullscreen && "max-h-full")}
             />
           </div>
         ) : (
@@ -375,14 +432,65 @@ function ApplicationFileViewer({
           </div>
         )}
       </div>
-
-      <div className="flex justify-end">
-        <FileLink value={file.value}>
-          <ExternalLinkIcon className="size-3.5" aria-hidden="true" />
-          {t("viewFileLabel")}
-        </FileLink>
-      </div>
     </section>
+  );
+}
+
+function ApplicationFileViewerPanel({
+  files,
+  activeIndex,
+  side,
+  onIndexChange,
+  onSideChange,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDrop,
+  reviewContent,
+}: {
+  files: ApplicationFile[];
+  activeIndex: number;
+  side: FileViewerSide;
+  onIndexChange: (index: number) => void;
+  onSideChange: (side: FileViewerSide) => void;
+  onDragStart: (event: DragEvent<HTMLButtonElement>) => void;
+  onDragEnd: () => void;
+  onDragOver: (event: DragEvent<HTMLElement>) => void;
+  onDrop: (event: DragEvent<HTMLElement>) => void;
+  reviewContent?: React.ReactNode;
+}) {
+  const { t } = useLocale();
+  const panelOffset = "calc(50% + 13.5rem)";
+  return (
+    <aside
+      data-dialog-floating
+      className={cn(
+        "pointer-events-auto fixed z-[60] hidden w-[min(30rem,calc(100vw-2rem))] 2xl:grid 2xl:gap-4",
+        reviewContent ? "2xl:grid-rows-[minmax(0,1fr)_auto]" : "2xl:grid-rows-[minmax(0,1fr)]",
+      )}
+      style={{
+        ...(side === "left" ? { right: panelOffset } : { left: panelOffset }),
+        top: "max(1rem, calc(50% - 27rem))",
+        bottom: "max(1rem, calc(50% - 27rem))",
+      }}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      aria-label={t("applicationFilesLabel")}
+    >
+      <div className="min-h-0 rounded-xl">
+        <ApplicationFileViewer
+          files={files}
+          activeIndex={activeIndex}
+          side={side}
+          onIndexChange={onIndexChange}
+          onSideChange={onSideChange}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          className="h-full"
+        />
+      </div>
+      {reviewContent && <div className="min-h-0 rounded-xl">{reviewContent}</div>}
+    </aside>
   );
 }
 
@@ -415,11 +523,6 @@ function StatusPillsRow({
             {t("reviewedByYou")}
           </StatusBadge>
         )}
-        {response.shirt_size && (
-          <StatusBadge tone="neutral" dot={false}>
-            {t("tshirtSize", { size: response.shirt_size })}
-          </StatusBadge>
-        )}
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
         <p className="text-muted-foreground">
@@ -445,7 +548,6 @@ export function ReviewModal({
   askFoodIntolerances = false,
   onClose,
   onChanged,
-  workspace = "review",
   onNavigate,
   onDecisionStatusChange,
   canGoPrev = false,
@@ -675,7 +777,7 @@ export function ReviewModal({
     }
   }
 
-  /** Runs a decision action, refreshes the parent, and toasts the result. */
+  /** Runs a decision action, keeps the modal open, and optionally refreshes the parent. */
   async function run(label: string, fn: () => Promise<unknown>, options: RunOptions = {}) {
     setBusy(true);
     try {
@@ -715,7 +817,9 @@ export function ReviewModal({
   );
   const activeFile = Math.min(activeFileIndex, Math.max(files.length - 1, 0));
   const canRevealReviews = canManage;
-  const showDecisionMenu = hasDecisionActions(workspace, st, canDecide);
+  const showDecisionMenu = hasDecisionActions(canDecide);
+  const showEditAction = canEdit && Boolean(template?.length) && !editing;
+  const showExportAction = canExport && answerFields.length > 0;
 
   function openReviewWindow() {
     const popupWorkspace = workspaceForResponseStatus(st);
@@ -759,18 +863,35 @@ export function ReviewModal({
     }
   }
 
+  const reviewComposerProps: ReviewComposerProps = {
+    responseId: response.id,
+    myScore,
+    onScoreChange: handleScoreChange,
+    myNotes,
+    onNotesChange: handleNotesChange,
+    reviewSaveState,
+    onOpenReviewWindow: openReviewWindow,
+    dockSide: files.length > 0 ? fileViewerSide : undefined,
+  };
+
   return (
     <Modal
       open
       onOpenChange={(o) => !o && onClose()}
       size="xl"
-      className="max-h-[90vh] sm:max-w-7xl"
+      className={cn(
+        "max-h-[90vh] sm:max-w-4xl 2xl:transition-[left]",
+        files.length > 0 &&
+          (fileViewerSide === "left"
+            ? "2xl:left-[calc(50%+15.5rem)]"
+            : "2xl:left-[calc(50%-15.5rem)]"),
+      )}
       icon={FileTextIcon}
       title={response.name ?? response.email}
       description={response.name ? response.email : undefined}
       headerActions={
-        (onNavigate || showDecisionMenu) && (
-          <div className="flex shrink-0 items-center gap-1">
+        (onNavigate || showDecisionMenu || showEditAction || showExportAction) && (
+          <div className="flex max-w-full flex-wrap items-center justify-end gap-1">
             {onNavigate && (
               <>
                 <button
@@ -797,7 +918,6 @@ export function ReviewModal({
             )}
             {showDecisionMenu && (
               <DecisionMenu
-                workspace={workspace}
                 status={st}
                 busy={busy}
                 run={run}
@@ -807,11 +927,68 @@ export function ReviewModal({
                 onAccepted={showApplicantAcceptedToast}
               />
             )}
+            {showEditAction && (
+              <button
+                type="button"
+                className={dialogIconButtonClass}
+                onClick={startEdit}
+                aria-label={t("editAnswers")}
+                title={t("editAnswers")}
+              >
+                <PencilIcon />
+              </button>
+            )}
+            {showExportAction && (
+              <button
+                type="button"
+                className={dialogIconButtonClass}
+                onClick={() =>
+                  exportAnswers(response, answerFields, answerSections, answerValues, lang, t)
+                }
+                aria-label={t("exportAnswers")}
+                title={t("exportAnswers")}
+              >
+                <DownloadIcon />
+              </button>
+            )}
           </div>
         )
       }
+      floatingContent={
+        <>
+          {files.length > 0 && (
+            <ApplicationFileViewerPanel
+              files={files}
+              activeIndex={activeFile}
+              side={fileViewerSide}
+              onIndexChange={setActiveFileIndex}
+              onSideChange={changeFileViewerSide}
+              onDragStart={handleFileViewerDragStart}
+              onDragEnd={handleFileViewerDragEnd}
+              onDragOver={handleFileViewerDragOver}
+              onDrop={(event) =>
+                handleFileViewerDrop(fileViewerSide === "left" ? "right" : "left", event)
+              }
+              reviewContent={canScore ? <ReviewPanelCard {...reviewComposerProps} /> : undefined}
+            />
+          )}
+          {canScore && (
+            <div className={cn("hidden lg:block", files.length > 0 && "2xl:hidden")}>
+              <FloatingReviewPanel {...reviewComposerProps} />
+            </div>
+          )}
+        </>
+      }
     >
-      <div className="space-y-4">
+      <section
+        className={cn("space-y-4", fileViewerDragging && "rounded-xl ring-1 ring-primary/30")}
+        aria-label={t("applicationFilesLabel")}
+        tabIndex={-1}
+        onDragOver={handleFileViewerDragOver}
+        onDrop={(event) =>
+          handleFileViewerDrop(fileViewerSide === "left" ? "right" : "left", event)
+        }
+      >
         {reviewPage === "reviews" ? (
           <ReviewsPage
             reviews={response.reviews}
@@ -830,11 +1007,11 @@ export function ReviewModal({
               onShowReviews={() => setReviewPage("reviews")}
             />
 
-            {files.length > 0 ? (
-              <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+            {files.length > 0 && (
+              <div className="grid gap-6 2xl:hidden lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
                 <section
                   className={cn(
-                    "min-w-0 space-y-4 lg:max-h-[68vh] lg:overflow-y-auto lg:pr-1",
+                    "hidden min-w-0 space-y-4 lg:block lg:max-h-[68vh] lg:overflow-y-auto lg:pr-1",
                     fileViewerSide === "right" && "lg:order-2",
                   )}
                   onDragOver={handleFileViewerDragOver}
@@ -871,16 +1048,12 @@ export function ReviewModal({
                     </p>
                   )}
                   <AnswersSection
-                    template={template}
                     applicationId={applicationId}
-                    canEdit={canEdit}
-                    canExport={canExport}
                     editing={editing}
                     setEditing={setEditing}
                     editValues={editValues}
                     setEditValues={setEditValues}
                     savingEdit={savingEdit}
-                    startEdit={startEdit}
                     saveEdit={saveEdit}
                     answerFields={answerFields}
                     answerSections={answerSections}
@@ -890,18 +1063,33 @@ export function ReviewModal({
                   />
                 </section>
               </div>
+            )}
+
+            {files.length > 0 ? (
+              <div className="hidden 2xl:block">
+                <AnswersSection
+                  applicationId={applicationId}
+                  editing={editing}
+                  setEditing={setEditing}
+                  editValues={editValues}
+                  setEditValues={setEditValues}
+                  savingEdit={savingEdit}
+                  saveEdit={saveEdit}
+                  answerFields={answerFields}
+                  answerSections={answerSections}
+                  answerValues={answerValues}
+                  response={response}
+                  lang={lang}
+                />
+              </div>
             ) : (
               <AnswersSection
-                template={template}
                 applicationId={applicationId}
-                canEdit={canEdit}
-                canExport={canExport}
                 editing={editing}
                 setEditing={setEditing}
                 editValues={editValues}
                 setEditValues={setEditValues}
                 savingEdit={savingEdit}
-                startEdit={startEdit}
                 saveEdit={saveEdit}
                 answerFields={answerFields}
                 answerSections={answerSections}
@@ -921,14 +1109,9 @@ export function ReviewModal({
             )}
 
             {canScore && (
-              <MyReviewBubble
-                myScore={myScore}
-                onScoreChange={handleScoreChange}
-                myNotes={myNotes}
-                onNotesChange={handleNotesChange}
-                reviewSaveState={reviewSaveState}
-                onOpenReviewWindow={openReviewWindow}
-              />
+              <div className="lg:hidden">
+                <InlineReviewPanel {...reviewComposerProps} />
+              </div>
             )}
           </>
         )}
@@ -949,7 +1132,7 @@ export function ReviewModal({
           }}
         />
         <Toaster id={REVIEW_TOASTER_ID} position="bottom-right" />
-      </div>
+      </section>
     </Modal>
   );
 }
@@ -958,16 +1141,12 @@ export function ReviewModal({
  *  edit form (APPLICATIONS_EDIT_RESPONSE), or a raw key/value fallback when
  *  the form has no template. */
 function AnswersSection({
-  template,
   applicationId,
-  canEdit,
-  canExport,
   editing,
   setEditing,
   editValues,
   setEditValues,
   savingEdit,
-  startEdit,
   saveEdit,
   answerFields,
   answerSections,
@@ -975,16 +1154,12 @@ function AnswersSection({
   response,
   lang,
 }: {
-  template: TemplateField[] | null;
   applicationId: number;
-  canEdit: boolean;
-  canExport: boolean;
   editing: boolean;
   setEditing: (v: boolean) => void;
   editValues: Record<string, unknown>;
   setEditValues: (fn: (prev: Record<string, unknown>) => Record<string, unknown>) => void;
   savingEdit: boolean;
-  startEdit: () => void;
   saveEdit: () => Promise<void>;
   answerFields: TemplateField[];
   answerSections: FormSection[];
@@ -992,32 +1167,10 @@ function AnswersSection({
   response: ResponseRow;
   lang: Language;
 }) {
-  const { t, language } = useLocale();
+  const { t } = useLocale();
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-medium">{t("answersLabel")}</p>
-        <div className="flex items-center gap-2">
-          {canExport && answerFields.length > 0 && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                exportAnswers(response, answerFields, answerSections, answerValues, language, t)
-              }
-            >
-              <DownloadIcon />
-              {t("exportAnswers")}
-            </Button>
-          )}
-          {canEdit && template && template.length > 0 && !editing && (
-            <Button size="sm" variant="outline" onClick={startEdit}>
-              <PencilIcon />
-              {t("editAnswers")}
-            </Button>
-          )}
-        </div>
-      </div>
+      <p className="text-sm font-medium">{t("answersLabel")}</p>
       {answerFields.length > 0 ? (
         <div className="space-y-4">
           {groupFieldsBySections(answerFields, answerSections).map((group, i) => (
@@ -1209,31 +1362,83 @@ function ReviewBubble({ review }: { review: ReviewEntry }) {
   );
 }
 
-function MyReviewBubble({
-  myScore,
-  onScoreChange,
-  myNotes,
-  onNotesChange,
-  reviewSaveState,
-  onOpenReviewWindow,
-}: {
+interface ReviewComposerProps {
+  responseId: number;
   myScore: number | null;
   onScoreChange: (v: number | null) => void;
   myNotes: string;
   onNotesChange: (v: string) => void;
   reviewSaveState: SaveState;
   onOpenReviewWindow?: () => void;
+  dockSide?: FileViewerSide;
+}
+
+function ReviewComposerFields({
+  responseId,
+  myScore,
+  onScoreChange,
+  myNotes,
+  onNotesChange,
+  reviewSaveState,
+}: {
+  responseId: number;
+  myScore: number | null;
+  onScoreChange: (v: number | null) => void;
+  myNotes: string;
+  onNotesChange: (v: string) => void;
+  reviewSaveState: SaveState;
 }) {
   const { t } = useLocale();
   return (
-    <div className="border-primary/30 bg-primary/5 space-y-3 rounded-xl border p-4">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-medium">{t("yourReview")}</p>
-        {onOpenReviewWindow && (
+    <>
+      <div className="space-y-1.5">
+        <Label className="text-muted-foreground text-xs uppercase">{t("scoreRangeLabel")}</Label>
+        <ScaleButtons
+          value={myScore}
+          onChange={onScoreChange}
+          min={0}
+          max={5}
+          className="flex-wrap overflow-visible"
+        />
+      </div>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <Label
+            htmlFor={`review-notes-${responseId}`}
+            className="text-muted-foreground text-xs uppercase"
+          >
+            {t("notesLabel")}
+          </Label>
+          <SaveStatus state={reviewSaveState} />
+        </div>
+        <Textarea
+          id={`review-notes-${responseId}`}
+          rows={3}
+          value={myNotes}
+          onChange={(e) => onNotesChange(e.target.value)}
+          placeholder={t("reviewNotesPlaceholder")}
+        />
+      </div>
+    </>
+  );
+}
+
+function ReviewPanelCard({ className, ...props }: ReviewComposerProps & { className?: string }) {
+  const { t } = useLocale();
+  return (
+    <div
+      className={cn(
+        "border-primary/30 bg-card space-y-3 rounded-xl border p-4 shadow-2xl ring-1 ring-black/5",
+        className,
+      )}
+    >
+      <div className="flex items-center gap-1">
+        <p className="min-w-0 flex-1 text-sm font-medium">{t("yourReview")}</p>
+        {props.onOpenReviewWindow && (
           <button
             type="button"
             className={dialogIconButtonClass}
-            onClick={onOpenReviewWindow}
+            onClick={props.onOpenReviewWindow}
             aria-label={t("openReviewWindow")}
             title={t("openReviewWindow")}
           >
@@ -1241,27 +1446,34 @@ function MyReviewBubble({
           </button>
         )}
       </div>
-      <div className="space-y-1.5">
-        <Label className="text-muted-foreground text-xs uppercase">{t("scoreRangeLabel")}</Label>
-        <ScaleButtons value={myScore} onChange={onScoreChange} min={0} max={5} />
-      </div>
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between gap-2">
-          <Label htmlFor="review-notes" className="text-muted-foreground text-xs uppercase">
-            {t("notesLabel")}
-          </Label>
-          <SaveStatus state={reviewSaveState} />
-        </div>
-        <Textarea
-          id="review-notes"
-          rows={3}
-          value={myNotes}
-          onChange={(e) => onNotesChange(e.target.value)}
-          placeholder={t("reviewNotesPlaceholder")}
-        />
-      </div>
+      <ReviewComposerFields {...props} />
     </div>
   );
+}
+
+function FloatingReviewPanel(props: ReviewComposerProps) {
+  const panelStyle = {
+    bottom: "1rem",
+    right:
+      props.dockSide === "left"
+        ? "max(1rem, calc(50% - 42.5rem))"
+        : props.dockSide === "right"
+          ? "max(1rem, calc(50% - 11.5rem))"
+          : "max(1rem, calc(50% - 27rem))",
+  };
+  return (
+    <div
+      data-dialog-floating
+      className="fixed z-[70] w-[min(24rem,calc(100vw-2rem))] rounded-xl"
+      style={panelStyle}
+    >
+      <ReviewPanelCard {...props} />
+    </div>
+  );
+}
+
+function InlineReviewPanel(props: ReviewComposerProps) {
+  return <ReviewPanelCard {...props} className="shadow-sm" />;
 }
 
 interface RunOptions {
@@ -1279,22 +1491,15 @@ function workspaceForResponseStatus(status: string): ApplicationWorkspace {
   return "sent";
 }
 
-function hasDecisionActions(
-  workspace: ApplicationWorkspace,
-  status: ResponseRow["status"],
-  canDecide: boolean,
-) {
-  if (!canDecide) return false;
-  if (workspace === "review") return status === "review";
-  if (workspace === "outbox") {
-    return status === "accepted_internal" || status === "rejected_internal";
-  }
-  return ["accepted", "rejected", "confirmed", "declined", "expired"].includes(status);
+function hasDecisionActions(canDecide: boolean) {
+  // The gavel is deliberately persistent. The available items change with
+  // the status, but the control never disappears when an in-modal action
+  // moves an application between workspaces.
+  return canDecide;
 }
 
 /** Admin decisions stay available without competing with the review forum. */
 function DecisionMenu({
-  workspace,
   status,
   busy,
   run,
@@ -1303,7 +1508,6 @@ function DecisionMenu({
   onRequestRevoke,
   onAccepted,
 }: {
-  workspace: ApplicationWorkspace;
   status: ResponseRow["status"];
   busy: boolean;
   run: RunAction;
@@ -1313,10 +1517,10 @@ function DecisionMenu({
   onAccepted: () => void;
 }) {
   const { t } = useLocale();
-  const reviewActions = workspace === "review" && status === "review";
-  const outboxActions =
-    workspace === "outbox" && (status === "accepted_internal" || status === "rejected_internal");
-  const sentActions = workspace === "sent";
+  const reviewActions = status === "review";
+  const outboxActions = status === "accepted_internal" || status === "rejected_internal";
+  const sentActions = ["accepted", "rejected", "confirmed", "declined", "expired"].includes(status);
+  const hasAvailableActions = reviewActions || outboxActions || sentActions;
 
   return (
     <DropdownMenu>
@@ -1334,6 +1538,9 @@ function DecisionMenu({
       <DropdownMenuContent align="end" className="min-w-52">
         <DropdownMenuLabel>{t("decisionLabel")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {!hasAvailableActions && (
+          <DropdownMenuItem disabled>{t("noDecisionActions")}</DropdownMenuItem>
+        )}
         {reviewActions && (
           <>
             <DropdownMenuItem

@@ -7,6 +7,7 @@
 import { ActionGroup } from "@/components/common/action-group";
 import { Button } from "@/components/ui/button";
 import { useLocale } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 export function ScaleButtons({
   value,
@@ -14,17 +15,19 @@ export function ScaleButtons({
   disabled,
   min = 0,
   max = 10,
+  className,
 }: {
   value: number | null;
   onChange: (value: number | null) => void;
   disabled?: boolean;
   min?: number;
   max?: number;
+  className?: string;
 }) {
   const { t } = useLocale();
   const scale = Array.from({ length: max - min + 1 }, (_, index) => min + index);
   return (
-    <ActionGroup className="max-w-full flex-nowrap overflow-x-auto pb-1">
+    <ActionGroup className={cn("max-w-full flex-nowrap overflow-x-auto pb-1", className)}>
       {scale.map((score) => (
         <Button
           key={score}
