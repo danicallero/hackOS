@@ -46,9 +46,9 @@ export function Modal({
   icon?: LucideIcon;
   size?: keyof typeof SIZES;
   footer?: React.ReactNode;
-  /** Rendered beside the title/description, outside the scrolling body — for
-   *  controls (e.g. prev/next paging) that must stay put while the body
-   *  scrolls. Reserves space so it doesn't collide with the close button. */
+  /** Rendered in the fixed top-right control row beside the close button —
+   *  for controls (e.g. prev/next paging) that must stay put while the body
+   *  scrolls (H13). */
   headerActions?: React.ReactNode;
   className?: string;
   children?: React.ReactNode;
@@ -56,13 +56,8 @@ export function Modal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
-      <DialogContent className={cn(SIZES[size], className)}>
-        <DialogHeader
-          className={cn(
-            "shrink-0",
-            headerActions && "flex-row items-start justify-between gap-2 pr-9",
-          )}
-        >
+      <DialogContent className={cn(SIZES[size], className)} headerActions={headerActions}>
+        <DialogHeader className={cn("shrink-0", headerActions && "pr-28")}>
           <div className={cn(headerActions && "min-w-0 space-y-1.5")}>
             <DialogTitle className="flex items-center gap-2">
               {Icon && <Icon className="text-muted-foreground size-5" />}
@@ -74,7 +69,6 @@ export function Modal({
               </DialogDescription>
             )}
           </div>
-          {headerActions}
         </DialogHeader>
         <div className="-mx-6 min-h-0 flex-1 overflow-y-auto px-6">{children}</div>
         {footer && <DialogFooter className="shrink-0">{footer}</DialogFooter>}

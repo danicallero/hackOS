@@ -59,9 +59,12 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  headerActions,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  /** Header controls share the top-right row with the close button (H13). */
+  headerActions?: React.ReactNode
 }) {
   const { t } = useLocale()
   return (
@@ -77,14 +80,19 @@ function DialogContent({
         {...props}
       >
         {children}
-        {showCloseButton && (
-          <DialogPrimitive.Close
-            data-slot="dialog-close"
-            className={cn("absolute top-3 right-3", dialogIconButtonClass)}
-          >
-            <XIcon />
-            <span className="sr-only">{t("close")}</span>
-          </DialogPrimitive.Close>
+        {(headerActions || showCloseButton) && (
+          <div className="absolute top-3 right-3 flex items-center gap-1">
+            {headerActions}
+            {showCloseButton && (
+              <DialogPrimitive.Close
+                data-slot="dialog-close"
+                className={dialogIconButtonClass}
+              >
+                <XIcon />
+                <span className="sr-only">{t("close")}</span>
+              </DialogPrimitive.Close>
+            )}
+          </div>
         )}
       </DialogPrimitive.Content>
     </DialogPortal>
