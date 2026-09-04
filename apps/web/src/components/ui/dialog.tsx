@@ -58,15 +58,12 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
-  headerActions,
   floatingContent,
   onInteractOutside,
   onPointerDownOutside,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
-  /** Header controls share the top-right row with the close button (H13). */
-  headerActions?: React.ReactNode
   /** Content that visually escapes the dialog while staying in its portal. */
   floatingContent?: React.ReactNode
 }) {
@@ -104,20 +101,15 @@ function DialogContent({
         {...props}
       >
         {children}
-        {(headerActions || showCloseButton) && (
-          <div className="absolute top-3 right-3 flex max-w-[calc(100%-1.5rem)] flex-wrap items-center justify-end gap-1 sm:max-w-none">
-            {headerActions}
-            {showCloseButton && (
-              <DialogPrimitive.Close
-                data-slot="dialog-close"
-                className={dialogIconButtonClass}
-                title={t("close")}
-              >
-                <XIcon />
-                <span className="sr-only">{t("close")}</span>
-              </DialogPrimitive.Close>
-            )}
-          </div>
+        {showCloseButton && (
+          <DialogPrimitive.Close
+            data-slot="dialog-close"
+            className={cn(dialogIconButtonClass, "absolute top-3 right-3 z-10")}
+            title={t("close")}
+          >
+            <XIcon />
+            <span className="sr-only">{t("close")}</span>
+          </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Content>
       {floatingContent}
