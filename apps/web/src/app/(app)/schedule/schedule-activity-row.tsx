@@ -408,6 +408,7 @@ export function ActivityRow({
         >
           <div className="flex items-center gap-0.5">
             <IconButton
+              variant="ghost"
               size="icon-sm"
               label={t("dragItemAria")}
               className="text-muted-foreground hover:bg-muted hover:text-foreground -ml-1.5 shrink-0 cursor-grab touch-none active:cursor-grabbing"
