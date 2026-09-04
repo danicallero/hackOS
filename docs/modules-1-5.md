@@ -410,11 +410,11 @@ from the window (`service.ts:isWindowOpen`). An admin who wants a form closed
 sets `close_at` instead of toggling a separate switch.
 
 **Follow-up — review modal redesign (H13).**
-- **Score scale**: the free-text 0-100 input is now the same 0-10 button
-  scale as judging (`components/common/scale-buttons.tsx`, extracted from
-  `question-field.tsx`'s `SCORE_SCALE` so applications doesn't pull in
-  judging's own dependency chain). `applicant_reviews.score` CHECK tightened
-  to 0-10 (`0208_review_score_scale.sql`, existing scores rescaled `/10`).
+- **Score scale**: the free-text 0-100 input is now a compact 1-5 button
+  scale for application reviews (`components/common/scale-buttons.tsx`);
+  judging-panel scores remain 0-10. `applicant_reviews.score` CHECK is
+  tightened to 1-5 (`0210_review_score_five_point_scale.sql`, existing scores
+  converted from the previous 0-10 scale).
 - **Two-column layout**: `review-modal.tsx` now renders answers (left,
   through `TemplateFieldControl` in the same per-section bordered-card format
   the applicant's own `my-applications/[id]/page.tsx` uses — previously a

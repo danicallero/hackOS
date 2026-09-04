@@ -490,7 +490,7 @@ Enum app_response_status {
 Table applicant_reviews {
   response_id integer [not null]
   author_id integer [not null]
-  score integer [note: '0..100']
+  score integer [note: '1..5']
   notes text
   created_at timestamptz [default: `now()`]
   updated_at timestamptz [default: `now()`]
