@@ -7,10 +7,11 @@ const REDUCED_HEADER = ["user_id", "name", "surname", "email", "dni", "hours"];
 
 /**
  * H24/H54: full hours export — one `summary` row per participant (mirrors
- * the reduced shape) followed by one `detail` row per presence interval that
- * contributed to their total. Kept as a single flat table (rather than
- * nested sections) so it stays valid, tool-openable CSV; `row_type` and the
- * blank summary/detail-only columns tell the two kinds of row apart.
+ * the reduced shape) followed by one `detail` row per presence window,
+ * including ones that expired with no confirming signal (`expired=true`,
+ * `time_aggregated=0`). Kept as a single flat table (rather than nested
+ * sections) so it stays valid, tool-openable CSV; `row_type` and the blank
+ * summary/detail-only columns tell the two kinds of row apart.
  */
 const FULL_HEADER = [
   "row_type",
@@ -20,11 +21,12 @@ const FULL_HEADER = [
   "email",
   "dni",
   "hours",
-  "interval_kind",
-  "interval_start",
-  "interval_end",
+  "activity",
+  "time_logged_in",
+  "time_logged_out",
   "confirmed",
-  "contributed_hours",
+  "expired",
+  "time_aggregated",
 ];
 
 async function contactFieldsById(
@@ -88,11 +90,12 @@ export async function exportHoursCsv(options: HoursExportOptions): Promise<strin
       email: contact.get(p.userId)?.email ?? null,
       dni: p.dni,
       hours: p.hours,
-      interval_kind: null,
-      interval_start: null,
-      interval_end: null,
+      activity: null,
+      time_logged_in: null,
+      time_logged_out: null,
       confirmed: null,
-      contributed_hours: null,
+      expired: null,
+      time_aggregated: null,
     });
     for (const interval of p.intervals) {
       rows.push({
@@ -103,11 +106,12 @@ export async function exportHoursCsv(options: HoursExportOptions): Promise<strin
         email: null,
         dni: null,
         hours: null,
-        interval_kind: interval.kind,
-        interval_start: interval.start,
-        interval_end: interval.end,
+        activity: interval.activity,
+        time_logged_in: interval.start,
+        time_logged_out: interval.end,
         confirmed: interval.confirmed,
-        contributed_hours: interval.contributedHours,
+        expired: interval.expired,
+        time_aggregated: interval.contributedHours,
       });
     }
   }

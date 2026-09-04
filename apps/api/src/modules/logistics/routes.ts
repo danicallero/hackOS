@@ -522,7 +522,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         querystring: hoursExportQuery,
         summary: "Export presence hours as CSV",
         description:
-          "Bulk hours export for the presence Hours tab (H24/H54). `format=reduced` (default) is one row per participant: user_id, name, surname, email, dni, hours. `format=full` adds one `detail` row per presence interval under each participant's `summary` row (row_type column distinguishes them; summary-only and detail-only columns are blank on the other kind), so the interval breakdown stays inside one valid CSV table. `userIds` (comma-separated) scopes the export to an already-filtered client-side list; `minHours` is an additional server-side floor applied on top. Requires logistics:stats.",
+          "Bulk hours export for the presence Hours tab (H24/H54). `format=reduced` (default) is one row per participant: user_id, name, surname, email, dni, hours. `format=full` adds one `detail` row per presence window under each participant's `summary` row (row_type column distinguishes them; summary-only and detail-only columns are blank on the other kind), so the breakdown stays inside one valid CSV table. Each detail row reports the activity (if any) that opened/closed the window, time_logged_in/time_logged_out, whether it was confirmed by a real door exit, whether it expired with no confirming signal (expired=true, time_aggregated=0), and time_aggregated (the hours it contributed). `userIds` (comma-separated) scopes the export to an already-filtered client-side list; `minHours` is an additional server-side floor applied on top. Requires logistics:stats.",
       },
     },
     async (req, reply) => {
