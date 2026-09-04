@@ -12,6 +12,7 @@ import {
   CircleCheckIcon,
   DownloadIcon,
   FileTextIcon,
+  GavelIcon,
   PencilIcon,
   SendIcon,
 } from "lucide-react";
@@ -39,7 +40,14 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { type FieldValue, TemplateFieldControl } from "@/components/common/template-field-control";
 import { Button } from "@/components/ui/button";
 import { dialogIconButtonClass } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
@@ -305,6 +313,41 @@ export function ReviewModal({
   const [savingEdit, setSavingEdit] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
 
+  useEffect(() => {
+    const navigate = onNavigate;
+    if (!navigate) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        (event.key !== "ArrowLeft" && event.key !== "ArrowRight")
+      ) {
+        return;
+      }
+      if (
+        event.target instanceof Element &&
+        event.target.closest(
+          "input, textarea, select, [contenteditable='true'], [role='combobox'], [role='menu'][data-state='open']",
+        )
+      ) {
+        return;
+      }
+
+      const direction = event.key === "ArrowLeft" ? "prev" : "next";
+      const canNavigate = direction === "prev" ? canGoPrev : canGoNext;
+      if (!canNavigate) return;
+
+      event.preventDefault();
+      navigate?.(direction);
+    }
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [canGoNext, canGoPrev, onNavigate]);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: only re-seed on navigating to a different response/user, not on every response.reviews identity change (e.g. after this same reviewer's own autosave).
   useEffect(() => {
     const mine = response.reviews.find((review) => review.author_id === me?.id);
@@ -317,12 +360,12 @@ export function ReviewModal({
   function handleScoreChange(v: number | null) {
     setMyScore(v);
     setReviewDirty(true);
-    setReviewSaveState("unsaved");
+    setReviewSaveState("saving");
   }
   function handleNotesChange(v: string) {
     setMyNotes(v);
     setReviewDirty(true);
-    setReviewSaveState("unsaved");
+    setReviewSaveState("saving");
   }
 
   useEffect(() => {
@@ -400,6 +443,7 @@ export function ReviewModal({
     (review) => review.author_id === me?.id && review.score != null,
   );
   const otherReviews = response.reviews.filter((review) => review.author_id !== me?.id);
+  const showDecisionMenu = hasDecisionActions(workspace, st, canDecide);
 
   return (
     <Modal
@@ -411,26 +455,43 @@ export function ReviewModal({
       title={response.name ?? response.email}
       description={response.name ? response.email : undefined}
       headerActions={
-        onNavigate && (
+        (onNavigate || showDecisionMenu) && (
           <div className="flex shrink-0 items-center gap-1">
-            <button
-              type="button"
-              className={dialogIconButtonClass}
-              disabled={!canGoPrev}
-              onClick={() => onNavigate("prev")}
-              aria-label={t("previousCandidate")}
-            >
-              <ChevronLeftIcon />
-            </button>
-            <button
-              type="button"
-              className={dialogIconButtonClass}
-              disabled={!canGoNext}
-              onClick={() => onNavigate("next")}
-              aria-label={t("nextCandidate")}
-            >
-              <ChevronRightIcon />
-            </button>
+            {onNavigate && (
+              <>
+                <button
+                  type="button"
+                  className={dialogIconButtonClass}
+                  disabled={!canGoPrev}
+                  onClick={() => onNavigate("prev")}
+                  aria-label={t("previousCandidate")}
+                  title={t("previousCandidate")}
+                >
+                  <ChevronLeftIcon />
+                </button>
+                <button
+                  type="button"
+                  className={dialogIconButtonClass}
+                  disabled={!canGoNext}
+                  onClick={() => onNavigate("next")}
+                  aria-label={t("nextCandidate")}
+                  title={t("nextCandidate")}
+                >
+                  <ChevronRightIcon />
+                </button>
+              </>
+            )}
+            {showDecisionMenu && (
+              <DecisionMenu
+                workspace={workspace}
+                status={st}
+                busy={busy}
+                run={run}
+                responseId={response.id}
+                canOverride={canOverride}
+                onRequestRevoke={() => setConfirmRevoke(true)}
+              />
+            )}
           </div>
         )
       }
@@ -477,8 +538,10 @@ export function ReviewModal({
               className="hidden lg:block"
             />
 
-            {canScore && (
-              <MyReviewCard
+            {(canScore || otherReviews.length > 0) && (
+              <ReviewForum
+                canScore={canScore}
+                reviews={otherReviews}
                 myScore={myScore}
                 onScoreChange={handleScoreChange}
                 myNotes={myNotes}
@@ -487,37 +550,12 @@ export function ReviewModal({
               />
             )}
 
-            {otherReviews.length > 0 && <ReviewWall reviews={otherReviews} />}
-
             {canReview && (
               <StaffNotesCard
                 staffNotes={staffNotes}
                 setStaffNotes={setStaffNotes}
                 savingNotes={savingNotes}
                 saveStaffNotes={saveStaffNotes}
-              />
-            )}
-
-            {/* Accept/reject inline here (H13/H14) — no separate "decisions" tab. */}
-            {workspace === "review" && st === "review" && (
-              <ReviewDecisionCard
-                canDecide={canDecide}
-                busy={busy}
-                run={run}
-                responseId={response.id}
-              />
-            )}
-
-            {/* Elsewhere, status + workspace (outbox/sent) picks the buttons (H14). */}
-            {workspace !== "review" && canDecide && (
-              <LifecycleDecisionCard
-                workspace={workspace}
-                status={st}
-                busy={busy}
-                run={run}
-                responseId={response.id}
-                canOverride={canOverride}
-                onRequestRevoke={() => setConfirmRevoke(true)}
               />
             )}
           </div>
@@ -730,7 +768,78 @@ function StaffNotesCard({
   );
 }
 
-function MyReviewCard({
+function ReviewForum({
+  canScore,
+  reviews,
+  myScore,
+  onScoreChange,
+  myNotes,
+  onNotesChange,
+  reviewSaveState,
+}: {
+  canScore: boolean;
+  reviews: ReviewEntry[];
+  myScore: number | null;
+  onScoreChange: (v: number | null) => void;
+  myNotes: string;
+  onNotesChange: (v: string) => void;
+  reviewSaveState: SaveState;
+}) {
+  const { t } = useLocale();
+  return (
+    <section aria-labelledby="review-forum-title" className="space-y-3">
+      <h3 id="review-forum-title" className="text-sm font-medium">
+        {t("reviewForumTitle")}
+      </h3>
+      {reviews.length > 0 ? (
+        <ul className="space-y-3">
+          {reviews.map((review) => (
+            <ReviewBubble key={review.author_id} review={review} />
+          ))}
+        </ul>
+      ) : (
+        <p className="text-muted-foreground text-sm">{t("noOtherReviewsYet")}</p>
+      )}
+      {canScore && (
+        <MyReviewBubble
+          myScore={myScore}
+          onScoreChange={onScoreChange}
+          myNotes={myNotes}
+          onNotesChange={onNotesChange}
+          reviewSaveState={reviewSaveState}
+        />
+      )}
+    </section>
+  );
+}
+
+function ReviewBubble({ review }: { review: ReviewEntry }) {
+  const { t, language } = useLocale();
+  return (
+    <li className="border-border bg-muted/20 space-y-2 rounded-xl border p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-medium">{review.author_name ?? t("unknownReviewer")}</p>
+        <div className="flex items-center gap-2">
+          {review.score != null && (
+            <StatusBadge tone="neutral" dot={false}>
+              {review.score}/5
+            </StatusBadge>
+          )}
+          <span className="text-muted-foreground text-xs">
+            {new Intl.DateTimeFormat(LOCALE_CODES[language], { dateStyle: "medium" }).format(
+              new Date(review.updated_at),
+            )}
+          </span>
+        </div>
+      </div>
+      {review.notes && (
+        <p className="text-muted-foreground text-sm whitespace-pre-wrap">{review.notes}</p>
+      )}
+    </li>
+  );
+}
+
+function MyReviewBubble({
   myScore,
   onScoreChange,
   myNotes,
@@ -745,116 +854,48 @@ function MyReviewCard({
 }) {
   const { t } = useLocale();
   return (
-    <div className="border-border space-y-3 rounded-lg border p-4">
+    <div className="border-primary/30 bg-primary/5 space-y-3 rounded-xl border p-4">
       <p className="text-sm font-medium">{t("yourReview")}</p>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-muted-foreground text-xs">{t("reviewAutosaveHint")}</p>
-        <SaveStatus state={reviewSaveState} />
-      </div>
       <div className="space-y-1.5">
         <Label className="text-muted-foreground text-xs uppercase">{t("scoreRangeLabel")}</Label>
-        <ScaleButtons value={myScore} onChange={onScoreChange} />
+        <ScaleButtons value={myScore} onChange={onScoreChange} min={1} max={5} />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="review-notes" className="text-muted-foreground text-xs uppercase">
-          {t("notesLabel")}
-        </Label>
-        <Input id="review-notes" value={myNotes} onChange={(e) => onNotesChange(e.target.value)} />
+        <div className="flex items-center justify-between gap-2">
+          <Label htmlFor="review-notes" className="text-muted-foreground text-xs uppercase">
+            {t("notesLabel")}
+          </Label>
+          <SaveStatus state={reviewSaveState} />
+        </div>
+        <Textarea
+          id="review-notes"
+          rows={3}
+          value={myNotes}
+          onChange={(e) => onNotesChange(e.target.value)}
+          placeholder={t("reviewNotesPlaceholder")}
+        />
       </div>
-    </div>
-  );
-}
-
-/** Every OTHER evaluator's score/notes for this response, feed-style (H13) —
- *  the caller's own review renders separately via `MyReviewCard`. */
-function ReviewWall({ reviews }: { reviews: ReviewEntry[] }) {
-  const { t, language } = useLocale();
-  return (
-    <div className="space-y-3">
-      <p className="text-sm font-medium">{t("otherReviewsLabel")}</p>
-      <ul className="divide-border divide-y">
-        {reviews.map((review) => (
-          <li key={review.author_id} className="space-y-1 py-3 first:pt-0 last:pb-0">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-medium">{review.author_name ?? t("unknownReviewer")}</p>
-              <div className="flex items-center gap-2">
-                {review.score != null && (
-                  <StatusBadge tone="neutral" dot={false}>
-                    {review.score}/10
-                  </StatusBadge>
-                )}
-                <span className="text-muted-foreground text-xs">
-                  {new Intl.DateTimeFormat(LOCALE_CODES[language], { dateStyle: "medium" }).format(
-                    new Date(review.updated_at),
-                  )}
-                </span>
-              </div>
-            </div>
-            {review.notes && (
-              <p className="text-muted-foreground text-sm whitespace-pre-wrap">{review.notes}</p>
-            )}
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
 
 type RunAction = (label: string, fn: () => Promise<unknown>) => Promise<void>;
 
-/** Inline accept/reject in the review workspace itself (H13/H14) — no separate
- *  "decisions" tab duplicating this row set. */
-function ReviewDecisionCard({
-  canDecide,
-  busy,
-  run,
-  responseId,
-}: {
-  canDecide: boolean;
-  busy: boolean;
-  run: RunAction;
-  responseId: number;
-}) {
-  const { t } = useLocale();
-  return (
-    <div className="border-border space-y-3 rounded-lg border p-4">
-      <p className="text-sm font-medium">{t("decisionLabel")}</p>
-      {canDecide ? (
-        <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            disabled={busy}
-            onClick={() =>
-              run(t("acceptedUnsentToast"), () =>
-                api.post(`/api/responses/${responseId}/decide`, { decision: "accepted" }),
-              )
-            }
-          >
-            {t("accept")}
-          </Button>
-          <Button
-            size="sm"
-            variant="destructive"
-            disabled={busy}
-            onClick={() =>
-              run(t("rejectedUnsentToast"), () =>
-                api.post(`/api/responses/${responseId}/decide`, { decision: "rejected" }),
-              )
-            }
-          >
-            {t("reject")}
-          </Button>
-        </div>
-      ) : (
-        <p className="text-muted-foreground text-xs">{t("needDecideCapability")}</p>
-      )}
-    </div>
-  );
+function hasDecisionActions(
+  workspace: ApplicationWorkspace,
+  status: ResponseRow["status"],
+  canDecide: boolean,
+) {
+  if (!canDecide) return false;
+  if (workspace === "review") return status === "review";
+  if (workspace === "outbox") {
+    return status === "accepted_internal" || status === "rejected_internal";
+  }
+  return ["accepted", "rejected", "confirmed", "declined", "expired"].includes(status);
 }
 
-/** Decision controls (H14) outside the review workspace — buttons here depend
- *  on which of outbox/sent the row is in, not just its status. */
-function LifecycleDecisionCard({
+/** Admin decisions stay available without competing with the review forum. */
+function DecisionMenu({
   workspace,
   status,
   busy,
@@ -872,31 +913,98 @@ function LifecycleDecisionCard({
   onRequestRevoke: () => void;
 }) {
   const { t } = useLocale();
+  const reviewActions = workspace === "review" && status === "review";
+  const outboxActions =
+    workspace === "outbox" && (status === "accepted_internal" || status === "rejected_internal");
+  const sentActions = workspace === "sent";
+
   return (
-    <div className="border-border space-y-3 rounded-lg border p-4">
-      <p className="text-sm font-medium">{t("decisionLabel")}</p>
-      <div className="flex flex-wrap gap-2">
-        {workspace === "outbox" &&
-          (status === "accepted_internal" || status === "rejected_internal") && (
-            <>
-              <Button
-                size="sm"
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={dialogIconButtonClass}
+          disabled={busy}
+          aria-label={t("decisionMenuLabel")}
+          title={t("decisionMenuLabel")}
+        >
+          <GavelIcon />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-52">
+        <DropdownMenuLabel>{t("decisionLabel")}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {reviewActions && (
+          <>
+            <DropdownMenuItem
+              disabled={busy}
+              onSelect={() =>
+                void run(t("acceptedUnsentToast"), () =>
+                  api.post(`/api/responses/${responseId}/decide`, { decision: "accepted" }),
+                )
+              }
+            >
+              {t("accept")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              variant="destructive"
+              disabled={busy}
+              onSelect={() =>
+                void run(t("rejectedUnsentToast"), () =>
+                  api.post(`/api/responses/${responseId}/decide`, { decision: "rejected" }),
+                )
+              }
+            >
+              {t("reject")}
+            </DropdownMenuItem>
+          </>
+        )}
+        {outboxActions && (
+          <>
+            <DropdownMenuItem
+              disabled={busy}
+              onSelect={() =>
+                void run(t("decisionSent"), () =>
+                  api.post(`/api/responses/${responseId}/send-decision`),
+                )
+              }
+            >
+              <SendIcon />
+              {t("sendDecision")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={busy}
+              onSelect={() =>
+                void run(t("movedBackToReview"), () =>
+                  api.post(`/api/responses/${responseId}/revert-decision`, {
+                    decision: "review",
+                  }),
+                )
+              }
+            >
+              {t("backToReview")}
+            </DropdownMenuItem>
+          </>
+        )}
+        {sentActions && (
+          <>
+            {(status === "accepted" || status === "rejected" || status === "expired") && (
+              <DropdownMenuItem
                 disabled={busy}
-                onClick={() =>
-                  run(t("decisionSent"), () =>
-                    api.post(`/api/responses/${responseId}/send-decision`),
+                onSelect={() =>
+                  void run(t("decisionResent"), () =>
+                    api.post(`/api/responses/${responseId}/resend-decision`),
                   )
                 }
               >
-                <SendIcon />
-                {t("sendDecision")}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
+                {t("resend")}
+              </DropdownMenuItem>
+            )}
+            {(status === "accepted" || status === "rejected") && (
+              <DropdownMenuItem
                 disabled={busy}
-                onClick={() =>
-                  run(t("movedBackToReview"), () =>
+                onSelect={() =>
+                  void run(t("movedBackToReview"), () =>
                     api.post(`/api/responses/${responseId}/revert-decision`, {
                       decision: "review",
                     }),
@@ -904,81 +1012,54 @@ function LifecycleDecisionCard({
                 }
               >
                 {t("backToReview")}
-              </Button>
-            </>
-          )}
-        {workspace === "sent" &&
-          (status === "accepted" || status === "rejected" || status === "expired") && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() =>
-                run(t("decisionResent"), () =>
-                  api.post(`/api/responses/${responseId}/resend-decision`),
-                )
-              }
-            >
-              {t("resend")}
-            </Button>
-          )}
-        {workspace === "sent" && (status === "accepted" || status === "rejected") && (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={busy}
-            onClick={() =>
-              run(t("movedBackToReview"), () =>
-                api.post(`/api/responses/${responseId}/revert-decision`, { decision: "review" }),
-              )
-            }
-          >
-            {t("backToReview")}
-          </Button>
-        )}
-        {workspace === "sent" &&
-          (status === "rejected" || status === "declined" || status === "expired") && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() =>
-                run(t("reacceptedUnsent"), () => api.post(`/api/responses/${responseId}/re-accept`))
-              }
-            >
-              {t("reaccept")}
-            </Button>
-          )}
-        {workspace === "sent" && (status === "accepted" || status === "confirmed") && (
-          <Button size="sm" variant="destructive" disabled={busy} onClick={onRequestRevoke}>
-            {t("revokeSpot")}
-          </Button>
-        )}
-        {workspace === "sent" && canOverride && status === "accepted" && (
-          <>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() =>
-                run(t("spotConfirmed"), () => api.post(`/api/responses/${responseId}/confirm`))
-              }
-            >
-              {t("confirmOverride")}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() =>
-                run(t("spotDeclined"), () => api.post(`/api/responses/${responseId}/decline`))
-              }
-            >
-              {t("declineOverride")}
-            </Button>
+              </DropdownMenuItem>
+            )}
+            {(status === "rejected" || status === "declined" || status === "expired") && (
+              <DropdownMenuItem
+                disabled={busy}
+                onSelect={() =>
+                  void run(t("reacceptedUnsent"), () =>
+                    api.post(`/api/responses/${responseId}/re-accept`),
+                  )
+                }
+              >
+                {t("reaccept")}
+              </DropdownMenuItem>
+            )}
+            {(status === "accepted" || status === "confirmed") && (
+              <DropdownMenuItem variant="destructive" disabled={busy} onSelect={onRequestRevoke}>
+                {t("revokeSpot")}
+              </DropdownMenuItem>
+            )}
+            {canOverride && status === "accepted" && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={busy}
+                  onSelect={() =>
+                    void run(t("spotConfirmed"), () =>
+                      api.post(`/api/responses/${responseId}/confirm`),
+                    )
+                  }
+                >
+                  {t("confirmOverride")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={busy}
+                  onSelect={() =>
+                    void run(t("spotDeclined"), () =>
+                      api.post(`/api/responses/${responseId}/decline`),
+                    )
+                  }
+                >
+                  {t("declineOverride")}
+                </DropdownMenuItem>
+              </>
+            )}
           </>
         )}
-      </div>
-    </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

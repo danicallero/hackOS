@@ -57,7 +57,7 @@ export function Modal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className={cn(SIZES[size], className)} headerActions={headerActions}>
-        <DialogHeader className={cn("shrink-0", headerActions && "pr-28")}>
+        <DialogHeader className={cn("shrink-0", headerActions && "pr-40")}>
           <div className={cn(headerActions && "min-w-0 space-y-1.5")}>
             <DialogTitle className="flex items-center gap-2">
               {Icon && <Icon className="text-muted-foreground size-5" />}

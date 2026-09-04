@@ -34,6 +34,7 @@ describe("IconButton", () => {
 
     const button = container.querySelector<HTMLButtonElement>("button");
     expect(button?.getAttribute("aria-label")).toBe("Remove item");
+    expect(button?.getAttribute("title")).toBe("Remove item");
     expect(button?.type).toBe("button");
     await act(async () => userEvent.setup().click(button as HTMLButtonElement));
     expect(onClick).toHaveBeenCalledOnce();

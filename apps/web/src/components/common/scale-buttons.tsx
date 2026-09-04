@@ -1,29 +1,31 @@
 "use client";
 
-// A row of 0-10 score buttons, plus a clear button — the judging panel's
-// 0-10 scale UI (question-field.tsx), extracted so other 0-10 scorers (H13
-// application review) can reuse the same interaction without pulling in
-// judging's own dependency chain.
+// A row of score buttons, plus a clear button — the judging panel's 0-10
+// scale UI (question-field.tsx), extracted so other scorers can reuse the
+// same interaction without pulling in judging's own dependency chain.
 
 import { ActionGroup } from "@/components/common/action-group";
 import { Button } from "@/components/ui/button";
 import { useLocale } from "@/lib/i18n";
 
-const SCALE = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
-
 export function ScaleButtons({
   value,
   onChange,
   disabled,
+  min = 0,
+  max = 10,
 }: {
   value: number | null;
   onChange: (value: number | null) => void;
   disabled?: boolean;
+  min?: number;
+  max?: number;
 }) {
   const { t } = useLocale();
+  const scale = Array.from({ length: max - min + 1 }, (_, index) => min + index);
   return (
-    <ActionGroup>
-      {SCALE.map((score) => (
+    <ActionGroup className="max-w-full flex-nowrap overflow-x-auto pb-1">
+      {scale.map((score) => (
         <Button
           key={score}
           type="button"

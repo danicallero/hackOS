@@ -147,20 +147,20 @@ describe("review + decide (H13, H14)", () => {
       method: "PUT",
       url: `/api/responses/${responseId}/my-review`,
       headers: asUser(reviewer),
-      payload: { score: 8, notes: "strong" },
+      payload: { score: 4, notes: "strong" },
     });
     await a.inject({
       method: "PUT",
       url: `/api/responses/${responseId}/my-review`,
       headers: asUser(reviewer2),
-      payload: { score: 4 },
+      payload: { score: 2 },
     });
     const { rows } = await pool.query(
       `SELECT count(*)::int AS n, avg(score)::float AS avg FROM applicant_reviews WHERE response_id = $1`,
       [responseId],
     );
     expect(rows[0].n).toBe(2);
-    expect(rows[0].avg).toBe(6);
+    expect(rows[0].avg).toBe(3);
 
     await a.inject({
       method: "PATCH",
@@ -181,7 +181,7 @@ describe("review + decide (H13, H14)", () => {
     expect(detail.statusCode).toBe(200);
     const body = detail.json();
     expect(body.review_count).toBe(2);
-    expect(body.avg_score).toBe(6);
+    expect(body.avg_score).toBe(3);
     expect(body.reviews).toHaveLength(2);
     for (const review of body.reviews) {
       expect(typeof review.author_name).toBe("string");
@@ -201,7 +201,7 @@ describe("review + decide (H13, H14)", () => {
     ).toBe(true);
   });
 
-  it("rejects a score outside 0-10", async () => {
+  it("rejects a score outside 1-5", async () => {
     const a = await getApp();
     const appId = await createApplication();
     const { responseId } = await submittedApplicant(appId);
@@ -210,15 +210,23 @@ describe("review + decide (H13, H14)", () => {
       method: "PUT",
       url: `/api/responses/${responseId}/my-review`,
       headers: asUser(reviewer),
-      payload: { score: 11 },
+      payload: { score: 6 },
     });
     expect(tooHigh.statusCode).toBe(400);
+
+    const belowMin = await a.inject({
+      method: "PUT",
+      url: `/api/responses/${responseId}/my-review`,
+      headers: asUser(reviewer),
+      payload: { score: 0 },
+    });
+    expect(belowMin.statusCode).toBe(400);
 
     const atMax = await a.inject({
       method: "PUT",
       url: `/api/responses/${responseId}/my-review`,
       headers: asUser(reviewer),
-      payload: { score: 10 },
+      payload: { score: 5 },
     });
     expect(atMax.statusCode).toBe(200);
   });
