@@ -514,25 +514,25 @@ function StatusPillsRow({
   className?: string;
 }) {
   return (
-    <div className={className}>
-      <div className="flex flex-wrap items-center gap-2">
+    <div className={cn("flex flex-wrap items-center justify-between gap-2", className)}>
+      <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-control border border-border bg-muted/20 px-1.5 py-1">
+        <p className="text-muted-foreground px-1 text-xs whitespace-nowrap">
+          avg {fmtScore(response.avg_score)}/5 · {response.review_count}{" "}
+          {response.review_count === 1 ? t("reviewWord") : t("reviewsWord")}
+        </p>
+        {canRevealReviews && response.review_count > 0 && (
+          <Button type="button" size="xs" variant="ghost" className="px-2" onClick={onShowReviews}>
+            {t("viewReviews", { count: response.review_count })}
+          </Button>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
         <StatusBadge tone={statusTone(st)}>{applicationStatusLabel(st, t)}</StatusBadge>
         {reviewedByMe && (
           <StatusBadge tone="success" dot={false}>
             <CircleCheckIcon className="size-3" aria-hidden="true" />
             {t("reviewedByYou")}
           </StatusBadge>
-        )}
-      </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-        <p className="text-muted-foreground">
-          avg {fmtScore(response.avg_score)}/5 · {response.review_count}{" "}
-          {response.review_count === 1 ? t("reviewWord") : t("reviewsWord")}
-        </p>
-        {canRevealReviews && response.review_count > 0 && (
-          <Button type="button" size="xs" variant="ghost" onClick={onShowReviews}>
-            {t("viewReviews", { count: response.review_count })}
-          </Button>
         )}
       </div>
     </div>
