@@ -148,8 +148,13 @@ function fieldValueText(
   }
 }
 
-/** Downloads every answer for one applicant as a plain-text file, grouped the
- *  same way the read-only view shows them. */
+/** Quotes a CSV field only when it needs it (RFC 4180). */
+function csvCell(value: string): string {
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+/** Downloads every answer for one applicant as a CSV file (section, field,
+ *  value), grouped the same way the read-only view shows them. */
 function exportAnswers(
   response: ResponseRow,
   answerFields: TemplateField[],
@@ -158,21 +163,65 @@ function exportAnswers(
   lang: Language,
   t: Translate,
 ) {
-  const lines: string[] = [`${response.name ?? response.email} <${response.email}>`, ""];
+  const rows: string[][] = [
+    ["Section", "Field", "Value"],
+    ["", "Name", response.name ?? ""],
+    ["", "Email", response.email],
+  ];
   for (const group of groupFieldsBySections(answerFields, answerSections)) {
-    if (group.section) lines.push(pickText(group.section.title, lang), "");
+    const sectionTitle = group.section ? pickText(group.section.title, lang) : "";
     for (const field of group.fields) {
       const text = fieldValueText(field, answerValues[field.key], lang, t);
-      lines.push(pickText(field.label, lang), text || "—", "");
+      rows.push([sectionTitle, pickText(field.label, lang), text]);
     }
   }
-  const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+  const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${(response.name ?? response.email).replace(/[^a-z0-9]+/gi, "-")}-answers.txt`;
+  link.download = `${(response.name ?? response.email).replace(/[^a-z0-9]+/gi, "-")}-answers.csv`;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+/** Status pills + average score — rendered twice (mobile leads with it,
+ *  desktop keeps it atop the right sidebar) via the `className` prop. */
+function StatusPillsRow({
+  response,
+  st,
+  reviewedByMe,
+  t,
+  className,
+}: {
+  response: ResponseRow;
+  st: string;
+  reviewedByMe: boolean;
+  t: Translate;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge tone={statusTone(st)}>{applicationStatusLabel(st, t)}</StatusBadge>
+        {reviewedByMe && (
+          <StatusBadge tone="success" dot={false}>
+            <CircleCheckIcon className="size-3" aria-hidden="true" />
+            {t("reviewedByYou")}
+          </StatusBadge>
+        )}
+        {response.shirt_size && (
+          <StatusBadge tone="neutral" dot={false}>
+            {t("tshirtSize", { size: response.shirt_size })}
+          </StatusBadge>
+        )}
+      </div>
+      <p className="text-muted-foreground mt-2 text-xs">
+        avg {fmtScore(response.avg_score)} · {response.review_count}{" "}
+        {response.review_count === 1 ? t("reviewWord") : t("reviewsWord")}
+      </p>
+    </div>
+  );
 }
 
 export function ReviewModal({
@@ -213,6 +262,7 @@ export function ReviewModal({
   const canDecide = useCan(CAPABILITIES.APPLICATIONS_DECIDE);
   const canOverride = useCan(CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE);
   const canEdit = useCan(CAPABILITIES.APPLICATIONS_EDIT_RESPONSE);
+  const canExport = useCan(CAPABILITIES.EXPORTS_RUN);
   const me = useMe();
   const lang = (me?.language ?? "es") as Language;
 
@@ -386,12 +436,23 @@ export function ReviewModal({
       }
     >
       <div className="space-y-4">
+        {/* Mobile: status pills lead, right above the answers/review split —
+         *  desktop keeps them at the top of the right-hand sidebar instead. */}
+        <StatusPillsRow
+          response={response}
+          st={st}
+          reviewedByMe={reviewedByMe}
+          t={t}
+          className="lg:hidden"
+        />
+
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <div className="min-w-0 lg:max-h-[65vh] lg:overflow-y-auto lg:pr-1">
             <AnswersSection
               template={template}
               applicationId={applicationId}
               canEdit={canEdit}
+              canExport={canExport}
               editing={editing}
               setEditing={setEditing}
               editValues={editValues}
@@ -408,24 +469,13 @@ export function ReviewModal({
           </div>
 
           <div className="min-w-0 space-y-4 lg:max-h-[65vh] lg:overflow-y-auto lg:pr-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge tone={statusTone(st)}>{applicationStatusLabel(st, t)}</StatusBadge>
-              {reviewedByMe && (
-                <StatusBadge tone="success" dot={false}>
-                  <CircleCheckIcon className="size-3" aria-hidden="true" />
-                  {t("reviewedByYou")}
-                </StatusBadge>
-              )}
-              {response.shirt_size && (
-                <StatusBadge tone="neutral" dot={false}>
-                  {t("tshirtSize", { size: response.shirt_size })}
-                </StatusBadge>
-              )}
-            </div>
-            <p className="text-muted-foreground text-xs">
-              avg {fmtScore(response.avg_score)} · {response.review_count}{" "}
-              {response.review_count === 1 ? t("reviewWord") : t("reviewsWord")}
-            </p>
+            <StatusPillsRow
+              response={response}
+              st={st}
+              reviewedByMe={reviewedByMe}
+              t={t}
+              className="hidden lg:block"
+            />
 
             {canScore && (
               <MyReviewCard
@@ -500,6 +550,7 @@ function AnswersSection({
   template,
   applicationId,
   canEdit,
+  canExport,
   editing,
   setEditing,
   editValues,
@@ -516,6 +567,7 @@ function AnswersSection({
   template: TemplateField[] | null;
   applicationId: number;
   canEdit: boolean;
+  canExport: boolean;
   editing: boolean;
   setEditing: (v: boolean) => void;
   editValues: Record<string, unknown>;
@@ -535,7 +587,7 @@ function AnswersSection({
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-medium">{t("answersLabel")}</p>
         <div className="flex items-center gap-2">
-          {answerFields.length > 0 && (
+          {canExport && answerFields.length > 0 && (
             <Button
               size="sm"
               variant="outline"
