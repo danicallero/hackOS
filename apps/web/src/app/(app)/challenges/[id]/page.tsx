@@ -116,8 +116,8 @@ export default function ChallengeDetailPage() {
 
   return (
     <div className="space-y-6">
-      <BackLink href="/challenges" label={t("backToChallenges")} />
       <PageHeader
+        context={<BackLink href="/challenges" label={t("backToChallenges")} />}
         title={textForDisplay(challenge.title)}
         state={
           <div className="flex flex-wrap items-center gap-2">

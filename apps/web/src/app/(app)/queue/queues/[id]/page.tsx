@@ -270,8 +270,11 @@ export default function QueueDetailPage() {
 
   return (
     <div className="space-y-6">
-      <BackLink href="/queue?tab=queues" label={t("queueOperations")} />
-      <PageHeader title={queue.group.display_name} meta={queue.group.enterprise_name} />
+      <PageHeader
+        context={<BackLink href="/queue?tab=queues" label={t("queueOperations")} />}
+        title={queue.group.display_name}
+        meta={queue.group.enterprise_name}
+      />
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <SectionCard

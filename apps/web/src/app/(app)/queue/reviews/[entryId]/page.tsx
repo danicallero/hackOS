@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
@@ -148,15 +149,7 @@ export default function ReviewDetailPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        context={
-          <Link
-            href="/queue/reviews"
-            className="hover:text-foreground inline-flex items-center gap-1"
-          >
-            <ArrowLeftIcon className="size-3.5" />
-            {t("backToReviews")}
-          </Link>
-        }
+        context={<BackLink href="/queue/reviews" label={t("backToReviews")} />}
         title={project.name}
         description={textForDisplay(challenge.title)}
         state={

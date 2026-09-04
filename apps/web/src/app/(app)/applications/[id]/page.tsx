@@ -179,9 +179,8 @@ export default function ApplicationDetailPage() {
 
   return (
     <div className="space-y-6">
-      <BackLink href="/applications" label={t("backToApplications")} />
-
       <PageHeader
+        context={<BackLink href="/applications" label={t("backToApplications")} />}
         title={form ? form.name : t("applicationNumber", { id })}
         state={
           form && w ? (

@@ -102,8 +102,7 @@ export default function UserProfilePage() {
 
   return (
     <div className="space-y-6">
-      <BackLink href="/users" label={t("backToUsers")} />
-      <ProfileHeader user={user} />
+      <ProfileHeader user={user} context={<BackLink href="/users" label={t("backToUsers")} />} />
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabBar aria-label={t("profileSections")} className="w-full justify-start">

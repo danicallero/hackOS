@@ -137,9 +137,10 @@ export default function NewApplicationFormPage() {
 
   return (
     <div className="space-y-6">
-      <BackLink href="/applications" label={t("backToApplications")} />
-
-      <PageHeader title={t("newApplicationForm")} />
+      <PageHeader
+        context={<BackLink href="/applications" label={t("backToApplications")} />}
+        title={t("newApplicationForm")}
+      />
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onCreate)}>
