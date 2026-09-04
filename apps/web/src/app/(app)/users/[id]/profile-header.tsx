@@ -24,10 +24,11 @@ import { useCan, useMe } from "@/lib/session";
 import type { UserDetail } from "@/lib/types";
 import { fullName, initials, ROLE_TONE, roleDisplayName } from "./shared";
 
-export function ProfileHeader({ user }: { user: UserDetail }) {
+export function ProfileHeader({ user, context }: { user: UserDetail; context?: React.ReactNode }) {
   const { t } = useLocale();
   return (
     <PageHeader
+      context={context}
       leading={
         <Avatar size="lg">
           {user.image && <AvatarImage src={user.image} alt={fullName(user)} />}

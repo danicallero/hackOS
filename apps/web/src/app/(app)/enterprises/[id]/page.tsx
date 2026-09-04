@@ -93,8 +93,10 @@ export default function EnterpriseDetailPage() {
 
   return (
     <div className="space-y-6">
-      {canManage && <BackLink href="/enterprises" label={t("backToEnterprises")} />}
       <PageHeader
+        context={
+          canManage ? <BackLink href="/enterprises" label={t("backToEnterprises")} /> : undefined
+        }
         leading={
           <Avatar size="lg">
             {enterprise.logo_url ? (

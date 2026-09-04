@@ -21,8 +21,8 @@ export default function NewChallengePage() {
 
   return (
     <div className="space-y-6">
-      <BackLink href="/challenges" label={t("backToChallenges")} />
       <PageHeader
+        context={<BackLink href="/challenges" label={t("backToChallenges")} />}
         title={t("newChallenge")}
         description={t("newChallengeDescription")}
         leading={<TrophyIcon className="text-muted-foreground size-6" aria-hidden="true" />}

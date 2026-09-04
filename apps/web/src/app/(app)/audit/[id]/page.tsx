@@ -80,9 +80,8 @@ export default function AuditEntryPage() {
 
   return (
     <div className="space-y-6">
-      <BackLink href="/audit" label={t("backToAuditLog")} />
-
       <PageHeader
+        context={<BackLink href="/audit" label={t("backToAuditLog")} />}
         title={getActionLabel(row.action, t)}
         meta={
           <span className="text-muted-foreground text-xs">

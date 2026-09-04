@@ -491,9 +491,9 @@ export function RoleEditor({
 }
 
 /**
- * Visually matches `BackLink` (same icon/label/classes) but is wired to an
- * in-page state transition rather than route navigation — the mobile
- * drill-down never changes route, only `?role=`/`tab` state, so `BackLink`'s
+ * Same back-navigation idea as `BackLink` but wired to an in-page state
+ * transition rather than route navigation — the mobile drill-down never
+ * changes route, only `?role=`/`tab` state, so `BackLink`'s
  * `router.back()`/`history`-depth logic (built for actual page-to-page nav,
  * see `components/common/back-link.tsx`) doesn't apply here.
  */
