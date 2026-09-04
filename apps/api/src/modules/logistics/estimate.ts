@@ -19,6 +19,8 @@ export interface PresenceEvent {
   /** epoch milliseconds */
   t: number;
   kind: PresenceEventKind;
+  /** Name of the activity that produced this signal; only set when kind === "activity". */
+  activityName?: string;
 }
 
 export interface Interval {
@@ -27,6 +29,18 @@ export interface Interval {
   end: number;
   /** True when `end` is a real door `out`; false for activity-backed/provisional time. */
   confirmed: boolean;
+}
+
+export interface PresenceBreakdownEntry {
+  /** epoch milliseconds */
+  start: number;
+  end: number;
+  /** True when `end` is a real door `out`; false for activity-backed/provisional time. */
+  confirmed: boolean;
+  /** True when the window's certainty gap lapsed with no confirming signal — contributes zero hours. */
+  expired: boolean;
+  /** Name of the activity that opened or closed this window, if any. */
+  activityName: string | null;
 }
 
 export interface PresenceOptions {
@@ -40,7 +54,11 @@ export interface CertaintyWindow {
   securedUntil: number | null;
   status: "secured" | "provisional" | "invalid";
   openedBy: "in" | "activity";
+  /** Name of the activity that opened this window, when openedBy === "activity". */
+  openedByActivity: string | null;
   closedBy: PresenceEventKind | null;
+  /** Name of the activity that closed this window, when closedBy === "activity". */
+  closedByActivity: string | null;
   /** True when a second door `in` arrived before any exit/activity closed this window. */
   conflict: boolean;
 }
@@ -74,6 +92,7 @@ export function buildCertaintyWindows(
       if (active && event.t <= active.deadline) {
         active.securedUntil = event.t;
         active.closedBy = "out";
+        active.closedByActivity = null;
         active.status = "secured";
       }
       active = null;
@@ -94,6 +113,7 @@ export function buildCertaintyWindows(
     } else if (active && event.t <= active.deadline) {
       active.securedUntil = event.t;
       active.closedBy = event.kind;
+      active.closedByActivity = event.kind === "activity" ? (event.activityName ?? null) : null;
       active.status = "secured";
     }
 
@@ -103,7 +123,9 @@ export function buildCertaintyWindows(
       securedUntil: null,
       status: event.t + gap < cutoff ? "invalid" : "provisional",
       openedBy: event.kind,
+      openedByActivity: event.kind === "activity" ? (event.activityName ?? null) : null,
       closedBy: null,
+      closedByActivity: null,
       conflict: false,
     };
     windows.push(next);
@@ -136,6 +158,35 @@ export function buildPresenceIntervals(
         start: window.start,
         end,
         confirmed: window.closedBy === "out",
+      },
+    ];
+  });
+}
+
+/**
+ * Full window breakdown for the CSV export (H24): unlike `buildPresenceIntervals`,
+ * this also includes windows that expired with no confirming signal (`expired:
+ * true`, contributing zero hours) so staff can audit what didn't count, and
+ * attributes each window to the activity that opened/closed it, if any.
+ */
+export function buildPresenceBreakdown(
+  events: PresenceEvent[],
+  cutoff: number,
+  opts: PresenceOptions = {},
+): PresenceBreakdownEntry[] {
+  return buildCertaintyWindows(events, cutoff, opts).flatMap((window) => {
+    const expired = window.status === "invalid";
+    const end = expired
+      ? Math.min(window.deadline, cutoff)
+      : (window.securedUntil ?? Math.min(window.deadline, cutoff));
+    if (end <= window.start) return [];
+    return [
+      {
+        start: window.start,
+        end,
+        confirmed: window.closedBy === "out",
+        expired,
+        activityName: window.closedByActivity ?? window.openedByActivity ?? null,
       },
     ];
   });

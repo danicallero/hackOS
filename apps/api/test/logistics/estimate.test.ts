@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCertaintyWindows,
+  buildPresenceBreakdown,
   buildPresenceIntervals,
   guaranteedPresenceMs,
   isPresentAt,
@@ -171,7 +172,9 @@ describe("rolling certainty windows", () => {
         securedUntil: at(5),
         status: "secured",
         openedBy: "in",
+        openedByActivity: null,
         closedBy: "activity",
+        closedByActivity: null,
         conflict: false,
       },
       {
@@ -180,7 +183,9 @@ describe("rolling certainty windows", () => {
         securedUntil: null,
         status: "provisional",
         openedBy: "activity",
+        openedByActivity: null,
         closedBy: null,
+        closedByActivity: null,
         conflict: false,
       },
     ]);
@@ -249,5 +254,37 @@ describe("rolling certainty windows", () => {
     expect(windows.every((window) => !window.conflict)).toBe(true);
     expect(windows[0]?.status).toBe("secured"); // in → activity
     expect(windows[1]?.status).toBe("secured"); // activity → in
+  });
+});
+
+describe("presence breakdown (H24 CSV export)", () => {
+  it("attributes a window to the activity that closed it", () => {
+    const events: PresenceEvent[] = [
+      { t: at(9), kind: "in" },
+      { t: at(14), kind: "activity", activityName: "Lunch" },
+    ];
+    const [door] = buildPresenceBreakdown(events, at(24));
+    expect(door).toMatchObject({
+      start: at(9),
+      end: at(14),
+      confirmed: false,
+      expired: false,
+      activityName: "Lunch",
+    });
+  });
+
+  it("attributes a window to the activity that opened it, when nothing closes it yet", () => {
+    const events: PresenceEvent[] = [{ t: at(9), kind: "activity", activityName: "Breakfast" }];
+    const [window] = buildPresenceBreakdown(events, at(10));
+    expect(window).toMatchObject({ activityName: "Breakfast", expired: false });
+  });
+
+  it("includes an unconfirmed expired window with zero-hour attribution", () => {
+    const events: PresenceEvent[] = [{ t: at(0), kind: "in" }];
+    const [window] = buildPresenceBreakdown(events, at(13)); // past the 12h window
+    expect(window).toMatchObject({ start: at(0), confirmed: false, expired: true });
+    // The window is still returned (unlike buildPresenceIntervals) so it's
+    // visible in the export, but callers must treat expired time as zero.
+    expect(buildPresenceIntervals(events, at(13))).toHaveLength(0);
   });
 });

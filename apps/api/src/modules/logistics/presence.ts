@@ -10,6 +10,7 @@ import { assertBadgeScanTimestamp, resolveByBadge } from "./badge.js";
 import { loadPersonCard } from "./cards.js";
 import {
   buildCertaintyWindows,
+  buildPresenceBreakdown,
   buildPresenceIntervals,
   DEFAULT_SUSPICIOUS_GAP_MS,
   isPresentAt,
@@ -392,47 +393,61 @@ export async function openSessions(at?: number, actorId?: number) {
 
 /**
  * Load raw presence signals (door in/out + activity scans) grouped per user.
- * Passing a userId scopes to that user.
+ * Passing a single userId or a userIds array scopes the query accordingly;
+ * omitted, every active participant's signals are loaded (bulk endpoints).
  */
 async function loadEvents(
-  userId?: number,
+  userIds?: number | number[],
   options: { accountScope?: "real" | "synthetic" | "all" } = {},
 ): Promise<Map<number, PresenceEvent[]>> {
-  const scoped = userId != null;
+  const scoped = userIds != null;
   const testAccountFilter =
     options.accountScope === "real"
       ? " AND u.is_test_account = false"
       : options.accountScope === "synthetic"
         ? " AND u.is_test_account = true"
         : "";
+  const idCondition = Array.isArray(userIds) ? "= ANY($1)" : "= $1";
   const timeFilter = scoped
-    ? `WHERE tl.user_id = $1
+    ? `WHERE tl.user_id ${idCondition}
          AND EXISTS (SELECT 1 FROM users u WHERE u.id = tl.user_id
           AND u.account_state = 'active' AND u.anonymized_at IS NULL${testAccountFilter})`
     : `WHERE tl.user_id IS NOT NULL
          AND EXISTS (SELECT 1 FROM users u WHERE u.id = tl.user_id
           AND u.account_state = 'active' AND u.anonymized_at IS NULL${testAccountFilter})`;
   const activityFilter = scoped
-    ? `WHERE al.user_id = $1
+    ? `WHERE al.user_id ${idCondition}
          AND EXISTS (SELECT 1 FROM users u WHERE u.id = al.user_id
           AND u.account_state = 'active' AND u.anonymized_at IS NULL${testAccountFilter})`
     : `WHERE al.user_id IS NOT NULL
          AND EXISTS (SELECT 1 FROM users u WHERE u.id = al.user_id
           AND u.account_state = 'active' AND u.anonymized_at IS NULL${testAccountFilter})`;
-  const params = scoped ? [userId] : [];
+  const params = scoped ? [userIds] : [];
   const { rows } = await pool.query(
-    `SELECT tl.user_id, extract(epoch from tl.scanned_at) * 1000 AS t, tl.kind
+    `SELECT tl.user_id, extract(epoch from tl.scanned_at) * 1000 AS t, tl.kind,
+            NULL::text AS activity_name
        FROM time_logs tl ${timeFilter} AND tl.kind IN ('in', 'out')
      UNION ALL
-     SELECT al.user_id, extract(epoch from al.logged_at) * 1000 AS t, 'activity' AS kind
-       FROM activity_logs al ${activityFilter}`,
+     SELECT al.user_id, extract(epoch from al.logged_at) * 1000 AS t, 'activity' AS kind,
+            a.name AS activity_name
+       FROM activity_logs al
+       JOIN activities a ON a.id = al.activity_id ${activityFilter}`,
     params,
   );
 
   const map = new Map<number, PresenceEvent[]>();
-  for (const row of rows as { user_id: number; t: string; kind: PresenceEvent["kind"] }[]) {
+  for (const row of rows as {
+    user_id: number;
+    t: string;
+    kind: PresenceEvent["kind"];
+    activity_name: string | null;
+  }[]) {
     const arr = map.get(row.user_id) ?? [];
-    arr.push({ t: Number(row.t), kind: row.kind });
+    arr.push({
+      t: Number(row.t),
+      kind: row.kind,
+      ...(row.activity_name != null ? { activityName: row.activity_name } : {}),
+    });
     map.set(row.user_id, arr);
   }
   return map;
@@ -514,12 +529,18 @@ export async function allHours(cutoff?: number, actorId?: number) {
  * H24/H54: bulk hours WITH per-record breakdown, for CSV export. `userIds`
  * scopes to a subset (e.g. the caller's currently-filtered hours table) —
  * omitted, every user with presence signals is included. Reuses the same
- * interval math as `userHours`/`allHours` instead of duplicating it.
+ * certainty-window math as `userHours`/`allHours` instead of duplicating it,
+ * but surfaces every window (including ones that expired unconfirmed) via
+ * `buildPresenceBreakdown` so the export can show why a stretch didn't count.
  */
 export async function hoursWithBreakdown(userIds?: number[], cutoff?: number, actorId?: number) {
   const now = cutoff ?? (await databaseNow()).getTime();
   const syntheticOperator = actorId != null && (await isSyntheticOperator(pool, actorId));
-  const map = await loadEvents(undefined, {
+  // Scope the signals query itself when a subset is requested (e.g. the
+  // single-participant export) instead of loading every participant's whole
+  // event history and filtering in memory — that made even a one-person
+  // export as slow as the full bulk export.
+  const map = await loadEvents(userIds, {
     accountScope: syntheticOperator ? "synthetic" : "real",
   });
   const suspiciousGapMs = await certaintyWindowMs();
@@ -545,19 +566,20 @@ export async function hoursWithBreakdown(userIds?: number[], cutoff?: number, ac
     .map((userId) => {
       const events = map.get(userId) ?? [];
       const person = byId.get(userId)!;
-      const intervals = buildPresenceIntervals(events, now, { suspiciousGapMs });
+      const breakdown = buildPresenceBreakdown(events, now, { suspiciousGapMs });
       return {
         userId,
         name: person.name,
         surname: person.surname,
         dni: person.dni,
         hours: round2(totalPresenceMs(events, now, { suspiciousGapMs }) / MS_PER_HOUR),
-        intervals: intervals.map((i) => ({
-          kind: "in_out" as const,
-          start: new Date(i.start).toISOString(),
-          end: new Date(i.end).toISOString(),
-          confirmed: i.confirmed,
-          contributedHours: round2((i.end - i.start) / MS_PER_HOUR),
+        intervals: breakdown.map((entry) => ({
+          activity: entry.activityName,
+          start: new Date(entry.start).toISOString(),
+          end: new Date(entry.end).toISOString(),
+          confirmed: entry.confirmed,
+          expired: entry.expired,
+          contributedHours: entry.expired ? 0 : round2((entry.end - entry.start) / MS_PER_HOUR),
         })),
       };
     })

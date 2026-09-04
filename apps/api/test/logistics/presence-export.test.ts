@@ -10,7 +10,7 @@ import {
   createUserWithCapabilities,
   truncateAll,
 } from "../helpers.js";
-import { assignBadge } from "./fixtures.js";
+import { assignBadge, createMeal } from "./fixtures.js";
 
 let app: App;
 let doorStaff: number;
@@ -154,18 +154,22 @@ describe("H24/H54 presence hours CSV export", () => {
       "email",
       "dni",
       "hours",
-      "interval_kind",
-      "interval_start",
-      "interval_end",
+      "activity",
+      "time_logged_in",
+      "time_logged_out",
       "confirmed",
-      "contributed_hours",
+      "expired",
+      "time_aggregated",
     ]);
     const summary = rows.find((r) => r[0] === "summary" && r[1] === String(uid));
     const detail = rows.find((r) => r[0] === "detail" && r[1] === String(uid));
     expect(summary).toBeDefined();
     expect(Number(summary?.[6])).toBeCloseTo(4, 1);
     expect(detail).toBeDefined();
-    expect(detail?.[10]).toBe("true");
+    expect(detail?.[7]).toBe(""); // no activity attributed to a pure door in/out window
+    expect(detail?.[10]).toBe("true"); // confirmed
+    expect(detail?.[11]).toBe("false"); // expired
+    expect(Number(detail?.[12])).toBeCloseTo(4, 1); // time_aggregated
 
     const filtered = await app.inject({
       method: "GET",
@@ -175,6 +179,47 @@ describe("H24/H54 presence hours CSV export", () => {
     expect(filtered.statusCode).toBe(200);
     const filteredRows = parseCsv(filtered.body);
     expect(filteredRows).toEqual([["user_id", "name", "surname", "email", "dni", "hours"]]);
+  });
+
+  it("attributes a detail row to the activity that contributed the time, and flags expired windows", async () => {
+    const uid = await createUser({ name: "Marie", email: "marie@test.local" });
+    await assignBadge(uid, "EXPORT-6");
+    await backdateBadgeAssignment(uid, new Date(Date.now() - 48 * 60 * 60 * 1000));
+    const mealId = await createMeal("Lunch");
+
+    // Door entry now expires unconfirmed (no exit/activity within the 12h window).
+    await doorScan("EXPORT-6", "in", new Date(Date.now() - 20 * 60 * 60 * 1000));
+
+    // A separate, recent, activity-only window that should surface with its name.
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/presence/signals/${uid}`,
+      headers: { ...asUser(doorStaff), "idempotency-key": `activity-${uid}-lunch` },
+      payload: {
+        kind: "activity",
+        activityId: mealId,
+        occurredAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      },
+    });
+    expect(res.statusCode).toBe(201);
+
+    const full = await app.inject({
+      method: "GET",
+      url: `/api/presence/hours/export.csv?format=full&userIds=${uid}`,
+      headers: asUser(statsStaff),
+    });
+    expect(full.statusCode).toBe(200);
+    const rows = parseCsv(full.body);
+    const details = rows.filter((r) => r[0] === "detail" && r[1] === String(uid));
+
+    const expired = details.find((r) => r[11] === "true");
+    expect(expired).toBeDefined();
+    expect(expired?.[7]).toBe(""); // no activity attributed to the plain door 'in'
+    expect(Number(expired?.[12])).toBe(0); // expired windows contribute zero hours
+
+    const activityRow = details.find((r) => r[7] === "Lunch");
+    expect(activityRow).toBeDefined();
+    expect(activityRow?.[11]).toBe("false"); // not expired
   });
 
   it("scopes the bulk export to userIds when given", async () => {
