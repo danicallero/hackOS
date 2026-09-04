@@ -53,6 +53,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
+import { Toaster } from "@/components/ui/sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { LOCALE_CODES, pickText, type Translate, useLocale } from "@/lib/i18n";
@@ -210,6 +211,7 @@ interface ApplicationFile {
 type FileViewerSide = "left" | "right";
 const FILE_VIEWER_SIDE_STORAGE_KEY = "hackos.application-review.file-viewer-side";
 const FILE_VIEWER_DRAG_TYPE = "text/hackos-application-file-viewer";
+const REVIEW_TOASTER_ID = "application-review-modal";
 
 function fileNameFromValue(value: string): string {
   let path = value;
@@ -732,6 +734,7 @@ export function ReviewModal({
 
   function showApplicantAcceptedToast() {
     toast.success(t("applicantAccepted"), {
+      toasterId: REVIEW_TOASTER_ID,
       duration: 8_000,
       action: {
         label: t("undo"),
@@ -746,9 +749,11 @@ export function ReviewModal({
     try {
       await api.post(`/api/responses/${response.id}/revert-decision`, { decision: "review" });
       if (mountedRef.current) updateModalStatus("review");
-      toast.success(t("acceptanceUndone"));
+      toast.success(t("acceptanceUndone"), { toasterId: REVIEW_TOASTER_ID });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("actionFailed"));
+      toast.error(err instanceof ApiError ? err.message : t("actionFailed"), {
+        toasterId: REVIEW_TOASTER_ID,
+      });
     } finally {
       if (mountedRef.current) setBusy(false);
     }
@@ -943,6 +948,7 @@ export function ReviewModal({
             ).finally(() => setConfirmRevoke(false));
           }}
         />
+        <Toaster id={REVIEW_TOASTER_ID} position="bottom-right" />
       </div>
     </Modal>
   );
