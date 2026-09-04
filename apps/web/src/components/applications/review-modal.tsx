@@ -7,17 +7,20 @@
 import { sponsorShareKey } from "@hackos/shared/applications";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import {
+  ArrowLeftIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   CircleCheckIcon,
   DownloadIcon,
+  ExternalLinkIcon,
   FileTextIcon,
   GavelIcon,
+  GripVerticalIcon,
   PencilIcon,
   SendIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { type DragEvent, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   type FormSection,
@@ -32,6 +35,7 @@ import {
   applicationStatusLabel,
 } from "@/app/(app)/applications/workflow";
 import { AlertModal } from "@/components/common/alert-modal";
+import { FileLink, fileDownloadUrl } from "@/components/common/file-link";
 import { Modal } from "@/components/common/modal";
 import { SaveStatus } from "@/components/common/save-status";
 import { ScaleButtons } from "@/components/common/scale-buttons";
@@ -55,6 +59,7 @@ import { LOCALE_CODES, pickText, type Translate, useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
 import { useCan, useMe } from "@/lib/session";
 import type { Intolerance, Language } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 /** Synthetic section for the shirt-size/dietary fields, that is never stored in
  *  `application.sections`.
@@ -193,6 +198,192 @@ function exportAnswers(
   URL.revokeObjectURL(url);
 }
 
+interface ApplicationFile {
+  fieldKey: string;
+  label: string;
+  value: string;
+  filename: string;
+  href: string;
+  preview: "image" | "pdf" | "download";
+}
+
+type FileViewerSide = "left" | "right";
+const FILE_VIEWER_SIDE_STORAGE_KEY = "hackos.application-review.file-viewer-side";
+const FILE_VIEWER_DRAG_TYPE = "text/hackos-application-file-viewer";
+
+function fileNameFromValue(value: string): string {
+  let path = value;
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      path = new URL(value).pathname;
+    } catch {
+      // Keep the raw value as a best-effort filename for malformed URLs.
+    }
+  }
+  const segment = path.split("/").filter(Boolean).pop() ?? path;
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
+function applicationFilePreview(filename: string): ApplicationFile["preview"] {
+  const extension = filename.toLowerCase().split(".").pop();
+  if (extension === "pdf") return "pdf";
+  if (["gif", "jpeg", "jpg", "png", "webp"].includes(extension ?? "")) return "image";
+  return "download";
+}
+
+function applicationFiles(
+  fields: TemplateField[],
+  values: Record<string, unknown>,
+  lang: Language,
+): ApplicationFile[] {
+  return fields.flatMap((field) => {
+    if (field.kind !== "file") return [];
+    const value = values[field.key];
+    if (typeof value !== "string" || value.length === 0) return [];
+    const filename = fileNameFromValue(value);
+    return [
+      {
+        fieldKey: field.key,
+        label: pickText(field.label, lang),
+        value,
+        filename,
+        href: fileDownloadUrl(value),
+        preview: applicationFilePreview(filename),
+      },
+    ];
+  });
+}
+
+function ApplicationFileViewer({
+  files,
+  activeIndex,
+  side,
+  onIndexChange,
+  onSideChange,
+  onDragStart,
+  onDragEnd,
+}: {
+  files: ApplicationFile[];
+  activeIndex: number;
+  side: FileViewerSide;
+  onIndexChange: (index: number) => void;
+  onSideChange: (side: FileViewerSide) => void;
+  onDragStart: (event: DragEvent<HTMLButtonElement>) => void;
+  onDragEnd: () => void;
+}) {
+  const { t } = useLocale();
+  if (files.length === 0) return null;
+
+  const file = files[activeIndex] ?? files[0];
+  const fileTitle = `${file.label}: ${file.filename}`;
+  const nextSide = side === "left" ? "right" : "left";
+  return (
+    <section
+      aria-labelledby="application-files-title"
+      className="border-border bg-muted/20 space-y-3 rounded-xl border p-4 sm:p-5"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 id="application-files-title" className="type-section-title text-balance">
+            {t("applicationFilesLabel")}
+          </h3>
+          <p className="text-muted-foreground mt-1 truncate text-xs" title={fileTitle}>
+            {fileTitle}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            type="button"
+            size="xs"
+            variant="ghost"
+            draggable
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+            onClick={() => onSideChange(nextSide)}
+            className="hidden cursor-grab px-1.5 active:cursor-grabbing lg:inline-flex"
+            aria-label={t("moveFileViewer", {
+              side: t(nextSide === "left" ? "leftSide" : "rightSide"),
+            })}
+            title={t("moveFileViewer", {
+              side: t(nextSide === "left" ? "leftSide" : "rightSide"),
+            })}
+          >
+            <GripVerticalIcon />
+            <span className="sr-only">{t("moveFileViewerHint")}</span>
+          </Button>
+          {files.length > 1 && (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                className={dialogIconButtonClass}
+                disabled={activeIndex === 0}
+                onClick={() => onIndexChange(Math.max(0, activeIndex - 1))}
+                aria-label={t("previousFile")}
+                title={t("previousFile")}
+              >
+                <ChevronLeftIcon />
+              </button>
+              <span
+                className="text-muted-foreground min-w-14 text-center text-xs tabular-nums"
+                aria-live="polite"
+              >
+                {t("filePosition", { current: activeIndex + 1, total: files.length })}
+              </span>
+              <button
+                type="button"
+                className={dialogIconButtonClass}
+                disabled={activeIndex === files.length - 1}
+                onClick={() => onIndexChange(Math.min(files.length - 1, activeIndex + 1))}
+                aria-label={t("nextFile")}
+                title={t("nextFile")}
+              >
+                <ChevronRightIcon />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-control border bg-background">
+        {file.preview === "pdf" ? (
+          <iframe
+            key={file.value}
+            src={file.href}
+            title={fileTitle}
+            className="h-[min(62vh,48rem)] w-full"
+          />
+        ) : file.preview === "image" ? (
+          <div className="flex min-h-64 items-center justify-center bg-muted/10 p-3 sm:p-6">
+            {/* biome-ignore lint/performance/noImgElement: private authenticated file proxy cannot be optimized by Next Image */}
+            <img
+              key={file.value}
+              src={file.href}
+              alt={fileTitle}
+              className="max-h-[62vh] max-w-full object-contain"
+            />
+          </div>
+        ) : (
+          <div className="flex min-h-64 flex-col items-center justify-center gap-3 p-6 text-center">
+            <FileTextIcon className="text-muted-foreground size-8" aria-hidden="true" />
+            <p className="text-muted-foreground text-sm">{t("filePreviewUnavailable")}</p>
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-end">
+        <FileLink value={file.value}>
+          <ExternalLinkIcon className="size-3.5" aria-hidden="true" />
+          {t("viewFileLabel")}
+        </FileLink>
+      </div>
+    </section>
+  );
+}
+
 /** Status pills + average score — rendered twice (mobile leads with it,
  *  desktop keeps it atop the right sidebar) via the `className` prop. */
 function StatusPillsRow({
@@ -200,12 +391,16 @@ function StatusPillsRow({
   st,
   reviewedByMe,
   t,
+  canRevealReviews,
+  onShowReviews,
   className,
 }: {
   response: ResponseRow;
   st: string;
   reviewedByMe: boolean;
   t: Translate;
+  canRevealReviews: boolean;
+  onShowReviews: () => void;
   className?: string;
 }) {
   return (
@@ -224,10 +419,17 @@ function StatusPillsRow({
           </StatusBadge>
         )}
       </div>
-      <p className="text-muted-foreground mt-2 text-xs">
-        avg {fmtScore(response.avg_score)} · {response.review_count}{" "}
-        {response.review_count === 1 ? t("reviewWord") : t("reviewsWord")}
-      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+        <p className="text-muted-foreground">
+          avg {fmtScore(response.avg_score)}/5 · {response.review_count}{" "}
+          {response.review_count === 1 ? t("reviewWord") : t("reviewsWord")}
+        </p>
+        {canRevealReviews && response.review_count > 0 && (
+          <Button type="button" size="xs" variant="ghost" onClick={onShowReviews}>
+            {t("viewReviews", { count: response.review_count })}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
@@ -243,6 +445,7 @@ export function ReviewModal({
   onChanged,
   workspace = "review",
   onNavigate,
+  onDecisionStatusChange,
   canGoPrev = false,
   canGoNext = false,
 }: {
@@ -258,6 +461,8 @@ export function ReviewModal({
   onClose: () => void;
   onChanged: () => Promise<void>;
   workspace?: ApplicationWorkspace;
+  /** Keeps the modal's familiar navigation set stable while a decision is made. */
+  onDecisionStatusChange?: (status: ResponseRow["status"]) => void;
   /** Prev/next paging over the caller's currently visible row order — omit
    *  where there's no meaningful list to page through (e.g. a single-user
    *  profile view). */
@@ -267,6 +472,7 @@ export function ReviewModal({
 }) {
   const { t } = useLocale();
   const canReview = useCan(CAPABILITIES.APPLICATIONS_REVIEW);
+  const canManage = useCan(CAPABILITIES.APPLICATIONS_MANAGE);
   const canDecide = useCan(CAPABILITIES.APPLICATIONS_DECIDE);
   const canOverride = useCan(CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE);
   const canEdit = useCan(CAPABILITIES.APPLICATIONS_EDIT_RESPONSE);
@@ -288,6 +494,7 @@ export function ReviewModal({
     food_intolerances: response.food_intolerances?.map(String) ?? [],
     food_intolerance_notes: response.food_intolerance_notes,
   };
+  const files = applicationFiles(answerFields, answerValues, lang);
 
   useEffect(() => {
     api
@@ -312,6 +519,27 @@ export function ReviewModal({
   const [editValues, setEditValues] = useState<Record<string, unknown>>(response.responses);
   const [savingEdit, setSavingEdit] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
+  const [activeFileIndex, setActiveFileIndex] = useState(0);
+  const [reviewPage, setReviewPage] = useState<"application" | "reviews">("application");
+  const [modalStatus, setModalStatus] = useState(response.status);
+  const [fileViewerSide, setFileViewerSide] = useState<FileViewerSide>("left");
+  const [fileViewerDragging, setFileViewerDragging] = useState(false);
+  const mountedRef = useRef(true);
+
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const savedSide = window.localStorage.getItem(FILE_VIEWER_SIDE_STORAGE_KEY);
+    if (savedSide === "left" || savedSide === "right") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate a persisted UI preference after client mount
+      setFileViewerSide(savedSide);
+    }
+  }, []);
 
   useEffect(() => {
     const navigate = onNavigate;
@@ -355,6 +583,12 @@ export function ReviewModal({
     setMyNotes(mine?.notes ?? "");
     setReviewSaveState("saved");
     setReviewDirty(false);
+    setModalStatus(response.status);
+    setStaffNotes(response.staff_notes ?? "");
+    setEditValues({ ...response.responses });
+    setEditing(false);
+    setActiveFileIndex(0);
+    setReviewPage("application");
   }, [response.id, me?.id]);
 
   function handleScoreChange(v: number | null) {
@@ -366,6 +600,39 @@ export function ReviewModal({
     setMyNotes(v);
     setReviewDirty(true);
     setReviewSaveState("saving");
+  }
+
+  function updateModalStatus(status: ResponseRow["status"]) {
+    setModalStatus(status);
+    onDecisionStatusChange?.(status);
+  }
+
+  function changeFileViewerSide(side: FileViewerSide) {
+    setFileViewerSide(side);
+    window.localStorage.setItem(FILE_VIEWER_SIDE_STORAGE_KEY, side);
+  }
+
+  function handleFileViewerDragStart(event: DragEvent<HTMLButtonElement>) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData(FILE_VIEWER_DRAG_TYPE, "file-viewer");
+    setFileViewerDragging(true);
+  }
+
+  function handleFileViewerDragEnd() {
+    setFileViewerDragging(false);
+  }
+
+  function handleFileViewerDragOver(event: DragEvent<HTMLElement>) {
+    if (!fileViewerDragging) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }
+
+  function handleFileViewerDrop(side: FileViewerSide, event: DragEvent<HTMLElement>) {
+    if (!fileViewerDragging) return;
+    event.preventDefault();
+    changeFileViewerSide(side);
+    setFileViewerDragging(false);
   }
 
   useEffect(() => {
@@ -407,12 +674,14 @@ export function ReviewModal({
   }
 
   /** Runs a decision action, refreshes the parent, and toasts the result. */
-  async function run(label: string, fn: () => Promise<unknown>) {
+  async function run(label: string, fn: () => Promise<unknown>, options: RunOptions = {}) {
     setBusy(true);
     try {
       await fn();
-      await onChanged();
-      toast.success(label);
+      if (options.nextStatus) updateModalStatus(options.nextStatus);
+      if (options.refresh !== false) await onChanged();
+      if (options.notify) options.notify();
+      else toast.success(label);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("actionFailed"));
     } finally {
@@ -436,21 +705,61 @@ export function ReviewModal({
     }
   }
 
-  const st = response.status;
+  const st = modalStatus;
   // A draft hasn't been submitted yet, so there's nothing for a reviewer to score.
   const canScore = canReview && st !== "draft";
   const reviewedByMe = response.reviews.some(
     (review) => review.author_id === me?.id && review.score != null,
   );
-  const otherReviews = response.reviews.filter((review) => review.author_id !== me?.id);
+  const activeFile = Math.min(activeFileIndex, Math.max(files.length - 1, 0));
+  const canRevealReviews = canManage;
   const showDecisionMenu = hasDecisionActions(workspace, st, canDecide);
+
+  function openReviewWindow() {
+    const popupWorkspace = workspaceForResponseStatus(st);
+    const query = new URLSearchParams({
+      tab: popupWorkspace,
+      response: String(response.id),
+    });
+    const popup = window.open(
+      `/applications/${applicationId}?${query.toString()}`,
+      "hackos-review-window",
+      "popup=yes,width=1200,height=900,resizable=yes,scrollbars=yes",
+    );
+    if (popup) popup.focus();
+    else toast.error(t("reviewWindowBlocked"));
+  }
+
+  function showApplicantAcceptedToast() {
+    toast.success(t("applicantAccepted"), {
+      duration: 8_000,
+      action: {
+        label: t("undo"),
+        onClick: () => {
+          void undoAcceptance();
+        },
+      },
+    });
+  }
+  async function undoAcceptance() {
+    if (mountedRef.current) setBusy(true);
+    try {
+      await api.post(`/api/responses/${response.id}/revert-decision`, { decision: "review" });
+      if (mountedRef.current) updateModalStatus("review");
+      toast.success(t("acceptanceUndone"));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("actionFailed"));
+    } finally {
+      if (mountedRef.current) setBusy(false);
+    }
+  }
 
   return (
     <Modal
       open
       onOpenChange={(o) => !o && onClose()}
       size="xl"
-      className="sm:max-w-6xl"
+      className="max-h-[90vh] sm:max-w-7xl"
       icon={FileTextIcon}
       title={response.name ?? response.email}
       description={response.name ? response.email : undefined}
@@ -490,6 +799,7 @@ export function ReviewModal({
                 responseId={response.id}
                 canOverride={canOverride}
                 onRequestRevoke={() => setConfirmRevoke(true)}
+                onAccepted={showApplicantAcceptedToast}
               />
             )}
           </div>
@@ -497,56 +807,102 @@ export function ReviewModal({
       }
     >
       <div className="space-y-4">
-        {/* Mobile: status pills lead, right above the answers/review split —
-         *  desktop keeps them at the top of the right-hand sidebar instead. */}
-        <StatusPillsRow
-          response={response}
-          st={st}
-          reviewedByMe={reviewedByMe}
-          t={t}
-          className="lg:hidden"
-        />
-
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="min-w-0 lg:max-h-[65vh] lg:overflow-y-auto lg:pr-1">
-            <AnswersSection
-              template={template}
-              applicationId={applicationId}
-              canEdit={canEdit}
-              canExport={canExport}
-              editing={editing}
-              setEditing={setEditing}
-              editValues={editValues}
-              setEditValues={setEditValues}
-              savingEdit={savingEdit}
-              startEdit={startEdit}
-              saveEdit={saveEdit}
-              answerFields={answerFields}
-              answerSections={answerSections}
-              answerValues={answerValues}
-              response={response}
-              lang={lang}
-            />
-          </div>
-
-          <div className="min-w-0 space-y-4 lg:max-h-[65vh] lg:overflow-y-auto lg:pr-1">
+        {reviewPage === "reviews" ? (
+          <ReviewsPage
+            reviews={response.reviews}
+            avgScore={response.avg_score}
+            reviewCount={response.review_count}
+            onBack={() => setReviewPage("application")}
+          />
+        ) : (
+          <>
             <StatusPillsRow
               response={response}
               st={st}
               reviewedByMe={reviewedByMe}
               t={t}
-              className="hidden lg:block"
+              canRevealReviews={canRevealReviews}
+              onShowReviews={() => setReviewPage("reviews")}
             />
 
-            {(canScore || otherReviews.length > 0) && (
-              <ReviewForum
-                canScore={canScore}
-                reviews={otherReviews}
-                myScore={myScore}
-                onScoreChange={handleScoreChange}
-                myNotes={myNotes}
-                onNotesChange={handleNotesChange}
-                reviewSaveState={reviewSaveState}
+            {files.length > 0 ? (
+              <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+                <section
+                  className={cn(
+                    "min-w-0 space-y-4 lg:max-h-[68vh] lg:overflow-y-auto lg:pr-1",
+                    fileViewerSide === "right" && "lg:order-2",
+                  )}
+                  onDragOver={handleFileViewerDragOver}
+                  onDrop={(event) => handleFileViewerDrop(fileViewerSide, event)}
+                  aria-label={t("applicationFilesLabel")}
+                >
+                  <ApplicationFileViewer
+                    files={files}
+                    activeIndex={activeFile}
+                    side={fileViewerSide}
+                    onIndexChange={setActiveFileIndex}
+                    onSideChange={changeFileViewerSide}
+                    onDragStart={handleFileViewerDragStart}
+                    onDragEnd={handleFileViewerDragEnd}
+                  />
+                </section>
+
+                <section
+                  className={cn(
+                    "min-w-0 space-y-4 lg:max-h-[68vh] lg:overflow-y-auto lg:pr-1",
+                    fileViewerSide === "left" && "lg:order-2",
+                    fileViewerDragging &&
+                      "lg:rounded-xl lg:border lg:border-dashed lg:border-primary/40 lg:p-3",
+                  )}
+                  onDragOver={handleFileViewerDragOver}
+                  onDrop={(event) =>
+                    handleFileViewerDrop(fileViewerSide === "left" ? "right" : "left", event)
+                  }
+                  aria-label={fileViewerDragging ? t("dropFileViewerHere") : undefined}
+                >
+                  {fileViewerDragging && (
+                    <p className="hidden rounded-control border border-dashed border-primary/50 px-3 py-2 text-center text-xs text-primary lg:block">
+                      {t("dropFileViewerHere")}
+                    </p>
+                  )}
+                  <AnswersSection
+                    template={template}
+                    applicationId={applicationId}
+                    canEdit={canEdit}
+                    canExport={canExport}
+                    editing={editing}
+                    setEditing={setEditing}
+                    editValues={editValues}
+                    setEditValues={setEditValues}
+                    savingEdit={savingEdit}
+                    startEdit={startEdit}
+                    saveEdit={saveEdit}
+                    answerFields={answerFields}
+                    answerSections={answerSections}
+                    answerValues={answerValues}
+                    response={response}
+                    lang={lang}
+                  />
+                </section>
+              </div>
+            ) : (
+              <AnswersSection
+                template={template}
+                applicationId={applicationId}
+                canEdit={canEdit}
+                canExport={canExport}
+                editing={editing}
+                setEditing={setEditing}
+                editValues={editValues}
+                setEditValues={setEditValues}
+                savingEdit={savingEdit}
+                startEdit={startEdit}
+                saveEdit={saveEdit}
+                answerFields={answerFields}
+                answerSections={answerSections}
+                answerValues={answerValues}
+                response={response}
+                lang={lang}
               />
             )}
 
@@ -558,8 +914,19 @@ export function ReviewModal({
                 saveStaffNotes={saveStaffNotes}
               />
             )}
-          </div>
-        </div>
+
+            {canScore && (
+              <MyReviewBubble
+                myScore={myScore}
+                onScoreChange={handleScoreChange}
+                myNotes={myNotes}
+                onNotesChange={handleNotesChange}
+                reviewSaveState={reviewSaveState}
+                onOpenReviewWindow={openReviewWindow}
+              />
+            )}
+          </>
+        )}
 
         <AlertModal
           open={confirmRevoke}
@@ -768,46 +1135,43 @@ function StaffNotesCard({
   );
 }
 
-function ReviewForum({
-  canScore,
+function ReviewsPage({
   reviews,
-  myScore,
-  onScoreChange,
-  myNotes,
-  onNotesChange,
-  reviewSaveState,
+  avgScore,
+  reviewCount,
+  onBack,
 }: {
-  canScore: boolean;
   reviews: ReviewEntry[];
-  myScore: number | null;
-  onScoreChange: (v: number | null) => void;
-  myNotes: string;
-  onNotesChange: (v: string) => void;
-  reviewSaveState: SaveState;
+  avgScore: number | string | null;
+  reviewCount: number;
+  onBack: () => void;
 }) {
   const { t } = useLocale();
   return (
-    <section aria-labelledby="review-forum-title" className="space-y-3">
-      <h3 id="review-forum-title" className="text-sm font-medium">
-        {t("reviewForumTitle")}
-      </h3>
+    <section aria-labelledby="all-reviews-title" className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <Button type="button" size="sm" variant="ghost" onClick={onBack}>
+            <ArrowLeftIcon />
+            {t("backToApplication")}
+          </Button>
+          <h3 id="all-reviews-title" className="type-section-title mt-3 text-balance">
+            {t("allReviewsTitle")}
+          </h3>
+          <p className="text-muted-foreground mt-1 text-sm">
+            avg {fmtScore(avgScore)}/5 · {reviewCount}{" "}
+            {reviewCount === 1 ? t("reviewWord") : t("reviewsWord")}
+          </p>
+        </div>
+      </div>
       {reviews.length > 0 ? (
-        <ul className="space-y-3">
+        <ul className="grid gap-3 md:grid-cols-2">
           {reviews.map((review) => (
             <ReviewBubble key={review.author_id} review={review} />
           ))}
         </ul>
       ) : (
-        <p className="text-muted-foreground text-sm">{t("noOtherReviewsYet")}</p>
-      )}
-      {canScore && (
-        <MyReviewBubble
-          myScore={myScore}
-          onScoreChange={onScoreChange}
-          myNotes={myNotes}
-          onNotesChange={onNotesChange}
-          reviewSaveState={reviewSaveState}
-        />
+        <p className="text-muted-foreground text-sm">{t("noReviewsYet")}</p>
       )}
     </section>
   );
@@ -845,20 +1209,35 @@ function MyReviewBubble({
   myNotes,
   onNotesChange,
   reviewSaveState,
+  onOpenReviewWindow,
 }: {
   myScore: number | null;
   onScoreChange: (v: number | null) => void;
   myNotes: string;
   onNotesChange: (v: string) => void;
   reviewSaveState: SaveState;
+  onOpenReviewWindow?: () => void;
 }) {
   const { t } = useLocale();
   return (
     <div className="border-primary/30 bg-primary/5 space-y-3 rounded-xl border p-4">
-      <p className="text-sm font-medium">{t("yourReview")}</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-medium">{t("yourReview")}</p>
+        {onOpenReviewWindow && (
+          <button
+            type="button"
+            className={dialogIconButtonClass}
+            onClick={onOpenReviewWindow}
+            aria-label={t("openReviewWindow")}
+            title={t("openReviewWindow")}
+          >
+            <ExternalLinkIcon />
+          </button>
+        )}
+      </div>
       <div className="space-y-1.5">
         <Label className="text-muted-foreground text-xs uppercase">{t("scoreRangeLabel")}</Label>
-        <ScaleButtons value={myScore} onChange={onScoreChange} min={1} max={5} />
+        <ScaleButtons value={myScore} onChange={onScoreChange} min={0} max={5} />
       </div>
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
@@ -879,7 +1258,20 @@ function MyReviewBubble({
   );
 }
 
-type RunAction = (label: string, fn: () => Promise<unknown>) => Promise<void>;
+interface RunOptions {
+  /** A decision stays in the modal until the reviewer closes it. */
+  refresh?: boolean;
+  nextStatus?: ResponseRow["status"];
+  notify?: () => void;
+}
+
+type RunAction = (label: string, fn: () => Promise<unknown>, options?: RunOptions) => Promise<void>;
+
+function workspaceForResponseStatus(status: string): ApplicationWorkspace {
+  if (status === "review") return "review";
+  if (status === "accepted_internal" || status === "rejected_internal") return "outbox";
+  return "sent";
+}
 
 function hasDecisionActions(
   workspace: ApplicationWorkspace,
@@ -903,6 +1295,7 @@ function DecisionMenu({
   responseId,
   canOverride,
   onRequestRevoke,
+  onAccepted,
 }: {
   workspace: ApplicationWorkspace;
   status: ResponseRow["status"];
@@ -911,6 +1304,7 @@ function DecisionMenu({
   responseId: number;
   canOverride: boolean;
   onRequestRevoke: () => void;
+  onAccepted: () => void;
 }) {
   const { t } = useLocale();
   const reviewActions = workspace === "review" && status === "review";
@@ -939,8 +1333,14 @@ function DecisionMenu({
             <DropdownMenuItem
               disabled={busy}
               onSelect={() =>
-                void run(t("acceptedUnsentToast"), () =>
-                  api.post(`/api/responses/${responseId}/decide`, { decision: "accepted" }),
+                void run(
+                  t("acceptedUnsentToast"),
+                  () => api.post(`/api/responses/${responseId}/decide`, { decision: "accepted" }),
+                  {
+                    refresh: false,
+                    nextStatus: "accepted_internal",
+                    notify: onAccepted,
+                  },
                 )
               }
             >
@@ -950,8 +1350,10 @@ function DecisionMenu({
               variant="destructive"
               disabled={busy}
               onSelect={() =>
-                void run(t("rejectedUnsentToast"), () =>
-                  api.post(`/api/responses/${responseId}/decide`, { decision: "rejected" }),
+                void run(
+                  t("rejectedUnsentToast"),
+                  () => api.post(`/api/responses/${responseId}/decide`, { decision: "rejected" }),
+                  { refresh: false, nextStatus: "rejected_internal" },
                 )
               }
             >
@@ -964,8 +1366,13 @@ function DecisionMenu({
             <DropdownMenuItem
               disabled={busy}
               onSelect={() =>
-                void run(t("decisionSent"), () =>
-                  api.post(`/api/responses/${responseId}/send-decision`),
+                void run(
+                  t("decisionSent"),
+                  () => api.post(`/api/responses/${responseId}/send-decision`),
+                  {
+                    refresh: false,
+                    nextStatus: status === "accepted_internal" ? "accepted" : "rejected",
+                  },
                 )
               }
             >
@@ -975,10 +1382,13 @@ function DecisionMenu({
             <DropdownMenuItem
               disabled={busy}
               onSelect={() =>
-                void run(t("movedBackToReview"), () =>
-                  api.post(`/api/responses/${responseId}/revert-decision`, {
-                    decision: "review",
-                  }),
+                void run(
+                  t("movedBackToReview"),
+                  () =>
+                    api.post(`/api/responses/${responseId}/revert-decision`, {
+                      decision: "review",
+                    }),
+                  { refresh: false, nextStatus: "review" },
                 )
               }
             >
@@ -992,8 +1402,10 @@ function DecisionMenu({
               <DropdownMenuItem
                 disabled={busy}
                 onSelect={() =>
-                  void run(t("decisionResent"), () =>
-                    api.post(`/api/responses/${responseId}/resend-decision`),
+                  void run(
+                    t("decisionResent"),
+                    () => api.post(`/api/responses/${responseId}/resend-decision`),
+                    { refresh: false, nextStatus: status === "expired" ? "accepted" : status },
                   )
                 }
               >
@@ -1004,10 +1416,13 @@ function DecisionMenu({
               <DropdownMenuItem
                 disabled={busy}
                 onSelect={() =>
-                  void run(t("movedBackToReview"), () =>
-                    api.post(`/api/responses/${responseId}/revert-decision`, {
-                      decision: "review",
-                    }),
+                  void run(
+                    t("movedBackToReview"),
+                    () =>
+                      api.post(`/api/responses/${responseId}/revert-decision`, {
+                        decision: "review",
+                      }),
+                    { refresh: false, nextStatus: "review" },
                   )
                 }
               >
@@ -1018,8 +1433,10 @@ function DecisionMenu({
               <DropdownMenuItem
                 disabled={busy}
                 onSelect={() =>
-                  void run(t("reacceptedUnsent"), () =>
-                    api.post(`/api/responses/${responseId}/re-accept`),
+                  void run(
+                    t("reacceptedUnsent"),
+                    () => api.post(`/api/responses/${responseId}/re-accept`),
+                    { refresh: false, nextStatus: "accepted" },
                   )
                 }
               >
@@ -1037,8 +1454,10 @@ function DecisionMenu({
                 <DropdownMenuItem
                   disabled={busy}
                   onSelect={() =>
-                    void run(t("spotConfirmed"), () =>
-                      api.post(`/api/responses/${responseId}/confirm`),
+                    void run(
+                      t("spotConfirmed"),
+                      () => api.post(`/api/responses/${responseId}/confirm`),
+                      { refresh: false, nextStatus: "confirmed" },
                     )
                   }
                 >
@@ -1048,8 +1467,10 @@ function DecisionMenu({
                   variant="destructive"
                   disabled={busy}
                   onSelect={() =>
-                    void run(t("spotDeclined"), () =>
-                      api.post(`/api/responses/${responseId}/decline`),
+                    void run(
+                      t("spotDeclined"),
+                      () => api.post(`/api/responses/${responseId}/decline`),
+                      { refresh: false, nextStatus: "declined" },
                     )
                   }
                 >

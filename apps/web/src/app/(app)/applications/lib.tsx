@@ -150,8 +150,8 @@ export interface ResponseRow {
   /** pg avg() arrives as a numeric string or null. */
   avg_score: number | string | null;
   review_count: number;
-  /** Every reviewer's own score/notes (H13) — used for the review wall and
-   *  "already reviewed by me" indicators, newest first. */
+  /** The caller's own score/notes (H13), or every reviewer's rows for a
+   *  manager's explicit reveal; newest first. */
   reviews: ReviewEntry[];
 }
 

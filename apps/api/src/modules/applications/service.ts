@@ -1613,7 +1613,11 @@ function computeAvailableActions(status: string): string[] {
   return actions;
 }
 
-export async function getResponseDetail(responseId: number): Promise<ResponseDetail> {
+export async function getResponseDetail(
+  responseId: number,
+  reviewerId: number,
+  canViewAllReviews: boolean,
+): Promise<ResponseDetail> {
   const { rows } = await pool.query(
     `SELECT r.*, NULLIF(concat_ws(' ', u.name, u.surname), '') AS name, u.email, u.shirt_size,
             u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
@@ -1655,17 +1659,26 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
     ...response
   } = rows[0];
 
+  const reviewWhere = canViewAllReviews
+    ? "ar.response_id = $1"
+    : "ar.response_id = $1 AND ar.author_id = $2";
+  const reviewParams = canViewAllReviews ? [responseId] : [responseId, reviewerId];
   const { rows: reviews } = await pool.query(
     `SELECT ar.author_id, u2.name AS author_name, ar.score, ar.notes, ar.updated_at
        FROM applicant_reviews ar
        JOIN users u2 ON u2.id = ar.author_id
-      WHERE ar.response_id = $1
+      WHERE ${reviewWhere}
       ORDER BY ar.updated_at DESC`,
+    reviewParams,
+  );
+  const { rows: scoreRows } = await pool.query(
+    `SELECT avg(score)::float AS avg_score, count(*)::int AS review_count
+       FROM applicant_reviews
+      WHERE response_id = $1`,
     [responseId],
   );
-  const scored = reviews.filter((r) => r.score != null);
-  const avgScore =
-    scored.length > 0 ? scored.reduce((sum, r) => sum + r.score, 0) / scored.length : null;
+  const avgScore = scoreRows[0]?.avg_score ?? null;
+  const reviewCount = scoreRows[0]?.review_count ?? 0;
 
   // Raw (un-enriched) template + the logistics flags/sections, matching what
   // GET /api/applications/:id returns — the web builds the shirt-size/dietary
@@ -1692,7 +1705,7 @@ export async function getResponseDetail(responseId: number): Promise<ResponseDet
     },
     reviews,
     avg_score: avgScore,
-    review_count: reviews.length,
+    review_count: reviewCount,
     available_actions: computeAvailableActions(response.status),
   };
 }

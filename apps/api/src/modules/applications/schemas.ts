@@ -220,7 +220,7 @@ export const submitSchema = z.object({
 });
 
 export const reviewUpsertSchema = z.object({
-  score: z.number().int().min(1).max(5).nullish(),
+  score: z.number().int().min(0).max(5).nullish(),
   notes: z.string().nullish(),
 });
 

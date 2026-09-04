@@ -18,6 +18,15 @@ const Toaster = ({ ...props }: ToasterProps) => {
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
       closeButton
+      // Keep action buttons visually secondary but discoverable. Sonner's
+      // closeButton remains enabled so every toast still has an explicit
+      // dismiss control alongside actions such as Undo.
+      toastOptions={{
+        classNames: {
+          actionButton:
+            "rounded-control bg-primary px-2.5 text-primary-foreground hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        },
+      }}
       icons={{
         success: <CircleCheckIcon className="size-4" />,
         info: <InfoIcon className="size-4" />,

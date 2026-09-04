@@ -113,6 +113,9 @@ export function ResponsesTab({
   const [statusFilter, setStatusFilter] = useState<string>(ALL);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [decisionStatusOverrides, setDecisionStatusOverrides] = useState<Record<number, string>>(
+    {},
+  );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sendOpen, setSendOpen] = useState(false);
   const [batchBusy, setBatchBusy] = useState(false);
@@ -125,29 +128,37 @@ export function ResponsesTab({
 
   const rows = useMemo(() => rowsForWorkspace(allRows, workspace), [allRows, workspace]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const { responses } = await api.get<{ responses: ResponseRow[] }>(
-        `/api/applications/${id}/responses`,
-        {
-          query: {
-            status: statusFilter === ALL ? undefined : statusFilter,
-            search: search.trim() || undefined,
+  const load = useCallback(
+    async (force = false) => {
+      // Keep the current table snapshot stable while a response modal is open.
+      // In particular, accepting a review moves it out of this workspace; the
+      // reviewer should still be able to navigate the familiar set and use undo.
+      if (!force && selectedId !== null) return;
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const { responses } = await api.get<{ responses: ResponseRow[] }>(
+          `/api/applications/${id}/responses`,
+          {
+            query: {
+              status: statusFilter === ALL ? undefined : statusFilter,
+              search: search.trim() || undefined,
+            },
           },
-        },
-      );
-      setAllRows(responses);
-      setSelectedIds(new Set());
-    } catch (err) {
-      const message = err instanceof ApiError ? err.message : t("couldNotLoadResponses");
-      setLoadError(message);
-      toast.error(message);
-    } finally {
-      setLoading(false);
-    }
-  }, [id, statusFilter, search, t]);
+        );
+        setAllRows(responses);
+        setDecisionStatusOverrides({});
+        setSelectedIds(new Set());
+      } catch (err) {
+        const message = err instanceof ApiError ? err.message : t("couldNotLoadResponses");
+        setLoadError(message);
+        toast.error(message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [id, search, selectedId, statusFilter, t],
+  );
 
   // Soft, in-place refresh instead of a hard reload when a response changes
   // (submitted, reviewed, decided) elsewhere.
@@ -179,7 +190,12 @@ export function ResponsesTab({
     }
   }, [rows, pendingResponseId]);
 
-  const selected = useMemo(() => rows.find((r) => r.id === selectedId) ?? null, [rows, selectedId]);
+  const selected = useMemo(() => {
+    const row = rows.find((r) => r.id === selectedId);
+    if (!row) return null;
+    const status = decisionStatusOverrides[row.id];
+    return status && status !== row.status ? { ...row, status } : row;
+  }, [decisionStatusOverrides, rows, selectedId]);
   const selectedIndex = useMemo(
     () => visibleRows.findIndex((r) => r.id === selectedId),
     [visibleRows, selectedId],
@@ -770,9 +786,19 @@ export function ResponsesTab({
           sections={sections}
           askShirtSize={askShirtSize}
           askFoodIntolerances={askFoodIntolerances}
-          onClose={() => setSelectedId(null)}
+          onClose={() => {
+            setSelectedId(null);
+            setDecisionStatusOverrides({});
+            void load(true);
+          }}
           onChanged={load}
           workspace={workspace}
+          onDecisionStatusChange={(status) => {
+            setDecisionStatusOverrides((current) => ({
+              ...current,
+              [selected.id]: status,
+            }));
+          }}
           onNavigate={(dir) => {
             if (selectedIndex < 0) return;
             const next = visibleRows[selectedIndex + (dir === "next" ? 1 : -1)];
