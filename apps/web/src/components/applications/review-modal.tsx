@@ -815,6 +815,10 @@ export function ReviewModal({
   const [fileViewerSide, setFileViewerSide] = useState<FileViewerSide>("left");
   const [fileViewerDragging, setFileViewerDragging] = useState(false);
   const [desktopFloating, setDesktopFloating] = useState(false);
+  // Only set true for a popup opened by clicking an answer's external link
+  // (see openReviewWindow) — a manual open from the panel's own button leaves
+  // the inline composer visible alongside the popup.
+  const [inlineReviewHidden, setInlineReviewHidden] = useState(false);
   const reviewWindowRef = useRef<Window | null>(null);
   const reviewDraftRef = useRef({
     responseId: response.id,
@@ -1104,16 +1108,27 @@ export function ReviewModal({
   const showDecisionMenu = hasDecisionActions(canDecide);
   const showEditAction = canEdit && Boolean(template?.length);
   const showExportAction = canExport && answerFields.length > 0;
+  // Suppressed only while a link-opened popup owns the composer (see
+  // openReviewWindow) — a manually opened one leaves this visible too.
+  const showInlineReview = canScore && !inlineReviewHidden;
 
   // Opens *only* the review composer (score + notes), not the application
   // shell — the popup is a companion to this modal, not a second copy of it.
   // Real-time sync back to this tab is over BroadcastChannel (useReviewSync
   // below); both windows load the same minimal route so they share one
   // implementation of the composer instead of two.
-  async function openReviewWindow() {
+  //
+  // `hideInline` distinguishes why the window opened: clicking an answer's
+  // external link is a navigation away from the review task, so the in-modal
+  // composer steps aside for the popup; clicking the panel's own external-link
+  // button is a deliberate "also open this externally" action and must not
+  // remove the composer the reviewer was just looking at. The inline panel
+  // comes back on its own once the popup/PiP window actually closes.
+  async function openReviewWindow(options: { hideInline?: boolean } = {}) {
     const existingWindow = reviewWindowRef.current;
     if (existingWindow && !existingWindow.closed) {
       existingWindow.focus();
+      if (options.hideInline) setInlineReviewHidden(true);
       return;
     }
     reviewWindowRef.current = null;
@@ -1141,6 +1156,8 @@ export function ReviewModal({
         pipWindow.document.title = response.name ?? response.email;
         pipWindow.document.body.append(iframe);
         reviewWindowRef.current = pipWindow;
+        pipWindow.addEventListener("pagehide", () => setInlineReviewHidden(false));
+        if (options.hideInline) setInlineReviewHidden(true);
         return;
       } catch {
         // Denied (no user gesture in this call stack, one already open,
@@ -1157,12 +1174,14 @@ export function ReviewModal({
     if (popup) {
       reviewWindowRef.current = popup;
       popup.focus();
+      popup.addEventListener("unload", () => setInlineReviewHidden(false));
+      if (options.hideInline) setInlineReviewHidden(true);
     } else toast.error(t("reviewWindowBlocked"));
   }
 
   function handleAnswerLinkClick() {
     if (canScore && window.matchMedia("(min-width: 1024px)").matches) {
-      void openReviewWindow();
+      void openReviewWindow({ hideInline: true });
     }
   }
 
@@ -1200,7 +1219,7 @@ export function ReviewModal({
     myNotes,
     onNotesChange: handleNotesChange,
     reviewSaveState,
-    onOpenReviewWindow: openReviewWindow,
+    onOpenReviewWindow: () => void openReviewWindow(),
     dockSide: files.length > 0 ? fileViewerSide : undefined,
   };
 
@@ -1322,10 +1341,12 @@ export function ReviewModal({
               onDrop={(event) =>
                 handleFileViewerDrop(fileViewerSide === "left" ? "right" : "left", event)
               }
-              reviewContent={canScore ? <ReviewPanelCard {...reviewComposerProps} /> : undefined}
+              reviewContent={
+                showInlineReview ? <ReviewPanelCard {...reviewComposerProps} /> : undefined
+              }
             />
           )}
-          {canScore && (
+          {showInlineReview && (
             <div className={cn("hidden lg:block", files.length > 0 && "2xl:hidden")}>
               <FloatingReviewPanel {...reviewComposerProps} />
             </div>
@@ -1471,7 +1492,7 @@ export function ReviewModal({
               />
             )}
 
-            {canScore && (
+            {showInlineReview && (
               <div className="lg:hidden">
                 <InlineReviewPanel {...reviewComposerProps} />
               </div>
