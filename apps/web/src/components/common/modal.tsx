@@ -68,9 +68,7 @@ export function Modal({
         floatingContent={floatingContent}
         floatingFocus={floatingFocus}
       >
-        <DialogHeader
-          className={cn("shrink-0 pr-10", headerActions && "max-sm:text-left sm:pr-48")}
-        >
+        <DialogHeader className={cn("shrink-0 pr-10", headerActions && "pr-48 text-left")}>
           <div className="min-w-0 space-y-1.5">
             <DialogTitle className="flex min-w-0 items-center gap-2">
               {Icon && <Icon className="text-muted-foreground size-5" />}
@@ -84,11 +82,12 @@ export function Modal({
           </div>
           {headerActions && (
             // Positioned against DialogContent (the nearest `position` ancestor,
-            // since DialogHeader itself no longer claims `relative`) so this row
-            // lines up with the dialog's own close button (`top-3 right-3`,
-            // same `--control-height-compact` sizing) instead of drifting from
-            // it — the close control always stays the extreme top-right item.
-            <div className="mt-3 flex max-w-full flex-wrap items-center justify-end gap-1 max-sm:mr-8 sm:absolute sm:top-0 sm:right-12 sm:max-w-[calc(100%-3.75rem)]">
+            // since DialogHeader itself no longer claims `relative`), pinned at
+            // the same `top-3` as the dialog's own close button (`top-3 right-3`)
+            // so the row always stays put next to it. It wraps onto additional
+            // lines — each right-aligned, stacking downward — only once it no
+            // longer fits, rather than dropping into normal header flow.
+            <div className="absolute top-3 right-12 flex max-w-[calc(100%-3.75rem)] flex-wrap items-center justify-end gap-1">
               {headerActions}
             </div>
           )}
