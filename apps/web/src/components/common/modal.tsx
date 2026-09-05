@@ -62,7 +62,7 @@ export function Modal({
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className={cn(SIZES[size], className)} floatingContent={floatingContent}>
         <DialogHeader
-          className={cn("relative shrink-0 pr-10", headerActions && "max-sm:pb-14 sm:pr-40")}
+          className={cn("relative shrink-0 pr-10", headerActions && "max-sm:pb-6 sm:pr-40")}
         >
           <div className={cn("min-w-0 space-y-1.5", headerActions && "max-sm:pr-28")}>
             <DialogTitle className="flex min-w-0 items-center gap-2">

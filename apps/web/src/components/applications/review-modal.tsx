@@ -494,8 +494,7 @@ function ApplicationFileViewerPanel({
   );
 }
 
-/** Status pills + average score — rendered twice (mobile leads with it,
- *  desktop keeps it atop the right sidebar) via the `className` prop. */
+/** Average score, review reveal, and status pills for the active response. */
 function StatusPillsRow({
   response,
   st,
@@ -998,7 +997,7 @@ export function ReviewModal({
           />
         ) : (
           <>
-            <div className="bg-background sticky top-0 z-10 -mx-6 px-6 py-2">
+            <div className="bg-background sticky top-0 z-10 -mx-6 mb-2 px-6 py-2">
               <StatusPillsRow
                 response={response}
                 st={st}
