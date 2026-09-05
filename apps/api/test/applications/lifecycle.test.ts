@@ -23,6 +23,7 @@ import {
 
 let app: App;
 let reviewer: number;
+let manager: number;
 let decider: number;
 let confirmOverride: number;
 
@@ -31,6 +32,10 @@ beforeEach(async () => {
   const { valkey } = await import("../../src/lib/valkey.js");
   await valkey.flushdb();
   reviewer = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_REVIEW]);
+  manager = await createUserWithCapabilities([
+    CAPABILITIES.APPLICATIONS_REVIEW,
+    CAPABILITIES.APPLICATIONS_MANAGE,
+  ]);
   decider = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_DECIDE]);
   confirmOverride = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE]);
 });
@@ -147,20 +152,20 @@ describe("review + decide (H13, H14)", () => {
       method: "PUT",
       url: `/api/responses/${responseId}/my-review`,
       headers: asUser(reviewer),
-      payload: { score: 8, notes: "strong" },
+      payload: { score: 4, notes: "strong" },
     });
     await a.inject({
       method: "PUT",
       url: `/api/responses/${responseId}/my-review`,
       headers: asUser(reviewer2),
-      payload: { score: 4 },
+      payload: { score: 2 },
     });
     const { rows } = await pool.query(
       `SELECT count(*)::int AS n, avg(score)::float AS avg FROM applicant_reviews WHERE response_id = $1`,
       [responseId],
     );
     expect(rows[0].n).toBe(2);
-    expect(rows[0].avg).toBe(6);
+    expect(rows[0].avg).toBe(3);
 
     await a.inject({
       method: "PATCH",
@@ -171,8 +176,8 @@ describe("review + decide (H13, H14)", () => {
     const r = await getResponse(responseId);
     expect(r.status).toBe("review");
 
-    // H13: the detail endpoint surfaces every reviewer's row (author_name
-    // included), not just the caller's own, for the review wall.
+    // H13: a reviewer gets the aggregate plus their own row; manager-only
+    // reveal returns every reviewer's row (author_name included).
     const detail = await a.inject({
       method: "GET",
       url: `/api/responses/${responseId}`,
@@ -181,27 +186,46 @@ describe("review + decide (H13, H14)", () => {
     expect(detail.statusCode).toBe(200);
     const body = detail.json();
     expect(body.review_count).toBe(2);
-    expect(body.avg_score).toBe(6);
-    expect(body.reviews).toHaveLength(2);
-    for (const review of body.reviews) {
+    expect(body.avg_score).toBe(3);
+    expect(body.reviews).toHaveLength(1);
+    expect(body.reviews[0].author_id).toBe(reviewer);
+
+    const managerDetail = await a.inject({
+      method: "GET",
+      url: `/api/responses/${responseId}`,
+      headers: asUser(manager),
+    });
+    expect(managerDetail.statusCode).toBe(200);
+    expect(managerDetail.json().reviews).toHaveLength(2);
+    for (const review of managerDetail.json().reviews) {
       expect(typeof review.author_name).toBe("string");
     }
 
-    // The list endpoint embeds the same per-reviewer array, so the client
-    // can show an "already reviewed by me" indicator without another call.
+    // The list endpoint embeds the caller's own row, so the client can show
+    // an "already reviewed by me" indicator without another call.
     const list = await a.inject({
       method: "GET",
       url: `/api/applications/${appId}/responses`,
       headers: asUser(reviewer),
     });
     const listed = list.json().responses.find((row: { id: number }) => row.id === responseId);
-    expect(listed.reviews).toHaveLength(2);
+    expect(listed.reviews).toHaveLength(1);
     expect(
       listed.reviews.some((review: { author_id: number }) => review.author_id === reviewer),
     ).toBe(true);
+
+    const managerList = await a.inject({
+      method: "GET",
+      url: `/api/applications/${appId}/responses`,
+      headers: asUser(manager),
+    });
+    const managerListed = managerList
+      .json()
+      .responses.find((row: { id: number }) => row.id === responseId);
+    expect(managerListed.reviews).toHaveLength(2);
   });
 
-  it("rejects a score outside 0-10", async () => {
+  it("rejects a score outside 0-5", async () => {
     const a = await getApp();
     const appId = await createApplication();
     const { responseId } = await submittedApplicant(appId);
@@ -210,15 +234,23 @@ describe("review + decide (H13, H14)", () => {
       method: "PUT",
       url: `/api/responses/${responseId}/my-review`,
       headers: asUser(reviewer),
-      payload: { score: 11 },
+      payload: { score: 6 },
     });
     expect(tooHigh.statusCode).toBe(400);
+
+    const belowMin = await a.inject({
+      method: "PUT",
+      url: `/api/responses/${responseId}/my-review`,
+      headers: asUser(reviewer),
+      payload: { score: -1 },
+    });
+    expect(belowMin.statusCode).toBe(400);
 
     const atMax = await a.inject({
       method: "PUT",
       url: `/api/responses/${responseId}/my-review`,
       headers: asUser(reviewer),
-      payload: { score: 10 },
+      payload: { score: 5 },
     });
     expect(atMax.statusCode).toBe(200);
   });

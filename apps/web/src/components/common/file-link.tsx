@@ -12,6 +12,12 @@ import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
+/** Resolves a private object key through the authenticated API proxy. */
+export function fileDownloadUrl(value: string): string {
+  const isDirect = /^https?:\/\//i.test(value);
+  return isDirect ? value : `${API_URL}/api/files/download?key=${encodeURIComponent(value)}`;
+}
+
 export function FileLink({
   value,
   className,
@@ -23,8 +29,7 @@ export function FileLink({
   children?: React.ReactNode;
 }) {
   const { t } = useLocale();
-  const isDirect = /^https?:\/\//i.test(value);
-  const href = isDirect ? value : `${API_URL}/api/files/download?key=${encodeURIComponent(value)}`;
+  const href = fileDownloadUrl(value);
 
   return (
     <a

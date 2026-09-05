@@ -410,23 +410,30 @@ from the window (`service.ts:isWindowOpen`). An admin who wants a form closed
 sets `close_at` instead of toggling a separate switch.
 
 **Follow-up — review modal redesign (H13).**
-- **Score scale**: the free-text 0-100 input is now the same 0-10 button
-  scale as judging (`components/common/scale-buttons.tsx`, extracted from
-  `question-field.tsx`'s `SCORE_SCALE` so applications doesn't pull in
-  judging's own dependency chain). `applicant_reviews.score` CHECK tightened
-  to 0-10 (`0208_review_score_scale.sql`, existing scores rescaled `/10`).
-- **Two-column layout**: `review-modal.tsx` now renders answers (left,
-  through `TemplateFieldControl` in the same per-section bordered-card format
+- **Score scale**: the free-text 0-100 input is now a compact 0-5 button
+  scale for application reviews (`components/common/scale-buttons.tsx`);
+  judging-panel scores remain 0-10. `applicant_reviews.score` CHECK is
+  tightened to 0-5 (`0210_review_score_five_point_scale.sql`, existing scores
+  converted from the previous 0-10 scale).
+- **Application workspace**: the larger `review-modal.tsx` renders an uploaded
+  file viewer/navigation area and answers (left, through
+  `TemplateFieldControl` in the same per-section bordered-card format
   the applicant's own `my-applications/[id]/page.tsx` uses — previously a
-  flat divided list) alongside a right column with status/shirt-size badges,
-  the average score, internal notes, the reviewer's own score/notes, and a
-  review wall.
-- **Review wall**: `getResponseDetail` and the list endpoint
-  (`GET /api/applications/:id/responses`) both now return every reviewer's
-  row (`author_id`, `author_name`, `score`, `notes`, `updated_at`) instead of
-  just the caller's own — the modal already discarded the rest before. The
-  list embeds this as a `jsonb_agg` per row so an "already reviewed by me"
-  indicator and the wall need no extra request.
+  flat divided list) alongside a right column with status/shirt-size badges
+  and shared internal notes. The caller's own 0-5 score, clear action, and
+  textarea notes sit at the bottom so the application remains the primary
+  reading surface.
+- **Bias-resistant reviews**: `getResponseDetail` and
+  `GET /api/applications/:id/responses` always return the aggregate score/count
+  but only the caller's own review by default. A holder of
+  `applications:manage` gets every review row (`author_id`, `author_name`,
+  `score`, `notes`, `updated_at`) and can reveal them in a nested modal page.
+  The list still embeds the filtered `jsonb_agg` so the "already reviewed by
+  me" indicator needs no extra request.
+- **Review workspace window**: the review composer can open the application
+  deep-link in a separate resizable browser window when the browser permits
+  pop-ups. Browser APIs cannot guarantee that it stays above unrelated
+  websites.
 - **Internal notes**: `sharedStaffNotes` copy renamed — reuses the existing
   `internalNotesLabel` i18n key already used elsewhere (announcements, the
   schedule form) rather than adding a duplicate.

@@ -3,7 +3,11 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
-import { requireAnyCapability, requireCapability } from "../../lib/capabilities.js";
+import {
+  requireAnyCapability,
+  requireCapability,
+  userHasCapability,
+} from "../../lib/capabilities.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import {
   batchDecideSchema,
@@ -71,13 +75,23 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List a form's responses",
         description:
-          "Staff read of every response to a form (H13), with optional status and name/email search filters, plus each response's aggregate review score.",
+          "Staff read of every response to a form (H13), with optional status and name/email search filters, each response's aggregate review score, and the caller's own review. Managers may reveal all reviews.",
         params: idParamSchema,
         querystring: listResponsesQuerySchema,
       },
     },
     async (req) => {
+      const canViewAllReviews = await userHasCapability(
+        req.userId as number,
+        CAPABILITIES.APPLICATIONS_MANAGE,
+        req,
+      );
       const params: unknown[] = [req.params.id];
+      let reviewFilter = "ar.author_id IS NOT NULL";
+      if (!canViewAllReviews) {
+        params.push(req.userId as number);
+        reviewFilter = `ar.author_id = $${params.length}`;
+      }
       const filters: string[] = [`r.application_id = $1`];
       if (req.query.status) {
         params.push(req.query.status);
@@ -102,7 +116,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
                       'author_id', ar.author_id, 'author_name', u2.name,
                       'score', ar.score, 'notes', ar.notes, 'updated_at', ar.updated_at
                     ) ORDER BY ar.updated_at DESC
-                  ) FILTER (WHERE ar.author_id IS NOT NULL),
+                  ) FILTER (WHERE ${reviewFilter}),
                   '[]'
                 ) AS reviews
          FROM application_responses r
@@ -355,7 +369,14 @@ export function registerReviewRoutes(app: FastifyInstance): void {
         params: responseIdParamSchema,
       },
     },
-    async (req) => getResponseDetail(req.params.responseId),
+    async (req) => {
+      const canViewAllReviews = await userHasCapability(
+        req.userId as number,
+        CAPABILITIES.APPLICATIONS_MANAGE,
+        req,
+      );
+      return getResponseDetail(req.params.responseId, req.userId as number, canViewAllReviews);
+    },
   );
 
   // ── staff edit response form data ────────────────────────────────────────────

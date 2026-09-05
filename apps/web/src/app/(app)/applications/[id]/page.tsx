@@ -80,6 +80,7 @@ export default function ApplicationDetailPage() {
   const [stats, setStats] = useState<ApplicationStats | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
+  const loadedFormIdRef = useRef<number | null>(null);
 
   // The builder (Form settings + Questions) is the only tab with local
   // unsaved edits — track both cards' dirtiness so leaving the page (or
@@ -125,10 +126,16 @@ export default function ApplicationDetailPage() {
       // granting the builder's update controls.
       const data = await api.get<ApplicationForm>(`/api/applications/${id}`);
       setForm(data);
+      loadedFormIdRef.current = id;
       setState("ready");
     } catch (err) {
-      setErrorMsg(err instanceof ApiError ? err.message : t("couldNotLoadForm"));
-      setState("error");
+      // A live refresh is background revalidation: keep the last complete
+      // application shell when it fails, so stats, tabs, and the active list
+      // never disappear for a transient network error.
+      if (loadedFormIdRef.current !== id) {
+        setErrorMsg(err instanceof ApiError ? err.message : t("couldNotLoadForm"));
+        setState("error");
+      }
     }
   }, [id, t]);
 
@@ -151,7 +158,8 @@ export default function ApplicationDetailPage() {
     api
       .get<ApplicationStats>(`/api/applications/${id}/stats`)
       .then(setStats)
-      .catch(() => setStats(null));
+      // Keep the last complete stats strip during background revalidation.
+      .catch(() => {});
   }, [id, canStats, liveRefresh]);
 
   if (state === "loading") {

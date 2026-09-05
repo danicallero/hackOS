@@ -9,11 +9,10 @@ import { Button } from "@/components/ui/button"
 import { overlayVariants } from "@/components/ui/surface"
 import { useLocale } from "@/lib/i18n"
 
-/** Bare icon-button treatment shared by the dialog's close button and any
- *  other icon-only controls placed in the header (e.g. prev/next paging) —
- *  keeps them visually identical: same size, no box, same opacity/hover. */
+/** Icon-button treatment shared by the dialog's close button and other
+ *  icon-only controls placed in the header (e.g. prev/next paging). */
 export const dialogIconButtonClass =
-  "flex size-[var(--control-height-compact)] items-center justify-center rounded-control opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none disabled:opacity-30 data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+  "flex size-[var(--control-height-compact)] items-center justify-center rounded-control opacity-70 ring-offset-background transition-[background-color,color,opacity,box-shadow] hover:bg-accent hover:text-accent-foreground hover:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-30 data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
 
 function Dialog({
   ...props
@@ -59,12 +58,14 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
-  headerActions,
+  floatingContent,
+  onInteractOutside,
+  onPointerDownOutside,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
-  /** Header controls share the top-right row with the close button (H13). */
-  headerActions?: React.ReactNode
+  /** Content that visually escapes the dialog while staying in its portal. */
+  floatingContent?: React.ReactNode
 }) {
   const { t } = useLocale()
   return (
@@ -77,24 +78,41 @@ function DialogContent({
           "fixed top-[50%] left-[50%] z-50 flex max-h-[85vh] w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] flex-col gap-4 overflow-hidden bg-background p-6 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
           className
         )}
+        onInteractOutside={(event) => {
+          if (
+            floatingContent &&
+            event.target instanceof Element &&
+            event.target.closest("[data-dialog-floating]")
+          ) {
+            event.preventDefault()
+          }
+          onInteractOutside?.(event)
+        }}
+        onPointerDownOutside={(event) => {
+          if (
+            floatingContent &&
+            event.target instanceof Element &&
+            event.target.closest("[data-dialog-floating]")
+          ) {
+            event.preventDefault()
+          }
+          onPointerDownOutside?.(event)
+        }}
         {...props}
       >
         {children}
-        {(headerActions || showCloseButton) && (
-          <div className="absolute top-3 right-3 flex items-center gap-1">
-            {headerActions}
-            {showCloseButton && (
-              <DialogPrimitive.Close
-                data-slot="dialog-close"
-                className={dialogIconButtonClass}
-              >
-                <XIcon />
-                <span className="sr-only">{t("close")}</span>
-              </DialogPrimitive.Close>
-            )}
-          </div>
+        {showCloseButton && (
+          <DialogPrimitive.Close
+            data-slot="dialog-close"
+            className={cn(dialogIconButtonClass, "absolute top-3 right-3 z-10")}
+            title={t("close")}
+          >
+            <XIcon />
+            <span className="sr-only">{t("close")}</span>
+          </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Content>
+      {floatingContent}
     </DialogPortal>
   )
 }

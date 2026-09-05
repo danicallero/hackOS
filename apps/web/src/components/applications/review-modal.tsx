@@ -7,16 +7,22 @@
 import { sponsorShareKey } from "@hackos/shared/applications";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import {
+  ArrowLeftIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   CircleCheckIcon,
   DownloadIcon,
+  ExternalLinkIcon,
   FileTextIcon,
+  GavelIcon,
+  GripVerticalIcon,
+  Maximize2Icon,
+  Minimize2Icon,
   PencilIcon,
   SendIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { type DragEvent, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   type FormSection,
@@ -31,6 +37,7 @@ import {
   applicationStatusLabel,
 } from "@/app/(app)/applications/workflow";
 import { AlertModal } from "@/components/common/alert-modal";
+import { fileDownloadUrl } from "@/components/common/file-link";
 import { Modal } from "@/components/common/modal";
 import { SaveStatus } from "@/components/common/save-status";
 import { ScaleButtons } from "@/components/common/scale-buttons";
@@ -39,14 +46,23 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { type FieldValue, TemplateFieldControl } from "@/components/common/template-field-control";
 import { Button } from "@/components/ui/button";
 import { dialogIconButtonClass } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
+import { Toaster } from "@/components/ui/sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { LOCALE_CODES, pickText, type Translate, useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
 import { useCan, useMe } from "@/lib/session";
 import type { Intolerance, Language } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 /** Synthetic section for the shirt-size/dietary fields, that is never stored in
  *  `application.sections`.
@@ -185,24 +201,342 @@ function exportAnswers(
   URL.revokeObjectURL(url);
 }
 
-/** Status pills + average score — rendered twice (mobile leads with it,
- *  desktop keeps it atop the right sidebar) via the `className` prop. */
+interface ApplicationFile {
+  fieldKey: string;
+  label: string;
+  value: string;
+  filename: string;
+  href: string;
+  preview: "image" | "pdf" | "download";
+}
+
+type FileViewerSide = "left" | "right";
+const FILE_VIEWER_SIDE_STORAGE_KEY = "hackos.application-review.file-viewer-side";
+const FILE_VIEWER_DRAG_TYPE = "text/hackos-application-file-viewer";
+const REVIEW_TOASTER_ID = "application-review-modal";
+
+function fileNameFromValue(value: string): string {
+  let path = value;
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      path = new URL(value).pathname;
+    } catch {
+      // Keep the raw value as a best-effort filename for malformed URLs.
+    }
+  }
+  const segment = path.split("/").filter(Boolean).pop() ?? path;
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
+function applicationFilePreview(filename: string): ApplicationFile["preview"] {
+  const extension = filename.toLowerCase().split(".").pop();
+  if (extension === "pdf") return "pdf";
+  if (["gif", "jpeg", "jpg", "png", "webp"].includes(extension ?? "")) return "image";
+  return "download";
+}
+
+function applicationFiles(
+  fields: TemplateField[],
+  values: Record<string, unknown>,
+  lang: Language,
+): ApplicationFile[] {
+  return fields.flatMap((field) => {
+    if (field.kind !== "file") return [];
+    const value = values[field.key];
+    if (typeof value !== "string" || value.length === 0) return [];
+    const filename = fileNameFromValue(value);
+    return [
+      {
+        fieldKey: field.key,
+        label: pickText(field.label, lang),
+        value,
+        filename,
+        href: fileDownloadUrl(value),
+        preview: applicationFilePreview(filename),
+      },
+    ];
+  });
+}
+
+function ApplicationFileViewer({
+  files,
+  activeIndex,
+  side,
+  onIndexChange,
+  onSideChange,
+  onDragStart,
+  onDragEnd,
+  className,
+}: {
+  files: ApplicationFile[];
+  activeIndex: number;
+  side: FileViewerSide;
+  onIndexChange: (index: number) => void;
+  onSideChange: (side: FileViewerSide) => void;
+  onDragStart: (event: DragEvent<HTMLButtonElement>) => void;
+  onDragEnd: () => void;
+  className?: string;
+}) {
+  const { t } = useLocale();
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    function syncFullscreen() {
+      setIsFullscreen(document.fullscreenElement === previewRef.current);
+    }
+    document.addEventListener("fullscreenchange", syncFullscreen);
+    return () => document.removeEventListener("fullscreenchange", syncFullscreen);
+  }, []);
+
+  if (files.length === 0) return null;
+
+  const file = files[activeIndex] ?? files[0];
+  const fileTitle = `${file.label}: ${file.filename}`;
+  const nextSide = side === "left" ? "right" : "left";
+
+  async function toggleFullscreen() {
+    const preview = previewRef.current;
+    if (!preview) return;
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await preview.requestFullscreen();
+    } catch {
+      // Fullscreen can be denied by the browser or an embedding context.
+    }
+  }
+
+  return (
+    <section
+      aria-label={t("applicationFilesLabel")}
+      className={cn(
+        "border-border bg-card flex min-h-0 flex-col space-y-3 overflow-hidden rounded-xl border p-4 sm:p-5",
+        className,
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <p className="type-section-title min-w-0 truncate text-balance" title={file.label}>
+          {file.label}
+        </p>
+        <div className="flex shrink-0 items-center gap-1">
+          <a
+            href={file.href}
+            target="_blank"
+            rel="noreferrer"
+            className={dialogIconButtonClass}
+            aria-label={t("viewFileLabel")}
+            title={t("viewFileLabel")}
+          >
+            <ExternalLinkIcon />
+          </a>
+          <button
+            type="button"
+            className={dialogIconButtonClass}
+            onClick={() => void toggleFullscreen()}
+            aria-label={t(isFullscreen ? "exitFullscreenFile" : "fullscreenFile")}
+            aria-pressed={isFullscreen}
+            title={t(isFullscreen ? "exitFullscreenFile" : "fullscreenFile")}
+          >
+            {isFullscreen ? <Minimize2Icon /> : <Maximize2Icon />}
+          </button>
+          <Button
+            type="button"
+            size="xs"
+            variant="ghost"
+            draggable
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+            onClick={() => onSideChange(nextSide)}
+            className="hidden cursor-grab px-1.5 active:cursor-grabbing lg:inline-flex"
+            aria-label={t("moveFileViewer", {
+              side: t(nextSide === "left" ? "leftSide" : "rightSide"),
+            })}
+            title={t("moveFileViewer", {
+              side: t(nextSide === "left" ? "leftSide" : "rightSide"),
+            })}
+          >
+            <GripVerticalIcon />
+            <span className="sr-only">{t("moveFileViewerHint")}</span>
+          </Button>
+          {files.length > 1 && (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                className={dialogIconButtonClass}
+                disabled={activeIndex === 0}
+                onClick={() => onIndexChange(Math.max(0, activeIndex - 1))}
+                aria-label={t("previousFile")}
+                title={t("previousFile")}
+              >
+                <ChevronLeftIcon />
+              </button>
+              <span
+                className="text-muted-foreground min-w-14 text-center text-xs tabular-nums"
+                aria-live="polite"
+              >
+                {t("filePosition", { current: activeIndex + 1, total: files.length })}
+              </span>
+              <button
+                type="button"
+                className={dialogIconButtonClass}
+                disabled={activeIndex === files.length - 1}
+                onClick={() => onIndexChange(Math.min(files.length - 1, activeIndex + 1))}
+                aria-label={t("nextFile")}
+                title={t("nextFile")}
+              >
+                <ChevronRightIcon />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div
+        ref={previewRef}
+        className={cn(
+          "min-h-0 flex-1 overflow-auto rounded-control border bg-background",
+          isFullscreen &&
+            "flex h-screen w-screen items-center justify-center rounded-none border-0 p-6",
+        )}
+      >
+        {file.preview === "pdf" ? (
+          <iframe
+            key={file.value}
+            src={file.href}
+            title={fileTitle}
+            className={cn("h-[min(62vh,48rem)] w-full", isFullscreen && "h-full")}
+          />
+        ) : file.preview === "image" ? (
+          <div
+            className={cn(
+              "flex min-h-64 items-center justify-center bg-muted p-3 sm:p-6",
+              isFullscreen && "h-full w-full min-h-0",
+            )}
+          >
+            {/* biome-ignore lint/performance/noImgElement: private authenticated file proxy cannot be optimized by Next Image */}
+            <img
+              key={file.value}
+              src={file.href}
+              alt={fileTitle}
+              className={cn("max-h-[62vh] max-w-full object-contain", isFullscreen && "max-h-full")}
+            />
+          </div>
+        ) : (
+          <div className="flex min-h-64 flex-col items-center justify-center gap-3 p-6 text-center">
+            <FileTextIcon className="text-muted-foreground size-8" aria-hidden="true" />
+            <p className="text-muted-foreground text-sm">{t("filePreviewUnavailable")}</p>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ApplicationFileViewerPanel({
+  files,
+  activeIndex,
+  side,
+  onIndexChange,
+  onSideChange,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDrop,
+  reviewContent,
+}: {
+  files: ApplicationFile[];
+  activeIndex: number;
+  side: FileViewerSide;
+  onIndexChange: (index: number) => void;
+  onSideChange: (side: FileViewerSide) => void;
+  onDragStart: (event: DragEvent<HTMLButtonElement>) => void;
+  onDragEnd: () => void;
+  onDragOver: (event: DragEvent<HTMLElement>) => void;
+  onDrop: (event: DragEvent<HTMLElement>) => void;
+  reviewContent?: React.ReactNode;
+}) {
+  const { t } = useLocale();
+  const panelOffset = "calc(50% + 13.5rem)";
+  return (
+    <aside
+      data-dialog-floating
+      className={cn(
+        "pointer-events-auto fixed z-[60] hidden h-[min(90vh,54rem)] w-[min(30rem,calc(100vw-2rem))] 2xl:grid 2xl:gap-4",
+        reviewContent ? "2xl:grid-rows-[minmax(0,1fr)_auto]" : "2xl:grid-rows-[minmax(0,1fr)]",
+      )}
+      style={{
+        ...(side === "left" ? { right: panelOffset } : { left: panelOffset }),
+        top: "50%",
+        transform: "translateY(-50%)",
+      }}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      aria-label={t("applicationFilesLabel")}
+    >
+      <div className="min-h-0 rounded-xl">
+        <ApplicationFileViewer
+          files={files}
+          activeIndex={activeIndex}
+          side={side}
+          onIndexChange={onIndexChange}
+          onSideChange={onSideChange}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          className="h-full"
+        />
+      </div>
+      {reviewContent && <div className="min-h-0 rounded-xl">{reviewContent}</div>}
+    </aside>
+  );
+}
+
+/** Average score, review reveal, and status pills for the active response. */
 function StatusPillsRow({
   response,
   st,
   reviewedByMe,
   t,
+  canRevealReviews,
+  onShowReviews,
   className,
 }: {
   response: ResponseRow;
   st: string;
   reviewedByMe: boolean;
   t: Translate;
+  canRevealReviews: boolean;
+  onShowReviews: () => void;
   className?: string;
 }) {
   return (
-    <div className={className}>
-      <div className="flex flex-wrap items-center gap-2">
+    <div
+      className={cn(
+        "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between",
+        className,
+      )}
+    >
+      <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-control border border-border bg-muted/20 px-1.5 py-1">
+        <p className="text-muted-foreground min-w-0 flex-1 px-1 text-xs">
+          avg {fmtScore(response.avg_score)}/5 · {response.review_count}{" "}
+          {response.review_count === 1 ? t("reviewWord") : t("reviewsWord")}
+        </p>
+        {canRevealReviews && response.review_count > 0 && (
+          <Button
+            type="button"
+            size="xs"
+            variant="ghost"
+            className="shrink-0 px-2"
+            onClick={onShowReviews}
+          >
+            {t("viewReviews", { count: response.review_count })}
+          </Button>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center justify-end gap-2 sm:ms-auto">
         <StatusBadge tone={statusTone(st)}>{applicationStatusLabel(st, t)}</StatusBadge>
         {reviewedByMe && (
           <StatusBadge tone="success" dot={false}>
@@ -210,16 +544,7 @@ function StatusPillsRow({
             {t("reviewedByYou")}
           </StatusBadge>
         )}
-        {response.shirt_size && (
-          <StatusBadge tone="neutral" dot={false}>
-            {t("tshirtSize", { size: response.shirt_size })}
-          </StatusBadge>
-        )}
       </div>
-      <p className="text-muted-foreground mt-2 text-xs">
-        avg {fmtScore(response.avg_score)} · {response.review_count}{" "}
-        {response.review_count === 1 ? t("reviewWord") : t("reviewsWord")}
-      </p>
     </div>
   );
 }
@@ -233,8 +558,8 @@ export function ReviewModal({
   askFoodIntolerances = false,
   onClose,
   onChanged,
-  workspace = "review",
   onNavigate,
+  onDecisionStatusChange,
   canGoPrev = false,
   canGoNext = false,
 }: {
@@ -250,6 +575,8 @@ export function ReviewModal({
   onClose: () => void;
   onChanged: () => Promise<void>;
   workspace?: ApplicationWorkspace;
+  /** Keeps the modal's familiar navigation set stable while a decision is made. */
+  onDecisionStatusChange?: (status: ResponseRow["status"]) => void;
   /** Prev/next paging over the caller's currently visible row order — omit
    *  where there's no meaningful list to page through (e.g. a single-user
    *  profile view). */
@@ -259,6 +586,7 @@ export function ReviewModal({
 }) {
   const { t } = useLocale();
   const canReview = useCan(CAPABILITIES.APPLICATIONS_REVIEW);
+  const canManage = useCan(CAPABILITIES.APPLICATIONS_MANAGE);
   const canDecide = useCan(CAPABILITIES.APPLICATIONS_DECIDE);
   const canOverride = useCan(CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE);
   const canEdit = useCan(CAPABILITIES.APPLICATIONS_EDIT_RESPONSE);
@@ -280,6 +608,7 @@ export function ReviewModal({
     food_intolerances: response.food_intolerances?.map(String) ?? [],
     food_intolerance_notes: response.food_intolerance_notes,
   };
+  const files = applicationFiles(answerFields, answerValues, lang);
 
   useEffect(() => {
     api
@@ -304,6 +633,62 @@ export function ReviewModal({
   const [editValues, setEditValues] = useState<Record<string, unknown>>(response.responses);
   const [savingEdit, setSavingEdit] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
+  const [activeFileIndex, setActiveFileIndex] = useState(0);
+  const [reviewPage, setReviewPage] = useState<"application" | "reviews">("application");
+  const [modalStatus, setModalStatus] = useState(response.status);
+  const [fileViewerSide, setFileViewerSide] = useState<FileViewerSide>("left");
+  const [fileViewerDragging, setFileViewerDragging] = useState(false);
+  const mountedRef = useRef(true);
+
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const savedSide = window.localStorage.getItem(FILE_VIEWER_SIDE_STORAGE_KEY);
+    if (savedSide === "left" || savedSide === "right") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate a persisted UI preference after client mount
+      setFileViewerSide(savedSide);
+    }
+  }, []);
+
+  useEffect(() => {
+    const navigate = onNavigate;
+    if (!navigate) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        (event.key !== "ArrowLeft" && event.key !== "ArrowRight")
+      ) {
+        return;
+      }
+      if (
+        event.target instanceof Element &&
+        event.target.closest(
+          "input, textarea, select, [contenteditable='true'], [role='combobox'], [role='menu'][data-state='open']",
+        )
+      ) {
+        return;
+      }
+
+      const direction = event.key === "ArrowLeft" ? "prev" : "next";
+      const canNavigate = direction === "prev" ? canGoPrev : canGoNext;
+      if (!canNavigate) return;
+
+      event.preventDefault();
+      navigate?.(direction);
+    }
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [canGoNext, canGoPrev, onNavigate]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: only re-seed on navigating to a different response/user, not on every response.reviews identity change (e.g. after this same reviewer's own autosave).
   useEffect(() => {
@@ -312,17 +697,56 @@ export function ReviewModal({
     setMyNotes(mine?.notes ?? "");
     setReviewSaveState("saved");
     setReviewDirty(false);
+    setModalStatus(response.status);
+    setStaffNotes(response.staff_notes ?? "");
+    setEditValues({ ...response.responses });
+    setEditing(false);
+    setActiveFileIndex(0);
+    setReviewPage("application");
   }, [response.id, me?.id]);
 
   function handleScoreChange(v: number | null) {
     setMyScore(v);
     setReviewDirty(true);
-    setReviewSaveState("unsaved");
+    setReviewSaveState("saving");
   }
   function handleNotesChange(v: string) {
     setMyNotes(v);
     setReviewDirty(true);
-    setReviewSaveState("unsaved");
+    setReviewSaveState("saving");
+  }
+
+  function updateModalStatus(status: ResponseRow["status"]) {
+    setModalStatus(status);
+    onDecisionStatusChange?.(status);
+  }
+
+  function changeFileViewerSide(side: FileViewerSide) {
+    setFileViewerSide(side);
+    window.localStorage.setItem(FILE_VIEWER_SIDE_STORAGE_KEY, side);
+  }
+
+  function handleFileViewerDragStart(event: DragEvent<HTMLButtonElement>) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData(FILE_VIEWER_DRAG_TYPE, "file-viewer");
+    setFileViewerDragging(true);
+  }
+
+  function handleFileViewerDragEnd() {
+    setFileViewerDragging(false);
+  }
+
+  function handleFileViewerDragOver(event: DragEvent<HTMLElement>) {
+    if (!fileViewerDragging) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }
+
+  function handleFileViewerDrop(side: FileViewerSide, event: DragEvent<HTMLElement>) {
+    if (!fileViewerDragging) return;
+    event.preventDefault();
+    changeFileViewerSide(side);
+    setFileViewerDragging(false);
   }
 
   useEffect(() => {
@@ -363,13 +787,15 @@ export function ReviewModal({
     }
   }
 
-  /** Runs a decision action, refreshes the parent, and toasts the result. */
-  async function run(label: string, fn: () => Promise<unknown>) {
+  /** Runs a decision action, keeps the modal open, and optionally refreshes the parent. */
+  async function run(label: string, fn: () => Promise<unknown>, options: RunOptions = {}) {
     setBusy(true);
     try {
       await fn();
-      await onChanged();
-      toast.success(label);
+      if (options.nextStatus) updateModalStatus(options.nextStatus);
+      if (options.refresh !== false) await onChanged();
+      if (options.notify) options.notify();
+      else toast.success(label);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("actionFailed"));
     } finally {
@@ -393,101 +819,297 @@ export function ReviewModal({
     }
   }
 
-  const st = response.status;
+  const st = modalStatus;
   // A draft hasn't been submitted yet, so there's nothing for a reviewer to score.
   const canScore = canReview && st !== "draft";
   const reviewedByMe = response.reviews.some(
     (review) => review.author_id === me?.id && review.score != null,
   );
-  const otherReviews = response.reviews.filter((review) => review.author_id !== me?.id);
+  const activeFile = Math.min(activeFileIndex, Math.max(files.length - 1, 0));
+  const canRevealReviews = canManage;
+  const showDecisionMenu = hasDecisionActions(canDecide);
+  const showEditAction = canEdit && Boolean(template?.length) && !editing;
+  const showExportAction = canExport && answerFields.length > 0;
+
+  function openReviewWindow() {
+    const popupWorkspace = workspaceForResponseStatus(st);
+    const query = new URLSearchParams({
+      tab: popupWorkspace,
+      response: String(response.id),
+    });
+    const popup = window.open(
+      `/applications/${applicationId}?${query.toString()}`,
+      "hackos-review-window",
+      "popup=yes,width=1200,height=900,resizable=yes,scrollbars=yes",
+    );
+    if (popup) popup.focus();
+    else toast.error(t("reviewWindowBlocked"));
+  }
+
+  function showApplicantAcceptedToast() {
+    toast.success(t("applicantAccepted"), {
+      toasterId: REVIEW_TOASTER_ID,
+      duration: 8_000,
+      action: {
+        label: t("undo"),
+        onClick: () => {
+          void undoAcceptance();
+        },
+      },
+    });
+  }
+  async function undoAcceptance() {
+    if (mountedRef.current) setBusy(true);
+    try {
+      await api.post(`/api/responses/${response.id}/revert-decision`, { decision: "review" });
+      if (mountedRef.current) updateModalStatus("review");
+      toast.success(t("acceptanceUndone"), { toasterId: REVIEW_TOASTER_ID });
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("actionFailed"), {
+        toasterId: REVIEW_TOASTER_ID,
+      });
+    } finally {
+      if (mountedRef.current) setBusy(false);
+    }
+  }
+
+  const reviewComposerProps: ReviewComposerProps = {
+    responseId: response.id,
+    myScore,
+    onScoreChange: handleScoreChange,
+    myNotes,
+    onNotesChange: handleNotesChange,
+    reviewSaveState,
+    onOpenReviewWindow: openReviewWindow,
+    dockSide: files.length > 0 ? fileViewerSide : undefined,
+  };
 
   return (
     <Modal
       open
       onOpenChange={(o) => !o && onClose()}
       size="xl"
-      className="sm:max-w-6xl"
+      className={cn(
+        "max-h-[90vh] sm:max-w-4xl 2xl:h-[min(90vh,54rem)] 2xl:transition-[left]",
+        files.length > 0 &&
+          (fileViewerSide === "left"
+            ? "2xl:left-[calc(50%+15.5rem)]"
+            : "2xl:left-[calc(50%-15.5rem)]"),
+      )}
       icon={FileTextIcon}
       title={response.name ?? response.email}
       description={response.name ? response.email : undefined}
       headerActions={
-        onNavigate && (
-          <div className="flex shrink-0 items-center gap-1">
-            <button
-              type="button"
-              className={dialogIconButtonClass}
-              disabled={!canGoPrev}
-              onClick={() => onNavigate("prev")}
-              aria-label={t("previousCandidate")}
-            >
-              <ChevronLeftIcon />
-            </button>
-            <button
-              type="button"
-              className={dialogIconButtonClass}
-              disabled={!canGoNext}
-              onClick={() => onNavigate("next")}
-              aria-label={t("nextCandidate")}
-            >
-              <ChevronRightIcon />
-            </button>
+        (onNavigate || showDecisionMenu || showEditAction || showExportAction) && (
+          <div className="flex max-w-full flex-wrap items-center justify-end gap-1">
+            {onNavigate && (
+              <>
+                <button
+                  type="button"
+                  className={dialogIconButtonClass}
+                  disabled={!canGoPrev}
+                  onClick={() => onNavigate("prev")}
+                  aria-label={t("previousCandidate")}
+                  title={t("previousCandidate")}
+                >
+                  <ChevronLeftIcon />
+                </button>
+                <button
+                  type="button"
+                  className={dialogIconButtonClass}
+                  disabled={!canGoNext}
+                  onClick={() => onNavigate("next")}
+                  aria-label={t("nextCandidate")}
+                  title={t("nextCandidate")}
+                >
+                  <ChevronRightIcon />
+                </button>
+              </>
+            )}
+            {showDecisionMenu && (
+              <DecisionMenu
+                status={st}
+                busy={busy}
+                run={run}
+                responseId={response.id}
+                canOverride={canOverride}
+                onRequestRevoke={() => setConfirmRevoke(true)}
+                onAccepted={showApplicantAcceptedToast}
+              />
+            )}
+            {showEditAction && (
+              <button
+                type="button"
+                className={dialogIconButtonClass}
+                onClick={startEdit}
+                aria-label={t("editAnswers")}
+                title={t("editAnswers")}
+              >
+                <PencilIcon />
+              </button>
+            )}
+            {showExportAction && (
+              <button
+                type="button"
+                className={dialogIconButtonClass}
+                onClick={() =>
+                  exportAnswers(response, answerFields, answerSections, answerValues, lang, t)
+                }
+                aria-label={t("exportAnswers")}
+                title={t("exportAnswers")}
+              >
+                <DownloadIcon />
+              </button>
+            )}
           </div>
         )
       }
+      floatingContent={
+        <>
+          {files.length > 0 && (
+            <ApplicationFileViewerPanel
+              files={files}
+              activeIndex={activeFile}
+              side={fileViewerSide}
+              onIndexChange={setActiveFileIndex}
+              onSideChange={changeFileViewerSide}
+              onDragStart={handleFileViewerDragStart}
+              onDragEnd={handleFileViewerDragEnd}
+              onDragOver={handleFileViewerDragOver}
+              onDrop={(event) =>
+                handleFileViewerDrop(fileViewerSide === "left" ? "right" : "left", event)
+              }
+              reviewContent={canScore ? <ReviewPanelCard {...reviewComposerProps} /> : undefined}
+            />
+          )}
+          {canScore && (
+            <div className={cn("hidden lg:block", files.length > 0 && "2xl:hidden")}>
+              <FloatingReviewPanel {...reviewComposerProps} />
+            </div>
+          )}
+        </>
+      }
     >
-      <div className="space-y-4">
-        {/* Mobile: status pills lead, right above the answers/review split —
-         *  desktop keeps them at the top of the right-hand sidebar instead. */}
-        <StatusPillsRow
-          response={response}
-          st={st}
-          reviewedByMe={reviewedByMe}
-          t={t}
-          className="lg:hidden"
-        />
-
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="min-w-0 lg:max-h-[65vh] lg:overflow-y-auto lg:pr-1">
-            <AnswersSection
-              template={template}
-              applicationId={applicationId}
-              canEdit={canEdit}
-              canExport={canExport}
-              editing={editing}
-              setEditing={setEditing}
-              editValues={editValues}
-              setEditValues={setEditValues}
-              savingEdit={savingEdit}
-              startEdit={startEdit}
-              saveEdit={saveEdit}
-              answerFields={answerFields}
-              answerSections={answerSections}
-              answerValues={answerValues}
-              response={response}
-              lang={lang}
-            />
-          </div>
-
-          <div className="min-w-0 space-y-4 lg:max-h-[65vh] lg:overflow-y-auto lg:pr-1">
-            <StatusPillsRow
-              response={response}
-              st={st}
-              reviewedByMe={reviewedByMe}
-              t={t}
-              className="hidden lg:block"
-            />
-
-            {canScore && (
-              <MyReviewCard
-                myScore={myScore}
-                onScoreChange={handleScoreChange}
-                myNotes={myNotes}
-                onNotesChange={handleNotesChange}
-                reviewSaveState={reviewSaveState}
+      <section
+        className={cn("space-y-4", fileViewerDragging && "rounded-xl ring-1 ring-primary/30")}
+        aria-label={t("applicationFilesLabel")}
+        tabIndex={-1}
+        onDragOver={handleFileViewerDragOver}
+        onDrop={(event) =>
+          handleFileViewerDrop(fileViewerSide === "left" ? "right" : "left", event)
+        }
+      >
+        {reviewPage === "reviews" ? (
+          <ReviewsPage
+            reviews={response.reviews}
+            avgScore={response.avg_score}
+            reviewCount={response.review_count}
+            onBack={() => setReviewPage("application")}
+          />
+        ) : (
+          <>
+            <div className="bg-background sticky top-0 z-10 -mx-6 mb-2 px-6 py-2">
+              <StatusPillsRow
+                response={response}
+                st={st}
+                reviewedByMe={reviewedByMe}
+                t={t}
+                canRevealReviews={canRevealReviews}
+                onShowReviews={() => setReviewPage("reviews")}
               />
+            </div>
+
+            {files.length > 0 && (
+              <div className="grid gap-6 2xl:hidden lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+                <section
+                  className={cn(
+                    "hidden min-w-0 space-y-4 lg:block lg:max-h-[68vh] lg:overflow-y-auto lg:pr-1",
+                    fileViewerSide === "right" && "lg:order-2",
+                  )}
+                  onDragOver={handleFileViewerDragOver}
+                  onDrop={(event) => handleFileViewerDrop(fileViewerSide, event)}
+                  aria-label={t("applicationFilesLabel")}
+                >
+                  <ApplicationFileViewer
+                    files={files}
+                    activeIndex={activeFile}
+                    side={fileViewerSide}
+                    onIndexChange={setActiveFileIndex}
+                    onSideChange={changeFileViewerSide}
+                    onDragStart={handleFileViewerDragStart}
+                    onDragEnd={handleFileViewerDragEnd}
+                  />
+                </section>
+
+                <section
+                  className={cn(
+                    "min-w-0 space-y-4 lg:max-h-[68vh] lg:overflow-y-auto lg:pr-1",
+                    fileViewerSide === "left" && "lg:order-2",
+                    fileViewerDragging &&
+                      "lg:rounded-xl lg:border lg:border-dashed lg:border-primary/40 lg:p-3",
+                  )}
+                  onDragOver={handleFileViewerDragOver}
+                  onDrop={(event) =>
+                    handleFileViewerDrop(fileViewerSide === "left" ? "right" : "left", event)
+                  }
+                  aria-label={fileViewerDragging ? t("dropFileViewerHere") : undefined}
+                >
+                  {fileViewerDragging && (
+                    <p className="hidden rounded-control border border-dashed border-primary/50 px-3 py-2 text-center text-xs text-primary lg:block">
+                      {t("dropFileViewerHere")}
+                    </p>
+                  )}
+                  <AnswersSection
+                    applicationId={applicationId}
+                    editing={editing}
+                    setEditing={setEditing}
+                    editValues={editValues}
+                    setEditValues={setEditValues}
+                    savingEdit={savingEdit}
+                    saveEdit={saveEdit}
+                    answerFields={answerFields}
+                    answerSections={answerSections}
+                    answerValues={answerValues}
+                    response={response}
+                    lang={lang}
+                  />
+                </section>
+              </div>
             )}
 
-            {otherReviews.length > 0 && <ReviewWall reviews={otherReviews} />}
+            {files.length > 0 ? (
+              <div className="hidden 2xl:block">
+                <AnswersSection
+                  applicationId={applicationId}
+                  editing={editing}
+                  setEditing={setEditing}
+                  editValues={editValues}
+                  setEditValues={setEditValues}
+                  savingEdit={savingEdit}
+                  saveEdit={saveEdit}
+                  answerFields={answerFields}
+                  answerSections={answerSections}
+                  answerValues={answerValues}
+                  response={response}
+                  lang={lang}
+                />
+              </div>
+            ) : (
+              <AnswersSection
+                applicationId={applicationId}
+                editing={editing}
+                setEditing={setEditing}
+                editValues={editValues}
+                setEditValues={setEditValues}
+                savingEdit={savingEdit}
+                saveEdit={saveEdit}
+                answerFields={answerFields}
+                answerSections={answerSections}
+                answerValues={answerValues}
+                response={response}
+                lang={lang}
+              />
+            )}
 
             {canReview && (
               <StaffNotesCard
@@ -498,30 +1120,13 @@ export function ReviewModal({
               />
             )}
 
-            {/* Accept/reject inline here (H13/H14) — no separate "decisions" tab. */}
-            {workspace === "review" && st === "review" && (
-              <ReviewDecisionCard
-                canDecide={canDecide}
-                busy={busy}
-                run={run}
-                responseId={response.id}
-              />
+            {canScore && (
+              <div className="lg:hidden">
+                <InlineReviewPanel {...reviewComposerProps} />
+              </div>
             )}
-
-            {/* Elsewhere, status + workspace (outbox/sent) picks the buttons (H14). */}
-            {workspace !== "review" && canDecide && (
-              <LifecycleDecisionCard
-                workspace={workspace}
-                status={st}
-                busy={busy}
-                run={run}
-                responseId={response.id}
-                canOverride={canOverride}
-                onRequestRevoke={() => setConfirmRevoke(true)}
-              />
-            )}
-          </div>
-        </div>
+          </>
+        )}
 
         <AlertModal
           open={confirmRevoke}
@@ -538,7 +1143,8 @@ export function ReviewModal({
             ).finally(() => setConfirmRevoke(false));
           }}
         />
-      </div>
+        <Toaster id={REVIEW_TOASTER_ID} position="bottom-right" />
+      </section>
     </Modal>
   );
 }
@@ -547,16 +1153,12 @@ export function ReviewModal({
  *  edit form (APPLICATIONS_EDIT_RESPONSE), or a raw key/value fallback when
  *  the form has no template. */
 function AnswersSection({
-  template,
   applicationId,
-  canEdit,
-  canExport,
   editing,
   setEditing,
   editValues,
   setEditValues,
   savingEdit,
-  startEdit,
   saveEdit,
   answerFields,
   answerSections,
@@ -564,16 +1166,12 @@ function AnswersSection({
   response,
   lang,
 }: {
-  template: TemplateField[] | null;
   applicationId: number;
-  canEdit: boolean;
-  canExport: boolean;
   editing: boolean;
   setEditing: (v: boolean) => void;
   editValues: Record<string, unknown>;
   setEditValues: (fn: (prev: Record<string, unknown>) => Record<string, unknown>) => void;
   savingEdit: boolean;
-  startEdit: () => void;
   saveEdit: () => Promise<void>;
   answerFields: TemplateField[];
   answerSections: FormSection[];
@@ -581,32 +1179,10 @@ function AnswersSection({
   response: ResponseRow;
   lang: Language;
 }) {
-  const { t, language } = useLocale();
+  const { t } = useLocale();
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-medium">{t("answersLabel")}</p>
-        <div className="flex items-center gap-2">
-          {canExport && answerFields.length > 0 && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                exportAnswers(response, answerFields, answerSections, answerValues, language, t)
-              }
-            >
-              <DownloadIcon />
-              {t("exportAnswers")}
-            </Button>
-          )}
-          {canEdit && template && template.length > 0 && !editing && (
-            <Button size="sm" variant="outline" onClick={startEdit}>
-              <PencilIcon />
-              {t("editAnswers")}
-            </Button>
-          )}
-        </div>
-      </div>
+      <p className="text-sm font-medium">{t("answersLabel")}</p>
       {answerFields.length > 0 ? (
         <div className="space-y-4">
           {groupFieldsBySections(answerFields, answerSections).map((group, i) => (
@@ -730,13 +1306,94 @@ function StaffNotesCard({
   );
 }
 
-function MyReviewCard({
+function ReviewsPage({
+  reviews,
+  avgScore,
+  reviewCount,
+  onBack,
+}: {
+  reviews: ReviewEntry[];
+  avgScore: number | string | null;
+  reviewCount: number;
+  onBack: () => void;
+}) {
+  const { t } = useLocale();
+  return (
+    <section aria-labelledby="all-reviews-title" className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <Button type="button" size="sm" variant="ghost" onClick={onBack}>
+            <ArrowLeftIcon />
+            {t("backToApplication")}
+          </Button>
+          <h3 id="all-reviews-title" className="type-section-title mt-3 text-balance">
+            {t("allReviewsTitle")}
+          </h3>
+          <p className="text-muted-foreground mt-1 text-sm">
+            avg {fmtScore(avgScore)}/5 · {reviewCount}{" "}
+            {reviewCount === 1 ? t("reviewWord") : t("reviewsWord")}
+          </p>
+        </div>
+      </div>
+      {reviews.length > 0 ? (
+        <ul className="grid gap-3 md:grid-cols-2">
+          {reviews.map((review) => (
+            <ReviewBubble key={review.author_id} review={review} />
+          ))}
+        </ul>
+      ) : (
+        <p className="text-muted-foreground text-sm">{t("noReviewsYet")}</p>
+      )}
+    </section>
+  );
+}
+
+function ReviewBubble({ review }: { review: ReviewEntry }) {
+  const { t, language } = useLocale();
+  return (
+    <li className="border-border bg-muted/20 space-y-2 rounded-xl border p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-medium">{review.author_name ?? t("unknownReviewer")}</p>
+        <div className="flex items-center gap-2">
+          {review.score != null && (
+            <StatusBadge tone="neutral" dot={false}>
+              {review.score}/5
+            </StatusBadge>
+          )}
+          <span className="text-muted-foreground text-xs">
+            {new Intl.DateTimeFormat(LOCALE_CODES[language], { dateStyle: "medium" }).format(
+              new Date(review.updated_at),
+            )}
+          </span>
+        </div>
+      </div>
+      {review.notes && (
+        <p className="text-muted-foreground text-sm whitespace-pre-wrap">{review.notes}</p>
+      )}
+    </li>
+  );
+}
+
+interface ReviewComposerProps {
+  responseId: number;
+  myScore: number | null;
+  onScoreChange: (v: number | null) => void;
+  myNotes: string;
+  onNotesChange: (v: string) => void;
+  reviewSaveState: SaveState;
+  onOpenReviewWindow?: () => void;
+  dockSide?: FileViewerSide;
+}
+
+function ReviewComposerFields({
+  responseId,
   myScore,
   onScoreChange,
   myNotes,
   onNotesChange,
   reviewSaveState,
 }: {
+  responseId: number;
   myScore: number | null;
   onScoreChange: (v: number | null) => void;
   myNotes: string;
@@ -745,240 +1402,311 @@ function MyReviewCard({
 }) {
   const { t } = useLocale();
   return (
-    <div className="border-border space-y-3 rounded-lg border p-4">
-      <p className="text-sm font-medium">{t("yourReview")}</p>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-muted-foreground text-xs">{t("reviewAutosaveHint")}</p>
-        <SaveStatus state={reviewSaveState} />
-      </div>
+    <>
       <div className="space-y-1.5">
         <Label className="text-muted-foreground text-xs uppercase">{t("scoreRangeLabel")}</Label>
-        <ScaleButtons value={myScore} onChange={onScoreChange} />
+        <ScaleButtons
+          value={myScore}
+          onChange={onScoreChange}
+          min={0}
+          max={5}
+          clearSize="xs"
+          className="flex-wrap gap-1 overflow-visible"
+        />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="review-notes" className="text-muted-foreground text-xs uppercase">
-          {t("notesLabel")}
-        </Label>
-        <Input id="review-notes" value={myNotes} onChange={(e) => onNotesChange(e.target.value)} />
+        <div className="flex items-center justify-between gap-2">
+          <Label
+            htmlFor={`review-notes-${responseId}`}
+            className="text-muted-foreground text-xs uppercase"
+          >
+            {t("notesLabel")}
+          </Label>
+          <SaveStatus state={reviewSaveState} />
+        </div>
+        <Textarea
+          id={`review-notes-${responseId}`}
+          rows={3}
+          value={myNotes}
+          onChange={(e) => onNotesChange(e.target.value)}
+          placeholder={t("reviewNotesPlaceholder")}
+        />
       </div>
-    </div>
+    </>
   );
 }
 
-/** Every OTHER evaluator's score/notes for this response, feed-style (H13) —
- *  the caller's own review renders separately via `MyReviewCard`. */
-function ReviewWall({ reviews }: { reviews: ReviewEntry[] }) {
-  const { t, language } = useLocale();
-  return (
-    <div className="space-y-3">
-      <p className="text-sm font-medium">{t("otherReviewsLabel")}</p>
-      <ul className="divide-border divide-y">
-        {reviews.map((review) => (
-          <li key={review.author_id} className="space-y-1 py-3 first:pt-0 last:pb-0">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-medium">{review.author_name ?? t("unknownReviewer")}</p>
-              <div className="flex items-center gap-2">
-                {review.score != null && (
-                  <StatusBadge tone="neutral" dot={false}>
-                    {review.score}/10
-                  </StatusBadge>
-                )}
-                <span className="text-muted-foreground text-xs">
-                  {new Intl.DateTimeFormat(LOCALE_CODES[language], { dateStyle: "medium" }).format(
-                    new Date(review.updated_at),
-                  )}
-                </span>
-              </div>
-            </div>
-            {review.notes && (
-              <p className="text-muted-foreground text-sm whitespace-pre-wrap">{review.notes}</p>
-            )}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-type RunAction = (label: string, fn: () => Promise<unknown>) => Promise<void>;
-
-/** Inline accept/reject in the review workspace itself (H13/H14) — no separate
- *  "decisions" tab duplicating this row set. */
-function ReviewDecisionCard({
-  canDecide,
-  busy,
-  run,
-  responseId,
-}: {
-  canDecide: boolean;
-  busy: boolean;
-  run: RunAction;
-  responseId: number;
-}) {
+function ReviewPanelCard({ className, ...props }: ReviewComposerProps & { className?: string }) {
   const { t } = useLocale();
   return (
-    <div className="border-border space-y-3 rounded-lg border p-4">
-      <p className="text-sm font-medium">{t("decisionLabel")}</p>
-      {canDecide ? (
-        <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            disabled={busy}
-            onClick={() =>
-              run(t("acceptedUnsentToast"), () =>
-                api.post(`/api/responses/${responseId}/decide`, { decision: "accepted" }),
-              )
-            }
-          >
-            {t("accept")}
-          </Button>
-          <Button
-            size="sm"
-            variant="destructive"
-            disabled={busy}
-            onClick={() =>
-              run(t("rejectedUnsentToast"), () =>
-                api.post(`/api/responses/${responseId}/decide`, { decision: "rejected" }),
-              )
-            }
-          >
-            {t("reject")}
-          </Button>
-        </div>
-      ) : (
-        <p className="text-muted-foreground text-xs">{t("needDecideCapability")}</p>
+    <div
+      className={cn(
+        "border-primary/30 bg-card space-y-3 rounded-xl border p-4 shadow-2xl ring-1 ring-black/5",
+        className,
       )}
+    >
+      <div className="flex items-center gap-1">
+        <p className="min-w-0 flex-1 text-sm font-medium">{t("yourReview")}</p>
+        {props.onOpenReviewWindow && (
+          <button
+            type="button"
+            className={dialogIconButtonClass}
+            onClick={props.onOpenReviewWindow}
+            aria-label={t("openReviewWindow")}
+            title={t("openReviewWindow")}
+          >
+            <ExternalLinkIcon />
+          </button>
+        )}
+      </div>
+      <ReviewComposerFields {...props} />
     </div>
   );
 }
 
-/** Decision controls (H14) outside the review workspace — buttons here depend
- *  on which of outbox/sent the row is in, not just its status. */
-function LifecycleDecisionCard({
-  workspace,
+function FloatingReviewPanel(props: ReviewComposerProps) {
+  const panelStyle = {
+    bottom: "1rem",
+    right:
+      props.dockSide === "left"
+        ? "max(1rem, calc(50% - 42.5rem))"
+        : props.dockSide === "right"
+          ? "max(1rem, calc(50% - 11.5rem))"
+          : "max(1rem, calc(50% - 27rem))",
+  };
+  return (
+    <div
+      data-dialog-floating
+      className="fixed z-[70] w-[min(24rem,calc(100vw-2rem))] rounded-xl"
+      style={panelStyle}
+    >
+      <ReviewPanelCard {...props} />
+    </div>
+  );
+}
+
+function InlineReviewPanel(props: ReviewComposerProps) {
+  return <ReviewPanelCard {...props} className="shadow-sm" />;
+}
+
+interface RunOptions {
+  /** A decision stays in the modal until the reviewer closes it. */
+  refresh?: boolean;
+  nextStatus?: ResponseRow["status"];
+  notify?: () => void;
+}
+
+type RunAction = (label: string, fn: () => Promise<unknown>, options?: RunOptions) => Promise<void>;
+
+function workspaceForResponseStatus(status: string): ApplicationWorkspace {
+  if (status === "review") return "review";
+  if (status === "accepted_internal" || status === "rejected_internal") return "outbox";
+  return "sent";
+}
+
+function hasDecisionActions(canDecide: boolean) {
+  // The gavel is deliberately persistent. The available items change with
+  // the status, but the control never disappears when an in-modal action
+  // moves an application between workspaces.
+  return canDecide;
+}
+
+/** Admin decisions stay available without competing with the review forum. */
+function DecisionMenu({
   status,
   busy,
   run,
   responseId,
   canOverride,
   onRequestRevoke,
+  onAccepted,
 }: {
-  workspace: ApplicationWorkspace;
   status: ResponseRow["status"];
   busy: boolean;
   run: RunAction;
   responseId: number;
   canOverride: boolean;
   onRequestRevoke: () => void;
+  onAccepted: () => void;
 }) {
   const { t } = useLocale();
+  const reviewActions = status === "review";
+  const outboxActions = status === "accepted_internal" || status === "rejected_internal";
+  const sentActions = ["accepted", "rejected", "confirmed", "declined", "expired"].includes(status);
+  const hasAvailableActions = reviewActions || outboxActions || sentActions;
+
   return (
-    <div className="border-border space-y-3 rounded-lg border p-4">
-      <p className="text-sm font-medium">{t("decisionLabel")}</p>
-      <div className="flex flex-wrap gap-2">
-        {workspace === "outbox" &&
-          (status === "accepted_internal" || status === "rejected_internal") && (
-            <>
-              <Button
-                size="sm"
-                disabled={busy}
-                onClick={() =>
-                  run(t("decisionSent"), () =>
-                    api.post(`/api/responses/${responseId}/send-decision`),
-                  )
-                }
-              >
-                <SendIcon />
-                {t("sendDecision")}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                onClick={() =>
-                  run(t("movedBackToReview"), () =>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={dialogIconButtonClass}
+          disabled={busy}
+          aria-label={t("decisionMenuLabel")}
+          title={t("decisionMenuLabel")}
+        >
+          <GavelIcon />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-52">
+        <DropdownMenuLabel>{t("decisionLabel")}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {!hasAvailableActions && (
+          <DropdownMenuItem disabled>{t("noDecisionActions")}</DropdownMenuItem>
+        )}
+        {reviewActions && (
+          <>
+            <DropdownMenuItem
+              disabled={busy}
+              onSelect={() =>
+                void run(
+                  t("acceptedUnsentToast"),
+                  () => api.post(`/api/responses/${responseId}/decide`, { decision: "accepted" }),
+                  {
+                    refresh: false,
+                    nextStatus: "accepted_internal",
+                    notify: onAccepted,
+                  },
+                )
+              }
+            >
+              {t("accept")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              variant="destructive"
+              disabled={busy}
+              onSelect={() =>
+                void run(
+                  t("rejectedUnsentToast"),
+                  () => api.post(`/api/responses/${responseId}/decide`, { decision: "rejected" }),
+                  { refresh: false, nextStatus: "rejected_internal" },
+                )
+              }
+            >
+              {t("reject")}
+            </DropdownMenuItem>
+          </>
+        )}
+        {outboxActions && (
+          <>
+            <DropdownMenuItem
+              disabled={busy}
+              onSelect={() =>
+                void run(
+                  t("decisionSent"),
+                  () => api.post(`/api/responses/${responseId}/send-decision`),
+                  {
+                    refresh: false,
+                    nextStatus: status === "accepted_internal" ? "accepted" : "rejected",
+                  },
+                )
+              }
+            >
+              <SendIcon />
+              {t("sendDecision")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={busy}
+              onSelect={() =>
+                void run(
+                  t("movedBackToReview"),
+                  () =>
                     api.post(`/api/responses/${responseId}/revert-decision`, {
                       decision: "review",
                     }),
+                  { refresh: false, nextStatus: "review" },
+                )
+              }
+            >
+              {t("backToReview")}
+            </DropdownMenuItem>
+          </>
+        )}
+        {sentActions && (
+          <>
+            {(status === "accepted" || status === "rejected" || status === "expired") && (
+              <DropdownMenuItem
+                disabled={busy}
+                onSelect={() =>
+                  void run(
+                    t("decisionResent"),
+                    () => api.post(`/api/responses/${responseId}/resend-decision`),
+                    { refresh: false, nextStatus: status === "expired" ? "accepted" : status },
+                  )
+                }
+              >
+                {t("resend")}
+              </DropdownMenuItem>
+            )}
+            {(status === "accepted" || status === "rejected") && (
+              <DropdownMenuItem
+                disabled={busy}
+                onSelect={() =>
+                  void run(
+                    t("movedBackToReview"),
+                    () =>
+                      api.post(`/api/responses/${responseId}/revert-decision`, {
+                        decision: "review",
+                      }),
+                    { refresh: false, nextStatus: "review" },
                   )
                 }
               >
                 {t("backToReview")}
-              </Button>
-            </>
-          )}
-        {workspace === "sent" &&
-          (status === "accepted" || status === "rejected" || status === "expired") && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() =>
-                run(t("decisionResent"), () =>
-                  api.post(`/api/responses/${responseId}/resend-decision`),
-                )
-              }
-            >
-              {t("resend")}
-            </Button>
-          )}
-        {workspace === "sent" && (status === "accepted" || status === "rejected") && (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={busy}
-            onClick={() =>
-              run(t("movedBackToReview"), () =>
-                api.post(`/api/responses/${responseId}/revert-decision`, { decision: "review" }),
-              )
-            }
-          >
-            {t("backToReview")}
-          </Button>
-        )}
-        {workspace === "sent" &&
-          (status === "rejected" || status === "declined" || status === "expired") && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() =>
-                run(t("reacceptedUnsent"), () => api.post(`/api/responses/${responseId}/re-accept`))
-              }
-            >
-              {t("reaccept")}
-            </Button>
-          )}
-        {workspace === "sent" && (status === "accepted" || status === "confirmed") && (
-          <Button size="sm" variant="destructive" disabled={busy} onClick={onRequestRevoke}>
-            {t("revokeSpot")}
-          </Button>
-        )}
-        {workspace === "sent" && canOverride && status === "accepted" && (
-          <>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() =>
-                run(t("spotConfirmed"), () => api.post(`/api/responses/${responseId}/confirm`))
-              }
-            >
-              {t("confirmOverride")}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() =>
-                run(t("spotDeclined"), () => api.post(`/api/responses/${responseId}/decline`))
-              }
-            >
-              {t("declineOverride")}
-            </Button>
+              </DropdownMenuItem>
+            )}
+            {(status === "rejected" || status === "declined" || status === "expired") && (
+              <DropdownMenuItem
+                disabled={busy}
+                onSelect={() =>
+                  void run(
+                    t("reacceptedUnsent"),
+                    () => api.post(`/api/responses/${responseId}/re-accept`),
+                    { refresh: false, nextStatus: "accepted" },
+                  )
+                }
+              >
+                {t("reaccept")}
+              </DropdownMenuItem>
+            )}
+            {(status === "accepted" || status === "confirmed") && (
+              <DropdownMenuItem variant="destructive" disabled={busy} onSelect={onRequestRevoke}>
+                {t("revokeSpot")}
+              </DropdownMenuItem>
+            )}
+            {canOverride && status === "accepted" && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={busy}
+                  onSelect={() =>
+                    void run(
+                      t("spotConfirmed"),
+                      () => api.post(`/api/responses/${responseId}/confirm`),
+                      { refresh: false, nextStatus: "confirmed" },
+                    )
+                  }
+                >
+                  {t("confirmOverride")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={busy}
+                  onSelect={() =>
+                    void run(
+                      t("spotDeclined"),
+                      () => api.post(`/api/responses/${responseId}/decline`),
+                      { refresh: false, nextStatus: "declined" },
+                    )
+                  }
+                >
+                  {t("declineOverride")}
+                </DropdownMenuItem>
+              </>
+            )}
           </>
         )}
-      </div>
-    </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
