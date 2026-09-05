@@ -990,6 +990,42 @@ describe("re-accept (admin)", () => {
     expect(rows).toHaveLength(1);
   });
 
+  it("declining after confirmation removes the role the form granted on confirm (H15, H8)", async () => {
+    const a = await getApp();
+    const mentorRoleId = await createRole([], { name: "Mentor" });
+    const appId = await createApplication();
+    await pool.query(
+      `INSERT INTO application_grants_roles (application_id, role_id) VALUES ($1, $2)`,
+      [appId, mentorRoleId],
+    );
+    const { userId, responseId } = await toAcceptedSent(appId);
+    const token = await latestConfirmationToken(userId);
+    await a.inject({ method: "POST", url: "/api/applications/confirm", payload: { token } });
+    expect(
+      (
+        await pool.query(`SELECT 1 FROM user_roles WHERE user_id = $1 AND role_id = $2`, [
+          userId,
+          mentorRoleId,
+        ])
+      ).rowCount,
+    ).toBe(1);
+
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/me/responses/${responseId}/decline`,
+      headers: asUser(userId),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(
+      (
+        await pool.query(`SELECT 1 FROM user_roles WHERE user_id = $1 AND role_id = $2`, [
+          userId,
+          mentorRoleId,
+        ])
+      ).rowCount,
+    ).toBe(0);
+  });
+
   it("re-accepts a rejected response (sent)", async () => {
     const a = await getApp();
     const appId = await createApplication();
@@ -1369,6 +1405,73 @@ describe("revoke spot + batch actions (M2)", () => {
     // The freed capacity slot lets someone else be accepted.
     const other = await toAcceptedSent(appId);
     expect((await getResponse(other.responseId)).status).toBe("accepted");
+  });
+
+  it("revoking a confirmed spot removes the role the form granted on confirm (H8)", async () => {
+    const a = await getApp();
+    const mentorRoleId = await createRole([], { name: "Mentor" });
+    const appId = await createApplication({ capacity: 1 });
+    await pool.query(
+      `INSERT INTO application_grants_roles (application_id, role_id) VALUES ($1, $2)`,
+      [appId, mentorRoleId],
+    );
+    const { userId, responseId } = await toAcceptedSent(appId);
+    await confirm(userId);
+    expect(
+      (
+        await pool.query(`SELECT 1 FROM user_roles WHERE user_id = $1 AND role_id = $2`, [
+          userId,
+          mentorRoleId,
+        ])
+      ).rowCount,
+    ).toBe(1);
+
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/revoke-spot`,
+      headers: asUser(decider),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(
+      (
+        await pool.query(`SELECT 1 FROM user_roles WHERE user_id = $1 AND role_id = $2`, [
+          userId,
+          mentorRoleId,
+        ])
+      ).rowCount,
+    ).toBe(0);
+  });
+
+  it("revoking a confirmed spot leaves a manually-assigned copy of the same role alone", async () => {
+    const a = await getApp();
+    const mentorRoleId = await createRole([], { name: "Mentor" });
+    const appId = await createApplication({ capacity: 1 });
+    await pool.query(
+      `INSERT INTO application_grants_roles (application_id, role_id) VALUES ($1, $2)`,
+      [appId, mentorRoleId],
+    );
+    const { userId, responseId } = await toAcceptedSent(appId);
+    await confirm(userId);
+    // An admin separately grants the same role manually for an unrelated reason.
+    await pool.query(
+      `UPDATE user_roles SET source = 'manual' WHERE user_id = $1 AND role_id = $2`,
+      [userId, mentorRoleId],
+    );
+
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/revoke-spot`,
+      headers: asUser(decider),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(
+      (
+        await pool.query(`SELECT 1 FROM user_roles WHERE user_id = $1 AND role_id = $2`, [
+          userId,
+          mentorRoleId,
+        ])
+      ).rowCount,
+    ).toBe(1);
   });
 
   it("revoke-spot rejects responses that aren't accepted/confirmed (409)", async () => {
