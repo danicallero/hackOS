@@ -46,6 +46,12 @@ function ReviewPopupInner() {
   const [dirty, setDirty] = useState(false);
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
+  const draftRef = useRef({
+    responseId: Number(params.responseId),
+    score: null as number | null,
+    notes: "",
+    dirty: false,
+  });
 
   // Independent fetch of whichever response is currently active — on first
   // load, and again whenever the main tab's navigation moves it to a
@@ -64,6 +70,12 @@ function ReviewPopupInner() {
           const mine = detail.reviews.find((r) => r.author_id === me?.id);
           setMyScore(mine?.score ?? null);
           setMyNotes(mine?.notes ?? "");
+          draftRef.current = {
+            responseId,
+            score: mine?.score ?? null,
+            notes: mine?.notes ?? "",
+            dirty: false,
+          };
         }
       })
       .catch(() => {
@@ -77,6 +89,18 @@ function ReviewPopupInner() {
     };
   }, [responseId, me?.id]);
 
+  useEffect(
+    () => () => {
+      const draft = draftRef.current;
+      if (!draft.dirty || !canReview) return;
+      void api.put(`/api/responses/${draft.responseId}/my-review`, {
+        score: draft.score,
+        notes: draft.notes.trim() || null,
+      });
+    },
+    [canReview],
+  );
+
   // Independent autosave (H29): this window keeps working — and keeps
   // saving — even if the reviewer closes the main modal tab that opened it.
   useEffect(() => {
@@ -88,6 +112,7 @@ function ReviewPopupInner() {
           score: myScore,
           notes: myNotes.trim() || null,
         });
+        if (draftRef.current.responseId === responseId) draftRef.current.dirty = false;
         setSaveState("saved");
         setDirty(false);
       } catch {
@@ -103,12 +128,25 @@ function ReviewPopupInner() {
     (message: ReviewSyncMessage) => {
       if (message.responseId !== responseId) {
         // The main tab navigated to a different applicant — follow it.
+        const draft = draftRef.current;
+        if (draft.dirty && canReview) {
+          void api.put(`/api/responses/${draft.responseId}/my-review`, {
+            score: draft.score,
+            notes: draft.notes.trim() || null,
+          });
+        }
         setResponseId(message.responseId);
         setStatus(message.status);
         setMyScore(message.score);
         setMyNotes(message.notes);
         setSaveState(message.saveState);
         setDirty(false);
+        draftRef.current = {
+          responseId: message.responseId,
+          score: message.score,
+          notes: message.notes,
+          dirty: false,
+        };
         return;
       }
       if (dirtyRef.current) return;
@@ -119,11 +157,23 @@ function ReviewPopupInner() {
   );
 
   function handleScoreChange(v: number | null) {
+    draftRef.current = {
+      responseId,
+      score: v,
+      notes: myNotes,
+      dirty: true,
+    };
     setMyScore(v);
     setDirty(true);
     setSaveState("saving");
   }
   function handleNotesChange(v: string) {
+    draftRef.current = {
+      responseId,
+      score: myScore,
+      notes: v,
+      dirty: true,
+    };
     setMyNotes(v);
     setDirty(true);
     setSaveState("saving");

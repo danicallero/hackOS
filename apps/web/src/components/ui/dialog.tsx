@@ -59,6 +59,7 @@ function DialogContent({
   children,
   showCloseButton = true,
   floatingContent,
+  floatingFocus = true,
   onInteractOutside,
   onPointerDownOutside,
   onFocusOutside,
@@ -67,6 +68,8 @@ function DialogContent({
   showCloseButton?: boolean
   /** Content that visually escapes the dialog while staying in its portal. */
   floatingContent?: React.ReactNode
+  /** Whether the detached content needs to escape Radix's modal focus trap. */
+  floatingFocus?: boolean
 }) {
   const { t } = useLocale()
   function isFloatingTarget(target: EventTarget | null) {
@@ -76,6 +79,13 @@ function DialogContent({
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
+      {floatingContent && floatingFocus && (
+        <div
+          data-slot="dialog-floating-overlay"
+          aria-hidden="true"
+          className="fixed inset-0 z-50 bg-black/50"
+        />
+      )}
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(

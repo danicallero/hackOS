@@ -176,6 +176,27 @@ describe("review + decide (H13, H14)", () => {
     const r = await getResponse(responseId);
     expect(r.status).toBe("review");
 
+    const clearedStaffNotes = await a.inject({
+      method: "PATCH",
+      url: `/api/responses/${responseId}/staff-notes`,
+      headers: asUser(reviewer),
+      payload: { staff_notes: null },
+    });
+    expect(clearedStaffNotes.statusCode).toBe(200);
+    const { rows: clearedNoteRows } = await pool.query(
+      `SELECT staff_notes FROM application_responses WHERE id = $1`,
+      [responseId],
+    );
+    expect(clearedNoteRows[0].staff_notes).toBeNull();
+
+    const clearedReview = await a.inject({
+      method: "PUT",
+      url: `/api/responses/${responseId}/my-review`,
+      headers: asUser(reviewer),
+      payload: { score: 4, notes: null },
+    });
+    expect(clearedReview.statusCode).toBe(200);
+
     // H13: a reviewer gets the aggregate plus their own row; manager-only
     // reveal returns every reviewer's row (author_name included).
     const detail = await a.inject({
@@ -189,6 +210,7 @@ describe("review + decide (H13, H14)", () => {
     expect(body.avg_score).toBe(3);
     expect(body.reviews).toHaveLength(1);
     expect(body.reviews[0].author_id).toBe(reviewer);
+    expect(body.reviews[0].notes).toBeNull();
 
     const managerDetail = await a.inject({
       method: "GET",

@@ -227,10 +227,10 @@ function exportAnswers(
 interface ApplicationFile {
   fieldKey: string;
   label: string;
-  value: string;
+  value: string | null;
   filename: string;
-  href: string;
-  preview: "image" | "pdf" | "download";
+  href: string | null;
+  preview: "image" | "pdf" | "download" | "empty";
 }
 
 type FileViewerSide = "left" | "right";
@@ -268,10 +268,21 @@ function applicationFiles(
   values: Record<string, unknown>,
   lang: Language,
 ): ApplicationFile[] {
-  return fields.flatMap((field) => {
+  return fields.flatMap((field): ApplicationFile[] => {
     if (field.kind !== "file") return [];
     const value = values[field.key];
-    if (typeof value !== "string" || value.length === 0) return [];
+    if (typeof value !== "string" || value.length === 0) {
+      return [
+        {
+          fieldKey: field.key,
+          label: pickText(field.label, lang),
+          value: null,
+          filename: "",
+          href: null,
+          preview: "empty" as const,
+        },
+      ];
+    }
     const filename = fileNameFromValue(value);
     return [
       {
@@ -341,7 +352,7 @@ function ApplicationFileViewer({
   if (files.length === 0) return null;
 
   const file = files[activeIndex] ?? files[0];
-  const fileTitle = `${file.label}: ${file.filename}`;
+  const fileTitle = file.filename ? `${file.label}: ${file.filename}` : file.label;
   const nextSide = side === "left" ? "right" : "left";
 
   async function toggleFullscreen() {
@@ -415,26 +426,30 @@ function ApplicationFileViewer({
           {file.label}
         </p>
         <div className="flex shrink-0 items-center gap-1">
-          <a
-            href={file.href}
-            target="_blank"
-            rel="noreferrer"
-            className={dialogIconButtonClass}
-            aria-label={t("viewFileLabel")}
-            title={t("viewFileLabel")}
-          >
-            <ExternalLinkIcon />
-          </a>
-          <button
-            type="button"
-            className={dialogIconButtonClass}
-            onClick={() => void toggleFullscreen()}
-            aria-label={t(isFullscreen ? "exitFullscreenFile" : "fullscreenFile")}
-            aria-pressed={isFullscreen}
-            title={t(isFullscreen ? "exitFullscreenFile" : "fullscreenFile")}
-          >
-            {isFullscreen ? <Minimize2Icon /> : <Maximize2Icon />}
-          </button>
+          {file.href && (
+            <>
+              <a
+                href={file.href}
+                target="_blank"
+                rel="noreferrer"
+                className={dialogIconButtonClass}
+                aria-label={t("viewFileLabel")}
+                title={t("viewFileLabel")}
+              >
+                <ExternalLinkIcon />
+              </a>
+              <button
+                type="button"
+                className={dialogIconButtonClass}
+                onClick={() => void toggleFullscreen()}
+                aria-label={t(isFullscreen ? "exitFullscreenFile" : "fullscreenFile")}
+                aria-pressed={isFullscreen}
+                title={t(isFullscreen ? "exitFullscreenFile" : "fullscreenFile")}
+              >
+                {isFullscreen ? <Minimize2Icon /> : <Maximize2Icon />}
+              </button>
+            </>
+          )}
           <Button
             type="button"
             size="xs"
@@ -505,14 +520,19 @@ function ApplicationFileViewer({
             "flex h-screen w-screen items-center justify-center rounded-none border-0 p-6",
         )}
       >
-        {file.preview === "pdf" ? (
+        {file.preview === "empty" ? (
+          <div className="flex min-h-64 flex-col items-center justify-center gap-3 p-6 text-center">
+            <FileTextIcon className="text-muted-foreground size-8" aria-hidden="true" />
+            <p className="text-muted-foreground text-sm">{t("noFileUploadedPeriod")}</p>
+          </div>
+        ) : file.preview === "pdf" && file.href ? (
           <iframe
-            key={file.value}
+            key={file.value ?? file.fieldKey}
             src={file.href}
             title={fileTitle}
             className={cn("h-[min(62vh,48rem)] w-full", isFullscreen && "h-full")}
           />
-        ) : file.preview === "image" ? (
+        ) : file.preview === "image" && file.href ? (
           <div
             className={cn(
               "flex min-h-64 items-center justify-center bg-muted p-3 sm:p-6",
@@ -521,7 +541,7 @@ function ApplicationFileViewer({
           >
             {/* biome-ignore lint/performance/noImgElement: private authenticated file proxy cannot be optimized by Next Image */}
             <img
-              key={file.value}
+              key={file.value ?? file.fieldKey}
               src={file.href}
               alt={fileTitle}
               className={cn("max-h-[62vh] max-w-full object-contain", isFullscreen && "max-h-full")}
@@ -794,6 +814,14 @@ export function ReviewModal({
   const [modalStatus, setModalStatus] = useState(response.status);
   const [fileViewerSide, setFileViewerSide] = useState<FileViewerSide>("left");
   const [fileViewerDragging, setFileViewerDragging] = useState(false);
+  const [desktopFloating, setDesktopFloating] = useState(false);
+  const reviewWindowRef = useRef<Window | null>(null);
+  const reviewDraftRef = useRef({
+    responseId: response.id,
+    score: myReview?.score ?? null,
+    notes: myReview?.notes ?? "",
+    dirty: false,
+  });
   const mountedRef = useRef(true);
 
   useEffect(
@@ -809,6 +837,14 @@ export function ReviewModal({
       // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate a persisted UI preference after client mount
       setFileViewerSide(savedSide);
     }
+  }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 1024px)");
+    const update = () => setDesktopFloating(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
   }, []);
 
   useEffect(() => {
@@ -849,6 +885,19 @@ export function ReviewModal({
   // biome-ignore lint/correctness/useExhaustiveDependencies: only re-seed on navigating to a different response/user, not on every response.reviews identity change (e.g. after this same reviewer's own autosave).
   useEffect(() => {
     const mine = response.reviews.find((review) => review.author_id === me?.id);
+    const pendingDraft = reviewDraftRef.current;
+    if (pendingDraft.responseId !== response.id && pendingDraft.dirty && canReview) {
+      void api.put(`/api/responses/${pendingDraft.responseId}/my-review`, {
+        score: pendingDraft.score,
+        notes: pendingDraft.notes.trim() || null,
+      });
+    }
+    reviewDraftRef.current = {
+      responseId: response.id,
+      score: mine?.score ?? null,
+      notes: mine?.notes ?? "",
+      dirty: false,
+    };
     setMyScore(mine?.score ?? null);
     setMyNotes(mine?.notes ?? "");
     setReviewSaveState("saved");
@@ -859,14 +908,38 @@ export function ReviewModal({
     setEditing(false);
     setActiveFileIndex(0);
     setReviewPage("application");
-  }, [response.id, me?.id]);
+  }, [response.id, me?.id, canReview]);
+
+  useEffect(
+    () => () => {
+      const pendingDraft = reviewDraftRef.current;
+      if (!pendingDraft.dirty || !canReview) return;
+      void api.put(`/api/responses/${pendingDraft.responseId}/my-review`, {
+        score: pendingDraft.score,
+        notes: pendingDraft.notes.trim() || null,
+      });
+    },
+    [canReview],
+  );
 
   function handleScoreChange(v: number | null) {
+    reviewDraftRef.current = {
+      responseId: response.id,
+      score: v,
+      notes: myNotes,
+      dirty: true,
+    };
     setMyScore(v);
     setReviewDirty(true);
     setReviewSaveState("saving");
   }
   function handleNotesChange(v: string) {
+    reviewDraftRef.current = {
+      responseId: response.id,
+      score: myScore,
+      notes: v,
+      dirty: true,
+    };
     setMyNotes(v);
     setReviewDirty(true);
     setReviewSaveState("saving");
@@ -921,7 +994,12 @@ export function ReviewModal({
   }
 
   useEffect(() => {
-    if (!reviewDirty || !canReview) return;
+    // During candidate navigation the response prop changes before the seed
+    // effect below has replaced the local composer state. Do not briefly save
+    // the previous candidate's draft into the newly selected response.
+    if (!reviewDirty || !canReview || reviewDraftRef.current.responseId !== response.id) {
+      return;
+    }
     const handle = window.setTimeout(async () => {
       setReviewSaveState("saving");
       try {
@@ -929,6 +1007,9 @@ export function ReviewModal({
           score: myScore,
           notes: myNotes.trim() || null,
         });
+        if (reviewDraftRef.current.responseId === response.id) {
+          reviewDraftRef.current.dirty = false;
+        }
         setReviewSaveState("saved");
         setReviewDirty(false);
       } catch {
@@ -1030,6 +1111,12 @@ export function ReviewModal({
   // below); both windows load the same minimal route so they share one
   // implementation of the composer instead of two.
   async function openReviewWindow() {
+    const existingWindow = reviewWindowRef.current;
+    if (existingWindow && !existingWindow.closed) {
+      existingWindow.focus();
+      return;
+    }
+    reviewWindowRef.current = null;
     const url = new URL(
       `/review-popup/${response.id}?applicationId=${applicationId}`,
       window.location.origin,
@@ -1053,6 +1140,7 @@ export function ReviewModal({
         pipWindow.document.body.style.margin = "0";
         pipWindow.document.title = response.name ?? response.email;
         pipWindow.document.body.append(iframe);
+        reviewWindowRef.current = pipWindow;
         return;
       } catch {
         // Denied (no user gesture in this call stack, one already open,
@@ -1061,13 +1149,21 @@ export function ReviewModal({
     }
     const popup = window.open(
       url,
-      `hackos-review-window-${response.id}`,
+      `hackos-review-window-${applicationId}`,
       "popup=yes,width=420,height=620,resizable=yes,scrollbars=yes",
     );
     // A single, immediate focus on open — not a repeated/refocus loop, which
     // would steal focus back from whatever the reviewer clicks into next.
-    if (popup) popup.focus();
-    else toast.error(t("reviewWindowBlocked"));
+    if (popup) {
+      reviewWindowRef.current = popup;
+      popup.focus();
+    } else toast.error(t("reviewWindowBlocked"));
+  }
+
+  function handleAnswerLinkClick() {
+    if (canScore && window.matchMedia("(min-width: 1024px)").matches) {
+      void openReviewWindow();
+    }
   }
 
   function showApplicantAcceptedToast() {
@@ -1113,6 +1209,7 @@ export function ReviewModal({
       open
       onOpenChange={(o) => !o && onClose()}
       size="xl"
+      floatingFocus={desktopFloating && (canScore || files.length > 0)}
       className={cn(
         "max-h-[90vh] sm:max-w-4xl 2xl:h-[min(90vh,54rem)] 2xl:transition-[left]",
         files.length > 0 &&
@@ -1323,6 +1420,7 @@ export function ReviewModal({
                     answerValues={answerValues}
                     response={response}
                     lang={lang}
+                    onExternalLinkClick={handleAnswerLinkClick}
                   />
                 </section>
               </div>
@@ -1343,6 +1441,7 @@ export function ReviewModal({
                   answerValues={answerValues}
                   response={response}
                   lang={lang}
+                  onExternalLinkClick={handleAnswerLinkClick}
                 />
               </div>
             ) : (
@@ -1359,6 +1458,7 @@ export function ReviewModal({
                 answerValues={answerValues}
                 response={response}
                 lang={lang}
+                onExternalLinkClick={handleAnswerLinkClick}
               />
             )}
 
@@ -1416,6 +1516,7 @@ function AnswersSection({
   answerValues,
   response,
   lang,
+  onExternalLinkClick,
 }: {
   applicationId: number;
   editing: boolean;
@@ -1429,6 +1530,7 @@ function AnswersSection({
   answerValues: Record<string, unknown>;
   response: ResponseRow;
   lang: Language;
+  onExternalLinkClick?: () => void;
 }) {
   const { t } = useLocale();
   return (
@@ -1474,6 +1576,7 @@ function AnswersSection({
                       }
                       lang={lang}
                       inDialog
+                      onExternalLinkClick={onExternalLinkClick}
                     />
                   );
                 })}
@@ -1733,7 +1836,9 @@ function FloatingReviewPanel(props: ReviewComposerProps) {
   } | null>(null);
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
 
-  const positionStorageKey = `${FLOATING_REVIEW_POSITION_STORAGE_KEY}.${props.responseId}`;
+  // The panel belongs to the review workspace, not to one applicant. Keep the
+  // same coordinate while the modal navigates between response records.
+  const positionStorageKey = FLOATING_REVIEW_POSITION_STORAGE_KEY;
 
   const clampPosition = useCallback((left: number, top: number) => {
     const rect = panelRef.current?.getBoundingClientRect();
@@ -1767,7 +1872,7 @@ function FloatingReviewPanel(props: ReviewComposerProps) {
       // A blocked localStorage is not a reason to make the review unusable.
     }
     setPosition(saved ? clampPosition(saved.left, saved.top) : null);
-  }, [positionStorageKey, clampPosition]);
+  }, [clampPosition]);
 
   useEffect(() => {
     if (!position) return;
@@ -1776,7 +1881,7 @@ function FloatingReviewPanel(props: ReviewComposerProps) {
     } catch {
       // Position persistence is best-effort.
     }
-  }, [position, positionStorageKey]);
+  }, [position]);
 
   useEffect(() => {
     function handleResize() {

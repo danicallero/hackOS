@@ -36,6 +36,7 @@ export function Modal({
   footer,
   headerActions,
   floatingContent,
+  floatingFocus = true,
   className,
   children,
 }: {
@@ -54,13 +55,19 @@ export function Modal({
   /** Visually floating content rendered in the dialog portal, outside the
    *  scrollable dialog surface (e.g. an attached file viewer). */
   floatingContent?: React.ReactNode;
+  /** Allow detached content to receive focus without Radix's modal trap. */
+  floatingFocus?: boolean;
   className?: string;
   children?: React.ReactNode;
 }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange} modal={!(floatingContent && floatingFocus)}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
-      <DialogContent className={cn(SIZES[size], className)} floatingContent={floatingContent}>
+      <DialogContent
+        className={cn(SIZES[size], className)}
+        floatingContent={floatingContent}
+        floatingFocus={floatingFocus}
+      >
         <DialogHeader
           className={cn("shrink-0 pr-10", headerActions && "max-sm:text-left sm:pr-48")}
         >

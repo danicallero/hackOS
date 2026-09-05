@@ -46,6 +46,9 @@ export interface TemplateFieldLike {
   /** Placeholder shown inside the empty input, for kinds the applicant types
    *  into (text/textarea/number). Falls back to a generic string. */
   placeholder?: I18nText;
+  validation?: {
+    text_condition?: string;
+  };
 }
 
 const NONE = "__none__";
@@ -68,6 +71,7 @@ export function TemplateFieldControl({
   inDialog = false,
   sharedWithSponsors,
   onSharedWithSponsorsChange,
+  onExternalLinkClick,
 }: {
   field: TemplateFieldLike;
   value: FieldValue;
@@ -90,6 +94,8 @@ export function TemplateFieldControl({
    */
   sharedWithSponsors?: boolean;
   onSharedWithSponsorsChange?: (value: boolean) => void;
+  /** Called when a read-only URL answer is opened in a new tab. */
+  onExternalLinkClick?: () => void;
 }) {
   const { t } = useLocale();
   const label = pickText(field.label, lang);
@@ -104,13 +110,29 @@ export function TemplateFieldControl({
   const errorId = `${id}-error`;
   const helpId = `${id}-help`;
   const hasError = Boolean(error);
+  const externalUrl = typeof value === "string" ? value.trim() : "";
+  const isReadOnlyUrl =
+    disabled &&
+    (field.kind === "text" || field.kind === "textarea") &&
+    field.validation?.text_condition === "url" &&
+    externalUrl.length > 0;
   const describedBy =
     [helpText ? helpId : null, hasError ? errorId : null].filter(Boolean).join(" ") || undefined;
 
   let control: React.ReactNode;
   switch (field.kind) {
     case "textarea":
-      control = (
+      control = isReadOnlyUrl ? (
+        <a
+          href={externalUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="text-primary block break-all text-sm underline underline-offset-4"
+          onClick={onExternalLinkClick}
+        >
+          {externalUrl}
+        </a>
+      ) : (
         <Textarea
           id={id}
           name={field.key}
@@ -306,7 +328,17 @@ export function TemplateFieldControl({
       );
       break;
     default:
-      control = (
+      control = isReadOnlyUrl ? (
+        <a
+          href={externalUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="text-primary block break-all text-sm underline underline-offset-4"
+          onClick={onExternalLinkClick}
+        >
+          {externalUrl}
+        </a>
+      ) : (
         <Input
           id={id}
           name={field.key}
