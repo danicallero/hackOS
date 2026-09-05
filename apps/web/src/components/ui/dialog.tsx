@@ -61,6 +61,7 @@ function DialogContent({
   floatingContent,
   onInteractOutside,
   onPointerDownOutside,
+  onFocusOutside,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
@@ -68,6 +69,10 @@ function DialogContent({
   floatingContent?: React.ReactNode
 }) {
   const { t } = useLocale()
+  function isFloatingTarget(target: EventTarget | null) {
+    return target instanceof Element && Boolean(target.closest("[data-dialog-floating]"))
+  }
+
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
@@ -79,24 +84,16 @@ function DialogContent({
           className
         )}
         onInteractOutside={(event) => {
-          if (
-            floatingContent &&
-            event.target instanceof Element &&
-            event.target.closest("[data-dialog-floating]")
-          ) {
-            event.preventDefault()
-          }
+          if (floatingContent && isFloatingTarget(event.target)) event.preventDefault()
           onInteractOutside?.(event)
         }}
         onPointerDownOutside={(event) => {
-          if (
-            floatingContent &&
-            event.target instanceof Element &&
-            event.target.closest("[data-dialog-floating]")
-          ) {
-            event.preventDefault()
-          }
+          if (floatingContent && isFloatingTarget(event.target)) event.preventDefault()
           onPointerDownOutside?.(event)
+        }}
+        onFocusOutside={(event) => {
+          if (floatingContent && isFloatingTarget(event.target)) event.preventDefault()
+          onFocusOutside?.(event)
         }}
         {...props}
       >
