@@ -831,6 +831,30 @@ export function ReviewModal({
     [],
   );
 
+  const closeReviewWindowRef = useRef<() => void>(undefined);
+  closeReviewWindowRef.current = function closeReviewWindow() {
+    const existingWindow = reviewWindowRef.current;
+    reviewWindowRef.current = null;
+    if (existingWindow && !existingWindow.closed) existingWindow.close();
+  };
+
+  // Refocusing this tab means the reviewer no longer needs the popup escape
+  // hatch; closing the modal (the "evaluation profile") means there's nothing
+  // left for the popup to review either way.
+  useEffect(() => {
+    function handleFocus() {
+      if (document.visibilityState === "visible") closeReviewWindowRef.current?.();
+    }
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleFocus);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleFocus);
+    };
+  }, []);
+
+  useEffect(() => () => closeReviewWindowRef.current?.(), []);
+
   useEffect(() => {
     const savedSide = window.localStorage.getItem(FILE_VIEWER_SIDE_STORAGE_KEY);
     if (savedSide === "left" || savedSide === "right") {
