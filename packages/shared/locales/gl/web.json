@@ -922,6 +922,7 @@
   "couldNotMoveScheduleItem": "Non se puido mover o elemento do horario.",
   "audienceFilterAction": "Audiencia",
   "audienceFilterStaffOnly": "Só staff",
+  "kindFilterAction": "Tipo",
   "bulkScheduleAction": "Programar…",
   "bulkScheduleHint": "Establece a data/hora de publicación de todos os elementos seleccionados.",
   "bulkScheduleSet": "Data de publicación establecida.",

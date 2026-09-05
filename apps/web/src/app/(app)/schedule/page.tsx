@@ -20,6 +20,11 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import {
+  type ActivityKind,
+  DEFAULT_ACTIVITY_KIND,
+  toActivityKind,
+} from "@hackos/shared/activity-kinds";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { CalendarClockIcon, EyeIcon, EyeOffIcon, PlusIcon, SearchIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
@@ -47,7 +52,12 @@ import { useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem, type ScheduleAudience } from "@/lib/logistics";
 import { useCan, useMe } from "@/lib/session";
 import { ActivityRow } from "./schedule-activity-row";
-import { AudienceFilterPopover, BulkSchedulePopover, MoveToDateModal } from "./schedule-dialogs";
+import {
+  AudienceFilterPopover,
+  BulkSchedulePopover,
+  KindFilterPopover,
+  MoveToDateModal,
+} from "./schedule-dialogs";
 import {
   cleanScheduleForm,
   EMPTY_SCHEDULE_FORM,
@@ -103,6 +113,7 @@ export default function SchedulePage() {
   const [tableConfig, setTableConfig] = useScheduleTableConfig();
   const [audienceFilter, setAudienceFilter] = useState<Set<ScheduleAudience>>(new Set());
   const [staffOnlyFilter, setStaffOnlyFilter] = useState(false);
+  const [kindFilter, setKindFilter] = useState<Set<ActivityKind>>(new Set());
   const [liveWidths, setLiveWidths] = useState<Partial<Record<ColumnId, number>>>({});
   const columnWidths = useMemo(
     () => ({ ...tableConfig.widths, ...liveWidths }),
@@ -215,11 +226,16 @@ export default function SchedulePage() {
         return audiences.some((a) => audienceFilter.has(a));
       });
     }
+    if (kindFilter.size > 0) {
+      list = list.filter((item) =>
+        kindFilter.has(toActivityKind(item.type) ?? DEFAULT_ACTIVITY_KIND),
+      );
+    }
     // groupByDay merges same-day items only when they're adjacent in this
     // list — sort chronologically first so every day forms exactly one
     // contiguous (and correctly ordered) group.
     return [...list].sort(compareScheduleItems);
-  }, [items, query, audienceFilter, staffOnlyFilter]);
+  }, [items, query, audienceFilter, staffOnlyFilter, kindFilter]);
 
   const groups = useMemo(() => groupByDay(filtered, language), [filtered, language]);
   const visibleColumns = tableConfig.order.filter(
@@ -416,6 +432,7 @@ export default function SchedulePage() {
                 }}
               />
             )}
+            {canEdit && <KindFilterPopover selected={kindFilter} onChange={setKindFilter} />}
             <ColumnConfigPopover config={tableConfig} onChange={setTableConfig} />
           </div>
         </div>

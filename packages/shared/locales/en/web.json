@@ -922,6 +922,7 @@
   "couldNotMoveScheduleItem": "Could not move schedule item.",
   "audienceFilterAction": "Audience",
   "audienceFilterStaffOnly": "Staff-only",
+  "kindFilterAction": "Type",
   "bulkScheduleAction": "Schedule…",
   "bulkScheduleHint": "Sets the publish date/time for every selected item.",
   "bulkScheduleSet": "Publish date set.",

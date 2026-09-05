@@ -118,7 +118,15 @@ every workspace and every item (`apps/web/src/lib/session.tsx`).
   pseudo-segment for empty-audience items) already present in what that
   caller received, never a separate capability lookup, so it can only ever
   offer segments the viewer already has access to. A pure participant (whose
-  feed is 100% `participant`-tagged) gets no filter at all.
+  feed is 100% `participant`-tagged) gets no filter at all. A second,
+  independent filter by activity kind (`components/public/schedule-kind-filter.tsx`)
+  appears alongside it whenever the feed spans more than one `ACTIVITY_KINDS`
+  value, mirroring the mobile app's kind filter (open to everyone there too —
+  `docs/mobile.md`'s Schedule/Horario section). The Manage Schedule table
+  (`app/(app)/schedule/schedule-dialogs.tsx`'s `KindFilterPopover`) offers the
+  same filter over the full, unfiltered `ACTIVITY_KINDS` list rather than what
+  happens to be present, since a staff editor also needs to find kinds with
+  zero items scheduled yet.
 - Every href in `nav.ts` is a stable, published URL: existing deep links and
   bookmarks must keep working without a redirect.
 
