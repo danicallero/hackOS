@@ -19,10 +19,19 @@ import {
   Maximize2Icon,
   Minimize2Icon,
   PencilIcon,
+  SaveIcon,
   SendIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { type DragEvent, useEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type DragEvent,
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import {
   type FormSection,
@@ -36,6 +45,7 @@ import {
   type ApplicationWorkspace,
   applicationStatusLabel,
 } from "@/app/(app)/applications/workflow";
+import { type ReviewSyncMessage, useReviewSync } from "@/components/applications/review-sync";
 import { AlertModal } from "@/components/common/alert-modal";
 import { fileDownloadUrl } from "@/components/common/file-link";
 import { Modal } from "@/components/common/modal";
@@ -63,6 +73,19 @@ import type { SaveState } from "@/lib/save-state";
 import { useCan, useMe } from "@/lib/session";
 import type { Intolerance, Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+// The Document Picture-in-Picture API (Chromium-only as of writing) is the
+// one real, spec-guaranteed way a page can put its own content in a window
+// the OS keeps above everything else. TypeScript's DOM lib doesn't ship
+// types for it yet, so it's declared narrowly here — only the bits used
+// below — rather than pulling in a whole ambient-types package for one API.
+declare global {
+  interface Window {
+    documentPictureInPicture?: {
+      requestWindow(options?: { width?: number; height?: number }): Promise<Window>;
+    };
+  }
+}
 
 /** Synthetic section for the shirt-size/dietary fields, that is never stored in
  *  `application.sections`.
@@ -213,6 +236,7 @@ interface ApplicationFile {
 type FileViewerSide = "left" | "right";
 const FILE_VIEWER_SIDE_STORAGE_KEY = "hackos.application-review.file-viewer-side";
 const FILE_VIEWER_DRAG_TYPE = "text/hackos-application-file-viewer";
+const FLOATING_REVIEW_POSITION_STORAGE_KEY = "hackos.application-review.floating-review-position";
 const REVIEW_TOASTER_ID = "application-review-modal";
 
 function fileNameFromValue(value: string): string {
@@ -262,6 +286,10 @@ function applicationFiles(
   });
 }
 
+/** Minimum pointer travel before the grip's fallback drag engages — small
+ *  enough to feel immediate, large enough not to swallow a plain click. */
+const GRIP_DRAG_THRESHOLD_PX = 6;
+
 function ApplicationFileViewer({
   files,
   activeIndex,
@@ -270,6 +298,8 @@ function ApplicationFileViewer({
   onSideChange,
   onDragStart,
   onDragEnd,
+  onPointerDragStart,
+  onPointerDragEnd,
   className,
 }: {
   files: ApplicationFile[];
@@ -279,11 +309,26 @@ function ApplicationFileViewer({
   onSideChange: (side: FileViewerSide) => void;
   onDragStart: (event: DragEvent<HTMLButtonElement>) => void;
   onDragEnd: () => void;
+  /** Pointer-based fallback for browsers/contexts where native HTML5 drag
+   *  doesn't engage reliably on the detached (floating) panel — mirrors
+   *  onDragStart/onDrop but driven by pointer capture instead of dataTransfer. */
+  onPointerDragStart?: () => void;
+  onPointerDragEnd?: (clientX: number, clientY: number) => void;
   className?: string;
 }) {
   const { t } = useLocale();
   const previewRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const gripDragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    native: boolean;
+    active: boolean;
+  } | null>(null);
+  // A completed pointer-fallback drag still fires a trailing click on the
+  // same button — suppress just that one so it doesn't also toggle the side.
+  const suppressGripClickRef = useRef(false);
 
   useEffect(() => {
     function syncFullscreen() {
@@ -308,6 +353,53 @@ function ApplicationFileViewer({
     } catch {
       // Fullscreen can be denied by the browser or an embedding context.
     }
+  }
+
+  // Native dragstart takes over the input stream (the browser fires
+  // pointercancel for the pointer that started it), so mark the in-flight
+  // pointer sequence as native and let the real onDragStart run — no double
+  // side-change from both paths firing for the same gesture.
+  function handleGripDragStart(event: DragEvent<HTMLButtonElement>) {
+    if (gripDragRef.current) gripDragRef.current.native = true;
+    onDragStart(event);
+  }
+
+  function handleGripPointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
+    gripDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      native: false,
+      active: false,
+    };
+  }
+
+  function handleGripPointerMove(event: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = gripDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId || drag.native || drag.active) return;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (Math.hypot(dx, dy) < GRIP_DRAG_THRESHOLD_PX) return;
+    drag.active = true;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    onPointerDragStart?.();
+  }
+
+  function handleGripPointerUp(event: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = gripDragRef.current;
+    gripDragRef.current = null;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (drag.active && !drag.native) {
+      suppressGripClickRef.current = true;
+      onPointerDragEnd?.(event.clientX, event.clientY);
+    }
+  }
+
+  function handleGripPointerCancel() {
+    gripDragRef.current = null;
   }
 
   return (
@@ -348,10 +440,20 @@ function ApplicationFileViewer({
             size="xs"
             variant="ghost"
             draggable
-            onDragStart={onDragStart}
+            onDragStart={handleGripDragStart}
             onDragEnd={onDragEnd}
-            onClick={() => onSideChange(nextSide)}
-            className="hidden cursor-grab px-1.5 active:cursor-grabbing lg:inline-flex"
+            onPointerDown={handleGripPointerDown}
+            onPointerMove={handleGripPointerMove}
+            onPointerUp={handleGripPointerUp}
+            onPointerCancel={handleGripPointerCancel}
+            onClick={() => {
+              if (suppressGripClickRef.current) {
+                suppressGripClickRef.current = false;
+                return;
+              }
+              onSideChange(nextSide);
+            }}
+            className="hidden cursor-grab touch-none px-1.5 active:cursor-grabbing lg:inline-flex"
             aria-label={t("moveFileViewer", {
               side: t(nextSide === "left" ? "leftSide" : "rightSide"),
             })}
@@ -440,10 +542,13 @@ function ApplicationFileViewerPanel({
   files,
   activeIndex,
   side,
+  dragging,
   onIndexChange,
   onSideChange,
   onDragStart,
   onDragEnd,
+  onPointerDragStart,
+  onPointerDragEnd,
   onDragOver,
   onDrop,
   reviewContent,
@@ -451,10 +556,15 @@ function ApplicationFileViewerPanel({
   files: ApplicationFile[];
   activeIndex: number;
   side: FileViewerSide;
+  /** True while the viewer's grip is mid-drag, anywhere in the modal — used
+   *  to show this docked panel as a valid drop target (H: docked viewer+review). */
+  dragging?: boolean;
   onIndexChange: (index: number) => void;
   onSideChange: (side: FileViewerSide) => void;
   onDragStart: (event: DragEvent<HTMLButtonElement>) => void;
   onDragEnd: () => void;
+  onPointerDragStart?: () => void;
+  onPointerDragEnd?: (clientX: number, clientY: number) => void;
   onDragOver: (event: DragEvent<HTMLElement>) => void;
   onDrop: (event: DragEvent<HTMLElement>) => void;
   reviewContent?: React.ReactNode;
@@ -464,9 +574,11 @@ function ApplicationFileViewerPanel({
   return (
     <aside
       data-dialog-floating
+      data-file-viewer-dropzone={side === "left" ? "right" : "left"}
       className={cn(
         "pointer-events-auto fixed z-[60] hidden h-[min(90vh,54rem)] w-[min(30rem,calc(100vw-2rem))] 2xl:grid 2xl:gap-4",
         reviewContent ? "2xl:grid-rows-[minmax(0,1fr)_auto]" : "2xl:grid-rows-[minmax(0,1fr)]",
+        dragging && "2xl:rounded-xl 2xl:ring-2 2xl:ring-primary/50 2xl:ring-offset-2",
       )}
       style={{
         ...(side === "left" ? { right: panelOffset } : { left: panelOffset }),
@@ -475,7 +587,7 @@ function ApplicationFileViewerPanel({
       }}
       onDragOver={onDragOver}
       onDrop={onDrop}
-      aria-label={t("applicationFilesLabel")}
+      aria-label={dragging ? t("dropFileViewerHere") : t("applicationFilesLabel")}
     >
       <div className="min-h-0 rounded-xl">
         <ApplicationFileViewer
@@ -486,11 +598,55 @@ function ApplicationFileViewerPanel({
           onSideChange={onSideChange}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
+          onPointerDragStart={onPointerDragStart}
+          onPointerDragEnd={onPointerDragEnd}
           className="h-full"
         />
       </div>
       {reviewContent && <div className="min-h-0 rounded-xl">{reviewContent}</div>}
     </aside>
+  );
+}
+
+function FileViewerDropZones({
+  onDragOver,
+  onDrop,
+  onSideChange,
+}: {
+  onDragOver: (event: DragEvent<HTMLElement>) => void;
+  onDrop: (side: FileViewerSide, event: DragEvent<HTMLElement>) => void;
+  onSideChange: (side: FileViewerSide) => void;
+}) {
+  const { t } = useLocale();
+  const sides: FileViewerSide[] = ["left", "right"];
+
+  return (
+    <div
+      data-dialog-floating
+      className="pointer-events-none fixed inset-0 z-[80] hidden items-center justify-between px-4 2xl:flex"
+    >
+      {sides.map((side) => (
+        <button
+          key={side}
+          type="button"
+          data-dialog-floating
+          data-file-viewer-dropzone={side}
+          className="border-primary/60 bg-primary/10 text-primary hover:bg-primary/20 focus-visible:ring-ring pointer-events-auto flex h-[min(54vh,32rem)] w-28 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-3 text-center text-xs font-medium shadow-lg backdrop-blur-sm transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden"
+          onDragOver={onDragOver}
+          onDrop={(event) => onDrop(side, event)}
+          onClick={() => onSideChange(side)}
+          aria-label={t("moveFileViewer", {
+            side: t(side === "left" ? "leftSide" : "rightSide"),
+          })}
+          title={t("moveFileViewer", {
+            side: t(side === "left" ? "leftSide" : "rightSide"),
+          })}
+        >
+          <GripVerticalIcon className="size-5" aria-hidden="true" />
+          <span>{t("dropFileViewerHere")}</span>
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -749,6 +905,21 @@ export function ReviewModal({
     setFileViewerDragging(false);
   }
 
+  function handleFileViewerPointerDragStart() {
+    setFileViewerDragging(true);
+  }
+
+  /** Pointer-fallback counterpart to handleFileViewerDrop — hit-tests the
+   *  release point instead of relying on dataTransfer/dragover. */
+  function handleFileViewerPointerDragEnd(clientX: number, clientY: number) {
+    setFileViewerDragging(false);
+    const target = document.elementFromPoint(clientX, clientY);
+    const zone =
+      target instanceof Element ? target.closest<HTMLElement>("[data-file-viewer-dropzone]") : null;
+    const side = zone?.dataset.fileViewerDropzone;
+    if (side === "left" || side === "right") changeFileViewerSide(side);
+  }
+
   useEffect(() => {
     if (!reviewDirty || !canReview) return;
     const handle = window.setTimeout(async () => {
@@ -766,6 +937,28 @@ export function ReviewModal({
     }, 700);
     return () => window.clearTimeout(handle);
   }, [response.id, myScore, myNotes, reviewDirty, canReview]);
+
+  // Mirrors score/notes/save-state to a same-origin popup opened via
+  // openReviewWindow (H: docked review composer popup). The popup does its
+  // own autosave independently — this tab only reflects what it broadcasts,
+  // never re-saves on its behalf, so the two never race to PUT the same row.
+  useReviewSync(
+    applicationId,
+    {
+      responseId: response.id,
+      score: myScore,
+      notes: myNotes,
+      saveState: reviewSaveState,
+      status: modalStatus,
+    },
+    (message: ReviewSyncMessage) => {
+      if (message.responseId !== response.id) return;
+      if (reviewDirty) return;
+      setMyScore(message.score);
+      setMyNotes(message.notes);
+      setReviewSaveState(message.saveState);
+    },
+  );
 
   function startEdit() {
     setEditValues({ ...response.responses });
@@ -828,20 +1021,51 @@ export function ReviewModal({
   const activeFile = Math.min(activeFileIndex, Math.max(files.length - 1, 0));
   const canRevealReviews = canManage;
   const showDecisionMenu = hasDecisionActions(canDecide);
-  const showEditAction = canEdit && Boolean(template?.length) && !editing;
+  const showEditAction = canEdit && Boolean(template?.length);
   const showExportAction = canExport && answerFields.length > 0;
 
-  function openReviewWindow() {
-    const popupWorkspace = workspaceForResponseStatus(st);
-    const query = new URLSearchParams({
-      tab: popupWorkspace,
-      response: String(response.id),
-    });
+  // Opens *only* the review composer (score + notes), not the application
+  // shell — the popup is a companion to this modal, not a second copy of it.
+  // Real-time sync back to this tab is over BroadcastChannel (useReviewSync
+  // below); both windows load the same minimal route so they share one
+  // implementation of the composer instead of two.
+  async function openReviewWindow() {
+    const url = new URL(
+      `/review-popup/${response.id}?applicationId=${applicationId}`,
+      window.location.origin,
+    ).toString();
+    // Document Picture-in-Picture is the only web-platform API that lets a
+    // page's own window be kept above other windows by the browser/OS — a
+    // real guarantee, not a request a page can spoof. It's Chromium-only and
+    // requires a user gesture, so this is a best-effort upgrade: browsers
+    // without it (Firefox, Safari) fall through to an ordinary popup, which
+    // has no scripted way to stay on top — no API lets a web page force
+    // that, by design, for the user's own security.
+    if (window.documentPictureInPicture) {
+      try {
+        const pipWindow = await window.documentPictureInPicture.requestWindow({
+          width: 420,
+          height: 620,
+        });
+        const iframe = pipWindow.document.createElement("iframe");
+        iframe.src = url;
+        iframe.style.cssText = "position:fixed;inset:0;width:100%;height:100%;border:0;";
+        pipWindow.document.body.style.margin = "0";
+        pipWindow.document.title = response.name ?? response.email;
+        pipWindow.document.body.append(iframe);
+        return;
+      } catch {
+        // Denied (no user gesture in this call stack, one already open,
+        // etc.) — fall through to the plain popup below.
+      }
+    }
     const popup = window.open(
-      `/applications/${applicationId}?${query.toString()}`,
-      "hackos-review-window",
-      "popup=yes,width=1200,height=900,resizable=yes,scrollbars=yes",
+      url,
+      `hackos-review-window-${response.id}`,
+      "popup=yes,width=420,height=620,resizable=yes,scrollbars=yes",
     );
+    // A single, immediate focus on open — not a repeated/refocus loop, which
+    // would steal focus back from whatever the reviewer clicks into next.
     if (popup) popup.focus();
     else toast.error(t("reviewWindowBlocked"));
   }
@@ -937,17 +1161,29 @@ export function ReviewModal({
                 onAccepted={showApplicantAcceptedToast}
               />
             )}
-            {showEditAction && (
-              <button
-                type="button"
-                className={dialogIconButtonClass}
-                onClick={startEdit}
-                aria-label={t("editAnswers")}
-                title={t("editAnswers")}
-              >
-                <PencilIcon />
-              </button>
-            )}
+            {showEditAction &&
+              (editing ? (
+                <button
+                  type="button"
+                  className={dialogIconButtonClass}
+                  disabled={savingEdit}
+                  onClick={() => void saveEdit()}
+                  aria-label={t("saveAnswers")}
+                  title={t("saveAnswers")}
+                >
+                  {savingEdit ? <Spinner /> : <SaveIcon />}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={dialogIconButtonClass}
+                  onClick={startEdit}
+                  aria-label={t("editAnswers")}
+                  title={t("editAnswers")}
+                >
+                  <PencilIcon />
+                </button>
+              ))}
             {showExportAction && (
               <button
                 type="button"
@@ -966,15 +1202,25 @@ export function ReviewModal({
       }
       floatingContent={
         <>
+          {files.length > 0 && fileViewerDragging && (
+            <FileViewerDropZones
+              onDragOver={handleFileViewerDragOver}
+              onDrop={handleFileViewerDrop}
+              onSideChange={changeFileViewerSide}
+            />
+          )}
           {files.length > 0 && (
             <ApplicationFileViewerPanel
               files={files}
               activeIndex={activeFile}
               side={fileViewerSide}
+              dragging={fileViewerDragging}
               onIndexChange={setActiveFileIndex}
               onSideChange={changeFileViewerSide}
               onDragStart={handleFileViewerDragStart}
               onDragEnd={handleFileViewerDragEnd}
+              onPointerDragStart={handleFileViewerPointerDragStart}
+              onPointerDragEnd={handleFileViewerPointerDragEnd}
               onDragOver={handleFileViewerDragOver}
               onDrop={(event) =>
                 handleFileViewerDrop(fileViewerSide === "left" ? "right" : "left", event)
@@ -994,6 +1240,7 @@ export function ReviewModal({
         className={cn("space-y-4", fileViewerDragging && "rounded-xl ring-1 ring-primary/30")}
         aria-label={t("applicationFilesLabel")}
         tabIndex={-1}
+        data-file-viewer-dropzone={fileViewerSide === "left" ? "right" : "left"}
         onDragOver={handleFileViewerDragOver}
         onDrop={(event) =>
           handleFileViewerDrop(fileViewerSide === "left" ? "right" : "left", event)
@@ -1026,6 +1273,7 @@ export function ReviewModal({
                     "hidden min-w-0 space-y-4 lg:block lg:max-h-[68vh] lg:overflow-y-auto lg:pr-1",
                     fileViewerSide === "right" && "lg:order-2",
                   )}
+                  data-file-viewer-dropzone={fileViewerSide}
                   onDragOver={handleFileViewerDragOver}
                   onDrop={(event) => handleFileViewerDrop(fileViewerSide, event)}
                   aria-label={t("applicationFilesLabel")}
@@ -1038,6 +1286,8 @@ export function ReviewModal({
                     onSideChange={changeFileViewerSide}
                     onDragStart={handleFileViewerDragStart}
                     onDragEnd={handleFileViewerDragEnd}
+                    onPointerDragStart={handleFileViewerPointerDragStart}
+                    onPointerDragEnd={handleFileViewerPointerDragEnd}
                   />
                 </section>
 
@@ -1048,6 +1298,7 @@ export function ReviewModal({
                     fileViewerDragging &&
                       "lg:rounded-xl lg:border lg:border-dashed lg:border-primary/40 lg:p-3",
                   )}
+                  data-file-viewer-dropzone={fileViewerSide === "left" ? "right" : "left"}
                   onDragOver={handleFileViewerDragOver}
                   onDrop={(event) =>
                     handleFileViewerDrop(fileViewerSide === "left" ? "right" : "left", event)
@@ -1374,7 +1625,7 @@ function ReviewBubble({ review }: { review: ReviewEntry }) {
   );
 }
 
-interface ReviewComposerProps {
+export interface ReviewComposerProps {
   responseId: number;
   myScore: number | null;
   onScoreChange: (v: number | null) => void;
@@ -1383,9 +1634,10 @@ interface ReviewComposerProps {
   reviewSaveState: SaveState;
   onOpenReviewWindow?: () => void;
   dockSide?: FileViewerSide;
+  dragHandle?: React.ReactNode;
 }
 
-function ReviewComposerFields({
+export function ReviewComposerFields({
   responseId,
   myScore,
   onScoreChange,
@@ -1436,7 +1688,11 @@ function ReviewComposerFields({
   );
 }
 
-function ReviewPanelCard({ className, ...props }: ReviewComposerProps & { className?: string }) {
+export function ReviewPanelCard({
+  className,
+  dragHandle,
+  ...props
+}: ReviewComposerProps & { className?: string }) {
   const { t } = useLocale();
   return (
     <div
@@ -1446,6 +1702,7 @@ function ReviewPanelCard({ className, ...props }: ReviewComposerProps & { classN
       )}
     >
       <div className="flex items-center gap-1">
+        {dragHandle}
         <p className="min-w-0 flex-1 text-sm font-medium">{t("yourReview")}</p>
         {props.onOpenReviewWindow && (
           <button
@@ -1465,22 +1722,163 @@ function ReviewPanelCard({ className, ...props }: ReviewComposerProps & { classN
 }
 
 function FloatingReviewPanel(props: ReviewComposerProps) {
-  const panelStyle = {
-    bottom: "1rem",
-    right:
-      props.dockSide === "left"
-        ? "max(1rem, calc(50% - 42.5rem))"
-        : props.dockSide === "right"
-          ? "max(1rem, calc(50% - 11.5rem))"
-          : "max(1rem, calc(50% - 27rem))",
-  };
+  const { t } = useLocale();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startLeft: number;
+    startTop: number;
+  } | null>(null);
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
+
+  const positionStorageKey = `${FLOATING_REVIEW_POSITION_STORAGE_KEY}.${props.responseId}`;
+
+  const clampPosition = useCallback((left: number, top: number) => {
+    const rect = panelRef.current?.getBoundingClientRect();
+    const margin = 16;
+    const width = rect?.width ?? 384;
+    const height = rect?.height ?? 300;
+    return {
+      left: Math.min(Math.max(margin, left), Math.max(margin, window.innerWidth - width - margin)),
+      top: Math.min(Math.max(margin, top), Math.max(margin, window.innerHeight - height - margin)),
+    };
+  }, []);
+
+  useEffect(() => {
+    let saved: { left: number; top: number } | null = null;
+    try {
+      const raw = window.localStorage.getItem(positionStorageKey);
+      if (raw) {
+        const value: unknown = JSON.parse(raw);
+        if (
+          typeof value === "object" &&
+          value !== null &&
+          "left" in value &&
+          "top" in value &&
+          typeof value.left === "number" &&
+          typeof value.top === "number"
+        ) {
+          saved = { left: value.left, top: value.top };
+        }
+      }
+    } catch {
+      // A blocked localStorage is not a reason to make the review unusable.
+    }
+    setPosition(saved ? clampPosition(saved.left, saved.top) : null);
+  }, [positionStorageKey, clampPosition]);
+
+  useEffect(() => {
+    if (!position) return;
+    try {
+      window.localStorage.setItem(positionStorageKey, JSON.stringify(position));
+    } catch {
+      // Position persistence is best-effort.
+    }
+  }, [position, positionStorageKey]);
+
+  useEffect(() => {
+    function handleResize() {
+      setPosition((current) => (current ? clampPosition(current.left, current.top) : current));
+    }
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [clampPosition]);
+
+  function startDragging(event: ReactPointerEvent<HTMLButtonElement>) {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const rect = panel.getBoundingClientRect();
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startLeft: rect.left,
+      startTop: rect.top,
+    };
+    setPosition({ left: rect.left, top: rect.top });
+  }
+
+  function moveDragging(event: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setPosition(
+      clampPosition(
+        drag.startLeft + event.clientX - drag.startX,
+        drag.startTop + event.clientY - drag.startY,
+      ),
+    );
+  }
+
+  function stopDragging(event: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.stopPropagation();
+    dragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  function moveWithKeyboard(event: React.KeyboardEvent<HTMLButtonElement>) {
+    const step = event.shiftKey ? 48 : 24;
+    const deltas: Record<string, [number, number]> = {
+      ArrowLeft: [-step, 0],
+      ArrowRight: [step, 0],
+      ArrowUp: [0, -step],
+      ArrowDown: [0, step],
+    };
+    const delta = deltas[event.key];
+    if (!delta) return;
+    const rect = panelRef.current?.getBoundingClientRect();
+    const current = position ?? { left: rect?.left ?? 16, top: rect?.top ?? 16 };
+    event.preventDefault();
+    event.stopPropagation();
+    setPosition(clampPosition(current.left + delta[0], current.top + delta[1]));
+  }
+
+  const panelStyle: CSSProperties = position
+    ? { left: position.left, top: position.top }
+    : {
+        bottom: "1rem",
+        right:
+          props.dockSide === "left"
+            ? "max(1rem, calc(50% - 42.5rem))"
+            : props.dockSide === "right"
+              ? "max(1rem, calc(50% - 11.5rem))"
+              : "max(1rem, calc(50% - 27rem))",
+      };
+
+  const dragHandle = (
+    <button
+      type="button"
+      className={cn(dialogIconButtonClass, "cursor-grab touch-none active:cursor-grabbing")}
+      onPointerDown={startDragging}
+      onPointerMove={moveDragging}
+      onPointerUp={stopDragging}
+      onPointerCancel={stopDragging}
+      onKeyDown={moveWithKeyboard}
+      aria-label={t("moveReviewPanel")}
+      title={t("moveReviewPanel")}
+    >
+      <GripVerticalIcon />
+    </button>
+  );
+
   return (
     <div
+      ref={panelRef}
       data-dialog-floating
-      className="fixed z-[70] w-[min(24rem,calc(100vw-2rem))] rounded-xl"
+      className="pointer-events-auto fixed z-[70] w-[min(24rem,calc(100vw-2rem))] rounded-xl"
       style={panelStyle}
     >
-      <ReviewPanelCard {...props} />
+      <ReviewPanelCard {...props} dragHandle={dragHandle} />
     </div>
   );
 }
@@ -1497,12 +1895,6 @@ interface RunOptions {
 }
 
 type RunAction = (label: string, fn: () => Promise<unknown>, options?: RunOptions) => Promise<void>;
-
-function workspaceForResponseStatus(status: string): ApplicationWorkspace {
-  if (status === "review") return "review";
-  if (status === "accepted_internal" || status === "rejected_internal") return "outbox";
-  return "sent";
-}
 
 function hasDecisionActions(canDecide: boolean) {
   // The gavel is deliberately persistent. The available items change with

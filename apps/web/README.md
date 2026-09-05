@@ -70,6 +70,9 @@ src/
       challenges, enterprises, queue, judging, logistics, announcements,
       timetable, tv, users, permissions, audit, settings/event) — one
       directory per module, gated by capability
+    (popup)/           standalone windows opened via `window.open`/Document
+      Picture-in-Picture out of the app shell (review-popup) — AuthGuard, but
+      no sidebar/top bar; the window itself is the whole surface
     layout.tsx         root: fonts + <Providers>
     page.tsx           routes to /timetable or /login by session
   components/
