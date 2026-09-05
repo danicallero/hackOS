@@ -465,13 +465,13 @@ function ApplicationFileViewerPanel({
     <aside
       data-dialog-floating
       className={cn(
-        "pointer-events-auto fixed z-[60] hidden w-[min(30rem,calc(100vw-2rem))] 2xl:grid 2xl:gap-4",
+        "pointer-events-auto fixed z-[60] hidden h-[min(90vh,54rem)] w-[min(30rem,calc(100vw-2rem))] 2xl:grid 2xl:gap-4",
         reviewContent ? "2xl:grid-rows-[minmax(0,1fr)_auto]" : "2xl:grid-rows-[minmax(0,1fr)]",
       )}
       style={{
         ...(side === "left" ? { right: panelOffset } : { left: panelOffset }),
-        top: "max(1rem, calc(50% - 27rem))",
-        bottom: "max(1rem, calc(50% - 27rem))",
+        top: "50%",
+        transform: "translateY(-50%)",
       }}
       onDragOver={onDragOver}
       onDrop={onDrop}
@@ -513,19 +513,30 @@ function StatusPillsRow({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-wrap items-center justify-between gap-2", className)}>
+    <div
+      className={cn(
+        "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between",
+        className,
+      )}
+    >
       <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-control border border-border bg-muted/20 px-1.5 py-1">
-        <p className="text-muted-foreground px-1 text-xs whitespace-nowrap">
+        <p className="text-muted-foreground min-w-0 flex-1 px-1 text-xs">
           avg {fmtScore(response.avg_score)}/5 · {response.review_count}{" "}
           {response.review_count === 1 ? t("reviewWord") : t("reviewsWord")}
         </p>
         {canRevealReviews && response.review_count > 0 && (
-          <Button type="button" size="xs" variant="ghost" className="px-2" onClick={onShowReviews}>
+          <Button
+            type="button"
+            size="xs"
+            variant="ghost"
+            className="shrink-0 px-2"
+            onClick={onShowReviews}
+          >
             {t("viewReviews", { count: response.review_count })}
           </Button>
         )}
       </div>
-      <div className="ms-auto flex flex-wrap items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2 sm:ms-auto">
         <StatusBadge tone={statusTone(st)}>{applicationStatusLabel(st, t)}</StatusBadge>
         {reviewedByMe && (
           <StatusBadge tone="success" dot={false}>
@@ -879,7 +890,7 @@ export function ReviewModal({
       onOpenChange={(o) => !o && onClose()}
       size="xl"
       className={cn(
-        "max-h-[90vh] sm:max-w-4xl 2xl:transition-[left]",
+        "max-h-[90vh] sm:max-w-4xl 2xl:h-[min(90vh,54rem)] 2xl:transition-[left]",
         files.length > 0 &&
           (fileViewerSide === "left"
             ? "2xl:left-[calc(50%+15.5rem)]"
@@ -1399,7 +1410,8 @@ function ReviewComposerFields({
           onChange={onScoreChange}
           min={0}
           max={5}
-          className="flex-wrap overflow-visible"
+          clearSize="xs"
+          className="flex-wrap gap-1 overflow-visible"
         />
       </div>
       <div className="space-y-1.5">

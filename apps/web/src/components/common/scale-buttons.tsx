@@ -15,6 +15,7 @@ export function ScaleButtons({
   disabled,
   min = 0,
   max = 10,
+  clearSize,
   className,
 }: {
   value: number | null;
@@ -22,6 +23,7 @@ export function ScaleButtons({
   disabled?: boolean;
   min?: number;
   max?: number;
+  clearSize?: "xs" | "sm";
   className?: string;
 }) {
   const { t } = useLocale();
@@ -44,7 +46,7 @@ export function ScaleButtons({
       {value !== null && (
         <Button
           type="button"
-          size="sm"
+          size={clearSize ?? "sm"}
           variant="ghost"
           disabled={disabled}
           onClick={() => onChange(null)}

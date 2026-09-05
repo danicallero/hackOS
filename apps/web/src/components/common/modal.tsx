@@ -62,9 +62,9 @@ export function Modal({
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className={cn(SIZES[size], className)} floatingContent={floatingContent}>
         <DialogHeader
-          className={cn("relative shrink-0 pr-10", headerActions && "max-sm:pb-6 sm:pr-40")}
+          className={cn("relative shrink-0 pr-10", headerActions && "max-sm:text-left sm:pr-40")}
         >
-          <div className={cn("min-w-0 space-y-1.5", headerActions && "max-sm:pr-28")}>
+          <div className="min-w-0 space-y-1.5">
             <DialogTitle className="flex min-w-0 items-center gap-2">
               {Icon && <Icon className="text-muted-foreground size-5" />}
               <span className="min-w-0 break-words">{title}</span>
@@ -76,7 +76,7 @@ export function Modal({
             )}
           </div>
           {headerActions && (
-            <div className="mt-3 flex max-w-full flex-wrap items-center justify-end gap-1 max-sm:absolute max-sm:-top-3 max-sm:right-10 max-sm:w-28 max-sm:max-w-none max-sm:mt-0 sm:absolute sm:-top-3 sm:right-10 sm:max-w-[calc(100%-2.5rem)]">
+            <div className="mt-3 flex max-w-full flex-wrap items-center justify-end gap-1 max-sm:mr-8 sm:absolute sm:-top-3 sm:right-10 sm:max-w-[calc(100%-2.5rem)]">
               {headerActions}
             </div>
           )}
