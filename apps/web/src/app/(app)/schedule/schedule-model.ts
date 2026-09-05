@@ -1,4 +1,5 @@
 import {
+  type ActivityKind,
   type ActivityKindIconName,
   activityKind,
   activityKindLabelKey,
@@ -450,4 +451,48 @@ export function groupByDay(
 export function compareScheduleItems(a: PublicScheduleItem, b: PublicScheduleItem): number {
   const startDelta = new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
   return startDelta || a.id - b.id;
+}
+
+/**
+ * The Manage Schedule table's combined search/audience/kind filter,
+ * chronologically sorted (H59). Extracted from the page component so the
+ * filtering rule is independently testable rather than only exercisable
+ * through the full table render.
+ */
+export function filterScheduleItems(
+  items: PublicScheduleItem[],
+  {
+    query,
+    audienceFilter,
+    staffOnlyFilter,
+    kindFilter,
+  }: {
+    query: string;
+    audienceFilter: ReadonlySet<ScheduleAudience>;
+    staffOnlyFilter: boolean;
+    kindFilter: ReadonlySet<ActivityKind>;
+  },
+): PublicScheduleItem[] {
+  const q = query.trim().toLowerCase();
+  let list = q
+    ? items.filter((item) =>
+        `${item.title} ${item.location ?? ""} ${ownerNames(item)}`.toLowerCase().includes(q),
+      )
+    : items;
+  if (audienceFilter.size > 0 || staffOnlyFilter) {
+    list = list.filter((item) => {
+      const audiences = item.audiences ?? [];
+      if (audiences.length === 0) return staffOnlyFilter;
+      return audiences.some((a) => audienceFilter.has(a));
+    });
+  }
+  if (kindFilter.size > 0) {
+    list = list.filter((item) =>
+      kindFilter.has(toActivityKind(item.type) ?? DEFAULT_ACTIVITY_KIND),
+    );
+  }
+  // groupByDay merges same-day items only when they're adjacent in this
+  // list — sort chronologically first so every day forms exactly one
+  // contiguous (and correctly ordered) group.
+  return [...list].sort(compareScheduleItems);
 }

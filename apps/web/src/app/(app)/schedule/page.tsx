@@ -20,11 +20,7 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import {
-  type ActivityKind,
-  DEFAULT_ACTIVITY_KIND,
-  toActivityKind,
-} from "@hackos/shared/activity-kinds";
+import type { ActivityKind } from "@hackos/shared/activity-kinds";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { CalendarClockIcon, EyeIcon, EyeOffIcon, PlusIcon, SearchIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
@@ -68,11 +64,10 @@ import {
   scheduleItemToTranslations,
 } from "./schedule-form-modal";
 import {
-  compareScheduleItems,
   type DayGroup,
   draftWindowBetween,
+  filterScheduleItems,
   groupByDay,
-  ownerNames,
   type ScheduleDraft,
   scheduleDayKey,
   scheduleDayLabel,
@@ -211,31 +206,13 @@ export default function SchedulePage() {
     if (targetDate) void moveItemToDate(item, targetDate);
   }
 
-  const filtered = useMemo(() => {
-    if (!items) return [];
-    const q = query.trim().toLowerCase();
-    let list = q
-      ? items.filter((item) =>
-          `${item.title} ${item.location ?? ""} ${ownerNames(item)}`.toLowerCase().includes(q),
-        )
-      : items;
-    if (audienceFilter.size > 0 || staffOnlyFilter) {
-      list = list.filter((item) => {
-        const audiences = item.audiences ?? [];
-        if (audiences.length === 0) return staffOnlyFilter;
-        return audiences.some((a) => audienceFilter.has(a));
-      });
-    }
-    if (kindFilter.size > 0) {
-      list = list.filter((item) =>
-        kindFilter.has(toActivityKind(item.type) ?? DEFAULT_ACTIVITY_KIND),
-      );
-    }
-    // groupByDay merges same-day items only when they're adjacent in this
-    // list — sort chronologically first so every day forms exactly one
-    // contiguous (and correctly ordered) group.
-    return [...list].sort(compareScheduleItems);
-  }, [items, query, audienceFilter, staffOnlyFilter, kindFilter]);
+  const filtered = useMemo(
+    () =>
+      items
+        ? filterScheduleItems(items, { query, audienceFilter, staffOnlyFilter, kindFilter })
+        : [],
+    [items, query, audienceFilter, staffOnlyFilter, kindFilter],
+  );
 
   const groups = useMemo(() => groupByDay(filtered, language), [filtered, language]);
   const visibleColumns = tableConfig.order.filter(
