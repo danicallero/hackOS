@@ -19,6 +19,7 @@ import {
   Maximize2Icon,
   Minimize2Icon,
   PencilIcon,
+  SaveIcon,
   SendIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -285,6 +286,10 @@ function applicationFiles(
   });
 }
 
+/** Minimum pointer travel before the grip's fallback drag engages — small
+ *  enough to feel immediate, large enough not to swallow a plain click. */
+const GRIP_DRAG_THRESHOLD_PX = 6;
+
 function ApplicationFileViewer({
   files,
   activeIndex,
@@ -293,6 +298,8 @@ function ApplicationFileViewer({
   onSideChange,
   onDragStart,
   onDragEnd,
+  onPointerDragStart,
+  onPointerDragEnd,
   className,
 }: {
   files: ApplicationFile[];
@@ -302,11 +309,26 @@ function ApplicationFileViewer({
   onSideChange: (side: FileViewerSide) => void;
   onDragStart: (event: DragEvent<HTMLButtonElement>) => void;
   onDragEnd: () => void;
+  /** Pointer-based fallback for browsers/contexts where native HTML5 drag
+   *  doesn't engage reliably on the detached (floating) panel — mirrors
+   *  onDragStart/onDrop but driven by pointer capture instead of dataTransfer. */
+  onPointerDragStart?: () => void;
+  onPointerDragEnd?: (clientX: number, clientY: number) => void;
   className?: string;
 }) {
   const { t } = useLocale();
   const previewRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const gripDragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    native: boolean;
+    active: boolean;
+  } | null>(null);
+  // A completed pointer-fallback drag still fires a trailing click on the
+  // same button — suppress just that one so it doesn't also toggle the side.
+  const suppressGripClickRef = useRef(false);
 
   useEffect(() => {
     function syncFullscreen() {
@@ -331,6 +353,53 @@ function ApplicationFileViewer({
     } catch {
       // Fullscreen can be denied by the browser or an embedding context.
     }
+  }
+
+  // Native dragstart takes over the input stream (the browser fires
+  // pointercancel for the pointer that started it), so mark the in-flight
+  // pointer sequence as native and let the real onDragStart run — no double
+  // side-change from both paths firing for the same gesture.
+  function handleGripDragStart(event: DragEvent<HTMLButtonElement>) {
+    if (gripDragRef.current) gripDragRef.current.native = true;
+    onDragStart(event);
+  }
+
+  function handleGripPointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
+    gripDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      native: false,
+      active: false,
+    };
+  }
+
+  function handleGripPointerMove(event: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = gripDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId || drag.native || drag.active) return;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (Math.hypot(dx, dy) < GRIP_DRAG_THRESHOLD_PX) return;
+    drag.active = true;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    onPointerDragStart?.();
+  }
+
+  function handleGripPointerUp(event: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = gripDragRef.current;
+    gripDragRef.current = null;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (drag.active && !drag.native) {
+      suppressGripClickRef.current = true;
+      onPointerDragEnd?.(event.clientX, event.clientY);
+    }
+  }
+
+  function handleGripPointerCancel() {
+    gripDragRef.current = null;
   }
 
   return (
@@ -371,10 +440,20 @@ function ApplicationFileViewer({
             size="xs"
             variant="ghost"
             draggable
-            onDragStart={onDragStart}
+            onDragStart={handleGripDragStart}
             onDragEnd={onDragEnd}
-            onClick={() => onSideChange(nextSide)}
-            className="hidden cursor-grab px-1.5 active:cursor-grabbing lg:inline-flex"
+            onPointerDown={handleGripPointerDown}
+            onPointerMove={handleGripPointerMove}
+            onPointerUp={handleGripPointerUp}
+            onPointerCancel={handleGripPointerCancel}
+            onClick={() => {
+              if (suppressGripClickRef.current) {
+                suppressGripClickRef.current = false;
+                return;
+              }
+              onSideChange(nextSide);
+            }}
+            className="hidden cursor-grab touch-none px-1.5 active:cursor-grabbing lg:inline-flex"
             aria-label={t("moveFileViewer", {
               side: t(nextSide === "left" ? "leftSide" : "rightSide"),
             })}
@@ -468,6 +547,8 @@ function ApplicationFileViewerPanel({
   onSideChange,
   onDragStart,
   onDragEnd,
+  onPointerDragStart,
+  onPointerDragEnd,
   onDragOver,
   onDrop,
   reviewContent,
@@ -482,6 +563,8 @@ function ApplicationFileViewerPanel({
   onSideChange: (side: FileViewerSide) => void;
   onDragStart: (event: DragEvent<HTMLButtonElement>) => void;
   onDragEnd: () => void;
+  onPointerDragStart?: () => void;
+  onPointerDragEnd?: (clientX: number, clientY: number) => void;
   onDragOver: (event: DragEvent<HTMLElement>) => void;
   onDrop: (event: DragEvent<HTMLElement>) => void;
   reviewContent?: React.ReactNode;
@@ -491,6 +574,7 @@ function ApplicationFileViewerPanel({
   return (
     <aside
       data-dialog-floating
+      data-file-viewer-dropzone={side === "left" ? "right" : "left"}
       className={cn(
         "pointer-events-auto fixed z-[60] hidden h-[min(90vh,54rem)] w-[min(30rem,calc(100vw-2rem))] 2xl:grid 2xl:gap-4",
         reviewContent ? "2xl:grid-rows-[minmax(0,1fr)_auto]" : "2xl:grid-rows-[minmax(0,1fr)]",
@@ -503,7 +587,6 @@ function ApplicationFileViewerPanel({
       }}
       onDragOver={onDragOver}
       onDrop={onDrop}
-      onPointerDownCapture={(event) => event.stopPropagation()}
       aria-label={dragging ? t("dropFileViewerHere") : t("applicationFilesLabel")}
     >
       <div className="min-h-0 rounded-xl">
@@ -515,6 +598,8 @@ function ApplicationFileViewerPanel({
           onSideChange={onSideChange}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
+          onPointerDragStart={onPointerDragStart}
+          onPointerDragEnd={onPointerDragEnd}
           className="h-full"
         />
       </div>
@@ -539,13 +624,13 @@ function FileViewerDropZones({
     <div
       data-dialog-floating
       className="pointer-events-none fixed inset-0 z-[80] hidden items-center justify-between px-4 2xl:flex"
-      onPointerDownCapture={(event) => event.stopPropagation()}
     >
       {sides.map((side) => (
         <button
           key={side}
           type="button"
           data-dialog-floating
+          data-file-viewer-dropzone={side}
           className="border-primary/60 bg-primary/10 text-primary hover:bg-primary/20 focus-visible:ring-ring pointer-events-auto flex h-[min(54vh,32rem)] w-28 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-3 text-center text-xs font-medium shadow-lg backdrop-blur-sm transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden"
           onDragOver={onDragOver}
           onDrop={(event) => onDrop(side, event)}
@@ -820,6 +905,21 @@ export function ReviewModal({
     setFileViewerDragging(false);
   }
 
+  function handleFileViewerPointerDragStart() {
+    setFileViewerDragging(true);
+  }
+
+  /** Pointer-fallback counterpart to handleFileViewerDrop — hit-tests the
+   *  release point instead of relying on dataTransfer/dragover. */
+  function handleFileViewerPointerDragEnd(clientX: number, clientY: number) {
+    setFileViewerDragging(false);
+    const target = document.elementFromPoint(clientX, clientY);
+    const zone =
+      target instanceof Element ? target.closest<HTMLElement>("[data-file-viewer-dropzone]") : null;
+    const side = zone?.dataset.fileViewerDropzone;
+    if (side === "left" || side === "right") changeFileViewerSide(side);
+  }
+
   useEffect(() => {
     if (!reviewDirty || !canReview) return;
     const handle = window.setTimeout(async () => {
@@ -921,7 +1021,7 @@ export function ReviewModal({
   const activeFile = Math.min(activeFileIndex, Math.max(files.length - 1, 0));
   const canRevealReviews = canManage;
   const showDecisionMenu = hasDecisionActions(canDecide);
-  const showEditAction = canEdit && Boolean(template?.length) && !editing;
+  const showEditAction = canEdit && Boolean(template?.length);
   const showExportAction = canExport && answerFields.length > 0;
 
   // Opens *only* the review composer (score + notes), not the application
@@ -1061,17 +1161,29 @@ export function ReviewModal({
                 onAccepted={showApplicantAcceptedToast}
               />
             )}
-            {showEditAction && (
-              <button
-                type="button"
-                className={dialogIconButtonClass}
-                onClick={startEdit}
-                aria-label={t("editAnswers")}
-                title={t("editAnswers")}
-              >
-                <PencilIcon />
-              </button>
-            )}
+            {showEditAction &&
+              (editing ? (
+                <button
+                  type="button"
+                  className={dialogIconButtonClass}
+                  disabled={savingEdit}
+                  onClick={() => void saveEdit()}
+                  aria-label={t("saveAnswers")}
+                  title={t("saveAnswers")}
+                >
+                  {savingEdit ? <Spinner /> : <SaveIcon />}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={dialogIconButtonClass}
+                  onClick={startEdit}
+                  aria-label={t("editAnswers")}
+                  title={t("editAnswers")}
+                >
+                  <PencilIcon />
+                </button>
+              ))}
             {showExportAction && (
               <button
                 type="button"
@@ -1107,6 +1219,8 @@ export function ReviewModal({
               onSideChange={changeFileViewerSide}
               onDragStart={handleFileViewerDragStart}
               onDragEnd={handleFileViewerDragEnd}
+              onPointerDragStart={handleFileViewerPointerDragStart}
+              onPointerDragEnd={handleFileViewerPointerDragEnd}
               onDragOver={handleFileViewerDragOver}
               onDrop={(event) =>
                 handleFileViewerDrop(fileViewerSide === "left" ? "right" : "left", event)
@@ -1126,6 +1240,7 @@ export function ReviewModal({
         className={cn("space-y-4", fileViewerDragging && "rounded-xl ring-1 ring-primary/30")}
         aria-label={t("applicationFilesLabel")}
         tabIndex={-1}
+        data-file-viewer-dropzone={fileViewerSide === "left" ? "right" : "left"}
         onDragOver={handleFileViewerDragOver}
         onDrop={(event) =>
           handleFileViewerDrop(fileViewerSide === "left" ? "right" : "left", event)
@@ -1158,6 +1273,7 @@ export function ReviewModal({
                     "hidden min-w-0 space-y-4 lg:block lg:max-h-[68vh] lg:overflow-y-auto lg:pr-1",
                     fileViewerSide === "right" && "lg:order-2",
                   )}
+                  data-file-viewer-dropzone={fileViewerSide}
                   onDragOver={handleFileViewerDragOver}
                   onDrop={(event) => handleFileViewerDrop(fileViewerSide, event)}
                   aria-label={t("applicationFilesLabel")}
@@ -1170,6 +1286,8 @@ export function ReviewModal({
                     onSideChange={changeFileViewerSide}
                     onDragStart={handleFileViewerDragStart}
                     onDragEnd={handleFileViewerDragEnd}
+                    onPointerDragStart={handleFileViewerPointerDragStart}
+                    onPointerDragEnd={handleFileViewerPointerDragEnd}
                   />
                 </section>
 
@@ -1180,6 +1298,7 @@ export function ReviewModal({
                     fileViewerDragging &&
                       "lg:rounded-xl lg:border lg:border-dashed lg:border-primary/40 lg:p-3",
                   )}
+                  data-file-viewer-dropzone={fileViewerSide === "left" ? "right" : "left"}
                   onDragOver={handleFileViewerDragOver}
                   onDrop={(event) =>
                     handleFileViewerDrop(fileViewerSide === "left" ? "right" : "left", event)
@@ -1758,7 +1877,6 @@ function FloatingReviewPanel(props: ReviewComposerProps) {
       data-dialog-floating
       className="pointer-events-auto fixed z-[70] w-[min(24rem,calc(100vw-2rem))] rounded-xl"
       style={panelStyle}
-      onPointerDownCapture={(event) => event.stopPropagation()}
     >
       <ReviewPanelCard {...props} dragHandle={dragHandle} />
     </div>

@@ -62,7 +62,7 @@ export function Modal({
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className={cn(SIZES[size], className)} floatingContent={floatingContent}>
         <DialogHeader
-          className={cn("relative shrink-0 pr-10", headerActions && "max-sm:text-left sm:pr-40")}
+          className={cn("shrink-0 pr-10", headerActions && "max-sm:text-left sm:pr-48")}
         >
           <div className="min-w-0 space-y-1.5">
             <DialogTitle className="flex min-w-0 items-center gap-2">
@@ -76,7 +76,12 @@ export function Modal({
             )}
           </div>
           {headerActions && (
-            <div className="mt-3 flex max-w-full flex-wrap items-center justify-end gap-1 max-sm:mr-8 sm:absolute sm:-top-3 sm:right-10 sm:max-w-[calc(100%-2.5rem)]">
+            // Positioned against DialogContent (the nearest `position` ancestor,
+            // since DialogHeader itself no longer claims `relative`) so this row
+            // lines up with the dialog's own close button (`top-3 right-3`,
+            // same `--control-height-compact` sizing) instead of drifting from
+            // it — the close control always stays the extreme top-right item.
+            <div className="mt-3 flex max-w-full flex-wrap items-center justify-end gap-1 max-sm:mr-8 sm:absolute sm:top-0 sm:right-12 sm:max-w-[calc(100%-3.75rem)]">
               {headerActions}
             </div>
           )}
