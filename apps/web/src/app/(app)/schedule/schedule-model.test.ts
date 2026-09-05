@@ -5,6 +5,7 @@ import {
   DRAFT_DEFAULT_MINUTES,
   draftWindowBetween,
   editingNavigationDirection,
+  filterScheduleItems,
   groupByDay,
   MAX_INLINE_ROLLED_HOURS,
   ownerNames,
@@ -406,5 +407,76 @@ describe("ownerNames", () => {
   it("is empty when an item has no owners", () => {
     expect(ownerNames(item({ owners: [] }))).toBe("");
     expect(ownerNames(item({ owners: undefined }))).toBe("");
+  });
+});
+
+describe("filterScheduleItems", () => {
+  const noFilter = { query: "", audienceFilter: new Set<never>(), staffOnlyFilter: false };
+
+  it("with no filters, returns every item sorted chronologically", () => {
+    const a = item({ id: 1, startsAt: "2026-07-22T14:00:00.000Z" });
+    const b = item({ id: 2, startsAt: "2026-07-22T13:00:00.000Z" });
+    expect(
+      filterScheduleItems([a, b], { ...noFilter, kindFilter: new Set() }).map((i) => i.id),
+    ).toEqual([2, 1]);
+  });
+
+  it("matches the search query against title, location, and owner names", () => {
+    const items = [
+      item({ id: 1, title: "Opening ceremony", location: "Main hall" }),
+      item({ id: 2, title: "Lunch", location: "Cafeteria" }),
+    ];
+    expect(
+      filterScheduleItems(items, { ...noFilter, query: "cafeteria", kindFilter: new Set() }).map(
+        (i) => i.id,
+      ),
+    ).toEqual([2]);
+  });
+
+  it("staff-only items match only when staffOnlyFilter is set, ignoring audienceFilter", () => {
+    const staffOnly = item({ id: 1, audiences: [] });
+    expect(
+      filterScheduleItems([staffOnly], {
+        query: "",
+        audienceFilter: new Set(["participant"]),
+        staffOnlyFilter: false,
+        kindFilter: new Set(),
+      }),
+    ).toEqual([]);
+    expect(
+      filterScheduleItems([staffOnly], {
+        query: "",
+        audienceFilter: new Set(),
+        staffOnlyFilter: true,
+        kindFilter: new Set(),
+      }),
+    ).toEqual([staffOnly]);
+  });
+
+  it("filters by activity kind, falling back to the default for an untyped item", () => {
+    const talk = item({ id: 1, type: "talk" });
+    const untyped = item({ id: 2, type: null });
+    expect(
+      filterScheduleItems([talk, untyped], { ...noFilter, kindFilter: new Set(["talk"]) }),
+    ).toEqual([talk]);
+    expect(
+      filterScheduleItems([talk, untyped], { ...noFilter, kindFilter: new Set(["activity"]) }),
+    ).toEqual([untyped]);
+  });
+
+  it("combines the audience and kind filters", () => {
+    const items = [
+      item({ id: 1, type: "talk", audiences: ["mentor"] }),
+      item({ id: 2, type: "talk", audiences: ["participant"] }),
+      item({ id: 3, type: "meal", audiences: ["participant"] }),
+    ];
+    expect(
+      filterScheduleItems(items, {
+        query: "",
+        audienceFilter: new Set(["participant"]),
+        staffOnlyFilter: false,
+        kindFilter: new Set(["talk"]),
+      }).map((i) => i.id),
+    ).toEqual([2]);
   });
 });

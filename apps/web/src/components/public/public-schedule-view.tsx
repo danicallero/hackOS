@@ -1,5 +1,6 @@
 "use client";
 
+import type { ActivityKind } from "@hackos/shared/activity-kinds";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { Spinner } from "@/components/common/spinner";
@@ -10,6 +11,11 @@ import {
   ScheduleAudienceFilterPopover,
   type ViewerScheduleSegment,
 } from "@/components/public/schedule-audience-filter";
+import {
+  deriveScheduleKinds,
+  matchesScheduleKindFilter,
+  ScheduleKindFilterPopover,
+} from "@/components/public/schedule-kind-filter";
 import { ScheduleTimeline } from "@/components/public/schedule-timeline";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -43,6 +49,10 @@ export function PublicScheduleView({
   // static list, so it's always as permissive (and no more) as their real
   // access. See schedule-audience-filter.tsx.
   const [segmentFilter, setSegmentFilter] = useState<Set<ViewerScheduleSegment>>(new Set());
+  // Companion filter by activity kind (talk/workshop/meal/…) — independent of
+  // the audience filter above, so a viewer can combine "just mentor items"
+  // with "just workshops" instead of picking one axis.
+  const [kindFilter, setKindFilter] = useState<Set<ActivityKind>>(new Set());
 
   const loadEvent = useCallback(async () => {
     setEventLoading(true);
@@ -80,9 +90,15 @@ export function PublicScheduleView({
   }, [loadEvent, loadSchedule]);
 
   const availableSegments = useMemo(() => deriveViewerScheduleSegments(items ?? []), [items]);
+  const availableKinds = useMemo(() => deriveScheduleKinds(items ?? []), [items]);
   const displayedItems = useMemo(
-    () => items?.filter((item) => matchesScheduleSegmentFilter(item, segmentFilter)) ?? null,
-    [items, segmentFilter],
+    () =>
+      items?.filter(
+        (item) =>
+          matchesScheduleSegmentFilter(item, segmentFilter) &&
+          matchesScheduleKindFilter(item, kindFilter),
+      ) ?? null,
+    [items, segmentFilter, kindFilter],
   );
 
   return (
@@ -107,14 +123,24 @@ export function PublicScheduleView({
             {/* A single segment means every item the caller can see already
                 shares it (e.g. a pure participant) — nothing meaningful to
                 filter, so the control only appears once there's a real
-                choice (H59 follow-up). */}
-            {availableSegments.length > 1 && (
-              <div className="flex justify-start sm:justify-end">
-                <ScheduleAudienceFilterPopover
-                  segments={availableSegments}
-                  selected={segmentFilter}
-                  onChange={setSegmentFilter}
-                />
+                choice (H59 follow-up). Same reasoning for kinds: only one
+                kind present means there's nothing to narrow down. */}
+            {(availableSegments.length > 1 || availableKinds.length > 1) && (
+              <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
+                {availableSegments.length > 1 && (
+                  <ScheduleAudienceFilterPopover
+                    segments={availableSegments}
+                    selected={segmentFilter}
+                    onChange={setSegmentFilter}
+                  />
+                )}
+                {availableKinds.length > 1 && (
+                  <ScheduleKindFilterPopover
+                    kinds={availableKinds}
+                    selected={kindFilter}
+                    onChange={setKindFilter}
+                  />
+                )}
               </div>
             )}
             {/* showResponsible is safe unconditionally: the API only ever

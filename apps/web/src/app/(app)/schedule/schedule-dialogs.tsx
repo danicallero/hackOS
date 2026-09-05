@@ -1,6 +1,7 @@
 "use client";
 
-import { CalendarClockIcon, CalendarPlusIcon, FilterIcon } from "lucide-react";
+import { ACTIVITY_KINDS, type ActivityKind } from "@hackos/shared/activity-kinds";
+import { CalendarClockIcon, CalendarPlusIcon, FilterIcon, ListFilterIcon } from "lucide-react";
 import { useState } from "react";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { Modal } from "@/components/common/modal";
@@ -11,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import type { PublicScheduleItem, ScheduleAudience } from "@/lib/logistics";
-import { SCHEDULE_AUDIENCES, scheduleAudienceLabel } from "./schedule-model";
+import { SCHEDULE_AUDIENCES, scheduleAudienceLabel, scheduleTypeLabel } from "./schedule-model";
 
 // The Manage Schedule table's popovers and modals (H59): the audience filter,
 // the bulk publish-date popover, and the date prompt a row dropped on the
@@ -80,6 +81,64 @@ export function AudienceFilterPopover({
             size="sm"
             className="w-full"
             onClick={() => onChange(new Set(), false)}
+          >
+            {t("clearFilters")}
+          </Button>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+export function KindFilterPopover({
+  selected,
+  onChange,
+}: {
+  selected: Set<ActivityKind>;
+  onChange: (selected: Set<ActivityKind>) => void;
+}) {
+  const { t } = useLocale();
+
+  function toggleKind(kind: ActivityKind, checked: boolean) {
+    const next = new Set(selected);
+    if (checked) next.add(kind);
+    else next.delete(kind);
+    onChange(next);
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm">
+          <ListFilterIcon className="size-4" />
+          {t("kindFilterAction")}
+          {selected.size > 0 && (
+            <span className="bg-primary text-primary-foreground ml-0.5 flex size-4 items-center justify-center rounded-full text-[10px]">
+              {selected.size}
+            </span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-60 space-y-1">
+        {ACTIVITY_KINDS.map((kind) => (
+          <div key={kind} className="flex items-center gap-2 px-1 py-1">
+            <Checkbox
+              id={`kind-filter-${kind}`}
+              checked={selected.has(kind)}
+              onCheckedChange={(checked) => toggleKind(kind, checked === true)}
+            />
+            <label htmlFor={`kind-filter-${kind}`} className="flex-1 text-sm">
+              {scheduleTypeLabel(kind, t)}
+            </label>
+          </div>
+        ))}
+        {selected.size > 0 && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full"
+            onClick={() => onChange(new Set())}
           >
             {t("clearFilters")}
           </Button>
