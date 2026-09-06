@@ -26,7 +26,6 @@ import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { SaveStatus } from "@/components/common/save-status";
-import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -65,15 +64,14 @@ export default function ApplicationDetailPage() {
   // ResponsesTab/ReviewModal independently gate every actual action on canDecide.
   const canSeeDecisions = canReview || canDecide;
   const applicationTabs = [
-    "overview",
     canManage ? "builder" : null,
     canReview ? "review" : null,
     canSeeDecisions ? "outbox" : null,
     canSeeDecisions ? "sent" : null,
-  ].filter(
-    (value): value is "overview" | "builder" | "review" | "outbox" | "sent" => value !== null,
-  );
-  const defaultTab = "overview" as const;
+  ].filter((value): value is "builder" | "review" | "outbox" | "sent" => value !== null);
+  // Access to this page already requires one of manage/review/decide (nav.ts),
+  // so applicationTabs is never empty — the first gated tab is a safe default.
+  const defaultTab = applicationTabs[0] as (typeof applicationTabs)[number];
   const { tab, setTab } = useUrlTab({ values: applicationTabs, defaultValue: defaultTab });
 
   const [form, setForm] = useState<ApplicationForm | null>(null);
@@ -221,7 +219,6 @@ export default function ApplicationDetailPage() {
       {applicationTabs.length > 0 && (
         <Tabs value={tab} onValueChange={changeTab}>
           <TabBar className="w-full justify-start">
-            <TabsTrigger value="overview">{t("tabOverview")}</TabsTrigger>
             {canManage && <TabsTrigger value="builder">{t("formTabLabel")}</TabsTrigger>}
             {canReview && <TabsTrigger value="review">{t("review")}</TabsTrigger>}
             {canSeeDecisions && <TabsTrigger value="outbox">{t("workspaceOutbox")}</TabsTrigger>}
@@ -229,53 +226,6 @@ export default function ApplicationDetailPage() {
               <TabsTrigger value="sent">{t("workspaceSentDecisions")}</TabsTrigger>
             )}
           </TabBar>
-
-          <TabsContent value="overview" className="pt-2">
-            <SectionCard title={t("applicationOverviewTitle")} icon={ClipboardListIcon}>
-              {form ? (
-                <dl className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <dt className="text-muted-foreground text-sm">{t("colGrantedRole")}</dt>
-                    <dd className="mt-1 font-medium">
-                      {grantedRoleNameLabel(form.granted_role_name, t)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground text-sm">{t("statusColumn")}</dt>
-                    <dd className="mt-1 font-medium">{w?.label ?? t("unknownStatus")}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground text-sm">
-                      {t("applicationQuestionsLabel")}
-                    </dt>
-                    <dd className="mt-1 font-medium">{form.template.length}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground text-sm">
-                      {t("applicationCapacityLabel")}
-                    </dt>
-                    <dd className="mt-1 font-medium">{form.capacity ?? t("unlimited")}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground text-sm">{t("askShirtSizeLabel")}</dt>
-                    <dd className="mt-1 font-medium">
-                      {form.ask_shirt_size ? t("yesLabel") : t("noLabel")}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground text-sm">
-                      {t("askFoodIntolerancesLabel")}
-                    </dt>
-                    <dd className="mt-1 font-medium">
-                      {form.ask_food_intolerances ? t("yesLabel") : t("noLabel")}
-                    </dd>
-                  </div>
-                </dl>
-              ) : (
-                <EmptyState icon={LockIcon} title={t("metadataUnavailable")} />
-              )}
-            </SectionCard>
-          </TabsContent>
 
           {canManage && (
             <TabsContent value="builder" className="space-y-6 pt-2">
