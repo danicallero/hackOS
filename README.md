@@ -10,7 +10,7 @@ without making event day depend on perfect Wi-Fi. It is built as a Fastify API,
 a Next.js web app and an Expo mobile app, with Postgres as the source of truth
 for all three.
 
-The product is defined by the 55 user stories in
+The product is defined by the 59 user stories in
 [`plan/historias-hackos.md`](plan/historias-hackos.md). This README is the short
 tour and the quickest way to get a development environment running.
 
@@ -155,7 +155,7 @@ In production, run the same commands from a shell on the API container/host
 (`node scripts/grant-superadmin.mjs --email ...`, `node
 scripts/list-superadmins.mjs`, `node scripts/revoke-superadmin.mjs --email
 ...` — no `tsx`/`pnpm` needed for the `.mjs` scripts) with `DATABASE_URL` set
-to the production database. See `docs/access-control-audit-plan.md`'s
+to the production database. See `docs/audits/access-control-audit-plan.md`'s
 "`system:superadmin` is CLI-only" section for the full design rationale.
 
 ### Start the mobile app
@@ -295,4 +295,4 @@ variable checklist.
 The mobile implementation and automated tests are in place. Offline recovery,
 APNs/FCM delivery, camera behaviour, encrypted SQLite and Wallet flows still
 need to be checked on real devices before release. The remaining checks are
-tracked in [`docs/mobile.md`](docs/mobile.md#whats-left).
+tracked in [`docs/mobile-store-release.md`](docs/mobile-store-release.md#before-release).

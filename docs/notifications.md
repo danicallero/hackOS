@@ -67,7 +67,7 @@ Delivery reaches one of three mutually exclusive audiences, resolved by
   `user_effective_capabilities`, and `user_effective_role_name` (H8: a user's
   mentor/participant attendee type is matched by the seeded Mentor/
   Participant role's own NAME — no separate `badge_category` column, retired
-  entirely; see `docs/access-control-audit-plan.md`) — no per-user
+  entirely; see `docs/audits/access-control-audit-plan.md`) — no per-user
   round-trips.
 - **Specific recipients**: an explicit list in the `announcement_recipients`
   join table (`announcement_id, user_id`). Rejected together with `audiences`
