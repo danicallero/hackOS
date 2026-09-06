@@ -10,6 +10,7 @@ import { assertVerifiedPrimaryEmail } from "../../lib/email-verification.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { hasEventAccess } from "../identity/role.js";
+import { applyRoleAssignmentRevokeRules } from "../identity/role-grants.js";
 import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
 import { issueTicket } from "../logistics/tickets.js";
 import { issueWalletAccessToken } from "../logistics/wallet-access.js";
@@ -1256,6 +1257,47 @@ async function voidTicketAccessIfLost(client: pg.PoolClient, userId: number): Pr
   return voided.rows.map((r: { id: number }) => r.id);
 }
 
+/**
+ * Undo the role grant from doConfirm's `application_confirmed` roles when a
+ * confirmed spot is lost (H15 decline, M2 admin revoke) — mirrors the manual
+ * role-removal path (identity/routes/roles.ts) including its revoke-rule
+ * cascade. Only rows this application granted and that are still tagged
+ * `source = 'application_confirmed'` are touched, so a role an admin later
+ * assigned manually for an unrelated reason is left alone.
+ */
+async function revokeApplicationGrantedRoles(
+  client: pg.PoolClient,
+  userId: number,
+  applicationId: number,
+  actorId: number | null,
+): Promise<void> {
+  const { rows: grantRows } = await client.query(
+    `SELECT role_id FROM application_grants_roles WHERE application_id = $1`,
+    [applicationId],
+  );
+  const roleIds = grantRows.map((r) => r.role_id as number);
+  if (roleIds.length === 0) return;
+
+  const { rows: revoked } = await client.query(
+    `DELETE FROM user_roles
+     WHERE user_id = $1 AND role_id = ANY($2::int[]) AND source = 'application_confirmed'
+     RETURNING role_id`,
+    [userId, roleIds],
+  );
+  for (const row of revoked as { role_id: number }[]) {
+    await applyRoleAssignmentRevokeRules(client, userId, row.role_id, actorId);
+    await audit(client, {
+      actorId,
+      entityType: "role",
+      entityId: row.role_id,
+      action: "remove_user",
+      source: "system",
+      before: { userId },
+      reason: "application spot lost after confirmation",
+    });
+  }
+}
+
 async function pushTicketVoid(userId: number, voidedPassIds: number[]): Promise<void> {
   if (voidedPassIds.length === 0) return;
   await broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.LOGISTICS_WALLET_PASS_UPDATED, {
@@ -1309,9 +1351,11 @@ export async function revokeSpot(actorId: number, responseId: number): Promise<R
     });
 
     // A ticket was only ever issued for a confirmed spot — void its wallet
-    // pass(es) if this was the user's last remaining event access.
+    // pass(es) if this was the user's last remaining event access, and
+    // revoke any roles doConfirm granted alongside that ticket.
     if (resp.status === "confirmed") {
       voidedPassIds = await voidTicketAccessIfLost(client, resp.user_id);
+      await revokeApplicationGrantedRoles(client, resp.user_id, resp.application_id, actorId);
     }
     return updated.rows[0] as ResponseRow;
   });
@@ -1894,9 +1938,13 @@ async function doDecline(
   });
 
   // A ticket was only ever issued once this spot was confirmed — void its
-  // wallet pass(es) if this was the user's last remaining event access.
-  const voidedPassIds =
-    resp.status === "confirmed" ? await voidTicketAccessIfLost(client, resp.user_id) : [];
+  // wallet pass(es) if this was the user's last remaining event access, and
+  // revoke any roles doConfirm granted alongside that ticket.
+  let voidedPassIds: number[] = [];
+  if (resp.status === "confirmed") {
+    voidedPassIds = await voidTicketAccessIfLost(client, resp.user_id);
+    await revokeApplicationGrantedRoles(client, resp.user_id, resp.application_id, actorId);
+  }
   return { status: "declined", alreadyDeclined: false, voidedPassIds };
 }
 

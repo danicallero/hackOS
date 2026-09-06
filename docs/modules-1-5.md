@@ -197,6 +197,12 @@ confirmed|declined|expired`).
   `hasEventAccess` is false. Web nav hides wallet/queue/project/inbox for a
   "pure applicant" (`isPureApplicant` in `apps/web/src/lib/session.tsx` — no
   confirmed spot, no capability, not an enterprise judge or sponsor rep).
+  The same "confirmed → lost" transition also revokes roles:
+  `service.ts:revokeApplicationGrantedRoles` deletes the `user_roles` row(s)
+  `doConfirm` granted (H8/H11) for that application's `application_grants_roles`,
+  cascading through `identity/role-grants.ts:applyRoleAssignmentRevokeRules`
+  the same way manual role removal does. A row with `source = 'manual'` (an
+  admin granted the same role separately) is left untouched.
 - Back to review / accept-pending-confirmation already existed
   (`revertDecision(…, "review")`, `decide` + `send-decision`) — verified.
 
