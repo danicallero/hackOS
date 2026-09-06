@@ -2,20 +2,24 @@
 
 Status: **implemented and independently release-gate verified (2026-07-31);
 superseded by the H8 role-hierarchy rewrite below (2026-08-31)**.
-The historical baseline and task DAG remain below for traceability; the generated runtime ledger is
-[`access-control-route-ledger.md`](./access-control-route-ledger.md).
+The historical design rationale remains below for traceability; the generated
+runtime ledger is
+[`access-control-route-ledger.md`](../access-control-route-ledger.md). The
+original agent-orchestration execution plan (task assignments, dispatch
+protocol) is removed — it was how the work got done, not part of what it did;
+nothing here describes current system behavior.
 
 Stories: H1–H10 (identity and the role hierarchy), H11–H15
 (applications), H16–H21 (projects), H28 (wallet), H29–H46 (queue, judging,
 TV, sponsors), H47–H54 (content, communications, audit, and exports), and H55
 (capability-based navigation).
 
-This document is the implementation and Orca-orchestration brief for making
-access control mechanically auditable across the API and its clients. The
-normative functional source remains
-[`plan/historias-hackos.md`](../plan/historias-hackos.md), and the hard
+This document is the implementation brief for making access control
+mechanically auditable across the API and its clients. The normative
+functional source remains
+[`plan/historias-hackos.md`](../../plan/historias-hackos.md), and the hard
 permission, concurrency, and broadcast invariants remain in
-[`plan/07-datos-relevantes-ers.md`](../plan/07-datos-relevantes-ers.md). If
+[`plan/07-datos-relevantes-ers.md`](../../plan/07-datos-relevantes-ers.md). If
 this brief conflicts with either file, `plan/` wins.
 
 ## H8 role-hierarchy rewrite (current architecture)
@@ -1082,7 +1086,7 @@ must take effect on the first request started after its transaction commits,
 even when Valkey is unavailable.
 
 The shared catalogue in
-[`packages/shared/src/capabilities.ts`](../packages/shared/src/capabilities.ts)
+[`packages/shared/src/capabilities.ts`](../../packages/shared/src/capabilities.ts)
 remains the only source for capability strings. Every direct grant, group
 mutation, nesting operation, template reset, member assignment, and invitation
 flow validates against `ALL_CAPABILITIES`; route code must use `CAPABILITIES`
@@ -1225,78 +1229,6 @@ hardcoded interface copy.
 Assigned judges and sponsor representatives need no template for their
 relationship-scoped access. `sponsor:portal` is absent from both templates and
 the selectable catalogue.
-
-## Orca execution brief
-
-This section is the required execution protocol for the implementation, not a
-record that dispatches have already happened. The coordinator must use Orca
-orchestration runtime state; ordinary terminal prompts or generic subagents do
-not satisfy the provenance requirement.
-
-### Runtime and provenance
-
-Before dispatch:
-
-1. Run `orca status --json` and confirm that orchestration is enabled.
-2. Inspect `orca orchestration task-list --json` so existing runtime-global
-   tasks are not mistaken for this audit.
-3. Create each work item with `orca orchestration task-create --spec ...`
-   and encode its dependencies with `--deps`.
-4. Create or select a fresh agent terminal in the intended worktree, wait for
-   `tui-idle`, then use
-   `orca orchestration dispatch --task <task_id> --to <handle> --inject
-   --json`.
-5. Verify every assignment with
-   `orca orchestration dispatch-show --task <task_id> --json`.
-6. Supervise with rolling
-   `orca orchestration check --wait
-   --types worker_done,escalation,decision_gate --timeout-ms <n> --json`.
-
-Workers must report `worker_done` exactly once with their `taskId`,
-`dispatchId`, changed files, tests run, route-ledger delta, and unresolved
-issues. A terminal looking idle or a wait timing out is not completion
-authority. Cross-domain policy disputes are decision gates; a worker must not
-invent a local exception.
-
-Shared authorization primitives and migrations have one owner: the policy
-foundation worker. Domain workers own disjoint module and client paths. If
-workers share the current worktree, the coordinator must state file ownership
-in each task spec and prevent overlapping edits. Independent worktrees require
-coordinator integration before dependants are dispatched.
-
-### Task DAG
-
-| ID | Task and owner boundary | Depends on | Completion signal |
-| --- | --- | --- | --- |
-| AC-1 | **Policy foundation:** route metadata/types, `onRoute` enforcement, request-local PostgreSQL capability resolution, shared contextual resolver interfaces, catalogue validation, wildcard/graph transaction protections, and migration preflight | — | Foundation tests pass; migration and route-policy contract documented; `worker_done` |
-| AC-2A | **Identity/access:** identity, invitations, permissions, applications, and exports | AC-1 | Domain routes classified; handler checks moved; adversarial tests and ledger rows reported |
-| AC-2B | **Projects/sponsors:** projects, challenges, sponsors, enterprise ownership, and contextual resource access | AC-1 | Owned/foreign sponsor and judge probes pass; duplicate scope SQL removed |
-| AC-2C | **Judging/realtime:** queue, judging, rooms, reviews, TV, operational SSE, and sanitized public invalidations | AC-1 | Operational streams reject unauthorized clients; public stream snapshot is sanitized |
-| AC-2D | **Remaining surfaces:** logistics, event configuration, notifications, wallet protocols, and public endpoints | AC-1 | Anonymous/token allowlist is explicit; university and wallet policies corrected |
-| AC-3 | **Templates and clients:** template catalogue/API, instantiate/reset UI, application navigation, association-aware dashboard, and TV/mobile stream consumers | AC-2A, AC-2B, AC-2C, AC-2D | API/UI tests pass; trilingual copy and client stream migrations reported |
-| AC-4 | **Consolidation review:** generate final route ledger, reconcile capability docs, run cross-domain/adversarial tests, and open decision gates for inconsistencies | AC-3 | All routes classified; allowlist snapshot and catalogue sync test pass; no unresolved gate |
-| AC-5 | **Independent release gate:** a separate review dispatch verifies the DAG/dispatch provenance, migrations, ledger, docs, and required checks | AC-4 | Reviewer `worker_done` states pass or enumerates blocking findings |
-
-AC-2A through AC-2D are the parallel wave. Do not start them until AC-1 has
-landed and its shared interfaces are stable. AC-3 integrates their API
-contracts into clients. AC-4 owns consolidation fixes only when its dispatch
-explicitly grants edit authority; otherwise findings must be routed to the
-appropriate domain owner. AC-5 must be a separate review dispatch and cannot
-be self-approved by an implementation worker.
-
-### Decision gates
-
-Create a coordinator-managed gate before changing course when:
-
-- a route's public/private classification is not supported by a user story;
-- two domains need incompatible semantics from a shared contextual policy;
-- existing production data cannot be quarantined without losing provenance;
-- preserving the last wildcard holder conflicts with an account lifecycle
-  requirement;
-- a public client appears to require operational SSE payload fields;
-- a migration requires destructive remapping beyond the assumptions below.
-
-Record the resolution in the task result and relevant living documentation.
 
 ## Test and acceptance matrix
 
