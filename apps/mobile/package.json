@@ -12,7 +12,6 @@
     "@react-native-community/datetimepicker": "^9.1.0",
     "better-auth": "^1.6.23",
     "expo": "~57.0.15",
-    "expo-blur": "~57.0.2",
     "expo-camera": "~57.0.4",
     "expo-constants": "~57.0.13",
     "expo-crypto": "~57.0.0",

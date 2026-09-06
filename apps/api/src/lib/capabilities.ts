@@ -72,10 +72,6 @@ export function assertKnownCapabilities(
  */
 export async function invalidateCapabilities(_userId: number): Promise<void> {}
 
-export async function invalidateAllCapabilities(): Promise<void> {
-  return;
-}
-
 /**
  * Route guard. Requires an authenticated session (request.userId, set by the
  * auth plugin) holding `capability`.

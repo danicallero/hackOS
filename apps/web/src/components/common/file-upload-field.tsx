@@ -2,8 +2,7 @@
 
 // Upload control for the "file" application field kind (H12). The template field
 // carries allowed_file_types / max_file_size_mb; the server re-validates both
-// (apps/api/src/modules/applications/upload.routes.ts). The shared api client is
-// JSON-only, so the multipart POST is a raw credentialed fetch. On success the
+// (apps/api/src/modules/applications/upload.routes.ts). On success the
 // returned object URL is stored as the field's value in the response object.
 
 import { FileIcon, PaperclipIcon, UploadIcon, XIcon } from "lucide-react";
@@ -13,7 +12,7 @@ import { FileLink } from "@/components/common/file-link";
 import { IconButton } from "@/components/common/icon-button";
 import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
-import { API_URL } from "@/lib/env";
+import { apiUpload } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 
 export function FileUploadField({
@@ -76,19 +75,12 @@ export function FileUploadField({
     try {
       const body = new FormData();
       body.append("file", file);
-      const res = await fetch(
-        `${API_URL}/api/applications/${applicationId}/upload/${encodeURIComponent(fieldKey)}`,
-        { method: "POST", credentials: "include", body },
+      const payload = await apiUpload<{ key: string }>(
+        `/api/applications/${applicationId}/upload/${encodeURIComponent(fieldKey)}`,
+        body,
       );
-      const text = await res.text();
-      const payload = text ? JSON.parse(text) : undefined;
-      if (!res.ok) {
-        throw new Error(
-          (payload as { error?: { message?: string } })?.error?.message ?? "Upload failed",
-        );
-      }
       // Store the private object key; reads resolve to a presigned URL on demand.
-      onChange((payload as { key: string }).key);
+      onChange(payload.key);
       setUploadError(null);
       toast.success(t("fileUploaded"));
     } catch {

@@ -65,7 +65,7 @@ export const MEAL_ACTIVITY_KINDS = ACTIVITY_KINDS.filter(
   (kind) => KINDS[kind].scan === "meal",
 ) as readonly ActivityKind[];
 
-export function isActivityKind(value: unknown): value is ActivityKind {
+function isActivityKind(value: unknown): value is ActivityKind {
   return typeof value === "string" && value in KINDS;
 }
 

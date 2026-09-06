@@ -90,6 +90,36 @@ export async function apiFetch<T = unknown>(
   return payload as T;
 }
 
+/**
+ * Like `apiFetch`, but for a multipart file upload — `apiFetch` always
+ * JSON-stringifies its body, which can't carry a `FormData` payload.
+ */
+export async function apiUpload<T = unknown>(path: string, body: FormData): Promise<T> {
+  const res = await fetch(buildUrl(path), {
+    method: "POST",
+    credentials: "include",
+    body,
+  });
+
+  if (res.status === 204) return undefined as T;
+
+  const text = await res.text();
+  const payload = text ? JSON.parse(text) : undefined;
+
+  if (!res.ok) {
+    const err = (payload as { error?: { code?: string; message?: string; details?: unknown } })
+      ?.error;
+    throw new ApiError(
+      res.status,
+      err?.code ?? "unknown",
+      err?.message ?? res.statusText ?? "Request failed",
+      err?.details,
+    );
+  }
+
+  return payload as T;
+}
+
 export const api = {
   get: <T>(path: string, options?: RequestOptions) =>
     apiFetch<T>(path, { ...options, method: "GET" }),

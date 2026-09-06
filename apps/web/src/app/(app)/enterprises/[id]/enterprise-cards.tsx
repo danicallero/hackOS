@@ -43,9 +43,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, apiUpload } from "@/lib/api";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
-import { API_URL } from "@/lib/env";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import type { UserList } from "@/lib/types";
@@ -363,20 +362,7 @@ export function LogoCard({
       // the selected logo variant server-side, so the browser never touches the object store.
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch(
-        `${API_URL}/api/enterprises/${enterprise.id}/logo?variant=${variant}`,
-        {
-          method: "POST",
-          credentials: "include",
-          body: fd,
-        },
-      );
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as {
-          error?: { message?: string };
-        } | null;
-        throw new Error(body?.error?.message ?? `Upload failed (${res.status})`);
-      }
+      await apiUpload(`/api/enterprises/${enterprise.id}/logo?variant=${variant}`, fd);
       await onChanged();
       toast.success(variant === "negative" ? t("darkLogoUpdated") : t("logoUpdated"));
     } catch (err) {
