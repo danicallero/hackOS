@@ -30,10 +30,10 @@ docker exec hackos-postgres-1 psql -U hackos -d hackos \
 curl -c s.jar -X POST :3000/api/auth/sign-in/email ... # then use -b s.jar
 ```
 
-Grant capabilities via SQL: insert into `permission_groups`,
-`group_capabilities` (capability strings like `accredit:scan`), and
-`permission_group_members`. Note: heredocs into `docker exec psql` silently
-no-op — pass statements with repeated `-c` flags instead.
+Grant capabilities via SQL: insert into `roles`, `role_capabilities`
+(capability strings like `accredit:scan`), and `user_roles`. Note: heredocs
+into `docker exec psql` silently no-op — pass statements with repeated `-c`
+flags instead.
 
 ## Driving the web GUI
 
@@ -57,8 +57,8 @@ chromium.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacO
 
 Delete seeded rows (`... WHERE email LIKE '%@verify.local'`) from
 `check_in_logs` (by `user_id` **and** `staff_id`), `tickets`, `wallet_passes`,
-`notification_outbox`, `notifications`, `permission_group_members`/
-`group_capabilities`/`permission_groups`, `sessions`, `accounts`, `audit_log`
+`notification_outbox`, `notifications`, `user_roles`/`role_capabilities`/
+`roles`, `sessions`, `accounts`, `audit_log`
 (by `actor_id`), then `users`; kill the two dev servers. Workers create
 notification rows on check-in, so delete those even if you never touched
 notifications.

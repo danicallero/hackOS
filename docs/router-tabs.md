@@ -30,6 +30,21 @@ the reusable shell is
 
 Story: H55.
 
+## Contents
+
+- [Design boundary](#design-boundary)
+- [Requirements](#requirements)
+- [Minimal integration](#minimal-integration)
+- [Public API](#public-api)
+- [Overflow menu contract](#overflow-menu-contract)
+- [Interaction model](#interaction-model)
+- [Geometry and safe-area contract](#geometry-and-safe-area-contract)
+- [Platform behaviour](#platform-behaviour)
+- [Accessibility and screen readers](#accessibility-and-screen-readers)
+- [Testing](#testing)
+- [Publishing checklist for a future package](#publishing-checklist-for-a-future-package)
+- [Troubleshooting](#troubleshooting)
+
 ## Design boundary
 
 The component has two layers:

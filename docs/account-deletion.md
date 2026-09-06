@@ -1,12 +1,12 @@
-# H54 — account deletion and irreversible anonymization audit
+# Account deletion and irreversible anonymization (H54)
 
-**Review date:** 2026-09-03
-**Scope:** `apps/api`, `apps/mobile`, `apps/web`, Postgres migrations, object
-storage references, offline scanner paths, notification workers, audit/export
-paths, and the account/privacy copy.  This is a code and data-lifecycle audit,
-not a legal opinion.
+Data-lifecycle reference for account deletion/anonymization across
+`apps/api`, `apps/mobile`, `apps/web`, Postgres migrations, object storage,
+offline scanner paths, notification workers, and audit/export paths. Not a
+legal opinion. Actively maintained: the findings ledger below records past
+issues and their fixes as they're found, not a one-time review.
 
-## Executive result
+## State machine
 
 The branch implements two server-selected outcomes plus one short operational
 transition:
@@ -688,12 +688,12 @@ suite alone.
 - `apps/web/src/app/(app)/users/review-fixtures-dialog.tsx`: admin-only
   generation and safe usage-status control; operating instructions are in
   `docs/reviewer-fixtures.md`.
-- `docs/{modules-1-5,mobile,mobile-release,background-workers,api-reference,README}.md`.
+- `docs/{audits/implementation-notes,mobile,mobile-release,background-workers,api-reference,README}.md`.
 
 ## Assumptions ledger
 
-These assumptions are intentionally recorded for PR review; none should be
-silently converted into a legal conclusion.
+These assumptions are a standing decision record, each with an owner; none
+should be silently converted into a legal conclusion.
 
 | ID | Assumption | Confirmation/owner |
 | --- | --- | --- |
@@ -747,12 +747,12 @@ silently converted into a legal conclusion.
 | A48 | The server-side `users.badge_assigned_at` timestamp is the authoritative boundary for offline badge-event replay. Presence, activity and meal paths reject timestamps before the current assignment both at enqueue/lookup and under the locked owner row; the timestamp is not exposed to clients. | Logistics + security owners |
 | A49 | The final state is authoritative for fresh installs and latest-main upgrades. Runtime paths do not preserve malformed presence kinds, expired scanner tombstones, or mutable-form fallbacks for historical responses. The runner recognizes the allow-listed H54 development chain and applies `0747` automatically, while unknown or malformed ledger histories still fail closed. | Release/DB + domain owners |
 
-## Release recommendation
+## Standing review gate
 
-Merge only after the reviewer confirms A01–A05, A09, A12, A18 and A20, and
-after operations documents provider/cache/log/backup retention. The code is
-safe to review now: it removes the old identity bridge, provides direct web
-and mobile actions, revokes access before asynchronous cleanup, and does not
-retain identity merely to preserve certificates or implementation
-convenience. The remaining high risks are deliberately visible rather than
-hidden behind a success response.
+Any change to this flow needs A01–A05, A09, A12, A18 and A20 re-confirmed,
+and operations' provider/cache/log/backup retention re-checked. The design
+removes the old identity bridge, provides direct web and mobile actions,
+revokes access before asynchronous cleanup, and does not retain identity
+merely to preserve certificates or implementation convenience. The remaining
+high risks are deliberately visible rather than hidden behind a success
+response.

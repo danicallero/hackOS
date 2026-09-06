@@ -23,14 +23,6 @@ export interface Enterprise {
   created_at: string;
 }
 
-/** Presign response from POST /api/enterprises/:id/logo (storage.PresignedUpload). */
-export interface PresignedUpload {
-  uploadUrl: string;
-  publicUrl: string;
-  key: string;
-  expiresInSeconds: number;
-}
-
 /** Mirror of sponsors/schemas.ts LOGO_CONTENT_TYPES — accepted logo MIME types. */
 export const LOGO_CONTENT_TYPES = [
   "image/png",

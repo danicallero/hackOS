@@ -74,7 +74,7 @@ the event is baked into issued passes. Composition:
   each behind its `pass_field_visibility` toggle, captioned per
   `pass_field_labels`. University/email rows also drop out when the user has
   no value. The role field is simply the holder's highest-visible role name
-  (`getHighestVisibleRoleName`, H8 — see `docs/access-control-audit-plan.md`'s
+  (`getHighestVisibleRoleName`, H8 — see `docs/audits/access-control-audit-plan.md`'s
   "badge_category retired entirely" section), or "Unassigned" with no visible
   role at all.
 - **Back fields**, in order: event name → venue name (if set) → the custom

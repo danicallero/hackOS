@@ -1,9 +1,11 @@
 /**
  * Capability catalogue (H8): permissions are checked against these concrete
- * capability strings, never against illustrative roles. Groups grant sets of
- * capabilities; groups can include other groups.
+ * capability strings, never against illustrative roles. Roles are ordered and
+ * grant capabilities with an ALLOW/DENY/INHERIT tri-state per position;
+ * `user_effective_capabilities` resolves the final set (see
+ * apps/api/src/lib/capabilities.ts).
  *
- * `*` is the admin wildcard: a group holding it passes every check.
+ * `*` is the admin wildcard: a role holding it passes every check.
  *
  * Naming: `<domain>:<action>`. Add new capabilities here (single source),
  * never as inline string literals in route code.

@@ -1,12 +1,16 @@
-# Module summaries (M1–M3, M5–M8)
+# Applications & identity: implementation notes
 
-High-level overview of the architectural changes per module. Each entry lists
-the **schema**, **hooks/endpoints**, **UI**, and **state transitions** touched.
-File references are `path:symbol` for quick navigation.
+Historical log of specific changes and bug fixes, each with the rationale —
+not a description of the applications/identity modules as they stand today.
+For current behavior read [`api-reference.md`](../api-reference.md) (roles,
+capabilities, module map) and
+[`account-deletion.md`](../account-deletion.md)
+(H54's data lifecycle). File references are `path:symbol` for quick
+navigation.
 
 ---
 
-## Module 1 — Invitation & application flow
+## Invitation & application flow
 
 **Schema.** Reuses existing `users` columns (`dni`, `food_intolerance_notes`,
 `name`, `surname`) and the `application_responses` status enum. Migration
@@ -143,18 +147,14 @@ as contextual policies (the former binds the upload key; the latter binds the
 data-subject request body) rather than overstating their access as merely
 authenticated or `exports:run`.
 
-**Hierarchical roles (H8, H53).** The read-only `GET /api/roles` list is also
-available to invitation managers so staff-invite forms can show assignable
-roles; role creation, capability editing, reordering, and assignment mutations
-remain `PERMISSIONS_MANAGE` only. Each role sits on one global reorderable
-hierarchy (`position`) and holds an ALLOW/DENY/INHERIT tri-state per
-capability (`role_capabilities`; a missing row is INHERIT). For a capability,
-resolution walks a user's OWN assigned roles ordered by position descending,
-stopping at the first ALLOW/DENY — INHERIT skips to the next-lower-position
-role the user also holds, never to the next role in the global hierarchy; no
-roles or an all-INHERIT chain denies. To assign, edit, or reorder a role, the
-actor needs `PERMISSIONS_MANAGE` AND the role's position (its NEW position,
-for a reorder) must sit strictly below the actor's own highest assigned role.
+**Hierarchical roles (H8, H53).** Role resolution (ALLOW/DENY/INHERIT
+position-ordered) is documented in
+[`api-reference.md`](../api-reference.md#identity-h1h10) — not restated
+here. The read-only `GET /api/roles` list is also available to invitation
+managers so staff-invite forms can show assignable roles; role creation,
+capability editing, reordering, and assignment mutations remain
+`PERMISSIONS_MANAGE` only, and the actor's edit/reorder target must sit
+strictly below their own highest assigned role.
 The role-creation template catalogue is code-owned (`identity/templates.ts`)
 and exposes stable keys, client-side i18n message keys, and capability sets —
 never localized interface copy. `GET /api/role-templates` lists the catalogue;
@@ -167,7 +167,7 @@ compatibility grant is deliberately absent from templates.
 
 ---
 
-## Module 2 — Application status state machine & batch actions
+## Application status state machine & batch actions
 
 **Schema.** None new; uses the existing `app_response_status` values
 (`draft → review → accepted_internal|rejected_internal → accepted|rejected →
@@ -224,7 +224,7 @@ the batch toast now surfaces the skipped count + first reason.
 
 ---
 
-## Module 3 — User profile refactor
+## User profile refactor
 
 **Schema.** None new.
 
@@ -252,79 +252,24 @@ H23/H24), and a badge/"Batch" assignment control on profile details
 
 ---
 
-## Module 5 — Critical bug fixes & admin utilities
+## H54 account deletion: implementation bug fixes
 
-**Schema.** H54 adds `users.account_state` (`active` → `removal_pending`),
-`removal_action` and `removal_started_at`, plus the separate
-`anonymous_participants` audit subject. `check_in_logs` and `time_logs` retain
-active-user references until the final scrub; all final direct user foreign-key
-writers are guarded by the squashed `0730` active-reference triggers.
-`users.id` remains the authenticated identity PK and is never used as the
-anonymous identifier. Better Auth's `accounts.account_id` for
-credential login is the user id as text, while `sessions`/`accounts` FK on
-`user_id`.
+The full schema, state machine, and removal.ts data flow are documented in
+[`account-deletion.md`](../account-deletion.md) —
+not restated here. Two bug fixes from this work, unrelated to that doc's
+scope:
 
-**Endpoints / hooks.**
-- `identity/outbox.ts:enqueueAuthEmail` — gained an optional
-  `{ recipient, language }` override.
 - `identity/routes/secondary-email.ts` — **bug fix**: secondary-email
   verification passed no `recipient`, so the email channel adapter
   (`channels/email.ts:70`, `payload.recipient ?? user.email`) fell back to the
   **primary** address. Now the new secondary address is passed as `recipient`.
-- `POST /api/me/secondary-email` and the staff equivalent store the address as
-  pending; Devpost membership is created only after verification. Replacing or
-  deleting it (`DELETE /api/me/secondary-email`, or the `USERS_WRITE` staff
-  route) transactionally revokes automatic matches that depended on it. A
-  case-insensitive partial unique index plus an address-scoped transaction lock
-  guarantees one verified owner under concurrent verification.
 - `profile.ts` `PATCH /api/users/:id/email` (`USERS_WRITE`) — safe primary-email
   change: uniqueness check vs any primary / verified-secondary, single-column
   update, marks verified (admin-vouched), audited.
-- `profile.ts` exposes the H54 self-service preflight, recovery status, cancel,
-  and actions, while the
-  admin routes use the same locked boundary. A fresh account is fully deleted;
-  an account with canonical `check_in_logs` accreditation is irreversibly
-  anonymized. Door/activity/badge history without canonical accreditation is
-  reported as an integrity warning and does not silently become permanent
-  retention. An open venue session is accepted as a pending-exit request;
-  staff can record only the required exit before finalization. The final
-  transaction creates a random UUID anonymous subject, stores verified minutes
-  and application answers explicitly retained by the submitted form version,
-  deletes raw accreditation/door/application/project/meal/notification and
-  other identity-bearing relationships, revokes sessions/tokens/push and
-  deletes the original `users` row. No mapping table or in-place anonymized
-  user remains.
-- `GET /api/me/removal-eligibility`, `GET /api/me/removal-status`,
-  `POST /api/me/anonymize/cancel`, `DELETE /api/me` and
-  `POST /api/me/anonymize` are authenticated and capability-free. The web and
-  mobile settings pages call the preflight and present the corresponding
-  destructive action directly. A self-service completion audit is actor-free
-  because the actor row is deleted in the same transaction.
-- `identity/removal.ts` performs two phases: commit `removal_pending` and
-  revoke local access, remove provider/storage artifacts with bounded retry,
-  then finalize the database transaction. The final `0730` migration adds a
-  database-level active-user reference guard so stale notification, token,
-  project, logistics or audit writers cannot create new FK rows after pending
-  begins; the already-open participant exit and sessions bounded by the fixed
-  recovery deadline are the only identity-bearing exceptions. It also
-  permanently retires disconnected scanner credentials without a participant
-  foreign key and prevents a response from selecting another form's retention
-  snapshot. A database that recorded the pre-squash H54 chain is normalized by
-  the runner's transactional `0747` compatibility migration before those same
-  final triggers are used.
-
-**State transitions.** `active → removal_pending → users row deleted`, with an
-anonymous participant created only for the anonymization branch. A pending
-account may use only its recovery/status/cancel surface and the validated exit
-path during the future anonymization window. New or refreshed sessions are
-restricted to the same pending identity and cannot outlive the fixed
-`removal_expires_at`; event operations remain blocked except that a validated
-`out` scan may close its already-open venue session. Finalization then removes
-the identity.
 
 ---
 
-## Module 6 — Applications review/decide IA + duplicate-rejection-email fix
+## Applications review/decide IA + duplicate-rejection-email fix
 
 **Schema.** None new; same `app_response_status` enum as Module 2.
 
@@ -454,7 +399,7 @@ sets `close_at` instead of toggling a separate switch.
 
 ---
 
-## Module 7 — Sponsor-shareable file fields & bulk export (H56)
+## Sponsor-shareable file fields & bulk export (H56)
 
 **Schema.** None new — reuses the existing jsonb columns. A "file" template
 field on `applications.template` may now carry
@@ -526,7 +471,7 @@ trace.
 
 ---
 
-## Module 8 — Reviewers can see decisions read-only (H57)
+## Reviewers can see decisions read-only (H57)
 
 **Schema.** None — no route or capability changed; this is purely a frontend
 tab-visibility change, `apps/web/src/app/(app)/applications/[id]/page.tsx`.
@@ -548,5 +493,5 @@ accepted either `applications:review` or `applications:decide`.
 
 ---
 
-See [background-workers.md](./background-workers.md) for which of the above run
+See [background-workers.md](../background-workers.md) for which of the above run
 synchronously in the request vs. are handed to a worker.

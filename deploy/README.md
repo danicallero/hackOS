@@ -18,6 +18,19 @@ posture. Pick one per instance — don't mix them for the same instance.
 > again with a different `STACK_NAME` + `INSTANCE_NETWORK` to host a second
 > event on the same server with zero shared state. See [Multiple instances](#multiple-instances).
 
+## Contents
+
+- [Architecture](#architecture)
+- [Environment variables: project (shared) vs service-only](#environment-variables-project-shared-vs-service-only)
+- [Wallet passes (H28)](#wallet-passes-h28)
+- [Mode A — per-service on Dokploy (recommended)](#mode-a--per-service-on-dokploy-recommended)
+- [Mode B — single stack](#mode-b--single-stack)
+- [Splitting Postgres onto its own host (optional, advanced)](#splitting-postgres-onto-its-own-host-optional-advanced)
+- [Multiple instances](#multiple-instances)
+- [Security posture](#security-posture)
+- [Operations](#operations)
+- [Files here](#files-here)
+
 ---
 
 ## Architecture
@@ -82,61 +95,21 @@ drift; see
 [`docs/env-vars.md`](../docs/env-vars.md#centralizing-values-with-dokploys-projectenvironment-variables)
 for the exact per-service reference lines to paste in.
 
-### Store these once (Environment or Project variables), reference from every service that needs them
+**The split in one line:** shared secrets + anything two or more services
+touch → store once as an **Environment variable**, reference it from each
+service that needs it (`${{environment.VAR}}`); per-service memory limits and
+MinIO image/console toggles → a plain literal directly in that one service's
+own box (or leave them at defaults, see per-service tables below). The two
+`.env.*.example` files mirror the first group: `.env.shared.example` =
+non-secret shared, `.env.instance.example` = per-instance secrets. Assemble
+both into the Dokploy Environment's variables.
 
-These are read by two or more services. Secrets are marked 🔒 — generate them
-with `deploy/scripts/gen-secrets.sh` and never reuse across instances.
-
-| Variable | Read by | Notes |
-|---|---|---|
-| `STACK_NAME` | api, web | Unique per instance; namespaces Traefik routers (`…-api`, `…-web`). Also use as the Dokploy project name / `-p`. |
-| `INSTANCE_NETWORK` | all | The private network name, e.g. `hackos-event2026-net`. Create it first (below). |
-| `PROXY_NETWORK` | api, web | Traefik network. Dokploy default `dokploy-network`. |
-| `API_DOMAIN` | api, worker, web | API public hostname. `worker` uses it for `BETTER_AUTH_URL`; `web` bakes it into `NEXT_PUBLIC_API_URL` at build. |
-| `WEB_DOMAIN` | web, api | Frontend public hostname, **distinct from `API_DOMAIN`**. The web app has its OWN Traefik router (`${STACK_NAME}-web`); the api uses it to build `WEB_URL` so auth emails link back to the web app. |
-| `CORS_ORIGINS` | api | Comma-separated allowed browser origins. **Must include `https://${WEB_DOMAIN}`** so the frontend's credentialed calls are allowed. |
-| `CERT_RESOLVER` | api, web | Traefik ACME resolver name (default `letsencrypt`). |
-| `IMAGE_REPO`, `IMAGE_TAG` | api, worker | The built api image. Ignored if Dokploy builds from source. |
-| `WEB_IMAGE_REPO`, `IMAGE_TAG` | web | The built web image. Ignored if Dokploy builds from source. |
-| `BETTER_AUTH_SECRET` 🔒 | api, worker | 32+ random bytes. |
-| `POSTGRES_USER` | postgres, api, worker | Also part of `DATABASE_URL`. |
-| `POSTGRES_PASSWORD` 🔒 | postgres, api, worker | Must match everywhere. |
-| `POSTGRES_DB` | postgres, api, worker | |
-| `VALKEY_PASSWORD` 🔒 | valkey, api, worker | Must match everywhere. |
-| `MINIO_ROOT_USER` | minio, minio-init | |
-| `MINIO_ROOT_PASSWORD` 🔒 | minio, minio-init | |
-| `S3_ACCESS_KEY` | api, worker | Root keys work; a scoped MinIO service account is better. |
-| `S3_SECRET_KEY` 🔒 | api, worker | |
-| `S3_BUCKET` | api, worker, minio-init | Default `hackos`. |
-| `MAIL_PROVIDER` | api, worker | `smtp` \| `resend` \| `postal`. |
-| `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` | api, worker | |
-| `MAIL_FOOTER_TEXT`, `MAIL_LAYOUT_*` | api, worker | Optional email theming/footer text customization (header, colors, sizing, footer copy). |
-| `RESEND_API_KEY` 🔒 / `POSTAL_*` 🔒 / `SMTP_*` 🔒 | api, worker | Fill the block for your provider. |
-| `LOG_LEVEL` | api, worker | |
-
-### Put these in **service-only environment** (optional)
-
-Each is read by exactly one service. They're safe to leave in Project env too —
-they're isolated here only because they logically belong to one service and have
-sensible defaults, so you can usually skip them entirely.
-
-| Service | Variable(s) | Purpose |
-|---|---|---|
-| postgres | `PG_MEM_LIMIT` | Memory cap (default `1g`). |
-| valkey | `VALKEY_MEM_LIMIT` | Memory cap (default `512m`). |
-| minio | `MINIO_IMAGE`, `MINIO_MC_IMAGE`, `MINIO_BROWSER`, `MINIO_MEM_LIMIT` | Pinned image tags; console on/off; memory cap. |
-| api | `API_MEM_LIMIT` | Memory cap (default `512m`). |
-| api | `MOBILE_APP_SCHEME` | Expo app's custom URL scheme, trusted for Better Auth's `expo()` plugin (default `hackos`, H4/H55). Only needed if `apps/mobile`'s scheme is renamed. |
-| api | `TRANSLATE_PROVIDER`, `GOOGLE_TRANSLATE_API_KEY` 🔒 / `LIBRETRANSLATE_URL` + `LIBRETRANSLATE_API_KEY` 🔒 | Optional; enables H50 announcement auto-translate via Google Translate or a self-hosted LibreTranslate instance. Unset/misconfigured means manual-only translation entry everywhere — see `docs/env-vars.md`. |
-| worker | `WORKER_MEM_LIMIT` | Memory cap (default `512m`). |
-
-> **The split in one line:** shared secrets + anything two services touch →
-> store once as an **Environment variable**, reference it from each service
-> that needs it (`${{environment.VAR}}`); per-service memory limits and MinIO
-> image/console toggles → a plain literal directly in that one service's own
-> box (or leave them at defaults). The two `.env.*.example` files mirror the
-> first group: `.env.shared.example` = non-secret shared, `.env.instance.example`
-> = per-instance secrets. Assemble both into the Dokploy Environment's variables.
+For exactly which variable goes where, and what each one does, see
+[`docs/env-vars.md`](../docs/env-vars.md) — its per-service tables (`postgres`,
+`valkey`, `minio`, `api`, `worker`, `web`) are the single source; this file
+only explains the Dokploy scoping mechanic above. Secrets are marked 🔒 there
+— generate them with `deploy/scripts/gen-secrets.sh` and never reuse across
+instances.
 
 ---
 
@@ -428,6 +401,7 @@ deploy/
 │   └── gen-secrets.sh            ← generate a per-instance secret env file
 ├── qualification/                ← disposable pre-event #544 load stack
 │   ├── docker-compose.yml        ← internal-only exact-image qualification
+│   ├── validate-compose.mjs      ← checks the compose file before running it
 │   └── run.sh                    ← preflight, run, artifact and cleanup gate
 └── services/                     ← Mode A: one compose per Dokploy service
     ├── postgres/

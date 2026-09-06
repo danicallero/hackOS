@@ -44,9 +44,6 @@ Architecture & modules:
   `deploy/README.md` is the operational runbook.
 - [Database schema](./database-schema.md) — the generated DBML ERD for the
   current post-migration schema, plus the migration identity/checksum rules.
-- [Module summaries (M1–M3, M5–M8)](./modules-1-5.md) — schemas, hooks, UI layouts and
-  state transitions touched by each module, with the corrections made where the
-  original brief assumed something the schema contradicts.
 - [Background processing & workers](./background-workers.md) — the BullMQ +
   Postgres worker subsystem: job flows, queue structure, retries, concurrency,
   the failure/dead-letter model, and (critically) the **sync-vs-async** event
@@ -81,11 +78,6 @@ Architecture & modules:
   override / timetable / default precedence, the combined live screen and its
   payload, slot rotation, venue Wi-Fi, and how each mode adapts to any screen
   size or aspect ratio.
-- [Access-control audit and consolidation plan](./access-control-audit-plan.md)
-  — implementation status and the Orca-orchestration brief for mandatory route
-  policies, contextual authorization, immediate capability revocation,
-  permission-group safety and templates, SSE isolation, the task DAG, and the
-  release gate.
 - [Generated API route-policy ledger](./access-control-route-ledger.md) — the
   complete sorted runtime declaration inventory and public/token allowlist
   snapshot; regenerate it with `pnpm --filter @hackos/api route-policy:audit`.
@@ -93,7 +85,7 @@ Architecture & modules:
   shared by Better Auth's own paths and this app's routes, the endpoint-class
   limits table, fail-open behavior and its metrics, and the trusted-proxy
   requirement it depends on.
-- [Account deletion and irreversible anonymization audit](./account-deletion-anonymization.md) —
+- [Account deletion and irreversible anonymization](./account-deletion.md) —
   the H54 data-flow inventory, authoritative retention boundary, anonymous
   audit-subject design, operational/dietary retention, venue-presence
   calculation, mobile/web flows, offline-cache behavior, concurrency controls,
@@ -111,13 +103,6 @@ Frontend (web & mobile):
   the copy rules `pnpm check:copy` enforces, web- and mobile-specific
   constraints, and an explicit don'ts list. Read before building or styling
   any screen; `apps/web/README.md` covers the component library itself.
-- [Web UX simplification audit and task plan](./ux-audit-tasks.md) — the
-  prioritized screen inventory, information-architecture changes, acceptance
-  criteria, and implementation sequence for reducing simultaneous choices
-  across the web app. The live judging workspace is the reference pattern.
-- [Application form builder UX audit](./ux-audit-application-builder.md) —
-  findings and fix plan for the create-form modal, Form settings/Questions
-  builder, preview, and Overview tab under `applications/[id]`.
 - [Navigation: capability-based workspaces](./navigation.md) — the personal
   area + additive work-workspace model on web, and the one-action mobile scan
   entry, with the full capability-to-workspace mapping.
@@ -128,10 +113,12 @@ Frontend (web & mobile):
 - [Mobile app](./mobile.md) — the Expo Router app (`apps/mobile`): Better Auth
   Expo integration, capability-driven tabs, offline scanners, and participant
   screens, with the per-story status registry.
-- [Mobile development & store release](./mobile-release.md) — local device
-  setup, prebuild/CNG, EAS profiles and environments, local/cloud compilation,
-  signing and push credentials, icons/store artwork, submission, privacy, and
-  release checklists.
+- [Mobile builds and release](./mobile-release.md) — index into three
+  focused runbooks: [local dev/builds](./mobile-dev-setup.md) (EAS profiles,
+  prebuild, local/cloud compilation), [credentials](./mobile-credentials.md)
+  (signing, push, Wallet certs), and
+  [store release](./mobile-store-release.md) (artwork, privacy declarations,
+  submission, release checklist).
 - [UI testing](./ui-testing.md) — the shared browser/native selector contract,
   Playwright browser projects, fast React Native screen tests, optional
   Detox simulator/device runs, and the screenshot-on-UI-PRs rule.
@@ -145,6 +132,13 @@ Deployment:
   checklist for ~600 concurrent users: what to set (`DB_POOL_MAX`, memory
   limits, replica counts), the Postgres connection budget arithmetic, load
   testing the hot paths, and the monitoring queries to watch during the event.
+
+Historical (not required reading — see [`audits/README.md`](./audits/README.md)):
+
+- [Access-control audit and consolidation plan](./audits/access-control-audit-plan.md)
+- [Web UX simplification audit and task plan](./audits/ux-audit-tasks.md)
+- [Application form builder UX audit](./audits/ux-audit-application-builder.md)
+- [Applications & identity: implementation notes](./audits/implementation-notes.md)
 
 See also the root [`README.md`](../README.md) for local dev setup, the API's
 own `/documentation` (Swagger UI, generated from route schemas — not a file in
