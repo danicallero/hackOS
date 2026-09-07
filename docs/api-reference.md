@@ -187,8 +187,12 @@ business being scanner-registrable). `POST /api/schedule/publish-at` sets a
 shared scheduled-reveal time for several items at once (`SCHEDULE_MANAGE`,
 one audit entry + one broadcast for the whole batch), alongside the existing
 single-item `publishAt` field and the bulk `POST /api/schedule/visibility`.
-`GET /api/public/activities` is audience-aware and anonymous-callable
-(treated as `participant`). An authenticated caller holding any capability
+`GET /api/public/activities` is audience-aware and anonymous-callable.
+Every caller receives the `participant` slice; a linked sponsor rep or Mentor
+also receives their additional audience slice. Non-staff responses project
+each item's `audiences` to only the tags that apply to that caller, so a
+participant cannot be offered a sponsor/mentor filter by client code. An
+authenticated caller holding any capability
 ("staff") bypasses both the audience filter *and* the visibility/publishAt
 one — every item regardless of state, including drafts and items still
 scheduled to reveal, each with its owners, contactNote, notes, and its own

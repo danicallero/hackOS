@@ -2,6 +2,7 @@
 
 import { ArrowLeftIcon, CalendarDaysIcon } from "lucide-react";
 import Link from "next/link";
+import { ActionGroup } from "@/components/common/action-group";
 import { Brand } from "@/components/common/brand";
 import { LanguageSelect } from "@/components/common/language-select";
 import { ThemeToggle } from "@/components/common/theme-toggle";
@@ -29,17 +30,20 @@ export default function PublicSchedulePage() {
       </header>
       <div className="py-8 sm:py-12">
         <PublicScheduleView
-          header={(event) => (
-            <div className="mb-8 flex items-start gap-3">
-              <div className="bg-primary/10 text-primary rounded-lg p-2.5">
-                <CalendarDaysIcon className="size-5" aria-hidden="true" />
+          header={(event, actions) => (
+            <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="bg-primary/10 text-primary shrink-0 rounded-lg p-2.5">
+                  <CalendarDaysIcon className="size-5" aria-hidden="true" />
+                </div>
+                <div className="min-w-0">
+                  <h1 className="text-balance text-3xl font-semibold">{t("publicSchedule")}</h1>
+                  <p className="text-muted-foreground text-pretty mt-1 text-sm">
+                    {event?.name ?? "hackOS"}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-balance text-3xl font-semibold">{t("publicSchedule")}</h1>
-                <p className="text-muted-foreground text-pretty mt-1 text-sm">
-                  {event?.name ?? "hackOS"}
-                </p>
-              </div>
+              {actions && <ActionGroup className="shrink-0">{actions}</ActionGroup>}
             </div>
           )}
         />
