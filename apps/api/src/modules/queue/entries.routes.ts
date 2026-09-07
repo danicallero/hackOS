@@ -324,7 +324,7 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
         body: moveToPositionBody,
         summary: "Move a team to a place in its queue",
         description:
-          "Puts the team at the given 1-based place in the queue its challenge feeds, renumbering the rest around it; the queue keeps a gapless 1..N ordering, so the number given here is the position every surface then shows. Out-of-range values are clamped to the ends rather than rejected. The team returns to `waiting` and leaves any waiting area it was called into.",
+          "Puts the team at the given 1-based place among the challenge's waiting teams, renumbering the rest around it — the number given here counts only teams still waiting to enter the waiting room, exactly like every surface's displayed position, regardless of any `called` teams interleaved in the underlying ordering. Out-of-range values are clamped to the ends rather than rejected. The team returns to `waiting` and leaves any waiting area it was called into.",
       },
     },
     async (req) =>

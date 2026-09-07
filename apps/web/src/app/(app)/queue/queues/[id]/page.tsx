@@ -256,8 +256,10 @@ export default function QueueDetailPage() {
       return;
     }
 
-    const targetIndex = queue.entries.findIndex((entry) => entry.id === targetEntryId);
-    const targetPosition = target.position ?? targetIndex + 1;
+    // A called team has no waiting-line rank (it already entered the waiting
+    // room) — dropping onto one means "send to the front of the waiting
+    // line," matching the same `?? 1` default the position button below uses.
+    const targetPosition = target.position ?? 1;
     const side =
       event.clientY >
       event.currentTarget.getBoundingClientRect().top + event.currentTarget.offsetHeight / 2
@@ -331,10 +333,11 @@ export default function QueueDetailPage() {
             <ol className="divide-border divide-y">
               {filteredEntries.map((entry) => {
                 const movable = entry.status === "waiting" || entry.status === "called";
-                const queueIndex = queue.entries.findIndex(
-                  (candidate) => candidate.id === entry.id,
-                );
-                const displayPosition = entry.position ?? queueIndex + 1;
+                // A called team has already entered the waiting room, so it
+                // has no "teams ahead of entering it" rank (`entry.position`
+                // is null) — default its move-to-position control to the
+                // front of the waiting line, same as the judging panel does.
+                const displayPosition = entry.position ?? 1;
                 const requestedPosition = movePositions[entry.id] ?? String(displayPosition);
                 const parsedPosition = Number(requestedPosition);
                 const canMove = Number.isInteger(parsedPosition) && parsedPosition > 0;

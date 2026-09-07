@@ -21,7 +21,12 @@ function room(id: number, overrides: Partial<RoomView> = {}): RoomView {
   };
 }
 
-function entry(id: number, status: string, position: number | null = null) {
+function entry(
+  id: number,
+  status: string,
+  position: number | null = null,
+  calledAt: string | null = null,
+) {
   return {
     id,
     challenge_id: 1,
@@ -31,7 +36,7 @@ function entry(id: number, status: string, position: number | null = null) {
     position,
     priority: 0,
     call_count: 0,
-    called_at: null,
+    called_at: calledAt,
     presentation_started_at: null,
     completed_at: null,
     precalled_at: null,
@@ -86,6 +91,19 @@ describe("queue operator console model", () => {
 
     expect(sortOperatorRows(operatorRows(view, "all")).map((row) => row.entry.id)).toEqual([
       31, 32, 30,
+    ]);
+  });
+
+  it("orders called teams by call time, not position (which is null once called)", () => {
+    const view = room(1, {
+      called: [
+        entry(50, "called", null, "2026-01-01T00:02:00.000Z"),
+        entry(51, "called", null, "2026-01-01T00:01:00.000Z"),
+      ],
+    });
+
+    expect(sortOperatorRows(operatorRows(view, "all")).map((row) => row.entry.id)).toEqual([
+      51, 50,
     ]);
   });
 

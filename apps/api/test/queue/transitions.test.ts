@@ -1278,6 +1278,56 @@ describe("move_to_top (H37, H58)", () => {
     expect(await historyRows(e1, "move_to_position")).toHaveLength(1);
   });
 
+  it("interprets the target position as a rank among waiting teams only, skipping interleaved called teams", async () => {
+    const { challengeId, roomId } = await setup();
+    const { pool } = await import("../../src/db/pool.js");
+    // Pause so the route's post-move top-up cannot call anyone mid-test.
+    await pool.query(`UPDATE room_queue_state SET is_paused = true WHERE room_id = $1`, [roomId]);
+
+    const { repoId: r1 } = await createRepoWithTeam();
+    const { repoId: r2 } = await createRepoWithTeam();
+    const { repoId: r3 } = await createRepoWithTeam();
+    const { repoId: r4 } = await createRepoWithTeam();
+    // r1 is already called (position 1, ahead of every waiting team) — H30
+    // skips leave a called team's position untouched, so waiting and called
+    // rows are genuinely interleaved by position, not front-loaded.
+    await pool.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status, position, assigned_room_id, called_at)
+       VALUES ($1, $2, 'called', 1, $3, now())`,
+      [challengeId, r1, roomId],
+    );
+    await enqueueRepo(challengeId, r2, 2);
+    await enqueueRepo(challengeId, r3, 3);
+    const e4 = await enqueueRepo(challengeId, r4, 4);
+
+    // "2" must mean "2nd among waiting teams" (ahead of r3), not "2nd in the
+    // combined called+waiting ordering" (which would land it right after r1).
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/queue/entries/${e4}/move-to`,
+      headers: asUser(judgeId),
+      payload: { position: 2, reason: "Reorder within the waiting line" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("waiting");
+
+    const view = await app.inject({
+      method: "GET",
+      url: `/api/queue/rooms/${roomId}/view`,
+      headers: asUser(operatorId),
+    });
+    expect(view.statusCode).toBe(200);
+    const body = view.json();
+    expect(body.called).toHaveLength(1);
+    expect(body.called[0].position).toBeNull();
+    expect(body.next.map((e: { repo_id: number; position: number | null }) => e.repo_id)).toEqual([
+      r2,
+      r4,
+      r3,
+    ]);
+    expect(body.next.map((e: { position: number | null }) => e.position)).toEqual([1, 2, 3]);
+  });
+
   // H58: the same repo is active in another room via a DIFFERENT challenge —
   // move_to_top of its waiting entry here is still blocked.
   it("blocks when the repo is active in another room for a different challenge", async () => {

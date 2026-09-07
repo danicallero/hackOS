@@ -221,6 +221,81 @@ describe("room view (H41)", () => {
     expect(tv.json()).toHaveLength(1);
     expect(tv.json()[0].active.status).toBe("presenting");
   });
+
+  it("counts only waiting teams for the displayed position — a called team never inflates it, nor shows one itself", async () => {
+    const { roomView, queueGroupQueue } = await import("../../src/modules/queue/reads.js");
+    const challengeId = await createChallenge();
+    const roomId = await createRoom({ maxInWaitingArea: 2 });
+    await assignChallengeToRoom(roomId, challengeId);
+    const { pool } = await import("../../src/db/pool.js");
+    // A fresh challenge already has its own 1:1 queue_group (backfill trigger).
+    const challengeGroupId = (
+      await pool.query(
+        `SELECT queue_group_id FROM queue_group_challenges WHERE challenge_id = $1`,
+        [challengeId],
+      )
+    ).rows[0].queue_group_id as number;
+
+    const mk = async (status: string, position: number, room: number | null) => {
+      const { repoId } = await createRepoWithTeam();
+      await pool.query(
+        `INSERT INTO queue_entries (challenge_id, repo_id, status, position, assigned_room_id, called_at)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [challengeId, repoId, status, position, room, status === "called" ? new Date() : null],
+      );
+      return repoId;
+    };
+    // H30 skip: a busy team stays waiting at a lower position while the next
+    // eligible team is called without moving its own position — so `called`
+    // ends up interleaved between two `waiting` rows, not front-loaded.
+    const waitingLow = await mk("waiting", 1, null);
+    const called = await mk("called", 2, roomId);
+    const waitingHigh = await mk("waiting", 3, null);
+
+    const view = await roomView(roomId);
+    expect(view.called).toHaveLength(1);
+    expect(view.called[0].position).toBeNull();
+    expect(view.next.map((e: { repo_id: number; position: number | null }) => e.position)).toEqual([
+      1, 2,
+    ]);
+    expect(view.next.map((e: { repo_id: number }) => e.repo_id)).toEqual([waitingLow, waitingHigh]);
+
+    const group = await queueGroupQueue(challengeGroupId);
+    const byRepo = new Map(
+      group.entries.map((e: { repo_id: number; position: number | null }) => [
+        e.repo_id,
+        e.position,
+      ]),
+    );
+    expect(byRepo.get(waitingLow)).toBe(1);
+    expect(byRepo.get(called)).toBeNull();
+    expect(byRepo.get(waitingHigh)).toBe(2);
+  });
+});
+
+describe("repo challenges list (staff team search)", () => {
+  it("shows the same waiting-only rank as every other surface, null once called", async () => {
+    const { repoChallenges } = await import("../../src/modules/queue/reads.js");
+    const challengeId = await createChallenge();
+    const roomId = await createRoom();
+    await assignChallengeToRoom(roomId, challengeId);
+    const { pool } = await import("../../src/db/pool.js");
+
+    const { repoId: busy } = await createRepoWithTeam();
+    const { repoId: aheadOfCalled } = await createRepoWithTeam();
+    const { repoId: behindCalled } = await createRepoWithTeam();
+    await pool.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status, position, assigned_room_id, called_at)
+       VALUES ($1, $2, 'called', 2, $3, now())`,
+      [challengeId, aheadOfCalled, roomId],
+    );
+    await enqueueRepo(challengeId, busy, 1);
+    const behindId = await enqueueRepo(challengeId, behindCalled, 3);
+
+    const rows = await repoChallenges(behindCalled);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ entry_id: behindId, status: "waiting", position: 2 });
+  });
 });
 
 describe("participant view (H38)", () => {

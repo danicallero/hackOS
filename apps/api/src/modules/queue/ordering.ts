@@ -6,10 +6,22 @@ import { GROUP_SIBLING_CHALLENGE_IDS_SQL } from "./groups.js";
  *
  * **`queue_entries.position` is a dense rank: 1..N over the active
  * (`waiting` | `called`) entries of one queue_group, no gaps, never zero,
- * never negative.** What is stored is exactly what every surface shows — the
- * judging panel's "Position #3", the participant's "you are 3rd", the TV, the
- * queue-management list. There is no second notion of "display rank" to keep
- * in sync, because there is nothing to convert.
+ * never negative.** This is the *physical* ordering key: it drives
+ * `call_next`'s candidate order, pause/reinjection placement, and every
+ * `placeEntry` move — nothing here changes when a team's status flips
+ * between `waiting` and `called`.
+ *
+ * It is deliberately **not** what any surface displays as "queue position."
+ * A team's displayed number is "how many teams are ahead of it before it
+ * enters the waiting room" — a rank over `waiting` entries only, computed at
+ * read time (see `reads.ts`'s waiting-only rank helper, shared by
+ * `myQueueStatus`, `waitingQueueView` and `queueGroupQueue`). `called`
+ * entries have already entered the waiting room, so they neither get a
+ * displayed number nor count toward anyone else's — and because H30 skips
+ * leave a busy team's `position` untouched while calling the next eligible
+ * team, `called` and `waiting` rows end up genuinely interleaved by
+ * `position`, not front-loaded, so the display rank cannot be derived by
+ * subtracting a called-count from the stored column.
  *
  * This replaces a sparse-sort-key scheme where "move to top" wrote
  * `min - 1` and "move to bottom" wrote `max + 1`, leaving the queue at
@@ -43,7 +55,7 @@ export type QueuePlacement = RequeuePosition | { rank: number };
 async function lockedGroupOrder(
   client: Queryable,
   challengeId: number,
-): Promise<Array<{ id: number; position: number | null }>> {
+): Promise<Array<{ id: number; position: number | null; status: string }>> {
   // `status` is the `queue_status` enum, so the active set is spelled out as
   // literals rather than bound as a text[] parameter.
   await client.query(
@@ -55,15 +67,16 @@ async function lockedGroupOrder(
     [challengeId],
   );
   const { rows } = await client.query(
-    `SELECT id, position FROM queue_entries
+    `SELECT id, position, status FROM queue_entries
       WHERE challenge_id IN (${GROUP_SIBLING_CHALLENGE_IDS_SQL})
         AND status IN ('waiting', 'called')
       ORDER BY position ASC NULLS LAST, id ASC`,
     [challengeId],
   );
-  return rows.map((row: { id: number; position: number | null }) => ({
+  return rows.map((row: { id: number; position: number | null; status: string }) => ({
     id: Number(row.id),
     position: row.position === null ? null : Number(row.position),
+    status: row.status,
   }));
 }
 
@@ -105,6 +118,50 @@ export async function placeEntry(
   else if (placement === "bottom") index = ids.length;
   else index = Math.min(Math.max(placement.rank - 1, 0), ids.length);
 
+  ids.splice(index, 0, entryId);
+  await renumber(client, ids);
+  return index + 1;
+}
+
+/**
+ * Put `entryId` at the `waitingRank`-th `waiting` slot within its
+ * queue_group, so the number an operator submits matches the "teams ahead of
+ * entering the waiting room" number every surface displays — even when
+ * `called` entries are interleaved in the underlying combined ordering.
+ * `called` entries don't count toward the rank but keep their own relative
+ * slot: `entryId` is spliced in right after the `(waitingRank - 1)`th
+ * `waiting` entry, skipping over any `called` rows in between. Renumbers the
+ * whole group and returns the entry's new (combined) `position`.
+ */
+export async function placeEntryAtWaitingRank(
+  client: Queryable,
+  challengeId: number,
+  entryId: number,
+  waitingRank: number,
+): Promise<number> {
+  const order = await lockedGroupOrder(client, challengeId);
+  const rest = order.filter((row) => row.id !== entryId);
+
+  // `index` is where `entryId` gets spliced into `rest`. Default: after
+  // everyone, becoming the last waiting entry (target exceeds how many
+  // waiting entries exist). Otherwise, splice in right before the
+  // `target`-th waiting entry — the `target - 1` waiting entries before it
+  // (and any interleaved `called` rows) keep their place, so `entryId`
+  // becomes exactly the `target`-th waiting entry.
+  const target = Math.max(1, Math.trunc(waitingRank));
+  let index = rest.length;
+  let waitingSeen = 0;
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i]?.status === "waiting") {
+      waitingSeen += 1;
+      if (waitingSeen === target) {
+        index = i;
+        break;
+      }
+    }
+  }
+
+  const ids = rest.map((row) => row.id);
   ids.splice(index, 0, entryId);
   await renumber(client, ids);
   return index + 1;

@@ -27,6 +27,7 @@ import {
   compactQueueGroupPositions,
   placeEntriesOnTop,
   placeEntry,
+  placeEntryAtWaitingRank,
   type RequeuePosition,
 } from "./ordering.js";
 import type { QueueEntryRow } from "./types.js";
@@ -711,9 +712,11 @@ const MOVE_TO_POSITION_FROM = ["waiting", "called"];
 
 /**
  * Put a waiting/called team at an explicit place in its queue_group's queue.
- * The rank is 1-based and clamped into range, and the whole group is
- * renumbered around it, so the number the operator typed is the number every
- * surface then shows (see `ordering.ts`).
+ * The rank is 1-based and clamped into range, and counts only `waiting`
+ * entries — the entry ends up `waiting`, so `rank` is exactly the "teams
+ * ahead of entering the waiting room" number every surface displays (see
+ * `ordering.ts`'s `placeEntryAtWaitingRank`), even when `called` entries are
+ * interleaved in the underlying combined ordering.
  */
 export async function moveToPosition(
   entryId: number,
@@ -726,7 +729,7 @@ export async function moveToPosition(
     const fixtureMarker = await assertEntryFixtureScope(client, actorId, entryId);
     await assertEntryCanMove(client, entry, fixtureMarker);
     assertFrom(entry, MOVE_TO_POSITION_FROM, "move_to_position");
-    const position = await placeEntry(client, entry.challenge_id, entryId, { rank });
+    const position = await placeEntryAtWaitingRank(client, entry.challenge_id, entryId, rank);
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
