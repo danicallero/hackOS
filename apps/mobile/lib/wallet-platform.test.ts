@@ -4,10 +4,35 @@ jest.mock("expo-device", () => ({
 
 import { DeviceType } from "expo-device";
 import {
+  ANDROID_GRANT_READ_URI_PERMISSION,
+  ANDROID_VIEW_ACTION,
+  createAndroidPkpassViewIntent,
+  PKPASS_MIME_TYPE,
   resolveAppleWalletPass,
   supportsAppleWalletButton,
   supportsAppleWalletFileHandoff,
 } from "./wallet-platform";
+
+describe("createAndroidPkpassViewIntent", () => {
+  it("opens a content URI with the pkpass MIME type and read grant", () => {
+    expect(
+      createAndroidPkpassViewIntent(
+        "content://com.hackudc.os.FileSystemFileProvider/cache/ticket.pkpass",
+      ),
+    ).toEqual({
+      data: "content://com.hackudc.os.FileSystemFileProvider/cache/ticket.pkpass",
+      type: PKPASS_MIME_TYPE,
+      flags: ANDROID_GRANT_READ_URI_PERMISSION,
+    });
+    expect(ANDROID_VIEW_ACTION).toBe("android.intent.action.VIEW");
+  });
+
+  it("rejects file URIs so callers cannot leak an app-private path", () => {
+    expect(() => createAndroidPkpassViewIntent("file:///data/user/0/hackos/ticket.pkpass")).toThrow(
+      "content URI",
+    );
+  });
+});
 
 describe("resolveAppleWalletPass", () => {
   it("selects the serial for the currently selected pass purpose", () => {

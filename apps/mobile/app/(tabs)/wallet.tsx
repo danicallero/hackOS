@@ -2,6 +2,7 @@ import { EVENTS } from "@hackos/shared/events";
 import { ButtonStyle, ButtonType, RNWalletView } from "@premieroctet/react-native-wallet";
 import * as Device from "expo-device";
 import { File, Paths } from "expo-file-system";
+import * as IntentLauncher from "expo-intent-launcher";
 import { useScrollToTop } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -35,6 +36,9 @@ import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { type WalletTicketPayload, walletCacheKey } from "@/lib/wallet-cache";
 import {
+  ANDROID_VIEW_ACTION,
+  createAndroidPkpassViewIntent,
+  PKPASS_MIME_TYPE,
   resolveAppleWalletPass,
   supportsAppleWalletButton,
   supportsAppleWalletFileHandoff,
@@ -137,11 +141,25 @@ export default function WalletScreen() {
       headers: { Cookie: cookie },
       idempotent: true,
     });
+
+    if (Platform.OS === "android") {
+      try {
+        await IntentLauncher.startActivityAsync(
+          ANDROID_VIEW_ACTION,
+          createAndroidPkpassViewIntent(file.contentUri),
+        );
+        return;
+      } catch {
+        // ACTION_VIEW has no compatible handler (or the native module is unavailable),
+        // so keep the existing share/save fallback available (H28, #624).
+      }
+    }
+
     if (!(await Sharing.isAvailableAsync())) {
       throw new Error("Sharing is not available on this device");
     }
     await Sharing.shareAsync(file.uri, {
-      mimeType: "application/vnd.apple.pkpass",
+      mimeType: PKPASS_MIME_TYPE,
       dialogTitle: Platform.OS === "ios" ? t("addToAppleWallet") : t("walletDownloadPkpass"),
     });
   }
