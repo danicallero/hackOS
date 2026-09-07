@@ -122,6 +122,15 @@ export function sortOperatorRows(rows: OperatorEntryRow[]): OperatorEntryRow[] {
   return [...rows].sort((a, b) => {
     const kindDifference = kindOrder[a.kind] - kindOrder[b.kind];
     if (kindDifference !== 0) return kindDifference;
+    // A called entry has no waiting-line position anymore (it already
+    // entered the waiting room), so every called row now ties on position —
+    // order the called bucket by call time instead, matching roomView.called
+    // (reads.ts: `ORDER BY called_at ASC`).
+    if (a.kind === "called") {
+      const calledAtA = a.entry.called_at ? Date.parse(a.entry.called_at) : Number.MAX_SAFE_INTEGER;
+      const calledAtB = b.entry.called_at ? Date.parse(b.entry.called_at) : Number.MAX_SAFE_INTEGER;
+      return calledAtA - calledAtB || a.entry.id - b.entry.id;
+    }
     const positionA = a.entry.position ?? Number.MAX_SAFE_INTEGER;
     const positionB = b.entry.position ?? Number.MAX_SAFE_INTEGER;
     return positionA - positionB || a.entry.id - b.entry.id;

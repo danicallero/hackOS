@@ -150,7 +150,15 @@ async function waitingQueueView(challengeIds: number[]) {
       ORDER BY merged.position ASC NULLS LAST, merged.id ASC`,
     [challengeIds],
   );
-  return rows;
+  // The displayed queue position is "how many teams are ahead of entering
+  // the waiting room" — a rank over `waiting` entries only (ordering.ts).
+  // `rows` here is already the deduped, `status = 'waiting'` set in that
+  // exact order, so the 1-based array index *is* that rank; no called teams
+  // to skip over.
+  return rows.map((row, index) => ({
+    ...row,
+    position: index + 1,
+  }));
 }
 
 /**
@@ -233,7 +241,20 @@ export async function queueGroupQueue(queueGroupId: number, fixtureMarker = fals
     [challengeIds, fixtureMarker],
   );
 
-  return { group, challenges, entries };
+  // Same "teams ahead of entering the waiting room" rank as everywhere else:
+  // count only `waiting` rows. `entries` is already ordered
+  // presenting/in_room/called first, then `waiting` by position ASC, so a
+  // running counter over just the `waiting` rows gives the right rank
+  // without a second query. Every other status has already entered (or
+  // passed through) the waiting room, so it gets no display position.
+  let waitingRank = 0;
+  const ranked = entries.map((entry) => {
+    if (entry.status !== "waiting") return { ...entry, position: null };
+    waitingRank += 1;
+    return { ...entry, position: waitingRank };
+  });
+
+  return { group, challenges, entries: ranked };
 }
 
 /** H40: counts by status for the challenge progress panel. */
@@ -312,21 +333,23 @@ export async function roomView(roomId: number, opts: { includeCrossRoomSkips?: b
       )
     ).rows[0] ?? null;
 
-  const called = (
-    await pool.query(
-      `SELECT ${QUEUE_ENTRY_SELECT}
-         FROM queue_entries qe
-         JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
-         JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
-         JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
-         JOIN room_queue_groups rqg
-           ON rqg.room_id = qe.assigned_room_id
-          AND rqg.queue_group_id = qgc.queue_group_id
-        WHERE qe.assigned_room_id = $1 AND qe.status = 'called'
-        ORDER BY qe.called_at ASC NULLS LAST, qe.id ASC`,
-      [roomId],
-    )
-  ).rows;
+  const { rows: calledRows } = await pool.query(
+    `SELECT ${QUEUE_ENTRY_SELECT}
+       FROM queue_entries qe
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
+       JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+       JOIN room_queue_groups rqg
+         ON rqg.room_id = qe.assigned_room_id
+        AND rqg.queue_group_id = qgc.queue_group_id
+      WHERE qe.assigned_room_id = $1 AND qe.status = 'called'
+      ORDER BY qe.called_at ASC NULLS LAST, qe.id ASC`,
+    [roomId],
+  );
+  // `called` teams have already entered the waiting room, so they have no
+  // "teams ahead of entering it" number — never show the stale combined
+  // ordering value here.
+  const called = calledRows.map((row) => ({ ...row, position: null }));
 
   const challengeIds = await roomChallengeIds(pool, roomId);
 
@@ -1057,7 +1080,28 @@ export async function roomPace(roomId: number) {
 export async function repoChallenges(repoId: number) {
   const { rows } = await pool.query(
     `SELECT qe.id AS entry_id, qe.repo_id, qe.challenge_id AS id, c.title, qe.status,
-            qe.position, qe.called_at,
+            CASE WHEN qe.status = 'waiting' THEN (
+              -- Teams ahead of entering the waiting room (ordering.ts): a
+              -- rank over waiting entries only, deduped by repo, in this
+              -- entry's queue_group. Counts each other repo's earliest
+              -- waiting occurrence, plus this entry itself.
+              SELECT COUNT(*)::int
+                FROM queue_entries oe
+                JOIN queue_group_challenges oqgc ON oqgc.challenge_id = oe.challenge_id
+               WHERE oqgc.queue_group_id = qgc.queue_group_id
+                 AND oe.status = 'waiting'
+                 AND (oe.position, oe.id) <= (qe.position, qe.id)
+                 AND NOT EXISTS (
+                   SELECT 1
+                     FROM queue_entries earlier
+                     JOIN queue_group_challenges eqgc ON eqgc.challenge_id = earlier.challenge_id
+                    WHERE eqgc.queue_group_id = oqgc.queue_group_id
+                      AND earlier.repo_id = oe.repo_id
+                      AND earlier.status = 'waiting'
+                      AND (earlier.position, earlier.id) < (oe.position, oe.id)
+                 )
+            ) ELSE NULL END AS position,
+            qe.called_at,
             qgc.queue_group_id, qg.display_name AS queue_name,
             qe.assigned_room_id AS room_id, r.name AS room_name,
             COALESCE(
