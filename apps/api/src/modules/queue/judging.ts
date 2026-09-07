@@ -368,9 +368,9 @@ export async function searchChallengeQueue(challengeId: number, q: string, fixtu
           LIMIT 1
        ) busy ON true
       WHERE qe.challenge_id = $1
-        AND (r.name ILIKE $2 OR CAST(r.id AS text) = $3 OR CAST(qe.id AS text) = $3)
+        AND (unaccent(r.name) ILIKE unaccent($2) OR CAST(r.id AS text) = $3 OR CAST(qe.id AS text) = $3)
       ORDER BY qe.position ASC NULLS LAST, qe.id ASC
-      LIMIT 25`,
+      LIMIT 100`,
     [challengeId, like, q, fixtureMarker],
   );
   return rows;

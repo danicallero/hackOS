@@ -406,6 +406,20 @@ describe("manual search (H37)", () => {
     expect(byId.json().some((h: { repo_id: number }) => h.repo_id === r2)).toBe(true);
   });
 
+  it("matches team names regardless of accents (H37)", async () => {
+    const challengeId = await createChallenge({ judgingPanelCriteria: CRITERIA });
+    const { repoId } = await createRepoWithTeam(undefined, "Cafe Ñandú");
+    await enqueueRepo(challengeId, repoId, 1);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/queue/challenges/${challengeId}/search?q=cafe nandu`,
+      headers: asUser(judgeA),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().some((h: { repo_id: number }) => h.repo_id === repoId)).toBe(true);
+  });
+
   it("projects the other room blocking a team before a judge attempts the call", async () => {
     const operatorId = await createUserWithCapabilities([CAPABILITIES.QUEUE_OPERATE]);
     const firstChallenge = await createChallenge({ judgingPanelCriteria: CRITERIA });

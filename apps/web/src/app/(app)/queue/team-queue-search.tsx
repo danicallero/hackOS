@@ -33,6 +33,10 @@ import {
 
 type TeamCandidate = { repoId: number; repoName: string };
 
+function foldAccents(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 const statusPriority: Record<string, number> = {
   presenting: 0,
   in_room: 1,
@@ -136,10 +140,10 @@ export function TeamQueueSearch({
   }, [rooms, t]);
 
   const matchingTeams = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase();
+    const needle = foldAccents(query.trim().toLocaleLowerCase());
     if (!needle) return [];
     return candidates.filter((candidate) =>
-      candidate.repoName.toLocaleLowerCase().includes(needle),
+      foldAccents(candidate.repoName.toLocaleLowerCase()).includes(needle),
     );
   }, [candidates, query]);
 
