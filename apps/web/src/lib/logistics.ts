@@ -274,6 +274,7 @@ export interface PublicScheduleItem {
   visibility?: "shown" | "hidden";
   publishAt: string | null;
   remindedAt?: string | null;
+  /** Audience tags projected for this caller; non-staff feeds omit inaccessible tags. */
   audiences?: ScheduleAudience[];
   contactNote?: string | null;
   /** Staff-only free-form notes — the run-of-show's "observations" column. */

@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { StyleSheet } from "react-native";
 
 const mockPush = jest.fn();
@@ -164,8 +164,11 @@ describe("schedule list (H374)", () => {
     await renderMobile(<ScheduleScreen />);
 
     const bells = await screen.findAllByLabelText("Reminder off");
-    fireEvent.press(bells[0]);
-    fireEvent.press(bells[0]);
+    await act(async () => {
+      fireEvent.press(bells[0]);
+      fireEvent.press(bells[0]);
+      await Promise.resolve();
+    });
 
     await waitFor(() => {
       const puts = (apiFetch as jest.Mock).mock.calls.filter((call) => call[1]?.method === "PUT");

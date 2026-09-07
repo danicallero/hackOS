@@ -263,6 +263,7 @@ services:
       dockerfile: apps/web/Dockerfile
       args:
         NEXT_PUBLIC_API_URL: "https://${API_DOMAIN}"
+        NEXT_PUBLIC_SITE_URL: "https://${WEB_DOMAIN}"
     networks: [edge]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/ || exit 1"]

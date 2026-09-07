@@ -114,11 +114,12 @@ every workspace and every item (`apps/web/src/lib/session.tsx`).
   `PublicScheduleView`) get a client-side audience filter (H59 follow-up,
   `components/public/schedule-audience-filter.tsx`) whenever the caller's own
   feed from `/api/public/activities` actually spans more than one segment —
-  its options are derived from the distinct `audiences` tags (plus a `staff`
-  pseudo-segment for empty-audience items) already present in what that
-  caller received, never a separate capability lookup, so it can only ever
-  offer segments the viewer already has access to. A pure participant (whose
-  feed is 100% `participant`-tagged) gets no filter at all. A second,
+  the API projects each item's tags to that caller's accessible segments, and
+  its options are derived from those distinct `audiences` tags (plus a
+  `staff` pseudo-segment for empty-audience items), never a separate role or
+  capability lookup, so it can only ever offer segments the viewer already has
+  access to. A pure participant (whose feed is 100% `participant`-tagged) gets
+  no filter at all. A second,
   independent filter by activity kind (`components/public/schedule-kind-filter.tsx`)
   appears alongside it whenever the feed spans more than one `ACTIVITY_KINDS`
   value, mirroring the mobile app's kind filter (open to everyone there too —

@@ -31,11 +31,13 @@ import { logisticsApi, type PublicScheduleItem, resolveScheduleText } from "@/li
  *
  * `header` is a title slot rather than a plain node because both shells title
  * themselves with the event name, which only this component has loaded.
+ * The second slot argument contains the ready-to-use filter actions so each
+ * shell can place them in its own header without duplicating schedule state.
  */
 export function PublicScheduleView({
   header,
 }: {
-  header?: (event: PublicEvent | null) => React.ReactNode;
+  header?: (event: PublicEvent | null, actions: React.ReactNode) => React.ReactNode;
 }) {
   const { t, language } = useLocale();
   const [event, setEvent] = useState<PublicEvent | null>(null);
@@ -100,10 +102,34 @@ export function PublicScheduleView({
       ) ?? null,
     [items, segmentFilter, kindFilter],
   );
+  const filterActions =
+    event &&
+    !eventLoading &&
+    !scheduleLoading &&
+    !eventError &&
+    !scheduleError &&
+    (availableSegments.length > 1 || availableKinds.length > 1) ? (
+      <>
+        {availableSegments.length > 1 && (
+          <ScheduleAudienceFilterPopover
+            segments={availableSegments}
+            selected={segmentFilter}
+            onChange={setSegmentFilter}
+          />
+        )}
+        {availableKinds.length > 1 && (
+          <ScheduleKindFilterPopover
+            kinds={availableKinds}
+            selected={kindFilter}
+            onChange={setKindFilter}
+          />
+        )}
+      </>
+    ) : null;
 
   return (
     <>
-      {header?.(event)}
+      {header?.(event, filterActions)}
       {eventLoading || scheduleLoading ? (
         <div className="flex justify-center py-20" role="status" aria-busy="true">
           <Spinner className="size-6" />
@@ -119,48 +145,23 @@ export function PublicScheduleView({
       ) : (
         event &&
         displayedItems && (
-          <div className="space-y-4">
-            {/* A single segment means every item the caller can see already
-                shares it (e.g. a pure participant) — nothing meaningful to
-                filter, so the control only appears once there's a real
-                choice (H59 follow-up). Same reasoning for kinds: only one
-                kind present means there's nothing to narrow down. */}
-            {(availableSegments.length > 1 || availableKinds.length > 1) && (
-              <div className="flex flex-wrap justify-start gap-2 sm:justify-end">
-                {availableSegments.length > 1 && (
-                  <ScheduleAudienceFilterPopover
-                    segments={availableSegments}
-                    selected={segmentFilter}
-                    onChange={setSegmentFilter}
-                  />
-                )}
-                {availableKinds.length > 1 && (
-                  <ScheduleKindFilterPopover
-                    kinds={availableKinds}
-                    selected={kindFilter}
-                    onChange={setKindFilter}
-                  />
-                )}
-              </div>
-            )}
-            {/* showResponsible is safe unconditionally: the API only ever
-                includes contactNote/owners for callers entitled to see them
-                (staff, or a sponsor rep on their own sponsor-tagged items) —
-                this page reuses that same /api/public/activities payload for
-                both /timetable and /horario, so a sponsor rep landing here
-                (the "schedule" nav item has no sponsor gate) still sees the
-                contact info the API already sent, matching sponsor-faq. */}
-            <ScheduleTimeline
-              items={displayedItems}
-              timezone={event.timezone}
-              showResponsible
-              emptyTitle={
-                items && items.length > 0 && displayedItems.length === 0
-                  ? t("scheduleFilterNoMatches")
-                  : undefined
-              }
-            />
-          </div>
+          /* showResponsible is safe unconditionally: the API only ever
+             includes contactNote/owners for callers entitled to see them
+             (staff, or a sponsor rep on their own sponsor-tagged items) —
+             this page reuses that same /api/public/activities payload for
+             both /timetable and /horario, so a sponsor rep landing here
+             (the "schedule" nav item has no sponsor gate) still sees the
+             contact info the API already sent, matching sponsor-faq. */
+          <ScheduleTimeline
+            items={displayedItems}
+            timezone={event.timezone}
+            showResponsible
+            emptyTitle={
+              items && items.length > 0 && displayedItems.length === 0
+                ? t("scheduleFilterNoMatches")
+                : undefined
+            }
+          />
         )
       )}
     </>

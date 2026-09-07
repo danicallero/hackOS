@@ -150,7 +150,7 @@ starts.
 | Variable | Kind | Required | What it does |
 |---|---|---|---|
 | `API_DOMAIN` | build arg | yes | Becomes `NEXT_PUBLIC_API_URL=https://${API_DOMAIN}`, compiled directly into the client bundle. Changing it means rebuilding the image — restarting the existing container serves the old API URL forever. |
-| `WEB_DOMAIN` | compose-level | yes | The `Host()` rule for this service's **own** Traefik router — deliberately separate from `API_DOMAIN`'s router, since the web app is never routed together with the api. |
+| `WEB_DOMAIN` | compose-level | yes | The `Host()` rule for this service's **own** Traefik router — deliberately separate from `API_DOMAIN`'s router, since the web app is never routed together with the api. It also becomes `NEXT_PUBLIC_SITE_URL=https://${WEB_DOMAIN}` at web build time so canonical and social-card URLs point at the web origin. |
 | `STACK_NAME`, `PROXY_NETWORK`, `CERT_RESOLVER` | compose-level | no (defaults) | Same Traefik-naming role as on `api`. |
 | `WEB_IMAGE_REPO`, `IMAGE_TAG` | compose-level | no | Pinned image tag for prebuilt-image deploys. |
 | `WEB_MEM_LIMIT` | compose-level | no | Memory cap, default `256m`. |
