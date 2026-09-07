@@ -28,6 +28,7 @@ services:
       dockerfile: apps/web/Dockerfile
       args:
         NEXT_PUBLIC_API_URL: "https://${API_DOMAIN}"
+        NEXT_PUBLIC_SITE_URL: "https://${WEB_DOMAIN}"
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
