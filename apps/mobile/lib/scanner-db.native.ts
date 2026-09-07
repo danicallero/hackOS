@@ -1,4 +1,4 @@
-import { File, Paths } from "expo-file-system";
+import { type Directory, File, Paths } from "expo-file-system";
 import * as SQLite from "expo-sqlite";
 import {
   decryptJson,
@@ -35,6 +35,11 @@ import type {
  * created_by_user_id) stay in plaintext.
  */
 
+const ROSTER_DATABASE_NAME = "hackos-scanner-roster.db";
+const QUEUE_DATABASE_NAME = "hackos-scanner-queue.db";
+const LEGACY_DATABASE_NAME = "hackos-scanner.db";
+const SQLITE_SIDECAR_SUFFIXES = ["-wal", "-shm", "-journal"] as const;
+
 let rosterDatabase: Promise<SQLite.SQLiteDatabase> | null = null;
 let queueDatabase: Promise<SQLite.SQLiteDatabase> | null = null;
 let legacyQueueMigration: Promise<void> | null = null;
@@ -69,89 +74,215 @@ interface PersonPayload {
  * Safe to call on every open — checked against `PRAGMA table_info` first.
  */
 async function addScannerActivityI18nColumns(db: SQLite.SQLiteDatabase): Promise<void> {
-  const columns = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(scanner_activities)`);
-  if (columns.some((c) => c.name === "primary_language")) return;
+  const columns = new Set(
+    (await db.getAllAsync<{ name: string }>(`PRAGMA table_info(scanner_activities)`)).map(
+      (column) => column.name,
+    ),
+  );
+  if (!columns.has("primary_language")) {
+    await db.execAsync(
+      "ALTER TABLE scanner_activities ADD COLUMN primary_language TEXT NOT NULL DEFAULT 'es'",
+    );
+  }
+  if (!columns.has("name_i18n")) {
+    await db.execAsync(
+      "ALTER TABLE scanner_activities ADD COLUMN name_i18n TEXT NOT NULL DEFAULT '{}'",
+    );
+  }
+  if (!columns.has("description_i18n")) {
+    await db.execAsync(
+      "ALTER TABLE scanner_activities ADD COLUMN description_i18n TEXT NOT NULL DEFAULT '{}'",
+    );
+  }
+}
+
+async function tableColumns(db: SQLite.SQLiteDatabase, table: string): Promise<Set<string>> {
+  return new Set(
+    (await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`)).map(
+      (column) => column.name,
+    ),
+  );
+}
+
+function hasExactColumns(actual: Set<string>, expected: readonly string[]): boolean {
+  return actual.size === expected.length && expected.every((column) => actual.has(column));
+}
+
+function sqliteSidecarFiles(directory: Directory, databaseName: string): File[] {
+  return SQLITE_SIDECAR_SUFFIXES.map((suffix) => new File(directory, `${databaseName}${suffix}`));
+}
+
+function removeSqliteSidecars(directory: Directory, databaseName: string): void {
+  for (const sidecar of sqliteSidecarFiles(directory, databaseName)) {
+    if (sidecar.exists) sidecar.delete();
+  }
+}
+
+async function prepareRosterDatabase(db: SQLite.SQLiteDatabase): Promise<boolean> {
   await db.execAsync(`
-    ALTER TABLE scanner_activities ADD COLUMN primary_language TEXT NOT NULL DEFAULT 'es';
-    ALTER TABLE scanner_activities ADD COLUMN name_i18n TEXT NOT NULL DEFAULT '{}';
-    ALTER TABLE scanner_activities ADD COLUMN description_i18n TEXT NOT NULL DEFAULT '{}';
+    PRAGMA journal_mode = WAL;
+    PRAGMA foreign_keys = ON;
+    PRAGMA busy_timeout = 5000;
+    CREATE TABLE IF NOT EXISTS scanner_people (
+      user_id INTEGER PRIMARY KEY,
+      ticket_token TEXT UNIQUE,
+      badge_id TEXT UNIQUE,
+      encrypted_payload TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS revoked_badges (badge_id TEXT PRIMARY KEY);
+    CREATE TABLE IF NOT EXISTS revoked_tickets (ticket_token TEXT PRIMARY KEY);
+    CREATE TABLE IF NOT EXISTS scanner_activities (
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      requires_scan INTEGER NOT NULL,
+      starts_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS scanner_activity_states (
+      user_id INTEGER NOT NULL,
+      activity_id INTEGER NOT NULL,
+      scan_count INTEGER NOT NULL,
+      PRIMARY KEY (user_id, activity_id)
+    );
+    CREATE TABLE IF NOT EXISTS scanner_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
   `);
+  await addScannerActivityI18nColumns(db);
+
+  return (
+    hasExactColumns(await tableColumns(db, "scanner_people"), [
+      "user_id",
+      "ticket_token",
+      "badge_id",
+      "encrypted_payload",
+    ]) &&
+    hasExactColumns(await tableColumns(db, "revoked_badges"), ["badge_id"]) &&
+    hasExactColumns(await tableColumns(db, "revoked_tickets"), ["ticket_token"]) &&
+    hasExactColumns(await tableColumns(db, "scanner_activities"), [
+      "id",
+      "name",
+      "category",
+      "requires_scan",
+      "starts_at",
+      "primary_language",
+      "name_i18n",
+      "description_i18n",
+    ]) &&
+    hasExactColumns(await tableColumns(db, "scanner_activity_states"), [
+      "user_id",
+      "activity_id",
+      "scan_count",
+    ]) &&
+    hasExactColumns(await tableColumns(db, "scanner_metadata"), ["key", "value"])
+  );
+}
+
+async function openRosterDatabase(): Promise<SQLite.SQLiteDatabase> {
+  let opened = await SQLite.openDatabaseAsync(ROSTER_DATABASE_NAME, undefined, Paths.cache.uri);
+  try {
+    if (await prepareRosterDatabase(opened)) return opened;
+
+    // The roster is disposable cache data. A database with the old plaintext
+    // shape, a partial migration, or any unknown extra NOT NULL column cannot
+    // be made safe by ALTER TABLE; discard only this cache file and rebuild it
+    // from the next server snapshot.
+    await opened.closeAsync();
+    await SQLite.deleteDatabaseAsync(ROSTER_DATABASE_NAME, Paths.cache.uri);
+    removeSqliteSidecars(Paths.cache, ROSTER_DATABASE_NAME);
+    opened = await SQLite.openDatabaseAsync(ROSTER_DATABASE_NAME, undefined, Paths.cache.uri);
+    if (!(await prepareRosterDatabase(opened))) {
+      throw new Error("Unable to initialize the encrypted scanner roster");
+    }
+    return opened;
+  } catch (error) {
+    await opened.closeAsync().catch(() => undefined);
+    throw error;
+  }
 }
 
 async function rosterDb(): Promise<SQLite.SQLiteDatabase> {
   if (!rosterDatabase) {
-    rosterDatabase = SQLite.openDatabaseAsync(
-      "hackos-scanner-roster.db",
-      undefined,
-      Paths.cache.uri,
-    ).then(async (opened) => {
-      await opened.execAsync(`
-        PRAGMA journal_mode = WAL;
-        PRAGMA foreign_keys = ON;
-        PRAGMA busy_timeout = 5000;
-        CREATE TABLE IF NOT EXISTS scanner_people (
-          user_id INTEGER PRIMARY KEY,
-          ticket_token TEXT UNIQUE,
-          badge_id TEXT UNIQUE,
-          encrypted_payload TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS revoked_badges (badge_id TEXT PRIMARY KEY);
-        CREATE TABLE IF NOT EXISTS revoked_tickets (ticket_token TEXT PRIMARY KEY);
-        CREATE TABLE IF NOT EXISTS scanner_activities (
-          id INTEGER PRIMARY KEY,
-          name TEXT NOT NULL,
-          category TEXT NOT NULL,
-          requires_scan INTEGER NOT NULL,
-          starts_at TEXT
-        );
-        CREATE TABLE IF NOT EXISTS scanner_activity_states (
-          user_id INTEGER NOT NULL,
-          activity_id INTEGER NOT NULL,
-          scan_count INTEGER NOT NULL,
-          PRIMARY KEY (user_id, activity_id)
-        );
-        CREATE TABLE IF NOT EXISTS scanner_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-      `);
-      await addScannerActivityI18nColumns(opened);
-      return opened;
+    rosterDatabase = openRosterDatabase().catch((error) => {
+      rosterDatabase = null;
+      throw error;
     });
   }
   return rosterDatabase;
 }
 
+async function openQueueDatabase(): Promise<SQLite.SQLiteDatabase> {
+  const opened = await SQLite.openDatabaseAsync(QUEUE_DATABASE_NAME);
+  try {
+    await opened.execAsync(`
+      PRAGMA journal_mode = WAL;
+      PRAGMA busy_timeout = 5000;
+      CREATE TABLE IF NOT EXISTS pending_scans (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        created_by_user_id INTEGER NOT NULL,
+        encrypted_payload TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        created_at TEXT NOT NULL,
+        acknowledged_at TEXT,
+        clock_corrected INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS pending_scans_owner_status
+        ON pending_scans(created_by_user_id, status, created_at);
+      CREATE TABLE IF NOT EXISTS scanner_sync_errors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        scan_id TEXT NOT NULL,
+        created_by_user_id INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        error_type TEXT NOT NULL,
+        message TEXT NOT NULL,
+        occurred_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS scanner_sync_errors_owner_time
+        ON scanner_sync_errors(created_by_user_id, occurred_at, id);
+    `);
+
+    // Never reinterpret a legacy/plaintext queue as encrypted data. The old
+    // combined database is retired separately below, while a malformed current
+    // queue remains untouched so an operator can recover it rather than losing
+    // the only copy of an offline transaction.
+    if (
+      !hasExactColumns(await tableColumns(opened, "pending_scans"), [
+        "id",
+        "kind",
+        "created_by_user_id",
+        "encrypted_payload",
+        "status",
+        "attempts",
+        "last_error",
+        "created_at",
+        "acknowledged_at",
+        "clock_corrected",
+      ]) ||
+      !hasExactColumns(await tableColumns(opened, "scanner_sync_errors"), [
+        "id",
+        "scan_id",
+        "created_by_user_id",
+        "kind",
+        "error_type",
+        "message",
+        "occurred_at",
+      ])
+    ) {
+      throw new Error("Incompatible encrypted scanner queue database");
+    }
+    return opened;
+  } catch (error) {
+    await opened.closeAsync().catch(() => undefined);
+    throw error;
+  }
+}
+
 async function queueDb(ownerUserId?: number): Promise<SQLite.SQLiteDatabase> {
   if (!queueDatabase) {
-    queueDatabase = SQLite.openDatabaseAsync("hackos-scanner-queue.db").then(async (opened) => {
-      await opened.execAsync(`
-        PRAGMA journal_mode = WAL;
-        PRAGMA busy_timeout = 5000;
-        CREATE TABLE IF NOT EXISTS pending_scans (
-          id TEXT PRIMARY KEY,
-          kind TEXT NOT NULL,
-          created_by_user_id INTEGER NOT NULL,
-          encrypted_payload TEXT NOT NULL,
-          status TEXT NOT NULL DEFAULT 'pending',
-          attempts INTEGER NOT NULL DEFAULT 0,
-          last_error TEXT,
-          created_at TEXT NOT NULL,
-          acknowledged_at TEXT,
-          clock_corrected INTEGER NOT NULL DEFAULT 0
-        );
-        CREATE INDEX IF NOT EXISTS pending_scans_owner_status
-          ON pending_scans(created_by_user_id, status, created_at);
-        CREATE TABLE IF NOT EXISTS scanner_sync_errors (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          scan_id TEXT NOT NULL,
-          created_by_user_id INTEGER NOT NULL,
-          kind TEXT NOT NULL,
-          error_type TEXT NOT NULL,
-          message TEXT NOT NULL,
-          occurred_at TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS scanner_sync_errors_owner_time
-          ON scanner_sync_errors(created_by_user_id, occurred_at, id);
-      `);
-      return opened;
+    queueDatabase = openQueueDatabase().catch((error) => {
+      queueDatabase = null;
+      throw error;
     });
   }
   const database = await queueDatabase;
@@ -184,38 +315,36 @@ async function queueDb(ownerUserId?: number): Promise<SQLite.SQLiteDatabase> {
  * authenticated call rather than exposing or replaying the legacy data.
  */
 async function retireLegacyScannerDatabase(): Promise<void> {
+  const legacyFile = new File(Paths.document, "SQLite", LEGACY_DATABASE_NAME);
+  const sidecarFiles = sqliteSidecarFiles(Paths.document, LEGACY_DATABASE_NAME);
+
+  // Do not open the legacy name on a fresh install: openDatabaseAsync creates
+  // a new file, which made the migration itself fail on Android and blocked
+  // every encrypted queue operation before the first scan.
+  if (!legacyFile.exists && !sidecarFiles.some((file) => file.exists)) return;
+
   let legacy: SQLite.SQLiteDatabase | null = null;
-  let openError: unknown = null;
-  try {
-    legacy = await SQLite.openDatabaseAsync("hackos-scanner.db");
-  } catch (error) {
-    // A corrupt legacy file still contains untrusted identity-bearing data;
-    // continue to the file retirement attempt and report the open failure if
-    // cleanup itself succeeds.
-    openError = error;
-  } finally {
-    if (legacy) {
-      await legacy.closeAsync();
+  if (legacyFile.exists) {
+    try {
+      legacy = await SQLite.openDatabaseAsync(LEGACY_DATABASE_NAME);
+    } catch {
+      // A corrupt legacy file still contains untrusted identity-bearing data;
+      // it is retired without reading or importing any row.
+    } finally {
+      if (legacy) {
+        await legacy.closeAsync();
+      }
     }
   }
 
-  const databaseDirectory = SQLite.defaultDatabaseDirectory as string;
-  const sidecars = ["hackos-scanner.db-wal", "hackos-scanner.db-shm", "hackos-scanner.db-journal"];
-  for (const filename of sidecars) {
-    const sidecar = new File(databaseDirectory, filename);
+  if (legacyFile.exists) await SQLite.deleteDatabaseAsync(LEGACY_DATABASE_NAME);
+  for (const sidecar of sidecarFiles) {
     if (sidecar.exists) sidecar.delete();
   }
 
-  const legacyFile = new File(databaseDirectory, "hackos-scanner.db");
-  if (legacyFile.exists) await SQLite.deleteDatabaseAsync("hackos-scanner.db");
-
-  if (
-    legacyFile.exists ||
-    sidecars.some((filename) => new File(databaseDirectory, filename).exists)
-  ) {
+  if (legacyFile.exists || sidecarFiles.some((file) => file.exists)) {
     throw new Error("Unable to retire the legacy scanner database");
   }
-  if (openError) throw openError;
 }
 
 let rosterTransactionChain: Promise<unknown> = Promise.resolve();
@@ -305,48 +434,61 @@ export async function applyScannerSnapshot(
     ) {
       return;
     }
-    const statements = [
-      `
+    await database.execAsync(`
       DELETE FROM scanner_people;
       DELETE FROM revoked_badges;
       DELETE FROM revoked_tickets;
       DELETE FROM scanner_activities;
       DELETE FROM scanner_activity_states;
-    `,
-    ];
+    `);
     for (const { person, encrypted } of encryptedPeople) {
-      statements.push(`INSERT INTO scanner_people
+      await database.runAsync(
+        `INSERT INTO scanner_people
           (user_id, ticket_token, badge_id, encrypted_payload)
-         VALUES (${sqlLiteral(person.userId)}, ${sqlLiteral(person.ticketToken)},
-                 ${sqlLiteral(person.badgeId)}, ${sqlLiteral(encrypted)});`);
-    }
-    for (const revoked of revokedBadgesFromSnapshot(snapshot)) {
-      statements.push(`INSERT INTO revoked_badges (badge_id) VALUES (${sqlLiteral(revoked)});`);
-    }
-    for (const revoked of snapshot.revokedTicketTokens ?? []) {
-      statements.push(
-        `INSERT INTO revoked_tickets (ticket_token) VALUES (${sqlLiteral(revoked)});`,
+         VALUES (?, ?, ?, ?)`,
+        person.userId,
+        person.ticketToken,
+        person.badgeId,
+        encrypted,
       );
     }
+    for (const revoked of revokedBadgesFromSnapshot(snapshot)) {
+      await database.runAsync(`INSERT INTO revoked_badges (badge_id) VALUES (?)`, revoked);
+    }
+    for (const revoked of snapshot.revokedTicketTokens ?? []) {
+      await database.runAsync(`INSERT INTO revoked_tickets (ticket_token) VALUES (?)`, revoked);
+    }
     for (const activity of snapshot.activities) {
-      statements.push(`INSERT INTO scanner_activities
+      await database.runAsync(
+        `INSERT INTO scanner_activities
         (id, name, category, requires_scan, starts_at, primary_language, name_i18n, description_i18n)
-        VALUES (${sqlLiteral(activity.id)}, ${sqlLiteral(activity.name)},
-                ${sqlLiteral(activity.category)}, ${sqlLiteral(activity.requiresScan)},
-                ${sqlLiteral(activity.startsAt)}, ${sqlLiteral(activity.primaryLanguage)},
-                ${sqlLiteral(JSON.stringify(activity.nameI18n))},
-                ${sqlLiteral(JSON.stringify(activity.descriptionI18n))});`);
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        activity.id,
+        activity.name,
+        activity.category,
+        activity.requiresScan ? 1 : 0,
+        activity.startsAt,
+        activity.primaryLanguage,
+        JSON.stringify(activity.nameI18n),
+        JSON.stringify(activity.descriptionI18n),
+      );
     }
     for (const state of snapshot.activityStates) {
-      statements.push(`INSERT INTO scanner_activity_states
+      await database.runAsync(
+        `INSERT INTO scanner_activity_states
         (user_id, activity_id, scan_count)
-        VALUES (${sqlLiteral(state.userId)}, ${sqlLiteral(state.activityId)},
-                ${sqlLiteral(state.count)});`);
+        VALUES (?, ?, ?)`,
+        state.userId,
+        state.activityId,
+        state.count,
+      );
     }
-    statements.push(`INSERT INTO scanner_metadata (key, value)
-      VALUES ('last_sync', ${sqlLiteral(snapshot.generatedAt)})
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value;`);
-    await database.execAsync(statements.join("\n"));
+    await database.runAsync(
+      `INSERT INTO scanner_metadata (key, value)
+        VALUES ('last_sync', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      snapshot.generatedAt,
+    );
   });
 }
 
@@ -390,17 +532,6 @@ export async function wipeAttendanceRoster(ownerUserId?: number): Promise<void> 
     `);
   });
   if (generation === rosterGeneration && rosterOwnerUserId === null) await resetRosterKey();
-}
-
-function sqlLiteral(value: string | number | boolean | Date | null): string {
-  if (value === null) return "NULL";
-  if (value instanceof Date) return sqlLiteral(value.toISOString());
-  if (typeof value === "boolean") return value ? "1" : "0";
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new TypeError("SQLite numbers must be finite");
-    return String(value);
-  }
-  return `'${value.replace(/'/g, "''")}'`;
 }
 
 type PersonRow = {
@@ -595,20 +726,22 @@ export async function enqueueLocalScan(payload: ScanPayload, ownerUserId: number
     }));
   } else if (payload.kind === "activity") {
     const roster = await rosterDb();
-    const owner = await roster.getFirstAsync<{ user_id: number }>(
-      `SELECT user_id FROM scanner_people WHERE badge_id = ?`,
-      payload.badgeId,
-    );
-    if (owner) {
-      await roster.runAsync(
-        `INSERT INTO scanner_activity_states (user_id, activity_id, scan_count)
-         VALUES (?, ?, 1)
-         ON CONFLICT(user_id, activity_id)
-         DO UPDATE SET scan_count = scan_count + 1`,
-        owner.user_id,
-        payload.activityId,
+    await withSerializedTransaction(rosterChainRef, roster, async () => {
+      const owner = await roster.getFirstAsync<{ user_id: number }>(
+        `SELECT user_id FROM scanner_people WHERE badge_id = ?`,
+        payload.badgeId,
       );
-    }
+      if (owner) {
+        await roster.runAsync(
+          `INSERT INTO scanner_activity_states (user_id, activity_id, scan_count)
+           VALUES (?, ?, 1)
+           ON CONFLICT(user_id, activity_id)
+           DO UPDATE SET scan_count = scan_count + 1`,
+          owner.user_id,
+          payload.activityId,
+        );
+      }
+    });
   }
   return id;
 }
@@ -686,12 +819,15 @@ export async function pendingScans(
 }
 
 export async function markScanAttempt(id: string, ownerUserId: number): Promise<void> {
-  await (await queueDb(ownerUserId)).runAsync(
-    `UPDATE pending_scans SET attempts = attempts + 1, last_error = NULL
-      WHERE id = ? AND created_by_user_id = ?`,
-    id,
-    ownerUserId,
-  );
+  const database = await queueDb(ownerUserId);
+  await withSerializedTransaction(queueChainRef, database, async () => {
+    await database.runAsync(
+      `UPDATE pending_scans SET attempts = attempts + 1, last_error = NULL
+        WHERE id = ? AND created_by_user_id = ?`,
+      id,
+      ownerUserId,
+    );
+  });
 }
 
 export async function acknowledgeScan(
@@ -713,17 +849,23 @@ export async function acknowledgeScan(
   });
   if (!acknowledged) return;
   if (payload.kind === "accreditation") {
-    await (await rosterDb()).runAsync(
-      `UPDATE scanner_people SET badge_id = ? WHERE ticket_token = ?`,
-      payload.badgeId,
-      payload.ticketToken,
-    );
+    const roster = await rosterDb();
+    await withSerializedTransaction(rosterChainRef, roster, async () => {
+      await roster.runAsync(
+        `UPDATE scanner_people SET badge_id = ? WHERE ticket_token = ?`,
+        payload.badgeId,
+        payload.ticketToken,
+      );
+    });
   } else if (payload.kind === "accreditation_user") {
-    await (await rosterDb()).runAsync(
-      `UPDATE scanner_people SET badge_id = ? WHERE user_id = ?`,
-      payload.badgeId,
-      payload.userId,
-    );
+    const roster = await rosterDb();
+    await withSerializedTransaction(rosterChainRef, roster, async () => {
+      await roster.runAsync(
+        `UPDATE scanner_people SET badge_id = ? WHERE user_id = ?`,
+        payload.badgeId,
+        payload.userId,
+      );
+    });
   }
 }
 
@@ -799,31 +941,40 @@ export async function correctScanTimestamp(
 ): Promise<void> {
   const key = await getQueueKey(ownerUserId);
   const encrypted = await encryptJson(payload, key);
-  await (await queueDb(ownerUserId)).runAsync(
-    `UPDATE pending_scans SET encrypted_payload = ?, clock_corrected = 1, last_error = NULL
-      WHERE id = ? AND created_by_user_id = ?`,
-    encrypted,
-    id,
-    ownerUserId,
-  );
+  const database = await queueDb(ownerUserId);
+  await withSerializedTransaction(queueChainRef, database, async () => {
+    await database.runAsync(
+      `UPDATE pending_scans SET encrypted_payload = ?, clock_corrected = 1, last_error = NULL
+        WHERE id = ? AND created_by_user_id = ?`,
+      encrypted,
+      id,
+      ownerUserId,
+    );
+  });
 }
 
 export async function retryFailedScans(ownerUserId: number): Promise<void> {
-  await (await queueDb(ownerUserId)).runAsync(
-    `UPDATE pending_scans SET status = 'pending', last_error = NULL
-      WHERE status = 'failed' AND created_by_user_id = ?`,
-    ownerUserId,
-  );
+  const database = await queueDb(ownerUserId);
+  await withSerializedTransaction(queueChainRef, database, async () => {
+    await database.runAsync(
+      `UPDATE pending_scans SET status = 'pending', last_error = NULL
+        WHERE status = 'failed' AND created_by_user_id = ?`,
+      ownerUserId,
+    );
+  });
 }
 
 /** Same as retryFailedScans, scoped to a single scan the operator picked from the queue. */
 export async function retryScan(id: string, ownerUserId: number): Promise<void> {
-  await (await queueDb(ownerUserId)).runAsync(
-    `UPDATE pending_scans SET status = 'pending', last_error = NULL
-      WHERE id = ? AND status = 'failed' AND created_by_user_id = ?`,
-    id,
-    ownerUserId,
-  );
+  const database = await queueDb(ownerUserId);
+  await withSerializedTransaction(queueChainRef, database, async () => {
+    await database.runAsync(
+      `UPDATE pending_scans SET status = 'pending', last_error = NULL
+        WHERE id = ? AND status = 'failed' AND created_by_user_id = ?`,
+      id,
+      ownerUserId,
+    );
+  });
 }
 
 /**
@@ -833,11 +984,14 @@ export async function retryScan(id: string, ownerUserId: number): Promise<void> 
  * scan is the only record of that transaction until it's acknowledged.
  */
 export async function deleteScan(id: string, ownerUserId: number): Promise<void> {
-  await (await queueDb(ownerUserId)).runAsync(
-    `DELETE FROM pending_scans WHERE id = ? AND created_by_user_id = ?`,
-    id,
-    ownerUserId,
-  );
+  const database = await queueDb(ownerUserId);
+  await withSerializedTransaction(queueChainRef, database, async () => {
+    await database.runAsync(
+      `DELETE FROM pending_scans WHERE id = ? AND created_by_user_id = ?`,
+      id,
+      ownerUserId,
+    );
+  });
 }
 
 /** H54: remove every encrypted offline scan owned by an account being closed. */

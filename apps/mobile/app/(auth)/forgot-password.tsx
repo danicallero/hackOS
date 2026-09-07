@@ -6,9 +6,8 @@ import { AuthAlert, AuthButton, AuthField, AuthHeader, AuthScreen } from "@/comp
 import { authClient } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
 import { safeBack } from "@/lib/navigation";
+import { passwordResetRedirect } from "@/lib/password-reset";
 import { colors } from "@/theme/colors";
-
-const RESET_DEEP_LINK = "hackos://reset-password";
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
@@ -34,7 +33,7 @@ export default function ForgotPasswordScreen() {
     try {
       const result = await authClient.requestPasswordReset({
         email: email.trim(),
-        redirectTo: RESET_DEEP_LINK,
+        redirectTo: passwordResetRedirect(),
       });
       if (result.error) setError(t("couldNotSendResetEmail"));
       else setSent(true);

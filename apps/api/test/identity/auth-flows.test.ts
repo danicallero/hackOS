@@ -412,6 +412,45 @@ describe("H5 password reset", () => {
     expect(callback.headers.location).toMatch(/^hackos:\/\/reset-password\?token=/);
   });
 
+  it("redirects an Android-style web callback to the browser reset form with its token", async () => {
+    const a = await getApp();
+    await signUp(a);
+    const { config } = await import("../../src/config.js");
+    const webResetUrl = `${config.WEB_URL.replace(/\/+$/, "")}/reset-password`;
+
+    const request = await a.inject({
+      method: "POST",
+      url: "/api/auth/request-password-reset",
+      payload: { email: SIGNUP.email, redirectTo: webResetUrl },
+    });
+    expect(request.statusCode).toBe(200);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(
+      `SELECT o.payload FROM notification_outbox o JOIN users u ON u.id = o.user_id
+       WHERE u.email = $1 AND o.payload->>'template' = 'auth.reset' ORDER BY o.id DESC LIMIT 1`,
+      [SIGNUP.email],
+    );
+    const resetUrl = new URL(rows[0].payload.vars.resetUrl as string);
+    expect(resetUrl.searchParams.get("callbackURL")).toBe(webResetUrl);
+
+    const callback = await a.inject({
+      method: "GET",
+      url: `${resetUrl.pathname}${resetUrl.search}`,
+    });
+    expect(callback.statusCode).toBe(302);
+    const location = new URL(callback.headers.location as string);
+    expect(`${location.origin}${location.pathname}`).toBe(webResetUrl);
+    expect(location.searchParams.get("token")).toBeTruthy();
+
+    const reset = await a.inject({
+      method: "POST",
+      url: "/api/auth/reset-password",
+      payload: { token: location.searchParams.get("token"), newPassword: "browser-reset-1" },
+    });
+    expect(reset.statusCode).toBe(200);
+  });
+
   it("same response whether the email exists or not, and the reset email is queued", async () => {
     const a = await getApp();
     await signUp(a);
