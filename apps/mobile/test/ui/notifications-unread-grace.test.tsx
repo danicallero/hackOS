@@ -89,7 +89,9 @@ jest.mock("@/lib/me-context", () => ({
 }));
 jest.mock("@/lib/notification-events", () => ({
   emitNotificationChange: jest.fn(),
+  emitNotificationPreferenceChange: jest.fn(),
   subscribeToCategory: () => () => {},
+  subscribeToNotificationPreferenceChanges: () => () => {},
   subscribeToNotificationChanges: () => () => {},
 }));
 jest.mock("@/lib/server-events", () => ({ subscribeToServerEvent: () => () => {} }));

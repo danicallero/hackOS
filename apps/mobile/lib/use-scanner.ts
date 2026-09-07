@@ -11,7 +11,7 @@ import {
   syncErrorHistory,
 } from "./scanner-db";
 import { synchronizeScanner } from "./scanner-sync";
-import type { PendingScan, ScannerSyncErrorEntry } from "./scanner-types";
+import type { PendingScan, ScannerSnapshot, ScannerSyncErrorEntry } from "./scanner-types";
 
 /** Sync stopped retrying automatically after this many straight failures. */
 const MAX_AUTO_RETRIES = 3;
@@ -30,6 +30,10 @@ export interface ScannerSyncError {
   conflict: boolean;
 }
 
+function asLocalError(cause: unknown): Error {
+  return cause instanceof Error ? cause : new Error("Local scanner storage failed");
+}
+
 /**
  * Every read/replay here is scoped to the currently signed-in staff member
  * (`me.id`) — the offline scan queue is encrypted and partitioned per user
@@ -45,6 +49,8 @@ export function useScannerSync() {
   const [queue, setQueue] = useState<PendingScan[]>([]);
   const [errorHistory, setErrorHistory] = useState<ScannerSyncErrorEntry[]>([]);
   const [error, setError] = useState<ScannerSyncError | null>(null);
+  const [serverSnapshot, setServerSnapshot] = useState<ScannerSnapshot | null>(null);
+  const [localError, setLocalError] = useState<Error | null>(null);
   const [clockSkewMs, setClockSkewMs] = useState<number | null>(null);
   const consecutiveFailures = useRef(0);
   // Read by the interval/AppState listener only — a manual retry (this
@@ -65,11 +71,13 @@ export function useScannerSync() {
     setErrorHistory(errors);
   }, [ownerUserId]);
 
-  const sync = useCallback(async () => {
+  const sync = useCallback(async (): Promise<void> => {
     if (ownerUserId === null) return;
     setSyncing(true);
     try {
-      await synchronizeScanner(ownerUserId);
+      const result = await synchronizeScanner(ownerUserId);
+      setServerSnapshot(result.snapshot);
+      setLocalError(result.localError);
       setError(null);
       consecutiveFailures.current = 0;
       autoRetryPausedRef.current = false;
@@ -87,7 +95,11 @@ export function useScannerSync() {
       }
       setError({ message: cause instanceof Error ? cause.message : "Sync failed", conflict });
     } finally {
-      await refreshLocal();
+      // Keep local queue metadata best-effort too. A locked/corrupt backup
+      // must not keep a successful server sync in the loading state.
+      void refreshLocal().catch((cause) => {
+        setLocalError((current) => current ?? asLocalError(cause));
+      });
       setClockSkewMs(getClockSkewMs());
       setSyncing(false);
     }
@@ -127,7 +139,12 @@ export function useScannerSync() {
 
   useEffect(() => {
     if (ownerUserId === null) return;
-    void refreshLocal().then(sync);
+    // Do not let a broken local backup prevent the first online snapshot.
+    // `sync` fetches the server directory and publishes it independently.
+    void refreshLocal().catch((cause) => {
+      setLocalError(asLocalError(cause));
+    });
+    void sync().catch(() => undefined);
     const interval = setInterval(() => {
       // Pausing auto-retry only skips the network attempt — local state
       // (the queue, including scans enqueued from another screen's own
@@ -155,6 +172,8 @@ export function useScannerSync() {
     errorHistory,
     error,
     autoRetryPaused,
+    serverSnapshot,
+    localError,
     clockSkewMs,
     sync,
     retryFailed,

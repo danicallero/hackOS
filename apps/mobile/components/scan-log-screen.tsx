@@ -150,9 +150,9 @@ export function ScanLogScreen() {
     const params = { id: String(entry.subjectUserId) };
     if (entry.source === "accreditation") {
       if (pathname.includes("/scan/")) {
-        router.push({ pathname: "/(tabs)/scan/person/[id]", params });
+        router.push({ pathname: "/scan/person/[id]", params });
       } else {
-        router.push({ pathname: "/(tabs)/others/person/[id]", params });
+        router.push({ pathname: "/others/person/[id]", params });
       }
       return;
     }
@@ -162,9 +162,9 @@ export function ScanLogScreen() {
       focusSource: entry.source,
     };
     if (pathname.includes("/scan/")) {
-      router.push({ pathname: "/(tabs)/scan/person/[id]", params: focusParams });
+      router.push({ pathname: "/scan/person/[id]", params: focusParams });
     } else {
-      router.push({ pathname: "/(tabs)/others/person/[id]", params: focusParams });
+      router.push({ pathname: "/others/person/[id]", params: focusParams });
     }
   }
 

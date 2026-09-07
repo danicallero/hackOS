@@ -2,7 +2,7 @@ import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Stack } from "expo-router/stack";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
@@ -53,12 +53,19 @@ export function ActivityScannerScreen() {
   const ownerUserId = me?.id;
   const syncState = useScannerSync();
   const { sync: runSync, lastSync } = syncState;
-  const [activity, setActivity] = useState<ScannerActivity | null>(null);
+  const [localActivity, setLocalActivity] = useState<ScannerActivity | null>(null);
   const [result, setResult] = useState<ActivityScanResult | null>(null);
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<ActivityStats | null>(null);
   const handledManualScan = useRef<string | null>(null);
+  const activity = useMemo(
+    () =>
+      syncState.serverSnapshot
+        ? (syncState.serverSnapshot.activities.find((item) => item.id === activityId) ?? null)
+        : localActivity,
+    [activityId, localActivity, syncState.serverSnapshot],
+  );
 
   const loadStats = useCallback(async () => {
     try {
@@ -70,9 +77,11 @@ export function ActivityScannerScreen() {
   }, [activityId]);
 
   useEffect(() => {
-    void listScannerActivities().then((items) =>
-      setActivity(items.find((item) => item.id === activityId) ?? null),
-    );
+    void listScannerActivities()
+      .then((items) => setLocalActivity(items.find((item) => item.id === activityId) ?? null))
+      .catch(() => {
+        // The online snapshot below remains authoritative when SQLite is down.
+      });
   }, [activityId]);
 
   useEffect(() => {
@@ -143,13 +152,28 @@ export function ActivityScannerScreen() {
       // (e.g. a slow/unresponsive sync), which would render its buttons
       // permanently disabled.
       setRegistering(false);
-      const found = await findPersonByBadge(badgeId);
+      const serverPerson = syncState.serverSnapshot?.people.find(
+        (candidate) => candidate.badgeId === badgeId,
+      );
+      const found = syncState.serverSnapshot
+        ? { person: serverPerson ?? null, revoked: false }
+        : await findPersonByBadge(badgeId);
       if (!found.person) {
         setError(found.revoked ? t("scannerBadgeRevoked") : t("scannerBadgeUnknown"));
         setResult(null);
         return;
       }
-      const state = await getActivityState(found.person.userId, activityId);
+      const state = syncState.serverSnapshot
+        ? {
+            userId: found.person.userId,
+            activityId,
+            count:
+              syncState.serverSnapshot.activityStates.find(
+                (candidate) =>
+                  candidate.userId === found.person!.userId && candidate.activityId === activityId,
+              )?.count ?? 0,
+          }
+        : await getActivityState(found.person.userId, activityId);
       setError(null);
       // Any repeat — meal or registrable activity — needs explicit staff
       // confirmation (H25/H26): the API 409s repeats sent without allowRepeat,
@@ -167,7 +191,7 @@ export function ActivityScannerScreen() {
       }
       await store(found.person, badgeId, false, state.count);
     },
-    [activityId, store, t],
+    [activityId, store, syncState.serverSnapshot, t],
   );
 
   useEffect(() => {

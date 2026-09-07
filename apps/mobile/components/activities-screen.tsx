@@ -55,6 +55,13 @@ export function ActivitiesScreen() {
   const glassAvailable = isRealLiquidGlassAvailable();
   const androidTopInset = useAndroidTopInset();
   const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
+  // SQLite is an offline backup. A successful online snapshot must replace
+  // the list immediately, even when the local roster cannot be opened.
+  const directory = sync.serverSnapshot?.activities ?? items;
+  const scannableDirectory = useMemo(
+    () => directory.filter((item) => item.requiresScan || isMealActivityKind(item.category)),
+    [directory],
+  );
 
   useScrollToTop(listRef);
 
@@ -79,13 +86,12 @@ export function ActivitiesScreen() {
     setRefreshing(true);
     try {
       await sync.sync();
-      await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause : new Error());
     } finally {
       setRefreshing(false);
     }
-  }, [load, sync.sync]);
+  }, [sync.sync]);
 
   useEffect(() => {
     void load();
@@ -107,11 +113,18 @@ export function ActivitiesScreen() {
   // already-loaded list. It gets its own banner below, and only appears
   // once auto-retry has actually given up (a single blip self-heals quietly
   // on the next tick) — see useScannerSync's autoRetryPaused.
-  const loadError = error;
+  const loadError = sync.serverSnapshot ? null : error;
   const syncError = sync.autoRetryPaused ? sync.error : null;
+  // A server snapshot is already usable while the disposable local backup is
+  // still opening (or is stuck behind a native SQLite lock). Do not leave an
+  // authoritative empty response looking like an endless loading spinner.
+  const listLoading = loading && !sync.serverSnapshot;
 
-  const kinds = useMemo(() => activityKinds(items), [items]);
-  const filtered = useMemo(() => filterActivities(items, { query, kind }), [items, kind, query]);
+  const kinds = useMemo(() => activityKinds(scannableDirectory), [scannableDirectory]);
+  const filtered = useMemo(
+    () => filterActivities(scannableDirectory, { query, kind }),
+    [scannableDirectory, kind, query],
+  );
   const marker = useMemo(() => closestActivity(filtered, now), [filtered, now]);
   const filtering = query.trim().length > 0 || kind !== null;
 
@@ -340,9 +353,9 @@ export function ActivitiesScreen() {
         refreshControl={<RefreshControl onRefresh={() => void refresh()} refreshing={refreshing} />}
         ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         ListHeaderComponent={
-          (loadError && items.length > 0) || syncError ? (
+          (loadError && scannableDirectory.length > 0) || syncError ? (
             <View style={{ gap: 8, paddingBottom: 12 }}>
-              {loadError && items.length > 0 ? (
+              {loadError && scannableDirectory.length > 0 ? (
                 <RequestFeedback
                   error={loadError}
                   message={t("requestError")}
@@ -365,7 +378,7 @@ export function ActivitiesScreen() {
           ) : null
         }
         ListEmptyComponent={
-          loading ? (
+          listLoading ? (
             <RequestFeedback loading />
           ) : loadError ? (
             <RequestFeedback
@@ -397,7 +410,7 @@ export function ActivitiesScreen() {
             onPress={() => {
               returningFromScanner.current = true;
               router.push({
-                pathname: "/(tabs)/activities/[id]",
+                pathname: "/activities/[id]",
                 params: { id: String(item.id) },
               });
             }}

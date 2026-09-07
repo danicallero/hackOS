@@ -84,6 +84,7 @@ const ANDROID_SYMBOL_NAMES = {
   lanyardcard: "badge",
   "list.bullet": "list",
   "list.bullet.rectangle": "list_alt",
+  "list.bullet.rectangle.fill": "list_alt",
   "lock.fill": "lock",
   magnifyingglass: "search",
   "lock.rotation": "sync_lock",

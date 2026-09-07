@@ -10,7 +10,6 @@ import {
 } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Alert, InteractionManager, Pressable, ScrollView, Text, View } from "react-native";
-import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ActionButton,
@@ -24,7 +23,7 @@ import { formatMinutes, PresenceManagement } from "@/components/presence-managem
 import { QrCamera } from "@/components/QrCamera";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
-import { apiFetch } from "@/lib/api";
+import { ApiError, apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -32,13 +31,9 @@ import { transparentDetailHeaderOptions } from "@/lib/navigation";
 import type { PresenceDivergence } from "@/lib/presence-timeline";
 import { roleDisplayName } from "@/lib/role-filters";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
-import {
-  enqueueLocalScan,
-  findPersonById,
-  findPersonByTicket,
-  pendingScans,
-} from "@/lib/scanner-db";
-import type { ScannerPerson } from "@/lib/scanner-types";
+import { enqueueLocalScan, findPersonById, pendingScans } from "@/lib/scanner-db";
+import { submitScannerMutation } from "@/lib/scanner-sync";
+import type { ScannerPerson, ScanPayload } from "@/lib/scanner-types";
 import { usePresenceSummary } from "@/lib/use-presence-summary";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
@@ -55,74 +50,6 @@ const CONTENT_PADDING = 16;
 // profile row below the status bar and native header there; iOS handles the
 // same inset through `contentInsetAdjustmentBehavior="automatic"`.
 const ANDROID_HEADER_CLEARANCE = 68;
-
-/**
- * The action panel revealed by swiping the current-badge row left, matching
- * the OS notification center's swipe-to-clear gesture: the row slides as one
- * opaque layer (Swipeable's own transform on its child) to uncover these
- * buttons — they're at full opacity from the first pixel of drag, never
- * fading in separately — and the badge is only replaced/removed on the
- * deliberate follow-up tap, never by the swipe distance alone. This is the
- * last row in its section, so only its bottom-right corner is rounded to
- * match the section's own clip.
- */
-function AccreditationRevealActions({
-  onReplace,
-  onDelete,
-}: {
-  onReplace: () => void;
-  onDelete: () => void;
-}) {
-  const { t } = useLocale();
-  return (
-    <View style={{ flexDirection: "row", height: "100%" }}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t("personReplaceBadge")}
-        onPress={() => {
-          void haptic("light");
-          onReplace();
-        }}
-        style={({ pressed }) => ({
-          alignItems: "center",
-          backgroundColor: colors.accent,
-          gap: 4,
-          height: "100%",
-          justifyContent: "center",
-          opacity: pressed ? 0.75 : 1,
-          paddingHorizontal: 16,
-        })}
-      >
-        <SymbolView name="qrcode.viewfinder" tintColor="white" size={16} accessible={false} />
-        <Text style={{ color: "white", fontSize: 12, fontWeight: "700" }}>
-          {t("personReplaceBadge")}
-        </Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t("personDeleteBadge")}
-        onPress={() => {
-          void haptic("warning");
-          onDelete();
-        }}
-        style={({ pressed }) => ({
-          alignItems: "center",
-          backgroundColor: colors.destructive,
-          gap: 4,
-          height: "100%",
-          justifyContent: "center",
-          opacity: pressed ? 0.75 : 1,
-          paddingHorizontal: 16,
-        })}
-      >
-        <SymbolView name="trash.fill" tintColor="white" size={16} accessible={false} />
-        <Text style={{ color: "white", fontSize: 12, fontWeight: "700" }}>
-          {t("personDeleteBadge")}
-        </Text>
-      </Pressable>
-    </View>
-  );
-}
 
 type PersonLoadState = "loading" | "ready" | "missing" | "error";
 
@@ -167,13 +94,22 @@ export function PersonOperationsScreen() {
   const scrollViewportRef = useRef<View>(null);
   const scrollOffsetRef = useRef(0);
   const autoScrolledFocusRef = useRef<string | null>(null);
+  const [cameraAction, setCameraAction] = useState<"assign" | "replace" | null>(null);
 
   // These profile routes can be pushed from several independent stacks. Set
   // the same native options on the mounted leaf route as in each layout so a
   // parent stack cannot briefly expose `[id]` while the detail screen mounts.
   useLayoutEffect(() => {
-    navigation.setOptions(transparentDetailHeaderOptions);
-  }, [navigation]);
+    // QrCamera owns its own full-screen back control. On Android a transparent
+    // native header still occupies the top 210px and wins hit-testing over
+    // that control, making the first tap appear to do nothing. Remove the
+    // header while the camera is open, then restore the profile chrome.
+    navigation.setOptions(
+      cameraAction
+        ? { ...transparentDetailHeaderOptions, headerShown: false }
+        : transparentDetailHeaderOptions,
+    );
+  }, [cameraAction, navigation]);
 
   useScrollToTop(scrollRef);
   const { me } = useMeContext();
@@ -218,9 +154,9 @@ export function PersonOperationsScreen() {
   const [person, setPerson] = useState<PersonDetails | null>(null);
   const [loadState, setLoadState] = useState<PersonLoadState>("loading");
   const [loadError, setLoadError] = useState<Error | null>(null);
-  const [cameraAction, setCameraAction] = useState<"assign" | "replace" | null>(null);
   const [attendeeRole, setAttendeeRole] = useState<"participant" | "mentor" | null>(null);
   const [busy, setBusy] = useState(false);
+  const badgeMutationInFlight = useRef(false);
   // Server-side last door log, reported by the presence timeline below —
   // the local snapshot alone can lag behind manual edits or other devices.
   const [serverDoor, setServerDoor] = useState<{ kind: "in" | "out"; at: string } | null>(null);
@@ -246,7 +182,12 @@ export function PersonOperationsScreen() {
     setLoadError(null);
     setLoadState((current) => (current === "ready" ? current : "loading"));
     try {
-      const local = await findPersonById(userId);
+      // Once the network has answered, it is authoritative. Do not reject a
+      // valid online profile merely because the disposable SQLite backup is
+      // empty, locked, or unavailable.
+      const local = sync.serverSnapshot
+        ? (sync.serverSnapshot.people.find((candidate) => candidate.userId === userId) ?? null)
+        : await findPersonById(userId);
       if (!local) {
         setPerson(null);
         setLoadState("missing");
@@ -277,7 +218,7 @@ export function PersonOperationsScreen() {
       setLoadError(cause instanceof Error ? cause : new Error(t("requestError")));
       setLoadState("error");
     }
-  }, [canAccredit, t, userId]);
+  }, [canAccredit, sync.serverSnapshot, t, userId]);
 
   // Reload on every scanner sync: the register derives its direction from
   // the person's last door log, which door scans on other devices (or manual
@@ -297,43 +238,46 @@ export function PersonOperationsScreen() {
   );
 
   async function saveBadge(nextBadge: string, attendeeRole?: "participant" | "mentor") {
-    if (!person || ownerUserId === undefined) return;
-    if (await findPersonByTicket(nextBadge)) {
-      Alert.alert(t("personBadgeIsTicketTitle"), t("personBadgeIsTicketBody"));
-      return;
-    }
+    if (!person || ownerUserId === undefined || !nextBadge || badgeMutationInFlight.current) return;
+    badgeMutationInFlight.current = true;
     const currentBadge = person.badgeId;
-    const scanId = await enqueueLocalScan(
-      currentBadge
-        ? {
-            kind: "badge_rotation",
-            userId,
-            currentBadgeId: currentBadge,
-            newBadgeId: nextBadge,
-            reason: t("badgeReplacementReason"),
-          }
-        : {
-            kind: "accreditation_user",
-            userId,
-            badgeId: nextBadge,
-            method: "manual",
-            attendeeRole,
-          },
-      ownerUserId,
-    );
-    void haptic("light");
+    const payload: ScanPayload = currentBadge
+      ? {
+          kind: "badge_rotation",
+          userId,
+          currentBadgeId: currentBadge,
+          newBadgeId: nextBadge,
+          reason: t("badgeReplacementReason"),
+        }
+      : {
+          kind: "accreditation_user",
+          userId,
+          badgeId: nextBadge,
+          method: "manual",
+          attendeeRole,
+        };
+    // Close the camera before doing any storage/network work. It prevents a
+    // slow Android camera callback from submitting the same badge twice.
     setCameraAction(null);
     setAttendeeRole(null);
-    await sync.sync();
-    const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
-    void haptic(
-      stored?.status === "failed"
-        ? "error"
-        : stored?.status === "acknowledged"
-          ? "success"
-          : "light",
-    );
-    await load();
+    try {
+      const result = await submitScannerMutation(payload, ownerUserId);
+      void haptic(result.state === "acknowledged" ? "success" : "light");
+      // Refresh the authoritative snapshot after an online mutation. A local
+      // cache failure is intentionally contained by useScannerSync, so it
+      // cannot turn a successful server assignment into an error state.
+      await sync.sync().catch(() => undefined);
+      await load();
+    } catch (cause) {
+      void haptic("error");
+      const message = cause instanceof Error ? cause.message : t("requestError");
+      Alert.alert(
+        cause instanceof ApiError ? t("scannerBusinessRejected") : t("requestError"),
+        message,
+      );
+    } finally {
+      badgeMutationInFlight.current = false;
+    }
   }
 
   function beginBadgeAction() {
@@ -559,19 +503,45 @@ export function PersonOperationsScreen() {
     serverAt >= localAt ? (serverDoor?.kind ?? person.lastPresenceKind) : person.lastPresenceKind;
   const direction: "in" | "out" = lastDoorKind === "in" ? "out" : "in";
 
-  // Once a badge exists, its row lives at the bottom of Personal details
-  // instead — this section is then only the unassigned-person action.
-  const accreditationSection =
-    canAccredit && !person.badgeId ? (
-      <Section title={t("scannerAccreditation")}>
+  // Keep accreditation as an explicit section for both unassigned and
+  // already-linked people. Hiding the linked state behind a swipe made the
+  // Android profile look different from iOS and made the available action
+  // easy to miss on a touch screen.
+  const accreditationSection = canAccredit ? (
+    <Section title={t("scannerAccreditation")}>
+      <InfoRow
+        label={t("personCurrentBadge")}
+        value={person.badgeId ?? t("personUnassigned")}
+        icon="key.card"
+      />
+      <Separator />
+      {person.badgeId ? (
+        <View style={{ flexDirection: "row" }}>
+          <ActionButton
+            icon="qrcode.viewfinder"
+            label={t("personReplaceBadge")}
+            onPress={beginBadgeAction}
+            style={{ flex: 1 }}
+          />
+          <View style={{ backgroundColor: colors.separator, width: 0.5 }} />
+          <ActionButton
+            destructive
+            icon="trash"
+            label={t("personDeleteBadge")}
+            onPress={confirmRemoveBadge}
+            style={{ flex: 1 }}
+          />
+        </View>
+      ) : (
         <ActionButton
           testID={UI_TEST_IDS.scanner.linkBadge}
           icon="qrcode.viewfinder"
           label={t("personLinkBadge")}
           onPress={beginBadgeAction}
         />
-      </Section>
-    ) : null;
+      )}
+    </Section>
+  ) : null;
 
   // Door logging needs a badge: without one the register is hidden entirely
   // and assigning a badge becomes the profile's primary action instead.
@@ -597,11 +567,11 @@ export function PersonOperationsScreen() {
   function openPresenceDraft(kind: "in" | "out", at: string) {
     const params = { id: String(userId), draftKind: kind, draftAt: at };
     if (pathname.includes("/activities/")) {
-      router.push({ pathname: "/(tabs)/activities/person/presence/[id]", params });
+      router.push({ pathname: "/activities/person/presence/[id]", params });
     } else if (pathname.includes("/others/")) {
-      router.push({ pathname: "/(tabs)/others/person/presence/[id]", params });
+      router.push({ pathname: "/others/person/presence/[id]", params });
     } else {
-      router.push({ pathname: "/(tabs)/scan/person/presence/[id]", params });
+      router.push({ pathname: "/scan/person/presence/[id]", params });
     }
   }
 
@@ -761,11 +731,11 @@ export function PersonOperationsScreen() {
           onPress={() => {
             const params = { id: String(userId) };
             if (pathname.includes("/activities/")) {
-              router.push({ pathname: "/(tabs)/activities/person/presence/[id]", params });
+              router.push({ pathname: "/activities/person/presence/[id]", params });
             } else if (pathname.includes("/others/")) {
-              router.push({ pathname: "/(tabs)/others/person/presence/[id]", params });
+              router.push({ pathname: "/others/person/presence/[id]", params });
             } else {
-              router.push({ pathname: "/(tabs)/scan/person/presence/[id]", params });
+              router.push({ pathname: "/scan/person/presence/[id]", params });
             }
           }}
           style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
@@ -856,39 +826,6 @@ export function PersonOperationsScreen() {
             />
             <Separator />
             <InfoRow label={t("personShirt")} value={person.shirtSize ?? "—"} icon="tshirt" />
-
-            {canAccredit && person.badgeId ? (
-              <>
-                <Separator />
-                <View
-                  style={{
-                    borderBottomLeftRadius: 14,
-                    borderBottomRightRadius: 14,
-                    borderCurve: "continuous",
-                    overflow: "hidden",
-                  }}
-                >
-                  <Swipeable
-                    renderRightActions={() => (
-                      <AccreditationRevealActions
-                        onReplace={beginBadgeAction}
-                        onDelete={confirmRemoveBadge}
-                      />
-                    )}
-                    rightThreshold={40}
-                    overshootRight={false}
-                  >
-                    <View style={{ backgroundColor: colors.surface }}>
-                      <InfoRow
-                        label={t("personCurrentBadge")}
-                        value={person.badgeId}
-                        icon="key.card"
-                      />
-                    </View>
-                  </Swipeable>
-                </View>
-              </>
-            ) : null}
           </Section>
 
           {person.intolerances.length > 0 || person.foodIntoleranceNotes ? (

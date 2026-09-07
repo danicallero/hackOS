@@ -39,9 +39,16 @@ import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import {
   emitNotificationChange,
+  emitNotificationPreferenceChange,
   subscribeToCategory,
   subscribeToNotificationChanges,
+  subscribeToNotificationPreferenceChanges,
 } from "@/lib/notification-events";
+import {
+  type NotificationChannel,
+  type NotificationPreferences,
+  withNotificationOverrides,
+} from "@/lib/notification-preferences";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { subscribeToServerEvent } from "@/lib/server-events";
 import { has } from "@/lib/tabs";
@@ -51,27 +58,12 @@ import { colors } from "@/theme/colors";
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
-type Channel = "in_app" | "email" | "push";
-const VALID_CHANNELS: Channel[] = ["in_app", "email", "push"];
+type Channel = NotificationChannel;
+const VALID_CHANNELS: NotificationChannel[] = ["in_app", "email", "push"];
 
 /** Drops any stale channel a device cached before a channel was retired (e.g. the old Discord channel). */
-function validChannels(channels: Channel[]): Channel[] {
+function validChannels(channels: NotificationChannel[]): NotificationChannel[] {
   return channels.filter((channel) => (VALID_CHANNELS as string[]).includes(channel));
-}
-
-interface Preferences {
-  channels: Channel[];
-  mandatoryCategories: string[];
-  overrides: { category: string; channel: Channel; enabled: boolean }[];
-}
-
-/** Mirrors the server's ON CONFLICT upsert, for an instant optimistic local view. */
-function withOverride(prefs: Preferences, category: string, channel: Channel, enabled: boolean) {
-  const overrides = [...prefs.overrides];
-  const index = overrides.findIndex((row) => row.category === category && row.channel === channel);
-  if (index === -1) overrides.push({ category, channel, enabled });
-  else overrides[index] = { category, channel, enabled };
-  return { ...prefs, overrides };
 }
 
 interface InboxItem {
@@ -1055,7 +1047,7 @@ const PreferencesView = memo(function PreferencesView({
   useScrollToTop(scrollRef);
 
   const fetchPreferences = useCallback(
-    () => apiFetch<Preferences>("/api/me/notification-preferences"),
+    () => apiFetch<NotificationPreferences>("/api/me/notification-preferences"),
     [],
   );
   const {
@@ -1071,10 +1063,10 @@ const PreferencesView = memo(function PreferencesView({
     void load();
   }, [load]);
 
-  // Keeps this tab in sync with toggles made elsewhere (e.g. the schedule
-  // bell), which mount their own independent cache instance for the same
-  // preferences (H51).
-  useEffect(() => subscribeToNotificationChanges(() => void load()), [load]);
+  // Keeps this tab's independent cache in sync with toggles made elsewhere
+  // (e.g. the schedule bell) without refetching the inbox or unread counter
+  // for a preference-only change (H51, issue #626).
+  useEffect(() => subscribeToNotificationPreferenceChanges((next) => setData(next)), [setData]);
 
   function enabledFor(category: string, channel: Channel): boolean {
     const override = prefs?.overrides.find(
@@ -1092,12 +1084,12 @@ const PreferencesView = memo(function PreferencesView({
     setActionError(null);
     // Optimistic: flip instantly, reconcile with the server in the
     // background — only revert if the request actually fails.
-    setData(withOverride(prefs, category, channel, enabled));
+    setData(withNotificationOverrides(prefs, [{ category, channel, enabled }]));
     void haptic("selection");
     try {
       const next = await savePreferences([{ category, channel, enabled }]);
       setData(next);
-      emitNotificationChange();
+      emitNotificationPreferenceChange(next);
     } catch (cause) {
       setData(previous);
       setActionError(cause instanceof Error ? cause : new Error("Failed to save preference"));
@@ -1237,7 +1229,7 @@ const PreferencesView = memo(function PreferencesView({
 function savePreferences(
   preferences: Array<{ category: string; channel: Channel; enabled: boolean }>,
 ) {
-  return apiFetch<Preferences>("/api/me/notification-preferences", {
+  return apiFetch<NotificationPreferences>("/api/me/notification-preferences", {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ preferences }),
