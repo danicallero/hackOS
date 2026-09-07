@@ -135,8 +135,8 @@ function WalletPurposePanel({ purpose, value }: { purpose: Purpose; value?: stri
 
   const Icon = icon;
   return (
-    <>
-      <div className="flex flex-col items-center gap-4 rounded-xl border bg-card py-10 text-center">
+    <div className="grid gap-6 lg:grid-cols-2">
+      <div className="flex flex-col items-center justify-center gap-4 rounded-xl border bg-card py-10 text-center">
         <Icon className="text-muted-foreground size-7" />
         {/* The tab and the QR caption already name the pass (issue #297). */}
         <p className="text-muted-foreground text-sm">{t("walletScanHint")}</p>
@@ -150,6 +150,6 @@ function WalletPurposePanel({ purpose, value }: { purpose: Purpose; value?: stri
       <SectionCard title={t("walletAddPass")} description={t("walletAddPassHint")}>
         <WalletButtons purpose={purpose} />
       </SectionCard>
-    </>
+    </div>
   );
 }

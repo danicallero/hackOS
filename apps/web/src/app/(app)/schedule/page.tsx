@@ -31,10 +31,10 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Surface } from "@/components/ui/surface";
 import {
   Table,
   TableBody,
@@ -356,7 +356,7 @@ export default function SchedulePage() {
     <div className="space-y-6" data-wide>
       <PageHeader title={t("manageSchedule")} />
 
-      <Card className="gap-0 overflow-hidden py-0">
+      <Surface padding="none" className="overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 p-4">
           <div className="relative w-full max-w-xs">
             <SearchIcon
@@ -554,7 +554,7 @@ export default function SchedulePage() {
             </Table>
           </DndContext>
         </div>
-      </Card>
+      </Surface>
 
       <ScheduleFormModal
         open={createOpen}

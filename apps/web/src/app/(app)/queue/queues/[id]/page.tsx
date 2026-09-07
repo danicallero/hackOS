@@ -475,7 +475,7 @@ export default function QueueDetailPage() {
                 disabled={!shared}
                 onChange={(e) => setName(e.target.value)}
               />
-              {shared && (
+              {shared ? (
                 <Button
                   variant="outline"
                   disabled={busy || !name.trim() || name.trim() === queue.group.display_name}
@@ -483,6 +483,23 @@ export default function QueueDetailPage() {
                 >
                   {t("save")}
                 </Button>
+              ) : (
+                <p className="text-muted-foreground text-xs">
+                  {queue.challenges.length === 1 ? (
+                    <>
+                      {t("queueNameFollowsChallengePrefix")}{" "}
+                      <Link
+                        href={`/challenges/${queue.challenges[0].id}`}
+                        className="text-foreground underline underline-offset-2"
+                      >
+                        {t("queueNameFollowsChallengeLink")}
+                      </Link>
+                      .
+                    </>
+                  ) : (
+                    t("queueNameFollowsChallenge")
+                  )}
+                </p>
               )}
             </div>
           </SectionCard>

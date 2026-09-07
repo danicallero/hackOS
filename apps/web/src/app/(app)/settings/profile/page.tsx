@@ -149,81 +149,83 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
               <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>
             }
           >
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("firstName")}</FormLabel>
-                  <FormControl>
-                    <Input autoComplete="given-name" disabled={locked} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="surname"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("lastName")}</FormLabel>
-                  <FormControl>
-                    <Input autoComplete="family-name" disabled={locked} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="language"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("language")}</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("firstName")}</FormLabel>
                     <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
+                      <Input autoComplete="given-name" disabled={locked} {...field} />
                     </FormControl>
-                    <SelectContent>
-                      {LANGS.map((language) => (
-                        <SelectItem key={language} value={language}>
-                          {languageName(language)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="shirtSize"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("shirtSize")}</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value} disabled={locked}>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="surname"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("lastName")}</FormLabel>
                     <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder={t("notSet")} />
-                      </SelectTrigger>
+                      <Input autoComplete="family-name" disabled={locked} {...field} />
                     </FormControl>
-                    <SelectContent>
-                      <SelectItem value={NONE}>{t("notSet")}</SelectItem>
-                      {shirtSizes.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {s}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="language"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("language")}</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {LANGS.map((language) => (
+                          <SelectItem key={language} value={language}>
+                            {languageName(language)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="shirtSize"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("shirtSize")}</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={locked}>
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder={t("notSet")} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value={NONE}>{t("notSet")}</SelectItem>
+                        {shirtSizes.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
             <FormField
               control={form.control}
               name="foodIntolerances"

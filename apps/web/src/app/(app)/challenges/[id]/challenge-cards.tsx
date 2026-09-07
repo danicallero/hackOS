@@ -11,6 +11,7 @@ import {
   TriangleAlertIcon,
   TrophyIcon,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
@@ -133,6 +134,8 @@ export function EditCard({
   onSaved: () => Promise<void>;
 }) {
   const { t } = useLocale();
+  const router = useRouter();
+  const [deleting, setDeleting] = useState(false);
   const { tab, setTab } = useUrlTab({ values: CHALLENGE_TABS, defaultValue: "content" });
   const [prizes, setPrizes] = useState<Prize[]>(asPrizes(challenge.prizes));
   const [questions, setQuestions] = useState<Question[]>(
@@ -454,6 +457,40 @@ export function EditCard({
               availableFrom={watchedAvailableFrom}
               timezone={timezone}
             />
+            {canAdmin && (
+              <SectionCard title={t("dangerZoneTitle")}>
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-muted-foreground text-sm">{t("deleteChallengeDesc")}</p>
+                  <AlertModal
+                    title={t("deleteChallengeConfirmTitle")}
+                    description={t("deleteChallengeConfirmDesc")}
+                    cancelLabel={t("cancel")}
+                    confirmLabel={t("deleteChallenge")}
+                    destructive
+                    pending={deleting}
+                    trigger={
+                      <Button variant="destructive" disabled={deleting}>
+                        {t("deleteChallenge")}
+                      </Button>
+                    }
+                    onConfirm={async () => {
+                      setDeleting(true);
+                      try {
+                        await api.delete(`/api/challenges/${challenge.id}`);
+                        toast.success(t("challengeDeleted"));
+                        router.push("/challenges");
+                      } catch (err) {
+                        toast.error(
+                          err instanceof ApiError ? err.message : t("couldNotDeleteChallenge"),
+                        );
+                      } finally {
+                        setDeleting(false);
+                      }
+                    }}
+                  />
+                </div>
+              </SectionCard>
+            )}
           </TabsContent>
 
           <TabsContent value="history" className="pt-4">

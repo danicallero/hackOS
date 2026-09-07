@@ -218,11 +218,11 @@ describe("route stability (deep links, issue #187)", () => {
       "/queue",
       "/judging",
       "/queue/rooms",
-      // /logistics/accreditation is deliberately gone from here: accreditation
-      // and presence scanning were merged into one nav entry (H22, H24), and
-      // the old href now redirects server-side (see its page.tsx) instead of
-      // being a live nav item — deep links still resolve, just not via nav.
-      "/logistics/meals",
+      // /logistics/accreditation and /logistics/meals are deliberately gone
+      // from here: accreditation+presence and meals+activities were each
+      // merged into one nav entry (H22, H24-H27), and the old hrefs now
+      // redirect server-side (see their page.tsx files) instead of being
+      // live nav items — deep links still resolve, just not via nav.
       "/logistics/activities",
       "/logistics/presence",
       "/logistics/stats",

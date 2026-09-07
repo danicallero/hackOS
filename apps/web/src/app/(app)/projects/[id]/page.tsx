@@ -23,7 +23,6 @@ import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { ReviewStatusBadge } from "@/components/common/review-status-badge";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
-import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { ProjectDescription } from "@/components/projects/project-description";
 import { Button } from "@/components/ui/button";
@@ -55,10 +54,6 @@ import {
   ProjectChallengeAdder,
   ProjectMemberAdder,
 } from "./project-actions";
-
-function manualMemberCount(repo: ProjectRepo): number {
-  return repo.members.filter((member) => member.mergeStatus === "manual").length;
-}
 
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
@@ -125,7 +120,6 @@ export default function ProjectDetailPage() {
     void load();
   }, [load, liveRefresh]);
 
-  const challengeCount = repo?.challenges.length ?? 0;
   const queueChallengeIds = useMemo(
     () =>
       new Set(
@@ -196,45 +190,6 @@ export default function ProjectDetailPage() {
           <ProjectDescription text={repo.description} />
         </div>
       )}
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label={t("teamMembers")} value={repo.members.length} />
-        <StatCard label={t("manualAdds")} value={manualMemberCount(repo)} />
-        <StatCard label={t("challenges")} value={challengeCount} />
-        <StatCard label={t("unmappedPrizesLabel")} value={repo.unmappedPrizes.length} />
-      </div>
-
-      <SectionCard title={t("linksTitle")} icon={ExternalLinkIcon}>
-        <div className="flex flex-wrap gap-2">
-          {repo.devpost_url && (
-            <Button variant="outline" asChild>
-              <a href={repo.devpost_url} target="_blank" rel="noreferrer">
-                <ExternalLinkIcon className="size-4" />
-                Devpost
-              </a>
-            </Button>
-          )}
-          {repo.demo_url && (
-            <Button variant="outline" asChild>
-              <a href={repo.demo_url} target="_blank" rel="noreferrer">
-                <ExternalLinkIcon className="size-4" />
-                Demo
-              </a>
-            </Button>
-          )}
-          {repo.github_url && (
-            <Button variant="outline" asChild>
-              <a href={repo.github_url} target="_blank" rel="noreferrer">
-                <ExternalLinkIcon className="size-4" />
-                Repository
-              </a>
-            </Button>
-          )}
-          {!repo.devpost_url && !repo.demo_url && !repo.github_url && (
-            <p className="text-muted-foreground text-sm">{t("noLinksProject")}</p>
-          )}
-        </div>
-      </SectionCard>
 
       <div className="grid gap-5 xl:grid-cols-2">
         <SectionCard
@@ -427,6 +382,38 @@ export default function ProjectDetailPage() {
           )}
         </SectionCard>
       </div>
+
+      <SectionCard title={t("linksTitle")} icon={ExternalLinkIcon}>
+        <div className="flex flex-wrap gap-2">
+          {repo.devpost_url && (
+            <Button variant="outline" asChild>
+              <a href={repo.devpost_url} target="_blank" rel="noreferrer">
+                <ExternalLinkIcon className="size-4" />
+                Devpost
+              </a>
+            </Button>
+          )}
+          {repo.demo_url && (
+            <Button variant="outline" asChild>
+              <a href={repo.demo_url} target="_blank" rel="noreferrer">
+                <ExternalLinkIcon className="size-4" />
+                Demo
+              </a>
+            </Button>
+          )}
+          {repo.github_url && (
+            <Button variant="outline" asChild>
+              <a href={repo.github_url} target="_blank" rel="noreferrer">
+                <ExternalLinkIcon className="size-4" />
+                Repository
+              </a>
+            </Button>
+          )}
+          {!repo.devpost_url && !repo.demo_url && !repo.github_url && (
+            <p className="text-muted-foreground text-sm">{t("noLinksProject")}</p>
+          )}
+        </div>
+      </SectionCard>
     </div>
   );
 }

@@ -252,7 +252,7 @@ export function DataTable<T>({
       {showToolbar && (
         <div className="flex flex-wrap items-center gap-2 p-4">
           {searchable && (
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-2">
               <div className="relative w-full max-w-xs">
                 <label htmlFor={searchId} className="sr-only">
                   {searchLabel ?? t("searchTable")}

@@ -24,6 +24,7 @@ import {
 } from "./schemas.js";
 import {
   createChallenge,
+  deleteChallenge,
   getChallenge,
   listAllChallenges,
   listAssignedJudgeChallenges,
@@ -236,6 +237,34 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => unpublishChallenge(req.params.id, req.userId as number),
+  );
+
+  // Admin-only permanent delete (H44) — gated like publish/unpublish, not the
+  // owner-inclusive edit policy: deleting is strictly more destructive than
+  // editing, so a sponsor rep who owns the challenge cannot do it themselves.
+  r.delete(
+    "/api/challenges/:id",
+    {
+      ...access({
+        kind: "capability",
+        anyOf: [
+          CAPABILITIES.SPONSORS_MANAGE,
+          CAPABILITIES.QUEUE_ADMIN,
+          CAPABILITIES.CHALLENGES_MANAGE,
+        ],
+      }),
+      preHandler: manageChallenges,
+      schema: {
+        params: challengeIdParam,
+        summary: "Delete a challenge",
+        description:
+          "Permanently deletes a challenge. Blocked if it has queue entries, recorded winners, or an active room assignment — unpublish it instead (H44).",
+      },
+    },
+    async (req, reply) => {
+      await deleteChallenge(req.params.id, req.userId as number);
+      reply.code(204);
+    },
   );
 
   // Preview the judging panel before it goes live (H44).

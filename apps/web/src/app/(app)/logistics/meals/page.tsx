@@ -1,24 +1,7 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { AccessDenied } from "@/components/common/access-denied";
-import { PageHeader } from "@/components/common/page-header";
-import { ActivityScannerCard } from "@/components/logistics/activity-scanner";
-import { useLocale } from "@/lib/i18n";
-import { useCan } from "@/lib/session";
-
+// Meals and activities merged into one station (H22-H27) — this route stays
+// as a redirect for existing bookmarks/deep links.
 export default function MealsPage() {
-  const { t } = useLocale();
-  const canScan = useCan(CAPABILITIES.ACTIVITY_SCAN);
-
-  if (!canScan) {
-    return <AccessDenied ask={t("mealsDeniedDesc")} />;
-  }
-
-  return (
-    <div className="space-y-6" data-wide>
-      <PageHeader title={t("meals")} />
-      <ActivityScannerCard category="meal" />
-    </div>
-  );
+  redirect("/logistics/activities?tab=meal");
 }

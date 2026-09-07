@@ -13,6 +13,16 @@ const HOUR_HEIGHT = 72;
 // The card remains expandable so long values are never hidden by an ellipsis.
 const MIN_ITEM_HEIGHT = 76;
 const LANE_GAP = 8;
+// A hackathon schedule is a handful of sparse milestones, not back-to-back
+// meetings: a literal HOUR_HEIGHT-per-hour axis makes one long event (a
+// multi-hour "general preparations" block) or a long dead stretch between two
+// items render as hundreds of near-empty pixels, reading as broken rather than
+// "long". Any stretch of the day with no internal item boundary — a real gap,
+// or the uninterrupted middle of one long item — is capped at this height;
+// stretches under the cap (including genuine overlaps between concurrent
+// items, which need full fidelity to show simultaneity) render at the literal
+// scale, unchanged.
+const MAX_SEGMENT_HEIGHT = 160;
 
 interface PositionedItem {
   item: PublicScheduleItem;
@@ -22,20 +32,78 @@ interface PositionedItem {
   laneCount: number;
 }
 
+interface TimeScale {
+  /** Pixel offset for an arbitrary instant, relative to the day's rangeStart. */
+  toY: (t: number) => number;
+  /** Total rendered height of the day's timeline. */
+  totalHeight: number;
+}
+
+/**
+ * Builds a piecewise time→pixel mapping for one day: the axis runs at the
+ * literal HOUR_HEIGHT scale within any stretch that actually contains (part
+ * of) an item or a boundary between items, and compresses down to
+ * MAX_SEGMENT_HEIGHT any stretch — busy or empty — that has no internal
+ * boundary and would otherwise exceed it. The mapping stays monotonic and
+ * continuous, so hour ticks and the "now" indicator can share it unchanged.
+ */
+export function buildTimeScale(
+  items: PublicScheduleItem[],
+  rangeStart: number,
+  rangeEnd: number,
+): TimeScale {
+  const boundarySet = new Set<number>([rangeStart, rangeEnd]);
+  for (const item of items) {
+    boundarySet.add(Date.parse(item.startsAt));
+    boundarySet.add(Date.parse(item.endsAt));
+  }
+  const boundaries = [...boundarySet]
+    .filter((t) => t >= rangeStart && t <= rangeEnd)
+    .sort((a, b) => a - b);
+
+  // Cumulative rendered offset at each boundary, and the rendered height of
+  // the segment ending at that boundary (index i pairs with segment
+  // [boundaries[i-1], boundaries[i]]).
+  const offsets: number[] = [0];
+  const renderedHeights: number[] = [];
+  for (let i = 1; i < boundaries.length; i++) {
+    const realHeight = ((boundaries[i] - boundaries[i - 1]) / 3_600_000) * HOUR_HEIGHT;
+    const rendered = Math.min(realHeight, MAX_SEGMENT_HEIGHT);
+    renderedHeights.push(rendered);
+    offsets.push(offsets[i - 1] + rendered);
+  }
+
+  function toY(t: number): number {
+    const clamped = Math.min(Math.max(t, rangeStart), rangeEnd);
+    let i = 0;
+    while (i < boundaries.length - 2 && boundaries[i + 1] < clamped) i++;
+    const segStart = boundaries[i];
+    const segEnd = boundaries[i + 1];
+    const frac = segEnd > segStart ? (clamped - segStart) / (segEnd - segStart) : 0;
+    return offsets[i] + frac * renderedHeights[i];
+  }
+
+  return { toY, totalHeight: offsets[offsets.length - 1] };
+}
+
 /**
  * Calendar entries are absolutely positioned, so their collision lanes must
  * be based on rendered pixels (including the minimum readable card height),
  * not only on their timestamps.
  */
-function positionDayItems(items: PublicScheduleItem[], rangeStart: number): PositionedItem[] {
+export function positionDayItems(
+  items: PublicScheduleItem[],
+  toY: (t: number) => number,
+): PositionedItem[] {
   const positioned = items
     .map((item) => {
       const starts = Date.parse(item.startsAt);
       const ends = Date.parse(item.endsAt);
+      const top = toY(starts);
       return {
         item,
-        top: ((starts - rangeStart) / 3_600_000) * HOUR_HEIGHT,
-        height: Math.max(MIN_ITEM_HEIGHT, ((ends - starts) / 3_600_000) * HOUR_HEIGHT - 4),
+        top,
+        height: Math.max(MIN_ITEM_HEIGHT, toY(ends) - top - 4),
       };
     })
     .sort((a, b) => a.top - b.top || b.height - a.height);
@@ -163,14 +231,15 @@ export function ScheduleTimeline({
         const last = Math.max(...dayItems.map((item) => Date.parse(item.endsAt)));
         const rangeStart = startOfHour(first);
         const rangeEnd = endOfHour(last);
-        const height = ((rangeEnd - rangeStart) / 3_600_000) * HOUR_HEIGHT;
+        const scale = buildTimeScale(dayItems, rangeStart, rangeEnd);
+        const height = scale.totalHeight;
         const isToday = key === currentDay;
         const showNow = isToday && now >= rangeStart && now <= rangeEnd;
         const hours = Array.from(
           { length: Math.ceil((rangeEnd - rangeStart) / 3_600_000) + 1 },
           (_, index) => rangeStart + index * 3_600_000,
         );
-        const positionedItems = positionDayItems(dayItems, rangeStart);
+        const positionedItems = positionDayItems(dayItems, scale.toY);
 
         return (
           <section key={key} aria-labelledby={`schedule-day-${key}`}>
@@ -188,11 +257,11 @@ export function ScheduleTimeline({
               )}
             </div>
             <div className="relative ml-1 hidden sm:block" style={{ height }}>
-              {hours.map((hour, index) => (
+              {hours.map((hour) => (
                 <div
                   key={hour}
                   className="border-border/70 absolute inset-x-0 border-t"
-                  style={{ top: index * HOUR_HEIGHT }}
+                  style={{ top: scale.toY(hour) }}
                 >
                   <time className="text-muted-foreground absolute -top-2.5 left-0 w-14 bg-background pr-2 text-right text-xs tabular-nums">
                     {timeFormatter.format(new Date(hour))}
@@ -268,7 +337,7 @@ export function ScheduleTimeline({
                     focusRef.current = node;
                   }}
                   className="pointer-events-none absolute right-0 left-14 z-10 flex items-center"
-                  style={{ top: ((now - rangeStart) / 3_600_000) * HOUR_HEIGHT }}
+                  style={{ top: scale.toY(now) }}
                   role="status"
                   aria-label={t("currentTime")}
                 >

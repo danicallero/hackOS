@@ -13,7 +13,7 @@ describe("final route-policy ledger", () => {
   it("has the exact classified rows, allowlists, and sole Better Auth exemption", async () => {
     app = await buildTestApp();
     const rows = app.routePolicyLedger.filter((row) => row.method !== "HEAD");
-    expect(rows).toHaveLength(349);
+    expect(rows).toHaveLength(350);
     expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(18);
     expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(12);
     expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(47);
@@ -27,7 +27,9 @@ describe("final route-policy ledger", () => {
     // +3 (H22/H24/H54): GET /api/logistics/people (logisticsRead) and the two
     // presence-hours CSV export routes (logistics:stats), for the unified
     // logistics scan+people-finder view.
-    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(205);
+    // +1 (H44): DELETE /api/challenges/:id, gated like publish/unpublish —
+    // capability-only, deliberately not the owner-inclusive edit policy.
+    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(206);
     expect(rows.filter((row) => row.policy.kind === "contextual")).toHaveLength(67);
     expect(app.routePolicyExemptions).toEqual([
       { url: "/api/auth/*", exemption: "better-auth-generated" },
