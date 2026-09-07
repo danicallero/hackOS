@@ -42,6 +42,7 @@ jest.mock("react-native-gesture-handler", () => {
     ...actual,
     Gesture: new Proxy({}, { get: () => chainableGesture }),
     GestureDetector: ({ children }) => children,
+    useNativeGesture: () => chainableGesture(),
   };
 });
 jest.mock("react-native-gesture-handler/ReanimatedSwipeable", () => {

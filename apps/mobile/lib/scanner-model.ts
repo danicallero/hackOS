@@ -1,4 +1,4 @@
-import type { PendingScan, ScannerPerson } from "./scanner-types";
+import type { PendingScan, ScannerPerson, ScanPayload } from "./scanner-types";
 
 /** Complete replace-all revocation set installed by each successful sync (H23). */
 export function revokedBadgesFromSnapshot(snapshot: {
@@ -17,14 +17,16 @@ export function revokedBadgesFromSnapshot(snapshot: {
   return [...revoked];
 }
 
-export function requestForPendingScan(scan: PendingScan): {
+export function requestForScanPayload(
+  payload: ScanPayload,
+  idempotencyKey: string,
+): {
   path: string;
   method: "POST" | "PATCH" | "DELETE";
   body: Record<string, unknown>;
   headers: Record<string, string>;
 } {
-  const headers = { "content-type": "application/json", "idempotency-key": scan.id };
-  const payload = scan.payload;
+  const headers = { "content-type": "application/json", "idempotency-key": idempotencyKey };
   if (payload.kind === "accreditation") {
     return {
       path: "/api/accreditation/check-in",
@@ -137,4 +139,13 @@ export function requestForPendingScan(scan: PendingScan): {
       scannedAt: payload.scannedAt,
     },
   };
+}
+
+export function requestForPendingScan(scan: PendingScan): {
+  path: string;
+  method: "POST" | "PATCH" | "DELETE";
+  body: Record<string, unknown>;
+  headers: Record<string, string>;
+} {
+  return requestForScanPayload(scan.payload, scan.id);
 }

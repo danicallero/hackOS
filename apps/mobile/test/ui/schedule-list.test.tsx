@@ -132,6 +132,9 @@ describe("schedule list (H374)", () => {
     await renderMobile(<ScheduleScreen />);
 
     const bells = await screen.findAllByLabelText("Reminder off");
+    const preferenceGetsBefore = (apiFetch as jest.Mock).mock.calls.filter(
+      (call) => call[0] === "/api/me/notification-preferences" && call[1]?.method !== "PUT",
+    ).length;
     fireEvent.press(bells[0]);
 
     await waitFor(() =>
@@ -140,11 +143,37 @@ describe("schedule list (H374)", () => {
         expect.objectContaining({ method: "PUT" }),
       ),
     );
-    const put = (apiFetch as jest.Mock).mock.calls.find((call) => call[1]?.method === "PUT");
-    expect(JSON.parse(put[1].body)).toEqual({
-      preferences: [{ category: "schedule:1", channel: "push", enabled: true }],
+    const puts = (apiFetch as jest.Mock).mock.calls.filter((call) => call[1]?.method === "PUT");
+    expect(puts).toHaveLength(1);
+    expect(
+      (apiFetch as jest.Mock).mock.calls.filter(
+        (call) => call[0] === "/api/me/notification-preferences" && call[1]?.method !== "PUT",
+      ),
+    ).toHaveLength(preferenceGetsBefore);
+    expect(JSON.parse(puts[0][1].body)).toEqual({
+      preferences: [
+        { category: "schedule:1", channel: "push", enabled: true },
+        { category: "schedule:type:meal", channel: "push", enabled: true },
+      ],
     });
     expect(await screen.findByLabelText("Reminder on")).toBeTruthy();
     expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it("serializes rapid reminder taps and leaves the final intent visible", async () => {
+    await renderMobile(<ScheduleScreen />);
+
+    const bells = await screen.findAllByLabelText("Reminder off");
+    fireEvent.press(bells[0]);
+    fireEvent.press(bells[0]);
+
+    await waitFor(() => {
+      const puts = (apiFetch as jest.Mock).mock.calls.filter((call) => call[1]?.method === "PUT");
+      expect(puts).toHaveLength(2);
+      expect(JSON.parse(puts[1][1].body)).toEqual({
+        preferences: [{ category: "schedule:1", channel: "push", enabled: false }],
+      });
+    });
+    await waitFor(() => expect(screen.getAllByLabelText("Reminder off")).toHaveLength(2));
   });
 });

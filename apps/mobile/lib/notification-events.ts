@@ -1,7 +1,10 @@
+import type { NotificationPreferences } from "./notification-preferences";
+
 type Listener = () => void;
 
 const listenersByCategory = new Map<string, Set<Listener>>();
 const changeListeners = new Set<Listener>();
+const preferenceChangeListeners = new Set<(preferences: NotificationPreferences) => void>();
 
 /**
  * Minimal in-process pub-sub keyed by notification `category` (the field the
@@ -36,4 +39,17 @@ export function subscribeToNotificationChanges(listener: Listener): () => void {
 /** Notify global listeners after an in-app mutation such as marking an item read. */
 export function emitNotificationChange(): void {
   for (const listener of changeListeners) listener();
+}
+
+/** Subscribe to preference snapshots without waking inbox or unread counters. */
+export function subscribeToNotificationPreferenceChanges(
+  listener: (preferences: NotificationPreferences) => void,
+): () => void {
+  preferenceChangeListeners.add(listener);
+  return () => preferenceChangeListeners.delete(listener);
+}
+
+/** Broadcast a committed preference snapshot to mounted preference views. */
+export function emitNotificationPreferenceChange(preferences: NotificationPreferences): void {
+  for (const listener of preferenceChangeListeners) listener(preferences);
 }

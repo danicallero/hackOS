@@ -58,6 +58,12 @@ class FakeDatabase {
     await work();
   }
 
+  async withExclusiveTransactionAsync(
+    work: (transaction: FakeDatabase) => Promise<void>,
+  ): Promise<void> {
+    await work(this);
+  }
+
   async closeAsync(): Promise<void> {}
 }
 
@@ -180,5 +186,20 @@ describe("native scanner roster generation fencing", () => {
 
     expect(SQLite.openDatabaseAsync).toHaveBeenCalledTimes(1);
     expect(SQLite.openDatabaseAsync).toHaveBeenCalledWith("hackos-scanner-queue.db");
+  });
+
+  it("stores a native Date timestamp as text in scanner metadata", async () => {
+    const generatedAt = new Date("2026-01-01T00:00:03.000Z");
+    const revivedSnapshot = {
+      ...snapshot("A"),
+      generatedAt,
+    } as unknown as ScannerSnapshot;
+
+    await applyScannerSnapshot(revivedSnapshot, 7);
+
+    const metadataInsert = mockRunStatements.find(({ sql }) =>
+      sql.includes("INSERT INTO scanner_metadata"),
+    );
+    expect(metadataInsert?.args).toEqual([generatedAt.toISOString()]);
   });
 });

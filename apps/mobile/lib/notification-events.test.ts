@@ -1,8 +1,10 @@
 import {
   emitCategory,
   emitNotificationChange,
+  emitNotificationPreferenceChange,
   subscribeToCategory,
   subscribeToNotificationChanges,
+  subscribeToNotificationPreferenceChanges,
 } from "./notification-events";
 
 describe("notification-events pub-sub", () => {
@@ -48,5 +50,25 @@ describe("notification-events pub-sub", () => {
     unsubscribe();
     emitNotificationChange();
     expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps preference snapshots out of inbox-affecting listeners", () => {
+    const inboxListener = jest.fn();
+    const preferenceListener = jest.fn();
+    const unsubscribeInbox = subscribeToNotificationChanges(inboxListener);
+    const unsubscribePreferences = subscribeToNotificationPreferenceChanges(preferenceListener);
+    const preferences = { channels: ["push" as const], mandatoryCategories: [], overrides: [] };
+
+    emitNotificationPreferenceChange(preferences);
+
+    expect(preferenceListener).toHaveBeenCalledWith(preferences);
+    expect(inboxListener).not.toHaveBeenCalled();
+
+    emitNotificationChange();
+    expect(inboxListener).toHaveBeenCalledTimes(1);
+    expect(preferenceListener).toHaveBeenCalledTimes(1);
+
+    unsubscribeInbox();
+    unsubscribePreferences();
   });
 });

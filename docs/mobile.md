@@ -455,7 +455,14 @@ distributed to other Expo Router apps without importing hackOS code.
   (`components/schedule-swipe-row.tsx`); both the swipe's edit action and the
   Add button open `components/schedule-form-modal.tsx`, which mirrors the web
   admin's `ScheduleFormModal` field-for-field (including the
-  responsible-person picker). Covered by `test/ui/schedule-list.test.tsx`.
+  responsible-person picker). On Android, manager schedules also mount one
+  native gesture on the `SectionList`; each row waits for that vertical gesture
+  to fail before its horizontal swipe can activate, keeping diagonal/vertical
+  drags in the list (issue #626). Reminder writes use one serialized optimistic
+  queue: individual last-item category promotion is included in the same PUT,
+  and committed preference snapshots update mounted caches without triggering
+  inbox/unread reloads. Covered by `test/ui/schedule-list.test.tsx`,
+  `test/ui/schedule-swipe-row.test.tsx`, and `lib/notification-events.test.ts`.
 - `app/schedule/[id].tsx` — a real native large-title nav bar
   (`headerLargeTitle` + `headerTransparent` on the `schedule/[id]`
   `Stack.Screen` in `app/_layout.tsx`, `contentInsetAdjustmentBehavior=
@@ -592,9 +599,13 @@ a temporal stability test (`lib/qr-scan-stability.ts`).
 
 **Offline queue & sync.** `lib/scanner-db.ts` (native: `scanner-db.native.ts`)
 owns two WAL-mode SQLite files — see "Scanner cache encryption & isolation"
-below — and `lib/scanner-sync.ts` replays in creation order with the
-persisted scan id as `Idempotency-Key`, then installs the latest server
-snapshot/revocation set.
+below — and `lib/scanner-sync.ts` sends scanner mutations to the server first.
+The server response is authoritative: an online accreditation, badge rotation,
+or scan is never blocked by a local SQLite failure. Only a transport failure is
+written to the encrypted offline queue, preserving the same persisted scan id
+as `Idempotency-Key` for replay in creation order. The latest server
+snapshot/revocation set is rendered even when its best-effort SQLite cache
+write fails; SQLite is the fallback for offline directory/activity reads.
 A scan rejected as "timestamp must be in the past" (device clock running
 ahead of the server's) is corrected once by the measured clock skew — read
 from the API's `Date` response header in `lib/api.ts` — and retried before

@@ -3,21 +3,21 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api";
 import { haptic } from "./haptics";
 import { useMeContext } from "./me-context";
-import { emitNotificationChange, subscribeToNotificationChanges } from "./notification-events";
+import {
+  emitNotificationPreferenceChange,
+  subscribeToNotificationPreferenceChanges,
+} from "./notification-events";
+import {
+  type NotificationPreferences,
+  type NotificationPreferenceUpdate,
+  withNotificationOverrides,
+} from "./notification-preferences";
 import type { ScheduleItem } from "./schedule";
 import { useCachedApi } from "./use-cached-api";
 
-type Channel = "in_app" | "email" | "push";
-
-interface Preferences {
-  channels: Channel[];
-  mandatoryCategories: string[];
-  overrides: { category: string; channel: Channel; enabled: boolean }[];
-}
-
 export type CategoryState = "on" | "off" | "partial";
 
-const CHANNEL: Channel = "push";
+const CHANNEL = "push" as const;
 
 export function itemCategory(id: number): string {
   return `schedule:${id}`;
@@ -27,30 +27,35 @@ export function kindCategory(kind: string): string {
   return `schedule:type:${kind}`;
 }
 
-function savePreferences(
-  preferences: Array<{ category: string; channel: Channel; enabled: boolean }>,
-) {
-  return apiFetch<Preferences>("/api/me/notification-preferences", {
+function savePreferences(preferences: NotificationPreferenceUpdate[]) {
+  return apiFetch<NotificationPreferences>("/api/me/notification-preferences", {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ preferences }),
   });
 }
 
-/** Mirrors the server's ON CONFLICT upsert, for an instant optimistic local view. */
-function withOverrides(
-  prefs: Preferences,
-  updates: Array<{ category: string; channel: Channel; enabled: boolean }>,
-): Preferences {
-  const overrides = [...prefs.overrides];
-  for (const update of updates) {
-    const index = overrides.findIndex(
-      (row) => row.category === update.category && row.channel === update.channel,
-    );
-    if (index === -1) overrides.push(update);
-    else overrides[index] = update;
-  }
-  return { ...prefs, overrides };
+function preferenceFor(
+  prefs: NotificationPreferences,
+  category: string,
+): NotificationPreferenceUpdate | undefined {
+  return prefs.overrides.find((row) => row.category === category && row.channel === CHANNEL);
+}
+
+function isEntrySubscribedFrom(
+  prefs: NotificationPreferences,
+  item: Pick<ScheduleItem, "id" | "type">,
+): boolean {
+  const own = preferenceFor(prefs, itemCategory(item.id));
+  if (own) return own.enabled;
+  return item.type ? (preferenceFor(prefs, kindCategory(item.type))?.enabled ?? false) : false;
+}
+
+interface PendingWrite {
+  key: string;
+  updates: NotificationPreferenceUpdate[];
+  previous: NotificationPreferences;
+  retry: () => Promise<void>;
 }
 
 /**
@@ -65,7 +70,7 @@ function withOverrides(
 export function useScheduleNotifications(items: ScheduleItem[]) {
   const { me } = useMeContext();
   const fetchPreferences = useCallback(
-    () => apiFetch<Preferences>("/api/me/notification-preferences"),
+    () => apiFetch<NotificationPreferences>("/api/me/notification-preferences"),
     [],
   );
   const {
@@ -80,8 +85,42 @@ export function useScheduleNotifications(items: ScheduleItem[]) {
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<Error | null>(null);
   const retryAction = useRef<(() => Promise<void>) | null>(null);
+  const prefsRef = useRef<NotificationPreferences | null>(null);
+  const pendingWritesRef = useRef<PendingWrite[]>([]);
+  const processingWritesRef = useRef(false);
+  const failedActionRef = useRef<PendingWrite | null>(null);
 
-  useEffect(() => subscribeToNotificationChanges(() => void load()), [load]);
+  const setLocalPreferences = useCallback(
+    (next: NotificationPreferences) => {
+      prefsRef.current = next;
+      setData(next);
+    },
+    [setData],
+  );
+
+  // The cache hook can receive a stale reload while a write is in flight.
+  // Keep the optimistic projection authoritative until the queued writes have
+  // all settled, then allow normal cache updates again.
+  useEffect(() => {
+    if (!prefs) return;
+    if (pendingWritesRef.current.length === 0 && !processingWritesRef.current) {
+      prefsRef.current = prefs;
+    } else if (prefsRef.current && prefs !== prefsRef.current) {
+      setData(prefsRef.current);
+    }
+  }, [prefs, setData]);
+
+  // Preference changes are local cache synchronization only. Inbox/unread
+  // listeners intentionally continue to receive `emitNotificationChange` for
+  // message mutations, but not for a reminder switch (H51, issue #626).
+  useEffect(
+    () =>
+      subscribeToNotificationPreferenceChanges((next) => {
+        if (pendingWritesRef.current.length > 0 || processingWritesRef.current) return;
+        setLocalPreferences(next);
+      }),
+    [setLocalPreferences],
+  );
 
   const itemRow = useCallback(
     (itemId: number) =>
@@ -118,94 +157,115 @@ export function useScheduleNotifications(items: ScheduleItem[]) {
     [items, itemRow, kindRow],
   );
 
-  const toggleEntry = useCallback(
-    async (item: ScheduleItem) => {
-      if (!prefs) return;
-      const key = itemCategory(item.id);
-      const currentlySubscribed = isEntrySubscribed(item);
-      const category = itemCategory(item.id);
-      const previous = prefs;
-      retryAction.current = () => toggleEntry(item);
+  const drainWrites = useCallback(async () => {
+    if (processingWritesRef.current) return;
+    processingWritesRef.current = true;
+    try {
+      while (pendingWritesRef.current.length > 0) {
+        const pending = pendingWritesRef.current[0];
+        setSavingKey(pending.key);
+        try {
+          const serverPreferences = await savePreferences(pending.updates);
+          pendingWritesRef.current.shift();
+          let next = serverPreferences;
+          // A rapid second tap is already reflected locally. Reapply those
+          // queued intent updates over the committed response so the visible
+          // state remains deterministic while requests are serialized.
+          for (const queued of pendingWritesRef.current) {
+            next = withNotificationOverrides(next, queued.updates);
+          }
+          setLocalPreferences(next);
+          emitNotificationPreferenceChange(next);
+          if (pendingWritesRef.current.length === 0 && !failedActionRef.current) {
+            retryAction.current = null;
+          }
+        } catch (cause) {
+          pendingWritesRef.current.shift();
+          let next = pending.previous;
+          for (const queued of pendingWritesRef.current) {
+            next = withNotificationOverrides(next, queued.updates);
+          }
+          setLocalPreferences(next);
+          emitNotificationPreferenceChange(next);
+          failedActionRef.current = pending;
+          retryAction.current = pending.retry;
+          setActionError(cause instanceof Error ? cause : new Error("Notification update failed"));
+        }
+      }
+    } finally {
+      processingWritesRef.current = false;
+      setSavingKey(null);
+    }
+  }, [setLocalPreferences]);
+
+  const enqueueWrite = useCallback(
+    (key: string, updates: NotificationPreferenceUpdate[], retry: () => Promise<void>) => {
+      const current = prefsRef.current ?? prefs;
+      if (!current) return;
+      failedActionRef.current = null;
+      retryAction.current = null;
+      pendingWritesRef.current.push({ key, updates, previous: current, retry });
+      setLocalPreferences(withNotificationOverrides(current, updates));
       setSavingKey(key);
       setActionError(null);
-      // Optimistic: flip the switch instantly and reconcile with the server
-      // in the background — only roll back if the request actually fails,
-      // instead of visually snapping back to the stale value every time
-      // while the request is in flight.
-      setData(
-        withOverrides(prefs, [{ category, channel: CHANNEL, enabled: !currentlySubscribed }]),
-      );
-      void haptic("selection");
-      try {
-        const next = await savePreferences([
-          { category, channel: CHANNEL, enabled: !currentlySubscribed },
-        ]);
-        setData(next);
-        emitNotificationChange();
-
-        // Promotion: once every currently-loaded item of this kind has been
-        // individually subscribed, fold that into the category flag instead
-        // of leaving a pile of identical per-item rows.
-        if (!currentlySubscribed && item.type) {
-          const kindItems = items.filter((candidate) => candidate.type === item.type);
-          const allSubscribed = kindItems.every((candidate) =>
-            candidate.id === item.id
-              ? true
-              : (next.overrides.find(
-                  (row) => row.category === itemCategory(candidate.id) && row.channel === CHANNEL,
-                )?.enabled ?? false),
-          );
-          if (allSubscribed && kindRow(item.type)?.enabled !== true) {
-            const promoted = await savePreferences([
-              { category: kindCategory(item.type), channel: CHANNEL, enabled: true },
-            ]);
-            setData(promoted);
-            emitNotificationChange();
-          }
-        }
-      } catch (cause) {
-        setData(previous);
-        setActionError(cause instanceof Error ? cause : new Error("Notification update failed"));
-      } finally {
-        setSavingKey(null);
-      }
+      void drainWrites();
     },
-    [prefs, setData, isEntrySubscribed, items, kindRow],
+    [drainWrites, prefs, setLocalPreferences],
+  );
+
+  const toggleEntry = useCallback(
+    (item: ScheduleItem) => {
+      const current = prefsRef.current ?? prefs;
+      if (!current) return;
+      const key = itemCategory(item.id);
+      const category = itemCategory(item.id);
+      const currentlySubscribed = isEntrySubscribedFrom(current, item);
+      const updates: NotificationPreferenceUpdate[] = [
+        { category, channel: CHANNEL, enabled: !currentlySubscribed },
+      ];
+
+      // Promotion: once every currently-loaded item of this kind has been
+      // individually subscribed, fold that into the category flag in the
+      // same request instead of issuing a second PUT (H59, issue #626).
+      if (
+        !currentlySubscribed &&
+        item.type &&
+        preferenceFor(current, kindCategory(item.type))?.enabled !== true
+      ) {
+        const projected = withNotificationOverrides(current, updates);
+        const kindItems = items.filter((candidate) => candidate.type === item.type);
+        const allSubscribed = kindItems.every((candidate) =>
+          isEntrySubscribedFrom(projected, candidate),
+        );
+        if (allSubscribed) {
+          updates.push({ category: kindCategory(item.type), channel: CHANNEL, enabled: true });
+        }
+      }
+
+      void haptic("selection");
+      enqueueWrite(key, updates, () => Promise.resolve(toggleEntry(item)));
+    },
+    [enqueueWrite, items, prefs],
   );
 
   const toggleCategory = useCallback(
-    async (kind: string, enabled: boolean) => {
-      if (!prefs) return;
+    (kind: string, enabled: boolean) => {
+      const current = prefsRef.current ?? prefs;
+      if (!current) return;
       const key = kindCategory(kind);
-      const previous = prefs;
-      retryAction.current = () => toggleCategory(kind, enabled);
-      setSavingKey(key);
-      setActionError(null);
       const kindItems = items.filter((item) => item.type === kind);
-      const preferences: Array<{ category: string; channel: Channel; enabled: boolean }> = [
+      const preferences: NotificationPreferenceUpdate[] = [
         { category: key, channel: CHANNEL, enabled },
         // Clearing the muted (off) or stray individually-subscribed (on)
         // per-item rows keeps a later toggle starting from a clean slate.
         ...kindItems
-          .filter((item) => itemRow(item.id) !== undefined)
+          .filter((item) => preferenceFor(current, itemCategory(item.id)) !== undefined)
           .map((item) => ({ category: itemCategory(item.id), channel: CHANNEL, enabled })),
       ];
-      // Optimistic, same reasoning as toggleEntry — flip instantly, roll
-      // back only if the request actually fails.
-      setData(withOverrides(prefs, preferences));
       void haptic("selection");
-      try {
-        const next = await savePreferences(preferences);
-        setData(next);
-        emitNotificationChange();
-      } catch (cause) {
-        setData(previous);
-        setActionError(cause instanceof Error ? cause : new Error("Notification update failed"));
-      } finally {
-        setSavingKey(null);
-      }
+      enqueueWrite(key, preferences, () => Promise.resolve(toggleCategory(kind, enabled)));
     },
-    [prefs, setData, items, itemRow],
+    [enqueueWrite, items, prefs],
   );
 
   const retry = useCallback(() => {

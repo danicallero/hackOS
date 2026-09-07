@@ -60,12 +60,16 @@ export function PeopleDirectoryScreen() {
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const listRef = useRef<FlatList<ScannerPerson>>(null);
 
+  // SQLite is an offline backup. Once an online sync has a response, prefer
+  // that snapshot even if the local roster could not be opened or written.
+  const directory = sync.serverSnapshot?.people ?? people;
+
   useScrollToTop(listRef);
 
   const roleFilters = useMemo(() => {
-    const options = roleFilterOptionsFromRoster(people, (role) => roleDisplayName(role, t));
+    const options = roleFilterOptionsFromRoster(directory, (role) => roleDisplayName(role, t));
     return [{ value: "all" as const, label: t("roleAll"), icon: ROLE_FILTER_ALL_ICON }, ...options];
-  }, [people, t]);
+  }, [directory, t]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,14 +105,16 @@ export function PeopleDirectoryScreen() {
   // already-loaded list. It gets its own banner below, and only appears
   // once auto-retry has actually given up (a single blip self-heals quietly
   // on the next tick) — see useScannerSync's autoRetryPaused.
-  const loadError = error;
+  const loadError = sync.serverSnapshot ? null : error;
   const syncError = sync.autoRetryPaused ? sync.error : null;
 
   async function onRefresh() {
     setRefreshing(true);
     try {
       await sync.sync();
-      await load();
+      // The online snapshot is the source of truth and updates the list
+      // directly. Local reload is best-effort and is already attempted by the
+      // sync hook; do not keep pull-to-refresh spinning on a broken cache.
     } catch (cause) {
       setError(cause instanceof Error ? cause : new Error());
     } finally {
@@ -168,7 +174,7 @@ export function PeopleDirectoryScreen() {
 
   const filtered = useMemo(() => {
     const needle = query.trim().replace(/\s+/g, " ").toLocaleLowerCase();
-    return people.filter((person) => {
+    return directory.filter((person) => {
       // An activity scan can only ever be logged against a badge, so this
       // list (unlike the plain scan directory, which lists everyone) only
       // shows people who already have one.
@@ -188,22 +194,20 @@ export function PeopleDirectoryScreen() {
         .toLocaleLowerCase()
         .includes(needle);
     });
-  }, [people, query, roleFilter, activityId, t]);
+  }, [directory, query, roleFilter, activityId, t]);
 
   function openPerson(person: ScannerPerson) {
     if (activityId) {
       // Guaranteed by the `filtered` list above.
       emitManualActivityScan(Number(activityId), person.badgeId!);
       safeBack(router, {
-        pathname: "/(tabs)/activities/[id]",
+        pathname: "/activities/[id]",
         params: { id: activityId },
       });
       return;
     }
     router.push({
-      pathname: pathname.includes("/others/")
-        ? "/(tabs)/others/person/[id]"
-        : "/(tabs)/scan/person/[id]",
+      pathname: pathname.includes("/others/") ? "/others/person/[id]" : "/scan/person/[id]",
       params: { id: String(person.userId) },
     });
   }
@@ -308,14 +312,14 @@ export function PeopleDirectoryScreen() {
       ItemSeparatorComponent={() => <Separator inset={72} />}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
       ListHeaderComponent={
-        showInlineListTitle || (loadError && people.length > 0) || syncError ? (
+        showInlineListTitle || (loadError && directory.length > 0) || syncError ? (
           <View style={{ gap: 16, paddingBottom: showInlineListTitle ? 16 : 0, paddingTop: 8 }}>
             {showInlineListTitle ? (
               <Text style={{ color: colors.label, fontSize: 34, fontWeight: "700" }}>
                 {t("scannerPeople")}
               </Text>
             ) : null}
-            {loadError && people.length > 0 ? (
+            {loadError && directory.length > 0 ? (
               <RequestFeedback
                 error={loadError}
                 message={t("requestError")}
@@ -340,7 +344,7 @@ export function PeopleDirectoryScreen() {
       ListEmptyComponent={
         loading ? (
           <RequestFeedback loading />
-        ) : loadError && people.length === 0 ? (
+        ) : loadError && directory.length === 0 ? (
           <RequestFeedback
             error={loadError}
             message={t("requestError")}

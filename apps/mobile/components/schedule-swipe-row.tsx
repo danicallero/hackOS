@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
-import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
+import type { NativeGesture } from "react-native-gesture-handler";
+import Swipeable, { type SwipeableProps } from "react-native-gesture-handler/ReanimatedSwipeable";
 import { SymbolView } from "@/components/symbol";
 import { colors } from "@/theme/colors";
 
@@ -17,6 +18,7 @@ export function ScheduleSwipeRow({
   deleteLabel,
   onEdit,
   onDelete,
+  scrollGesture,
   children,
 }: {
   enabled: boolean;
@@ -24,6 +26,8 @@ export function ScheduleSwipeRow({
   deleteLabel: string;
   onEdit?: () => void;
   onDelete: () => void;
+  /** The vertical SectionList gesture may run alongside the row's horizontal pan. */
+  scrollGesture?: NativeGesture;
   children: ReactNode;
 }) {
   if (!enabled) return <>{children}</>;
@@ -33,6 +37,7 @@ export function ScheduleSwipeRow({
       containerStyle={{ width: "100%" }}
       rightThreshold={40}
       overshootRight={false}
+      simultaneousWith={scrollGesture as SwipeableProps["simultaneousWith"]}
       renderRightActions={() => (
         <RevealActions
           editLabel={editLabel}

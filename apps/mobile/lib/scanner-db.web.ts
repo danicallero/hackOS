@@ -125,8 +125,12 @@ export async function getActivityState(
   );
 }
 
-export async function enqueueLocalScan(payload: ScanPayload, ownerUserId: number): Promise<string> {
-  const id = globalThis.crypto.randomUUID();
+export async function enqueueLocalScan(
+  payload: ScanPayload,
+  ownerUserId: number,
+  idOverride?: string,
+): Promise<string> {
+  const id = idOverride ?? globalThis.crypto.randomUUID();
   scans.push({
     id,
     kind: payload.kind,

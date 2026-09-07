@@ -23,6 +23,7 @@ jest.mock("./scanner-db", () => ({
   applyScannerSnapshot: jest.fn(),
   correctScanTimestamp: jest.fn(),
   deleteScan: jest.fn(),
+  enqueueLocalScan: jest.fn(),
   failScan: jest.fn(),
   markScanAttempt: jest.fn(),
   noteRetryableError: jest.fn(),
@@ -36,12 +37,13 @@ import {
   applyScannerSnapshot,
   correctScanTimestamp,
   deleteScan,
+  enqueueLocalScan,
   failScan,
   noteRetryableError,
   pendingScans,
 } from "./scanner-db";
-import { synchronizeScanner } from "./scanner-sync";
-import type { PendingScan } from "./scanner-types";
+import { submitScannerMutation, synchronizeScanner } from "./scanner-sync";
+import type { PendingScan, ScanPayload } from "./scanner-types";
 
 const mockApiFetch = apiFetch as jest.Mock;
 const mockPendingScans = pendingScans as jest.Mock;
@@ -52,6 +54,7 @@ const mockGetClockSkewMs = getClockSkewMs as jest.Mock;
 const mockCorrectScanTimestamp = correctScanTimestamp as jest.Mock;
 const mockAcknowledgeScan = acknowledgeScan as jest.Mock;
 const mockDeleteScan = deleteScan as jest.Mock;
+const mockEnqueueLocalScan = enqueueLocalScan as jest.Mock;
 const mockGetCookie = authClient.getCookie as jest.Mock;
 const OWNER_USER_ID = 42;
 // The mocked ApiError constructor is (status, code, message).
@@ -101,7 +104,83 @@ describe("synchronizeScanner", () => {
     mockCorrectScanTimestamp.mockReset();
     mockAcknowledgeScan.mockReset();
     mockDeleteScan.mockReset();
+    mockEnqueueLocalScan.mockReset();
     mockGetCookie.mockReset().mockReturnValue("session=staff-a");
+  });
+
+  it("sends an online badge assignment without touching SQLite first", async () => {
+    const payload: ScanPayload = {
+      kind: "accreditation_user",
+      userId: 7,
+      badgeId: "BADGE-7",
+      method: "manual",
+    };
+    mockApiFetch.mockResolvedValue({ badgeId: "BADGE-7" });
+
+    const result = await submitScannerMutation(payload, OWNER_USER_ID);
+
+    expect(result.state).toBe("acknowledged");
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      "/api/accreditation/check-in-user",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ userId: 7, badgeId: "BADGE-7", method: "manual" }),
+        sessionCookie: "session=staff-a",
+        headers: expect.objectContaining({
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        }),
+      }),
+    );
+    expect(mockEnqueueLocalScan).not.toHaveBeenCalled();
+  });
+
+  it("queues the same idempotent badge assignment when the transport is offline", async () => {
+    const payload: ScanPayload = {
+      kind: "accreditation_user",
+      userId: 7,
+      badgeId: "BADGE-7",
+      method: "manual",
+    };
+    mockApiFetch.mockRejectedValueOnce(new TypeError("Network request failed"));
+    mockEnqueueLocalScan.mockResolvedValue("queued");
+
+    const result = await submitScannerMutation(payload, OWNER_USER_ID);
+    const request = mockApiFetch.mock.calls[0]?.[1] as { headers: Record<string, string> };
+
+    expect(result.state).toBe("queued");
+    expect(mockEnqueueLocalScan).toHaveBeenCalledWith(
+      payload,
+      OWNER_USER_ID,
+      request.headers["idempotency-key"],
+    );
+  });
+
+  it("does not hide a server-side badge rejection in the offline queue", async () => {
+    const payload: ScanPayload = {
+      kind: "accreditation_user",
+      userId: 7,
+      badgeId: "BADGE-7",
+      method: "manual",
+    };
+    mockApiFetch.mockRejectedValueOnce(apiError(409, "Badge already assigned"));
+
+    await expect(submitScannerMutation(payload, OWNER_USER_ID)).rejects.toThrow(
+      "Badge already assigned",
+    );
+    expect(mockEnqueueLocalScan).not.toHaveBeenCalled();
+  });
+
+  it("returns the online snapshot when its SQLite cache write fails", async () => {
+    const snapshot = { generatedAt: "t0", people: [], activities: [], activityStates: [] };
+    mockPendingScans.mockResolvedValue([]);
+    mockApiFetch.mockResolvedValue(snapshot);
+    mockApplySnapshot.mockRejectedValueOnce(new Error("SQLite unavailable"));
+
+    await expect(synchronizeScanner(OWNER_USER_ID)).resolves.toEqual({
+      snapshot,
+      localError: expect.objectContaining({ message: "SQLite unavailable" }),
+    });
   });
 
   it("keeps an in-flight replay bound to the session that started it", async () => {

@@ -389,6 +389,20 @@ const queueChainRef = {
   },
 };
 
+// Reads must use the same queue as writes. Expo SQLite's async methods share
+// the connection with `withTransactionAsync`; an unqueued SELECT can suspend
+// a replace-all snapshot halfway through its transaction on Android.
+function withSerializedRosterOperation<T>(
+  work: (database: SQLite.SQLiteDatabase) => Promise<T>,
+): Promise<T> {
+  const run = rosterChainRef.chain.then(async () => work(await rosterDb()));
+  rosterChainRef.chain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
 export async function applyScannerSnapshot(
   snapshot: ScannerSnapshot,
   ownerUserId?: number,
@@ -398,10 +412,27 @@ export async function applyScannerSnapshot(
       ? ++rosterGeneration
       : rosterGeneration;
   if (ownerUserId !== undefined) rosterOwnerUserId = ownerUserId;
+  // Better Fetch can revive ISO timestamps as Date instances on native
+  // clients, even though the wire schema is typed as a string. SQLite only
+  // needs the canonical text form, so normalize both runtime shapes before
+  // the NOT NULL metadata write.
+  const rawGeneratedAt: unknown = snapshot.generatedAt;
+  const generatedAt =
+    typeof rawGeneratedAt === "string"
+      ? rawGeneratedAt
+      : rawGeneratedAt instanceof Date && !Number.isNaN(rawGeneratedAt.getTime())
+        ? rawGeneratedAt.toISOString()
+        : null;
+  if (!generatedAt) throw new Error("Scanner snapshot is missing generatedAt");
   const database = await rosterDb();
   const key = await getRosterKey();
-  const encryptedPeople = await Promise.all(
-    snapshot.people.map(async (person) => ({
+  // expo-crypto's Android bridge does not reliably complete several AES
+  // operations issued at once. The roster is event-sized, so serialize the
+  // small encryption batch before opening the SQLite transaction instead of
+  // leaving a successful server snapshot hanging forever.
+  const encryptedPeople: Array<{ person: ScannerPerson; encrypted: string }> = [];
+  for (const person of snapshot.people) {
+    encryptedPeople.push({
       person,
       encrypted: await encryptJson(
         {
@@ -422,8 +453,8 @@ export async function applyScannerSnapshot(
         } satisfies PersonPayload,
         key,
       ),
-    })),
-  );
+    });
+  }
   await withSerializedTransaction(rosterChainRef, database, async () => {
     // Sign-out/wipe and a newer owner's snapshot advance the generation before
     // their database transaction is queued. Do not let this stale operation
@@ -434,13 +465,11 @@ export async function applyScannerSnapshot(
     ) {
       return;
     }
-    await database.execAsync(`
-      DELETE FROM scanner_people;
-      DELETE FROM revoked_badges;
-      DELETE FROM revoked_tickets;
-      DELETE FROM scanner_activities;
-      DELETE FROM scanner_activity_states;
-    `);
+    await database.runAsync("DELETE FROM scanner_people");
+    await database.runAsync("DELETE FROM revoked_badges");
+    await database.runAsync("DELETE FROM revoked_tickets");
+    await database.runAsync("DELETE FROM scanner_activities");
+    await database.runAsync("DELETE FROM scanner_activity_states");
     for (const { person, encrypted } of encryptedPeople) {
       await database.runAsync(
         `INSERT INTO scanner_people
@@ -487,7 +516,7 @@ export async function applyScannerSnapshot(
       `INSERT INTO scanner_metadata (key, value)
         VALUES ('last_sync', ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-      snapshot.generatedAt,
+      generatedAt,
     );
   });
 }
@@ -578,23 +607,23 @@ async function updatePersonPayload(
 }
 
 export async function findPersonByTicket(ticketToken: string): Promise<ScannerPerson | null> {
-  const database = await rosterDb();
-  const revoked = await database.getFirstAsync<{ ticket_token: string }>(
-    `SELECT ticket_token FROM revoked_tickets WHERE ticket_token = ?`,
-    ticketToken,
-  );
-  if (revoked) return null;
-  const row = await database.getFirstAsync<PersonRow>(
-    `SELECT * FROM scanner_people WHERE ticket_token = ?`,
-    ticketToken,
-  );
+  const row = await withSerializedRosterOperation(async (database) => {
+    const revoked = await database.getFirstAsync<{ ticket_token: string }>(
+      `SELECT ticket_token FROM revoked_tickets WHERE ticket_token = ?`,
+      ticketToken,
+    );
+    if (revoked) return null;
+    return database.getFirstAsync<PersonRow>(
+      `SELECT * FROM scanner_people WHERE ticket_token = ?`,
+      ticketToken,
+    );
+  });
   return row ? personFromRow(row) : null;
 }
 
 export async function findPersonById(userId: number): Promise<ScannerPerson | null> {
-  const row = await (await rosterDb()).getFirstAsync<PersonRow>(
-    `SELECT * FROM scanner_people WHERE user_id = ?`,
-    userId,
+  const row = await withSerializedRosterOperation((database) =>
+    database.getFirstAsync<PersonRow>(`SELECT * FROM scanner_people WHERE user_id = ?`, userId),
   );
   return row ? personFromRow(row) : null;
 }
@@ -606,7 +635,9 @@ export async function findPersonById(userId: number): Promise<ScannerPerson | nu
  */
 export async function listScannerPeople(query = ""): Promise<ScannerPerson[]> {
   const needle = query.trim().toLocaleLowerCase();
-  const rows = await (await rosterDb()).getAllAsync<PersonRow>(`SELECT * FROM scanner_people`);
+  const rows = await withSerializedRosterOperation((database) =>
+    database.getAllAsync<PersonRow>(`SELECT * FROM scanner_people`),
+  );
   const people = await Promise.all(rows.map(personFromRow));
   return people
     .filter((person) =>
@@ -626,31 +657,39 @@ export async function listScannerPeople(query = ""): Promise<ScannerPerson[]> {
 export async function findPersonByBadge(
   badgeId: string,
 ): Promise<{ person: ScannerPerson | null; revoked: boolean }> {
-  const database = await rosterDb();
-  const revoked = await database.getFirstAsync<{ badge_id: string }>(
-    `SELECT badge_id FROM revoked_badges WHERE badge_id = ?`,
-    badgeId,
-  );
-  if (revoked) return { person: null, revoked: true };
-  const row = await database.getFirstAsync<PersonRow>(
-    `SELECT * FROM scanner_people WHERE badge_id = ?`,
-    badgeId,
-  );
-  if (row) return { person: await personFromRow(row), revoked: false };
-  return { person: null, revoked: false };
+  const result = await withSerializedRosterOperation(async (database) => {
+    const revoked = await database.getFirstAsync<{ badge_id: string }>(
+      `SELECT badge_id FROM revoked_badges WHERE badge_id = ?`,
+      badgeId,
+    );
+    if (revoked) return { row: null, revoked: true };
+    return {
+      row: await database.getFirstAsync<PersonRow>(
+        `SELECT * FROM scanner_people WHERE badge_id = ?`,
+        badgeId,
+      ),
+      revoked: false,
+    };
+  });
+  return {
+    person: result.row ? await personFromRow(result.row) : null,
+    revoked: result.revoked,
+  };
 }
 
 export async function listScannerActivities(): Promise<ScannerActivity[]> {
-  const rows = await (await rosterDb()).getAllAsync<{
-    id: number;
-    name: string;
-    category: string;
-    requires_scan: number;
-    starts_at: string | null;
-    primary_language: ScannerActivity["primaryLanguage"];
-    name_i18n: string;
-    description_i18n: string;
-  }>(`SELECT * FROM scanner_activities ORDER BY starts_at IS NULL, starts_at, name, id`);
+  const rows = await withSerializedRosterOperation((database) =>
+    database.getAllAsync<{
+      id: number;
+      name: string;
+      category: string;
+      requires_scan: number;
+      starts_at: string | null;
+      primary_language: ScannerActivity["primaryLanguage"];
+      name_i18n: string;
+      description_i18n: string;
+    }>(`SELECT * FROM scanner_activities ORDER BY starts_at IS NULL, starts_at, name, id`),
+  );
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
@@ -667,13 +706,13 @@ export async function getActivityState(
   userId: number,
   activityId: number,
 ): Promise<ScannerActivityState> {
-  const row = await (await rosterDb()).getFirstAsync<{
-    scan_count: number;
-  }>(
-    `SELECT scan_count FROM scanner_activity_states
-      WHERE user_id = ? AND activity_id = ?`,
-    userId,
-    activityId,
+  const row = await withSerializedRosterOperation((database) =>
+    database.getFirstAsync<{ scan_count: number }>(
+      `SELECT scan_count FROM scanner_activity_states
+        WHERE user_id = ? AND activity_id = ?`,
+      userId,
+      activityId,
+    ),
   );
   return {
     userId,
@@ -694,9 +733,13 @@ function makeId(): string {
  * so a different user signing in on this device later cannot decrypt or
  * even usefully list it — pendingScans() always filters by owner.
  */
-export async function enqueueLocalScan(payload: ScanPayload, ownerUserId: number): Promise<string> {
+export async function enqueueLocalScan(
+  payload: ScanPayload,
+  ownerUserId: number,
+  idOverride?: string,
+): Promise<string> {
   const database = await queueDb(ownerUserId);
-  const id = makeId();
+  const id = idOverride ?? makeId();
   const now = new Date().toISOString();
   const key = await getQueueKey(ownerUserId);
   const encrypted = await encryptJson(payload, key);
@@ -1036,8 +1079,10 @@ export async function syncErrorHistory(ownerUserId: number): Promise<ScannerSync
 export async function getScannerMeta(
   ownerUserId: number,
 ): Promise<{ lastSync: string | null; pending: number }> {
-  const sync = await (await rosterDb()).getFirstAsync<{ value: string }>(
-    `SELECT value FROM scanner_metadata WHERE key = 'last_sync'`,
+  const sync = await withSerializedRosterOperation((database) =>
+    database.getFirstAsync<{ value: string }>(
+      `SELECT value FROM scanner_metadata WHERE key = 'last_sync'`,
+    ),
   );
   const pending = await (await queueDb(ownerUserId)).getFirstAsync<{ count: number }>(
     `SELECT count(*) AS count FROM pending_scans WHERE status = 'pending' AND created_by_user_id = ?`,

@@ -1,7 +1,15 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Alert,
   type GestureResponderEvent,
@@ -13,6 +21,11 @@ import {
   useColorScheme,
   View,
 } from "react-native";
+import {
+  GestureDetector,
+  type NativeGesture,
+  useNativeGesture,
+} from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import {
@@ -78,6 +91,19 @@ const FAB_MARGIN = 24;
 // making it float far up into the schedule content.
 const FAB_BOTTOM_OFFSET = 4;
 
+function ScheduleScrollGestureBoundary({
+  enabled,
+  gesture,
+  children,
+}: {
+  enabled: boolean;
+  gesture: NativeGesture;
+  children: ReactNode;
+}) {
+  if (!enabled) return <>{children}</>;
+  return <GestureDetector gesture={gesture}>{children}</GestureDetector>;
+}
+
 function audienceMatches(item: ScheduleItem, selected: AudienceFilterValue[]): boolean {
   if (selected.length === 0) return true;
   if (item.audiences.length === 0) return selected.includes("staff");
@@ -111,6 +137,8 @@ export default function ScheduleScreen() {
   const tabBarBottomInset = useRouterTabBarBottomInset();
   const tabBarScrollBottomInset = useRouterTabBarScrollBottomInset();
   const canManage = has(me?.capabilities ?? [], CAPABILITIES.SCHEDULE_MANAGE);
+  const scheduleScrollGuardEnabled = process.env.EXPO_OS === "android" && canManage;
+  const scheduleScrollGesture = useNativeGesture({ enabled: scheduleScrollGuardEnabled });
 
   const { data, loading, error, staleSince, load, setData } = useCachedApi(
     "schedule",
@@ -486,116 +514,122 @@ export default function ScheduleScreen() {
           </Pressable>
         </GlassView>
       ) : null}
-      <SectionList
-        ref={listRef}
-        sections={sections}
-        keyExtractor={(row) => (row.kind === "now" ? row.id : String(row.id))}
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{
-          flexGrow: 1,
-          // Exactly clears the FAB (its own offset + height + a small gap) —
-          // was previously adding `insets.bottom` a second time on top of an
-          // already-inset-aware FAB offset, which let the list scroll well
-          // past the last card into empty space.
-          paddingBottom: canManage
-            ? tabBarScrollBottomInset + FAB_BOTTOM_OFFSET + FAB_SIZE + 16
-            : tabBarScrollBottomInset + 16,
-        }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        stickySectionHeadersEnabled
-        onScrollToIndexFailed={(info) => retryScrollToActive(info)}
-        ListHeaderComponent={
-          <View style={{ gap: 8 }}>
-            <StaleDataBanner updatedAt={staleSince} />
-            {notifications.error ? (
-              <RequestFeedback
-                error={notifications.error}
-                message={t("scheduleReminderError")}
-                onRetry={notifications.retry}
-                retrying={notifications.savingKey !== null}
+      <ScheduleScrollGestureBoundary
+        enabled={scheduleScrollGuardEnabled}
+        gesture={scheduleScrollGesture}
+      >
+        <SectionList
+          ref={listRef}
+          sections={sections}
+          keyExtractor={(row) => (row.kind === "now" ? row.id : String(row.id))}
+          contentInsetAdjustmentBehavior="automatic"
+          contentContainerStyle={{
+            flexGrow: 1,
+            // Exactly clears the FAB (its own offset + height + a small gap) —
+            // was previously adding `insets.bottom` a second time on top of an
+            // already-inset-aware FAB offset, which let the list scroll well
+            // past the last card into empty space.
+            paddingBottom: canManage
+              ? tabBarScrollBottomInset + FAB_BOTTOM_OFFSET + FAB_SIZE + 16
+              : tabBarScrollBottomInset + 16,
+          }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          stickySectionHeadersEnabled
+          onScrollToIndexFailed={(info) => retryScrollToActive(info)}
+          ListHeaderComponent={
+            <View style={{ gap: 8 }}>
+              <StaleDataBanner updatedAt={staleSince} />
+              {notifications.error ? (
+                <RequestFeedback
+                  error={notifications.error}
+                  message={t("scheduleReminderError")}
+                  onRetry={notifications.retry}
+                  retrying={notifications.savingKey !== null}
+                />
+              ) : null}
+            </View>
+          }
+          ListHeaderComponentStyle={{ paddingHorizontal: 16, paddingTop: 8 }}
+          ListEmptyComponent={
+            loading ? (
+              <RequestFeedback loading />
+            ) : error ? (
+              <RequestFeedback error={error} onRetry={() => void load()} />
+            ) : (
+              <EmptyState
+                icon="calendar.badge.clock"
+                title={t("scheduleEmptyTitle")}
+                description={normalizedQuery ? t("scheduleSearchEmpty") : t("scheduleEmpty")}
               />
-            ) : null}
-          </View>
-        }
-        ListHeaderComponentStyle={{ paddingHorizontal: 16, paddingTop: 8 }}
-        ListEmptyComponent={
-          loading ? (
-            <RequestFeedback loading />
-          ) : error ? (
-            <RequestFeedback error={error} onRetry={() => void load()} />
-          ) : (
-            <EmptyState
-              icon="calendar.badge.clock"
-              title={t("scheduleEmptyTitle")}
-              description={normalizedQuery ? t("scheduleSearchEmpty") : t("scheduleEmpty")}
-            />
-          )
-        }
-        renderSectionHeader={({ section }) => (
-          <View
-            style={{
-              backgroundColor: colors.background,
-              height: SECTION_HEADER_HEIGHT,
-              justifyContent: "center",
-            }}
-          >
-            <Text
-              selectable
-              accessibilityRole="header"
+            )
+          }
+          renderSectionHeader={({ section }) => (
+            <View
               style={{
-                color: colors.secondaryLabel,
-                fontSize: 13,
-                fontWeight: "600",
-                paddingHorizontal: 16,
-                textTransform: "uppercase",
+                backgroundColor: colors.background,
+                height: SECTION_HEADER_HEIGHT,
+                justifyContent: "center",
               }}
             >
-              {section.title}
-            </Text>
-          </View>
-        )}
-        renderItem={({ item, index, section }) =>
-          item.kind === "now" ? (
-            <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <View style={{ width: 70, alignItems: "center" }}>
-                  <Text
-                    style={{
-                      color: colors.accent,
-                      fontSize: 13,
-                      fontVariant: ["tabular-nums"],
-                      fontWeight: "700",
-                    }}
-                  >
-                    {formatTime(now, language)}
-                  </Text>
-                </View>
-                <View
-                  style={{ backgroundColor: colors.accent, flex: 1, height: 2, marginLeft: 8 }}
-                />
-              </View>
+              <Text
+                selectable
+                accessibilityRole="header"
+                style={{
+                  color: colors.secondaryLabel,
+                  fontSize: 13,
+                  fontWeight: "600",
+                  paddingHorizontal: 16,
+                  textTransform: "uppercase",
+                }}
+              >
+                {section.title}
+              </Text>
             </View>
-          ) : (
-            <ScheduleSwipeRow
-              enabled={canManage}
-              editLabel={t("scheduleEdit")}
-              deleteLabel={t("scheduleDelete")}
-              onEdit={() => setFormTarget(item)}
-              onDelete={() => confirmDelete(item)}
-            >
-              <ScheduleCard
-                item={item}
-                active={item.active}
-                language={language}
-                last={index === section.data.length - 1}
-                reminderOn={notifications.ready ? notifications.isEntrySubscribed(item) : null}
-                reminderBusy={notifications.savingKey === itemCategory(item.id)}
-                onToggleReminder={() => void notifications.toggleEntry(item)}
-              />
-            </ScheduleSwipeRow>
-          )
-        }
-      />
+          )}
+          renderItem={({ item, index, section }) =>
+            item.kind === "now" ? (
+              <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <View style={{ width: 70, alignItems: "center" }}>
+                    <Text
+                      style={{
+                        color: colors.accent,
+                        fontSize: 13,
+                        fontVariant: ["tabular-nums"],
+                        fontWeight: "700",
+                      }}
+                    >
+                      {formatTime(now, language)}
+                    </Text>
+                  </View>
+                  <View
+                    style={{ backgroundColor: colors.accent, flex: 1, height: 2, marginLeft: 8 }}
+                  />
+                </View>
+              </View>
+            ) : (
+              <ScheduleSwipeRow
+                enabled={canManage}
+                editLabel={t("scheduleEdit")}
+                deleteLabel={t("scheduleDelete")}
+                onEdit={() => setFormTarget(item)}
+                onDelete={() => confirmDelete(item)}
+                scrollGesture={scheduleScrollGuardEnabled ? scheduleScrollGesture : undefined}
+              >
+                <ScheduleCard
+                  item={item}
+                  active={item.active}
+                  language={language}
+                  last={index === section.data.length - 1}
+                  reminderOn={notifications.ready ? notifications.isEntrySubscribed(item) : null}
+                  reminderBusy={notifications.savingKey === itemCategory(item.id)}
+                  onToggleReminder={() => void notifications.toggleEntry(item)}
+                />
+              </ScheduleSwipeRow>
+            )
+          }
+        />
+      </ScheduleScrollGestureBoundary>
 
       {formTarget === "create" ? (
         <ScheduleFormModal

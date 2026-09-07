@@ -48,6 +48,9 @@ export function GeneralScannerScreen() {
   const [people, setPeople] = useState<ScannerPerson[]>([]);
   const [groups, setGroups] = useState<ScannerGroup[]>([]);
   const [roleStats, setRoleStats] = useState<ScannerRoleStat[] | null>(null);
+  // SQLite is only the offline roster. Once the server has answered, use its
+  // people for both the counters and QR resolution.
+  const directory = sync.serverSnapshot?.people ?? people;
 
   useEffect(() => {
     void loadScannerGroupFilter().then(setGroups);
@@ -119,20 +122,25 @@ export function GeneralScannerScreen() {
         inside: filtered.reduce((sum, row) => sum + row.inside, 0),
       };
     }
-    const filtered = people.filter((person) => matchesScannerGroup(person, groups));
+    const filtered = directory.filter((person) => matchesScannerGroup(person, groups));
     return {
       accredited: filtered.filter((person) => person.badgeId !== null).length,
       confirmed: filtered.filter((person) => isAccreditationEligible(person)).length,
       inside: filtered.filter((person) => person.lastPresenceKind === "in").length,
     };
-  }, [roleStats, people, groups]);
+  }, [roleStats, directory, groups]);
 
   const resolve = useCallback(
     async (raw: string) => {
       const value = raw.trim();
-      const byTicket = await findPersonByTicket(value);
-      const badge = byTicket ? null : await findPersonByBadge(value);
-      const person = byTicket ?? badge?.person ?? null;
+      const serverPerson = sync.serverSnapshot?.people.find(
+        (candidate) => candidate.ticketToken === value || candidate.badgeId === value,
+      );
+      const byTicket = sync.serverSnapshot ? null : await findPersonByTicket(value);
+      const badge = sync.serverSnapshot ? null : byTicket ? null : await findPersonByBadge(value);
+      const person = sync.serverSnapshot
+        ? (serverPerson ?? null)
+        : (byTicket ?? badge?.person ?? null);
       if (!person) {
         setError(badge?.revoked ? t("scannerBadgeRevoked") : t("scannerUnknownQr"));
         return;
@@ -140,11 +148,11 @@ export function GeneralScannerScreen() {
       setError(null);
       void haptic("light");
       router.push({
-        pathname: "/(tabs)/scan/person/[id]",
+        pathname: "/scan/person/[id]",
         params: { id: String(person.userId) },
       });
     },
-    [router, t],
+    [router, sync.serverSnapshot, t],
   );
 
   return (
