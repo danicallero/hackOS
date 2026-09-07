@@ -565,6 +565,10 @@ toolbar chrome. This guarantees the heading is visible on initial entry;
 compact-width iPhone keeps the native large-title presentation.
 Camera-owned torch/manual-entry buttons and modal-owned close/save actions
 remain attached to their surfaces rather than moving into navigation chrome.
+Opening a person from People Finder or a scan shows the current badge as the
+last row in Personal data. When a badge is assigned, swipe that row left to
+reveal the deliberate Replace and Delete actions; an unassigned person keeps
+the separate Link badge action in the Accreditation section.
 The local `modules/camera-capabilities` Expo module reads the back camera's
 actual torch support from AVFoundation/Camera2. Flash-capable devices keep
 manual entry at bottom-left and the torch at bottom-right. Devices without a
