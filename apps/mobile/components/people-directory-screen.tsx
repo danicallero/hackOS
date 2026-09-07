@@ -167,7 +167,7 @@ export function PeopleDirectoryScreen() {
   }, [glassAvailable, navigation, roleFilter, roleFilters, t, usesListTitle]);
 
   const filtered = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase();
+    const needle = query.trim().replace(/\s+/g, " ").toLocaleLowerCase();
     return people.filter((person) => {
       // An activity scan can only ever be logged against a badge, so this
       // list (unlike the plain scan directory, which lists everyone) only
@@ -180,6 +180,7 @@ export function PeopleDirectoryScreen() {
         person.surname,
         person.email,
         person.badgeId,
+        person.dni,
         roleDisplayName(person.role, t),
       ]
         .filter(Boolean)

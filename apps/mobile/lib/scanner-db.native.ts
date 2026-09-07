@@ -51,6 +51,7 @@ interface PersonPayload {
   isEnterpriseJudge: boolean;
   name: string | null;
   surname: string | null;
+  dni: string | null;
   accepted: boolean;
   confirmed: boolean;
   intolerances: ScannerPerson["intolerances"];
@@ -281,6 +282,7 @@ export async function applyScannerSnapshot(
           isEnterpriseJudge: person.isEnterpriseJudge,
           name: person.name,
           surname: person.surname,
+          dni: person.dni,
           accepted: person.accepted ?? person.confirmed,
           confirmed: person.confirmed,
           intolerances: person.intolerances,

@@ -158,7 +158,9 @@ export function DataTable<T>({
 
   const filtered = useMemo(() => {
     if (!searchable || !query.trim()) return data;
-    const q = query.trim().toLowerCase();
+    // Collapse run-on spacing ("Ana   Perez") so it still matches the
+    // single-space-joined haystack `searchable` builds from row fields.
+    const q = query.trim().replace(/\s+/g, " ").toLowerCase();
     return data.filter((row) => searchable(row).toLowerCase().includes(q));
   }, [data, searchable, query]);
 

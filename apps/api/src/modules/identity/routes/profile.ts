@@ -786,6 +786,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       preHandler: requireCapability(CAPABILITIES.USERS_READ),
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_READ }),
       schema: {
+        summary: "List and search users",
+        description:
+          '`q` matches name, surname, "name surname"/"surname name", email, badge id, or DNI as a case-insensitive, accent-insensitive substring.',
         querystring: z.object({
           q: z.string().optional(),
           limit: z.coerce.number().int().min(1).max(200).default(50),
@@ -817,11 +820,19 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const { q, limit, offset } = req.query;
-      const filter = q?.trim() ? `%${q.trim()}%` : null;
+      const needle = q?.trim().replace(/\s+/g, " ") || null;
+      const filter = needle ? `%${needle}%` : null;
+      // unaccent (migration 0505) makes name/surname matching accent-insensitive.
       const where = filter
         ? `WHERE account_state = 'active' AND anonymized_at IS NULL
              AND is_test_account = false
-             AND (name ILIKE $1 OR surname ILIKE $1 OR email ILIKE $1)`
+             AND (unaccent(name) ILIKE unaccent($1)
+              OR unaccent(surname) ILIKE unaccent($1)
+              OR email ILIKE $1
+              OR badge_id ILIKE $1
+              OR dni ILIKE $1
+              OR unaccent(name || ' ' || surname) ILIKE unaccent($1)
+              OR unaccent(surname || ' ' || name) ILIKE unaccent($1))`
         : `WHERE account_state = 'active' AND anonymized_at IS NULL
              AND is_test_account = false`;
       const args = filter ? [filter, limit, offset] : [limit, offset];

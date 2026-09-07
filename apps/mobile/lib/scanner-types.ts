@@ -32,6 +32,7 @@ export interface ScannerPerson {
   revokedBadgeIds: string[];
   name: string | null;
   surname: string | null;
+  dni: string | null;
   accepted: boolean;
   confirmed: boolean;
   intolerances: Array<{ id: number; label: Record<string, string> }>;

@@ -74,6 +74,7 @@ describe("H22-H26 native scanner snapshot", () => {
       `INSERT INTO activity_logs (user_id, activity_id, logged_by) VALUES ($1, $2, $3)`,
       [userId, mealId, scanner],
     );
+    await pool.query(`UPDATE users SET dni = $2 WHERE id = $1`, [userId, "11223344B"]);
 
     const response = await app.inject({
       method: "GET",
@@ -88,6 +89,7 @@ describe("H22-H26 native scanner snapshot", () => {
         ticketToken,
         badgeId: "BADGE-NEW",
         revokedBadgeIds: ["BADGE-OLD"],
+        dni: "11223344B",
         accepted: true,
         confirmed: true,
         foodIntoleranceNotes: "Severe",

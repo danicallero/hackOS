@@ -185,6 +185,7 @@ const scannerPersonCard = z.object({
   revokedBadgeIds: z.array(z.string()),
   name: z.string().nullable(),
   surname: z.string().nullable(),
+  dni: z.string().nullable(),
   accepted: z.boolean(),
   confirmed: z.boolean(),
   intolerances: z.array(

@@ -63,6 +63,7 @@ function snapshot(name: string): ScannerSnapshot {
         revokedBadgeIds: [],
         name,
         surname: "User",
+        dni: null,
         accepted: true,
         confirmed: true,
         intolerances: [],
