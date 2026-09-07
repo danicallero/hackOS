@@ -339,6 +339,7 @@ export async function listActiveJudgingSessions(entryId: number) {
 export async function searchChallengeQueue(challengeId: number, q: string, fixtureMarker: boolean) {
   await assertQueueChallengeReadScope(pool, challengeId, fixtureMarker);
   const like = `%${q}%`;
+  // LIMIT comfortably clears the ~200-team ceiling for a single challenge's queue.
   const { rows } = await pool.query(
     `SELECT qe.*, r.name AS repo_name,
             (ar.attempt_id IS NOT NULL) AS has_review, ar.status AS review_status,
@@ -370,7 +371,7 @@ export async function searchChallengeQueue(challengeId: number, q: string, fixtu
       WHERE qe.challenge_id = $1
         AND (unaccent(r.name) ILIKE unaccent($2) OR CAST(r.id AS text) = $3 OR CAST(qe.id AS text) = $3)
       ORDER BY qe.position ASC NULLS LAST, qe.id ASC
-      LIMIT 100`,
+      LIMIT 250`,
     [challengeId, like, q, fixtureMarker],
   );
   return rows;
