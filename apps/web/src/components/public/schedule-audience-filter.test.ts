@@ -57,7 +57,7 @@ describe("deriveViewerScheduleSegments", () => {
     expect(deriveViewerScheduleSegments(items)).toEqual(["sponsor", "participant"]);
   });
 
-  it("a mentor's feed yields only the mentor segment (mutually exclusive with participant)", () => {
+  it("a mentor-only item yields only the mentor segment", () => {
     const items = [item({ id: 1, audiences: ["mentor"] })];
     expect(deriveViewerScheduleSegments(items)).toEqual(["mentor"]);
   });

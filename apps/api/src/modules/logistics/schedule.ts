@@ -862,20 +862,19 @@ export async function removeScheduleOwner(
 // variants of the same query.
 
 export interface CallerScheduleAudience {
-  /** Sees every live item unconditionally, plus owners/contactNote/notes on all of them. */
+  /** Sees every item unconditionally, plus owners/contactNote/notes on all of them. */
   isStaff: boolean;
-  /** `sponsor`/`participant`/`mentor` — the optional per-item toggles that apply to this caller. */
+  /** `participant` is universal; `sponsor`/`mentor` are additional per-item toggles. */
   audiences: Set<ScheduleAudience>;
 }
 
 /**
  * Staff (any authenticated account holding at least one capability) always
  * sees everything — never gated by the stored `audiences` set. Everyone else
- * is resolved to at most one attendee audience (`participant`/`mentor`,
- * mutually exclusive) plus `sponsor` if they're a linked sponsor rep. An
- * anonymous caller (no session — the public site/TV) is treated as
- * `participant`: there's no audience distinct from "what participants see"
- * for an anonymous visitor (H59).
+ * always sees the participant audience, then gains the mentor audience when
+ * they hold the Mentor role and the sponsor audience when they're a linked
+ * sponsor rep. An anonymous caller (no session — the public site/TV) gets
+ * the same universal participant slice (H59).
  */
 export async function callerScheduleAudiences(
   userId: number | null,
@@ -887,12 +886,11 @@ export async function callerScheduleAudiences(
     mentorOrParticipantType(pool, userId),
   ]);
   if (capabilities.size > 0) return { isStaff: true, audiences: new Set() };
-  const audiences = new Set<ScheduleAudience>();
-  // A sponsor rep always sees the entire public schedule (the same
-  // `participant` feed anyone else browses), plus their own sponsor-tagged
-  // content on top — sponsor is additive, never a narrower view (H59).
-  if (isSponsorRep) audiences.add("sponsor").add("participant");
-  if (attendeeType) audiences.add(attendeeType);
+  const audiences = new Set<ScheduleAudience>(["participant"]);
+  // Sponsor and mentor views are additive to the universal participant feed,
+  // never narrower views (H59).
+  if (isSponsorRep) audiences.add("sponsor");
+  if (attendeeType === "mentor") audiences.add("mentor");
   return { isStaff: false, audiences };
 }
 
@@ -905,6 +903,7 @@ export interface AudienceScheduleItem {
   startsAt: string;
   endsAt: string;
   publishAt: string | null;
+  /** Stored audience tags visible to this caller; staff receives the full set. */
   audiences: string[];
   /** Only populated when the caller shares a non-public audience with this item. */
   contactNote?: string | null;
@@ -953,6 +952,11 @@ export async function listScheduleForAudiences(
   return rows.map((row: Record<string, unknown>) => {
     const itemAudiences = new Set((row.audiences as string[]) ?? []);
     const sharesSponsorAudience = itemAudiences.has("sponsor") && caller.audiences.has("sponsor");
+    const visibleAudiences = caller.isStaff
+      ? Array.from(itemAudiences)
+      : Array.from(itemAudiences).filter((audience) =>
+          caller.audiences.has(audience as ScheduleAudience),
+        );
     const base = {
       id: Number(row.id),
       title: String(row.title),
@@ -962,10 +966,10 @@ export async function listScheduleForAudiences(
       startsAt: (row.starts_at as Date).toISOString(),
       endsAt: (row.ends_at as Date).toISOString(),
       publishAt: row.publish_at instanceof Date ? row.publish_at.toISOString() : null,
-      // Non-sensitive categorization metadata — always exposed so a sponsor
-      // rep's client can pick out "sponsor-relevant" items from the general
-      // feed (H59), same as it already lets a staff caller do the same.
-      audiences: Array.from(itemAudiences),
+      // Non-sensitive categorization metadata lets a sponsor rep's client
+      // pick out "sponsor-relevant" items from the general feed (H59), while
+      // non-staff callers only receive tags from their own accessible set.
+      audiences: visibleAudiences,
       primaryLanguage: ((row.primary_language as Language | null) ?? "es") as Language,
       titleI18n: (row.title_i18n as Record<string, string> | null) ?? {},
       descriptionI18n: (row.description_i18n as Record<string, string | null> | null) ?? {},
