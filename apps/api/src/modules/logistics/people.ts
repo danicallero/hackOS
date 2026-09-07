@@ -40,7 +40,7 @@ export interface PersonSearchResult {
  *   2. the CURRENT badge of someone (a rotated-away badge never shadows the
  *      person who holds that id now),
  *   3. a rotated-away badge (matchedBy "badge_history", so callers can tell),
- *   4. a name / surname / "name surname" / "surname name" / email substring.
+ *   4. a name / surname / "name surname" / "surname name" / email / DNI substring.
  * Exact identifier hits short-circuit the fuzzy search so a scanned QR always
  * resolves to exactly one person. `fields` picks which extra user fields come
  * back (see PERSON_FIELDS). Read-only.
@@ -50,7 +50,10 @@ export async function searchPeople(
   fields: PersonField[] = DEFAULT_PERSON_FIELDS,
   actorId?: number,
 ): Promise<PersonSearchResult[]> {
-  const needle = q.trim();
+  // Collapse "Ana   Perez" / "Perez " down to "Ana Perez" so run-on spacing
+  // between names or a trailing space still matches the single-space
+  // concatenation used below.
+  const needle = q.trim().replace(/\s+/g, " ");
   if (!needle) return [];
   const fixtureFilter = await fixtureReadFilter(pool, actorId, "u");
 
@@ -97,6 +100,7 @@ export async function searchPeople(
         AND (unaccent(u.name) ILIKE unaccent($1)
          OR unaccent(u.surname) ILIKE unaccent($1)
          OR unaccent(u.email) ILIKE unaccent($1)
+         OR u.dni ILIKE $1
          OR unaccent(u.name || ' ' || u.surname) ILIKE unaccent($1)
          OR unaccent(u.surname || ' ' || u.name) ILIKE unaccent($1))
       ORDER BY u.surname NULLS LAST, u.name NULLS LAST, u.id

@@ -88,3 +88,20 @@ describe("unified person lookup excludes anonymized profiles (H54)", () => {
     expect(await search("Lovelace")).toHaveLength(0);
   });
 });
+
+describe("unified person lookup accepts DNI and loose whitespace", () => {
+  it("matches by DNI substring and by run-on/trailing spacing between name and surname", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const userId = await createUser({ name: "Ada", email: "ada-dni@example.test" });
+    await pool.query(`UPDATE users SET surname = $2, dni = $3 WHERE id = $1`, [
+      userId,
+      "Lovelace",
+      "12345678Z",
+    ]);
+
+    expect(await search("12345678Z")).toHaveLength(1);
+    expect(await search("1234567")).toHaveLength(1);
+    expect(await search("Ada   Lovelace")).toHaveLength(1);
+    expect(await search("Lovelace ")).toHaveLength(1);
+  });
+});

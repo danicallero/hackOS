@@ -1899,8 +1899,15 @@ describe("staff user routes (H7)", () => {
 
   it("GET /api/users lists and searches users (USERS_READ)", async () => {
     const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
     await createUser({ name: "Ada", email: "ada@example.test" });
-    await createUser({ name: "Grace", email: "grace@example.test" });
+    const graceId = await createUser({ name: "Grace", email: "grace@example.test" });
+    await pool.query(`UPDATE users SET surname = $2, dni = $3, badge_id = $4 WHERE id = $1`, [
+      graceId,
+      "Hopper",
+      "87654321X",
+      "BADGE-GRACE",
+    ]);
     const reader = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
     const pleb = await createUser();
 
@@ -1913,14 +1920,22 @@ describe("staff user routes (H7)", () => {
     expect(all.json().total).toBeGreaterThanOrEqual(3);
     expect(Array.isArray(all.json().users)).toBe(true);
 
-    const search = await a.inject({
-      method: "GET",
-      url: "/api/users?q=grace",
-      headers: asUser(reader),
-    });
-    expect(search.json().users.map((u: { email: string }) => u.email)).toContain(
-      "grace@example.test",
-    );
+    async function search(q: string) {
+      const res = await a.inject({
+        method: "GET",
+        url: `/api/users?q=${encodeURIComponent(q)}`,
+        headers: asUser(reader),
+      });
+      return res.json().users.map((u: { email: string }) => u.email) as string[];
+    }
+
+    expect(await search("grace")).toContain("grace@example.test");
+    // apellido, DNI, acreditación, and loosely-spaced "nombre apellido".
+    expect(await search("Hopper")).toContain("grace@example.test");
+    expect(await search("87654321X")).toContain("grace@example.test");
+    expect(await search("BADGE-GRACE")).toContain("grace@example.test");
+    expect(await search("Grace   Hopper")).toContain("grace@example.test");
+    expect(await search("Hopper ")).toContain("grace@example.test");
   });
 
   it("GET /api/users resolves each row's visibleRoleName via the bulk view, not just capability holders (H8 regression: the web /users page previously read a stale `role` field name and always showed everyone as unassigned)", async () => {

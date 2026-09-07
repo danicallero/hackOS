@@ -51,6 +51,7 @@ jest.mock("@/lib/scanner-db", () => ({
       revokedBadgeIds: [],
       name: "Ada",
       surname: "Lovelace",
+      dni: null,
       accepted: true,
       confirmed: true,
       intolerances: [],

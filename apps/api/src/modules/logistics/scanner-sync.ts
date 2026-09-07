@@ -34,7 +34,7 @@ export async function scannerSnapshot(actorId?: number) {
   // for immediate operator feedback.
   const [peopleResult, activitiesResult, statesResult] = await Promise.all([
     pool.query(
-      `SELECT u.id, u.email, u.name, u.surname, u.badge_id, u.badge_id_history,
+      `SELECT u.id, u.email, u.name, u.surname, u.dni, u.badge_id, u.badge_id_history,
               u.food_intolerance_notes, u.notes, t.token AS ticket_token,
               -- H8 full-replacement: a person's scanner-facing "role" is
               -- simply their highest-visible role name (identity/role.ts's
@@ -119,6 +119,7 @@ export async function scannerSnapshot(actorId?: number) {
       revokedBadgeIds: (row.badge_id_history as string[]) ?? [],
       name: (row.name as string | null) ?? null,
       surname: (row.surname as string | null) ?? null,
+      dni: (row.dni as string | null) ?? null,
       accepted: Boolean(row.accepted),
       confirmed: Boolean(row.confirmed),
       intolerances: row.intolerances as Array<{ id: number; label: Record<string, string> }>,

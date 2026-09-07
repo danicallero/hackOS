@@ -44,7 +44,6 @@ import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
 
 interface PersonDetails extends ScannerPerson {
-  dni?: string | null;
   shirtSize?: string | null;
   currentBadge?: string | null;
   secondaryEmail?: string | null;
