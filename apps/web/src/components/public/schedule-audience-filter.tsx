@@ -16,9 +16,11 @@ import type { PublicScheduleItem, ScheduleAudience } from "@/lib/logistics";
  * received from /api/public/activities — the API only ever sends items a
  * caller is entitled to see (`callerScheduleAudiences`/
  * `listScheduleForAudiences`), so the segments worth offering are exactly the
- * ones actually present across the items they got back: no separate
- * capability/role lookup needed, and it can never offer a segment the viewer
- * doesn't already have access to.
+ * caller-visible tags actually present across the items they got back: no
+ * separate capability/role lookup is needed, and it can never offer a segment
+ * the viewer doesn't already have access to. The API strips non-applicable
+ * tags from non-staff responses, which keeps a participant-only feed at the
+ * participant segment even when an item is also aimed at mentors.
  *
  * An item with no `audiences` tags is staff-only (schedule.ts's
  * `ScheduleAudience` doc comment) — only a staff caller's feed ever includes

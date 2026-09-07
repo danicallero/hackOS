@@ -14,10 +14,9 @@ import {
 
 /**
  * H59: audience scoping — staff always sees everything (never stored);
- * `sponsor`/`participant`/`mentor` are the optional stored toggles, empty
- * meaning staff-only; an anonymous caller is treated as `participant`. Plus
- * the responsible-person ("owner") join table and the staff-only `notes`
- * field.
+ * `participant` is universal, while `sponsor`/`mentor` are additional stored
+ * toggles; empty means staff-only. Plus the responsible-person ("owner") join
+ * table and the staff-only `notes` field.
  */
 
 let app: App;
@@ -187,11 +186,14 @@ describe("audience-aware schedule feed (H59)", () => {
     expect(participantItem.contactNote).toBeUndefined();
   });
 
-  it("a confirmed mentor sees mentor-tagged items but not participant- or sponsor-only ones", async () => {
+  it("a confirmed mentor sees participant-tagged items as well as mentor items", async () => {
     const a = await getApp();
     const mentor = await makeAttendee("mentor");
     const mentorId = await createItem({ title: "Mentor briefing", audiences: ["mentor"] });
-    await createItem({ title: "Opening ceremony", audiences: ["participant"] });
+    const participantId = await createItem({
+      title: "Opening ceremony",
+      audiences: ["participant"],
+    });
     await createItem({ title: "Sponsor reception", audiences: ["sponsor"] });
 
     const res = await a.inject({
@@ -199,7 +201,58 @@ describe("audience-aware schedule feed (H59)", () => {
       url: "/api/public/activities",
       headers: asUser(mentor),
     });
-    expect(res.json().items.map((i: { id: number }) => i.id)).toEqual([mentorId]);
+    expect(
+      res
+        .json()
+        .items.map((i: { id: number }) => i.id)
+        .sort(),
+    ).toEqual([mentorId, participantId].sort());
+  });
+
+  it("an authenticated user without a role or capability still sees participant items", async () => {
+    const a = await getApp();
+    const viewer = await createUser();
+    const participantId = await createItem({
+      title: "Opening ceremony",
+      audiences: ["participant"],
+    });
+    await createItem({ title: "Mentor briefing", audiences: ["mentor"] });
+
+    const res = await a.inject({
+      method: "GET",
+      url: "/api/public/activities",
+      headers: asUser(viewer),
+    });
+    expect(res.json().items.map((i: { id: number }) => i.id)).toEqual([participantId]);
+  });
+
+  it("only exposes audience tags that apply to the caller", async () => {
+    const a = await getApp();
+    const participant = await makeAttendee("participant");
+    const mentor = await makeAttendee("mentor");
+    const mixedId = await createItem({
+      title: "Shared workshop",
+      audiences: ["participant", "mentor"],
+    });
+
+    const participantRes = await a.inject({
+      method: "GET",
+      url: "/api/public/activities",
+      headers: asUser(participant),
+    });
+    expect(
+      participantRes.json().items.find((i: { id: number }) => i.id === mixedId).audiences,
+    ).toEqual(["participant"]);
+
+    const mentorRes = await a.inject({
+      method: "GET",
+      url: "/api/public/activities",
+      headers: asUser(mentor),
+    });
+    expect(mentorRes.json().items.find((i: { id: number }) => i.id === mixedId).audiences).toEqual([
+      "participant",
+      "mentor",
+    ]);
   });
 
   it("a confirmed participant sees participant-tagged items but not mentor- or sponsor-only ones", async () => {
