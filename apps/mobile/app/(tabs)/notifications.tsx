@@ -4,6 +4,7 @@ import { useScrollToTop } from "expo-router";
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  AppState,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   Platform,
@@ -40,6 +41,7 @@ import {
   emitNotificationChange,
   emitNotificationPreferenceChange,
   subscribeToCategory,
+  subscribeToNotificationChanges,
   subscribeToNotificationPreferenceChanges,
 } from "@/lib/notification-events";
 import {
@@ -353,14 +355,18 @@ const MessagesView = memo(function MessagesView({
       void all.load();
       void unread.load();
     };
-    return subscribeToCategory("announcements", reload);
-  }, [all.load, unread.load]);
-  useEffect(() => {
-    const reload = () => {
-      void all.load();
-      void unread.load();
+    const unsubscribeCategory = subscribeToCategory("announcements", reload);
+    const unsubscribeChanges = subscribeToNotificationChanges(reload);
+    const unsubscribeServer = subscribeToServerEvent(EVENTS.USER_NOTIFICATION, reload);
+    const appStateSubscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") reload();
+    });
+    return () => {
+      unsubscribeCategory();
+      unsubscribeChanges();
+      unsubscribeServer();
+      appStateSubscription.remove();
     };
-    return subscribeToServerEvent(EVENTS.USER_NOTIFICATION, reload);
   }, [all.load, unread.load]);
 
   /** Applies an update to whichever of the two caches currently holds `itemId`, keeping both in sync. */
