@@ -13,9 +13,11 @@ import {
   addChallengeJudge,
   assignChallengeToRoom,
   createChallenge,
+  createEnterpriseChallenges,
   createRepoWithTeam,
   createRoom,
   enqueueRepo,
+  mergeChallengesIntoOneGroup,
 } from "./fixtures.js";
 
 /** Judging (H36, H37, H40): collaborative review, versioning, search, CSV export. */
@@ -414,6 +416,22 @@ describe("manual search (H37)", () => {
     const res = await app.inject({
       method: "GET",
       url: `/api/queue/challenges/${challengeId}/search?q=cafe nandu`,
+      headers: asUser(judgeA),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().some((h: { repo_id: number }) => h.repo_id === repoId)).toBe(true);
+  });
+
+  it("finds a team enqueued under a sibling challenge in a merged queue group (H46)", async () => {
+    const { challengeIds } = await createEnterpriseChallenges(2, [CRITERIA, CRITERIA]);
+    const [firstChallenge, secondChallenge] = challengeIds;
+    await mergeChallengesIntoOneGroup(challengeIds);
+    const { repoId } = await createRepoWithTeam(undefined, "BlackVault");
+    await enqueueRepo(secondChallenge, repoId, 1);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/queue/challenges/${firstChallenge}/search?q=BlackVau`,
       headers: asUser(judgeA),
     });
     expect(res.statusCode).toBe(200);

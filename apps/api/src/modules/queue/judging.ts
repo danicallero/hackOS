@@ -8,6 +8,7 @@ import { broadcastQueueEvent } from "./broadcast.js";
 import { resolveChallengePanel } from "./criteria-merge.js";
 import { lockQueueGroupForEntry } from "./evaluation-lock.js";
 import { assertQueueChallengeReadScope } from "./fixture-scope.js";
+import { GROUP_SIBLING_CHALLENGE_IDS_SQL } from "./groups.js";
 import { writeQueueHistory } from "./history.js";
 import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 import { notifyChallengeQueueChanged } from "./notify.js";
@@ -339,7 +340,10 @@ export async function listActiveJudgingSessions(entryId: number) {
 export async function searchChallengeQueue(challengeId: number, q: string, fixtureMarker: boolean) {
   await assertQueueChallengeReadScope(pool, challengeId, fixtureMarker);
   const like = `%${q}%`;
-  // LIMIT comfortably clears the ~200-team ceiling for a single challenge's queue.
+  // H46: a merged queue group holds several challenges under one queue —
+  // search every sibling challenge, not just the one the caller passed in,
+  // or teams enqueued under another challenge in the same group go missing.
+  // LIMIT comfortably clears a merged group's combined team ceiling.
   const { rows } = await pool.query(
     `SELECT qe.*, r.name AS repo_name,
             (ar.attempt_id IS NOT NULL) AS has_review, ar.status AS review_status,
@@ -368,10 +372,10 @@ export async function searchChallengeQueue(challengeId: number, q: string, fixtu
           ORDER BY bqe.id
           LIMIT 1
        ) busy ON true
-      WHERE qe.challenge_id = $1
+      WHERE qe.challenge_id IN (${GROUP_SIBLING_CHALLENGE_IDS_SQL})
         AND (unaccent(r.name) ILIKE unaccent($2) OR CAST(r.id AS text) = $3 OR CAST(qe.id AS text) = $3)
       ORDER BY qe.position ASC NULLS LAST, qe.id ASC
-      LIMIT 250`,
+      LIMIT 500`,
     [challengeId, like, q, fixtureMarker],
   );
   return rows;
