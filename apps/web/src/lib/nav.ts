@@ -257,12 +257,13 @@ export const WORKSPACES: Workspace[] = [
         judgeVisible: true,
       },
       {
-        title: "rooms",
+        // Rooms and the judging window share one "Judging settings" surface
+        // (H39, H46): a sponsor rep routes their queues to their pooled
+        // rooms from Judging queues, but never assigns a room to an
+        // enterprise or edits the judging window in the first place.
+        title: "judgingSettingsTitle",
         href: "/queue/rooms",
         icon: Building2Icon,
-        // Admin-only (H46, 0413): a sponsor rep routes their queues to their
-        // pooled rooms from Judging queues, but never assigns a room to an
-        // enterprise in the first place.
         anyCapability: [CAPABILITIES.QUEUE_ADMIN],
       },
       {
@@ -271,12 +272,6 @@ export const WORKSPACES: Workspace[] = [
         icon: ClipboardListIcon,
         anyCapability: [CAPABILITIES.QUEUE_ADMIN],
         sponsorVisible: true,
-      },
-      {
-        title: "judgingWindowTitle",
-        href: "/queue/settings",
-        icon: GavelIcon,
-        anyCapability: [CAPABILITIES.QUEUE_ADMIN],
       },
     ],
   },
@@ -296,13 +291,9 @@ export const WORKSPACES: Workspace[] = [
         anyCapability: [CAPABILITIES.ACCREDIT_SCAN, CAPABILITIES.PRESENCE_SCAN],
       },
       {
-        title: "meals",
-        href: "/logistics/meals",
-        icon: SoupIcon,
-        capability: CAPABILITIES.ACTIVITY_SCAN,
-      },
-      {
-        title: "activities",
+        // Meals and activities share one station/page (unified scanner with
+        // a meal/activity tab), so this single entry covers both (H22-H27).
+        title: "mealsAndActivities",
         href: "/logistics/activities",
         icon: ActivityIcon,
         capability: CAPABILITIES.ACTIVITY_SCAN,

@@ -33,7 +33,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <VerificationBanner />
           <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:py-8">
             {/* Pages opt into a wider column with data-wide (e.g. the judging
-                panel's two-column operator layout). */}
+                panel's two-column operator layout). Everything else shares
+                this one width — a page whose content looks sparse here
+                should fix its own layout (a field grid, a two-column
+                arrangement), not shrink the shared column, or the app ends
+                up with three different page widths instead of one. */}
             <div className="mx-auto w-full max-w-6xl has-data-wide:max-w-none">{children}</div>
           </main>
         </SidebarInset>

@@ -16,6 +16,7 @@ import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
+import { TabBar } from "@/components/common/tab-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -43,7 +45,12 @@ import {
 } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
 import type { EnterpriseSummary } from "@/lib/types";
+import { useUrlTab } from "@/lib/url-tab";
+import { JudgingWindowTab } from "./judging-window-tab";
 import { AssignmentsEditor } from "./room-panels";
+
+const JUDGING_SETTINGS_TABS = ["rooms", "window"] as const;
+type JudgingSettingsTab = (typeof JUDGING_SETTINGS_TABS)[number];
 
 type RoomEditor = {
   name: string;
@@ -62,6 +69,13 @@ export default function QueueRoomsPage() {
   // and judges from the enterprise workspace, but never which rooms serve
   // it or a room's own settings.
   const canAdmin = can(CAPABILITIES.QUEUE_ADMIN);
+  // Rooms and the judging window share one QUEUE_ADMIN-gated "Judging
+  // settings" surface (H39, H46) — merged the same way meals/activities and
+  // accreditation/presence share one station page.
+  const { tab, setTab } = useUrlTab<JudgingSettingsTab>({
+    values: JUDGING_SETTINGS_TABS,
+    defaultValue: "rooms",
+  });
   const [rooms, setRooms] = useState<Room[]>([]);
   const [assignments, setAssignments] = useState<Record<number, RoomAssignments | null>>({});
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
@@ -287,69 +301,82 @@ export default function QueueRoomsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={t("rooms")}
+        title={t("judgingSettingsTitle")}
         actions={
-          <Button onClick={openCreateModal}>
-            <PlusIcon className="size-4" />
-            {t("createRoom")}
-          </Button>
+          tab === "rooms" ? (
+            <Button onClick={openCreateModal}>
+              <PlusIcon className="size-4" />
+              {t("createRoom")}
+            </Button>
+          ) : undefined
         }
       />
 
-      <SectionCard
-        title={t("roomQueues")}
-        description={
-          !loading && !loadError && rooms.length > 0
-            ? t("roomsSummary", { active: activeCount, total: rooms.length })
-            : undefined
-        }
-        icon={Building2Icon}
-        bodyClassName="space-y-4"
-      >
-        {!loading && !loadError && rooms.length === 0 ? (
-          <EmptyState
-            icon={Building2Icon}
-            title={t("noRoomsConfigured")}
-            description={t("noRoomsConfiguredDesc")}
-          />
-        ) : (
-          <DataTable
-            columns={roomColumns}
-            data={filteredRooms}
-            getRowId={(room) => String(room.id)}
-            onRowClick={(room) => openManageModal(room.id)}
-            getRowLabel={(room) => room.name}
-            loading={loading}
-            error={loadError ? { message: loadError, onRetry: load } : undefined}
-            searchable={(room) => `${room.name} ${room.slug} ${room.location ?? ""}`}
-            searchPlaceholder={t("filterRoomsPlaceholder")}
-            searchLabel={t("filterRooms")}
-            pageSize={10}
-            toolbar={
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("allRoomStatuses")}</SelectItem>
-                  <SelectItem value="active">{t("roomStatusActive")}</SelectItem>
-                  <SelectItem value="paused">{t("roomStatusPaused")}</SelectItem>
-                </SelectContent>
-              </Select>
-            }
-            filteredEmpty={{
-              active: statusFilter !== "all",
-              onClear: () => setStatusFilter("all"),
-              title: t("noMatchingRooms"),
-            }}
-            empty={{
-              icon: Building2Icon,
-              title: t("noRoomsConfigured"),
-              description: t("noRoomsConfiguredDesc"),
-            }}
-          />
-        )}
-      </SectionCard>
+      <Tabs value={tab} onValueChange={(value) => setTab(value)}>
+        <TabBar aria-label={t("judgingSettingsTitle")} className="w-full justify-start">
+          <TabsTrigger value="rooms">{t("rooms")}</TabsTrigger>
+          <TabsTrigger value="window">{t("judgingWindowTitle")}</TabsTrigger>
+        </TabBar>
+      </Tabs>
+
+      {tab === "rooms" && (
+        <SectionCard
+          title={t("roomQueues")}
+          description={
+            !loading && !loadError && rooms.length > 0
+              ? t("roomsSummary", { active: activeCount, total: rooms.length })
+              : undefined
+          }
+          icon={Building2Icon}
+          bodyClassName="space-y-4"
+        >
+          {!loading && !loadError && rooms.length === 0 ? (
+            <EmptyState
+              icon={Building2Icon}
+              title={t("noRoomsConfigured")}
+              description={t("noRoomsConfiguredDesc")}
+            />
+          ) : (
+            <DataTable
+              columns={roomColumns}
+              data={filteredRooms}
+              getRowId={(room) => String(room.id)}
+              onRowClick={(room) => openManageModal(room.id)}
+              getRowLabel={(room) => room.name}
+              loading={loading}
+              error={loadError ? { message: loadError, onRetry: load } : undefined}
+              searchable={(room) => `${room.name} ${room.slug} ${room.location ?? ""}`}
+              searchPlaceholder={t("filterRoomsPlaceholder")}
+              searchLabel={t("filterRooms")}
+              pageSize={10}
+              toolbar={
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("allRoomStatuses")}</SelectItem>
+                    <SelectItem value="active">{t("roomStatusActive")}</SelectItem>
+                    <SelectItem value="paused">{t("roomStatusPaused")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              }
+              filteredEmpty={{
+                active: statusFilter !== "all",
+                onClear: () => setStatusFilter("all"),
+                title: t("noMatchingRooms"),
+              }}
+              empty={{
+                icon: Building2Icon,
+                title: t("noRoomsConfigured"),
+                description: t("noRoomsConfiguredDesc"),
+              }}
+            />
+          )}
+        </SectionCard>
+      )}
+
+      {tab === "window" && <JudgingWindowTab />}
 
       <Modal
         open={modalMode !== null}

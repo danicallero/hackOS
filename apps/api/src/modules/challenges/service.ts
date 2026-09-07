@@ -551,6 +551,65 @@ export async function updateChallenge(
 }
 
 /**
+ * Admin-only permanent delete (H44). Blocked — rather than cascading — the
+ * moment a challenge has anything real attached: queue entries (which carry
+ * their own queue_history), recorded winners, or an active room assignment.
+ * Deleting an in-use challenge would either violate the plain FKs on those
+ * tables or, for the parts that do cascade (challenge_versions,
+ * queue_group_challenges), silently destroy judging/audit history — so the
+ * check runs first and reports which of the three is blocking, and the
+ * caller is pointed at Unpublish instead. An unused challenge has none of
+ * these, so the delete cannot break anything by construction.
+ */
+export async function deleteChallenge(challengeId: number, actorId: number) {
+  await assertFixtureQueueScope(pool, actorId, "challenge", challengeId);
+  return withTransaction(async (client) => {
+    const beforeRes = await client.query(
+      `SELECT ${EDITABLE_COLUMNS} FROM challenges WHERE id = $1 FOR UPDATE`,
+      [challengeId],
+    );
+    const before = beforeRes.rows[0];
+    if (!before) throw new NotFoundError("Challenge not found", { challengeId });
+
+    const { rows: usageRows } = await client.query(
+      `SELECT
+          EXISTS (SELECT 1 FROM queue_entries WHERE challenge_id = $1) AS has_queue_entries,
+          EXISTS (SELECT 1 FROM challenge_winners WHERE challenge_id = $1) AS has_winners,
+          EXISTS (
+            SELECT 1
+              FROM room_queue_groups rqg
+              JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
+             WHERE qgc.challenge_id = $1
+          ) AS assigned_to_room`,
+      [challengeId],
+    );
+    const usage = usageRows[0] as {
+      has_queue_entries: boolean;
+      has_winners: boolean;
+      assigned_to_room: boolean;
+    };
+    if (usage.has_queue_entries || usage.has_winners || usage.assigned_to_room) {
+      throw new ConflictError("Challenge is in use and cannot be deleted. Unpublish it instead.", {
+        challengeId,
+        hasQueueEntries: usage.has_queue_entries,
+        hasWinners: usage.has_winners,
+        assignedToRoom: usage.assigned_to_room,
+      });
+    }
+
+    await client.query(`DELETE FROM challenges WHERE id = $1`, [challengeId]);
+
+    await audit(client, {
+      actorId,
+      entityType: "challenge",
+      entityId: challengeId,
+      action: "deleted",
+      before: { title: before.title, visibility: before.visibility },
+    });
+  });
+}
+
+/**
  * Scheduled visibility sweep (H45). `available_from` is only a trigger: due
  * hidden rows flip visible, while already-visible rows remain visible even if
  * their timestamp is in the future.

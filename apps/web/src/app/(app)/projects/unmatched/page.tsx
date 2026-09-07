@@ -162,6 +162,103 @@ export default function UnmatchedProjectsPage() {
         </SectionCard>
       )}
 
+      <SectionCard title={t("unmatchedParticipantsTitle")} icon={UserPlusIcon}>
+        {loading ? (
+          <Spinner />
+        ) : rows.length === 0 ? (
+          <EmptyState
+            icon={UserPlusIcon}
+            title={t("noUnmatchedParticipantsTitle")}
+            description={t("allImportedLinkedDesc")}
+          />
+        ) : (
+          <ul className="space-y-3">
+            {rows.map((row) => {
+              const key = `${row.repo_id}:${row.email}`;
+              const selectedUserId = selectedUsers[key] ?? "";
+              return (
+                <li key={key} className="rounded-md border p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{memberName(row)}</p>
+                      <p className="text-muted-foreground truncate text-sm">{row.email}</p>
+                      <p className="text-muted-foreground text-xs">
+                        {t("repoNameBatchInline", { repo: row.repo_name, batch: row.import_batch })}
+                      </p>
+                    </div>
+                    {row.claim_email_sent_at ? (
+                      <StatusBadge tone="info">{t("claimEmailSent")}</StatusBadge>
+                    ) : (
+                      <StatusBadge tone="warning">{t("unmatchedBadge")}</StatusBadge>
+                    )}
+                  </div>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto_auto_auto] lg:items-end">
+                    <div className="space-y-2">
+                      <Label htmlFor={`user-${key}`}>{t("linkToUserLabel")}</Label>
+                      <UserPicker
+                        id={`user-${key}`}
+                        value={selectedUserId}
+                        onChange={(value) =>
+                          setSelectedUsers((current) => ({ ...current, [key]: value }))
+                        }
+                        search={searchUsers}
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      disabled={!selectedUserId || busy === key}
+                      onClick={() =>
+                        mutate(
+                          key,
+                          () => linkParticipant(row.repo_id, row.email, Number(selectedUserId)),
+                          t("participantLinked"),
+                        )
+                      }
+                    >
+                      <LinkIcon className="size-4" />
+                      {t("linkDirectlyButton")}
+                    </Button>
+                    {/* H6: link by adding this email as the account's secondary and
+                        triggering the platform's secondary-email verification —
+                        distinct from the immediate admin-asserted match above, so
+                        the two buttons need distinct labels, not just distinct
+                        icons (issue reported: "hard to understand"). */}
+                    <Button
+                      variant="outline"
+                      disabled={!selectedUserId || busy === `${key}:secondary`}
+                      onClick={() =>
+                        mutate(
+                          `${key}:secondary`,
+                          () => linkSecondaryEmail(row.repo_id, row.email, Number(selectedUserId)),
+                          t("verificationEmailSentLinked"),
+                        )
+                      }
+                    >
+                      <UserPlusIcon className="size-4" />
+                      {t("requestConfirmationButton")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      disabled={busy === `${key}:claim`}
+                      onClick={() =>
+                        mutate(
+                          `${key}:claim`,
+                          () => sendClaimEmail(row.repo_id, row.email),
+                          t("claimEmailQueued"),
+                        )
+                      }
+                    >
+                      <MailIcon className="size-4" />
+                      {t("claimEmail")}
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </SectionCard>
+
       {unmappedPrizes.length > 0 && (
         <SectionCard title={t("unmappedPrizesTitle")} description={t("unmappedPrizesDesc")}>
           <ul className="space-y-3">
@@ -322,10 +419,13 @@ export default function UnmatchedProjectsPage() {
                       }
                     >
                       <LinkIcon className="size-4" />
-                      {t("link")}
+                      {t("linkDirectlyButton")}
                     </Button>
                     {/* H6: link by adding this email as the account's secondary and
-                        triggering the platform's secondary-email verification. */}
+                        triggering the platform's secondary-email verification —
+                        distinct from the immediate admin-asserted match above, so
+                        the two buttons need distinct labels, not just distinct
+                        icons (issue reported: "hard to understand"). */}
                     <Button
                       variant="outline"
                       disabled={!selectedUserId || busy === `${key}:secondary`}
@@ -338,7 +438,7 @@ export default function UnmatchedProjectsPage() {
                       }
                     >
                       <UserPlusIcon className="size-4" />
-                      {t("linkParticipantToUser")}
+                      {t("requestConfirmationButton")}
                     </Button>
                     <Button
                       variant="outline"

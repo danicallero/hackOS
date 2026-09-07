@@ -44,8 +44,7 @@ import { logisticsApi } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
 import type { UserList, UserListItem } from "@/lib/types";
 import { initials } from "./[id]/shared";
-import { ActiveInvitationsModal } from "./active-invitations-modal";
-import { InviteUserDialog } from "./invite-dialog";
+import { InvitationsModal } from "./invitations-tab";
 import { ReviewFixturesDialog } from "./review-fixtures-dialog";
 
 function fullName(u: UserListItem): string {
@@ -484,8 +483,7 @@ export default function UsersPage() {
         actions={
           <>
             <CapabilityGate capability={CAPABILITIES.INVITES_MANAGE}>
-              <ActiveInvitationsModal />
-              <InviteUserDialog />
+              <InvitationsModal />
             </CapabilityGate>
             <CapabilityGate capability={CAPABILITIES.ADMIN_ALL}>
               <ReviewFixturesDialog />
@@ -494,126 +492,128 @@ export default function UsersPage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-        <div className="relative col-span-2 w-full sm:max-w-sm">
-          <label htmlFor="user-search" className="sr-only">
-            {t("searchUsers")}
-          </label>
-          <SearchIcon
-            className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
-            aria-hidden="true"
-          />
-          <Input
-            id="user-search"
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder={t("searchUsersPlaceholder")}
-            className="pr-9 pl-9"
-          />
-          {q && (
-            <IconButton
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="absolute top-1/2 right-0.5 -translate-y-1/2"
-              onClick={() => {
-                setQ("");
-                document.getElementById("user-search")?.focus();
-              }}
-              label={t("clearSearch")}
-            >
-              <XIcon className="size-4" aria-hidden="true" />
-            </IconButton>
-          )}
-        </div>
-        <span
-          role="status"
-          aria-live="polite"
-          className="text-muted-foreground col-span-2 text-xs tabular-nums sm:col-span-1"
-        >
-          {t("tableResultCount", { count: filteredUsers.length })}
-        </span>
-        <Select value={emailFilter} onValueChange={setEmailFilter}>
-          <SelectTrigger className="w-full sm:w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("anyEmail")}</SelectItem>
-            <SelectItem value="verified">{t("verified")}</SelectItem>
-            <SelectItem value="unverified">{t("unverified")}</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={roleFilter} onValueChange={setRoleFilter}>
-          <SelectTrigger className="w-full sm:w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("anyRole")}</SelectItem>
-            {roleFilterOptions.map((name) => (
-              <SelectItem key={name} value={name}>
-                {name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={spotFilter} onValueChange={setSpotFilter}>
-          <SelectTrigger className="w-full sm:w-44">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("anySpot")}</SelectItem>
-            <SelectItem value="confirmed">{t("confirmed")}</SelectItem>
-            <SelectItem value="accepted_pending">{t("acceptedPending")}</SelectItem>
-            <SelectItem value="declined">{t("declined")}</SelectItem>
-            <SelectItem value="not_confirmed">{t("notConfirmed")}</SelectItem>
-          </SelectContent>
-        </Select>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="w-full sm:w-auto">
-              <SlidersHorizontalIcon />
-              {t("columnsLabel")}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>{t("visibleFields")}</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {availableColumnOptions.map((id) => (
-              <DropdownMenuCheckboxItem
-                key={id}
-                checked={visibleColumns.has(id)}
-                onCheckedChange={(checked) => toggleColumn(id, checked === true)}
-                disabled={visibleColumns.size === 1 && visibleColumns.has(id)}
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+          <div className="relative col-span-2 w-full sm:max-w-sm">
+            <label htmlFor="user-search" className="sr-only">
+              {t("searchUsers")}
+            </label>
+            <SearchIcon
+              className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+              aria-hidden="true"
+            />
+            <Input
+              id="user-search"
+              type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={t("searchUsersPlaceholder")}
+              className="pr-9 pl-9"
+            />
+            {q && (
+              <IconButton
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="absolute top-1/2 right-0.5 -translate-y-1/2"
+                onClick={() => {
+                  setQ("");
+                  document.getElementById("user-search")?.focus();
+                }}
+                label={t("clearSearch")}
               >
-                {COLUMN_LABEL[id]}
-              </DropdownMenuCheckboxItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+                <XIcon className="size-4" aria-hidden="true" />
+              </IconButton>
+            )}
+          </div>
+          <span
+            role="status"
+            aria-live="polite"
+            className="text-muted-foreground col-span-2 text-xs tabular-nums sm:col-span-1"
+          >
+            {t("tableResultCount", { count: filteredUsers.length })}
+          </span>
+          <Select value={emailFilter} onValueChange={setEmailFilter}>
+            <SelectTrigger className="w-full sm:w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("anyEmail")}</SelectItem>
+              <SelectItem value="verified">{t("verified")}</SelectItem>
+              <SelectItem value="unverified">{t("unverified")}</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={roleFilter} onValueChange={setRoleFilter}>
+            <SelectTrigger className="w-full sm:w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("anyRole")}</SelectItem>
+              {roleFilterOptions.map((name) => (
+                <SelectItem key={name} value={name}>
+                  {name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={spotFilter} onValueChange={setSpotFilter}>
+            <SelectTrigger className="w-full sm:w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("anySpot")}</SelectItem>
+              <SelectItem value="confirmed">{t("confirmed")}</SelectItem>
+              <SelectItem value="accepted_pending">{t("acceptedPending")}</SelectItem>
+              <SelectItem value="declined">{t("declined")}</SelectItem>
+              <SelectItem value="not_confirmed">{t("notConfirmed")}</SelectItem>
+            </SelectContent>
+          </Select>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="w-full sm:w-auto">
+                <SlidersHorizontalIcon />
+                {t("columnsLabel")}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>{t("visibleFields")}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {availableColumnOptions.map((id) => (
+                <DropdownMenuCheckboxItem
+                  key={id}
+                  checked={visibleColumns.has(id)}
+                  onCheckedChange={(checked) => toggleColumn(id, checked === true)}
+                  disabled={visibleColumns.size === 1 && visibleColumns.has(id)}
+                >
+                  {COLUMN_LABEL[id]}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
 
-      <DataTable
-        columns={columns}
-        data={filteredUsers}
-        getRowId={(u) => String(u.id)}
-        stateKey="users-list"
-        getRowHref={(u) => `/users/${u.id}`}
-        getRowLabel={(u) => `${u.name ?? ""} ${u.surname ?? ""}`.trim() || u.email}
-        renderMobileRow={(u) => <UserMobileRow user={u} t={t} />}
-        pageSize={15}
-        loading={loading}
-        error={
-          loadError
-            ? { message: loadError, onRetry: () => setRetryNonce((value) => value + 1) }
-            : undefined
-        }
-        empty={{
-          icon: UsersIcon,
-          title: t("noUsersYet"),
-        }}
-        filteredEmpty={{ active: hasFilters, onClear: clearUserFilters }}
-      />
+        <DataTable
+          columns={columns}
+          data={filteredUsers}
+          getRowId={(u) => String(u.id)}
+          stateKey="users-list"
+          getRowHref={(u) => `/users/${u.id}`}
+          getRowLabel={(u) => `${u.name ?? ""} ${u.surname ?? ""}`.trim() || u.email}
+          renderMobileRow={(u) => <UserMobileRow user={u} t={t} />}
+          pageSize={15}
+          loading={loading}
+          error={
+            loadError
+              ? { message: loadError, onRetry: () => setRetryNonce((value) => value + 1) }
+              : undefined
+          }
+          empty={{
+            icon: UsersIcon,
+            title: t("noUsersYet"),
+          }}
+          filteredEmpty={{ active: hasFilters, onClear: clearUserFilters }}
+        />
+      </div>
     </div>
   );
 }
