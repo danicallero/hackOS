@@ -263,7 +263,12 @@ distributed to other Expo Router apps without importing hackOS code.
   leading, task-first composition. Their primary actions remain discoverable,
   invalid values are explained beside the relevant field, and focus moves to
   the first correction. They stay fixed at standard text sizes and become
-  scrollable only for accessibility text sizes.
+  scrollable only for accessibility text sizes. The request uses
+  `lib/password-reset.ts` to keep the platform boundary explicit: iOS keeps
+  the `hackos://reset-password` native callback, while Android requests the
+  event website's `/reset-password` callback so Better Auth appends the token
+  to the browser form instead of opening the native route or returning raw API
+  output.
 - `app/_layout.tsx` keeps a neutral background while the authenticated profile
   restores. It only announces and renders the session progress state
   (`components/session-state.tsx`) after a 500 ms grace period, so a normal
@@ -692,7 +697,13 @@ physical iOS/Android and EAS verification remains a release-gate task in
   file and its SQLite `-wal`, `-shm`, and `-journal` sidecars without importing
   any row; staff must re-record scans that existed only in the old queue. If
   the OS refuses deletion, queue initialization fails closed and retries on a
-  later authenticated call. A scan recorded before the server's current badge
+  later authenticated call. A fresh install does not create the legacy file
+  just to inspect it, and retirement addresses the default `document/SQLite`
+  directory through an Expo FileSystem URI on both platforms. The encrypted
+  roster validates its table shape on open; stale or partial roster cache data
+  is disposable and is rebuilt from the next snapshot, while an incompatible
+  durable queue is left untouched and fails closed rather than being
+  reinterpreted or deleted. A scan recorded before the server's current badge
   assignment boundary is a terminal stale-credential result: API enqueue and
   locked processing reject it, and the mobile queue deletes the encrypted
   payload rather than retrying it under the replacement participant. Devices

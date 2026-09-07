@@ -1,17 +1,64 @@
 const mockExecStatements: string[] = [];
+const mockRunStatements: Array<{ sql: string; args: unknown[] }> = [];
 
 class FakeDatabase {
   async execAsync(sql: string): Promise<void> {
     mockExecStatements.push(sql);
   }
 
-  async getAllAsync<T>(): Promise<T[]> {
-    return [{ name: "primary_language" }] as T[];
+  async runAsync(sql: string, ...args: unknown[]): Promise<{ changes: number }> {
+    mockRunStatements.push({ sql, args });
+    return { changes: 1 };
+  }
+
+  async getAllAsync<T>(sql = ""): Promise<T[]> {
+    const table = sql.match(/table_info\(([^)]+)\)/)?.[1];
+    const columns: Record<string, string[]> = {
+      scanner_people: ["user_id", "ticket_token", "badge_id", "encrypted_payload"],
+      revoked_badges: ["badge_id"],
+      revoked_tickets: ["ticket_token"],
+      scanner_activities: [
+        "id",
+        "name",
+        "category",
+        "requires_scan",
+        "starts_at",
+        "primary_language",
+        "name_i18n",
+        "description_i18n",
+      ],
+      scanner_activity_states: ["user_id", "activity_id", "scan_count"],
+      scanner_metadata: ["key", "value"],
+      pending_scans: [
+        "id",
+        "kind",
+        "created_by_user_id",
+        "encrypted_payload",
+        "status",
+        "attempts",
+        "last_error",
+        "created_at",
+        "acknowledged_at",
+        "clock_corrected",
+      ],
+      scanner_sync_errors: [
+        "id",
+        "scan_id",
+        "created_by_user_id",
+        "kind",
+        "error_type",
+        "message",
+        "occurred_at",
+      ],
+    };
+    return (columns[table ?? ""] ?? []).map((name) => ({ name })) as T[];
   }
 
   async withTransactionAsync(work: () => Promise<void>): Promise<void> {
     await work();
   }
+
+  async closeAsync(): Promise<void> {}
 }
 
 const mockDatabase = new FakeDatabase();
@@ -21,7 +68,7 @@ jest.mock("expo-file-system", () => ({
     exists = false;
     delete() {}
   },
-  Paths: { cache: { uri: "cache://" } },
+  Paths: { cache: { uri: "cache://" }, document: { uri: "document://" } },
 }));
 
 jest.mock("expo-sqlite", () => ({
@@ -44,8 +91,9 @@ jest.mock("./scanner-crypto", () => ({
 
 jest.mock("./scanner-model", () => ({ revokedBadgesFromSnapshot: jest.fn(() => []) }));
 
+import * as SQLite from "expo-sqlite";
 import { encryptJson } from "./scanner-crypto";
-import { applyScannerSnapshot, wipeAttendanceRoster } from "./scanner-db.native";
+import { applyScannerSnapshot, enqueueLocalScan, wipeAttendanceRoster } from "./scanner-db.native";
 import type { ScannerSnapshot } from "./scanner-types";
 
 function snapshot(name: string): ScannerSnapshot {
@@ -81,6 +129,7 @@ function snapshot(name: string): ScannerSnapshot {
 describe("native scanner roster generation fencing", () => {
   beforeEach(() => {
     mockExecStatements.length = 0;
+    mockRunStatements.length = 0;
     jest.mocked(encryptJson).mockImplementation(async (payload: unknown) => {
       const name = (payload as { name?: string }).name;
       return `encrypted-${name ?? ""}`;
@@ -113,11 +162,23 @@ describe("native scanner roster generation fencing", () => {
 
     await Promise.all([accountASnapshot, signOut, accountBSnapshot]);
 
-    const installedSnapshots = mockExecStatements.filter((sql) =>
+    const installedSnapshots = mockRunStatements.filter(({ sql }) =>
       sql.includes("INSERT INTO scanner_people"),
     );
     expect(installedSnapshots).toHaveLength(1);
-    expect(installedSnapshots[0]).toContain("encrypted-B");
-    expect(installedSnapshots[0]).not.toContain("encrypted-A");
+    expect(installedSnapshots[0]?.args).toContain("encrypted-B");
+    expect(installedSnapshots[0]?.args).not.toContain("encrypted-A");
+  });
+
+  it("does not create the ownerless legacy database on a fresh queue", async () => {
+    jest.mocked(SQLite.openDatabaseAsync).mockClear();
+
+    await enqueueLocalScan(
+      { kind: "accreditation", ticketToken: "ticket-A", badgeId: "badge-A", method: "manual" },
+      7,
+    );
+
+    expect(SQLite.openDatabaseAsync).toHaveBeenCalledTimes(1);
+    expect(SQLite.openDatabaseAsync).toHaveBeenCalledWith("hackos-scanner-queue.db");
   });
 });
