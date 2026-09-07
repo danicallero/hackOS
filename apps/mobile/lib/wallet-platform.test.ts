@@ -5,6 +5,7 @@ jest.mock("expo-device", () => ({
 import { DeviceType } from "expo-device";
 import {
   ANDROID_GRANT_READ_URI_PERMISSION,
+  ANDROID_PKPASS_MIME_TYPES,
   ANDROID_VIEW_ACTION,
   createAndroidPkpassViewIntent,
   PKPASS_MIME_TYPE,
@@ -25,6 +26,25 @@ describe("createAndroidPkpassViewIntent", () => {
       flags: ANDROID_GRANT_READ_URI_PERMISSION,
     });
     expect(ANDROID_VIEW_ACTION).toBe("android.intent.action.VIEW");
+  });
+
+  it("supports the MIME aliases used by older Android pass importers", () => {
+    expect(ANDROID_PKPASS_MIME_TYPES).toEqual([
+      "application/vnd.apple.pkpass",
+      "application/pkpass",
+      "application/vndapplepkpass",
+      "application/vnd-com.apple.pkpass",
+    ]);
+    expect(
+      createAndroidPkpassViewIntent(
+        "content://com.hackudc.os.FileSystemFileProvider/cache/ticket.pkpass",
+        "application/pkpass",
+      ),
+    ).toEqual({
+      data: "content://com.hackudc.os.FileSystemFileProvider/cache/ticket.pkpass",
+      type: "application/pkpass",
+      flags: ANDROID_GRANT_READ_URI_PERMISSION,
+    });
   });
 
   it("rejects file URIs so callers cannot leak an app-private path", () => {

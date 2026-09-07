@@ -3,6 +3,18 @@ import { DeviceType } from "expo-device";
 export type WalletPurpose = "ticket" | "badge";
 
 export const PKPASS_MIME_TYPE = "application/vnd.apple.pkpass";
+/**
+ * MIME aliases used by Android pass importers (H28, #624). Keep the Apple
+ * type first so handlers that support the canonical type win, but also try
+ * the aliases used by older Passbook-compatible apps.
+ */
+export const ANDROID_PKPASS_MIME_TYPES = [
+  PKPASS_MIME_TYPE,
+  "application/pkpass",
+  "application/vndapplepkpass",
+  "application/vnd-com.apple.pkpass",
+] as const;
+export type AndroidPkpassMimeType = (typeof ANDROID_PKPASS_MIME_TYPES)[number];
 export const ANDROID_VIEW_ACTION = "android.intent.action.VIEW";
 /** Android's Intent.FLAG_GRANT_READ_URI_PERMISSION (H28, #624). */
 export const ANDROID_GRANT_READ_URI_PERMISSION = 1;
@@ -12,9 +24,12 @@ export const ANDROID_GRANT_READ_URI_PERMISSION = 1;
  * PassAndroid. The file provider URI and explicit read grant let the target
  * app read the authenticated, app-private download (H28, #624).
  */
-export function createAndroidPkpassViewIntent(contentUri: string): {
+export function createAndroidPkpassViewIntent(
+  contentUri: string,
+  mimeType: AndroidPkpassMimeType = PKPASS_MIME_TYPE,
+): {
   data: string;
-  type: typeof PKPASS_MIME_TYPE;
+  type: AndroidPkpassMimeType;
   flags: typeof ANDROID_GRANT_READ_URI_PERMISSION;
 } {
   if (!contentUri.startsWith("content://")) {
@@ -23,7 +38,7 @@ export function createAndroidPkpassViewIntent(contentUri: string): {
 
   return {
     data: contentUri,
-    type: PKPASS_MIME_TYPE,
+    type: mimeType,
     flags: ANDROID_GRANT_READ_URI_PERMISSION,
   };
 }
