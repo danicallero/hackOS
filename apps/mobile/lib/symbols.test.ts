@@ -24,6 +24,11 @@ describe("Android symbol aliases (H55)", () => {
     expect(androidSymbolName("wallet.pass")).toBe("account_balance_wallet");
   });
 
+  it("maps bell.badge and bell.badge.fill to notifications icons", () => {
+    expect(androidSymbolName("bell.badge")).toBe("notifications_none");
+    expect(androidSymbolName("bell.badge.fill")).toBe("notifications");
+  });
+
   it("leaves unknown symbols available for the native fallback prop", () => {
     expect(androidSymbolName("future.symbol")).toBeUndefined();
   });

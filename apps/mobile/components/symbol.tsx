@@ -3,7 +3,8 @@ import {
   SymbolView as ExpoSymbolView,
   type SymbolViewProps as ExpoSymbolViewProps,
 } from "expo-symbols";
-import { Platform } from "react-native";
+import { Platform, View } from "react-native";
+import { colors } from "@/theme/colors";
 
 export type SymbolViewProps = ExpoSymbolViewProps;
 
@@ -27,8 +28,8 @@ const ANDROID_SYMBOL_NAMES = {
   "arrow.trianglehead.2.clockwise.rotate.90": "sync",
   "arrow.triangle.2.circlepath": "sync",
   bell: "notifications_none",
-  "bell.badge": "notifications_active",
-  "bell.badge.fill": "notifications_active",
+  "bell.badge": "notifications_none",
+  "bell.badge.fill": "notifications",
   "bell.fill": "notifications",
   briefcase: "work",
   calendar: "calendar_month",
@@ -145,14 +146,54 @@ export function SymbolView(props: ExpoSymbolViewProps) {
   if (Platform.OS === "ios" || Platform.OS === "macos" || typeof props.name !== "string") {
     return <ExpoSymbolView {...props} />;
   }
+  const isBadge = props.name === "bell.badge" || props.name === "bell.badge.fill";
   const android = androidSymbolName(props.name);
   if (!android) {
     return <ExpoSymbolView {...props} />;
   }
-  return (
+  const symbol = (
     <ExpoSymbolView
       {...props}
       name={{ android, ios: props.name, web: android } as ExpoSymbolViewProps["name"]}
     />
+  );
+  if (!isBadge) {
+    return symbol;
+  }
+
+  const size = typeof props.size === "number" ? props.size : 22;
+  const dotSize = Math.round(size * 0.32);
+  const dotOffset = Math.round(size * 0.04);
+  const dotColor =
+    props.tintColor === "white" || props.tintColor === "#ffffff"
+      ? "white"
+      : (colors.accent as string);
+
+  return (
+    <View
+      accessible={false}
+      style={{
+        alignItems: "center",
+        height: size,
+        justifyContent: "center",
+        position: "relative",
+        width: size,
+      }}
+    >
+      {symbol}
+      <View
+        accessible={false}
+        testID="android-notification-badge-dot"
+        style={{
+          backgroundColor: dotColor,
+          borderRadius: dotSize / 2,
+          height: dotSize,
+          position: "absolute",
+          right: dotOffset,
+          top: dotOffset,
+          width: dotSize,
+        }}
+      />
+    </View>
   );
 }
