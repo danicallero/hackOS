@@ -130,7 +130,7 @@ describe("scan history context", () => {
 
     await user.press(screen.getByRole("button", { name: /Ada Lovelace, Activity scan/ }));
     expect(mockPush).toHaveBeenCalledWith({
-      pathname: "/(tabs)/others/person/[id]",
+      pathname: "/others/person/[id]",
       params: { focusLogId: "12", focusSource: "activity", id: "42" },
     });
   });
