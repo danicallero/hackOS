@@ -733,6 +733,13 @@ physical iOS/Android and EAS verification remains a release-gate task in
 - `lib/notification-events.ts` — `subscribeToCategory`/`emitCategory`, unit
   tested in `lib/notification-events.test.ts`. Lets a mounted screen react to
   a push the moment it arrives instead of waiting out its poll interval.
+- `components/symbol.tsx` — drop-in `SymbolView` mapping SF Symbols to Material
+  Symbols on Android. For `bell.badge` and `bell.badge.fill`, where Material Symbols
+  has no badge-dot equivalent (only `notifications_active` depicting ringing waves),
+  it maps to `notifications_none`/`notifications` with an overlaid accent badge dot.
+  This gives Android a visible unread indicator on the bottom tab bar
+  (`OpaqueRouterTabs`) and notifications inbox filter button (`UnreadBellButton`)
+  that matches iOS SF Symbol badge behavior without altering geometry. (issue #625)
 
 ## Other infrastructure
 

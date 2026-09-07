@@ -1,5 +1,5 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
-import { Platform, StyleSheet } from "react-native";
+import { AppState, Platform, StyleSheet } from "react-native";
 
 jest.mock("expo-router", () => ({
   useScrollToTop: () => {},
@@ -190,5 +190,76 @@ describe("Android notification pagination (H51)", () => {
       resolveNextPage?.(page(21));
     });
     await waitFor(() => expect(screen.getByText("Notification 21")).toBeTruthy());
+  });
+});
+
+describe("Android notification unread indicators (issue #625)", () => {
+  it("renders visual unread indicators on unread notifications and hides them when read", async () => {
+    mockApiFetch.mockImplementation((path: string) => {
+      if (path === "/api/me/notification-preferences") {
+        return Promise.resolve({ channels: ["push"], mandatoryCategories: [], overrides: [] });
+      }
+      if (path.startsWith("/api/me/notifications?")) {
+        return Promise.resolve({
+          items: [
+            {
+              id: 1,
+              category: "announcements",
+              payload: { subject: "Unread announcement" },
+              status: "sent",
+              sent_at: null,
+              read_at: null,
+              created_at: "2026-08-22T12:00:00.000Z",
+            },
+            {
+              id: 2,
+              category: "announcements",
+              payload: { subject: "Read announcement" },
+              status: "sent",
+              sent_at: null,
+              read_at: "2026-08-22T12:05:00.000Z",
+              created_at: "2026-08-22T12:00:00.000Z",
+            },
+          ],
+          total: 2,
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    await renderMobile(<NotificationsScreen />);
+
+    await waitFor(() => expect(screen.getByText("Unread announcement")).toBeTruthy());
+    expect(screen.getByText("Read announcement")).toBeTruthy();
+
+    const unreadDots = screen.getAllByTestId("notification-unread-dot", {
+      includeHiddenElements: true,
+    });
+    expect(unreadDots).toHaveLength(1);
+  });
+
+  it("reloads notifications list when app returns to active state", async () => {
+    let appStateListener: ((state: string) => void) | undefined;
+    jest.spyOn(AppState, "addEventListener").mockImplementation((_event, cb) => {
+      appStateListener = cb as (state: string) => void;
+      return { remove: jest.fn() } as unknown as ReturnType<typeof AppState.addEventListener>;
+    });
+
+    await renderMobile(<NotificationsScreen />);
+    await waitFor(() => expect(screen.getByText("Notification 1")).toBeTruthy());
+
+    const initialFetchCount = mockApiFetch.mock.calls.filter(([path]) =>
+      String(path).startsWith("/api/me/notifications?"),
+    ).length;
+
+    await act(async () => {
+      appStateListener?.("active");
+    });
+
+    const postResumeFetchCount = mockApiFetch.mock.calls.filter(([path]) =>
+      String(path).startsWith("/api/me/notifications?"),
+    ).length;
+
+    expect(postResumeFetchCount).toBeGreaterThan(initialFetchCount);
   });
 });
