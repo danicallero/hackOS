@@ -36,6 +36,7 @@ import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { type WalletTicketPayload, walletCacheKey } from "@/lib/wallet-cache";
 import {
+  ANDROID_PKPASS_MIME_TYPES,
   ANDROID_VIEW_ACTION,
   createAndroidPkpassViewIntent,
   PKPASS_MIME_TYPE,
@@ -143,15 +144,17 @@ export default function WalletScreen() {
     });
 
     if (Platform.OS === "android") {
-      try {
-        await IntentLauncher.startActivityAsync(
-          ANDROID_VIEW_ACTION,
-          createAndroidPkpassViewIntent(file.contentUri),
-        );
-        return;
-      } catch {
-        // ACTION_VIEW has no compatible handler (or the native module is unavailable),
-        // so keep the existing share/save fallback available (H28, #624).
+      for (const mimeType of ANDROID_PKPASS_MIME_TYPES) {
+        try {
+          await IntentLauncher.startActivityAsync(
+            ANDROID_VIEW_ACTION,
+            createAndroidPkpassViewIntent(file.contentUri, mimeType),
+          );
+          return;
+        } catch {
+          // Some pass apps only advertise a legacy MIME alias. Keep trying
+          // before falling back to the generic share/save handoff (H28, #624).
+        }
       }
     }
 

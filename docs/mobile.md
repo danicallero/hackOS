@@ -362,9 +362,9 @@ distributed to other Expo Router apps without importing hackOS code.
   Google Wallet still goes through
   the existing `saveUrl` endpoint via `Linking.openURL`. On Android, the `.pkpass` download first
   hands its `expo-file-system` content URI to an `ACTION_VIEW` intent with
-  `application/vnd.apple.pkpass` and `FLAG_GRANT_READ_URI_PERMISSION`, which matches importers
-  such as PassAndroid; when no compatible handler is installed, it falls back to the existing
-  Expo share/save sheet.
+  `application/vnd.apple.pkpass` and `FLAG_GRANT_READ_URI_PERMISSION`, then retries with the
+  legacy MIME aliases used by older importers such as PassAndroid; when no compatible handler
+  is installed, it falls back to the existing Expo share/save sheet.
   `queue.tsx` refetches immediately on a "queue" push
   (below) and also polls `GET /api/queue/me` every 15s while focused as a
   fallback. `notifications.tsx` pages past the initial 20 inbox messages on
