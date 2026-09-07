@@ -424,7 +424,8 @@ describe("manual search (H37)", () => {
 
   it("finds a team enqueued under a sibling challenge in a merged queue group (H46)", async () => {
     const { challengeIds } = await createEnterpriseChallenges(2, [CRITERIA, CRITERIA]);
-    const [firstChallenge, secondChallenge] = challengeIds;
+    const firstChallenge = challengeIds[0]!;
+    const secondChallenge = challengeIds[1]!;
     await mergeChallengesIntoOneGroup(challengeIds);
     const { repoId } = await createRepoWithTeam(undefined, "BlackVault");
     await enqueueRepo(secondChallenge, repoId, 1);
