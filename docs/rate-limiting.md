@@ -39,6 +39,7 @@ whether the route is Better Auth's own or this app's.
 | resend-verification | `POST /api/auth/resend-verification` | 3/hour + 60s cooldown (H3, pre-existing) | invitee email | fixed |
 | invite-lookup | `GET /api/invites/lookup` | 30/min | client IP | fixed |
 | invite-accept | `POST /api/invites/accept` | 20/hour | client IP | fixed |
+| university proposal | `POST /api/public/universities/propose` | 5/hour, plus one active suggestion | authenticated user id | fixed |
 | scan | `POST /api/accreditation/{check-in,check-in-user,rotate,remove}`, `POST /api/presence/scan` | 120/min (default) | staff user id | `RATE_LIMIT_SCAN_MAX`, `RATE_LIMIT_SCAN_WINDOW_SECONDS` |
 | meal-batch | `POST /api/activities/:id/meal-scans/batch` | 60/min (default), per **request** (each carries up to 100 scans) | staff user id | `RATE_LIMIT_MEAL_BATCH_MAX`, `RATE_LIMIT_MEAL_BATCH_WINDOW_SECONDS` |
 | snapshot | `GET /api/scanner/snapshot` | 20/min (default) | staff user id | `RATE_LIMIT_SNAPSHOT_MAX`, `RATE_LIMIT_SNAPSHOT_WINDOW_SECONDS` |

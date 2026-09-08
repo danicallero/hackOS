@@ -918,6 +918,7 @@ Table universities {
   name text [unique, not null]
   proposed_by integer
   created_at "timestamp with time zone" [not null, default: `now()`]
+  suggested_by integer [note: 'H12: authenticated self-service proposer. Unlike proposed_by (which records every creator, including staff), a person may have at most one active suggestion.']
 }
 
 Table user_email_history {
@@ -1162,6 +1163,7 @@ Ref: tickets.user_id > users.id
 Ref: time_logs.scanned_by > users.id
 Ref: time_logs.user_id > users.id
 Ref: universities.proposed_by > users.id
+Ref: universities.suggested_by > users.id
 Ref: user_email_history.user_id > users.id
 Ref: user_invite_link_redemptions.link_id > user_invite_links.id
 Ref: user_invite_link_redemptions.user_id > users.id
