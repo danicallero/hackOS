@@ -79,7 +79,7 @@ async function fixtureUserId(email: string): Promise<number> {
 }
 
 describe("review fixture regeneration", () => {
-  it("requires admin capability and returns the four synthetic reviewer accounts", async () => {
+  it("requires admin capability and preserves app/ticket access for all four reviewer accounts", async () => {
     const a = await getApp();
     const ordinary = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
     const denied = await a.inject({
@@ -121,6 +121,39 @@ describe("review fixture regeneration", () => {
     );
     expect(registry).toHaveLength(4);
     expect(registry.every((row) => row.generation === 1)).toBe(true);
+
+    // Every App Store reviewer account must retain the participant-facing app
+    // entry point after event access became role-derived. The operator is
+    // still a participant for this purpose: their operational capabilities do
+    // not replace the entrance entitlement, and all four accounts need a
+    // ticket so the published mobile build can exercise the same entry flow.
+    for (const account of result.accounts) {
+      const accountId = await fixtureUserId(account.email);
+      const profile = await a.inject({
+        method: "GET",
+        url: "/api/me",
+        headers: asUser(accountId),
+      });
+      expect(profile.statusCode).toBe(200);
+      expect(profile.json()).toMatchObject({
+        mobileAccess: true,
+        hasEventAccess: true,
+      });
+      expect(profile.json().roles).toEqual(
+        expect.arrayContaining([expect.objectContaining({ eventAccess: true })]),
+      );
+
+      const ticket = await a.inject({
+        method: "GET",
+        url: "/api/me/ticket",
+        headers: asUser(accountId),
+      });
+      expect(ticket.statusCode).toBe(200);
+      expect(ticket.json()).toMatchObject({
+        userId: accountId,
+        ticketToken: expect.any(String),
+      });
+    }
 
     const staff = result.accounts.find((account) => account.fixtureKey === "staff-exit-operator");
     const inside = result.accounts.find(
