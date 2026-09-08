@@ -8,12 +8,15 @@ GPUL-operated hackOS service and do not mention a particular review channel.
 ## Scope and safety boundary
 
 An administrator with `ADMIN_ALL` can use **Users → Regenerate review accounts**.
-The API creates a new generation of four marked synthetic accounts and removes
-the previous generation, including its sessions, credentials, push tokens,
-scanner data, project graph, queue graph and synthetic anonymous rows. The
-registry and fixture graph update is transactional and audited; Better Auth
-signup calls commit on their own connection, so a failed provisioning attempt
-triggers best-effort cleanup of only the accounts created by that attempt.
+The API resets the four marked synthetic accounts to their default scenarios,
+revoking their sessions and replacing their credentials while keeping each
+login email address unchanged. The reset also removes push tokens, scanner
+data, project graph, queue graph and synthetic anonymous rows. The generation
+counter advances for fixture data and operational handoffs, but it is not part
+of a login address. The registry and fixture graph update is transactional and
+audited; Better Auth signup calls commit on their own connection, so a failed
+first provisioning attempt triggers best-effort cleanup of only the accounts
+created by that attempt.
 
 The feature uses the same API deployment and primary PostgreSQL database as
 the event. Set these API-only variables only when the deployment owner wants
@@ -82,16 +85,22 @@ resets the signal.
 
 The timestamp and IP origin record only successful Better Auth email sign-ins
 observed by the API. The origin is Fastify's trust-proxy-aware `request.ip`,
-not a client-provided field. This does not prove that a particular person
-completed a scenario, and it does not capture failed attempts or a history of
-sign-ins. This is intentional data minimization.
+not a client-provided field. The API additionally emits one structured server
+log for every API response made with a current reviewer session and for every
+email sign-in attempt to a current reviewer address. These entries use
+`kind: "DEBUG"` at the normal INFO transport level, even in production, and
+include the fixture key, route, method, status, user id, email and the same
+trusted IP (also exposed as `originatingIp`). Query strings, request bodies,
+cookies, passwords and PINs are never logged. Server-log retention is
+controlled by the deployment.
 
 ## Operational rules
 
 - Keep the four credentials and the deployment URL together in the private
   review/QA handoff, never in the repository or a public API response.
-- Regeneration invalidates the previous accounts. Update any handoff that
-  references an older generation after regenerating.
+- Regeneration revokes previous sessions and resets all synthetic state. Login
+  email addresses remain stable; the shared deployment password and reviewer
+  PIN remain the sources of truth in the private handoff.
 - A synthetic participant requesting in-venue anonymization enters the same
   pending-exit flow as a real participant. The synthetic staff account records
   the exit; the participant cannot self-record it. The static PIN does not
@@ -126,9 +135,10 @@ These are implementation assumptions, not legal conclusions:
   future synthetic workflows need their own marked graph and cleanup pointers
   rather than reusing real event rows.
 - The last-authenticated timestamp and trusted IP are sufficient for the
-  operational question “was this current fixture credential used, and where
-  did the latest successful sign-in originate?”; no sign-in history or new
-  participant identity data is stored.
+  dashboard question “was this current fixture credential used, and where did
+  the latest successful sign-in originate?”; detailed reviewer request traces
+  live only in deployment server logs and contain no participant response
+  data.
 - The static deletion PIN remains synthetic-only. If a product owner requests
   a universal real-user PIN, security review must explicitly replace this
   boundary rather than silently broadening it.

@@ -6,6 +6,7 @@ import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
 import { ForbiddenError, TooManyRequestsError } from "../../lib/errors.js";
 import { consumeRateLimit } from "../../lib/rate-limit.js";
+import { findReviewFixtureByEmail } from "../../lib/review-fixture-log.js";
 import { setUserIdResolver } from "../../plugins/auth-context.js";
 import { auth, getBetterAuthSessionToken } from "./auth.js";
 import { recordReviewFixtureAuthentication } from "./review-fixture-usage.js";
@@ -123,24 +124,29 @@ async function betterAuthPassthrough(
 ): Promise<FastifyReply> {
   await enforcePendingBetterAuthRoute(request);
 
+  const isEmailSignIn =
+    request.method === "POST" && request.url.split("?", 1)[0] === "/api/auth/sign-in/email";
+  const attemptedSignInEmail = isEmailSignIn ? signInEmail(request.body) : null;
+  if (attemptedSignInEmail) {
+    const fixture = await findReviewFixtureByEmail(pool, attemptedSignInEmail).catch(() => null);
+    if (fixture) request.reviewFixtureContext = fixture;
+  }
+
   // #559: one attacked account must not consume the shared venue IP's whole
   // sign-in budget. Apply a stricter distributed counter to the normalized
   // account identifier before Better Auth applies its generous IP ceiling.
   // Hashing keeps email addresses out of Valkey keys and operational tooling.
-  if (request.method === "POST" && request.url.split("?", 1)[0] === "/api/auth/sign-in/email") {
-    const email = signInEmail(request.body);
-    if (email) {
-      const accountKey = createHash("sha256").update(email).digest("hex");
-      const accountLimit = await consumeRateLimit("auth-sign-in-account", accountKey, {
-        windowSeconds: 300,
-        max: 10,
-      });
-      if (!accountLimit.allowed) {
-        throw new TooManyRequestsError(
-          "Too many requests — try again later.",
-          accountLimit.retryAfterSeconds,
-        );
-      }
+  if (isEmailSignIn && attemptedSignInEmail) {
+    const accountKey = createHash("sha256").update(attemptedSignInEmail).digest("hex");
+    const accountLimit = await consumeRateLimit("auth-sign-in-account", accountKey, {
+      windowSeconds: 300,
+      max: 10,
+    });
+    if (!accountLimit.allowed) {
+      throw new TooManyRequestsError(
+        "Too many requests — try again later.",
+        accountLimit.retryAfterSeconds,
+      );
     }
   }
 
@@ -168,11 +174,10 @@ async function betterAuthPassthrough(
   // Keep a non-sensitive operational signal for the admin fixture dashboard.
   // This records only successful sign-ins for the current synthetic account;
   // a telemetry failure must never turn a successful login into a 500.
-  if (request.method === "POST" && request.url.split("?", 1)[0] === "/api/auth/sign-in/email") {
-    const email = signInEmail(request.body);
-    if (email && response.ok) {
-      await recordReviewFixtureAuthentication(pool, email, request.ip).catch(() => undefined);
-    }
+  if (isEmailSignIn && attemptedSignInEmail && response.ok) {
+    await recordReviewFixtureAuthentication(pool, attemptedSignInEmail, request.ip).catch(
+      () => undefined,
+    );
   }
 
   reply.status(response.status);

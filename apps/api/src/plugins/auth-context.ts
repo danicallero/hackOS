@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import fp from "fastify-plugin";
 import { config } from "../config.js";
+import type { ReviewFixtureLogContext } from "../lib/review-fixture-log.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -10,6 +11,8 @@ declare module "fastify" {
     sessionToken: string | null;
     /** Request-scoped PostgreSQL capability resolution (H8). */
     effectiveCapabilities?: Promise<Set<string>>;
+    /** Current synthetic reviewer identity captured before the request runs. */
+    reviewFixtureContext: ReviewFixtureLogContext | null;
   }
 }
 
@@ -33,6 +36,7 @@ export const authContextPlugin = fp(async (app: FastifyInstance) => {
   app.decorateRequest("userId", null);
   app.decorateRequest("sessionToken", null);
   app.decorateRequest("effectiveCapabilities", undefined);
+  app.decorateRequest("reviewFixtureContext", null);
   app.addHook("onRequest", async (req) => {
     if (config.isTest) {
       const testHeader = req.headers["x-test-user-id"];
