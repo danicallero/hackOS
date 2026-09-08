@@ -61,7 +61,7 @@ jobs:
 
           # Shared packages, dependency/toolchain changes, and workflow changes
           # can affect every workspace and therefore run every quality gate.
-          if has_change '^(packages/|\.github/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.node-version$|biome\.json$|tsconfig[^/]*\.json$)'; then
+          if has_change '^(packages/|patches/|\.github/|\.dockerignore$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.node-version$|biome\.json$|tsconfig[^/]*\.json$)'; then
             api=true
             web=true
             mobile=true
@@ -90,6 +90,20 @@ jobs:
             echo "mobile=$mobile"
             echo "typecheck=$typecheck"
           } >> "$GITHUB_OUTPUT"
+
+  api-image:
+    name: API production image
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      # `pnpm deploy` validates patches more strictly than a normal workspace
+      # install; exercise the exact image path used by Dokploy (H55).
+      - name: Build API production image
+        run: docker build --file apps/api/Dockerfile --tag hackos-api:ci .
 
   lint:
     name: lint
