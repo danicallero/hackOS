@@ -34,10 +34,10 @@ describe("logistics, event and notifications route policy ledger", () => {
     registerPreferenceRoutes(app);
     registerPushTokenRoutes(app);
 
-    // Fastify synthesizes a matching HEAD route for each GET; the 90 explicit
+    // Fastify synthesizes a matching HEAD route for each GET; the 91 explicit
     // declarations below are the reviewable API policy delta.
     const declared = app.routePolicyLedger.filter((row) => row.method !== "HEAD");
-    expect(declared).toHaveLength(90);
+    expect(declared).toHaveLength(91);
     expect(declared).toContainEqual({
       method: "GET",
       url: "/api/logistics/people",
@@ -139,6 +139,11 @@ describe("logistics, event and notifications route policy ledger", () => {
       method: "POST",
       url: "/api/public/universities/propose",
       policy: { kind: "authenticated" },
+    });
+    expect(declared).toContainEqual({
+      method: "POST",
+      url: "/api/universities/:id/normalize",
+      policy: { kind: "capability", capability: "intolerances:manage" },
     });
     expect(declared).toContainEqual({
       method: "GET",
