@@ -47,10 +47,6 @@ export const metadata: Metadata = {
     description: SITE_DESCRIPTION,
     images: [SOCIAL_IMAGE_PATH],
   },
-  icons: {
-    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
-    apple: [{ url: "/apple-icon.svg", type: "image/svg+xml" }],
-  },
 };
 
 export default function RootLayout({
