@@ -28,6 +28,15 @@ SELECT r.id, 'statistics:manage', 'allow'::permission_state FROM roles r
 WHERE r.name IN ('Event Director', 'Applications Lead')
 ON CONFLICT (role_id, capability) DO UPDATE SET state = EXCLUDED.state;
 
+-- The seeded-role tests and reset-to-default flow treat role_seed_defaults as
+-- the complete immutable ALLOW snapshot. Extend the two manager snapshots to
+-- include the capability introduced by this migration.
+UPDATE role_seed_defaults rsd
+SET capabilities = rsd.capabilities || jsonb_build_object('statistics:manage', 'allow')
+FROM roles r
+WHERE r.id = rsd.role_id
+  AND r.name IN ('Event Director', 'Applications Lead');
+
 -- Preserve the existing logistics stats audience for the base panels. Dynamic
 -- field panels remain private until explicitly published in Stats.
 INSERT INTO application_stats_panel_role_access (application_id, panel_key, role_id, state)

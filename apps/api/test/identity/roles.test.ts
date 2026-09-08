@@ -1228,6 +1228,7 @@ describe("H8 default seeded role set (0805)", () => {
       "Applications Lead": [
         CAPABILITIES.APPLICATIONS_DECIDE,
         CAPABILITIES.APPLICATIONS_EDIT_RESPONSE,
+        CAPABILITIES.STATISTICS_MANAGE,
       ],
       "Operations Team": [
         CAPABILITIES.ACCREDIT_SCAN,
