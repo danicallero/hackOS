@@ -140,6 +140,9 @@ export function UniversityPicker({
   function select(u: University) {
     onChange(String(u.id));
     setResolvedLabel({ id: String(u.id), name: u.name });
+    // A changed selection is just that: it must not leave the previous search
+    // text around to look like a second catalogue proposal.
+    setQuery("");
     setOpen(false);
   }
 

@@ -18,6 +18,7 @@ import type { Column } from "@/components/common/data-table";
 import { DataTable } from "@/components/common/data-table";
 import { Modal } from "@/components/common/modal";
 import { SubmitButton } from "@/components/common/submit-button";
+import { UniversityPicker } from "@/components/common/university-picker";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -57,6 +58,10 @@ export function UniversitiesManager() {
   const [editing, setEditing] = useState<University | null | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = useState<University | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [normalizationSource, setNormalizationSource] = useState<University | null>(null);
+  const [normalizationTargetId, setNormalizationTargetId] = useState("");
+  const [normalizing, setNormalizing] = useState(false);
+  const [normalizationError, setNormalizationError] = useState<string | null>(null);
 
   const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: { name: "" } });
   const { reset } = form;
@@ -125,6 +130,34 @@ export function UniversitiesManager() {
       toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteUniversity"));
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function onNormalize() {
+    if (!normalizationSource || !normalizationTargetId) {
+      setNormalizationError(t("chooseUniversityToKeep"));
+      return;
+    }
+    if (normalizationTargetId === String(normalizationSource.id)) {
+      setNormalizationError(t("chooseDifferentUniversity"));
+      return;
+    }
+    setNormalizing(true);
+    setNormalizationError(null);
+    try {
+      await api.post(`/api/universities/${normalizationSource.id}/normalize`, {
+        targetId: Number(normalizationTargetId),
+      });
+      toast.success(t("universitiesNormalized"));
+      setNormalizationSource(null);
+      setNormalizationTargetId("");
+      await load();
+    } catch (err) {
+      setNormalizationError(
+        err instanceof ApiError ? err.message : t("couldNotNormalizeUniversities"),
+      );
+    } finally {
+      setNormalizing(false);
     }
   }
 
@@ -216,6 +249,15 @@ export function UniversitiesManager() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={() => setEditing(row)}>{t("rename")}</DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  setNormalizationSource(row);
+                  setNormalizationTargetId("");
+                  setNormalizationError(null);
+                }}
+              >
+                {t("normalizeUniversity")}
+              </DropdownMenuItem>
               <DropdownMenuItem variant="destructive" onSelect={() => setDeleteTarget(row)}>
                 {t("deleteAction")}
               </DropdownMenuItem>
@@ -275,6 +317,49 @@ export function UniversitiesManager() {
         pending={deleting}
         onConfirm={onDelete}
       />
+
+      <AlertModal
+        open={normalizationSource !== null}
+        onOpenChange={(open) => {
+          if (!open && !normalizing) {
+            setNormalizationSource(null);
+            setNormalizationTargetId("");
+            setNormalizationError(null);
+          }
+        }}
+        title={t("normalizeUniversityTitle")}
+        description={
+          normalizationSource
+            ? t("normalizeUniversityDesc", { name: normalizationSource.name })
+            : ""
+        }
+        cancelLabel={t("cancel")}
+        confirmLabel={t("normalizeUniversity")}
+        destructive
+        pending={normalizing}
+        onConfirm={onNormalize}
+      >
+        <div className="space-y-2">
+          <label htmlFor="university-normalization-target" className="text-sm font-medium">
+            {t("universityToKeep")}
+          </label>
+          <UniversityPicker
+            id="university-normalization-target"
+            value={normalizationTargetId}
+            onChange={(value) => {
+              setNormalizationTargetId(value);
+              setNormalizationError(null);
+            }}
+            allowPropose={false}
+            inDialog
+          />
+          {normalizationError && (
+            <p role="alert" className="text-destructive text-sm">
+              {normalizationError}
+            </p>
+          )}
+        </div>
+      </AlertModal>
     </div>
   );
 }

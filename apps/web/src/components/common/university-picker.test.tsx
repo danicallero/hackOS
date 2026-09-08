@@ -123,4 +123,30 @@ describe("UniversityPicker proposals", () => {
     });
     expect(toastError).toHaveBeenCalledWith("signIn");
   });
+
+  it("replaces an incorrect selection with an existing university without proposing a row", async () => {
+    const onChange = vi.fn();
+    mockGet.mockResolvedValue({
+      universities: [
+        { id: 1, name: "Wrong University" },
+        { id: 2, name: "Correct University" },
+      ],
+    });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await act(async () =>
+      root.render(<UniversityPicker value="1" onChange={onChange} allowPropose={false} />),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+
+    await user.click(
+      [...container.querySelectorAll("button")].find((button) =>
+        button.textContent?.includes("Correct University"),
+      ) as HTMLButtonElement,
+    );
+
+    expect(onChange).toHaveBeenCalledWith("2");
+    expect(mockPost).not.toHaveBeenCalled();
+  });
 });
