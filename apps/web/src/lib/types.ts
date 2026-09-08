@@ -54,6 +54,7 @@ export interface Me {
   canCreateProject: boolean;
   /** H7: once an application is accepted, name/shirt-size/dietary fields are no longer self-editable. */
   profileLocked: boolean;
+  hasStatisticsPanels: boolean;
 }
 
 export type Language = "en" | "es" | "gl";

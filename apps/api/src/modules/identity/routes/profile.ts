@@ -500,6 +500,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             // fields are no longer self-editable — the web/mobile settings
             // form greys them out and points the participant at staff.
             profileLocked: z.boolean(),
+            hasStatisticsPanels: z.boolean(),
           }),
         },
       },
@@ -515,6 +516,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         hasQueueItems,
         canCreateProject,
         profileLocked,
+        hasStatisticsPanels,
         removalStatus,
         roles,
       ] = await Promise.all([
@@ -525,6 +527,17 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         hasMyQueueItems(userId),
         canCreateMyProject(userId),
         hasAcceptedApplication(userId),
+        pool
+          .query(
+            `SELECT EXISTS (
+             SELECT 1
+             FROM application_stats_panel_role_access pa
+             JOIN user_roles ur ON ur.role_id = pa.role_id AND ur.user_id = $1
+             WHERE pa.state = 'allow'
+           ) AS "exists"`,
+            [userId],
+          )
+          .then((result) => Boolean(result.rows[0]?.exists)),
         getPendingAccountRemovalStatus(pool, userId),
         getAssignedRoles(pool, userId),
       ]);
@@ -541,6 +554,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         hasQueueItems,
         canCreateProject,
         profileLocked,
+        hasStatisticsPanels,
       };
     },
   );

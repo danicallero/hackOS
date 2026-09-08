@@ -390,6 +390,15 @@ Anything a user reads — UI strings and outbound notification templates alike
 i18n entry is missing a language and that no story id or capability key
 leaks into user-facing text.
 
+### Application statistics
+
+`GET /api/applications/:id/stats` returns only panels allowed by the caller's
+role-position ACL. `GET`/`PUT /api/applications/:id/stats/access` (the latter
+requires `statistics:manage`) manage per-panel `allow`/`inherit`/`deny` rows;
+new reportable field panels are private until published. Personal hidden-panel
+preferences are stored through `/api/me/ui-prefs` and therefore follow the
+account across devices.
+
 ## Exploring the live API
 
 - `/documentation` — Swagger UI generated from every route's Zod schema; this

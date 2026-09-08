@@ -77,6 +77,7 @@ const CAPABILITY_DESCRIPTION_KEYS: Partial<Record<string, MessageKey>> = {
   "applications:decide": "capabilityDescriptionApplicationsDecide",
   "applications:confirm-override": "capabilityDescriptionApplicationsConfirmOverride",
   "applications:edit-response": "capabilityDescriptionApplicationsEditResponse",
+  "statistics:manage": "capabilityDescriptionStatisticsManage",
   "projects:read": "capabilityDescriptionProjectsRead",
   "projects:import": "capabilityDescriptionProjectsImport",
   "projects:edit": "capabilityDescriptionProjectsEdit",

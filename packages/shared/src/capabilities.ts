@@ -25,6 +25,7 @@ export const CAPABILITIES = {
   APPLICATIONS_DECIDE: "applications:decide", // accept/reject, send decisions
   APPLICATIONS_CONFIRM_OVERRIDE: "applications:confirm-override", // admin confirm/decline override (H15)
   APPLICATIONS_EDIT_RESPONSE: "applications:edit-response", // edit any response's form data
+  STATISTICS_MANAGE: "statistics:manage", // configure per-panel statistics visibility
 
   // projects / devpost (H16-H17, H21)
   PROJECTS_READ: "projects:read",
@@ -102,6 +103,7 @@ export const CAPABILITY_DESCRIPTIONS: Record<Capability, string> = {
   "applications:decide": "Accept or reject applications and send decisions",
   "applications:confirm-override": "Override a participant's confirm/decline as an admin",
   "applications:edit-response": "Edit any applicant's form responses",
+  "statistics:manage": "Configure who can view each statistics panel",
   "projects:read": "Read project and Devpost submissions",
   "projects:import": "Import projects from Devpost",
   "projects:edit": "Edit project and Devpost submissions",

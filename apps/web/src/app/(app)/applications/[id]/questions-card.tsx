@@ -1140,6 +1140,16 @@ export function FieldEditor({
               </div>
             </>
           )}
+          <div className="flex items-center justify-between gap-3 border-t pt-4">
+            <Label htmlFor={`reporting-${uid}`} className="text-sm">
+              {t("includeInStatistics")}
+            </Label>
+            <Switch
+              id={`reporting-${uid}`}
+              checked={field.reporting === true}
+              onCheckedChange={(reporting) => onChange({ reporting })}
+            />
+          </div>
         </div>
       </details>
 

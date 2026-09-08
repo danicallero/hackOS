@@ -49,6 +49,8 @@ export interface NavItem {
   hideIfNoQueueItems?: boolean;
   /** Not built yet — shown disabled with a "Soon" badge. */
   soon?: boolean;
+  /** Dynamic Statistics ACL may expose the workspace without a global capability. */
+  statisticsVisible?: boolean;
 }
 
 /**
@@ -117,6 +119,7 @@ export interface NavVisibilityContext {
   hasProject: boolean;
   /** Has a queue entry of their own — see NavItem.hideIfNoQueueItems (issue #424). */
   hasQueueItems: boolean;
+  hasStatisticsPanels?: boolean;
 }
 
 /**
@@ -130,6 +133,7 @@ export function isNavItemVisible(item: NavItem, ctx: NavVisibilityContext): bool
   if (item.hideIfNoQueueItems && !ctx.hasQueueItems) return false;
   if (item.sponsorVisible && ctx.isSponsorRep) return true;
   if (item.judgeVisible && ctx.isEnterpriseJudge) return true;
+  if (item.statisticsVisible && ctx.hasStatisticsPanels) return true;
   // Unlike sponsorVisible/judgeVisible (additional grants layered on top of a
   // capability/anyCapability gate), staffVisible is the item's only gate —
   // it must not fall through to the unconditional `return true` below.
@@ -303,7 +307,8 @@ export const WORKSPACES: Workspace[] = [
         title: "logisticsStats",
         href: "/logistics/stats",
         icon: ChartColumnIcon,
-        capability: CAPABILITIES.LOGISTICS_STATS,
+        anyCapability: [CAPABILITIES.LOGISTICS_STATS, CAPABILITIES.STATISTICS_MANAGE],
+        statisticsVisible: true,
       },
     ],
   },

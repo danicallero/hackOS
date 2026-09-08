@@ -63,6 +63,28 @@ describe("stable personal area (audit §3.1)", () => {
   });
 });
 
+describe("dynamic statistics visibility", () => {
+  it("shows Stats to a reader with a published panel and no global capability", () => {
+    const ctx = contextFor([], {});
+    expect(
+      isNavItemVisible(
+        WORKSPACES.flatMap((w) => w.items).find((item) => item.href === "/logistics/stats")!,
+        { ...ctx, hasStatisticsPanels: true },
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps Stats hidden when no panel is published", () => {
+    const ctx = contextFor([], {});
+    expect(
+      isNavItemVisible(
+        WORKSPACES.flatMap((w) => w.items).find((item) => item.href === "/logistics/stats")!,
+        { ...ctx, hasStatisticsPanels: false },
+      ),
+    ).toBe(false);
+  });
+});
+
 describe("pure applicant (no role-derived event access, no operational role)", () => {
   const ctx = contextFor([], { isPureApplicant: true });
 

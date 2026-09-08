@@ -66,6 +66,7 @@ function useVisible() {
       // "show, then narrow down" pattern so the sidebar doesn't flash empty.
       hasProject: me ? me.hasProject || me.canCreateProject : true,
       hasQueueItems: me ? me.hasQueueItems : true,
+      hasStatisticsPanels: me ? me.hasStatisticsPanels : true,
     });
 }
 

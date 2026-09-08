@@ -89,7 +89,7 @@ describe("confirmation expirer (plan/07 §5.2)", () => {
 describe("pre-event stats (H27)", () => {
   it("counts by status + confirmed-only intolerances + field histogram", async () => {
     const a = await getApp();
-    const statsUser = await createUserWithCapabilities([CAPABILITIES.LOGISTICS_STATS]);
+    const statsUser = await createUserWithCapabilities([CAPABILITIES.STATISTICS_MANAGE]);
     const appId = await createApplication({ capacity: 10 });
 
     const nutFree = await createFoodIntolerance("nut-free", statsUser);
@@ -168,7 +168,7 @@ describe("pre-event stats (H27)", () => {
     expect(body.time_to_confirm_hours.median).toBeGreaterThan(4);
   });
 
-  it("requires LOGISTICS_STATS", async () => {
+  it("requires statistics access", async () => {
     const a = await getApp();
     const appId = await createApplication();
     const pleb = await createUser();
@@ -182,7 +182,7 @@ describe("pre-event stats (H27)", () => {
 
   it("excludes anonymized applicants from every count (H54)", async () => {
     const a = await getApp();
-    const statsUser = await createUserWithCapabilities([CAPABILITIES.LOGISTICS_STATS]);
+    const statsUser = await createUserWithCapabilities([CAPABILITIES.STATISTICS_MANAGE]);
     const admin = await createUserWithCapabilities(["*"]);
     const appId = await createApplication({ capacity: 10 });
     const nutFree = await createFoodIntolerance("nut-free", statsUser);
