@@ -16,6 +16,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { ActionGroup } from "@/components/common/action-group";
 import { AlertModal } from "@/components/common/alert-modal";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -94,6 +95,7 @@ export function RoleEditor({
   onResetToDefault,
   mobile,
   onBack,
+  headerActions,
 }: {
   role: RoleSummary;
   users: Map<number, UserListItem>;
@@ -114,6 +116,8 @@ export function RoleEditor({
   mobile?: boolean;
   /** Mobile only: returns to the roles list screen. */
   onBack?: () => void;
+  /** List-level actions rendered beside the selected role on wide screens. */
+  headerActions?: React.ReactNode;
 }) {
   const { t } = useLocale();
   const { tab, setTab } = useUrlTab({
@@ -477,13 +481,14 @@ export function RoleEditor({
       <Tabs value={tab} onValueChange={setTab} className="gap-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {roleHeader}
-          <TabBar aria-label={t("roleSections")} className="max-w-full justify-start">
-            <TabsTrigger value="display">{t("displayTab")}</TabsTrigger>
-            <TabsTrigger value="capabilities">{t("capabilitiesLabel")}</TabsTrigger>
-            <TabsTrigger value="members">{t("membersTitle")}</TabsTrigger>
-            <TabsTrigger value="grantRules">{t("grantRulesTitle")}</TabsTrigger>
-          </TabBar>
+          {headerActions && <ActionGroup className="justify-end">{headerActions}</ActionGroup>}
         </div>
+        <TabBar aria-label={t("roleSections")} className="max-w-full justify-start">
+          <TabsTrigger value="display">{t("displayTab")}</TabsTrigger>
+          <TabsTrigger value="capabilities">{t("capabilitiesLabel")}</TabsTrigger>
+          <TabsTrigger value="members">{t("membersTitle")}</TabsTrigger>
+          <TabsTrigger value="grantRules">{t("grantRulesTitle")}</TabsTrigger>
+        </TabBar>
 
         <TabsContent value="display" className="space-y-6">
           {displaySection}

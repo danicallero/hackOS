@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { ActionGroup } from "@/components/common/action-group";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
@@ -458,6 +459,20 @@ export default function PermissionsPage() {
     />
   );
 
+  const roleActions = (
+    <>
+      <Button variant="outline" onClick={() => setAllRulesOpen(true)}>
+        <ZapIcon /> {t("allGrantRulesButton")}
+      </Button>
+      <Button variant="outline" onClick={toggleTrash}>
+        <Trash2Icon /> {t("trashTitle")}
+      </Button>
+      <Button onClick={() => setCreateOpen(true)}>
+        <PlusIcon /> {t("newRole")}
+      </Button>
+    </>
+  );
+
   const roleEditor = selectedRole && (
     <RoleEditor
       role={selectedRole}
@@ -473,29 +488,13 @@ export default function PermissionsPage() {
       onResetToDefault={() => onResetToDefault(selectedRole.id)}
       mobile={isMobile}
       onBack={() => selectRole(null)}
+      headerActions={roleActions}
     />
   );
 
   return (
     <div className="space-y-8">
-      {showHeader && (
-        <PageHeader
-          title={t("rolesTitle")}
-          primaryAction={
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setAllRulesOpen(true)}>
-                <ZapIcon /> {t("allGrantRulesButton")}
-              </Button>
-              <Button variant="outline" onClick={toggleTrash}>
-                <Trash2Icon /> {t("trashTitle")}
-              </Button>
-              <Button onClick={() => setCreateOpen(true)}>
-                <PlusIcon /> {t("newRole")}
-              </Button>
-            </div>
-          }
-        />
-      )}
+      {isMobile && showHeader && <PageHeader title={t("rolesTitle")} primaryAction={roleActions} />}
 
       {isMobile ? (
         showTrash ? (
@@ -513,27 +512,32 @@ export default function PermissionsPage() {
           </Section>
         )
       ) : (
-        <>
-          {showTrash && trashPanel}
-
-          {loadError ? (
-            <ContextualError message={loadError} onRetry={() => void load()} />
-          ) : (
-            <div className="grid gap-6 lg:grid-cols-[320px_1fr] lg:items-start">
+        <div className="grid gap-6 lg:grid-cols-[320px_1fr] lg:items-start">
+          <div className="space-y-6">
+            {showHeader && <PageHeader title={t("rolesTitle")} />}
+            {showTrash && trashPanel}
+            {loadError ? (
+              <ContextualError message={loadError} onRetry={() => void load()} />
+            ) : (
               <Section padding="none" className="overflow-hidden">
                 {rolesListBody}
               </Section>
+            )}
+          </div>
 
-              {selectedRole
-                ? roleEditor
-                : !loading && (
-                    <Section>
-                      <EmptyState icon={ShieldCheckIcon} title={t("selectRoleHint")} />
-                    </Section>
-                  )}
+          {selectedRole ? (
+            roleEditor
+          ) : (
+            <div className="space-y-6">
+              <ActionGroup className="justify-end">{roleActions}</ActionGroup>
+              {!loading && !loadError && (
+                <Section>
+                  <EmptyState icon={ShieldCheckIcon} title={t("selectRoleHint")} />
+                </Section>
+              )}
             </div>
           )}
-        </>
+        </div>
       )}
       <GrantRulesOverviewModal
         open={allRulesOpen}
