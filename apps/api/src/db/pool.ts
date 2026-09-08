@@ -1,5 +1,5 @@
+import client from "@prometheus-io/client";
 import pg from "pg";
-import client from "prom-client";
 import { config } from "../config.js";
 import { register } from "../lib/metrics.js";
 

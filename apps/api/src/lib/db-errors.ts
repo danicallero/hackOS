@@ -1,4 +1,4 @@
-import client from "prom-client";
+import client from "@prometheus-io/client";
 import { register } from "./metrics.js";
 
 /** Postgres error codes for the two timeouts pool.ts configures (H540). */
