@@ -1,4 +1,4 @@
-import client from "prom-client";
+import client from "@prometheus-io/client";
 import type { RequestLane } from "./request-lanes.js";
 
 /**

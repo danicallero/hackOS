@@ -1,5 +1,5 @@
+import client from "@prometheus-io/client";
 import type { FastifyRequest } from "fastify";
-import client from "prom-client";
 import { TooManyRequestsError } from "./errors.js";
 import { register } from "./metrics.js";
 import { valkey } from "./valkey.js";

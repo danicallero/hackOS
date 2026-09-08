@@ -1,7 +1,7 @@
 import type { OutgoingHttpHeaders } from "node:http";
 import { EVENTS, SSE_TOPICS, type SseEnvelope } from "@hackos/shared/events";
+import client from "@prometheus-io/client";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import client from "prom-client";
 import { config } from "../config.js";
 import { TooManyRequestsError } from "./errors.js";
 import { register } from "./metrics.js";

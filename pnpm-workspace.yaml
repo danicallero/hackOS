@@ -2,6 +2,12 @@ packages:
   - apps/*
   - packages/*
 
+# Every runtime peer must be declared by the workspace that needs it.  Better
+# Auth advertises optional adapters for several UI frameworks; automatically
+# installing those peers made the Fastify API pull Next, React and their trees
+# into its production image even though it does not use them.
+autoInstallPeers: false
+
 # pnpm 11 errors when a dependency's build script is ignored. esbuild (used by
 # tsup) needs to install its platform binary; the rest are optional native
 # accelerators we intentionally skip. Without this, `pnpm install
