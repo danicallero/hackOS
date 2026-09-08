@@ -31,21 +31,6 @@
     "infra:down": "docker compose down",
     "prepare": "husky"
   },
-  "pnpm": {
-    "supportedArchitectures": {
-      "os": [
-        "darwin",
-        "linux"
-      ],
-      "cpu": [
-        "arm64",
-        "x64"
-      ]
-    },
-    "patchedDependencies": {
-      "@expo/cli": "patches/@expo__cli.patch"
-    }
-  },
   "devDependencies": {
     "@biomejs/biome": "^2.5.2",
     "@playwright/test": "^1.62.1",
