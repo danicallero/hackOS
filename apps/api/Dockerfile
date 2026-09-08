@@ -33,7 +33,10 @@ COPY apps/api/assets ./apps/api/assets
 RUN pnpm --filter @hackos/api exec tsup
 # Copies the built package + only its production deps into /app, resolving
 # workspace deps to a flat, real node_modules that survives without the store.
-RUN pnpm --filter @hackos/api deploy --prod --legacy /app
+# The Docker context intentionally excludes the mobile workspace. Its
+# @expo/cli patch is validated by full-workspace installs/CI, but is not part
+# of this API-only production graph (H55).
+RUN pnpm --config.allow-unused-patches=true --filter @hackos/api deploy --prod --legacy /app
 
 # ── deploy: minimal runtime, non-root ─────────────────────────────────────
 FROM base AS deploy
