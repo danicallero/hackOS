@@ -16,7 +16,12 @@ import {
   useColorScheme,
   View,
 } from "react-native";
-import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
+import {
+  GestureDetector,
+  type NativeGesture,
+  useNativeGesture,
+} from "react-native-gesture-handler";
+import Swipeable, { type SwipeableProps } from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, {
   runOnJS,
   type SharedValue,
@@ -86,6 +91,24 @@ const LIMIT = 20;
 const LOAD_MORE_THRESHOLD = 130;
 const LOAD_MORE_BANDS = 12;
 const LOAD_MORE_END_DISTANCE = 24;
+
+/**
+ * Android's scroll recognizer must participate in notification-row swipes:
+ * without this native gesture boundary, a mostly vertical drag can be claimed
+ * by Swipeable and reveal the delete action instead of scrolling the inbox.
+ */
+function NotificationScrollGestureBoundary({
+  enabled,
+  gesture,
+  children,
+}: {
+  enabled: boolean;
+  gesture: NativeGesture;
+  children: ReactNode;
+}) {
+  if (!enabled) return <>{children}</>;
+  return <GestureDetector gesture={gesture}>{children}</GestureDetector>;
+}
 
 /** The segmented control plus an optional trailing action, memoized so toggling the bell doesn't also re-render whichever hidden tab it's shared with. */
 const NotificationsHeader = memo(function NotificationsHeader({
@@ -324,6 +347,8 @@ const MessagesView = memo(function MessagesView({
   const pullBand = useSharedValue(0);
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
+  const notificationScrollGuardEnabled = Platform.OS === "android";
+  const notificationScrollGesture = useNativeGesture({ enabled: notificationScrollGuardEnabled });
 
   useScrollToTop(scrollRef);
 
@@ -609,110 +634,120 @@ const MessagesView = memo(function MessagesView({
   );
 
   return (
-    <Animated.ScrollView
-      ref={scrollRef}
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{
-        gap: 16,
-        padding: 16,
-        paddingBottom: Math.max(32, tabBarBottomInset + 16),
-        paddingTop: 16 + androidTopInset,
-      }}
-      keyboardShouldPersistTaps="handled"
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
-      onScroll={Platform.OS === "ios" ? scrollHandler : undefined}
-      onScrollEndDrag={Platform.OS === "android" ? loadMoreAtAndroidEnd : undefined}
-      onMomentumScrollEnd={Platform.OS === "android" ? loadMoreAtAndroidEnd : undefined}
-      scrollEventThrottle={1}
+    <NotificationScrollGestureBoundary
+      enabled={notificationScrollGuardEnabled}
+      gesture={notificationScrollGesture}
     >
-      {tabSwitcher}
-      <StaleDataBanner updatedAt={staleSince} />
+      <Animated.ScrollView
+        ref={scrollRef}
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={{
+          gap: 16,
+          padding: 16,
+          paddingBottom: Math.max(32, tabBarBottomInset + 16),
+          paddingTop: 16 + androidTopInset,
+        }}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
+        }
+        onScroll={Platform.OS === "ios" ? scrollHandler : undefined}
+        onScrollEndDrag={Platform.OS === "android" ? loadMoreAtAndroidEnd : undefined}
+        onMomentumScrollEnd={Platform.OS === "android" ? loadMoreAtAndroidEnd : undefined}
+        scrollEventThrottle={1}
+      >
+        {tabSwitcher}
+        <StaleDataBanner updatedAt={staleSince} />
 
-      {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
-      {actionError ? (
-        <RequestFeedback
-          error={actionError}
-          onRetry={retryAction ? () => void retryAction() : undefined}
-          retrying={actionRetrying}
-        />
-      ) : null}
-      {loading && !data ? <RequestFeedback loading /> : null}
+        {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
+        {actionError ? (
+          <RequestFeedback
+            error={actionError}
+            onRetry={retryAction ? () => void retryAction() : undefined}
+            retrying={actionRetrying}
+          />
+        ) : null}
+        {loading && !data ? <RequestFeedback loading /> : null}
 
-      {!loading && !error && items.length === 0 ? (
-        <EmptyState
-          icon="tray"
-          title={unreadOnly ? t("notificationsNoUnread") : t("notificationsEmptyTitle")}
-          description={t("notificationsEmptyHint")}
-        />
-      ) : null}
+        {!loading && !error && items.length === 0 ? (
+          <EmptyState
+            icon="tray"
+            title={unreadOnly ? t("notificationsNoUnread") : t("notificationsEmptyTitle")}
+            description={t("notificationsEmptyHint")}
+          />
+        ) : null}
 
-      {items.length ? (
-        <Section>
-          {items.map((item, index) => (
-            <View key={item.id}>
-              {index > 0 ? <Separator inset={50} /> : null}
-              <NotificationRow
-                item={item}
-                expanded={expanded.has(item.id)}
-                language={language}
-                onPress={() => toggleExpanded(item)}
-                busy={readingId === item.id}
-                deleting={deletingId === item.id}
-                onDelete={() => confirmDelete(item)}
-              />
-            </View>
-          ))}
-        </Section>
-      ) : null}
-
-      {data && data.total > LIMIT ? (
-        <View style={{ gap: 18 }}>
-          <Text
-            selectable
-            accessibilityLiveRegion="polite"
-            style={{ color: colors.secondaryLabel, fontSize: 13, textAlign: "center" }}
-          >
-            {t("notificationsShowingLatest", {
-              count: String(data.items.length),
-              total: String(data.total),
-            })}
-          </Text>
-          {data.items.length < data.total ? (
-            Platform.OS === "android" ? (
-              <Pressable
-                accessibilityLabel={t("notificationsPullToLoadMore")}
-                accessibilityRole="button"
-                accessibilityState={{ busy: loadingMore, disabled: loadingMore }}
-                disabled={loadingMore}
-                onPress={() => void loadMoreRef.current()}
-                style={({ pressed }) => ({
-                  alignItems: "center",
-                  height: 44,
-                  justifyContent: "center",
-                  opacity: loadingMore ? 0.55 : pressed ? 0.65 : 1,
-                  position: "relative",
-                  width: "100%",
-                })}
-              >
-                {loadMoreIndicator}
-              </Pressable>
-            ) : (
-              <View
-                style={{
-                  alignItems: "center",
-                  height: RING_SIZE,
-                  justifyContent: "center",
-                  position: "relative",
-                  width: "100%",
-                }}
-              >
-                {loadMoreIndicator}
+        {items.length ? (
+          <Section>
+            {items.map((item, index) => (
+              <View key={item.id}>
+                {index > 0 ? <Separator inset={50} /> : null}
+                <NotificationRow
+                  item={item}
+                  expanded={expanded.has(item.id)}
+                  language={language}
+                  onPress={() => toggleExpanded(item)}
+                  busy={readingId === item.id}
+                  deleting={deletingId === item.id}
+                  onDelete={() => confirmDelete(item)}
+                  scrollGesture={
+                    notificationScrollGuardEnabled ? notificationScrollGesture : undefined
+                  }
+                />
               </View>
-            )
-          ) : null}
-        </View>
-      ) : null}
-    </Animated.ScrollView>
+            ))}
+          </Section>
+        ) : null}
+
+        {data && data.total > LIMIT ? (
+          <View style={{ gap: 18 }}>
+            <Text
+              selectable
+              accessibilityLiveRegion="polite"
+              style={{ color: colors.secondaryLabel, fontSize: 13, textAlign: "center" }}
+            >
+              {t("notificationsShowingLatest", {
+                count: String(data.items.length),
+                total: String(data.total),
+              })}
+            </Text>
+            {data.items.length < data.total ? (
+              Platform.OS === "android" ? (
+                <Pressable
+                  accessibilityLabel={t("notificationsPullToLoadMore")}
+                  accessibilityRole="button"
+                  accessibilityState={{ busy: loadingMore, disabled: loadingMore }}
+                  disabled={loadingMore}
+                  onPress={() => void loadMoreRef.current()}
+                  style={({ pressed }) => ({
+                    alignItems: "center",
+                    height: 44,
+                    justifyContent: "center",
+                    opacity: loadingMore ? 0.55 : pressed ? 0.65 : 1,
+                    position: "relative",
+                    width: "100%",
+                  })}
+                >
+                  {loadMoreIndicator}
+                </Pressable>
+              ) : (
+                <View
+                  style={{
+                    alignItems: "center",
+                    height: RING_SIZE,
+                    justifyContent: "center",
+                    position: "relative",
+                    width: "100%",
+                  }}
+                >
+                  {loadMoreIndicator}
+                </View>
+              )
+            ) : null}
+          </View>
+        ) : null}
+      </Animated.ScrollView>
+    </NotificationScrollGestureBoundary>
   );
 });
 
@@ -879,6 +914,7 @@ function NotificationRow({
   busy,
   deleting,
   onDelete,
+  scrollGesture,
 }: {
   item: InboxItem;
   expanded: boolean;
@@ -887,6 +923,7 @@ function NotificationRow({
   busy: boolean;
   deleting: boolean;
   onDelete: () => void;
+  scrollGesture?: NativeGesture;
 }) {
   const { t } = useLocale();
   const subject = payloadField(item.payload, "subject") ?? categoryLabel(item.category, t);
@@ -911,6 +948,7 @@ function NotificationRow({
         <DeleteRevealAction progress={progress} onDelete={onDelete} />
       )}
       rightThreshold={40}
+      simultaneousWith={scrollGesture as SwipeableProps["simultaneousWith"]}
       onSwipeableOpenStartDrag={() => {
         swiping.current = true;
       }}

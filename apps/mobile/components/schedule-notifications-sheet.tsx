@@ -1,13 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal, Platform, Pressable, ScrollView, Switch, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, {
-  runOnJS,
-  SlideInLeft,
-  SlideInRight,
-  SlideOutLeft,
-  SlideOutRight,
-} from "react-native-reanimated";
+import Animated, { runOnJS, SlideInLeft, SlideInRight } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FloatingGlassButton } from "@/components/native-ui";
 import { SymbolView } from "@/components/symbol";
@@ -47,11 +41,25 @@ export function ScheduleNotificationsSheet({
 }) {
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
+  // Android presents this as a full-screen modal rather than an iOS page
+  // sheet, so the scroll content must clear the status bar itself.
+  const sheetTopInset = Platform.OS === "android" ? insets.top : 0;
   const [viewingKind, setViewingKind] = useState<string | null>(null);
+  const [hasViewedDetail, setHasViewedDetail] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return;
+    setViewingKind(null);
+    setHasViewedDetail(false);
+  }, [visible]);
 
   function close() {
-    setViewingKind(null);
     onClose();
+  }
+
+  function openKind(kind: string) {
+    setHasViewedDetail(true);
+    setViewingKind(kind);
   }
 
   // Edge-swipe-right-to-go-back, matching iOS's native pop gesture.
@@ -73,33 +81,60 @@ export function ScheduleNotificationsSheet({
     >
       <GestureDetector gesture={backGesture}>
         <View style={{ backgroundColor: colors.background, flex: 1 }}>
+          <View
+            style={{
+              backgroundColor: colors.background,
+              left: 0,
+              minHeight: (viewingKind ? 60 : 86) + sheetTopInset,
+              paddingHorizontal: 52,
+              paddingTop: sheetTopInset + 16,
+              position: "absolute",
+              right: 0,
+              shadowColor: "#000000",
+              shadowOffset: { height: 2, width: 0 },
+              shadowOpacity: 0.08,
+              shadowRadius: 6,
+              top: 0,
+              zIndex: 2,
+            }}
+          >
+            <Text
+              ellipsizeMode="tail"
+              numberOfLines={1}
+              selectable
+              style={{
+                color: colors.label,
+                fontSize: 20,
+                fontWeight: "700",
+                lineHeight: 26,
+                textAlign: "center",
+              }}
+            >
+              {viewingKind ? scheduleTypeLabel(viewingKind, t) : t("scheduleNotificationsTitle")}
+            </Text>
+            {!viewingKind ? (
+              <Text
+                ellipsizeMode="tail"
+                numberOfLines={1}
+                style={{ color: colors.secondaryLabel, fontSize: 13, textAlign: "center" }}
+              >
+                {t("scheduleNotificationsSubtitle")}
+              </Text>
+            ) : null}
+          </View>
           <ScrollView
             contentInsetAdjustmentBehavior="automatic"
             contentContainerStyle={{
               paddingBottom: Math.max(32, insets.bottom + 16),
-              paddingTop: 16,
+              paddingTop: (viewingKind ? 76 : 102) + sheetTopInset,
             }}
           >
             {viewingKind ? (
               <Animated.View
                 key={viewingKind}
                 entering={SlideInRight}
-                exiting={SlideOutRight}
                 style={{ gap: 22, paddingHorizontal: 16 }}
               >
-                <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 36 }}>
-                  <Text
-                    selectable
-                    style={{
-                      color: colors.label,
-                      fontSize: 20,
-                      fontWeight: "700",
-                      textAlign: "center",
-                    }}
-                  >
-                    {scheduleTypeLabel(viewingKind, t)}
-                  </Text>
-                </View>
                 <KindEntryList
                   items={items.filter((item) => item.type === viewingKind)}
                   isEntrySubscribed={isEntrySubscribed}
@@ -110,27 +145,9 @@ export function ScheduleNotificationsSheet({
             ) : (
               <Animated.View
                 key="root"
-                entering={SlideInLeft}
-                exiting={SlideOutLeft}
+                entering={hasViewedDetail ? SlideInLeft : undefined}
                 style={{ gap: 22, paddingHorizontal: 16 }}
               >
-                <View style={{ gap: 4, paddingHorizontal: 36 }}>
-                  <Text
-                    selectable
-                    style={{
-                      color: colors.label,
-                      fontSize: 20,
-                      fontWeight: "700",
-                      textAlign: "center",
-                    }}
-                  >
-                    {t("scheduleNotificationsTitle")}
-                  </Text>
-                  <Text style={{ color: colors.secondaryLabel, fontSize: 13, textAlign: "center" }}>
-                    {t("scheduleNotificationsSubtitle")}
-                  </Text>
-                </View>
-
                 <View
                   style={{
                     backgroundColor: colors.surface,
@@ -160,7 +177,7 @@ export function ScheduleNotificationsSheet({
                         <Pressable
                           accessibilityLabel={scheduleTypeLabel(kind, t)}
                           accessibilityRole="button"
-                          onPress={() => setViewingKind(kind)}
+                          onPress={() => openKind(kind)}
                           style={{ flex: 1, gap: 2 }}
                         >
                           <Text style={{ color: colors.label, fontSize: 16 }}>
@@ -179,7 +196,7 @@ export function ScheduleNotificationsSheet({
                         <Pressable
                           accessibilityLabel={scheduleTypeLabel(kind, t)}
                           accessibilityRole="button"
-                          onPress={() => setViewingKind(kind)}
+                          onPress={() => openKind(kind)}
                           hitSlop={8}
                         >
                           <SymbolView

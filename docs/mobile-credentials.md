@@ -112,9 +112,9 @@ and color rather than copying the example blindly. See Expo's SDK 57
 1. Create/select the Firebase project owned by the organization.
 2. Register an Android app whose package exactly matches `android.package`.
 3. Download `google-services.json` into `apps/mobile/google-services.json`
-   for local builds. It contains a Google API key and is gitignored; every
-   dev machine building Android locally must fetch it from the Firebase
-   console separately. `app.config.ts` resolves
+   when local push notifications are needed. It contains a Google API key and
+   is gitignored; each dev machine that needs FCM must fetch it from the
+   Firebase console separately. `app.config.ts` resolves
    `android.googleServicesFile` from the `GOOGLE_SERVICES_JSON` env var when
    set, falling back to the local file otherwise — EAS cloud builds never
    have the gitignored file, so they read it from an EAS environment file
@@ -139,8 +139,10 @@ and color rather than copying the example blindly. See Expo's SDK 57
 
 ### Rebuilding without Firebase credentials
 
-`google-services.json` is required by the Android build and is intentionally
-not stored in Git. It is different from the Google Play service-account JSON.
+`google-services.json` is required for Android FCM builds and is intentionally
+not stored in Git. Local development builds may omit it when push
+notifications are not being tested; the file is different from the Google
+Play service-account JSON.
 
 Anyone rebuilding the APK needs access to the organization’s Firebase
 configuration and EAS FCM credentials. Without them, the build may fail; if it
@@ -195,4 +197,3 @@ Validate on a real iPhone:
 
 Treat Wallet private keys and certificates as backend secrets. They must never
 appear in the mobile bundle or EAS `EXPO_PUBLIC_*` values.
-

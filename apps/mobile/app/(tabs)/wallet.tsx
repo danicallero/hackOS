@@ -2,7 +2,6 @@ import { EVENTS } from "@hackos/shared/events";
 import { ButtonStyle, ButtonType, RNWalletView } from "@premieroctet/react-native-wallet";
 import * as Device from "expo-device";
 import { File, Paths } from "expo-file-system";
-import * as IntentLauncher from "expo-intent-launcher";
 import { useScrollToTop } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -144,9 +143,20 @@ export default function WalletScreen() {
     });
 
     if (Platform.OS === "android") {
+      // Load this module after the React context exists. A top-level import is
+      // evaluated while Expo Router validates every route and can run before
+      // the native module registry has been created (H28).
+      let intentLauncher: typeof import("expo-intent-launcher") | null = null;
+      try {
+        intentLauncher = await import("expo-intent-launcher");
+      } catch {
+        // Older development clients may not contain the optional native
+        // module; the generic share handoff below remains usable.
+      }
       for (const mimeType of ANDROID_PKPASS_MIME_TYPES) {
+        if (!intentLauncher) break;
         try {
-          await IntentLauncher.startActivityAsync(
+          await intentLauncher.startActivityAsync(
             ANDROID_VIEW_ACTION,
             createAndroidPkpassViewIntent(file.contentUri, mimeType),
           );

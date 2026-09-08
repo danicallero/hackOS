@@ -251,12 +251,11 @@ function RootLayoutNav({ authenticated, pending }: { authenticated: boolean; pen
           <Stack.Screen
             name="schedule/[id]"
             options={{
-              // Android uses the native compact app bar; iOS keeps its
-              // existing transparent large-title presentation (H59).
-              headerShown: process.env.EXPO_OS === "ios" || process.env.EXPO_OS === "android",
+              // Android uses the same in-screen chrome as the Schedule tab;
+              // iOS keeps its native transparent large-title presentation.
+              headerShown: process.env.EXPO_OS === "ios",
               headerTransparent: process.env.EXPO_OS === "ios",
               headerLargeTitle: process.env.EXPO_OS === "ios",
-              headerShadowVisible: process.env.EXPO_OS === "android" ? false : undefined,
               headerBackTitle: t("tabSchedule"),
             }}
           />
