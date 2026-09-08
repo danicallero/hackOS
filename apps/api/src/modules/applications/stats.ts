@@ -17,9 +17,74 @@ interface Counts {
   [status: string]: number;
 }
 
+export const BASE_STAT_PANEL_KEYS = [
+  "overview",
+  "funnel",
+  "shirt-sizes",
+  "food-intolerances",
+] as const;
+
+const fieldPanelKey = (key: string) => `field:${key.toLowerCase()}`;
+
+export type StatisticsPanelDecision = {
+  panelKey: string;
+  rolePosition: number;
+  state: "allow" | "deny" | "inherit";
+};
+
+/** H8 resolver: highest role position with an explicit decision wins. */
+export function resolveStatisticsPanelAccess(decisions: StatisticsPanelDecision[]): Set<string> {
+  const byPanel = new Map<string, StatisticsPanelDecision>();
+  for (const decision of [...decisions].sort((a, b) => b.rolePosition - a.rolePosition)) {
+    if (!byPanel.has(decision.panelKey) && decision.state !== "inherit")
+      byPanel.set(decision.panelKey, decision);
+  }
+  return new Set(
+    [...byPanel.values()]
+      .filter((decision) => decision.state === "allow")
+      .map((decision) => decision.panelKey),
+  );
+}
+
+export function statisticsPanelKeys(
+  template: Array<{ key: string; kind: string; reporting?: boolean }>,
+) {
+  const safe = new Set(["select", "multiselect", "checkbox", "university"]);
+  return new Set([
+    ...BASE_STAT_PANEL_KEYS,
+    ...template
+      .filter((field) => field.reporting === true || safe.has(field.kind))
+      .map((field) => fieldPanelKey(field.key)),
+  ]);
+}
+
+/** Resolve a caller's panel ACL with H8's own role-position semantics. */
+export async function allowedStatisticsPanels(
+  applicationId: number,
+  userId: number,
+): Promise<Set<string>> {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT ON (a.panel_key) a.panel_key, a.state
+       FROM application_stats_panel_role_access a
+       JOIN user_roles ur ON ur.role_id = a.role_id AND ur.user_id = $2
+       JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
+      WHERE a.application_id = $1 AND a.state <> 'inherit'
+      ORDER BY a.panel_key, r.position DESC`,
+    [applicationId, userId],
+  );
+  return resolveStatisticsPanelAccess(
+    (rows as Array<{ panel_key: string; state: "allow" | "deny" }>).map((row) => ({
+      panelKey: row.panel_key,
+      rolePosition: 0,
+      state: row.state,
+    })),
+  );
+}
+
 export async function applicationStats(
   applicationId: number,
   field?: string,
+  allowedPanels?: Set<string>,
 ): Promise<Record<string, unknown>> {
   const app = await requireApplication(pool, applicationId);
   // H8: the retired static `type` is replaced by the name of the form's
@@ -156,8 +221,31 @@ export async function applicationStats(
   if (field) {
     result.field_histogram = await fieldHistogram(applicationId, app.template, field);
   }
+  result.field_distributions = await reportableFieldDistributions(applicationId, app.template);
+
+  if (allowedPanels) filterStatisticsPanels(result, allowedPanels);
 
   return result;
+}
+
+function filterStatisticsPanels(result: Record<string, unknown>, allowed: Set<string>): void {
+  if (!allowed.has("overview")) {
+    delete result.counts_by_status;
+    delete result.time_series;
+    delete result.time_to_confirm_hours;
+  }
+  if (!allowed.has("funnel")) delete result.funnel;
+  if (!allowed.has("shirt-sizes")) delete result.shirt_sizes_confirmed;
+  if (!allowed.has("food-intolerances")) delete result.food_intolerances_confirmed;
+  result.field_distributions = (
+    (result.field_distributions as Array<{ field: { key: string } }>) ?? []
+  ).filter((panel) => allowed.has(fieldPanelKey(panel.field.key)));
+  if (
+    result.field_histogram &&
+    !allowed.has(fieldPanelKey(String((result.field_histogram as { field?: string }).field)))
+  ) {
+    delete result.field_histogram;
+  }
 }
 
 function toNum(v: unknown): number | null {
@@ -202,4 +290,81 @@ async function fieldHistogram(
         [applicationId, field],
       );
   return { field, buckets: rows };
+}
+
+/**
+ * H27: the dashboard is driven by the form definition, not a hand-maintained
+ * list of demographic fields. Choice fields are aggregate-safe by default;
+ * authors explicitly opt other kinds in through `reporting`.
+ */
+async function reportableFieldDistributions(
+  applicationId: number,
+  template: Array<{
+    key: string;
+    kind: string;
+    label: { es: string; gl: string; en: string };
+    options?: Array<{ value: string; label: { es: string; gl: string; en: string } }>;
+    reporting?: boolean;
+  }>,
+) {
+  const safeByDefault = new Set(["select", "multiselect", "checkbox", "university"]);
+  const fields = template.filter(
+    (field) => field.reporting === true || safeByDefault.has(field.kind),
+  );
+  return Promise.all(
+    fields.map(async (field) => ({
+      field: {
+        key: field.key,
+        kind: field.kind,
+        label: field.label,
+        options: field.options ?? [],
+      },
+      buckets: await distributionBuckets(applicationId, field.key, field.kind),
+    })),
+  );
+}
+
+async function distributionBuckets(applicationId: number, key: string, kind: string) {
+  if (kind === "multiselect") {
+    const { rows } = await pool.query(
+      `SELECT elem AS value, count(*)::int AS n
+         FROM application_responses r
+         JOIN users u ON u.id = r.user_id
+         JOIN LATERAL jsonb_array_elements_text(
+                CASE WHEN jsonb_typeof(r.responses -> $2) = 'array'
+                     THEN r.responses -> $2 ELSE '[]'::jsonb END) AS elem ON true
+        WHERE r.application_id = $1
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
+        GROUP BY elem ORDER BY n DESC, elem`,
+      [applicationId, key],
+    );
+    return rows;
+  }
+  if (kind === "university") {
+    const { rows } = await pool.query(
+      `SELECT COALESCE(un.name, r.responses ->> $2) AS value, count(*)::int AS n
+         FROM application_responses r
+         JOIN users u ON u.id = r.user_id
+         LEFT JOIN universities un ON un.id = CASE
+           WHEN r.responses ->> $2 ~ '^[0-9]+$' THEN (r.responses ->> $2)::integer
+           ELSE NULL
+         END
+        WHERE r.application_id = $1 AND r.responses ? $2
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
+        GROUP BY value ORDER BY n DESC, value`,
+      [applicationId, key],
+    );
+    return rows;
+  }
+  const { rows } = await pool.query(
+    `SELECT r.responses ->> $2 AS value, count(*)::int AS n
+       FROM application_responses r
+       JOIN users u ON u.id = r.user_id
+      WHERE r.application_id = $1 AND r.responses ? $2
+        AND r.responses ->> $2 IS NOT NULL AND r.responses ->> $2 <> ''
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
+      GROUP BY value ORDER BY n DESC, value`,
+    [applicationId, key],
+  );
+  return rows;
 }

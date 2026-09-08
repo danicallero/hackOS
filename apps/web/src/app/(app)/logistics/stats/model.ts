@@ -79,7 +79,12 @@ export function exportUrl(
 }
 
 export interface ApplicationStats {
-  application: { id: number; name: string; type: string; capacity: number | null };
+  application: {
+    id: number;
+    name: string;
+    granted_role_name: string | null;
+    capacity: number | null;
+  };
   counts_by_status: Record<string, number>;
   funnel: {
     sent: number;
@@ -100,5 +105,14 @@ export interface ApplicationStats {
     intolerance_id: number;
     label: I18nText;
     n: number;
+  }>;
+  field_distributions: Array<{
+    field: {
+      key: string;
+      kind: string;
+      label: I18nText;
+      options: Array<{ value: string; label: I18nText }>;
+    };
+    buckets: Array<{ value: string; n: number }>;
   }>;
 }

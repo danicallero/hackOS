@@ -14,7 +14,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
@@ -35,7 +35,7 @@ import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
-import { pickText, useLocale } from "@/lib/i18n";
+import { useLocale } from "@/lib/i18n";
 import {
   type LogisticsStats,
   logisticsApi,
@@ -44,6 +44,7 @@ import {
 } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
+import { BeforePanels } from "./before-panels";
 import {
   type ApplicationStats,
   applicationStatusLabel,
@@ -54,6 +55,7 @@ import {
   FRESHNESS_LABEL_KEYS,
   type FreshnessKind,
 } from "./model";
+import { StatsVisibility } from "./stats-visibility";
 
 const LOGISTICS_EVENTS = [
   EVENTS.LOGISTICS_ACCREDITED,
@@ -98,10 +100,13 @@ const DATA_PHASES: DataPhase[] = ["before", "during", "after"];
 
 export default function LogisticsStatsPage() {
   const { t } = useLocale();
-  const canStats = useCan(CAPABILITIES.LOGISTICS_STATS);
+  const canLogisticsStats = useCan(CAPABILITIES.LOGISTICS_STATS);
+  const canManageStatistics = useCan(CAPABILITIES.STATISTICS_MANAGE);
+  const canStats = canLogisticsStats || canManageStatistics;
   const canManageApplications = useCan(CAPABILITIES.APPLICATIONS_MANAGE);
   const canReviewApplications = useCan(CAPABILITIES.APPLICATIONS_REVIEW);
-  const canApplications = canManageApplications || canReviewApplications;
+  const canDecideApplications = useCan(CAPABILITIES.APPLICATIONS_DECIDE);
+  const canApplications = canManageApplications || canReviewApplications || canDecideApplications;
   const {
     tab: phase,
     setTab: setPhase,
@@ -217,6 +222,7 @@ export default function LogisticsStatsPage() {
             onApplicationChange={setApplicationId}
             onRetry={loadBefore}
           />
+          {canManageStatistics && <StatsVisibility applicationId={applicationId} />}
         </TabsContent>
         <TabsContent value="during" className="mt-4">
           <DuringPanel stats={liveStats} />
@@ -246,12 +252,11 @@ function BeforePanel({
   onApplicationChange: (id: number) => void;
   onRetry: () => void;
 }) {
-  const { language, t } = useLocale();
-  const statusRows = useMemo(
-    () =>
-      Object.entries(stats?.counts_by_status ?? {}).map(([status, count]) => ({ status, count })),
-    [stats],
-  );
+  const { t } = useLocale();
+  const statusRows = Object.entries(stats?.counts_by_status ?? {}).map(([status, count]) => ({
+    status,
+    count,
+  }));
   const statusColumns: Column<(typeof statusRows)[number]>[] = [
     {
       id: "status",
@@ -267,24 +272,7 @@ function BeforePanel({
       sortValue: (row) => row.count,
     },
   ];
-  const dietaryColumns: Column<ApplicationStats["food_intolerances_confirmed"][number]>[] = [
-    {
-      id: "restriction",
-      header: t("dietaryRestrictions"),
-      cell: (row) => pickText(row.label, language),
-      sortValue: (row) => pickText(row.label, language),
-    },
-    {
-      id: "count",
-      header: t("columnPeople"),
-      align: "right",
-      cell: (row) => row.n,
-      sortValue: (row) => row.n,
-    },
-  ];
-  const filters = { applicationId };
-  const download = `${API_URL}${exportUrl("/api/exports/applications.csv", filters)}`;
-
+  const download = `${API_URL}${exportUrl("/api/exports/applications.csv", { applicationId })}`;
   return (
     <div className="space-y-4">
       <SectionCard
@@ -332,22 +320,7 @@ function BeforePanel({
           empty={{ icon: ClipboardListIcon, title: t("noApplicationStatistics") }}
         />
       </SectionCard>
-
-      <SectionCard
-        title={t("dietaryDistribution")}
-        description={t("dietaryConfirmedOnlyPolicy")}
-        icon={SoupIcon}
-        state={<Freshness kind={error || !stats ? "incomplete" : "actual"} />}
-      >
-        <DataTable
-          columns={dietaryColumns}
-          data={stats?.food_intolerances_confirmed ?? []}
-          getRowId={(row) => String(row.intolerance_id)}
-          loading={loading}
-          error={error ? { message: error, onRetry } : undefined}
-          empty={{ icon: SoupIcon, title: t("noConfirmedDietaryData") }}
-        />
-      </SectionCard>
+      <BeforePanels stats={stats} />
     </div>
   );
 }

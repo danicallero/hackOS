@@ -111,6 +111,13 @@ export const templateFieldSchema = z
     retention_mode: retentionModeSchema.optional(),
     /** Optional stable reporting dimension; never controls retention by itself. */
     anonymous_audit_dimension: anonymousAuditDimensionSchema,
+    /**
+     * Opt a free-form/number field into the aggregate pre-event dashboard.
+     * Choice fields are safe and included by default; this explicit switch is
+     * required for every other kind so identifiers and prose never become a
+     * report merely because a form author added a question.
+     */
+    reporting: z.boolean().optional(),
   })
   .refine(
     (f) => !(f.kind === "select" || f.kind === "multiselect") || (f.options?.length ?? 0) > 0,
@@ -260,6 +267,11 @@ export const listResponsesQuerySchema = z.object({
 
 export const statsQuerySchema = z.object({
   field: z.string().optional(),
+});
+export const statsPanelAccessSchema = z.object({
+  panel_key: z.string().regex(/^[a-z0-9:_-]+$/),
+  role_id: z.number().int().positive(),
+  state: z.enum(["allow", "inherit", "deny"]),
 });
 
 // ── batch operations ─────────────────────────────────────────────────────────

@@ -67,6 +67,8 @@ export interface TemplateField {
   retention_mode?: "none" | "anonymous_audit";
   /** Optional open semantic slug for anonymous-audit reporting. */
   anonymous_audit_dimension?: string | null;
+  /** Include this answer's aggregate distribution in pre-event statistics. */
+  reporting?: boolean;
 }
 
 /** Response-validation rules (H11) — which sub-fields apply depends on the
