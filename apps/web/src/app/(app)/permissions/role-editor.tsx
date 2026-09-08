@@ -473,31 +473,30 @@ export function RoleEditor({
   }
 
   return (
-    <div className="space-y-6">
-      {roleHeader}
+    <div>
+      <Tabs value={tab} onValueChange={setTab} className="gap-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {roleHeader}
+          <TabBar aria-label={t("roleSections")} className="max-w-full justify-start">
+            <TabsTrigger value="display">{t("displayTab")}</TabsTrigger>
+            <TabsTrigger value="capabilities">{t("capabilitiesLabel")}</TabsTrigger>
+            <TabsTrigger value="members">{t("membersTitle")}</TabsTrigger>
+            <TabsTrigger value="grantRules">{t("grantRulesTitle")}</TabsTrigger>
+          </TabBar>
+        </div>
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabBar aria-label={t("roleSections")} className="w-full justify-start">
-          <TabsTrigger value="display">{t("displayTab")}</TabsTrigger>
-          <TabsTrigger value="capabilities">{t("capabilitiesLabel")}</TabsTrigger>
-          <TabsTrigger value="members">{t("membersTitle")}</TabsTrigger>
-          <TabsTrigger value="grantRules">{t("grantRulesTitle")}</TabsTrigger>
-        </TabBar>
-
-        <TabsContent value="display" className="space-y-6 pt-2">
+        <TabsContent value="display" className="space-y-6">
           {displaySection}
           {dangerZoneSection}
         </TabsContent>
 
-        <TabsContent value="capabilities" className="space-y-4 pt-2">
+        <TabsContent value="capabilities" className="space-y-4">
           {capabilitiesSection}
         </TabsContent>
 
-        <TabsContent value="members" className="pt-2">
-          {membersSection}
-        </TabsContent>
+        <TabsContent value="members">{membersSection}</TabsContent>
 
-        <TabsContent value="grantRules" className="space-y-4 pt-2">
+        <TabsContent value="grantRules" className="space-y-4">
           {grantRulesSection}
         </TabsContent>
       </Tabs>
