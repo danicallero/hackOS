@@ -10,3 +10,18 @@ onlyBuiltDependencies:
   - esbuild
 ignoredBuiltDependencies:
   - msgpackr-extract
+
+# The team develops on both macOS and Linux; keep both platforms' optional
+# binaries resolvable in the lockfile so either OS can install from it.
+# pnpm 10 moved these out of package.json's "pnpm" field into this file -
+# leaving them in package.json makes pnpm silently ignore them.
+supportedArchitectures:
+  os:
+    - darwin
+    - linux
+  cpu:
+    - arm64
+    - x64
+
+patchedDependencies:
+  '@expo/cli': patches/@expo__cli.patch
