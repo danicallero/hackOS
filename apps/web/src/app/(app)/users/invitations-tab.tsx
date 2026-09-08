@@ -21,6 +21,7 @@ import { IconButton } from "@/components/common/icon-button";
 import { Modal } from "@/components/common/modal";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
+import { TabBar } from "@/components/common/tab-bar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -32,6 +33,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { ApiError, api } from "@/lib/api";
 import { shortDateTimeFmt } from "@/lib/datetime";
@@ -66,6 +68,7 @@ export function InvitationsModal() {
     participant: t("roleParticipant"),
   };
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState("invites");
   const [invites, setInvites] = useState<InviteListItem[]>([]);
   const [enterpriseLinks, setEnterpriseLinks] = useState<EnterpriseInviteLink[]>([]);
   const [userLinks, setUserLinks] = useState<UserInviteLink[]>([]);
@@ -106,7 +109,6 @@ export function InvitationsModal() {
   }, [t]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (open) void load();
   }, [open, load]);
 
@@ -349,12 +351,13 @@ export function InvitationsModal() {
   return (
     <Modal
       open={open}
-      onOpenChange={(o) => {
-        setOpen(o);
-        if (!o) {
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) {
           setInvites([]);
           setEnterpriseLinks([]);
           setUserLinks([]);
+          setTab("invites");
           setCreateLinkOpen(false);
           setMobileLinkQuery("");
           resetCreateLinkForm();
@@ -369,80 +372,84 @@ export function InvitationsModal() {
       title={t("invitationManagement")}
       size="xl"
     >
-      <div className="space-y-6">
-        <div className="flex justify-end">
-          <InviteUserDialog />
-        </div>
-        <DataTable
-          columns={columns}
-          data={invites}
-          getRowId={(i) => String(i.id)}
-          loading={loading}
-          error={loadError ? { message: loadError, onRetry: load } : undefined}
-          searchable={(i) => `${i.email} ${i.kind}`}
-          searchPlaceholder={t("searchByEmailType")}
-          rowActions={(i) => {
-            const isBusy = (action: string) => busy.has(`${i.id}:${action}`);
-            return (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <IconButton variant="ghost" size="icon-sm" label={t("openMenuAria")}>
-                    <MoreHorizontalIcon className="size-4" />
-                  </IconButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44">
-                  <DropdownMenuItem
-                    disabled={isBusy("renew")}
-                    onClick={() => doAction(i.id, "renew", t("expiryExtended"))}
-                  >
-                    <TimerResetIcon className="size-4" />
-                    {t("renew")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={isBusy("resend")}
-                    onClick={() => doAction(i.id, "resend", t("inviteResent"))}
-                  >
-                    <MailPlusIcon className="size-4" />
-                    {t("resendEmail")}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    disabled={isBusy("regenerate")}
-                    onClick={() => doAction(i.id, "regenerate", t("newInviteCreated"))}
-                  >
-                    <RefreshCwIcon className="size-4" />
-                    {t("regenerate")}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    variant="destructive"
-                    disabled={isBusy("expire")}
-                    onClick={() => doAction(i.id, "expire", t("inviteExpired"))}
-                  >
-                    <BanIcon className="size-4" />
-                    {t("expire")}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            );
-          }}
-          pageSize={10}
-          empty={{
-            icon: MailIcon,
-            title: t("noActiveInvitations"),
-          }}
-        />
-        <section className="space-y-3" aria-labelledby="enterprise-invite-links-heading">
+      <Tabs value={tab} onValueChange={setTab} className="gap-4">
+        <TabBar aria-label={t("invitationManagement")} className="w-full justify-start">
+          <TabsTrigger value="invites">{t("invitesSectionTitle")}</TabsTrigger>
+          <TabsTrigger value="enterprise">{t("enterpriseInviteLinks")}</TabsTrigger>
+          <TabsTrigger value="accounts">{t("userInviteLinksTitle")}</TabsTrigger>
+        </TabBar>
+
+        <TabsContent value="invites" className="space-y-4">
+          <div className="flex justify-end">
+            <InviteUserDialog />
+          </div>
+          <DataTable
+            columns={columns}
+            data={invites}
+            getRowId={(i) => String(i.id)}
+            loading={loading}
+            error={loadError ? { message: loadError, onRetry: load } : undefined}
+            searchable={(i) => `${i.email} ${i.kind}`}
+            searchPlaceholder={t("searchByEmailType")}
+            rowActions={(i) => {
+              const isBusy = (action: string) => busy.has(`${i.id}:${action}`);
+              return (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <IconButton variant="ghost" size="icon-sm" label={t("openMenuAria")}>
+                      <MoreHorizontalIcon className="size-4" />
+                    </IconButton>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    <DropdownMenuItem
+                      disabled={isBusy("renew")}
+                      onClick={() => doAction(i.id, "renew", t("expiryExtended"))}
+                    >
+                      <TimerResetIcon className="size-4" />
+                      {t("renew")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={isBusy("resend")}
+                      onClick={() => doAction(i.id, "resend", t("inviteResent"))}
+                    >
+                      <MailPlusIcon className="size-4" />
+                      {t("resendEmail")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      disabled={isBusy("regenerate")}
+                      onClick={() => doAction(i.id, "regenerate", t("newInviteCreated"))}
+                    >
+                      <RefreshCwIcon className="size-4" />
+                      {t("regenerate")}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      disabled={isBusy("expire")}
+                      onClick={() => doAction(i.id, "expire", t("inviteExpired"))}
+                    >
+                      <BanIcon className="size-4" />
+                      {t("expire")}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              );
+            }}
+            pageSize={10}
+            empty={{
+              icon: MailIcon,
+              title: t("noActiveInvitations"),
+            }}
+          />
+        </TabsContent>
+
+        <TabsContent value="enterprise" className="space-y-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h3 id="enterprise-invite-links-heading" className="text-balance font-medium">
-                {t("enterpriseInviteLinks")}
-              </h3>
-            </div>
             <Button
               type="button"
               size="sm"
-              className="w-full sm:w-auto"
+              className="w-full sm:ml-auto sm:w-auto"
               onClick={() => setCreateLinkOpen((current) => !current)}
             >
               <PlusIcon className="size-4" aria-hidden="true" /> {t("createEnterpriseInviteLink")}
@@ -713,16 +720,19 @@ export function InvitationsModal() {
               }}
             />
           </div>
-        </section>
-        <UserInviteLinksSection
-          links={userLinks}
-          loading={loading}
-          error={loadError}
-          visible={open}
-          onRetry={load}
-          onChanged={load}
-        />
-      </div>
+        </TabsContent>
+
+        <TabsContent value="accounts">
+          <UserInviteLinksSection
+            links={userLinks}
+            loading={loading}
+            error={loadError}
+            visible={open}
+            onRetry={load}
+            onChanged={load}
+          />
+        </TabsContent>
+      </Tabs>
     </Modal>
   );
 }

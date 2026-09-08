@@ -570,7 +570,7 @@ export default function UsersPage() {
           </Select>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="w-full sm:w-auto">
+              <Button variant="outline" className="w-full sm:w-auto">
                 <SlidersHorizontalIcon />
                 {t("columnsLabel")}
               </Button>

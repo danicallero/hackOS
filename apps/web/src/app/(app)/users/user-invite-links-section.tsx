@@ -276,15 +276,12 @@ export function UserInviteLinksSection({
   });
 
   return (
-    <section className="mt-6 space-y-3" aria-labelledby="user-invite-links-heading">
+    <section className="space-y-3" aria-label={t("userInviteLinksTitle")}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <h3 id="user-invite-links-heading" className="text-balance font-medium">
-          {t("userInviteLinksTitle")}
-        </h3>
         <Button
           type="button"
           size="sm"
-          className="w-full sm:w-auto"
+          className="w-full sm:ml-auto sm:w-auto"
           onClick={() => setCreateOpen((current) => !current)}
         >
           <PlusIcon className="size-4" aria-hidden="true" /> {t("createUserInviteLink")}
