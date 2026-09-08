@@ -6,6 +6,7 @@ jest.mock("expo-router", () => ({
 }));
 
 const mockApiFetch = jest.fn();
+const mockSwipeable = jest.fn(({ children }: { children: unknown }) => children);
 let resolveNextPage: ((value: { items: unknown[]; total: number }) => void) | null = null;
 
 jest.mock("react-native-reanimated", () => {
@@ -38,7 +39,7 @@ jest.mock("react-native-svg", () => {
 });
 jest.mock("react-native-gesture-handler/ReanimatedSwipeable", () => ({
   __esModule: true,
-  default: ({ children }: { children: unknown }) => children,
+  default: (props: { children: unknown }) => mockSwipeable(props),
 }));
 jest.mock("@/components/glass-view", () => ({
   GlassView: ({ children }: { children: unknown }) => children,
@@ -174,6 +175,10 @@ afterEach(() => {
 describe("Android notification pagination (H51)", () => {
   it("offers an accessible tap fallback and never starts duplicate page loads", async () => {
     await renderMobile(<NotificationsScreen />);
+
+    expect(mockSwipeable).toHaveBeenCalledWith(
+      expect.objectContaining({ simultaneousWith: expect.anything() }),
+    );
 
     const loadMore = await screen.findByRole("button", { name: "Load more messages" });
     // The queried element is the host view, so its style is already resolved.

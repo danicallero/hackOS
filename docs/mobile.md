@@ -376,7 +376,10 @@ distributed to other Expo Router apps without importing hackOS code.
   (below) and also polls `GET /api/queue/me` every 15s while focused as a
   fallback. `notifications.tsx` pages past the initial 20 inbox messages on
   demand, allows an expanded message to be deleted after native confirmation,
-  and mirrors the web activity/kind reminder preferences. A third "Manage"
+  and mirrors the web activity/kind reminder preferences. On Android its
+  inbox mounts the same native scroll gesture boundary as Schedule, so
+  vertical scrolling takes precedence over a row's horizontal delete reveal.
+  A third "Manage"
   segment (`ANNOUNCEMENTS_MANAGE` only) adds announcement administration —
   `components/announcement-manage-view.tsx` lists admin announcements with
   the same swipeable edit/delete rows as Schedule
@@ -474,18 +477,21 @@ distributed to other Expo Router apps without importing hackOS code.
   and committed preference snapshots update mounted caches without triggering
   inbox/unread reloads. Covered by `test/ui/schedule-list.test.tsx`,
   `test/ui/schedule-swipe-row.test.tsx`, and `lib/notification-events.test.ts`.
-- `app/schedule/[id].tsx` — a real native large-title nav bar
+- `app/schedule/[id].tsx` — iOS uses the native large-title navigation bar
   (`headerLargeTitle` + `headerTransparent` on the `schedule/[id]`
   `Stack.Screen` in `app/_layout.tsx`, `contentInsetAdjustmentBehavior=
-  "automatic"` on the `ScrollView`) replaces an earlier hand-rolled
-  pinned-header overlay that had no opaque background of its own and let
-  scrolled content show through the title. Staff details follow the schedule
-  rules: staff-only items omit scan/visibility/publish fields, and
-  already-visible items omit the spent publish date. The reminder bell is a
-  proper `headerRight` item; back reads "Horario" via `headerBackTitle`.
-  Admins get a floating glass pencil (bottom-right, clear of the home
-  indicator) that opens the same `ScheduleFormModal` as the list's
-  swipe-to-edit.
+  "automatic"` on the `ScrollView`). Android uses the same in-screen glass
+  chrome as the Schedule tab: a single-line, tail-ellipsized title with back
+  and reminder actions, clear of its status-bar inset, rather than the native
+  Material app bar. The Android header is pinned above the scroll view; the
+  initial content is inset below it, then scrolls naturally underneath it.
+  Staff details follow the schedule rules: staff-only items omit
+  scan/visibility/publish fields, and already-visible items omit the spent
+  publish date. On iOS, the reminder bell is a proper `headerRight` item and
+  back reads "Horario" via `headerBackTitle`; on Android those actions live
+  in the custom header. Admins get a floating glass pencil (bottom-right,
+  clear of the home indicator) that opens the same `ScheduleFormModal` as the
+  list's swipe-to-edit.
 
 ## Operator screens
 

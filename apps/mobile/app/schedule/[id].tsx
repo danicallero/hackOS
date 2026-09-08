@@ -1,11 +1,11 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView } from "@/components/glass-view";
-import { EmptyState } from "@/components/native-ui";
+import { EmptyState, LegacyHeaderIconButton } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import {
   ScheduleFormModal,
@@ -16,6 +16,7 @@ import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
+import { safeBack } from "@/lib/navigation";
 import {
   type AdminScheduleItem,
   collapseBlankLines,
@@ -36,16 +37,23 @@ import { itemCategory, useScheduleNotifications } from "@/lib/use-schedule-notif
 import { colors } from "@/theme/colors";
 
 const CONTENT_PADDING = 20;
+const noTextShadow = {
+  textShadowColor: "transparent" as const,
+  textShadowOffset: { height: 0, width: 0 },
+  textShadowRadius: 0,
+};
 
 const sectionHeaderStyle = {
   color: colors.secondaryLabel,
   fontSize: 13,
   fontWeight: "600" as const,
+  ...noTextShadow,
   textTransform: "uppercase" as const,
 };
 
 export default function ScheduleDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const { t, language } = useLocale();
   const { me } = useMeContext();
   const insets = useSafeAreaInsets();
@@ -84,6 +92,7 @@ export default function ScheduleDetailScreen() {
   // this screen keeps reading plain item.title/item.description unchanged.
   const item = rawItem ? { ...rawItem, ...resolveScheduleText(rawItem, language) } : null;
   const reminderOn = item && notifications.ready ? notifications.isEntrySubscribed(item) : null;
+  const usesCustomAndroidHeader = process.env.EXPO_OS === "android";
 
   async function saveEdit(
     values: ScheduleInput,
@@ -118,52 +127,133 @@ export default function ScheduleDetailScreen() {
     startsAt && endsAt
       ? `${startsAt.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" })}–${endsAt.toLocaleTimeString(language, { hour: "2-digit", minute: "2-digit" })}`
       : null;
+  const headerTitle = truncateHeaderTitle(item?.title ?? t("scheduleDetails"));
 
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: item?.title ?? (process.env.EXPO_OS === "android" ? t("scheduleDetails") : ""),
-          headerRight:
-            item && reminderOn !== null
-              ? () => (
-                  <Pressable
-                    accessibilityLabel={t(
-                      reminderOn ? "scheduleReminderOn" : "scheduleReminderOff",
-                      {
-                        name: item.title,
-                      },
-                    )}
-                    accessibilityRole="button"
-                    accessibilityState={{
-                      selected: reminderOn,
-                      busy: notifications.savingKey === itemCategory(item.id),
-                    }}
-                    disabled={notifications.savingKey === itemCategory(item.id)}
-                    hitSlop={12}
-                    onPress={() => void notifications.toggleEntry(item)}
-                    style={{
-                      opacity: notifications.savingKey === itemCategory(item.id) ? 0.4 : 1,
-                    }}
-                  >
-                    <SymbolView
-                      name={reminderOn ? "bell.fill" : "bell"}
-                      tintColor={reminderOn ? colors.accent : colors.label}
-                      size={20}
-                    />
-                  </Pressable>
-                )
-              : undefined,
-        }}
-      />
+      {usesCustomAndroidHeader ? (
+        <View
+          style={{
+            alignItems: "center",
+            backgroundColor: colors.background,
+            flexDirection: "row",
+            gap: 8,
+            height: insets.top + 60,
+            left: 0,
+            paddingBottom: 4,
+            paddingHorizontal: 16,
+            paddingTop: insets.top + 8,
+            position: "absolute",
+            right: 0,
+            shadowColor: "#000000",
+            shadowOffset: { height: 2, width: 0 },
+            shadowOpacity: 0.08,
+            shadowRadius: 6,
+            top: 0,
+            zIndex: 10,
+          }}
+        >
+          <GlassView
+            colorScheme="auto"
+            glassEffectStyle="regular"
+            isInteractive
+            style={{ borderRadius: 22, height: 44, width: 44 }}
+          >
+            <LegacyHeaderIconButton
+              accessibilityLabel={t("back")}
+              icon="chevron.left"
+              onPress={() => safeBack(router, "/(tabs)/schedule")}
+            />
+          </GlassView>
+          <Text
+            ellipsizeMode="tail"
+            numberOfLines={1}
+            selectable
+            style={[
+              noTextShadow,
+              {
+                color: colors.label,
+                flex: 1,
+                flexBasis: 0,
+                fontSize: 24,
+                fontWeight: "800",
+                flexShrink: 1,
+                height: 30,
+                includeFontPadding: false,
+                lineHeight: 30,
+                minWidth: 0,
+                overflow: "hidden",
+                width: 0,
+              },
+            ]}
+          >
+            {headerTitle}
+          </Text>
+          {item && reminderOn !== null ? (
+            <GlassView
+              colorScheme="auto"
+              glassEffectStyle="regular"
+              isInteractive
+              style={{ borderRadius: 22, height: 44, width: 44 }}
+            >
+              <LegacyHeaderIconButton
+                accessibilityLabel={t(reminderOn ? "scheduleReminderOn" : "scheduleReminderOff", {
+                  name: item.title,
+                })}
+                accessibilityState={{ selected: reminderOn }}
+                icon={reminderOn ? "bell.fill" : "bell"}
+                tintColor={reminderOn ? colors.accent : colors.label}
+                onPress={() => void notifications.toggleEntry(item)}
+              />
+            </GlassView>
+          ) : null}
+        </View>
+      ) : (
+        <Stack.Screen
+          options={{
+            title: "",
+            headerRight:
+              item && reminderOn !== null
+                ? () => (
+                    <Pressable
+                      accessibilityLabel={t(
+                        reminderOn ? "scheduleReminderOn" : "scheduleReminderOff",
+                        {
+                          name: item.title,
+                        },
+                      )}
+                      accessibilityRole="button"
+                      accessibilityState={{
+                        selected: reminderOn,
+                        busy: notifications.savingKey === itemCategory(item.id),
+                      }}
+                      disabled={notifications.savingKey === itemCategory(item.id)}
+                      hitSlop={12}
+                      onPress={() => void notifications.toggleEntry(item)}
+                      style={{
+                        opacity: notifications.savingKey === itemCategory(item.id) ? 0.4 : 1,
+                      }}
+                    >
+                      <SymbolView
+                        name={reminderOn ? "bell.fill" : "bell"}
+                        tintColor={reminderOn ? colors.accent : colors.label}
+                        size={20}
+                      />
+                    </Pressable>
+                  )
+                : undefined,
+          }}
+        />
+      )}
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{
           flexGrow: 1,
           paddingBottom: 40,
           paddingHorizontal: CONTENT_PADDING,
+          paddingTop: usesCustomAndroidHeader ? insets.top + 76 : 0,
         }}
-        style={{ backgroundColor: colors.background }}
+        style={{ backgroundColor: colors.background, flex: 1 }}
       >
         <View style={{ gap: 8 }}>
           <StaleDataBanner updatedAt={staleSince} />
@@ -194,7 +284,10 @@ export default function ScheduleDetailScreen() {
             {detailItem?.description ? (
               <View style={{ gap: 10 }}>
                 <Text style={sectionHeaderStyle}>{t("scheduleDescription")}</Text>
-                <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 24 }}>
+                <Text
+                  selectable
+                  style={[noTextShadow, { color: colors.label, fontSize: 16, lineHeight: 24 }]}
+                >
                   {collapseBlankLines(detailItem.description)}
                 </Text>
               </View>
@@ -265,7 +358,7 @@ export default function ScheduleDetailScreen() {
                       />
                     ) : null}
                   </View>
-                  <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                  <Text style={[noTextShadow, { color: colors.secondaryLabel, fontSize: 13 }]}>
                     {t("scheduleStaffSeeAllHint")}
                   </Text>
                 </View>
@@ -289,7 +382,10 @@ export default function ScheduleDetailScreen() {
             {detailItem?.owners ? (
               <View style={{ gap: 8 }}>
                 <Text style={sectionHeaderStyle}>{t("scheduleOwnersLabel")}</Text>
-                <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 24 }}>
+                <Text
+                  selectable
+                  style={[noTextShadow, { color: colors.label, fontSize: 16, lineHeight: 24 }]}
+                >
                   {detailItem.owners.length > 0
                     ? detailItem.owners.map(ownerDisplayName).join(", ")
                     : t("scheduleOwnersEmpty")}
@@ -369,11 +465,22 @@ function ownerDisplayName(owner: ScheduleOwner): string {
   return [owner.name, owner.surname].filter(Boolean).join(" ").trim() || owner.email || "";
 }
 
+function truncateHeaderTitle(title: string): string {
+  // Keep the fallback header deterministic on Android. Its Text ellipsize
+  // implementation can wrap before applying the tail ellipsis when it sits
+  // between two fixed-size icon buttons.
+  const maxCharacters = 22;
+  return title.length > maxCharacters ? `${title.slice(0, maxCharacters - 1)}…` : title;
+}
+
 function DetailTextSection({ label, value }: { label: string; value: string }) {
   return (
     <View style={{ gap: 10 }}>
       <Text style={sectionHeaderStyle}>{label}</Text>
-      <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 24 }}>
+      <Text
+        selectable
+        style={[noTextShadow, { color: colors.label, fontSize: 16, lineHeight: 24 }]}
+      >
         {collapseBlankLines(value)}
       </Text>
     </View>
@@ -401,10 +508,10 @@ function PlainInfoRow({
         paddingVertical: 14,
       }}
     >
-      <Text selectable style={{ color: colors.secondaryLabel, fontSize: 16 }}>
+      <Text selectable style={[noTextShadow, { color: colors.secondaryLabel, fontSize: 16 }]}>
         {label}
       </Text>
-      <Text selectable style={{ color: colors.label, fontSize: 16 }}>
+      <Text selectable style={[noTextShadow, { color: colors.label, fontSize: 16 }]}>
         {value}
       </Text>
     </View>

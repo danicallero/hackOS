@@ -25,6 +25,7 @@ let mockSchedule: MockScheduleItem[] = [mockActivity];
 
 jest.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ id: "1" }),
+  useRouter: () => ({ back: jest.fn(), canGoBack: () => true, replace: jest.fn() }),
 }));
 jest.mock("expo-router/stack", () => ({
   __esModule: true,
@@ -33,7 +34,10 @@ jest.mock("expo-router/stack", () => ({
   },
 }));
 jest.mock("@/components/glass-view", () => ({ GlassView: () => null }));
-jest.mock("@/components/native-ui", () => ({ EmptyState: () => null }));
+jest.mock("@/components/native-ui", () => ({
+  EmptyState: () => null,
+  LegacyHeaderIconButton: () => null,
+}));
 jest.mock("@/components/RequestFeedback", () => ({ RequestFeedback: () => null }));
 jest.mock("@/components/schedule-form-modal", () => ({
   ScheduleFormModal: () => null,
