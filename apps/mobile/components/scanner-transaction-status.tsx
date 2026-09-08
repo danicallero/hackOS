@@ -52,48 +52,102 @@ function ClockSkewBanner() {
   );
 }
 
-export function findSubject(scan: PendingScan, people: ScannerPerson[]): ScannerPerson | undefined {
+/**
+ * O(1) alternative to scanning `people` per lookup — built once per roster
+ * snapshot (see `buildPeopleIndex`) so a screen rendering many scans (e.g.
+ * sync-queue-screen.tsx's full offline queue) doesn't rescan the whole
+ * roster for every row.
+ */
+export interface PeopleLookup {
+  byTicketToken(token: string): ScannerPerson | undefined;
+  byUserId(userId: number): ScannerPerson | undefined;
+  /** Matches either a person's current `badgeId` or one of their `revokedBadgeIds`. */
+  byBadgeId(badgeId: string): ScannerPerson | undefined;
+}
+
+function arrayPeopleLookup(people: ScannerPerson[]): PeopleLookup {
+  return {
+    byTicketToken: (token) => people.find((person) => person.ticketToken === token),
+    byUserId: (userId) => people.find((person) => person.userId === userId),
+    byBadgeId: (badgeId) =>
+      people.find(
+        (person) => person.badgeId === badgeId || person.revokedBadgeIds.includes(badgeId),
+      ),
+  };
+}
+
+export function buildPeopleIndex(people: ScannerPerson[]): PeopleLookup {
+  const byTicketToken = new Map<string, ScannerPerson>();
+  const byUserId = new Map<number, ScannerPerson>();
+  const byBadgeId = new Map<string, ScannerPerson>();
+  for (const person of people) {
+    if (person.ticketToken && !byTicketToken.has(person.ticketToken)) {
+      byTicketToken.set(person.ticketToken, person);
+    }
+    if (!byUserId.has(person.userId)) byUserId.set(person.userId, person);
+    if (person.badgeId && !byBadgeId.has(person.badgeId)) byBadgeId.set(person.badgeId, person);
+    for (const revoked of person.revokedBadgeIds) {
+      if (!byBadgeId.has(revoked)) byBadgeId.set(revoked, person);
+    }
+  }
+  return {
+    byTicketToken: (token) => byTicketToken.get(token),
+    byUserId: (userId) => byUserId.get(userId),
+    byBadgeId: (badgeId) => byBadgeId.get(badgeId),
+  };
+}
+
+export function findSubject(
+  scan: PendingScan,
+  people: ScannerPerson[] | PeopleLookup,
+): ScannerPerson | undefined {
+  const lookup = Array.isArray(people) ? arrayPeopleLookup(people) : people;
   const p = scan.payload;
   switch (p.kind) {
     case "accreditation":
-      return people.find((person) => person.ticketToken === p.ticketToken);
+      return lookup.byTicketToken(p.ticketToken);
     case "accreditation_user":
     case "badge_rotation":
     case "badge_removal":
-      return people.find((person) => person.userId === p.userId);
+      return lookup.byUserId(p.userId);
     case "presence":
     case "activity":
-      return people.find(
-        (person) => person.badgeId === p.badgeId || person.revokedBadgeIds.includes(p.badgeId),
-      );
+      return lookup.byBadgeId(p.badgeId);
     case "presence_signal":
     case "presence_signal_activity":
-      return people.find((person) => person.userId === p.userId);
+      return lookup.byUserId(p.userId);
     case "presence_signal_edit_door":
     case "presence_signal_edit_activity":
       return undefined;
     case "presence_signal_delete": {
-      const byUserId =
-        p.userId === undefined ? undefined : people.find((person) => person.userId === p.userId);
+      const byUserId = p.userId === undefined ? undefined : lookup.byUserId(p.userId);
       if (byUserId) return byUserId;
       const badgeId = p.badgeId;
       if (!badgeId) return undefined;
-      return people.find(
-        (person) => person.badgeId === badgeId || person.revokedBadgeIds.includes(badgeId),
-      );
+      return lookup.byBadgeId(badgeId);
     }
   }
 }
 
-export function subjectLabel(scan: PendingScan, people: ScannerPerson[]): string | null {
+export function subjectLabel(
+  scan: PendingScan,
+  people: ScannerPerson[] | PeopleLookup,
+): string | null {
   const person = findSubject(scan, people);
   if (!person) return null;
   return [person.name, person.surname].filter(Boolean).join(" ") || person.email;
 }
 
+function findActivityById(
+  activities: ScannerActivity[] | Map<number, ScannerActivity>,
+  id: number,
+): ScannerActivity | undefined {
+  return Array.isArray(activities) ? activities.find((a) => a.id === id) : activities.get(id);
+}
+
 export function detailLabel(
   scan: PendingScan,
-  activities: ScannerActivity[],
+  activities: ScannerActivity[] | Map<number, ScannerActivity>,
   t: ReturnType<typeof useLocale>["t"],
 ): string {
   const p = scan.payload;
@@ -108,13 +162,13 @@ export function detailLabel(
     case "presence":
       return `${p.badgeId} · ${p.direction === "in" ? t("presenceSignalEntry") : t("presenceSignalExit")}`;
     case "activity": {
-      const activity = activities.find((a) => a.id === p.activityId);
+      const activity = findActivityById(activities, p.activityId);
       return `${p.badgeId} · ${activity?.name ?? `#${p.activityId}`}`;
     }
     case "presence_signal":
       return `#${p.userId} · ${p.direction === "in" ? t("presenceSignalEntry") : t("presenceSignalExit")}`;
     case "presence_signal_activity":
-      return `#${p.userId} · ${activities.find((a) => a.id === p.activityId)?.name ?? `#${p.activityId}`}`;
+      return `#${p.userId} · ${findActivityById(activities, p.activityId)?.name ?? `#${p.activityId}`}`;
     case "presence_signal_edit_door":
       return `${t("edit")} · #${p.logId}`;
     case "presence_signal_edit_activity":
@@ -129,8 +183,7 @@ export function detailLabel(
             : null
           : p.activityId == null
             ? null
-            : (activities.find((activity) => activity.id === p.activityId)?.name ??
-              `#${p.activityId}`);
+            : (findActivityById(activities, p.activityId)?.name ?? `#${p.activityId}`);
       return [
         t("delete"),
         p.source === "door" ? t("scannerPresence") : t("scannerActivity"),

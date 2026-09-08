@@ -1,5 +1,5 @@
 import { useScrollToTop } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -20,8 +20,10 @@ import {
 } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import {
+  buildPeopleIndex,
   detailLabel,
   ManualLogDetails,
+  type PeopleLookup,
   scannerOperationLabel,
   subjectLabel,
 } from "@/components/scanner-transaction-status";
@@ -96,6 +98,33 @@ export default function SyncQueueScreen() {
     return current;
   }, [filter, sync.queue]);
 
+  // O(1) lookups shared by every row instead of each one scanning the full
+  // roster/activity list/queue on its own — this screen can show hundreds of
+  // queued scans after a device was offline for a while.
+  const peopleIndex = useMemo(() => buildPeopleIndex(people), [people]);
+  const activitiesById = useMemo(
+    () => new Map(activities.map((activity) => [activity.id, activity])),
+    [activities],
+  );
+  const queueById = useMemo(() => new Map(sync.queue.map((scan) => [scan.id, scan])), [sync.queue]);
+
+  const discard = useCallback(
+    (id: string) => {
+      Alert.alert(t("scannerDiscardScanTitle"), t("scannerDiscardScanBody"), [
+        { text: t("cancel"), style: "cancel" },
+        {
+          text: t("scannerDiscardScan"),
+          style: "destructive",
+          onPress: () => {
+            void haptic("warning");
+            void sync.discardScan(id);
+          },
+        },
+      ]);
+    },
+    [t, sync.discardScan],
+  );
+
   if (loading && !me) {
     return (
       <View style={{ flex: 1, justifyContent: "center" }}>
@@ -124,20 +153,6 @@ export default function SyncQueueScreen() {
   const health = queueHealth(sync.queue);
   const failedCount = sync.queue.filter((scan) => scan.status === "failed").length;
   const syncError = sync.autoRetryPaused && sync.error ? sync.error : null;
-
-  function discard(id: string) {
-    Alert.alert(t("scannerDiscardScanTitle"), t("scannerDiscardScanBody"), [
-      { text: t("cancel"), style: "cancel" },
-      {
-        text: t("scannerDiscardScan"),
-        style: "destructive",
-        onPress: () => {
-          void haptic("warning");
-          void sync.discardScan(id);
-        },
-      },
-    ]);
-  }
 
   return (
     <ScrollView
@@ -260,11 +275,13 @@ export default function SyncQueueScreen() {
               {index > 0 ? <Separator inset={16} /> : null}
               <QueueRow
                 activities={activities}
+                activitiesById={activitiesById}
                 canManage={canManage}
                 people={people}
+                peopleIndex={peopleIndex}
                 scan={scan}
-                onDiscard={() => discard(scan.id)}
-                onRetry={() => void sync.retryOne(scan.id)}
+                onDiscard={discard}
+                onRetry={sync.retryOne}
               />
             </View>
           ))}
@@ -281,10 +298,10 @@ export default function SyncQueueScreen() {
             <View key={entry.id}>
               {index > 0 ? <Separator inset={16} /> : null}
               <ErrorHistoryRow
-                activities={activities}
+                activitiesById={activitiesById}
                 entry={entry}
-                people={people}
-                scan={sync.queue.find((queuedScan) => queuedScan.id === entry.scanId)}
+                peopleIndex={peopleIndex}
+                scan={queueById.get(entry.scanId)}
               />
             </View>
           ))
@@ -314,23 +331,29 @@ function queueHealth(queue: PendingScan[]) {
   );
 }
 
-function QueueRow({
+const QueueRow = memo(function QueueRow({
   scan,
   people,
+  peopleIndex,
   activities,
+  activitiesById,
   canManage,
   onRetry,
   onDiscard,
 }: {
   scan: PendingScan;
+  /** Raw roster, only needed for `ManualLogDetails`'s own (rarer) lookups. */
   people: ScannerPerson[];
+  peopleIndex: PeopleLookup;
+  /** Raw activities, only needed for `ManualLogDetails`'s own (rarer) lookups. */
   activities: ScannerActivity[];
+  activitiesById: Map<number, ScannerActivity>;
   canManage: boolean;
-  onRetry: () => void;
-  onDiscard: () => void;
+  onRetry: (id: string) => void;
+  onDiscard: (id: string) => void;
 }) {
   const { t } = useLocale();
-  const subject = subjectLabel(scan, people);
+  const subject = subjectLabel(scan, peopleIndex);
   const status = queueStatus(scan, t);
   return (
     <View style={{ gap: 8, padding: 16 }}>
@@ -344,7 +367,7 @@ function QueueRow({
             numberOfLines={2}
             style={{ color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 }}
           >
-            {scannerOperationLabel(scan, t)} · {detailLabel(scan, activities, t)}
+            {scannerOperationLabel(scan, t)} · {detailLabel(scan, activitiesById, t)}
           </Text>
         </View>
         <StatusPill tone={status.tone}>{status.label}</StatusPill>
@@ -374,33 +397,37 @@ function QueueRow({
       ) : null}
       {scan.status === "failed" && canManage ? (
         <View style={{ flexDirection: "row", gap: 8, justifyContent: "flex-end", paddingLeft: 29 }}>
-          <CompactAction icon="arrow.clockwise" label={t("retry")} onPress={onRetry} />
+          <CompactAction
+            icon="arrow.clockwise"
+            label={t("retry")}
+            onPress={() => onRetry(scan.id)}
+          />
           <CompactAction
             destructive
             icon="trash"
             label={t("scannerDiscardScan")}
-            onPress={onDiscard}
+            onPress={() => onDiscard(scan.id)}
           />
         </View>
       ) : null}
     </View>
   );
-}
+});
 
-function ErrorHistoryRow({
+const ErrorHistoryRow = memo(function ErrorHistoryRow({
   entry,
   scan,
-  people,
-  activities,
+  peopleIndex,
+  activitiesById,
 }: {
   entry: ScannerSyncErrorEntry;
   scan?: PendingScan;
-  people: ScannerPerson[];
-  activities: ScannerActivity[];
+  peopleIndex: PeopleLookup;
+  activitiesById: Map<number, ScannerActivity>;
 }) {
   const { t } = useLocale();
   const context = scan
-    ? `${subjectLabel(scan, people) ?? scannerOperationLabel(scan, t)} · ${detailLabel(scan, activities, t)}`
+    ? `${subjectLabel(scan, peopleIndex) ?? scannerOperationLabel(scan, t)} · ${detailLabel(scan, activitiesById, t)}`
     : null;
   return (
     <View style={{ gap: 5, padding: 16 }}>
@@ -436,7 +463,7 @@ function ErrorHistoryRow({
       </Text>
     </View>
   );
-}
+});
 
 function CompactAction({
   label,

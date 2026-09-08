@@ -1,7 +1,7 @@
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { type BarcodeScanningResult, CameraView, useCameraPermissions } from "expo-camera";
 import { useIsFocused } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Keyboard,
   Modal,
@@ -113,6 +113,31 @@ export function QrCamera({
     onValue(value);
   }
 
+  const handleBarcodeScanned = useCallback(
+    (result: BarcodeScanningResult) => {
+      if (locked.current) return;
+      const observation = getBarcodeFrameObservation(result, { height, width }, FRAME);
+      if (!observation) {
+        scanCandidate.current = null;
+        return;
+      }
+      const confirmation = advanceQrScanCandidate(
+        scanCandidate.current,
+        result.data,
+        observation,
+        Date.now(),
+      );
+      scanCandidate.current = confirmation.candidate;
+      if (!confirmation.accepted) return;
+      locked.current = true;
+      onValue(result.data);
+      setTimeout(() => {
+        locked.current = false;
+      }, 1200);
+    },
+    [height, width, onValue],
+  );
+
   if (!permission) return <View style={styles.black} />;
   if (!permission.granted) {
     return (
@@ -177,29 +202,7 @@ export function QrCamera({
           enableTorch={cameraControls.showTorch && torchEnabled}
           barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
           onBarcodeScanned={
-            scanningEnabled && !manualEntryVisible
-              ? (result: BarcodeScanningResult) => {
-                  if (locked.current) return;
-                  const observation = getBarcodeFrameObservation(result, { height, width }, FRAME);
-                  if (!observation) {
-                    scanCandidate.current = null;
-                    return;
-                  }
-                  const confirmation = advanceQrScanCandidate(
-                    scanCandidate.current,
-                    result.data,
-                    observation,
-                    Date.now(),
-                  );
-                  scanCandidate.current = confirmation.candidate;
-                  if (!confirmation.accepted) return;
-                  locked.current = true;
-                  onValue(result.data);
-                  setTimeout(() => {
-                    locked.current = false;
-                  }, 1200);
-                }
-              : undefined
+            scanningEnabled && !manualEntryVisible ? handleBarcodeScanned : undefined
           }
         />
       ) : null}

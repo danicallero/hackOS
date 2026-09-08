@@ -1,7 +1,7 @@
 import { MenuView } from "@expo/ui/community/menu";
 import { EVENTS, type SseEnvelope } from "@hackos/shared/events";
 import { useFocusEffect, useNavigation, usePathname, useRouter } from "expo-router";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
   FlatList,
   Pressable,
@@ -245,6 +245,17 @@ export function QueueOperationsScreen() {
     [load, t],
   );
 
+  const renderTeamQueueCard = useCallback(
+    ({ item }: { item: QueueSearchResult }) => (
+      <TeamQueueCard
+        result={item}
+        highlighted={justCalledEntryIds.has(item.entry.id)}
+        onPress={openTeam}
+      />
+    ),
+    [justCalledEntryIds, openTeam],
+  );
+
   if (!canOperate) {
     return (
       <EmptyState
@@ -299,16 +310,22 @@ export function QueueOperationsScreen() {
             description={t("queueOpsNoSearchResults")}
           />
         }
-        renderItem={({ item }) => (
-          <TeamQueueCard
-            result={item}
-            highlighted={justCalledEntryIds.has(item.entry.id)}
-            onPress={() => openTeam(item.entry.id, item.rooms[0].id)}
-          />
-        )}
+        renderItem={renderTeamQueueCard}
       />
     );
   }
+
+  const renderRoomCard = ({ item }: { item: RoomView }) => (
+    <RoomCard
+      room={item}
+      busyEntryId={notifyingEntryId}
+      notifiedEntryId={notifiedEntryId}
+      justCalledEntryIds={justCalledEntryIds}
+      columns={columns}
+      onNotify={notifyTeam}
+      onOpenTeam={openTeam}
+    />
+  );
 
   return (
     <FlatList
@@ -346,17 +363,7 @@ export function QueueOperationsScreen() {
           />
         )
       }
-      renderItem={({ item }) => (
-        <RoomCard
-          room={item}
-          busyEntryId={notifyingEntryId}
-          notifiedEntryId={notifiedEntryId}
-          justCalledEntryIds={justCalledEntryIds}
-          columns={columns}
-          onNotify={notifyTeam}
-          onOpenTeam={openTeam}
-        />
-      )}
+      renderItem={renderRoomCard}
     />
   );
 }
@@ -412,14 +419,14 @@ function SearchResultCount({ count }: { count: number }) {
 }
 
 /** Same card the participant sees on their own My Queue screen, plus the rooms and a tap-through to more detail. */
-function TeamQueueCard({
+const TeamQueueCard = memo(function TeamQueueCard({
   result,
   highlighted,
   onPress,
 }: {
   result: QueueSearchResult;
   highlighted: boolean;
-  onPress: () => void;
+  onPress: (entryId: number, roomId: number) => void;
 }) {
   const { t } = useLocale();
   const { entry, rooms, challengeTitle } = result;
@@ -431,7 +438,7 @@ function TeamQueueCard({
     <Pressable
       accessibilityRole="button"
       accessibilityHint={t("queueOpsViewTeamHint")}
-      onPress={onPress}
+      onPress={() => onPress(entry.id, rooms[0].id)}
       style={({ pressed }) => ({
         backgroundColor: colors.surface,
         borderColor: highlighted ? colors.accent : "transparent",
@@ -522,7 +529,7 @@ function TeamQueueCard({
       )}
     </Pressable>
   );
-}
+});
 
 function QueueMetric({
   icon,
@@ -588,7 +595,7 @@ function RoomChip({ room }: { room: QueueRoom }) {
   );
 }
 
-function RoomCard({
+const RoomCard = memo(function RoomCard({
   room,
   columns,
   busyEntryId,
@@ -787,7 +794,7 @@ function RoomCard({
       />
     </View>
   );
-}
+});
 
 function QueueSlot({
   icon,

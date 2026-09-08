@@ -1,5 +1,5 @@
 import * as Network from "expo-network";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import { ApiError, apiFetch } from "./api";
 import { readCachedValue, writeCachedValue } from "./offline-cache";
@@ -126,5 +126,12 @@ export function useMe(enabled: boolean) {
     return () => subscription.remove();
   }, [enabled, offline, refetch]);
 
-  return { me, loading, error, offline, staleSince, refetch };
+  // Memoized so MeProvider's context value stays referentially stable across
+  // renders that don't change any of these fields — otherwise every consumer
+  // of useMeContext() re-renders on each revalidation (e.g. iOS briefly
+  // marking the app inactive), regardless of whether its own data changed.
+  return useMemo(
+    () => ({ me, loading, error, offline, staleSince, refetch }),
+    [me, loading, error, offline, staleSince, refetch],
+  );
 }
