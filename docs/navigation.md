@@ -23,9 +23,9 @@ Web: `apps/web/src/lib/nav.ts` (data) + `apps/web/src/components/layout/app-side
 
 ## Principle
 
-Every navigation decision is a function of **effective capabilities and
-association facts** (is this account on an enterprise judge roster? a
-linked sponsor rep?),
+Every navigation decision is a function of **effective capabilities,
+role-derived event access, and association facts** (is this account on an
+enterprise judge roster? a linked sponsor rep?),
 never of the illustrative `role` string (`apps/api/src/modules/identity/role.ts`
 computes a single-priority `role` for *display* only — admin > judge > sponsor
 > staff > participant — and explicitly says it must never gate a permission
@@ -45,9 +45,9 @@ sponsor workspace if nav gated on `role` instead.
 
 Visible to any authenticated account, no capability required: Schedule, My
 applications, My project, My queue, Wallet, Inbox, My profile — except for a
-**pure applicant**: an account with no confirmed spot (`GET /api/me`'s
-`hasEventAccess`, `apps/api/src/modules/identity/role.ts#hasEventAccess`), no
-operational capability, and no room-judge/sponsor-rep association
+**pure applicant**: an account with no role-derived event access (`GET
+/api/me`'s `hasEventAccess`, `apps/api/src/modules/identity/role.ts#hasEventAccess`),
+no operational capability, and no room-judge/sponsor-rep association
 (`isPureApplicant` in `apps/web/src/lib/session.tsx`). That account has
 nothing to do yet on My project, My queue, Wallet, or Inbox, so those four
 hide (`NavItem.hideForPureApplicant` in `nav.ts`) — Schedule, My applications,

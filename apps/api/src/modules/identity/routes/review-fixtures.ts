@@ -10,7 +10,7 @@ import { requireCapability } from "../../../lib/capabilities.js";
 import { ServiceUnavailableError } from "../../../lib/errors.js";
 import { idempotencyGuard } from "../../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
-import { issueTicket } from "../../logistics/tickets.js";
+import { reconcileTicketAccess } from "../../logistics/tickets.js";
 import { auth } from "../auth.js";
 import { purgeReviewFixtureAccount } from "../removal.js";
 import { purgeReviewFixtureQueue } from "../review-fixture-queues.js";
@@ -142,9 +142,9 @@ async function configureFixtureStaffRole(client: import("pg").PoolClient): Promi
   // manage it via requireRoleMutationAuthority (fixtures are seeded by an
   // already-wildcard-holding reviewer flow, not through the roles API).
   const { rows } = await client.query<{ id: number }>(
-    `INSERT INTO roles (name, position)
-     VALUES ('App review exit staff', -900000)
-     ON CONFLICT (name) DO UPDATE SET position = EXCLUDED.position
+    `INSERT INTO roles (name, position, event_access)
+     VALUES ('App review exit staff', -900000, true)
+     ON CONFLICT (name) DO UPDATE SET position = EXCLUDED.position, event_access = true
      RETURNING id`,
   );
   const roleId = rows[0]?.id;
@@ -169,7 +169,7 @@ async function configureFixtureParticipant(
 ): Promise<void> {
   await assignAttendeeRole(client, userId, "participant", actorId);
   // A used account-claim token is the existing, non-application path that
-  // grants a manually-created participant mobile access.
+  // records a manually-created participant's legacy access history.
   await client.query(
     `INSERT INTO email_verification_tokens
        (token, type, email, user_id, kind, expires_at, used_at)
@@ -177,7 +177,7 @@ async function configureFixtureParticipant(
        FROM users WHERE id = $2`,
     [`review-claim-${generation}-${fixtureKey}-${randomUUID()}`, userId],
   );
-  await issueTicket(client, userId);
+  await reconcileTicketAccess(client, userId);
 
   if (fixtureKey === "participant-delete") return;
 
@@ -385,6 +385,7 @@ export function registerReviewFixtureRoutes(app: FastifyInstance): void {
             `INSERT INTO user_roles (user_id, role_id, assigned_by) VALUES ($1, $2, $3)`,
             [staff.id, staffRoleId, req.userId],
           );
+          await reconcileTicketAccess(client, staff.id);
           for (const fixture of FIXTURE_DEFINITIONS) {
             if (fixture.kind !== "participant") continue;
             const account = created.get(fixture.key);

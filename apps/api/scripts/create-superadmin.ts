@@ -72,7 +72,7 @@ async function main(): Promise<void> {
   const { rows: existingUserRows } = await pool.query(`SELECT id FROM users WHERE email = $1`, [
     email,
   ]);
-  const existingUserId = existingUserRows.length > 0 ? (existingUserRows[0].id as number) : null;
+  const existingUserId = existingUserRows.length > 0 ? Number(existingUserRows[0].id) : null;
 
   let userId: number;
   let action: "create_superadmin" | "grant_superadmin";
@@ -106,10 +106,10 @@ async function main(): Promise<void> {
     // real, auditable state (who holds it), but is_visible = false keeps it
     // out of the highest-position-visible-role computation (role.ts).
     const { rows: roleRows } = await client.query(
-      `INSERT INTO roles (name, position, is_protected, is_visible)
-       VALUES ($1, $2, true, false)
+      `INSERT INTO roles (name, position, is_protected, is_visible, event_access)
+       VALUES ($1, $2, true, false, true)
        ON CONFLICT (name) DO UPDATE SET
-         position = EXCLUDED.position, is_protected = true, is_visible = false
+         position = EXCLUDED.position, is_protected = true, is_visible = false, event_access = true
        RETURNING id`,
       [roleName, position],
     );
@@ -127,6 +127,13 @@ async function main(): Promise<void> {
        VALUES ($1, $2, $1)
        ON CONFLICT DO NOTHING`,
       [userId, roleId],
+    );
+    await client.query(
+      `INSERT INTO tickets (user_id, token)
+       SELECT $1::integer, 'superadmin-ticket-' || $1::integer || '-' || md5(random()::text || clock_timestamp()::text)
+        WHERE EXISTS (SELECT 1 FROM user_event_access WHERE user_id = $1::integer)
+       ON CONFLICT (user_id) DO NOTHING`,
+      [userId],
     );
 
     await client.query(

@@ -1,5 +1,5 @@
 import { pool } from "../../src/db/pool.js";
-import { ensureApplicationFormVersion } from "../helpers.js";
+import { ensureApplicationFormVersion, grantAttendeeRole } from "../helpers.js";
 
 /**
  * Devpost-shaped CSV fixtures (H16). Header names mirror real Devpost
@@ -99,10 +99,11 @@ export async function createChallenge(title: string, devpostTags: string[]): Pro
 }
 
 /**
- * H19/H20 self-service eligibility: `isAdmittedParticipant` only needs an
- * `application_responses` row in ('accepted', 'confirmed') for that user —
- * any application type. Inserts a throwaway `applications` row to hang it
- * off, mirroring what a real accepted participant application looks like.
+ * H19/H20 self-service eligibility: an admitted participant has both the
+ * historical accepted application response and the event-bearing Participant
+ * role that now drives app/ticket entitlement. Inserts a throwaway
+ * `applications` row to hang it off, mirroring a real accepted participant
+ * application and its resulting role assignment.
  */
 export async function admitParticipant(userId: number): Promise<void> {
   const application = await pool.query(
@@ -116,6 +117,7 @@ export async function admitParticipant(userId: number): Promise<void> {
      VALUES ($1, $2, $3, 'accepted')`,
     [userId, application.rows[0].id, formVersionId],
   );
+  await grantAttendeeRole(userId, "participant");
 }
 
 /**

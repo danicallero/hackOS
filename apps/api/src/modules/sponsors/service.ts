@@ -1,14 +1,18 @@
+import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { TRIGGER_EVENTS } from "@hackos/shared/role-grant-triggers";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { lockRoleGraph } from "../identity/role-authority.js";
 import { applyRoleGrantRule } from "../identity/role-grants.js";
+import { broadcastForActiveUser } from "../logistics/active-broadcast.js";
 import {
   assertFixtureEnterpriseScope,
   assertFixtureSubjectScope,
   isSyntheticOperator,
 } from "../logistics/review-fixture-scope.js";
-import { issueTicket } from "../logistics/tickets.js";
+import { reconcileTicketAccess } from "../logistics/tickets.js";
+import { enqueueWalletSync } from "../logistics/wallet-sync.js";
 import type { CreateEnterpriseBody, FaqItem, UpdateEnterpriseBody } from "./schemas.js";
 
 const COLUMNS = `id, name, website, logo_url,
@@ -67,6 +71,19 @@ async function assertEnterpriseScope(
 
 function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: string }).code === "23505";
+}
+
+async function publishTicketAccess(
+  userId: number,
+  access: { eventAccess: boolean; voidedPassIds: number[] },
+): Promise<void> {
+  await broadcastForActiveUser(
+    userId,
+    `${SSE_TOPICS.USER_PREFIX}${userId}`,
+    EVENTS.LOGISTICS_WALLET_PASS_UPDATED,
+    { purpose: "ticket", status: access.eventAccess ? "updated" : "voided" },
+  );
+  await enqueueWalletSync(access.voidedPassIds);
 }
 
 export async function getEnterprise(id: number) {
@@ -312,7 +329,8 @@ export async function addEnterpriseMember(
 ): Promise<EnterpriseMember> {
   await assertEnterpriseScope(pool, actorId, enterpriseId);
   await getEnterprise(enterpriseId); // 404 if the enterprise is missing
-  const { member, user } = await withTransaction(async (client) => {
+  const { member, user, ticketAccess } = await withTransaction(async (client) => {
+    await lockRoleGraph(client);
     // Serialize the target against H54 removal. A pending account must not
     // receive a new sponsor relation, ticket, or audit row while its
     // identity-bearing graph is being scrubbed.
@@ -338,7 +356,7 @@ export async function addEnterpriseMember(
       `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id, joined_at`,
       [enterpriseId, userId],
     );
-    await issueTicket(client, userId);
+
     // H8: the Sponsor role is granted through the generic role_grant_rules
     // mechanism, not an ad hoc user_roles write — see role-grants.ts. The
     // enterprise is passed as context so an admin can additionally (or
@@ -346,6 +364,7 @@ export async function addEnterpriseMember(
     await applyRoleGrantRule(client, userId, TRIGGER_EVENTS.SPONSOR_ENTERPRISE_LINKED, actorId, {
       enterpriseId,
     });
+    const ticketAccess = await reconcileTicketAccess(client, userId);
     await audit(client, {
       actorId,
       entityType: "enterprise",
@@ -353,8 +372,9 @@ export async function addEnterpriseMember(
       action: "member_added",
       after: { userId },
     });
-    return { member: rows[0], user: userRows[0] };
+    return { member: rows[0], user: userRows[0], ticketAccess };
   });
+  await publishTicketAccess(userId, ticketAccess);
   return {
     sponsorId: Number(member.id),
     userId,
@@ -372,7 +392,15 @@ export async function removeEnterpriseMember(
 ): Promise<void> {
   await assertEnterpriseScope(pool, actorId, enterpriseId);
   if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
-  await withTransaction(async (client) => {
+  const ticketAccess = await withTransaction(async (client) => {
+    await lockRoleGraph(client);
+    const { rows: userRows } = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!userRows[0]) throw new NotFoundError("User not found", { userId });
     const { rowCount } = await client.query(
       `DELETE FROM sponsors WHERE enterprise_id = $1 AND user_id = $2`,
       [enterpriseId, userId],
@@ -400,6 +428,7 @@ export async function removeEnterpriseMember(
         },
       );
     }
+    const ticketAccess = await reconcileTicketAccess(client, userId);
     await audit(client, {
       actorId,
       entityType: "enterprise",
@@ -407,7 +436,9 @@ export async function removeEnterpriseMember(
       action: "member_removed",
       after: { userId },
     });
+    return ticketAccess;
   });
+  await publishTicketAccess(userId, ticketAccess);
 }
 
 // ── judge roster (DELTA(Hxx): enterprise_judges replaces room_judges) ─────────
@@ -463,7 +494,8 @@ export async function addEnterpriseJudge(
 ): Promise<EnterpriseJudge> {
   await assertEnterpriseScope(pool, actorId, enterpriseId);
   await getEnterprise(enterpriseId);
-  return withTransaction(async (client) => {
+  const { judge, ticketAccess } = await withTransaction(async (client) => {
+    await lockRoleGraph(client);
     const { rows: userRows } = await client.query(
       `SELECT id FROM users
         WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
@@ -494,6 +526,7 @@ export async function addEnterpriseJudge(
     await applyRoleGrantRule(client, userId, TRIGGER_EVENTS.JUDGE_ENTERPRISE_ASSIGNED, actorId, {
       enterpriseId,
     });
+    const ticketAccess = await reconcileTicketAccess(client, userId);
     await audit(client, {
       actorId,
       entityType: "enterprise",
@@ -509,8 +542,10 @@ export async function addEnterpriseJudge(
           AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
       [enterpriseId, userId],
     );
-    return judgeRow(judges[0]);
+    return { judge: judgeRow(judges[0]), ticketAccess };
   });
+  await publishTicketAccess(userId, ticketAccess);
+  return judge;
 }
 
 /** Remove a judge; their contextual access to the enterprise's rooms goes with it. */
@@ -521,7 +556,15 @@ export async function removeEnterpriseJudge(
 ): Promise<void> {
   await assertEnterpriseScope(pool, actorId, enterpriseId);
   if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
-  await withTransaction(async (client) => {
+  const ticketAccess = await withTransaction(async (client) => {
+    await lockRoleGraph(client);
+    const { rows: userRows } = await client.query(
+      `SELECT id FROM users
+        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+        FOR UPDATE`,
+      [userId],
+    );
+    if (!userRows[0]) throw new NotFoundError("User not found", { userId });
     const { rowCount } = await client.query(
       `DELETE FROM enterprise_judges WHERE enterprise_id = $1 AND user_id = $2`,
       [enterpriseId, userId],
@@ -532,6 +575,7 @@ export async function removeEnterpriseJudge(
     await applyRoleGrantRule(client, userId, TRIGGER_EVENTS.JUDGE_ENTERPRISE_REMOVED, actorId, {
       enterpriseId,
     });
+    const ticketAccess = await reconcileTicketAccess(client, userId);
     await audit(client, {
       actorId,
       entityType: "enterprise",
@@ -539,7 +583,9 @@ export async function removeEnterpriseJudge(
       action: "judge_removed",
       before: { userId },
     });
+    return ticketAccess;
   });
+  await publishTicketAccess(userId, ticketAccess);
 }
 
 /**

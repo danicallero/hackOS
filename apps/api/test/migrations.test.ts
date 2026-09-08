@@ -463,7 +463,7 @@ describe("migration history (H53)", () => {
       if (applicationId == null) throw new Error("Expected upgrade application");
       await client.query(
         `INSERT INTO application_responses (user_id, application_id, status)
-         VALUES ($1, $2, 'review'), ($3, $2, 'review')`,
+         VALUES ($1, $2, 'accepted'), ($3, $2, 'review')`,
         [activeUserId, applicationId, legacyUserId],
       );
       await client.query(
@@ -553,6 +553,27 @@ describe("migration history (H53)", () => {
         legacy_requests: "0",
         legacy_audit: "0",
       });
+
+      // 0815's compatibility pass keeps a user who was already admitted by
+      // the pre-role mobile-access rules inside the published app while the
+      // new role-derived source of truth rolls out. The bridge is a normal,
+      // removable event-bearing role; the durable ticket remains available to
+      // the old client through the unchanged /api/me/ticket contract.
+      const compatibility = await client.query<{
+        role_name: string;
+        event_access: boolean;
+        tickets: string;
+      }>(
+        `SELECT r.name AS role_name, r.event_access,
+                (SELECT count(*)::text FROM tickets WHERE user_id = $1) AS tickets
+           FROM user_roles ur
+           JOIN roles r ON r.id = ur.role_id
+          WHERE ur.user_id = $1 AND r.name = 'legacy:event-access'`,
+        [activeUserId],
+      );
+      expect(compatibility.rows).toEqual([
+        { role_name: "legacy:event-access", event_access: true, tickets: "1" },
+      ]);
 
       const expectedBadgeDigest = createHmac("sha256", secret)
         .update("hackos:scanner-credential:v1:badge:legacy-badge-current")

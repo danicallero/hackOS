@@ -35,7 +35,13 @@ export async function scannerSnapshot(actorId?: number) {
   const [peopleResult, activitiesResult, statesResult] = await Promise.all([
     pool.query(
       `SELECT u.id, u.email, u.name, u.surname, u.dni, u.badge_id, u.badge_id_history,
-              u.food_intolerance_notes, u.notes, t.token AS ticket_token,
+              u.food_intolerance_notes, u.notes,
+              CASE WHEN EXISTS (
+                SELECT 1 FROM user_event_access uea WHERE uea.user_id = u.id
+              ) THEN t.token ELSE NULL END AS ticket_token,
+              EXISTS (
+                SELECT 1 FROM user_event_access uea WHERE uea.user_id = u.id
+              ) AS event_access,
               -- H8 full-replacement: a person's scanner-facing "role" is
               -- simply their highest-visible role name (identity/role.ts's
               -- getHighestVisibleRoleName — this is its bulk-query
@@ -47,7 +53,8 @@ export async function scannerSnapshot(actorId?: number) {
               -- column, since role names are now free text with no fixed
               -- "admin"/"staff" spelling. These mirror stats.ts's
               -- scannerRoleStats is_operational/enterprise-judge checks --
-              -- the real underlying data those groupings always used.
+              -- the real underlying data those groupings always used. Ticket
+              -- entitlement itself comes only from user_event_access above.
               EXISTS (
                 SELECT 1 FROM user_effective_capabilities uec WHERE uec.user_id = u.id
               ) AS has_capabilities,
@@ -114,6 +121,7 @@ export async function scannerSnapshot(actorId?: number) {
       role: (row.role as string | null) ?? null,
       hasCapabilities: Boolean(row.has_capabilities),
       isEnterpriseJudge: Boolean(row.is_enterprise_judge),
+      eventAccess: Boolean(row.event_access),
       ticketToken: (row.ticket_token as string | null) ?? null,
       badgeId: (row.badge_id as string | null) ?? null,
       revokedBadgeIds: (row.badge_id_history as string[]) ?? [],

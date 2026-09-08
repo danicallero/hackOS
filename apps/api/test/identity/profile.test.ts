@@ -130,6 +130,10 @@ describe("GET /api/me (H7)", () => {
        VALUES ($1, $3, $4, 'accepted', now()), ($2, $3, $4, 'accepted_internal', NULL)`,
       [accepted, internal, applications[0].id, formVersionId],
     );
+    const { grantAttendeeRole } = await import("../helpers.js");
+    await grantAttendeeRole(accepted, "participant");
+    await grantAttendeeRole(invited, "participant");
+    await grantAttendeeRole(invited, "participant");
     await pool.query(
       `INSERT INTO email_verification_tokens
          (token, type, email, user_id, kind, expires_at, used_at)

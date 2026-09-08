@@ -38,30 +38,12 @@ describe("matchesScannerGroup", () => {
 });
 
 describe("isAccreditationEligible", () => {
-  it("treats capability holders and sponsors as always eligible", () => {
-    expect(
-      isAccreditationEligible({ role: "Event Director", hasCapabilities: true, confirmed: false }),
-    ).toBe(true);
-    expect(isAccreditationEligible({ role: null, hasCapabilities: true, confirmed: false })).toBe(
-      true,
-    );
-    expect(
-      isAccreditationEligible({ role: "Sponsor", hasCapabilities: false, confirmed: false }),
-    ).toBe(true);
+  it("uses the assigned-role event entitlement instead of capabilities or role names", () => {
+    expect(isAccreditationEligible({ eventAccess: true })).toBe(true);
+    expect(isAccreditationEligible({ eventAccess: false })).toBe(false);
   });
 
-  it("gates participants and mentors on their confirmed application status", () => {
-    expect(
-      isAccreditationEligible({ role: "Participant", hasCapabilities: false, confirmed: true }),
-    ).toBe(true);
-    expect(
-      isAccreditationEligible({ role: "Participant", hasCapabilities: false, confirmed: false }),
-    ).toBe(false);
-    expect(
-      isAccreditationEligible({ role: "Mentor", hasCapabilities: false, confirmed: true }),
-    ).toBe(true);
-    expect(
-      isAccreditationEligible({ role: "Mentor", hasCapabilities: false, confirmed: false }),
-    ).toBe(false);
+  it("does not infer event access from application status", () => {
+    expect(isAccreditationEligible({ eventAccess: false })).toBe(false);
   });
 });

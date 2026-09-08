@@ -58,10 +58,10 @@ try {
   // real, auditable state (who holds it), but is_visible = false keeps it out
   // of the highest-position-visible-role computation (role.ts) permanently.
   const { rows: roles } = await client.query(
-    `INSERT INTO roles (name, position, is_protected, is_visible)
-     VALUES ('system:superadmin', $1, true, false)
+    `INSERT INTO roles (name, position, is_protected, is_visible, event_access)
+     VALUES ('system:superadmin', $1, true, false, true)
      ON CONFLICT (name) DO UPDATE SET
-       position = EXCLUDED.position, is_protected = true, is_visible = false
+       position = EXCLUDED.position, is_protected = true, is_visible = false, event_access = true
      RETURNING id`,
     [position],
   );
@@ -79,6 +79,13 @@ try {
      VALUES ($1, $2, $1)
      ON CONFLICT DO NOTHING`,
     [userId, roleId],
+  );
+  await client.query(
+    `INSERT INTO tickets (user_id, token)
+     SELECT $1::integer, 'superadmin-ticket-' || $1::integer || '-' || md5(random()::text || clock_timestamp()::text)
+      WHERE EXISTS (SELECT 1 FROM user_event_access WHERE user_id = $1::integer)
+     ON CONFLICT (user_id) DO NOTHING`,
+    [userId],
   );
 
   await client.query(`UPDATE users SET email_verified = true WHERE id = $1`, [userId]);

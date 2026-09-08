@@ -42,6 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Section } from "@/components/ui/surface";
+import { Switch } from "@/components/ui/switch";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError, api } from "@/lib/api";
@@ -92,6 +93,7 @@ const createSchema = (t: Translate) =>
       .min(1, t("required"))
       .refine((v) => Number.isInteger(Number(v)), t("required")),
     isVisible: z.boolean(),
+    eventAccess: z.boolean(),
     templateKey: z.string(),
   });
 
@@ -157,6 +159,7 @@ export default function PermissionsPage() {
       name: "",
       position: "0",
       isVisible: true,
+      eventAccess: false,
       templateKey: "",
     },
   });
@@ -252,6 +255,7 @@ export default function PermissionsPage() {
         name: values.name,
         position: Number(values.position),
         isVisible: values.isVisible,
+        eventAccess: values.eventAccess,
         templateKey: template?.key,
       });
       toast.success(t("roleCreated"));
@@ -260,6 +264,7 @@ export default function PermissionsPage() {
         name: "",
         position: "0",
         isVisible: true,
+        eventAccess: false,
         templateKey: "",
       });
       setRoles((prev) => [...prev, role]);
@@ -283,7 +288,10 @@ export default function PermissionsPage() {
     }
   }
 
-  async function onSaveDetails(roleId: number, values: { name: string; isVisible: boolean }) {
+  async function onSaveDetails(
+    roleId: number,
+    values: { name: string; isVisible: boolean; eventAccess: boolean },
+  ) {
     try {
       const r = await api.patch<RoleDetail>(`/api/roles/${roleId}`, values);
       applyRole(r);
@@ -585,6 +593,18 @@ export default function PermissionsPage() {
                     <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                   </FormControl>
                   <FormLabel className="font-normal">{t("isVisibleLabel")}</FormLabel>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="eventAccess"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between gap-2 space-y-0">
+                  <FormLabel className="font-normal">{t("roleEventAccessLabel")}</FormLabel>
+                  <FormControl>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
                 </FormItem>
               )}
             />

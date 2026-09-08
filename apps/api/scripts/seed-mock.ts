@@ -471,8 +471,8 @@ async function upsertUser(row: {
 
 async function ensureRole(name: string, position: number, capabilities: string[]): Promise<number> {
   const role = await client.query(
-    `INSERT INTO roles (name, position) VALUES ($1, $2)
-     ON CONFLICT (name) DO UPDATE SET position = EXCLUDED.position
+    `INSERT INTO roles (name, position, event_access) VALUES ($1, $2, true)
+     ON CONFLICT (name) DO UPDATE SET position = EXCLUDED.position, event_access = true
      RETURNING id`,
     [name, position],
   );
@@ -790,6 +790,24 @@ async function seedApplications(): Promise<void> {
   }
   const formVersionId = await ensureCurrentApplicationFormVersion(applicationId);
 
+  const participantRole = await client.query(
+    `SELECT id FROM roles
+      WHERE name = 'Participant' AND deleted_at IS NULL
+      ORDER BY position DESC LIMIT 1`,
+  );
+  let participantRoleId = participantRole.rows[0]?.id as number | undefined;
+  if (!participantRoleId) {
+    const { rows: positionRows } = await client.query(
+      `SELECT COALESCE(MAX(position), 0) + 1 AS position FROM roles`,
+    );
+    participantRoleId = await ensureRole("Participant", Number(positionRows[0].position), []);
+  }
+  await client.query(
+    `INSERT INTO application_grants_roles (application_id, role_id)
+     VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+    [applicationId, participantRoleId],
+  );
+
   const universities = await client.query(`SELECT id, name FROM universities ORDER BY id`);
   const universityById = new Map<number, string>(universities.rows.map((r) => [r.id, r.name]));
 
@@ -842,6 +860,14 @@ async function seedApplications(): Promise<void> {
          responses = EXCLUDED.responses`,
       [row.id, applicationId, formVersionId, status, JSON.stringify(responses)],
     );
+    if (status === "confirmed") {
+      await client.query(
+        `INSERT INTO user_roles (user_id, role_id, source)
+         VALUES ($1, $2, 'mock_application_confirmed')
+         ON CONFLICT DO NOTHING`,
+        [row.id, participantRoleId],
+      );
+    }
     count++;
   }
 
@@ -965,13 +991,14 @@ async function seedProjects(): Promise<void> {
 
 async function seedTickets(): Promise<void> {
   const confirmed = await client.query(
-    `SELECT ar.user_id FROM application_responses ar
-     JOIN users u ON u.id = ar.user_id
-     WHERE u.email LIKE '%@example.com' AND ar.status = 'confirmed'`,
+    `SELECT DISTINCT u.id AS user_id FROM users u
+      JOIN user_event_access uea ON uea.user_id = u.id
+     WHERE u.email LIKE '%@example.com'
+       AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
   );
   if (confirmed.rows.length === 0) {
     console.log(
-      "tickets: skipped — no confirmed seeded applications found, run the `applications` module first",
+      "tickets: skipped — no event-access users found, run the `users` or `applications` module first",
     );
     return;
   }

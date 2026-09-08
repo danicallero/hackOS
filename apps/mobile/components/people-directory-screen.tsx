@@ -379,13 +379,9 @@ function PersonRow({ person, onPress }: { person: ScannerPerson; onPress: () => 
   // Only shown as its own line when it isn't already standing in for the
   // name above (someone with no name on file at all).
   const showEmailLine = Boolean(fullName) && Boolean(person.email);
-  const normalizedRole = person.role?.toLocaleLowerCase() ?? null;
-  const participantWarning =
-    normalizedRole === null || (normalizedRole === "participant" && !person.accepted)
-      ? { label: t("scannerNoAcceptedPlace"), tone: "destructive" as const }
-      : normalizedRole === "participant" && !person.confirmed
-        ? { label: t("scannerPlaceUnconfirmed"), tone: "warning" as const }
-        : null;
+  const participantWarning = !person.eventAccess
+    ? { label: t("scannerNoEventAccess"), tone: "destructive" as const }
+    : null;
 
   return (
     <Pressable

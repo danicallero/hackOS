@@ -15,14 +15,13 @@ import {
 } from "../../../lib/errors.js";
 import { keyByIp, rateLimitGuard } from "../../../lib/rate-limit.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
-import { issueTicket } from "../../logistics/tickets.js";
+import { reconcileTicketAccess } from "../../logistics/tickets.js";
 import { auth } from "../auth.js";
 import {
   inviteContainsWildcardRole,
   lockRoleGraph,
   requireWildcardInviteAuthority,
 } from "../invite-role-authority.js";
-import { userHasAnyCapability } from "../role-authority.js";
 import { applyRoleGrantRule } from "../role-grants.js";
 import {
   enterpriseInviteClaimUrl,
@@ -807,7 +806,6 @@ export function registerInviteRoutes(app: FastifyInstance): void {
              )`,
             [enterpriseId, userId],
           );
-          await issueTicket(client, userId);
           // H8: the Sponsor role is granted through the generic
           // role_grant_rules mechanism, not an ad hoc user_roles write. The
           // enterprise is passed as context so an admin can additionally (or
@@ -858,11 +856,11 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           );
         }
 
-        // Staff status starts only once an effective capability is assigned.
-        // Sponsors are already ticketed above regardless of capability grants.
-        if (kind === "staff") {
-          if (await userHasAnyCapability(client, userId)) await issueTicket(client, userId);
-        }
+        // Every invite kind follows the same role-derived entitlement rule.
+        // This runs after both enterprise-triggered and pre-assigned role
+        // grants, so one invite cannot issue a ticket before its complete role
+        // set is visible to the reconciliation query.
+        await reconcileTicketAccess(client, userId);
 
         await audit(client, {
           actorId: userId,

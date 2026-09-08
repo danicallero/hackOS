@@ -70,6 +70,7 @@ const role: RoleSummary = {
   name: "Judges",
   position: 100,
   isVisible: true,
+  eventAccess: true,
   isProtected: false,
   isSeeded: false,
   capabilities: [{ capability: "users:read", state: "inherit" }],

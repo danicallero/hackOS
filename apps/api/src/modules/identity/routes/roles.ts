@@ -15,7 +15,8 @@ import {
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { broadcast } from "../../../lib/sse.js";
-import { issueTicket } from "../../logistics/tickets.js";
+import { reconcileTicketAccess } from "../../logistics/tickets.js";
+import { enqueueWalletSync } from "../../logistics/wallet-sync.js";
 import {
   assertActiveWildcardHolder,
   assertNotProtectedRole,
@@ -26,7 +27,6 @@ import {
   requireRoleMutationAuthority,
   requireWildcardRoleAuthority,
   roleGrantsWildcard,
-  userHasAnyCapability,
 } from "../role-authority.js";
 import { applyRoleAssignmentGrantRules, applyRoleAssignmentRevokeRules } from "../role-grants.js";
 import { getPermissionGroupTemplate, PERMISSION_GROUP_TEMPLATES } from "../templates.js";
@@ -75,6 +75,8 @@ const roleResponse = z.object({
   name: z.string(),
   position: z.number(),
   isVisible: z.boolean(),
+  /** Independent of visibility/capabilities: this role entitles its holders to the event app/ticket. */
+  eventAccess: z.boolean(),
   isProtected: z.boolean(),
   // H8/0800/0807: true for a role inserted by a seed migration (0801's
   // Sponsor, every 0805 default) rather than created via POST /api/roles.
@@ -99,6 +101,7 @@ const seedDiffResponse = z.object({
   isSeeded: z.boolean(),
   hasDrifted: z.boolean(),
   diff: z.array(seedDiffEntry),
+  eventAccess: z.object({ current: z.boolean(), default: z.boolean() }).nullable(),
 });
 
 async function loadRole(db: pg.Pool | pg.PoolClient, roleId: number) {
@@ -119,12 +122,56 @@ async function loadRole(db: pg.Pool | pg.PoolClient, roleId: number) {
     name: rows[0].name as string,
     position: rows[0].position as number,
     isVisible: rows[0].is_visible as boolean,
+    eventAccess: rows[0].event_access as boolean,
     isProtected: rows[0].is_protected as boolean,
     isSeeded: rows[0].is_seeded as boolean,
     capabilities: caps.rows as { capability: string; state: "allow" | "deny" | "inherit" }[],
     memberIds: members.rows.map((r: { user_id: number }) => r.user_id),
     deletedAt: rows[0].deleted_at ? new Date(rows[0].deleted_at).toISOString() : null,
   };
+}
+
+interface TicketChanges {
+  userIds: number[];
+  voidedPassIds: number[];
+}
+
+const NO_TICKET_CHANGES: TicketChanges = { userIds: [], voidedPassIds: [] };
+
+/** Reconcile every holder after a role's entitlement flag or deletion changes. */
+async function reconcileRoleMembers(client: pg.PoolClient, roleId: number): Promise<TicketChanges> {
+  const { rows } = await client.query<{ user_id: number }>(
+    `SELECT DISTINCT ur.user_id
+       FROM user_roles ur
+       JOIN users u ON u.id = ur.user_id
+      WHERE ur.role_id = $1
+        AND u.account_state = 'active'
+        AND u.anonymized_at IS NULL
+      ORDER BY ur.user_id`,
+    [roleId],
+  );
+  const userIds: number[] = [];
+  const voidedPassIds: number[] = [];
+  for (const row of rows) {
+    const result = await reconcileTicketAccess(client, Number(row.user_id));
+    userIds.push(Number(row.user_id));
+    voidedPassIds.push(...result.voidedPassIds);
+  }
+  return { userIds, voidedPassIds };
+}
+
+async function publishTicketChanges(changes: TicketChanges): Promise<void> {
+  await Promise.all(
+    [...new Set(changes.userIds)].map((userId) =>
+      broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.LOGISTICS_WALLET_PASS_UPDATED, {
+        purpose: "ticket",
+        status: "updated",
+      }),
+    ),
+  );
+  if (changes.voidedPassIds.length > 0) {
+    await enqueueWalletSync([...new Set(changes.voidedPassIds)]);
+  }
 }
 
 function announceRoleChange(): void {
@@ -215,6 +262,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
           name: z.string().min(1).max(200),
           position: z.number().int(),
           isVisible: z.boolean().default(true),
+          eventAccess: z.boolean().default(false),
           templateKey: z.string().min(1).max(120).optional(),
           capabilities: z
             .array(z.object({ capability: z.string().min(1), state: permissionState }))
@@ -224,7 +272,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       },
     },
     async (req, reply) => {
-      const { name, position, isVisible, templateKey } = req.body;
+      const { name, position, isVisible, eventAccess, templateKey } = req.body;
       assertNotSuperadminRole(name);
       let capabilities = req.body.capabilities;
       if (templateKey) {
@@ -252,9 +300,9 @@ export function registerRoleRoutes(app: FastifyInstance): void {
           throw new ConflictError("A role with this name already exists", { name });
         }
         const { rows } = await client.query(
-          `INSERT INTO roles (name, position, is_visible)
-           VALUES ($1, $2, $3) RETURNING id`,
-          [name, position, isVisible],
+          `INSERT INTO roles (name, position, is_visible, event_access)
+           VALUES ($1, $2, $3, $4) RETURNING id`,
+          [name, position, isVisible, eventAccess],
         );
         const roleId = rows[0].id as number;
         for (const { capability, state } of capabilities) {
@@ -287,18 +335,19 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Rename or toggle visibility of a role",
         description:
-          "Updates a role's name and/or is_visible (H8). A role's public display label — badges, wallet passes, scanner UI, stats — is simply its name; there is no separate category to set.",
+          "Updates a role's name, public visibility, and independent event-access entitlement (H8/H15). A role's public display label — badges, wallet passes, scanner UI, stats — is simply its name; eventAccess controls whether holders can use the event app and receive an entrance ticket.",
         params: roleIdParams,
         body: z.object({
           name: z.string().min(1).max(200).optional(),
           isVisible: z.boolean().optional(),
+          eventAccess: z.boolean().optional(),
         }),
         response: { 200: roleResponse },
       },
     },
     async (req) => {
       const { roleId } = req.params;
-      const role = await withTransaction(async (client) => {
+      const result = await withTransaction(async (client) => {
         await lockRoleGraph(client);
         const before = await loadRole(client, roleId);
         assertNotProtectedRole(before);
@@ -306,24 +355,33 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         const name = req.body.name ?? before.name;
         assertNotSuperadminRole(name);
         const isVisible = req.body.isVisible ?? before.isVisible;
-        await client.query(`UPDATE roles SET name = $2, is_visible = $3 WHERE id = $1`, [
-          roleId,
-          name,
-          isVisible,
-        ]);
+        const eventAccess = req.body.eventAccess ?? before.eventAccess;
+        await client.query(
+          `UPDATE roles SET name = $2, is_visible = $3, event_access = $4 WHERE id = $1`,
+          [roleId, name, isVisible, eventAccess],
+        );
+        const ticketChanges =
+          eventAccess === before.eventAccess
+            ? NO_TICKET_CHANGES
+            : await reconcileRoleMembers(client, roleId);
         await audit(client, {
           actorId: req.userId,
           entityType: "role",
           entityId: roleId,
           action: "update",
           source: "admin",
-          before: { name: before.name, isVisible: before.isVisible },
-          after: { name, isVisible },
+          before: {
+            name: before.name,
+            isVisible: before.isVisible,
+            eventAccess: before.eventAccess,
+          },
+          after: { name, isVisible, eventAccess },
         });
-        return loadRole(client, roleId);
+        return { role: await loadRole(client, roleId), ticketChanges };
       });
+      await publishTicketChanges(result.ticketChanges);
       announceRoleChange();
-      return role;
+      return result.role;
     },
   );
 
@@ -454,7 +512,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const { roleId } = req.params;
-      await withTransaction(async (client) => {
+      const ticketChanges = await withTransaction(async (client) => {
         await lockRoleGraph(client);
         const before = await loadRole(client, roleId);
         assertNotProtectedRole(before);
@@ -463,6 +521,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         await requireRoleMutationAuthority(client, actorId, before.position);
         const removesWildcard = await roleGrantsWildcard(client, roleId);
         await client.query(`UPDATE roles SET deleted_at = now() WHERE id = $1`, [roleId]);
+        const changes = await reconcileRoleMembers(client, roleId);
         if (removesWildcard) await assertActiveWildcardHolder(client);
         await audit(client, {
           actorId,
@@ -472,7 +531,9 @@ export function registerRoleRoutes(app: FastifyInstance): void {
           source: "admin",
           before,
         });
+        return changes;
       });
+      await publishTicketChanges(ticketChanges);
       announceRoleChange();
       return { deleted: true as const };
     },
@@ -511,6 +572,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
           );
         }
         await client.query(`UPDATE roles SET deleted_at = NULL WHERE id = $1`, [roleId]);
+        const ticketChanges = await reconcileRoleMembers(client, roleId);
         await audit(client, {
           actorId,
           entityType: "role",
@@ -519,10 +581,11 @@ export function registerRoleRoutes(app: FastifyInstance): void {
           source: "admin",
           after: { roleId },
         });
-        return loadRole(client, roleId);
+        return { role: await loadRole(client, roleId), ticketChanges };
       });
+      await publishTicketChanges(result.ticketChanges);
       announceRoleChange();
-      return result;
+      return result.role;
     },
   );
 
@@ -544,12 +607,15 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     async (req) => {
       const { roleId } = req.params;
       const role = await loadRole(pool, roleId);
-      if (!role.isSeeded) return { isSeeded: false, hasDrifted: false, diff: [] };
+      if (!role.isSeeded) {
+        return { isSeeded: false, hasDrifted: false, diff: [], eventAccess: null };
+      }
       const { rows } = await pool.query(
-        `SELECT capabilities FROM role_seed_defaults WHERE role_id = $1`,
+        `SELECT capabilities, event_access FROM role_seed_defaults WHERE role_id = $1`,
         [roleId],
       );
-      if (rows.length === 0) return { isSeeded: true, hasDrifted: false, diff: [] };
+      if (rows.length === 0)
+        return { isSeeded: true, hasDrifted: false, diff: [], eventAccess: null };
       const defaults = rows[0].capabilities as Record<string, "allow" | "deny" | "inherit">;
       const current = new Map(role.capabilities.map((c) => [c.capability, c.state]));
       const defaultMap = new Map(Object.entries(defaults));
@@ -562,7 +628,17 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         }))
         .filter((entry) => entry.current !== entry.default)
         .sort((a, b) => a.capability.localeCompare(b.capability));
-      return { isSeeded: true, hasDrifted: diff.length > 0, diff };
+      const defaultEventAccess = Boolean(rows[0].event_access);
+      const eventAccess = {
+        current: role.eventAccess,
+        default: defaultEventAccess,
+      };
+      return {
+        isSeeded: true,
+        hasDrifted: diff.length > 0 || role.eventAccess !== defaultEventAccess,
+        diff,
+        eventAccess,
+      };
     },
   );
 
@@ -597,13 +673,14 @@ export function registerRoleRoutes(app: FastifyInstance): void {
           });
         }
         const { rows: snapshotRows } = await client.query(
-          `SELECT capabilities FROM role_seed_defaults WHERE role_id = $1`,
+          `SELECT capabilities, event_access FROM role_seed_defaults WHERE role_id = $1`,
           [roleId],
         );
         if (snapshotRows.length === 0) {
           throw new NotFoundError("This role has no seed snapshot to reset to", { roleId });
         }
         const defaults = snapshotRows[0].capabilities as Record<string, "allow">;
+        const defaultEventAccess = Boolean(snapshotRows[0].event_access);
         await requireRoleMutationAuthority(client, actorId, before.position);
         // H8: possession guard applies only to capabilities the reset would
         // newly grant — one already ALLOW on the live role isn't "new".
@@ -630,20 +707,29 @@ export function registerRoleRoutes(app: FastifyInstance): void {
             [roleId, capability, state],
           );
         }
+        await client.query(`UPDATE roles SET event_access = $2 WHERE id = $1`, [
+          roleId,
+          defaultEventAccess,
+        ]);
+        const ticketChanges =
+          defaultEventAccess === before.eventAccess
+            ? NO_TICKET_CHANGES
+            : await reconcileRoleMembers(client, roleId);
         await audit(client, {
           actorId,
           entityType: "role",
           entityId: roleId,
           action: "reset_to_default",
           source: "admin",
-          before: { capabilities: before.capabilities },
-          after: { capabilities: afterCapabilities },
+          before: { capabilities: before.capabilities, eventAccess: before.eventAccess },
+          after: { capabilities: afterCapabilities, eventAccess: defaultEventAccess },
         });
         if (hadWildcard && !introducesWildcard) await assertActiveWildcardHolder(client);
-        return loadRole(client, roleId);
+        return { role: await loadRole(client, roleId), ticketChanges };
       });
+      await publishTicketChanges(result.ticketChanges);
       announceRoleChange();
-      return result;
+      return result.role;
     },
   );
 
@@ -691,9 +777,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         // or more further roles (e.g. every functional team role implies
         // Organizer). Same transaction, same audit trail as the assignment.
         await applyRoleAssignmentGrantRules(client, userId, roleId, actorId);
-        // A capability holder is staff (H8); issue their permanent entrance
-        // ticket in the same transaction as the role-producing assignment.
-        if (await userHasAnyCapability(client, userId)) await issueTicket(client, userId);
+        const ticketAccess = await reconcileTicketAccess(client, userId);
         await audit(client, {
           actorId,
           entityType: "role",
@@ -702,10 +786,17 @@ export function registerRoleRoutes(app: FastifyInstance): void {
           source: "admin",
           after: { userId },
         });
-        return loadRole(client, roleId);
+        return {
+          role: await loadRole(client, roleId),
+          ticketChanges: {
+            userIds: [userId],
+            voidedPassIds: ticketAccess.voidedPassIds,
+          },
+        };
       });
+      await publishTicketChanges(result.ticketChanges);
       announceRoleChange();
-      return result;
+      return result.role;
     },
   );
 
@@ -732,6 +823,13 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         assertNotProtectedRole(role);
         await requireRoleMutationAuthority(client, actorId, role.position);
         const removesWildcard = await roleGrantsWildcard(client, roleId);
+        const { rows: userRows } = await client.query(
+          `SELECT id FROM users
+            WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+            FOR UPDATE`,
+          [userId],
+        );
+        if (userRows.length === 0) throw new NotFoundError("User not found", { userId });
         await client.query(`DELETE FROM user_roles WHERE user_id = $1 AND role_id = $2`, [
           userId,
           roleId,
@@ -740,6 +838,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         // above — revokes an implied role ONLY if no other role the user
         // still holds justifies it (see role-grants.ts for the full guard).
         await applyRoleAssignmentRevokeRules(client, userId, roleId, actorId);
+        const ticketAccess = await reconcileTicketAccess(client, userId);
         if (removesWildcard) await assertActiveWildcardHolder(client, undefined);
         await audit(client, {
           actorId,
@@ -749,10 +848,17 @@ export function registerRoleRoutes(app: FastifyInstance): void {
           source: "admin",
           before: { userId },
         });
-        return loadRole(client, roleId);
+        return {
+          role: await loadRole(client, roleId),
+          ticketChanges: {
+            userIds: [userId],
+            voidedPassIds: ticketAccess.voidedPassIds,
+          },
+        };
       });
+      await publishTicketChanges(result.ticketChanges);
       announceRoleChange();
-      return result;
+      return result.role;
     },
   );
 
@@ -774,6 +880,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
               name: z.string(),
               position: z.number(),
               isVisible: z.boolean(),
+              eventAccess: z.boolean(),
             }),
           ),
         },
@@ -781,10 +888,10 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const { rows } = await pool.query(
-        `SELECT r.id, r.name, r.position, r.is_visible
+        `SELECT r.id, r.name, r.position, r.is_visible, r.event_access
            FROM user_roles ur
            JOIN roles r ON r.id = ur.role_id
-          WHERE ur.user_id = $1
+          WHERE ur.user_id = $1 AND r.deleted_at IS NULL
           ORDER BY r.position DESC`,
         [req.params.userId],
       );
@@ -793,6 +900,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         name: r.name as string,
         position: r.position as number,
         isVisible: r.is_visible as boolean,
+        eventAccess: r.event_access as boolean,
       }));
     },
   );

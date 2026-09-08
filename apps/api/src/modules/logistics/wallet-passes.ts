@@ -4,6 +4,7 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { hasEventAccess } from "../identity/role.js";
+import { lockRoleGraph } from "../identity/role-authority.js";
 
 /**
  * Shared `wallet_passes` bookkeeping for both providers (H28). Apple and
@@ -54,6 +55,8 @@ async function assertEntitled(userId: number, purpose: Purpose): Promise<void> {
     // invariant 10), so re-issuing/refreshing a wallet pass must instead gate
     // on whether the person currently holds real event access.
     if (!(await hasEventAccess(pool, userId))) throw new NotFoundError("Ticket not issued");
+    const { rows } = await pool.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [userId]);
+    if (!rows[0]) throw new NotFoundError("Ticket not issued");
   } else {
     const b = await pool.query(
       `SELECT badge_id FROM users
@@ -80,6 +83,10 @@ export async function ensurePassRecord(
   await assertEntitled(userId, purpose);
 
   return withTransaction(async (client) => {
+    // Role mutations and pass issuance use the same ordering (role graph,
+    // then user row), so a last-role removal cannot race this final
+    // entitlement check and issue a fresh ticket pass afterwards.
+    await lockRoleGraph(client);
     // H54: serialize pass issuance with account removal. The preflight above
     // is only advisory; this row lock is the authoritative state check.
     const activeUser = await client.query(
@@ -89,6 +96,11 @@ export async function ensurePassRecord(
       [userId],
     );
     if (!activeUser.rows[0]) throw new NotFoundError("User not found");
+    if (purpose === "ticket") {
+      if (!(await hasEventAccess(client, userId))) throw new NotFoundError("Ticket not issued");
+      const ticket = await client.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [userId]);
+      if (!ticket.rows[0]) throw new NotFoundError("Ticket not issued");
+    }
     const existing = await client.query(
       `SELECT id, user_id, purpose, platform, serial_number, authentication_token,
               google_object_id, status, update_tag
@@ -154,11 +166,15 @@ export async function bumpAllAppleWalletUpdateTags(): Promise<number[]> {
  * representation, which the caller then pushes to devices via
  * `enqueueWalletSync`.
  */
-export async function voidTicketPasses(client: pg.PoolClient, userId: number): Promise<void> {
-  await client.query(
+export async function voidTicketPasses(client: pg.PoolClient, userId: number): Promise<number[]> {
+  const { rows } = await client.query(
     `UPDATE wallet_passes
-        SET status = 'voided', last_updated_at = now(), update_tag = extract(epoch from now())::text
-      WHERE user_id = $1 AND purpose = 'ticket' AND status <> 'voided'`,
+        SET status = 'voided',
+            last_updated_at = now(),
+            update_tag = ((extract(epoch FROM now()) * 1000)::bigint)::text
+      WHERE user_id = $1 AND purpose = 'ticket' AND status <> 'voided'
+      RETURNING id`,
     [userId],
   );
+  return rows.map((row: { id: number }) => row.id);
 }

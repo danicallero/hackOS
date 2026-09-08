@@ -27,6 +27,8 @@ export interface ScannerPerson {
   hasCapabilities: boolean;
   /** Enterprise judge relationship — door scanners don't badge-scan judges. */
   isEnterpriseJudge: boolean;
+  /** Current event entitlement derived from the person's assigned roles. */
+  eventAccess: boolean;
   ticketToken: string | null;
   badgeId: string | null;
   revokedBadgeIds: string[];

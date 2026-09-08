@@ -1,6 +1,5 @@
 import type { FastifyRequest } from "fastify";
 import type { Queryable } from "../../db/pool.js";
-import { getEffectiveCapabilities } from "../../lib/capabilities.js";
 import { ConflictError } from "../../lib/errors.js";
 
 /**
@@ -92,6 +91,7 @@ export interface AssignedRoleSummary {
   name: string;
   position: number;
   isVisible: boolean;
+  eventAccess: boolean;
 }
 
 /**
@@ -105,19 +105,28 @@ export async function getAssignedRoles(
   userId: number,
 ): Promise<AssignedRoleSummary[]> {
   const { rows } = await db.query(
-    `SELECT r.id, r.name, r.position, r.is_visible
+    `SELECT r.id, r.name, r.position, r.is_visible, r.event_access
        FROM user_roles ur
        JOIN roles r ON r.id = ur.role_id
       WHERE ur.user_id = $1 AND r.deleted_at IS NULL
       ORDER BY r.position DESC`,
     [userId],
   );
-  return rows.map((r: { id: number; name: string; position: number; is_visible: boolean }) => ({
-    id: r.id,
-    name: r.name,
-    position: r.position,
-    isVisible: r.is_visible,
-  }));
+  return rows.map(
+    (r: {
+      id: number;
+      name: string;
+      position: number;
+      is_visible: boolean;
+      event_access: boolean;
+    }) => ({
+      id: r.id,
+      name: r.name,
+      position: r.position,
+      isVisible: r.is_visible,
+      eventAccess: r.event_access,
+    }),
+  );
 }
 
 /**
@@ -151,49 +160,25 @@ export async function computeMembershipFlags(
 }
 
 /**
- * Whether this user currently holds real event access: a confirmed
- * application response, a staff-assigned attendee role (mentor/participant
- * granted without going through the applications flow), a sponsor
- * representative membership, or any operational capability (admin/staff —
- * H43). User-level, not response-level — declining one of several
- * applications doesn't strip access if another stays confirmed, and it
- * doesn't strip access for an admin/staffer whose only other tie to the
- * event was an application they later rejected: capability holders keep
- * their ticket regardless of application status. Drives ticket/wallet
- * exposure and participant-only nav gating; the underlying `tickets` row is
- * never touched by this (plan/07 invariant 10: a ticket is neither consumed
- * nor revoked).
+ * Whether this user currently holds event access. The role flag is the one
+ * entitlement source: any assigned, non-deleted role with `event_access =
+ * true` is enough, and losing one of several such roles does not matter until
+ * the last one is gone. `is_visible` and effective capabilities are unrelated
+ * presentation/authorization concerns. Ticket and mobile-app callers use
+ * this same query so they cannot drift into separate eligibility rules.
  */
 export async function hasEventAccess(db: Queryable, userId: number): Promise<boolean> {
   const { rows } = await db.query(
-    `SELECT 1 FROM users u WHERE u.id = $1
-      AND u.account_state = 'active' AND u.anonymized_at IS NULL
-      AND (EXISTS (
-        SELECT 1 FROM application_responses WHERE user_id = $1 AND status = 'confirmed'
-      ) OR EXISTS (
-        -- H8 full-replacement: manual_attendee_roles' write paths (H10's
-        -- attendee-role route, accreditation's walk-in classification) now
-        -- grant the real Mentor/Participant role instead (0808 backfilled
-        -- every pre-cutover row) — this is the equivalent check over
-        -- user_roles, matched by the seeded roles' own names rather than a
-        -- retired badge_category column. manual_attendee_roles itself is
-        -- read here too, purely defensively: the table is not dropped, so a
-        -- row surviving from before the cutover (or a direct DB write
-        -- bypassing the API) still counts.
-        SELECT 1 FROM user_roles ur
-          JOIN roles r ON r.id = ur.role_id
-         WHERE ur.user_id = $1 AND r.name = ANY($2::text[])
-           AND r.deleted_at IS NULL
-      ) OR EXISTS (
-        SELECT 1 FROM manual_attendee_roles WHERE user_id = $1
-      ) OR EXISTS (
-        SELECT 1 FROM sponsors WHERE user_id = $1
-      ))`,
-    [userId, [ATTENDEE_ROLE_NAMES.mentor, ATTENDEE_ROLE_NAMES.participant]],
+    `SELECT 1
+       FROM users u
+       JOIN user_event_access uea ON uea.user_id = u.id
+      WHERE u.id = $1
+        AND u.account_state = 'active'
+        AND u.anonymized_at IS NULL
+      LIMIT 1`,
+    [userId],
   );
-  if (rows.length > 0) return true;
-  const capabilities = await getEffectiveCapabilities(userId);
-  return capabilities.size > 0;
+  return rows.length > 0;
 }
 
 /**

@@ -44,7 +44,7 @@ explicit release/security approval for the reset operation.
 
 | Fixture key | Account kind | Prepared state |
 | --- | --- | --- |
-| `participant-delete` | Participant | Accepted mobile-access path, no canonical accreditation; exercises full deletion. |
+| `participant-delete` | Participant | Accepted role-derived event-access path, no canonical accreditation; exercises full deletion. |
 | `participant-anonymize-outside` | Participant | Canonically accredited, with a closed door interval; exercises irreversible anonymization outside the venue. It owns the synthetic participant-facing judging queue. |
 | `participant-anonymize-inside` | Participant | Canonically accredited, with an open door interval; exercises accepted anonymization with a pending exit. |
 | `staff-exit-operator` | Staff | Synthetic operator with accreditation, presence and activity scan capabilities; can act only on marked synthetic subjects. |

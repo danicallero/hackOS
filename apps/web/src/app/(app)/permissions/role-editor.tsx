@@ -54,6 +54,7 @@ const detailsSchema = (t: Translate) =>
   z.object({
     name: z.string().min(1, t("required")).max(200),
     isVisible: z.boolean(),
+    eventAccess: z.boolean(),
   });
 type DetailsValues = z.infer<ReturnType<typeof detailsSchema>>;
 
@@ -133,11 +134,12 @@ export function RoleEditor({
     defaultValues: {
       name: role.name,
       isVisible: role.isVisible,
+      eventAccess: role.eventAccess,
     },
   });
   const { reset } = form;
   useEffect(() => {
-    reset({ name: role.name, isVisible: role.isVisible });
+    reset({ name: role.name, isVisible: role.isVisible, eventAccess: role.eventAccess });
   }, [role, reset]);
 
   const [caps, setCaps] = useState<CapabilityStateMap>(() => toStateMap(role));
@@ -255,6 +257,22 @@ export function RoleEditor({
             render={({ field }) => (
               <FormItem className="flex flex-row items-center justify-between gap-2 space-y-0">
                 <FormLabel className="font-normal">{t("isVisibleLabel")}</FormLabel>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    disabled={isProtected}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="eventAccess"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between gap-2 space-y-0">
+                <FormLabel className="font-normal">{t("roleEventAccessLabel")}</FormLabel>
                 <FormControl>
                   <Switch
                     checked={field.value}

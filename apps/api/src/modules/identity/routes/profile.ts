@@ -17,7 +17,8 @@ import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/erro
 import { idempotencyGuard, replayCompletedIdempotency } from "../../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { assertFixtureSubjectScope } from "../../logistics/review-fixture-scope.js";
-import { issueTicket } from "../../logistics/tickets.js";
+import { reconcileTicketAccess } from "../../logistics/tickets.js";
+import { enqueueWalletSync } from "../../logistics/wallet-sync.js";
 import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliation.js";
 import { canCreateMyProject, hasMyProject, myProjects } from "../../projects/service.js";
 import { hasMyQueueItems } from "../../queue/reads.js";
@@ -39,7 +40,7 @@ import {
   getHighestVisibleRoleName,
   hasEventAccess,
 } from "../role.js";
-import { SUPERADMIN_ROLE_NAME } from "../role-authority.js";
+import { lockRoleGraph, SUPERADMIN_ROLE_NAME } from "../role-authority.js";
 
 /**
  * Profile routes (H7).
@@ -60,6 +61,7 @@ const assignedRoleSchema = z.object({
   name: z.string(),
   position: z.number(),
   isVisible: z.boolean(),
+  eventAccess: z.boolean(),
 });
 
 /** Fields a user may edit on themself (H7: "consultar mis datos… y si detecto un error"). */
@@ -454,8 +456,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         description:
           "The caller's own profile, illustrative role, effective capabilities (H8), " +
           "the isEnterpriseJudge/isSponsorRep association facts nav uses for multi-capability " +
-          "accounts (H55), whether they currently hold event access (confirmed spot or " +
-          "manual attendee role), whether they have a project/queue entry of their own " +
+          "accounts (H55), whether they currently hold role-derived event access, whether they have a project/queue entry of their own " +
           "(drives hiding the My project/My queue nav items, issue #424), mobile " +
           "access eligibility, and the caller's complete assigned-role set (H8) alongside " +
           "the single highest-visible `role` shown elsewhere.",
@@ -483,8 +484,8 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             // the single-priority `role` above can't represent on its own.
             isEnterpriseJudge: z.boolean(),
             isSponsorRep: z.boolean(),
-            // Confirmed spot or manual attendee role — drives ticket/wallet
-            // exposure and hides participant-only nav for pure applicants.
+            // Any assigned, non-deleted role with eventAccess=true — drives
+            // ticket/wallet exposure and mobile-app access.
             hasEventAccess: z.boolean(),
             // issue #424: My project/My queue nav items are hidden until the
             // caller actually has one — visible-but-empty misleads sponsors
@@ -998,15 +999,16 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         body: attendeeRoleBody,
         summary: "Set an attendee type manually",
         description:
-          "Classify an attendee as participant or mentor by granting the matching seeded Mentor/Participant role (H8) — an auditable, explicit staff action, distinct from a capability-bearing permission role (both seeded roles carry zero capabilities). The permanent ticket is issued in the same transaction. Re-classifying replaces whichever of the two roles this action previously granted.",
+          "Classify an attendee as participant or mentor by granting the matching seeded Mentor/Participant role (H8) — an auditable, explicit staff action, distinct from a capability-bearing permission role. The role's eventAccess setting controls ticket issuance. Re-classifying replaces whichever of the two roles this action previously granted.",
         response: {
-          200: z.object({ role: z.enum(["participant", "mentor"]), ticketIssued: z.literal(true) }),
+          200: z.object({ role: z.enum(["participant", "mentor"]), ticketIssued: z.boolean() }),
         },
       },
     },
     async (req) => {
       await assertProfileSubjectScope(req.userId as number, req.params.id);
-      return withTransaction(async (client) => {
+      const result = await withTransaction(async (client) => {
+        await lockRoleGraph(client);
         const { rows } = await client.query(
           `SELECT id FROM users
             WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
@@ -1015,7 +1017,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         );
         if (!rows[0]) throw new NotFoundError("User not found", { userId: req.params.id });
         await assignAttendeeRole(client, req.params.id, req.body.role, req.userId as number);
-        await issueTicket(client, req.params.id);
+        const ticketAccess = await reconcileTicketAccess(client, req.params.id);
         await audit(client, {
           actorId: req.userId,
           entityType: "user",
@@ -1024,8 +1026,14 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           source: "admin",
           after: { role: req.body.role },
         });
-        return { role: req.body.role, ticketIssued: true as const };
+        return { role: req.body.role, ticketIssued: ticketAccess.eventAccess, ticketAccess };
       });
+      if (result.ticketAccess.voidedPassIds.length > 0) {
+        // A classification change can also be a last-role removal in a
+        // customized installation; keep installed ticket passes in sync.
+        await enqueueWalletSync(result.ticketAccess.voidedPassIds);
+      }
+      return { role: result.role, ticketIssued: result.ticketIssued };
     },
   );
 

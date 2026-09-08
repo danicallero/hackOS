@@ -56,6 +56,18 @@ Three distinct time windows, deliberately not one:
 `APPLE_PASS_ORGANIZATION`) so the settings page can show what the pass's
 "Organized by" back field is filled with.
 
+### Role-derived event entitlement
+
+`roles.event_access` is the independent admission bit configured alongside a
+role's capabilities and visibility from Permissions. A user has event/app
+access when any assigned, non-deleted role has `event_access = true`; losing
+one role therefore does not remove access while another event-bearing role
+remains. Only removal or disabling of the last such role removes the live
+ticket entitlement. The historical `tickets` row is retained, but ticket QR,
+wallet issuance/refresh, scanner eligibility, and check-in all re-evaluate the
+same live role-derived fact. Active wallet passes are voided and the existing
+SSE/Wallet sync path is used when the last role is removed.
+
 ## 2. How the pass renders (apps/api/src/modules/logistics/wallet.ts)
 
 `passPayload()` reads `event_config` fresh on every pass fetch — nothing about

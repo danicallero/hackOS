@@ -90,7 +90,7 @@ describe("scanner role stats", () => {
     expect(row?.hasCapabilities).toBe(false);
   });
 
-  it("gates participants on their application's confirmed status", async () => {
+  it("uses assigned role event access rather than application confirmation", async () => {
     const { pool } = await import("../../src/db/pool.js");
 
     const confirmed = await createUser();
@@ -99,7 +99,6 @@ describe("scanner role stats", () => {
     await assignBadge(confirmed, "PAX-CONFIRMED");
 
     const unconfirmed = await createUser();
-    await grantAttendeeRole(unconfirmed, "participant");
     await pool.query(
       `INSERT INTO applications (name, type, template) VALUES ('participant-app', 'participant', '{}'::jsonb)`,
     );
@@ -114,7 +113,8 @@ describe("scanner role stats", () => {
 
     const byRole = await getStats(app, scanner);
     const row = forRole(byRole, "Participant");
-    // Only the confirmed participant is eligible; the unconfirmed one isn't.
+    // Only the user with the event-bearing Participant role is eligible; an
+    // application row by itself does not grant entrance access.
     expect(row?.eligible).toBe(1);
     expect(row?.accredited).toBe(1);
   });

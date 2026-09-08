@@ -1404,9 +1404,12 @@ describe("H8 default seeded role set (0805)", () => {
     expect(oldDraftRows).toHaveLength(0);
 
     // Total default set on a fresh install: 0805's fifteen roles + 0801's
-    // always-created Sponsor role. system:superadmin is CLI-only, never
-    // created by migrations.
-    const { rows: allRoles } = await pool.query(`SELECT name FROM roles ORDER BY name`);
+    // always-created Sponsor role. 0815 also adds one hidden compatibility
+    // role so users of the already-approved mobile build keep access during
+    // rollout. system:superadmin is CLI-only, never created by migrations.
+    const { rows: allRoles } = await pool.query(
+      `SELECT name FROM roles WHERE name <> 'legacy:event-access' ORDER BY name`,
+    );
     expect(allRoles.map((r: { name: string }) => r.name).sort()).toEqual(
       [
         "Event Director",
@@ -1465,8 +1468,15 @@ describe("H8 default seeded role set (0805)", () => {
   it("marks every 0801/0805 seeded role is_seeded=true, and snapshots exactly its ALLOW set into role_seed_defaults", async () => {
     const pool = await seededRoles();
     const { rows: unseeded } = await pool.query(`SELECT name FROM roles WHERE NOT is_seeded`);
-    // system:superadmin is CLI-only, never created by a migration.
-    expect(unseeded).toHaveLength(0);
+    // The hidden compatibility role is deliberately not part of the seeded
+    // catalogue; it preserves pre-0815 mobile access while remaining a normal
+    // event-bearing role that staff can explicitly remove when needed.
+    expect(unseeded).toEqual([{ name: "legacy:event-access" }]);
+    const { rows: legacyRole } = await pool.query(
+      `SELECT is_visible, is_protected, event_access
+         FROM roles WHERE name = 'legacy:event-access'`,
+    );
+    expect(legacyRole).toEqual([{ is_visible: false, is_protected: false, event_access: true }]);
 
     const { rows: eventDirector } = await pool.query(
       `SELECT r.id, rsd.capabilities
@@ -1667,7 +1677,12 @@ describe("H8 seed-diff and reset-to-default (0807)", () => {
       headers: asUser(actor),
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ isSeeded: false, hasDrifted: false, diff: [] });
+    expect(res.json()).toEqual({
+      isSeeded: false,
+      hasDrifted: false,
+      diff: [],
+      eventAccess: null,
+    });
   });
 
   it("reports no drift right after seeding", async () => {
@@ -1680,7 +1695,12 @@ describe("H8 seed-diff and reset-to-default (0807)", () => {
       headers: asUser(actor),
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ isSeeded: true, hasDrifted: false, diff: [] });
+    expect(res.json()).toEqual({
+      isSeeded: true,
+      hasDrifted: false,
+      diff: [],
+      eventAccess: { current: true, default: true },
+    });
   });
 
   it("reports the correct diff after the role's capabilities are edited", async () => {
@@ -1712,6 +1732,7 @@ describe("H8 seed-diff and reset-to-default (0807)", () => {
       isSeeded: true,
       hasDrifted: true,
       diff: [{ capability: CAPABILITIES.USERS_READ, current: "inherit", default: "allow" }],
+      eventAccess: { current: true, default: true },
     });
   });
 
@@ -1765,7 +1786,12 @@ describe("H8 seed-diff and reset-to-default (0807)", () => {
       url: `/api/roles/${roleId}/seed-diff`,
       headers: asUser(actor),
     });
-    expect(diff.json()).toEqual({ isSeeded: true, hasDrifted: false, diff: [] });
+    expect(diff.json()).toEqual({
+      isSeeded: true,
+      hasDrifted: false,
+      diff: [],
+      eventAccess: { current: true, default: true },
+    });
   });
 
   it("rejects reset-to-default for a non-seeded role", async () => {

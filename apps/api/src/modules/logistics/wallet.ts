@@ -20,7 +20,7 @@ import {
   UnauthorizedError,
 } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
-import { getHighestVisibleRoleName } from "../identity/role.js";
+import { getHighestVisibleRoleName, hasEventAccess } from "../identity/role.js";
 import { logisticsTopicForFixture } from "./active-broadcast.js";
 import {
   ensurePassRecord,
@@ -117,6 +117,8 @@ async function passPayload(pass: PassRow) {
   if (!u) throw new NotFoundError("User not found");
   const revoked = pass.status === "voided";
   if (!revoked && pass.purpose === "ticket" && !u.token)
+    throw new NotFoundError("Ticket not issued");
+  if (!revoked && pass.purpose === "ticket" && !(await hasEventAccess(pool, pass.user_id)))
     throw new NotFoundError("Ticket not issued");
   if (!revoked && pass.purpose === "badge" && !u.badge_id)
     throw new BadRequestError("Badge not assigned");

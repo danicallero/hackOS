@@ -123,18 +123,16 @@ function AccreditationRevealActions({
 type PersonLoadState = "loading" | "ready" | "missing" | "error";
 
 /**
- * The badge shown in the top-right corner: capability holders, enterprise
- * judges, sponsors, and mentors just show their role (there's no "accepted
- * place" concept for them). Participants (and anyone with no visible role at
- * all) instead flag a missing accepted place or an unconfirmed one, and the
- * pill is omitted entirely once they've confirmed (H8 — badge_category
- * retired, no more fixed admin/staff/sponsor/mentor/judge role-name match).
+ * The badge shown in the top-right corner reflects the current role-derived
+ * event entitlement. Application status and role labels remain useful
+ * context, but neither grants admission by itself.
  */
 function personRolePill(
   person: ScannerPerson,
   t: ReturnType<typeof useLocale>["t"],
 ): { label: string; tone: "accent" | "warning" } | null {
   const normalizedRole = person.role?.toLocaleLowerCase() ?? null;
+  if (!person.eventAccess) return { label: t("scannerNoEventAccess"), tone: "warning" };
   if (person.hasCapabilities || person.isEnterpriseJudge) {
     return { label: roleDisplayName(person.role, t), tone: "accent" };
   }
@@ -142,8 +140,9 @@ function personRolePill(
     return { label: person.role as string, tone: "accent" };
   }
   // Participant, a custom attendee role, or no visible role at all.
-  if (!person.accepted) return { label: t("scannerNoAcceptedPlace"), tone: "warning" };
-  return person.confirmed ? null : { label: t("scannerPlaceUnconfirmed"), tone: "warning" };
+  return normalizedRole === "participant" && person.confirmed
+    ? null
+    : { label: roleDisplayName(person.role, t), tone: "accent" };
 }
 
 export function PersonOperationsScreen() {
@@ -372,19 +371,15 @@ export function PersonOperationsScreen() {
       ]);
       return;
     }
-    if (person.role?.toLocaleLowerCase() === "participant" && !person.confirmed) {
-      Alert.alert(
-        person.accepted ? t("scannerPlaceUnconfirmed") : t("scannerNoAcceptedPlace"),
-        person.accepted ? t("personUnconfirmedWarning") : t("personUnacceptedWarning"),
-        [
-          { text: t("cancel"), style: "cancel" },
-          {
-            text: t("continueAnyway"),
-            style: "destructive",
-            onPress: () => setCameraAction(nextAction),
-          },
-        ],
-      );
+    if (!person.eventAccess) {
+      Alert.alert(t("scannerNoEventAccess"), t("personNoEventAccessWarning"), [
+        { text: t("cancel"), style: "cancel" },
+        {
+          text: t("continueAnyway"),
+          style: "destructive",
+          onPress: () => setCameraAction(nextAction),
+        },
+      ]);
       return;
     }
     setCameraAction(nextAction);

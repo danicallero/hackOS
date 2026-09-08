@@ -9,12 +9,11 @@ import { audit } from "../../lib/audit.js";
 import { assertVerifiedPrimaryEmail } from "../../lib/email-verification.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
-import { hasEventAccess } from "../identity/role.js";
+import { lockRoleGraph } from "../identity/role-authority.js";
 import { applyRoleAssignmentRevokeRules } from "../identity/role-grants.js";
 import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
-import { issueTicket } from "../logistics/tickets.js";
+import { reconcileTicketAccess } from "../logistics/tickets.js";
 import { issueWalletAccessToken } from "../logistics/wallet-access.js";
-import { voidTicketPasses } from "../logistics/wallet-passes.js";
 import { enqueueWalletSync } from "../logistics/wallet-sync.js";
 import type { FormSection, TemplateField } from "./schemas.js";
 
@@ -31,8 +30,8 @@ export interface ApplicationRow {
   name: string;
   /** DEPRECATED (H8): legacy static classification, no longer set by the API
    *  or read as authoritative — see application_grants_roles + roles.name
-   *  (formGrantsMentorRole below, granted_role_name in admin.routes.ts) for
-   *  the real, drift-proof classification. */
+   *  (and granted_role_name in admin.routes.ts) for the real, drift-proof
+   *  classification. */
   type: string | null;
   template: TemplateField[];
   sections: FormSection[];
@@ -152,33 +151,6 @@ export async function requireApplication(db: Queryable, id: number): Promise<App
   const app = await getApplication(db, id);
   if (!app) throw new NotFoundError("Application not found");
   return app;
-}
-
-/**
- * H8 full-replacement: whether a form's `grants_role_ids` include the seeded
- * "Mentor" role, matched by name (identity/role.ts's ATTENDEE_ROLE_NAMES) now
- * that the durable `badge_category` column is retired. Powers the
- * early-ticket-issuance special case below (sendOne/reAccept): accepted
- * mentors attend without a separate spot-confirmation step, so their
- * decision itself is the ticket-issuing transition, unlike every other
- * applicant who waits for confirm. Known tradeoff of the name-based match
- * (same one identity/role.ts's assignAttendeeRole/hasEventAccess accept): an
- * admin who renames the seeded Mentor role breaks this detection until
- * `grants_role_ids` is reconfigured against its new name.
- */
-async function formGrantsMentorRole(
-  client: pg.PoolClient,
-  applicationId: number,
-): Promise<boolean> {
-  const { rows } = await client.query(
-    `SELECT 1
-       FROM application_grants_roles agr
-       JOIN roles r ON r.id = agr.role_id AND r.deleted_at IS NULL
-      WHERE agr.application_id = $1 AND r.name = 'Mentor'
-      LIMIT 1`,
-    [applicationId],
-  );
-  return rows.length > 0;
 }
 
 /** Open for a NEW draft (H11) = past open_at, before close_at (close optional). */
@@ -573,6 +545,7 @@ export async function submitResponse(
   input: SubmitInput,
 ): Promise<{ response: ResponseRow; privacyNotice: string }> {
   return withTransaction(async (client) => {
+    await lockRoleGraph(client);
     const app = await requireApplication(client, applicationId);
 
     const { rows: userRows } = await client.query(
@@ -688,11 +661,13 @@ export async function submitResponse(
     );
 
     if (invited) {
-      // Auto-confirm: issue ticket, stamp confirmed_at, audit confirmed.
+      // Auto-confirm: reconcile the role-derived ticket, stamp confirmed_at,
+      // and audit confirmed. The invite acceptance path assigns the role;
+      // this transition only makes the response state durable.
       await client.query(`UPDATE application_responses SET confirmed_at = now() WHERE id = $1`, [
         existing.id,
       ]);
-      await issueTicket(client, userId);
+      await reconcileTicketAccess(client, userId);
       await audit(client, {
         actorId: userId,
         entityType: "application_response",
@@ -779,16 +754,16 @@ async function lockResponse(
     `SELECT user_id FROM application_responses WHERE id = $1`,
     [responseId],
   );
+  if (!targetRows[0]) throw new NotFoundError("Response not found");
+  const targetUserId = Number(targetRows[0].user_id);
+  const { rows: userRows } = await client.query(
+    `SELECT id FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+      FOR UPDATE`,
+    [targetUserId],
+  );
+  if (!userRows[0]) throw new NotFoundError("Response not found");
   if (actorId != null) {
-    const targetUserId = Number(targetRows[0]?.user_id);
-    if (!targetRows[0]) throw new NotFoundError("Response not found");
-    const { rows: userRows } = await client.query(
-      `SELECT id FROM users
-        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
-        FOR UPDATE`,
-      [targetUserId],
-    );
-    if (!userRows[0]) throw new NotFoundError("Response not found");
     await assertFixtureSubjectScope(client, actorId, targetUserId);
   }
   const { rows } = await client.query(
@@ -1029,10 +1004,6 @@ async function sendOne(
   const sentStatus = isAccepted ? "accepted" : "rejected";
   if (isAccepted) {
     token = await issueConfirmationToken(client, resp, app, user.email);
-    // Accepted mentors attend without a separate spot-confirmation step, so
-    // their decision is the ticket-issuing transition (H8: keyed off the
-    // form's actual grants_role_ids, not a static applications.type).
-    if (await formGrantsMentorRole(client, app.id)) await issueTicket(client, resp.user_id);
   }
   await client.query(
     `UPDATE application_responses SET status = $2, decision_sent_at = now() WHERE id = $1`,
@@ -1218,9 +1189,6 @@ export async function reAccept(
        WHERE id = $1`,
       [resp.id],
     );
-    // H8: keyed off the form's actual grants_role_ids, not a static
-    // applications.type — see formGrantsMentorRole's doc comment.
-    if (await formGrantsMentorRole(client, app.id)) await issueTicket(client, resp.user_id);
 
     await enqueueDecisionEmailRow(client, resp.user_id, user, app, "accepted", token);
 
@@ -1238,23 +1206,6 @@ export async function reAccept(
     ]);
     return { response: rows[0], confirmationToken: token };
   });
-}
-
-/**
- * Voids ticket-purpose wallet passes for a user who just lost their confirmed
- * spot, but only if they don't hold event access through some other route
- * (another confirmed response, or a manual attendee role) — the `tickets` row
- * itself is never touched (plan/07 invariant 10). Returns the voided pass ids
- * so the caller can push the update to devices after its transaction commits.
- */
-async function voidTicketAccessIfLost(client: pg.PoolClient, userId: number): Promise<number[]> {
-  if (await hasEventAccess(client, userId)) return [];
-  await voidTicketPasses(client, userId);
-  const voided = await client.query(
-    `SELECT id FROM wallet_passes WHERE user_id = $1 AND purpose = 'ticket' AND status = 'voided'`,
-    [userId],
-  );
-  return voided.rows.map((r: { id: number }) => r.id);
 }
 
 /**
@@ -1280,9 +1231,21 @@ async function revokeApplicationGrantedRoles(
 
   const { rows: revoked } = await client.query(
     `DELETE FROM user_roles
-     WHERE user_id = $1 AND role_id = ANY($2::int[]) AND source = 'application_confirmed'
+     WHERE user_id = $1
+       AND role_id = ANY($2::int[])
+       AND source = 'application_confirmed'
+       AND NOT EXISTS (
+         SELECT 1
+           FROM application_responses other_response
+           JOIN application_grants_roles other_grant
+             ON other_grant.application_id = other_response.application_id
+          WHERE other_response.user_id = $1
+            AND other_response.status = 'confirmed'
+            AND other_response.application_id <> $3
+            AND other_grant.role_id = user_roles.role_id
+       )
      RETURNING role_id`,
-    [userId, roleIds],
+    [userId, roleIds, applicationId],
   );
   for (const row of revoked as { role_id: number }[]) {
     await applyRoleAssignmentRevokeRules(client, userId, row.role_id, actorId);
@@ -1319,6 +1282,7 @@ async function pushTicketVoid(userId: number, voidedPassIds: number[]): Promise<
 export async function revokeSpot(actorId: number, responseId: number): Promise<ResponseRow> {
   let voidedPassIds: number[] = [];
   const result = await withTransaction(async (client) => {
+    await lockRoleGraph(client);
     const resp = await lockResponse(client, responseId, actorId);
     if (resp.status !== "accepted" && resp.status !== "confirmed") {
       throw new ConflictError("Only accepted or confirmed spots can be revoked", {
@@ -1350,12 +1314,13 @@ export async function revokeSpot(actorId: number, responseId: number): Promise<R
       reason: resp.status === "confirmed" ? "revoked after confirmation" : "revoked before confirm",
     });
 
-    // A ticket was only ever issued for a confirmed spot — void its wallet
-    // pass(es) if this was the user's last remaining event access, and
-    // revoke any roles doConfirm granted alongside that ticket.
+    // A confirmed spot grants the roles configured on its form. Revoke those
+    // application-owned roles first, then reconcile the user's ticket from
+    // the complete remaining role set. This preserves access when another
+    // role or confirmed response still grants event access.
     if (resp.status === "confirmed") {
-      voidedPassIds = await voidTicketAccessIfLost(client, resp.user_id);
       await revokeApplicationGrantedRoles(client, resp.user_id, resp.application_id, actorId);
+      voidedPassIds = (await reconcileTicketAccess(client, resp.user_id)).voidedPassIds;
     }
     return updated.rows[0] as ResponseRow;
   });
@@ -1847,14 +1812,13 @@ async function doConfirm(
   actorId: number | null,
 ): Promise<ConfirmResult> {
   if (resp.status === "confirmed") {
-    // Double-confirm is idempotent-friendly (H15): return already-confirmed.
-    const existing = await client.query(`SELECT token FROM tickets WHERE user_id = $1`, [
-      resp.user_id,
-    ]);
+    // Double-confirm is idempotent-friendly (H15): reconcile current role
+    // entitlement before returning the historical ticket token.
+    const ticketAccess = await reconcileTicketAccess(client, resp.user_id);
     return {
       status: "confirmed",
       alreadyConfirmed: true,
-      ticketToken: existing.rows[0]?.token ?? "",
+      ticketToken: ticketAccess.ticketToken ?? "",
       userId: resp.user_id,
     };
   }
@@ -1873,7 +1837,6 @@ async function doConfirm(
 
   // capacity is NOT re-checked here: it binds at ACCEPT time (plan invariant);
   // confirm never exceeds it because accepts already respected capacity.
-  const ticketToken = await issueTicket(client, resp.user_id);
   await client.query(
     `UPDATE application_responses SET status = 'confirmed', confirmed_at = now() WHERE id = $1`,
     [resp.id],
@@ -1896,6 +1859,7 @@ async function doConfirm(
       [resp.user_id, grantedRoleIds, actorId],
     );
   }
+  const ticketAccess = await reconcileTicketAccess(client, resp.user_id);
   await audit(client, {
     actorId,
     entityType: "application_response",
@@ -1905,7 +1869,12 @@ async function doConfirm(
     before: { status: "accepted" },
     after: { status: "confirmed", grantedRoleIds },
   });
-  return { status: "confirmed", alreadyConfirmed: false, ticketToken, userId: resp.user_id };
+  return {
+    status: "confirmed",
+    alreadyConfirmed: false,
+    ticketToken: ticketAccess.ticketToken ?? "",
+    userId: resp.user_id,
+  };
 }
 
 async function doDecline(
@@ -1937,13 +1906,12 @@ async function doDecline(
     after: { status: "declined" },
   });
 
-  // A ticket was only ever issued once this spot was confirmed — void its
-  // wallet pass(es) if this was the user's last remaining event access, and
-  // revoke any roles doConfirm granted alongside that ticket.
+  // Remove roles this confirmed response owned before deriving current ticket
+  // entitlement from every role that remains.
   let voidedPassIds: number[] = [];
   if (resp.status === "confirmed") {
-    voidedPassIds = await voidTicketAccessIfLost(client, resp.user_id);
     await revokeApplicationGrantedRoles(client, resp.user_id, resp.application_id, actorId);
+    voidedPassIds = (await reconcileTicketAccess(client, resp.user_id)).voidedPassIds;
   }
   return { status: "declined", alreadyDeclined: false, voidedPassIds };
 }
@@ -1956,9 +1924,12 @@ async function doDecline(
  */
 export async function confirmByToken(token: string): Promise<EmailConfirmResult> {
   return withTransaction(async (client) => {
+    await lockRoleGraph(client);
     const resp = await lockVerifiedResponseByToken(client, token, "confirmation");
     const result = await doConfirm(client, resp, "email_link", resp.user_id);
-    const grant = await issueWalletAccessToken(client, resp.user_id, "ticket");
+    const grant = result.ticketToken
+      ? await issueWalletAccessToken(client, resp.user_id, "ticket")
+      : null;
     const { rows: userRows } = await client.query(
       `SELECT email FROM users
         WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
@@ -1966,8 +1937,11 @@ export async function confirmByToken(token: string): Promise<EmailConfirmResult>
     );
     return {
       ...result,
-      walletToken: grant.token,
-      walletTokenExpiresAt: grant.expiresAt.toISOString(),
+      // Preserve the old response type for clients already in production.
+      // An empty value means this confirmed response did not produce a role
+      // with event access, so there is no scoped Wallet credential to use.
+      walletToken: grant?.token ?? "",
+      walletTokenExpiresAt: grant?.expiresAt.toISOString() ?? "",
       maskedEmail: maskEmail((userRows[0]?.email as string | undefined) ?? ""),
     };
   });
@@ -1980,6 +1954,7 @@ export async function confirmByResponseId(
   requireOwner?: number,
 ): Promise<ConfirmResult> {
   return withTransaction(async (client) => {
+    await lockRoleGraph(client);
     // Lock the caller's verification state before the response, matching
     // submitResponse's user→response order. The ownership check below still
     // prevents acting on somebody else's response.
@@ -1999,6 +1974,7 @@ export async function declineByToken(token: string): Promise<{
   alreadyDeclined: boolean;
 }> {
   const result = await withTransaction(async (client) => {
+    await lockRoleGraph(client);
     const resp = await lockVerifiedResponseByToken(client, token, "decline");
     const decline = await doDecline(client, resp, "email_link", resp.user_id);
     return { ...decline, userId: resp.user_id };
@@ -2014,6 +1990,7 @@ export async function declineByResponseId(
   requireOwner?: number,
 ): Promise<{ status: string; alreadyDeclined: boolean }> {
   const result = await withTransaction(async (client) => {
+    await lockRoleGraph(client);
     if (requireOwner != null) {
       await assertVerifiedPrimaryEmail(client, requireOwner, { forUpdate: true });
     }
