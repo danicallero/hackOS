@@ -159,7 +159,7 @@ export const scannerRoleStatsResponse = z.object({
       role: z.string(),
       /** At least one member of this role bucket is a real capability holder — the scanner's "staff" filter key. */
       hasCapabilities: z.boolean(),
-      /** Eligible to be accredited: capability holders/enterprise judges/sponsor reps always, everyone else only once their application is confirmed. */
+      /** Eligible to be accredited when at least one assigned active role grants event access. */
       eligible: z.number().int(),
       /** Badge already issued. */
       accredited: z.number().int(),
@@ -180,6 +180,7 @@ const scannerPersonCard = z.object({
   // spelling — mirrors stats.ts's scannerRoleStats classification.
   hasCapabilities: z.boolean(),
   isEnterpriseJudge: z.boolean(),
+  eventAccess: z.boolean(),
   ticketToken: z.string().nullable(),
   badgeId: z.string().nullable(),
   revokedBadgeIds: z.array(z.string()),

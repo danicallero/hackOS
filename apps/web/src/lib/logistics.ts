@@ -15,6 +15,7 @@ export interface AccreditationLookup extends PersonCard {
   dni: string | null;
   shirtSize: string | null;
   confirmed: boolean;
+  hasEventAccess: boolean;
   hasTicket: boolean;
   alreadyAccredited: boolean;
   currentBadge: string | null;
@@ -52,6 +53,7 @@ export interface PersonDirectoryEntry {
   badgeId: string | null;
   dni: string | null;
   role: string | null;
+  eventAccess: boolean;
   confirmed: boolean;
   present: boolean;
 }

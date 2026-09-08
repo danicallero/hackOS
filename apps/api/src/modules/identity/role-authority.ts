@@ -305,13 +305,19 @@ export async function requireCapabilityPossessionForAssignment(
   roleId: number,
 ): Promise<void> {
   const { rows } = await client.query(
-    `SELECT capability FROM role_capabilities WHERE role_id = $1 AND state = 'allow'`,
+    `SELECT rc.capability
+       FROM roles r
+       LEFT JOIN role_capabilities rc
+         ON rc.role_id = r.id AND rc.state = 'allow'
+      WHERE r.id = $1`,
     [roleId],
   );
   await assertPossessesAll(
     client,
     actorId,
-    (rows as { capability: string }[]).map((r) => r.capability),
+    (rows as { capability: string | null }[])
+      .filter((r): r is { capability: string } => r.capability !== null)
+      .map((r) => r.capability),
     "You may only assign a role that grants capabilities you already possess yourself",
   );
 }

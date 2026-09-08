@@ -44,18 +44,20 @@ export async function createRole(
   overrides: Partial<{
     name: string;
     isVisible: boolean;
+    eventAccess: boolean;
     isProtected: boolean;
     isSeeded: boolean;
   }> = {},
 ): Promise<number> {
   const name = overrides.name ?? `test-role-${crypto.randomUUID()}`;
   const { rows } = await pool.query(
-    `INSERT INTO roles (name, position, is_visible, is_protected, is_seeded)
-     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+    `INSERT INTO roles (name, position, is_visible, event_access, is_protected, is_seeded)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
     [
       name,
       randomRolePosition(),
       overrides.isVisible ?? true,
+      overrides.eventAccess ?? true,
       overrides.isProtected ?? false,
       overrides.isSeeded ?? false,
     ],
@@ -80,11 +82,12 @@ export async function createRole(
 export async function seedRoleDefaults(
   roleId: number,
   capabilities: Record<string, "allow">,
+  eventAccess = true,
 ): Promise<void> {
-  await pool.query(`INSERT INTO role_seed_defaults (role_id, capabilities) VALUES ($1, $2)`, [
-    roleId,
-    JSON.stringify(capabilities),
-  ]);
+  await pool.query(
+    `INSERT INTO role_seed_defaults (role_id, capabilities, event_access) VALUES ($1, $2, $3)`,
+    [roleId, JSON.stringify(capabilities), eventAccess],
+  );
 }
 
 /** Assign an existing role to a user. */

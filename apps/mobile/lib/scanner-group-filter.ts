@@ -43,19 +43,13 @@ export function matchesScannerGroup(
 }
 
 /**
- * "Confirmed" for the stats tile means "eligible to be accredited", not the
- * raw `confirmed` application flag: staff/admin (capability holders) and
- * sponsors are always eligible (they never file an application, so
- * `confirmed` stays false for them), while participants and mentors are
- * gated by their application's confirmed status. Mirrors stats.ts's
- * scannerRoleStats `is_operational` (minus enterprise judges, who aren't
- * scanned at doors).
+ * "Confirmed" for the stats tile means "eligible to be accredited". The
+ * server and scanner roster both use the same role-derived event entitlement;
+ * application status, capabilities, and sponsor relationships are only
+ * descriptive fields and do not grant a ticket on their own.
  */
-export function isAccreditationEligible(
-  person: Pick<ScannerPerson, "role" | "confirmed" | "hasCapabilities">,
-): boolean {
-  if (person.hasCapabilities || normalizedRole(person.role) === "sponsor") return true;
-  return person.confirmed;
+export function isAccreditationEligible(person: Pick<ScannerPerson, "eventAccess">): boolean {
+  return person.eventAccess;
 }
 
 export async function loadScannerGroupFilter(): Promise<ScannerGroup[]> {

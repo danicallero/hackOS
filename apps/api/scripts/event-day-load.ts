@@ -260,6 +260,16 @@ async function prepareFixture(options: Options): Promise<Fixture> {
       [participantIds],
     );
     await client.query(
+      `INSERT INTO user_roles (user_id, role_id, source)
+       SELECT id, r.id, 'event_day_load'
+         FROM users
+         CROSS JOIN roles r
+        WHERE users.id = ANY($1::int[])
+          AND r.name = 'Participant' AND r.is_seeded = true AND r.deleted_at IS NULL
+       ON CONFLICT (user_id, role_id) DO NOTHING`,
+      [participantIds],
+    );
+    await client.query(
       `INSERT INTO tickets (user_id, token)
        SELECT id, 'event-day-ticket-' || id FROM users WHERE id = ANY($1::int[])`,
       [participantIds],
@@ -285,10 +295,12 @@ async function prepareFixture(options: Options): Promise<Fixture> {
     const judges = judgeRows.rows.map((row) => Number(row.id));
 
     const operatorRole = await client.query<{ id: number }>(
-      `INSERT INTO roles (name, position) VALUES ('event-day-load-operators', 700) RETURNING id`,
+      `INSERT INTO roles (name, position, event_access)
+       VALUES ('event-day-load-operators', 700, true) RETURNING id`,
     );
     const judgeRole = await client.query<{ id: number }>(
-      `INSERT INTO roles (name, position) VALUES ('event-day-load-judges', 690) RETURNING id`,
+      `INSERT INTO roles (name, position, event_access)
+       VALUES ('event-day-load-judges', 690, true) RETURNING id`,
     );
     const operatorRoleId = operatorRole.rows[0]?.id;
     const judgeRoleId = judgeRole.rows[0]?.id;
@@ -319,6 +331,14 @@ async function prepareFixture(options: Options): Promise<Fixture> {
       `INSERT INTO user_roles (user_id, role_id)
        SELECT unnest($1::int[]), $2`,
       [judges, judgeRoleId],
+    );
+    await client.query(
+      `INSERT INTO tickets (user_id, token)
+       SELECT id, 'event-day-ticket-' || id
+         FROM users
+        WHERE id = ANY($1::int[])
+       ON CONFLICT (user_id) DO NOTHING`,
+      [[...operators, ...judges]],
     );
 
     const enterprise = await client.query<{ id: number }>(

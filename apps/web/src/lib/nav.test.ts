@@ -63,7 +63,7 @@ describe("stable personal area (audit §3.1)", () => {
   });
 });
 
-describe("pure applicant (no confirmed spot, no operational role)", () => {
+describe("pure applicant (no role-derived event access, no operational role)", () => {
   const ctx = contextFor([], { isPureApplicant: true });
 
   it("hides wallet, project, queue and inbox", () => {

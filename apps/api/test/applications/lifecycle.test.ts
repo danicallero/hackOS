@@ -424,10 +424,10 @@ describe("review + decide (H13, H14)", () => {
 });
 
 describe("confirm / decline (H15)", () => {
-  it("issues a ticket when a mentor acceptance is sent, without waiting for confirmation", async () => {
-    // H8: mentor-ness is now the form actually granting the role named
-    // "Mentor" (see identity/role.ts's formGrantsMentorRole/ATTENDEE_ROLE_NAMES),
-    // not a static applications.type — the retired field this replaces.
+  it("does not issue a ticket until a role-bearing acceptance is confirmed", async () => {
+    // H8/H15: an accepted response only becomes event access once its
+    // configured role is assigned on confirmation. The old mentor-only
+    // early-ticket exception no longer exists.
     const mentorRoleId = await createRole([], { name: "Mentor" });
     const mentorAppId = await createApplication();
     await pool.query(
@@ -436,7 +436,50 @@ describe("confirm / decline (H15)", () => {
     );
     const { userId } = await toAcceptedSent(mentorAppId);
     const { rows } = await pool.query(`SELECT token FROM tickets WHERE user_id = $1`, [userId]);
-    expect(rows).toHaveLength(1);
+    expect(rows).toHaveLength(0);
+
+    const token = await latestConfirmationToken(userId);
+    const confirmation = await (await getApp()).inject({
+      method: "POST",
+      url: "/api/applications/confirm",
+      payload: { token },
+    });
+    expect(confirmation.statusCode).toBe(200);
+    expect(confirmation.json().ticket_token).toBeTruthy();
+  });
+
+  it("keeps the published confirm contract when confirmation grants no event-bearing role", async () => {
+    const a = await getApp();
+    const appId = await createApplication({ type: "volunteer" });
+    const { userId } = await toAcceptedSent(appId);
+    const token = await latestConfirmationToken(userId);
+
+    const confirmation = await a.inject({
+      method: "POST",
+      url: "/api/applications/confirm",
+      payload: { token },
+    });
+    expect(confirmation.statusCode).toBe(200);
+    const body = confirmation.json();
+
+    // The already-published app/web clients decode these as strings. Empty
+    // values preserve that contract while truthiness still says "no pass".
+    expect(body.ticket_token).toBe("");
+    expect(body.wallet_token).toBe("");
+    expect(body.wallet_token_expires_at).toBe("");
+    expect(typeof body.ticket_token).toBe("string");
+    expect(typeof body.wallet_token).toBe("string");
+    expect(typeof body.wallet_token_expires_at).toBe("string");
+
+    // The old mobile build still reads this field; its value now comes from
+    // the same role entitlement as the ticket instead of a legacy fallback.
+    const me = await a.inject({ method: "GET", url: "/api/me", headers: asUser(userId) });
+    expect(me.json().mobileAccess).toBe(false);
+    expect(me.json().hasEventAccess).toBe(false);
+    expect(
+      (await a.inject({ method: "GET", url: "/api/me/ticket", headers: asUser(userId) })).json()
+        .ticketToken,
+    ).toBeNull();
   });
 
   it("does not early-issue a ticket for a form granting a non-mentor role", async () => {
@@ -963,7 +1006,7 @@ describe("re-accept (admin)", () => {
     expect(confirm.json().status).toBe("confirmed");
   });
 
-  it("issues a ticket on re-accept for a form granting the mentor role (H8)", async () => {
+  it("does not issue a ticket on re-accept until the response is confirmed again", async () => {
     const a = await getApp();
     const mentorRoleId = await createRole([], { name: "Mentor" });
     const appId = await createApplication();
@@ -987,7 +1030,16 @@ describe("re-accept (admin)", () => {
     expect(res.statusCode).toBe(200);
 
     const { rows } = await pool.query(`SELECT token FROM tickets WHERE user_id = $1`, [userId]);
-    expect(rows).toHaveLength(1);
+    expect(rows).toHaveLength(0);
+
+    const token = await latestConfirmationToken(userId);
+    const confirmation = await a.inject({
+      method: "POST",
+      url: "/api/applications/confirm",
+      payload: { token },
+    });
+    expect(confirmation.statusCode).toBe(200);
+    expect(confirmation.json().ticket_token).toBeTruthy();
   });
 
   it("declining after confirmation removes the role the form granted on confirm (H15, H8)", async () => {

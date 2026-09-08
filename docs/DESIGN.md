@@ -557,9 +557,10 @@ architecture: [`mobile.md`](./mobile.md).**
   pattern. Session restoration uses a neutral surface for the first 500 ms and
   only presents a progress announcement when the operation is genuinely slow,
   preventing transient content and VoiceOver noise during normal launches.
-- A successfully authenticated account without mobile-event access is signed
-  out and receives one native modal alert with a clear dismissal action. This
-  access boundary must not be represented only as transient inline copy.
+- A successfully authenticated account without role-derived mobile/event
+  access is signed out and receives one native modal alert with a clear
+  dismissal action. This access boundary must not be represented only as
+  transient inline copy.
 - Notifications render in the foreground too (Expo's default suppresses
   them); a tapped queue notification navigates to the queue tab.
 - Copy comes from `lib/i18n.tsx` (react-i18next), reading

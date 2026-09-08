@@ -1,6 +1,6 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { App } from "../../src/app.js";
 import { config } from "../../src/config.js";
 import { logisticsStats } from "../../src/modules/logistics/stats.js";
@@ -78,8 +78,18 @@ async function fixtureUserId(email: string): Promise<number> {
   return row.id;
 }
 
+function sessionCookie(response: { headers: Record<string, unknown> }): string {
+  const setCookie = response.headers["set-cookie"];
+  const cookies = Array.isArray(setCookie) ? setCookie : [String(setCookie)];
+  const session = cookies.find((cookie) => cookie.includes("session_token"));
+  if (!session) throw new Error("Expected a session cookie");
+  const [value] = session.split(";", 1);
+  if (!value) throw new Error("Expected a session cookie value");
+  return value;
+}
+
 describe("review fixture regeneration", () => {
-  it("requires admin capability and returns the four synthetic reviewer accounts", async () => {
+  it("requires admin capability and preserves app/ticket access for all four reviewer accounts", async () => {
     const a = await getApp();
     const ordinary = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
     const denied = await a.inject({
@@ -121,6 +131,39 @@ describe("review fixture regeneration", () => {
     );
     expect(registry).toHaveLength(4);
     expect(registry.every((row) => row.generation === 1)).toBe(true);
+
+    // Every App Store reviewer account must retain the participant-facing app
+    // entry point after event access became role-derived. The operator is
+    // still a participant for this purpose: their operational capabilities do
+    // not replace the entrance entitlement, and all four accounts need a
+    // ticket so the published mobile build can exercise the same entry flow.
+    for (const account of result.accounts) {
+      const accountId = await fixtureUserId(account.email);
+      const profile = await a.inject({
+        method: "GET",
+        url: "/api/me",
+        headers: asUser(accountId),
+      });
+      expect(profile.statusCode).toBe(200);
+      expect(profile.json()).toMatchObject({
+        mobileAccess: true,
+        hasEventAccess: true,
+      });
+      expect(profile.json().roles).toEqual(
+        expect.arrayContaining([expect.objectContaining({ eventAccess: true })]),
+      );
+
+      const ticket = await a.inject({
+        method: "GET",
+        url: "/api/me/ticket",
+        headers: asUser(accountId),
+      });
+      expect(ticket.statusCode).toBe(200);
+      expect(ticket.json()).toMatchObject({
+        userId: accountId,
+        ticketToken: expect.any(String),
+      });
+    }
 
     const staff = result.accounts.find((account) => account.fixtureKey === "staff-exit-operator");
     const inside = result.accounts.find(
@@ -190,6 +233,191 @@ describe("review fixture regeneration", () => {
     });
     expect(adminSearch.statusCode).toBe(200);
     expect(adminSearch.json().results).toHaveLength(1);
+  });
+
+  it("resets fixture state without rotating the reviewer login email", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    const first = await regenerate(a, admin);
+    const firstEmails = new Map(
+      first.accounts.map((account) => [account.fixtureKey, account.email]),
+    );
+    expect(first.accounts.every((account) => !/-\d+@hackos\.test$/.test(account.email))).toBe(true);
+
+    const outsideEmail = firstEmails.get("participant-anonymize-outside");
+    if (!outsideEmail) throw new Error("Expected outside fixture email");
+    const outsideId = await fixtureUserId(outsideEmail);
+    const { pool } = await import("../../src/db/pool.js");
+    const initialLogin = await a.inject({
+      method: "POST",
+      url: "/api/auth/sign-in/email",
+      payload: { email: outsideEmail, password: fixturePassword },
+    });
+    expect(initialLogin.statusCode).toBe(200);
+    const initialSessionCookie = sessionCookie(initialLogin);
+    await pool.query(
+      `UPDATE review_fixture_accounts
+          SET last_authenticated_at = clock_timestamp(), last_authenticated_ip = '203.0.113.18'
+        WHERE fixture_key = 'participant-anonymize-outside'`,
+    );
+    await pool.query(
+      `UPDATE users
+          SET name = 'Changed reviewer', surname = 'Changed state', notes = 'Changed state',
+              ui_prefs = '{"scheduleTable":{"columns":["email"]}}'::jsonb
+        WHERE id = $1`,
+      [outsideId],
+    );
+
+    const second = await regenerate(a, admin);
+    expect(second.generation).toBe(2);
+    expect(new Map(second.accounts.map((account) => [account.fixtureKey, account.email]))).toEqual(
+      firstEmails,
+    );
+
+    const current = await pool.query<{
+      email: string;
+      name: string | null;
+      surname: string | null;
+      notes: string | null;
+      ui_prefs: Record<string, unknown>;
+      account_state: string;
+      email_verified: boolean;
+      is_test_account: boolean;
+      badge_id: string | null;
+    }>(
+      `SELECT email, name, surname, notes, ui_prefs, account_state, email_verified,
+              is_test_account, badge_id
+         FROM users
+        WHERE email = ANY($1::text[])
+        ORDER BY email`,
+      [[...firstEmails.values()]],
+    );
+    expect(current.rows).toHaveLength(4);
+    expect(current.rows.every((row) => row.account_state === "active")).toBe(true);
+    expect(current.rows.every((row) => row.email_verified && row.is_test_account)).toBe(true);
+    const resetOutside = current.rows.find((row) => row.email === outsideEmail);
+    expect(resetOutside).toMatchObject({
+      name: "App Review",
+      surname: "Anonymize Outside",
+      notes: null,
+      ui_prefs: {},
+      badge_id: "review-2-participant-anonymize-outside",
+    });
+
+    const revokedSession = await a.inject({
+      method: "GET",
+      url: "/api/me",
+      headers: { cookie: initialSessionCookie },
+    });
+    expect(revokedSession.statusCode).toBe(401);
+
+    const status = await a.inject({
+      method: "GET",
+      url: "/api/admin/review-fixtures",
+      headers: asUser(admin),
+    });
+    expect(status.statusCode).toBe(200);
+    expect(status.json().accounts).toEqual(
+      expect.arrayContaining(
+        first.accounts.map((account) =>
+          expect.objectContaining({
+            fixtureKey: account.fixtureKey,
+            email: account.email,
+            active: true,
+            lastAuthenticatedAt: null,
+            lastAuthenticatedIp: null,
+          }),
+        ),
+      ),
+    );
+
+    const tickets = await pool.query<{ email: string; token: string }>(
+      `SELECT u.email, t.token
+         FROM users u
+         JOIN tickets t ON t.user_id = u.id
+        WHERE u.email = ANY($1::text[])
+        ORDER BY u.email`,
+      [[...firstEmails.values()]],
+    );
+    expect(tickets.rows).toHaveLength(4);
+    expect(tickets.rows.every((row) => row.token.length > 0)).toBe(true);
+
+    const info = vi.spyOn(a.log, "info");
+    const login = await a.inject({
+      method: "POST",
+      url: "/api/auth/sign-in/email",
+      remoteAddress: "198.51.100.31",
+      payload: { email: outsideEmail, password: fixturePassword },
+    });
+    expect(login.statusCode).toBe(200);
+    const loginSessionCookie = sessionCookie(login);
+
+    const directApi = await a.inject({
+      method: "GET",
+      url: "/api/me",
+      remoteAddress: "198.51.100.32",
+      headers: { cookie: loginSessionCookie },
+    });
+    expect(directApi.statusCode).toBe(200);
+    const reviewerLogs = info.mock.calls
+      .map(([fields]) => fields)
+      .filter(
+        (fields): fields is Record<string, unknown> =>
+          typeof fields === "object" && fields !== null && "kind" in fields,
+      );
+    expect(reviewerLogs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "DEBUG",
+          reviewFixture: true,
+          fixtureKey: "participant-anonymize-outside",
+          method: "POST",
+          statusCode: 200,
+          ip: "198.51.100.31",
+          originatingIp: "198.51.100.31",
+        }),
+        expect.objectContaining({
+          kind: "DEBUG",
+          reviewFixture: true,
+          fixtureKey: "participant-anonymize-outside",
+          method: "GET",
+          path: "/api/me",
+          statusCode: 200,
+          ip: "198.51.100.32",
+          originatingIp: "198.51.100.32",
+        }),
+      ]),
+    );
+    info.mockRestore();
+  });
+
+  it("preserves a reviewer login email carried by an older generation", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    const first = await regenerate(a, admin);
+    const outside = first.accounts.find(
+      (account) => account.fixtureKey === "participant-anonymize-outside",
+    );
+    if (!outside) throw new Error("Expected outside fixture");
+    const outsideId = await fixtureUserId(outside.email);
+    const legacyEmail = outside.email.replace("@hackos.test", "-1@hackos.test");
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE users SET email = $1 WHERE id = $2`, [legacyEmail, outsideId]);
+
+    const second = await regenerate(a, admin);
+    const resetOutside = second.accounts.find(
+      (account) => account.fixtureKey === "participant-anonymize-outside",
+    );
+    expect(second.generation).toBe(2);
+    expect(resetOutside?.email).toBe(legacyEmail);
+    expect(await fixtureUserId(legacyEmail)).toBe(outsideId);
+
+    const login = await a.inject({
+      method: "POST",
+      url: "/api/auth/sign-in/email",
+      payload: { email: legacyEmail, password: fixturePassword },
+    });
+    expect(login.statusCode).toBe(200);
   });
 
   it("fails closed when fixture secrets are not configured", async () => {

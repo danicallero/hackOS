@@ -20,6 +20,7 @@ import { idempotencyOnSend } from "./lib/idempotency.js";
 import { observeHttpRequest, register } from "./lib/metrics.js";
 import { RequestAdmission, type RequestAdmissionLease } from "./lib/request-admission.js";
 import { classifyRequestLane, isSseRequest } from "./lib/request-lanes.js";
+import { findReviewFixtureByUserId } from "./lib/review-fixture-log.js";
 import { openApiSecurityForPolicy, registerRoutePolicyInfrastructure } from "./lib/route-policy.js";
 import { broadcast } from "./lib/sse.js";
 import { mutationDomainForPath, publicContentMutationForPath } from "./lib/sse-routing.js";
@@ -271,6 +272,15 @@ export async function buildApp(): Promise<App> {
   const admissionLeases = new WeakMap<FastifyRequest, RequestAdmissionLease>();
 
   app.addHook("onRequest", async (req) => {
+    if (req.userId != null) {
+      try {
+        req.reviewFixtureContext = await findReviewFixtureByUserId(pool, req.userId);
+      } catch {
+        // Reviewer diagnostics must never turn an otherwise valid request into
+        // a failure when the optional lookup is unavailable.
+        req.reviewFixtureContext = null;
+      }
+    }
     const lane = classifyRequestLane({ url: req.url, method: req.method, userId: req.userId });
     observeHttpRequest(lane, req.method);
     // A long-lived SSE socket must never hold an admission slot for its whole
@@ -296,6 +306,33 @@ export async function buildApp(): Promise<App> {
   };
   app.addHook("onResponse", async (req) => releaseAdmission(req));
   app.addHook("onError", async (req) => releaseAdmission(req));
+
+  app.addHook("onResponse", async (req, reply) => {
+    const fixture = req.reviewFixtureContext;
+    const path = req.url.split("?", 1)[0] ?? req.url;
+    if (!fixture || !path.startsWith("/api/")) return;
+    const route = req.routeOptions.url ?? path;
+
+    // Keep reviewer diagnostics visible in production even when the normal
+    // debug level is disabled: INFO is the transport level, while kind marks
+    // this deliberately bounded synthetic-account trace. Never log query
+    // strings, request bodies, cookies or credentials.
+    req.log.info(
+      {
+        kind: "DEBUG",
+        reviewFixture: true,
+        fixtureKey: fixture.fixtureKey,
+        userId: fixture.userId,
+        email: fixture.email,
+        method: req.method,
+        path: route,
+        statusCode: reply.statusCode,
+        ip: req.ip,
+        originatingIp: req.ip,
+      },
+      "review fixture API operation",
+    );
+  });
 
   app.addHook("onSend", idempotencyOnSend);
   app.addHook("onResponse", async (req, reply) => {

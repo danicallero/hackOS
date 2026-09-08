@@ -10,9 +10,10 @@ const ME_CACHE_KEY = "me";
 /**
  * Loads GET /api/me and refetches on app foreground (H55: "al cambiar los
  * permisos de alguien, sus pestañas cambian sin reinstalar nada" — a
- * capability change made by an admin elsewhere must show up here without a
- * reinstall, so we refresh whenever the app comes back to the foreground,
- * plus whatever manual refetch() callers wire to pull-to-refresh).
+ * capability or role-derived event-access change made by an admin elsewhere
+ * must show up here without a reinstall, so we refresh whenever the app comes
+ * back to the foreground, plus whatever manual refetch() callers wire to
+ * pull-to-refresh).
  *
  * A device with no connectivity must not get stuck on "verifying session"
  * forever: a fetch failure that isn't a confirmed 401 (i.e. the server was

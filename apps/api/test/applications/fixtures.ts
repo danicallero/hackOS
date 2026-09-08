@@ -1,6 +1,6 @@
 import { pool } from "../../src/db/pool.js";
 import type { TemplateField } from "../../src/modules/applications/schemas.js";
-import { ensureApplicationFormVersion } from "../helpers.js";
+import { createRole, ensureApplicationFormVersion } from "../helpers.js";
 
 /** A minimal 2-field template: a required text field and an optional select. */
 export function sampleTemplate(): TemplateField[] {
@@ -63,6 +63,21 @@ export async function createApplication(
     ],
   );
   await ensureApplicationFormVersion(rows[0].id);
+  const roleName =
+    type === "participant" ? "Participant" : type === "mentor" ? "Mentor" : undefined;
+  if (roleName) {
+    const existingRole = await pool.query(
+      `SELECT id FROM roles WHERE name = $1 AND deleted_at IS NULL ORDER BY position DESC LIMIT 1`,
+      [roleName],
+    );
+    const roleId =
+      existingRole.rows[0]?.id ?? (await createRole([], { name: roleName, isSeeded: true }));
+    await pool.query(
+      `INSERT INTO application_grants_roles (application_id, role_id)
+       VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [rows[0].id, roleId],
+    );
+  }
   return rows[0].id;
 }
 

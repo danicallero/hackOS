@@ -3,6 +3,8 @@ import type pg from "pg";
 import { pool } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { UnauthorizedError } from "../../lib/errors.js";
+import { hasEventAccess } from "../identity/role.js";
+import { lockRoleGraph } from "../identity/role-authority.js";
 import type { Purpose } from "./wallet-passes.js";
 
 /**
@@ -36,6 +38,7 @@ export async function issueWalletAccessToken(
   userId: number,
   purpose: Purpose,
 ): Promise<WalletAccessGrant> {
+  await lockRoleGraph(client);
   // H54: the scoped token is still a credential. Serialize its issuance with
   // account removal so a pending account cannot mint a last-minute Wallet
   // link after its sessions and existing tokens were revoked.
@@ -46,6 +49,9 @@ export async function issueWalletAccessToken(
     [userId],
   );
   if (!active.rows[0]) throw new UnauthorizedError("Account is closed or being removed");
+  if (purpose === "ticket" && !(await hasEventAccess(client, userId))) {
+    throw new UnauthorizedError("This user has no role granting event access");
+  }
   const token = randomBytes(32).toString("base64url");
   const { rows } = await client.query(
     `INSERT INTO wallet_access_tokens (token, user_id, purpose, expires_at)
@@ -82,6 +88,9 @@ export async function resolveWalletAccessToken(
     [token, purpose],
   );
   if (!rows[0]) throw new UnauthorizedError("Wallet link is invalid or has expired");
+  if (purpose === "ticket" && !(await hasEventAccess(pool, rows[0].user_id as number))) {
+    throw new UnauthorizedError("Wallet link is invalid or has expired");
+  }
   return { userId: rows[0].user_id as number };
 }
 

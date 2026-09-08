@@ -92,6 +92,7 @@ describe("H22-H26 native scanner snapshot", () => {
         dni: "11223344B",
         accepted: true,
         confirmed: true,
+        eventAccess: true,
         foodIntoleranceNotes: "Severe",
       }),
     );

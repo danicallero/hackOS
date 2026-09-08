@@ -732,6 +732,7 @@ Table role_grant_rules {
 Table role_seed_defaults {
   role_id integer [pk, not null]
   capabilities jsonb [not null]
+  event_access boolean [not null, default: `false`, note: 'H8: seed-time event entitlement for the role, restored together with its seed-time capability snapshot.']
 
   Note: 'H8: one row per is_seeded role, capturing exactly the ALLOW capability set it was seeded with (0801 Sponsor, 0805 default catalogue). Used by GET /api/roles/:roleId/seed-diff and POST /api/roles/:roleId/reset-to-default to compute/undo drift from live role_capabilities.'
 }
@@ -746,6 +747,7 @@ Table roles {
   created_at "timestamp with time zone" [not null, default: `now()`]
   updated_at "timestamp with time zone" [not null, default: `now()`]
   deleted_at "timestamp with time zone" [note: 'H8: soft-delete marker. Non-null excludes the role from capability resolution (user_effective_capabilities), from default GET /api/roles listings, and from every "highest role" / wildcard-holder computation, as if the user held no such role. A deleted role\'s position becomes available for reuse (see roles_position_idx below); POST .../restore 409s only if a still-live role has since taken that exact slot.']
+  event_access boolean [not null, default: `false`, note: 'H8/H15: whether holding this role entitles a user to use the event app and receive an entrance ticket. Independent of is_visible and role capabilities; effective access is OR across assigned, non-deleted roles.']
 
   Note: 'H8: the authorization truth. is_visible marks a role eligible to be shown as a user\'s public role; is_protected is the enforced (not informational) lockout — every HTTP mutation route refuses a role with is_protected = true outright (role-authority.ts assertNotProtectedRole), regardless of the actor\'s own capabilities; it is never settable via POST/PATCH /api/roles, only by direct DB/CLI action (only system:superadmin carries it today, see scripts/grant-superadmin.mjs and create-superadmin.ts); is_seeded marks a role that came from a seed migration rather than being created by an admin.'
 }

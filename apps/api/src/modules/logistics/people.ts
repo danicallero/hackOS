@@ -60,6 +60,7 @@ export async function searchPeople(
   const ticket = await pool.query(
     `SELECT t.user_id FROM tickets t
       JOIN users u ON u.id = t.user_id
+      JOIN user_event_access uea ON uea.user_id = u.id
      WHERE upper(t.token) = upper($1) AND u.account_state = 'active' AND u.anonymized_at IS NULL${fixtureFilter}`,
     [needle],
   );
@@ -123,6 +124,7 @@ export interface RosterEntry {
   badgeId: string | null;
   dni: string | null;
   role: string | null;
+  eventAccess: boolean;
   confirmed: boolean;
   present: boolean;
 }
@@ -139,6 +141,9 @@ export async function listPeople(actorId?: number): Promise<RosterEntry[]> {
   const fixtureFilter = await fixtureReadFilter(pool, actorId, "u");
   const { rows } = await pool.query(
     `SELECT u.id, u.name, u.surname, u.email, u.badge_id, u.dni, uern.role_name AS role,
+            EXISTS (
+              SELECT 1 FROM user_event_access uea WHERE uea.user_id = u.id
+            ) AS event_access,
             EXISTS (
               SELECT 1 FROM application_responses ar
                WHERE ar.user_id = u.id AND ar.status = 'confirmed'
@@ -165,6 +170,7 @@ export async function listPeople(actorId?: number): Promise<RosterEntry[]> {
       badge_id: string | null;
       dni: string | null;
       role: string | null;
+      event_access: boolean;
       confirmed: boolean;
       present: boolean | null;
     }[]
@@ -176,6 +182,7 @@ export async function listPeople(actorId?: number): Promise<RosterEntry[]> {
     badgeId: r.badge_id,
     dni: r.dni,
     role: r.role,
+    eventAccess: Boolean(r.event_access),
     confirmed: r.confirmed,
     present: Boolean(r.present),
   }));

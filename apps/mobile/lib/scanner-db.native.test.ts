@@ -112,6 +112,7 @@ function snapshot(name: string): ScannerSnapshot {
         role: "Participant",
         hasCapabilities: false,
         isEnterpriseJudge: false,
+        eventAccess: true,
         ticketToken: `ticket-${name}`,
         badgeId: `badge-${name}`,
         revokedBadgeIds: [],

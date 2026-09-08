@@ -1,10 +1,12 @@
 import { randomBytes } from "node:crypto";
 import type pg from "pg";
 import { pool } from "../../db/pool.js";
-import { NotFoundError } from "../../lib/errors.js";
+import { ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { hasEventAccess } from "../identity/role.js";
+import { lockRoleGraph } from "../identity/role-authority.js";
 import { assertFixtureSubjectScope } from "./review-fixture-scope.js";
 import { PASS_TYPE_IDENTIFIER } from "./wallet.js";
+import { voidTicketPasses } from "./wallet-passes.js";
 
 /**
  * Creates the permanent entrance credential for any attendee category. The
@@ -21,6 +23,9 @@ export async function issueTicket(client: pg.PoolClient, userId: number): Promis
     [userId],
   );
   if (!active.rows[0]) throw new NotFoundError("User not found");
+  if (!(await hasEventAccess(client, userId))) {
+    throw new ForbiddenError("This user has no role granting event access", { userId });
+  }
   const token = randomBytes(32).toString("base64url");
   const { rows } = await client.query(
     `INSERT INTO tickets (user_id, token) VALUES ($1, $2)
@@ -31,6 +36,51 @@ export async function issueTicket(client: pg.PoolClient, userId: number): Promis
   if (rows[0]) return rows[0].token as string;
   const existing = await client.query(`SELECT token FROM tickets WHERE user_id = $1`, [userId]);
   return existing.rows[0].token as string;
+}
+
+export interface TicketAccessReconciliation {
+  eventAccess: boolean;
+  ticketToken: string | null;
+  voidedPassIds: number[];
+}
+
+/**
+ * Reconciles the identity-bearing ticket and its wallet representation with
+ * the current role-derived entitlement. Call this after every role assignment
+ * or removal that can change a user's access, inside the same transaction.
+ * The historical `tickets` row is retained, but live ticket exposure,
+ * check-in and wallet passes all follow the returned eventAccess value.
+ */
+export async function reconcileTicketAccess(
+  client: pg.PoolClient,
+  userId: number,
+): Promise<TicketAccessReconciliation> {
+  // Keep this invariant local to the shared reconciliation helper as well as
+  // its current call sites: role changes and ticket issuance must serialize
+  // before the user row is locked.
+  await lockRoleGraph(client);
+  const active = await client.query(
+    `SELECT 1 FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+      FOR UPDATE`,
+    [userId],
+  );
+  if (!active.rows[0]) throw new NotFoundError("User not found", { userId });
+
+  const eventAccess = await hasEventAccess(client, userId);
+  if (!eventAccess) {
+    return {
+      eventAccess: false,
+      ticketToken: null,
+      voidedPassIds: await voidTicketPasses(client, userId),
+    };
+  }
+
+  return {
+    eventAccess: true,
+    ticketToken: await issueTicket(client, userId),
+    voidedPassIds: [],
+  };
 }
 
 export async function ticketQrPayload(userId: number, actorId?: number) {
@@ -84,9 +134,10 @@ export async function ticketQrPayload(userId: number, actorId?: number) {
     // number is the account-specific identity Wallet needs when more than one
     // hackOS pass is installed on the device.
     applePassSerialNumbers: {
-      ticket:
-        (applePassRows.find((pass: { purpose: string }) => pass.purpose === "ticket")
-          ?.serial_number as string | undefined) ?? null,
+      ticket: eventAccess
+        ? ((applePassRows.find((pass: { purpose: string }) => pass.purpose === "ticket")
+            ?.serial_number as string | undefined) ?? null)
+        : null,
       badge:
         (applePassRows.find((pass: { purpose: string }) => pass.purpose === "badge")
           ?.serial_number as string | undefined) ?? null,

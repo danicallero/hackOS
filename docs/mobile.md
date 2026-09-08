@@ -56,9 +56,14 @@ documented in full in its own section below.
 
 ## Backend changes
 
-**Schema.** One new column-free addition: `push_tokens` (already existed,
-`apps/api/db/migrations/0001_initial.sql`) is now actually written to, via the
-route below. No migration needed.
+**Schema.** Migration `0815_role_event_access.sql` adds the independent
+`roles.event_access` flag, its `role_seed_defaults` snapshot, and the
+`user_event_access` read view. A user is entitled when at least one assigned,
+non-deleted role has the flag enabled; visibility and capabilities do not
+change that result. The same migration backfills roles, legacy users, durable
+tickets, and wallet-pass state so an already-approved app build keeps working
+through the rollout. `push_tokens` (already existed in
+`0001_initial.sql`) is now also written via the route below.
 
 **Endpoints / hooks.**
 - `POST /api/me/push-tokens` (`apps/api/src/modules/notifications/routes/push-tokens.ts`)
@@ -79,7 +84,8 @@ route below. No migration needed.
   inserted a templateless, push-only outbox row directly — the pre-alert had
   no rendered subject/body and never reached in_app/email).
 - The app also calls these existing endpoints:
-  `GET /api/me` (capabilities + language + badgeId), `GET /api/public/activities`
+  `GET /api/me` (capabilities + language + badgeId + role-derived event access),
+  `GET /api/public/activities`
   (schedule), `GET /api/queue/me` (H38 status), `GET /api/me/ticket` (including
   the active account-specific Apple Wallet serial number for each purpose) +
   `GET /api/me/wallet/apple/:purpose.pkpass` + `GET /api/me/wallet/google/:purpose`
@@ -87,7 +93,9 @@ route below. No migration needed.
 - `GET /api/scanner/snapshot` — capability-guarded, replace-all seed for the
   device SQLite store. It contains only the lightweight person cards, ticket
   and current/revoked badge mappings, scannable activities, meal/activity
-  scan counts, and last door state needed by H22-H26. A full snapshot
+  scan counts, last door state, and the current `eventAccess` entitlement
+  needed by H22-H26. Ticket tokens are included only while the person's live
+  role set grants event access. A full snapshot
   is deliberate: badge-history values have no individual timestamp, and a
   complete replacement guarantees convergence after any missed refresh.
   Accounts in `removal_pending` and deleted/anonymized accounts (H54,
@@ -125,8 +133,7 @@ route below. No migration needed.
   scanner home screen's stats tiles, broken down by the same role
   classification `/api/scanner/snapshot` uses (`apps/api/src/modules/logistics/stats.ts`).
   "Confirmed" means accreditation-eligible, not the raw application
-  `confirmed` flag: staff/admins/sponsors are always eligible, participants/
-  mentors only once their application is confirmed
+  `confirmed` flag: it is the person's live role-derived `eventAccess` bit
   (`isAccreditationEligible` in `lib/scanner-group-filter.ts` mirrors this
   server-side rule for the offline fallback below). "Inside" reuses
   `occupancyEstimate()` rather than re-deriving presence semantics. It is a
@@ -252,7 +259,7 @@ distributed to other Expo Router apps without importing hackOS code.
   navigator, so the native fields that receive the selected values remain the
   same instances; iOS additionally associates the domain through
   `webcredentials`.
-  If authentication succeeds but the account lacks `mobileAccess`, the app
+  If authentication succeeds but the account lacks role-derived `mobileAccess`, the app
   revokes that device session and returns to sign-in with a native, modal
   access-denied alert. The route signal is consumed before presentation so
   VoiceOver does not hear the same denial again after a remount. `mobileAccess`
@@ -678,7 +685,7 @@ physical iOS/Android and EAS verification remains a release-gate task in
 
 - **Attendance roster** (`hackos-scanner-roster.db`, `scanner_people` +
   badges/activities/scan-count tables) — every field beyond the plaintext
-  `ticket_token`/`badge_id` lookup keys (name, email, role,
+  `ticket_token`/`badge_id` lookup keys (name, email, role, event access,
   `food_intolerance_notes`, `notes`, presence state) is AES-256-GCM encrypted
   as one JSON blob per person under a single roster key
   (`expo-crypto`'s `AESEncryptionKey`, persisted in `expo-secure-store`).

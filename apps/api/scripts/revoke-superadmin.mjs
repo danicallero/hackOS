@@ -91,6 +91,21 @@ try {
     roleId,
   ]);
 
+  // A CLI role mutation is outside the HTTP reconciliation path. Keep the
+  // same live-ticket invariant here: historical `tickets` rows remain for
+  // audit, while active ticket wallet passes are voided if this was the
+  // user's last event-bearing role.
+  await client.query(
+    `UPDATE wallet_passes
+        SET status = 'voided', last_updated_at = now(),
+            update_tag = ((extract(epoch FROM now()) * 1000)::bigint)::text
+      WHERE user_id = $1 AND purpose = 'ticket' AND status <> 'voided'
+        AND NOT EXISTS (
+          SELECT 1 FROM user_event_access uea WHERE uea.user_id = $1
+        )`,
+    [userId],
+  );
+
   await client.query(
     `INSERT INTO audit_log (actor_id, entity_type, entity_id, action, source, before)
      VALUES ($1, 'user', $1::text, 'revoke_superadmin', 'system', $2::jsonb)`,

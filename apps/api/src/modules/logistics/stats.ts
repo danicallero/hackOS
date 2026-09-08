@@ -149,11 +149,11 @@ export async function logisticsStats() {
  * role name (H8 full-replacement — no separate admin/judge/sponsor/staff
  * bucket; `Unassigned` covers anyone with no visible role), so the client
  * can sum whatever combination of role groups the operator has filtered to.
- * "Eligible" is the same underlying fact `hasEventAccess`/`hasMobileAccess`
- * use: any capability holder, sponsor rep, or enterprise judge is eligible
- * regardless of application status; anyone else (a pure applicant) needs a
- * confirmed spot. Answered as a direct read from Postgres; freshness comes
- * from the existing logistics SSE events rather than a global cache version.
+ * "Eligible" is the same role-derived fact `hasEventAccess`/`hasMobileAccess`
+ * use: any assigned, non-deleted role with `event_access = true` is eligible,
+ * regardless of visibility, capability, sponsor relationship, or application
+ * status. Answered as a direct read from Postgres; freshness comes from the
+ * existing logistics SSE events rather than a global cache version.
  */
 export type ScannerRole = string;
 
@@ -188,19 +188,15 @@ export async function scannerRoleStats(actorId?: number): Promise<
        SELECT u.id, u.badge_id,
               COALESCE(uern.role_name, 'Unassigned') AS role,
               EXISTS (SELECT 1 FROM user_effective_capabilities uec WHERE uec.user_id = u.id) AS has_capabilities,
-              (EXISTS (SELECT 1 FROM user_effective_capabilities uec WHERE uec.user_id = u.id)
-                OR EXISTS (SELECT 1 FROM enterprise_judges ej WHERE ej.user_id = u.id)
-                OR EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id)) AS is_operational,
               EXISTS (
-                SELECT 1 FROM application_responses ar
-                 WHERE ar.user_id = u.id AND ar.status = 'confirmed'
-              ) AS confirmed
+                SELECT 1 FROM user_event_access uea WHERE uea.user_id = u.id
+              ) AS has_event_access
          FROM users u
          LEFT JOIN user_effective_role_name uern ON uern.user_id = u.id
         WHERE u.account_state = 'active' AND u.anonymized_at IS NULL ${subjectScope}
      )
      SELECT role,
-            count(*) FILTER (WHERE is_operational OR confirmed)::int AS eligible,
+            count(*) FILTER (WHERE has_event_access)::int AS eligible,
             count(*) FILTER (WHERE badge_id IS NOT NULL)::int AS accredited,
             array_agg(id) AS user_ids,
             bool_or(has_capabilities) AS has_capabilities

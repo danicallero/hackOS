@@ -44,7 +44,7 @@ export interface Me {
   /** Association facts underlying `visibleRoleName` (H55) — a sponsor rep who also judges needs both workspaces. */
   isEnterpriseJudge: boolean;
   isSponsorRep: boolean;
-  /** Confirmed spot or manual attendee role — drives ticket/wallet exposure and participant-only nav. */
+  /** Current role-derived event entitlement — drives ticket/wallet exposure and participant-only nav. */
   hasEventAccess: boolean;
   /** Has a project of their own (submission or Devpost participant) — drives My project nav visibility (issue #424). */
   hasProject: boolean;
@@ -85,6 +85,7 @@ export interface AssignedRoleSummary {
   name: string;
   position: number;
   isVisible: boolean;
+  eventAccess: boolean;
 }
 
 export interface UserDetail extends Omit<Me, "visibleRoleName" | "capabilities" | "roles"> {
@@ -103,6 +104,8 @@ export interface RoleSummary {
   position: number;
   /** Whether this can be shown as a user's public role. */
   isVisible: boolean;
+  /** Whether holding this role grants event-app and entrance-ticket access. */
+  eventAccess: boolean;
   /** Built-in roles (e.g. Platform administrator). Informational only — see deletedAt/name for what's actually locked. */
   isProtected: boolean;
   /** H8/0800: true for a role from the seeded default catalogue (0801 Sponsor / 0805). Scopes trash/restore and gates reset-to-default. */
@@ -121,6 +124,7 @@ export interface RoleSeedDiff {
   isSeeded: boolean;
   hasDrifted: boolean;
   diff: { capability: string; current: PermissionState; default: PermissionState }[];
+  eventAccess: { current: boolean; default: boolean } | null;
 }
 
 /** GET/POST/PATCH /api/role-grant-rules item (H8: admin-configurable automatic role grant/revoke rules). */

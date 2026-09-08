@@ -41,7 +41,7 @@ export interface NavItem {
   judgeVisible?: boolean;
   /** Visible to any account holding at least one capability (H59 staff activities view). */
   staffVisible?: boolean;
-  /** Hidden from applicants with no confirmed spot and no operational role. */
+  /** Hidden from applicants with no role-derived event access and no operational role. */
   hideForPureApplicant?: boolean;
   /** Hidden until the caller actually has a project of their own (issue #424). */
   hideIfNoProject?: boolean;
@@ -111,7 +111,7 @@ export interface NavVisibilityContext {
   isEnterpriseJudge: boolean;
   /** Holds at least one capability (H59 "staff" audience — see callerScheduleAudiences). */
   hasAnyCapability: boolean;
-  /** No confirmed spot and no operational role — see NavItem.hideForPureApplicant. */
+  /** No role-derived event access and no operational role — see NavItem.hideForPureApplicant. */
   isPureApplicant: boolean;
   /** Has a project of their own, or is currently eligible to self-create one — see NavItem.hideIfNoProject (issue #424). */
   hasProject: boolean;
@@ -149,7 +149,7 @@ export const PERSONAL_NAV: NavItem[] = [
   // Participant-facing: everyone can apply (H12-H15). No capability gate.
   { title: "myApplications", href: "/my-applications", icon: FileTextIcon },
   // Participant project self-view (H20) + policy-gated creation (H19). Hidden
-  // without a confirmed spot, and hidden for anyone (participant, sponsor
+  // without role-derived event access, and hidden for anyone (participant, sponsor
   // rep, judge) who doesn't actually have a project yet — issue #424.
   {
     title: "myProject",
@@ -158,7 +158,7 @@ export const PERSONAL_NAV: NavItem[] = [
     hideForPureApplicant: true,
     hideIfNoProject: true,
   },
-  // Participant-facing queue status (H38). Hidden without a confirmed spot,
+  // Participant-facing queue status (H38). Hidden without role-derived event access,
   // and hidden for anyone with no queue entry of their own — issue #424.
   {
     title: "myQueue",
@@ -167,7 +167,8 @@ export const PERSONAL_NAV: NavItem[] = [
     hideForPureApplicant: true,
     hideIfNoQueueItems: true,
   },
-  // Entrance ticket only exists once a spot is confirmed (plan/07 invariant 10).
+  // Entrance ticket is exposed only while a role grants current event access
+  // (the historical tickets row remains for audit/idempotency).
   { title: "wallet", href: "/wallet", icon: WalletCardsIcon, hideForPureApplicant: true },
   // Hidden for pure applicants — decision emails go out regardless (H50/H51).
   { title: "inbox", href: "/inbox", icon: InboxIcon, hideForPureApplicant: true },

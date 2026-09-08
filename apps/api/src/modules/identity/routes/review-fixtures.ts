@@ -7,20 +7,20 @@ import { config } from "../../../config.js";
 import { pool, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
 import { requireCapability } from "../../../lib/capabilities.js";
-import { ServiceUnavailableError } from "../../../lib/errors.js";
+import { ConflictError, ServiceUnavailableError } from "../../../lib/errors.js";
 import { idempotencyGuard } from "../../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
-import { issueTicket } from "../../logistics/tickets.js";
+import { reconcileTicketAccess } from "../../logistics/tickets.js";
 import { auth } from "../auth.js";
-import { purgeReviewFixtureAccount } from "../removal.js";
+import { purgeReviewFixtureAccount, resetReviewFixtureAccount } from "../removal.js";
 import { purgeReviewFixtureQueue } from "../review-fixture-queues.js";
 import { assignAttendeeRole } from "../role.js";
 
 /**
  * Synthetic accounts used in the same deployed hackOS instance. The scenario
- * keys are stable, while the generation suffix makes every account replacement
- * a fresh credential set and prevents old handoff notes from accidentally
- * pointing at a newly-created person.
+ * keys and login email addresses are stable. Regeneration resets each account
+ * and all of its synthetic state to the default scenario while the generation
+ * counter keeps fixture data and operational handoffs auditable.
  */
 const FIXTURE_DEFINITIONS = [
   {
@@ -93,17 +93,16 @@ function requireFixturePassword(): string {
   return config.REVIEW_FIXTURE_PASSWORD;
 }
 
-function fixtureEmail(key: string, generation: number): string {
-  return `app-review-${key}-${generation}@hackos.test`;
+function fixtureEmail(key: string): string {
+  return `app-review-${key}@hackos.test`;
 }
 
 async function createFixtureUser(
   client: import("pg").PoolClient,
   fixture: (typeof FIXTURE_DEFINITIONS)[number],
-  generation: number,
   password: string,
 ): Promise<{ id: number; email: string }> {
-  const email = fixtureEmail(fixture.key, generation);
+  const email = fixtureEmail(fixture.key);
   const signup = await auth.api.signUpEmail({
     body: {
       email,
@@ -142,9 +141,9 @@ async function configureFixtureStaffRole(client: import("pg").PoolClient): Promi
   // manage it via requireRoleMutationAuthority (fixtures are seeded by an
   // already-wildcard-holding reviewer flow, not through the roles API).
   const { rows } = await client.query<{ id: number }>(
-    `INSERT INTO roles (name, position)
-     VALUES ('App review exit staff', -900000)
-     ON CONFLICT (name) DO UPDATE SET position = EXCLUDED.position
+    `INSERT INTO roles (name, position, event_access)
+     VALUES ('App review exit staff', -900000, true)
+     ON CONFLICT (name) DO UPDATE SET position = EXCLUDED.position, event_access = true
      RETURNING id`,
   );
   const roleId = rows[0]?.id;
@@ -169,7 +168,7 @@ async function configureFixtureParticipant(
 ): Promise<void> {
   await assignAttendeeRole(client, userId, "participant", actorId);
   // A used account-claim token is the existing, non-application path that
-  // grants a manually-created participant mobile access.
+  // records a manually-created participant's legacy access history.
   await client.query(
     `INSERT INTO email_verification_tokens
        (token, type, email, user_id, kind, expires_at, used_at)
@@ -177,7 +176,7 @@ async function configureFixtureParticipant(
        FROM users WHERE id = $2`,
     [`review-claim-${generation}-${fixtureKey}-${randomUUID()}`, userId],
   );
-  await issueTicket(client, userId);
+  await reconcileTicketAccess(client, userId);
 
   if (fixtureKey === "participant-delete") return;
 
@@ -302,7 +301,7 @@ export function registerReviewFixtureRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Regenerate App Store review fixtures",
         description:
-          "Replaces the synthetic deletion/anonymization participant accounts and scanner operator. Requires both deployment-only fixture secrets; real accounts are never created by this route and fixture users are excluded from aggregate statistics.",
+          "Resets the synthetic deletion/anonymization participant accounts and scanner operator to their default scenarios while keeping their login email addresses stable. Requires both deployment-only fixture secrets; real accounts are never created by this route and fixture users are excluded from aggregate statistics.",
         response: { 200: regenerateResponseSchema },
       },
     },
@@ -328,37 +327,114 @@ export function registerReviewFixtureRoutes(app: FastifyInstance): void {
           const generation = Math.max(0, ...registry.map((row) => Number(row.generation) || 0)) + 1;
 
           // A failed Better Auth signup can leave a committed synthetic user
-          // after the surrounding transaction rolls back. Reclaim the exact
-          // candidate emails before reusing this generation.
-          const candidateEmails = FIXTURE_DEFINITIONS.map((fixture) =>
-            fixtureEmail(fixture.key, generation),
-          );
-          const { rows: stale } = await client.query<{ id: number }>(
-            `SELECT id FROM users
-              WHERE is_test_account = true AND email = ANY($1::text[])
+          // after the surrounding transaction rolls back. Reuse those exact
+          // stable login addresses when they are available; deleting a stable
+          // row and signing up again inside this transaction would not work,
+          // because Better Auth writes through a separate database connection.
+          const candidateEmails = FIXTURE_DEFINITIONS.map((fixture) => fixtureEmail(fixture.key));
+          const { rows: stableUsers } = await client.query<{
+            id: number;
+            email: string;
+            is_test_account: boolean;
+          }>(
+            `SELECT id, email, is_test_account
+               FROM users
+              WHERE lower(email) = ANY($1::text[])
+              ORDER BY id
               FOR UPDATE`,
-            [candidateEmails],
+            [candidateEmails.map((email) => email.toLowerCase())],
           );
-          for (const row of stale) await purgeReviewFixtureAccount(client, row.id);
 
-          const oldUserIds = [
+          const registeredUserIds = [
             ...new Set(
               registry
                 .map((row) => row.user_id)
                 .filter((userId): userId is number => userId !== null),
             ),
           ];
-          if (oldUserIds.length > 0) {
-            const { rows: oldUsers } = await client.query<{ id: number; is_test_account: boolean }>(
-              `SELECT id, is_test_account FROM users WHERE id = ANY($1::int[]) FOR UPDATE`,
-              [oldUserIds],
-            );
-            for (const row of oldUsers) {
-              if (!row.is_test_account) {
-                throw new Error("Review fixture registry points at a real account");
-              }
-              await purgeReviewFixtureAccount(client, row.id);
+          const { rows: registeredUsers } =
+            registeredUserIds.length > 0
+              ? await client.query<{ id: number; email: string; is_test_account: boolean }>(
+                  `SELECT id, email, is_test_account
+                     FROM users
+                    WHERE id = ANY($1::int[])
+                    ORDER BY array_position($1::int[], id)
+                    FOR UPDATE`,
+                  [registeredUserIds],
+                )
+              : { rows: [] as Array<{ id: number; email: string; is_test_account: boolean }> };
+
+          const registryByKey = new Map(registry.map((row) => [row.fixture_key, row]));
+          const registryByUserId = new Map(
+            registry
+              .filter((row) => row.user_id !== null)
+              .map((row) => [row.user_id as number, row.fixture_key]),
+          );
+          const stableByEmail = new Map(stableUsers.map((row) => [row.email.toLowerCase(), row]));
+          const registeredById = new Map(registeredUsers.map((row) => [row.id, row]));
+          const existingByFixture = new Map<string, { id: number; email: string }>();
+          const staleStableUsers: typeof stableUsers = [];
+          for (const fixture of FIXTURE_DEFINITIONS) {
+            const registered = registryByKey.get(fixture.key);
+            const stable = stableByEmail.get(fixtureEmail(fixture.key).toLowerCase());
+            if (stable && !stable.is_test_account) {
+              throw new ConflictError("A real account owns a reserved review fixture login.", {
+                code: "review_fixture_email_reserved",
+                email: stable.email,
+              });
             }
+            const stableOwner = stable ? registryByUserId.get(stable.id) : undefined;
+            if (stableOwner && stableOwner !== fixture.key) {
+              throw new ConflictError("Review fixture registry has conflicting login ownership.", {
+                code: "review_fixture_registry_conflict",
+                fixtureKey: fixture.key,
+              });
+            }
+            if (registered?.user_id !== null && registered?.user_id !== undefined) {
+              const registeredUser = registeredById.get(registered.user_id);
+              if (!registeredUser) {
+                throw new Error("Review fixture registry points at a missing account");
+              }
+              existingByFixture.set(fixture.key, {
+                id: registeredUser.id,
+                email: registeredUser.email,
+              });
+              if (stable && stable.id !== registered.user_id) staleStableUsers.push(stable);
+            } else if (stable) {
+              existingByFixture.set(fixture.key, { id: stable.id, email: stable.email });
+            }
+          }
+
+          // Purge orphaned stable rows before resetting current rows, and do
+          // operator provenance first for the same H54 trigger invariant.
+          staleStableUsers.sort((left, right) => {
+            const leftFixture = FIXTURE_DEFINITIONS.find(
+              (fixture) => fixtureEmail(fixture.key).toLowerCase() === left.email.toLowerCase(),
+            );
+            const rightFixture = FIXTURE_DEFINITIONS.find(
+              (fixture) => fixtureEmail(fixture.key).toLowerCase() === right.email.toLowerCase(),
+            );
+            return (
+              Number(rightFixture?.kind === "staff") - Number(leftFixture?.kind === "staff") ||
+              left.id - right.id
+            );
+          });
+          for (const row of staleStableUsers) await purgeReviewFixtureAccount(client, row.id);
+
+          const resetOrder = FIXTURE_DEFINITIONS.slice().sort(
+            (left, right) => Number(right.kind === "staff") - Number(left.kind === "staff"),
+          );
+          const created = new Map<string, { id: number; email: string }>();
+          for (const fixture of resetOrder) {
+            const existing = existingByFixture.get(fixture.key);
+            if (!existing) continue;
+            await resetReviewFixtureAccount(client, existing.id, {
+              email: existing.email,
+              name: fixture.name,
+              surname: fixture.surname,
+              password,
+            });
+            created.set(fixture.key, existing);
           }
 
           // Remove the previous synthetic queue/project graph before replacing
@@ -373,9 +449,9 @@ export function registerReviewFixtureRoutes(app: FastifyInstance): void {
           await client.query(`DELETE FROM anonymous_participants WHERE is_test_account = true`);
 
           const staffRoleId = await configureFixtureStaffRole(client);
-          const created = new Map<string, { id: number; email: string }>();
           for (const fixture of FIXTURE_DEFINITIONS) {
-            const account = await createFixtureUser(client, fixture, generation, password);
+            if (created.has(fixture.key)) continue;
+            const account = await createFixtureUser(client, fixture, password);
             createdUserIds.push(account.id);
             created.set(fixture.key, account);
           }
@@ -385,6 +461,7 @@ export function registerReviewFixtureRoutes(app: FastifyInstance): void {
             `INSERT INTO user_roles (user_id, role_id, assigned_by) VALUES ($1, $2, $3)`,
             [staff.id, staffRoleId, req.userId],
           );
+          await reconcileTicketAccess(client, staff.id);
           for (const fixture of FIXTURE_DEFINITIONS) {
             if (fixture.kind !== "participant") continue;
             const account = created.get(fixture.key);

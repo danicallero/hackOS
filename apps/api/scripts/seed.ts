@@ -26,8 +26,8 @@ try {
       `SELECT COALESCE(MAX(position), 0) + 1000 AS position FROM roles`,
     );
     const inserted = await client.query(
-      `INSERT INTO roles (name, position, is_visible, is_protected)
-       VALUES ('Platform administrator', $1, true, true)
+      `INSERT INTO roles (name, position, is_visible, event_access, is_protected)
+       VALUES ('Platform administrator', $1, true, true, true)
        ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
        RETURNING id`,
       [positionRows[0].position],
@@ -40,6 +40,7 @@ try {
       [roleId, CAPABILITIES.ADMIN_ALL],
     );
   }
+  await client.query(`UPDATE roles SET event_access = true WHERE id = $1`, [roleId]);
 
   const admin = await client.query(
     `INSERT INTO users (email, name, email_verified, language)
@@ -53,6 +54,13 @@ try {
     `INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)
      ON CONFLICT DO NOTHING`,
     [adminId, roleId],
+  );
+  await client.query(
+    `INSERT INTO tickets (user_id, token)
+     SELECT $1::integer, 'seed-ticket-' || $1::integer || '-' || md5(random()::text || clock_timestamp()::text)
+      WHERE EXISTS (SELECT 1 FROM user_event_access WHERE user_id = $1::integer)
+     ON CONFLICT (user_id) DO NOTHING`,
+    [adminId],
   );
 
   await client.query("COMMIT");

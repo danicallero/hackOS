@@ -280,7 +280,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Scanner stats by role",
         description:
-          "Per-role counts of accreditation-eligible, already-accredited, and currently-inside people, broken down by the same role classification the scanner roster uses. Staff/admins/sponsors are always eligible; participants/mentors are eligible once their application is confirmed. The client sums whatever role groups it has filtered to.",
+          "Per-role counts of accreditation-eligible, already-accredited, and currently-inside people, broken down by the same role classification the scanner roster uses. Eligible means the person currently holds at least one assigned active role with eventAccess enabled. The client sums whatever role groups it has filtered to.",
         response: { 200: scannerRoleStatsResponse },
       },
     },
@@ -338,7 +338,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Full people roster for the logistics people finder",
         description:
-          "Unlike /api/logistics/people/search (query-required), this returns the whole active roster — id, name, surname, email, current badge, DNI, effective role name, confirmed-spot flag, and ground-truth present flag (last door scan, not an estimate) — for a client-side directory that filters locally, mirroring the mobile app's offline-synced people finder (H22-H24). Capped at 2000 rows (no pagination UI is planned for this list). Anonymized accounts (H54) are excluded. Read-only; any logistics capability grants access.",
+          "Unlike /api/logistics/people/search (query-required), this returns the whole active roster — id, name, surname, email, current badge, DNI, effective role name, current role-derived event-access flag, confirmed-spot flag, and ground-truth present flag (last door scan, not an estimate) — for a client-side directory that filters locally, mirroring the mobile app's offline-synced people finder (H22-H24). Capped at 2000 rows (no pagination UI is planned for this list). Anonymized accounts (H54) are excluded. Read-only; any logistics capability grants access.",
       },
     },
     async (req) => ({ items: await listPeople(actor(req.userId)) }),
@@ -354,7 +354,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         body: lookupBody,
         description:
-          "Resolve an entrance-ticket QR token to the full person card staff needs to accredit (H22): identity fields (name, DNI, email, shirt size), intolerances, notes, confirmed-spot flag, current badge if already accredited, and hasEventAccess (H43) — whether this ticket's owner currently holds real event access; false means the ticket token still exists (permanent, plan/07 invariant 10) but check-in will be refused. Read-only.",
+          "Resolve an entrance-ticket QR token to the full person card staff needs to accredit (H22): identity fields (name, DNI, email, shirt size), intolerances, notes, confirmed-spot history, current badge if already accredited, and hasEventAccess (H43) — whether this ticket's owner currently holds real role-derived event access; false means the historical ticket token still exists (permanent, plan/07 invariant 10) but check-in will be refused. Read-only.",
       },
     },
     async (req) => lookupByTicket(req.body.ticketToken, actor(req.userId)),
@@ -1194,7 +1194,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         querystring: walletAccessQuery,
         summary: "Apple Wallet pass via a scoped token",
         description:
-          "Downloads the .pkpass for the user named by a scoped wallet token (issue #369) — the credential handed out when a spot is confirmed from the acceptance email (H28). No session is required, created or read: the token alone decides whose pass this is, must match `purpose`, and expires after an hour. 401 if it is unknown, expired, or minted for a different purpose.",
+          "Downloads the .pkpass for the user named by a scoped wallet token (issue #369) — the credential returned after confirmation when the resulting roles grant event access (H28). No session is required, created or read: the token alone decides whose pass this is, must match `purpose`, and expires after an hour. 401 if it is unknown, expired, or minted for a different purpose; live ticket entitlement is checked again when the pass is built.",
       },
     },
     async (req, reply) => {

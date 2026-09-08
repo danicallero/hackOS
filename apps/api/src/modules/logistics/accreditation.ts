@@ -4,11 +4,12 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { assignAttendeeRole, hasEventAccess } from "../identity/role.js";
+import { lockRoleGraph } from "../identity/role-authority.js";
 import { broadcastForActiveUser } from "./active-broadcast.js";
 import { loadPersonCard } from "./cards.js";
 import { scannerCredentialDigest } from "./credential-tombstones.js";
 import { assertFixtureSubjectScope } from "./review-fixture-scope.js";
-import { issueTicket } from "./tickets.js";
+import { reconcileTicketAccess } from "./tickets.js";
 import { enqueueWalletSync } from "./wallet-sync.js";
 
 /** Postgres unique_violation — thrown by the unique `users.badge_id` index. */
@@ -73,6 +74,7 @@ export async function lookupByUserId(userId: number, actorId?: number) {
     [userId],
   );
 
+  const eventAccess = await hasEventAccess(pool, userId);
   return {
     ...card,
     email: (row.email ?? null) as string | null,
@@ -81,14 +83,13 @@ export async function lookupByUserId(userId: number, actorId?: number) {
     secondaryEmail: (row.secondary_email ?? null) as string | null,
     secondaryEmailVerified: row.secondary_email_verified_at != null,
     confirmed: confirmed.rows.length > 0,
-    hasTicket: await hasTicket(userId),
-    // Distinct from `confirmed`: a capability holder or sponsor rep can have
-    // event access with no confirmed application at all (H43), and a
-    // formerly-confirmed applicant can have a permanent `tickets` row but no
-    // current access. `checkIn`/`checkInUser` refuse the latter — surfaced
-    // here so staff see it before attempting the badge assignment, not as a
-    // bare 403 after.
-    hasEventAccess: await hasEventAccess(pool, userId),
+    hasTicket: eventAccess && (await hasTicket(userId)),
+    // Distinct from `confirmed`: any role may grant event access without a
+    // confirmed application, and a formerly-entitled person can have a
+    // permanent `tickets` row but no current access. `checkIn`/`checkInUser`
+    // refuse the latter — surfaced here so staff see it before attempting the
+    // badge assignment, not as a bare 403 after.
+    hasEventAccess: eventAccess,
     alreadyAccredited: badge != null,
     currentBadge: badge,
   };
@@ -166,6 +167,7 @@ export async function checkInUser(
   },
 ) {
   const result = await withTransaction(async (client) => {
+    await lockRoleGraph(client);
     const u = await client.query(
       `SELECT id, badge_id, name, surname
          FROM users
@@ -193,7 +195,7 @@ export async function checkInUser(
         });
       }
       await assignAttendeeRole(client, input.userId, input.attendeeRole, actorId);
-      await issueTicket(client, input.userId);
+      await reconcileTicketAccess(client, input.userId);
       await audit(client, {
         actorId,
         entityType: "user",
@@ -213,8 +215,7 @@ export async function checkInUser(
     // QR/token — screenshotted, printed, or already sitting in an installed
     // Wallet pass — never itself expires. Gate the physical door the same
     // way the served QR and wallet exposure already are (H43): a ticket
-    // whose owner no longer holds event access (declined/revoked spot, no
-    // capability/manual role/sponsor tie) must not badge someone in.
+    // whose owner no longer holds event access must not badge someone in.
     if (!(await hasEventAccess(client, input.userId))) {
       throw new ForbiddenError("This ticket's owner no longer has event access", {
         userId: input.userId,

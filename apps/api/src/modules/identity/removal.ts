@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { verifyPassword } from "better-auth/crypto";
+import { hashPassword, verifyPassword } from "better-auth/crypto";
 import type { Job } from "bullmq";
 import type pg from "pg";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
@@ -1727,6 +1727,81 @@ export async function purgeReviewFixtureAccount(
   // H54: an unavailable fixture must not retain a stale address-use signal.
   await clearReviewFixtureAuthentication(client, user.id);
   await client.query(`DELETE FROM users WHERE id = $1`, [user.id]);
+  if (wasWildcardHolder) await assertActiveWildcardHolder(client);
+}
+
+/**
+ * Reset one synthetic reviewer in place while retaining its login identity.
+ * The relationship scrub still removes every generated session, credential,
+ * ticket, badge and operational row; the caller then restores only the
+ * default Better Auth credential and fixture profile fields.
+ */
+export async function resetReviewFixtureAccount(
+  client: pg.PoolClient,
+  userId: number,
+  fixture: { email: string; name: string; surname: string; password: string },
+): Promise<void> {
+  await lockRoleGraph(client);
+  const user = await loadUserForRemoval(client, userId);
+  if (!user.is_test_account) {
+    throw new ConflictError("Only synthetic review fixture accounts can be regenerated.", {
+      code: "review_fixture_required",
+    });
+  }
+
+  const passwordHash = await hashPassword(fixture.password);
+  await purgeReviewFixtureQueuesForUser(client, user.id);
+  await deleteExternalArtifacts({
+    targetId: user.id,
+    action: "delete",
+    uploadPrefixes: await collectUploadPrefixes(client, user.id),
+    exportPrefixes: await collectExportPrefixes(client, user.id),
+    storageKeys: await collectStorageKeys(client, user.id),
+    ...(await collectWalletArtifacts(client, user.id)),
+    requiresVenueExit: false,
+  });
+
+  const wasWildcardHolder = await userHasWildcardRegardlessOfState(client, user.id);
+  if (wasWildcardHolder) await assertActiveWildcardHolder(client, user.id);
+  await scrubRelationships(client, user);
+  await client.query(`DELETE FROM user_roles WHERE user_id = $1`, [user.id]);
+  await client.query(`DELETE FROM user_email_history WHERE user_id = $1`, [user.id]);
+  await client.query(
+    `UPDATE users
+        SET email = $2,
+            email_verified = true,
+            image = NULL,
+            name = $3,
+            surname = $4,
+            dni = NULL,
+            badge_id = NULL,
+            badge_id_history = ARRAY[]::text[],
+            food_intolerances = ARRAY[]::integer[],
+            food_intolerance_notes = NULL,
+            dietary_data_state = 'not_provided',
+            university_id = NULL,
+            shirt_size = NULL,
+            language = 'en',
+            secondary_email = NULL,
+            secondary_email_verified_at = NULL,
+            notes = NULL,
+            ui_prefs = '{}'::jsonb,
+            account_state = 'active',
+            removal_action = NULL,
+            removal_started_at = NULL,
+            removal_requires_exit = false,
+            removal_idempotency_key = NULL,
+            removal_expires_at = NULL,
+            anonymized_at = NULL,
+            is_test_account = true
+      WHERE id = $1`,
+    [user.id, fixture.email, fixture.name, fixture.surname],
+  );
+  await client.query(
+    `INSERT INTO accounts (user_id, account_id, provider_id, password)
+     VALUES ($1, $2, 'credential', $3)`,
+    [user.id, String(user.id), passwordHash],
+  );
   if (wasWildcardHolder) await assertActiveWildcardHolder(client);
 }
 

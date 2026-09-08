@@ -799,13 +799,20 @@ describe("H9 invite regeneration", () => {
     const a = await getApp();
     const actor = await inviter();
     const entId = await createEnterprise("RegenCo");
+    const { pool } = await import("../../src/db/pool.js");
+    const { createRole } = await import("../helpers.js");
+    const sponsorRole = await createRole([], { name: "Sponsor" });
+    await pool.query(
+      `INSERT INTO role_grant_rules (role_id, trigger_event, action)
+       VALUES ($1, 'sponsor.enterprise_linked', 'grant')`,
+      [sponsorRole],
+    );
     const original = await createInvite(a, actor, {
       email: "regen@example.com",
       kind: "sponsor",
       enterpriseId: entId,
     });
 
-    const { pool } = await import("../../src/db/pool.js");
     await pool.query(
       `UPDATE email_verification_tokens SET expires_at = now() - interval '1 hour' WHERE id = $1`,
       [original.id],

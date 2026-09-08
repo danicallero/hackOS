@@ -87,6 +87,15 @@ a thin merge-patch, not a table per view; the browser also keeps a
 localStorage copy for an instant read, and this is what makes the preference
 follow the account across devices.
 
+The same role record also carries the independent `event_access` entitlement
+bit. `hasEventAccess` is true for an active user when any assigned,
+non-deleted role has that bit enabled; it is an OR across roles and does not
+depend on role visibility, capability grants, application status, or sponsor/
+judge relationships. `mobileAccess` on `GET /api/me` remains the additive,
+backwards-compatible field name for this same result. Ticket QR/wallet
+exposure, scanner eligibility, and physical check-in use the same live query;
+role transitions reconcile wallet passes and retain the historical ticket row.
+
 Primary-email verification is deliberately not required by Better Auth at sign
 in: H1 allows an unverified account to establish a session and use read-only
 or preparation surfaces. The shared route-policy layer requires a verified
@@ -149,7 +158,10 @@ the queue module has no room-scoped judge routes.
 Accreditation (badge issuance, rotation, revocation), presence (door in/out
 with certainty-window derivation and conflict detection), meal/activity
 scanning, the pre-event schedule, cross-station people search, and Apple/Google
-Wallet pass issuance + the Apple PassKit web-service protocol. Scanner
+Wallet pass issuance + the Apple PassKit web-service protocol. Ticket
+eligibility is read from the identity role graph's `event_access` bit, so
+losing one of several event-bearing roles keeps access while losing the last
+one stops live ticket exposure and voids active wallet passes. Scanner
 mutation routes carry `idempotencyGuard` so an offline device's queued retries
 never double-apply.
 

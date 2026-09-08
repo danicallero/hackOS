@@ -201,10 +201,12 @@ Gotchas that cost real time:
 - **Seeded rows won't appear** until the page is refreshed: reads are direct
   from Postgres, and live pages refresh through their domain-scoped SSE topic.
   Schedule rows still need `visibility = 'shown'`, not `'public'`.
-- **Sign-in needs `mobileAccess`** (`apps/api/src/modules/identity/mobile-access.ts`):
-  a fresh account bounces straight back to the form unless it has an accepted
-  `application_responses` row or any capability. The bounce is silent, so
-  check the API log rather than guessing.
+- **Sign-in needs role-derived `mobileAccess`**
+  (`apps/api/src/modules/identity/mobile-access.ts`): a fresh account bounces
+  straight back to the form unless it holds an assigned, non-deleted role with
+  `event_access = true`. `mobileAccess` remains the backwards-compatible API
+  field name; an accepted application or capability alone no longer grants it.
+  The bounce is silent, so check the API log rather than guessing.
 - **Running Metro writes `apps/mobile/.expo/types/router.d.ts`**, which narrows
   `router.push()` and makes `pnpm typecheck` fail on pre-existing call sites.
   `rm -rf apps/mobile/.expo/types` before typechecking. Never commit `.env`.

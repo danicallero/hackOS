@@ -54,6 +54,7 @@ interface PersonPayload {
   role: ScannerPerson["role"];
   hasCapabilities: boolean;
   isEnterpriseJudge: boolean;
+  eventAccess: boolean;
   name: string | null;
   surname: string | null;
   dni: string | null;
@@ -440,6 +441,7 @@ export async function applyScannerSnapshot(
           role: person.role,
           hasCapabilities: person.hasCapabilities,
           isEnterpriseJudge: person.isEnterpriseJudge,
+          eventAccess: person.eventAccess,
           name: person.name,
           surname: person.surname,
           dni: person.dni,
@@ -579,6 +581,9 @@ async function personFromRow(row: PersonRow): Promise<ScannerPerson> {
     badgeId: row.badge_id,
     revokedBadgeIds: [],
     ...payload,
+    // A roster encrypted before event-access was added is safe to treat as
+    // not entitled until the next server snapshot replaces it.
+    eventAccess: payload.eventAccess ?? false,
   };
 }
 

@@ -6,6 +6,7 @@ import { pool } from "../../src/db/pool.js";
 import {
   asUser,
   buildTestApp,
+  createRole,
   createUser,
   createUserWithCapabilities,
   seedAttendeeRoles,
@@ -17,10 +18,9 @@ import { createApplication } from "./fixtures.js";
  * Losing event access (declining a confirmed spot, or staff revoking one)
  * must stop the ticket/wallet from being served — even though the `tickets`
  * row itself is never touched (plan/07 invariant 10: neither consumed nor
- * revoked). Any wallet pass already issued gets voided. Capability holders
- * (admin/staff) and sponsor reps are the exception: their event access does
- * not depend on application status at all, so declining/losing an
- * application spot never strips their ticket (H43).
+ * revoked). Any wallet pass already issued gets voided. A user with multiple
+ * event-bearing roles keeps access until the last such role is removed; role
+ * capabilities, visibility, and application status do not grant it.
  */
 
 let app: App;
@@ -229,6 +229,80 @@ describe("ticket/wallet exposure follows event access", () => {
     expect(me.json().hasEventAccess).toBe(true);
   });
 
+  it("keeps access while any event-bearing role remains, then voids on the last removal", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.PERMISSIONS_MANAGE]);
+    const target = await createUser({ emailVerified: true });
+    const roleA = await createRole([], { name: "Venue access A" });
+    const roleB = await createRole([], { name: "Venue access B" });
+    const { rows: managerRoles } = await pool.query(
+      `SELECT role_id FROM user_roles WHERE user_id = $1`,
+      [manager],
+    );
+    await pool.query(`UPDATE roles SET position = 1000000000 WHERE id = $1`, [
+      managerRoles[0].role_id,
+    ]);
+    await pool.query(`UPDATE roles SET position = 10 WHERE id = $1`, [roleA]);
+    await pool.query(`UPDATE roles SET position = 20 WHERE id = $1`, [roleB]);
+
+    expect(
+      (
+        await a.inject({
+          method: "POST",
+          url: `/api/roles/${roleA}/users/${target}`,
+          headers: asUser(manager),
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await a.inject({
+          method: "POST",
+          url: `/api/roles/${roleB}/users/${target}`,
+          headers: asUser(manager),
+        })
+      ).statusCode,
+    ).toBe(200);
+
+    const passId = await createTicketPass(target);
+    const tokenBefore = (
+      await a.inject({ method: "GET", url: "/api/me/ticket", headers: asUser(target) })
+    ).json().ticketToken;
+    expect(tokenBefore).toBeTruthy();
+
+    const removeA = await a.inject({
+      method: "DELETE",
+      url: `/api/roles/${roleA}/users/${target}`,
+      headers: asUser(manager),
+    });
+    expect(removeA.statusCode).toBe(200);
+    expect(
+      (await a.inject({ method: "GET", url: "/api/me", headers: asUser(target) })).json()
+        .hasEventAccess,
+    ).toBe(true);
+    expect(await passStatus(passId)).toBe("active");
+    expect(
+      (await a.inject({ method: "GET", url: "/api/me/ticket", headers: asUser(target) })).json()
+        .ticketToken,
+    ).toBe(tokenBefore);
+
+    const removeB = await a.inject({
+      method: "DELETE",
+      url: `/api/roles/${roleB}/users/${target}`,
+      headers: asUser(manager),
+    });
+    expect(removeB.statusCode).toBe(200);
+    expect(
+      (await a.inject({ method: "GET", url: "/api/me", headers: asUser(target) })).json()
+        .hasEventAccess,
+    ).toBe(false);
+    expect(await passStatus(passId)).toBe("voided");
+    expect(
+      (await a.inject({ method: "GET", url: "/api/me/ticket", headers: asUser(target) })).json()
+        .ticketToken,
+    ).toBeNull();
+  });
+
   it("an admin/staff account keeps event access after declining their own confirmed spot", async () => {
     const a = await getApp();
     const appId = await createApplication();
@@ -278,7 +352,8 @@ describe("ticket/wallet exposure follows event access", () => {
     });
     expect(decline.statusCode).toBe(200);
 
-    // Unlike a plain applicant, the capability keeps event access alive.
+    // The test helper's assigned role is event-bearing; the capability itself
+    // is not an admission entitlement.
     const after = await a.inject({ method: "GET", url: "/api/me", headers: asUser(staffUser) });
     expect(after.json().hasEventAccess).toBe(true);
     expect(await passStatus(passId)).toBe("active");
@@ -293,6 +368,13 @@ describe("ticket/wallet exposure follows event access", () => {
 
   it("a sponsor representative gets a served, non-null ticket (H43, #426)", async () => {
     const a = await getApp();
+    const sponsorRole = await createRole([], { name: "Sponsor", isSeeded: true });
+    await pool.query(
+      `INSERT INTO role_grant_rules (role_id, trigger_event, action)
+       VALUES ($1, 'sponsor.enterprise_linked', 'grant'),
+              ($1, 'sponsor.enterprise_unlinked', 'revoke')`,
+      [sponsorRole],
+    );
     const userId = await createUser({ emailVerified: true });
     const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
 

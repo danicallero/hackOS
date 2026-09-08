@@ -68,6 +68,9 @@ export function PeopleTab({ onOpenPerson }: { onOpenPerson: (userId: number) => 
           <StatusBadge tone={row.confirmed ? "success" : "warning"} dot={false}>
             {row.confirmed ? t("confirmed") : t("notConfirmed")}
           </StatusBadge>
+          <StatusBadge tone={row.eventAccess ? "success" : "danger"} dot={false}>
+            {row.eventAccess ? t("eventAccessStatus") : t("noEventAccessStatus")}
+          </StatusBadge>
           <StatusBadge tone={row.present ? "success" : "neutral"} dot={false}>
             {row.present ? t("currentlyInside") : t("currentlyOutside")}
           </StatusBadge>

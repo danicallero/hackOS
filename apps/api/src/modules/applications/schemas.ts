@@ -246,6 +246,9 @@ export const confirmByEmailResponseSchema = z.object({
   ticket_token: z.string(),
   user_id: z.number().int(),
   masked_email: z.string(),
+  // Keep the historical string contract for the already-published client:
+  // a form whose confirmed roles grant no event access returns an empty
+  // string instead of changing the field type to null.
   wallet_token: z.string(),
   wallet_token_expires_at: z.string(),
 });

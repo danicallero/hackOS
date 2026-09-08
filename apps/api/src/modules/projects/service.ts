@@ -8,8 +8,8 @@ import { audit } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { assertWithinHackingWindow, isWithinHackingWindow } from "../../lib/hacking-window.js";
 import { broadcast } from "../../lib/sse.js";
-import { hasMobileAccess } from "../identity/mobile-access.js";
 import { enqueueAuthEmail } from "../identity/outbox.js";
+import { hasEventAccess } from "../identity/role.js";
 import { assertSecondaryEmailAvailable } from "../identity/routes/secondary-email.js";
 import {
   assertFixtureQueueScope,
@@ -1039,12 +1039,13 @@ export async function myProjects(userId: number): Promise<RepoWithExtras[]> {
 }
 
 /**
- * H19/H20 self-service eligibility: reuses the mobile-access "admitted
- * attendee" check verbatim (accepted/confirmed applicant, or an operational
- * relationship) rather than reimplementing the underlying SQL.
+ * H19/H20 self-service eligibility: reuses the role-derived event-access
+ * check verbatim rather than reimplementing the underlying SQL. Holding any
+ * assigned, non-deleted event-bearing role is the admission signal for the
+ * app, ticket and participant self-service surfaces.
  */
 export async function isAdmittedParticipant(db: Queryable, userId: number): Promise<boolean> {
-  return hasMobileAccess(db, userId);
+  return hasEventAccess(db, userId);
 }
 
 /**
@@ -1900,8 +1901,9 @@ export async function canCreateMyProject(userId: number): Promise<boolean> {
  * belong to more than one project — H20's original "singular mi proyecto"
  * framing assumed the read-only surface; self-service supersedes it, so
  * there is no longer a "you already belong to a project" check here.
- * Self-creation is further gated to admitted participants (same check as
- * mobile access) and to the configured hacking window. The creator becomes
+ * Self-creation is further gated to admitted participants (the same
+ * role-derived event-access check as mobile access) and to the configured
+ * hacking window. The creator becomes
  * the project's first member; chosen challenges enqueue exactly like a hot
  * edit.
  */
