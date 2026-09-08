@@ -66,8 +66,20 @@ export async function loadScannerGroupFilter(): Promise<ScannerGroup[]> {
   }
 }
 
-export async function saveScannerGroupFilter(groups: ScannerGroup[]): Promise<void> {
-  await SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(groups));
+// Callers (e.g. rapid taps on general-scanner-screen.tsx's group chips) can
+// fire several of these before the previous SecureStore write settles.
+// Chaining onto this queue keeps writes applied in call order instead of
+// whichever setItemAsync happens to resolve first, which could otherwise
+// persist a stale filter after fast toggling.
+let writeQueue: Promise<void> = Promise.resolve();
+
+export function saveScannerGroupFilter(groups: ScannerGroup[]): Promise<void> {
+  writeQueue = writeQueue
+    .catch(() => {})
+    .then(() => {
+      return SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(groups));
+    });
+  return writeQueue;
 }
 
 export const SCANNER_GROUP_VALUES: ScannerGroup[] = ["participant", "mentor", "staff", "sponsor"];

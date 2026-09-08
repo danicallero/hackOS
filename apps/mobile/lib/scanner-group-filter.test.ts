@@ -1,8 +1,28 @@
-import { isAccreditationEligible, matchesScannerGroup } from "./scanner-group-filter";
+const mockSecureStore = new Map<string, string>();
+
+jest.mock("expo-secure-store", () => ({
+  getItemAsync: jest.fn(async (key: string) => mockSecureStore.get(key) ?? null),
+  setItemAsync: jest.fn(async (key: string, value: string) => {
+    mockSecureStore.set(key, value);
+  }),
+}));
+
+import * as SecureStore from "expo-secure-store";
+import {
+  isAccreditationEligible,
+  loadScannerGroupFilter,
+  matchesScannerGroup,
+  saveScannerGroupFilter,
+} from "./scanner-group-filter";
 
 function person(role: string | null, hasCapabilities = false) {
   return { role, hasCapabilities };
 }
+
+beforeEach(() => {
+  mockSecureStore.clear();
+  jest.clearAllMocks();
+});
 
 describe("matchesScannerGroup", () => {
   it("matches everyone when no groups are selected", () => {
@@ -45,5 +65,38 @@ describe("isAccreditationEligible", () => {
 
   it("does not infer event access from application status", () => {
     expect(isAccreditationEligible({ eventAccess: false })).toBe(false);
+  });
+});
+
+describe("saveScannerGroupFilter", () => {
+  it("applies writes in call order even when an earlier write's I/O resolves later (fast-tap race)", async () => {
+    const setItemAsync = SecureStore.setItemAsync as jest.Mock;
+    setItemAsync
+      .mockImplementationOnce(
+        (key: string, value: string) =>
+          new Promise<void>((resolve) => {
+            setTimeout(() => {
+              mockSecureStore.set(key, value);
+              resolve();
+            }, 50);
+          }),
+      )
+      .mockImplementationOnce(
+        (key: string, value: string) =>
+          new Promise<void>((resolve) => {
+            setTimeout(() => {
+              mockSecureStore.set(key, value);
+              resolve();
+            }, 5);
+          }),
+      );
+
+    // Simulates two fast taps: toggling "participant" on, then "mentor" on
+    // right after, before the first SecureStore write has settled.
+    const first = saveScannerGroupFilter(["participant"]);
+    const second = saveScannerGroupFilter(["participant", "mentor"]);
+    await Promise.all([first, second]);
+
+    expect(await loadScannerGroupFilter()).toEqual(["participant", "mentor"]);
   });
 });

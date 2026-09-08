@@ -7,7 +7,7 @@ import {
   useRouter,
   useScrollToTop,
 } from "expo-router";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
@@ -196,21 +196,29 @@ export function PeopleDirectoryScreen() {
     });
   }, [directory, query, roleFilter, activityId, t]);
 
-  function openPerson(person: ScannerPerson) {
-    if (activityId) {
-      // Guaranteed by the `filtered` list above.
-      emitManualActivityScan(Number(activityId), person.badgeId!);
-      safeBack(router, {
-        pathname: "/activities/[id]",
-        params: { id: activityId },
+  const openPerson = useCallback(
+    (person: ScannerPerson) => {
+      if (activityId) {
+        // Guaranteed by the `filtered` list above.
+        emitManualActivityScan(Number(activityId), person.badgeId!);
+        safeBack(router, {
+          pathname: "/activities/[id]",
+          params: { id: activityId },
+        });
+        return;
+      }
+      router.push({
+        pathname: pathname.includes("/others/") ? "/others/person/[id]" : "/scan/person/[id]",
+        params: { id: String(person.userId) },
       });
-      return;
-    }
-    router.push({
-      pathname: pathname.includes("/others/") ? "/others/person/[id]" : "/scan/person/[id]",
-      params: { id: String(person.userId) },
-    });
-  }
+    },
+    [activityId, pathname, router],
+  );
+
+  const renderPersonRow = useCallback(
+    ({ item }: { item: ScannerPerson }) => <PersonRow person={item} onPress={openPerson} />,
+    [openPerson],
+  );
 
   const legacyHeader = !glassAvailable ? (
     <LegacyScreenHeader
@@ -359,7 +367,7 @@ export function PeopleDirectoryScreen() {
           />
         )
       }
-      renderItem={({ item }) => <PersonRow person={item} onPress={() => openPerson(item)} />}
+      renderItem={renderPersonRow}
     />
   );
 
@@ -372,7 +380,13 @@ export function PeopleDirectoryScreen() {
   );
 }
 
-function PersonRow({ person, onPress }: { person: ScannerPerson; onPress: () => void }) {
+const PersonRow = memo(function PersonRow({
+  person,
+  onPress,
+}: {
+  person: ScannerPerson;
+  onPress: (person: ScannerPerson) => void;
+}) {
   const { t } = useLocale();
   const fullName = [person.name, person.surname].filter(Boolean).join(" ");
   const displayName = fullName || person.email;
@@ -395,7 +409,7 @@ function PersonRow({ person, onPress }: { person: ScannerPerson; onPress: () => 
         .filter(Boolean)
         .join(", ")}
       accessibilityRole="button"
-      onPress={onPress}
+      onPress={() => onPress(person)}
       style={({ pressed }) => ({
         alignItems: "center",
         backgroundColor: pressed ? colors.elevatedSurface : colors.background,
@@ -464,4 +478,4 @@ function PersonRow({ person, onPress }: { person: ScannerPerson; onPress: () => 
       <SymbolView name="chevron.right" tintColor={colors.tertiaryLabel} size={14} />
     </Pressable>
   );
-}
+});

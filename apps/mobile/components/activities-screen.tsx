@@ -2,7 +2,7 @@ import { MenuView } from "@expo/ui/community/menu";
 import { type ActivityKindSymbolName, isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { useFocusEffect, useNavigation, useRouter, useScrollToTop } from "expo-router";
 import Stack from "expo-router/stack";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, useColorScheme, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
@@ -220,6 +220,30 @@ export function ActivitiesScreen() {
     }, []),
   );
 
+  const onActivityPress = useCallback(
+    (item: ScannerActivity) => {
+      returningFromScanner.current = true;
+      router.push({
+        pathname: "/activities/[id]",
+        params: { id: String(item.id) },
+      });
+    },
+    [router],
+  );
+
+  const renderActivityRow = useCallback(
+    ({ item }: { item: ScannerActivity }) => (
+      <ActivityRow
+        item={item}
+        language={language}
+        marker={marker?.id === item.id ? (marker.running ? "now" : "next") : null}
+        t={t}
+        onPress={onActivityPress}
+      />
+    ),
+    [language, marker, onActivityPress, t],
+  );
+
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
       {glassAvailable ? (
@@ -401,27 +425,13 @@ export function ActivitiesScreen() {
             />
           )
         }
-        renderItem={({ item }) => (
-          <ActivityRow
-            item={item}
-            language={language}
-            marker={marker?.id === item.id ? (marker.running ? "now" : "next") : null}
-            t={t}
-            onPress={() => {
-              returningFromScanner.current = true;
-              router.push({
-                pathname: "/activities/[id]",
-                params: { id: String(item.id) },
-              });
-            }}
-          />
-        )}
+        renderItem={renderActivityRow}
       />
     </View>
   );
 }
 
-function ActivityRow({
+const ActivityRow = memo(function ActivityRow({
   item,
   language,
   marker,
@@ -432,14 +442,14 @@ function ActivityRow({
   language: ScannerActivity["primaryLanguage"];
   /** "now" on the activity currently running, "next" on the one about to start. */
   marker: "now" | "next" | null;
-  onPress: () => void;
+  onPress: (item: ScannerActivity) => void;
   t: ReturnType<typeof useLocale>["t"];
 }) {
   const startsAt = item.startsAt ? new Date(item.startsAt) : null;
   return (
     <Pressable
       accessibilityRole="button"
-      onPress={onPress}
+      onPress={() => onPress(item)}
       style={({ pressed }) => ({
         alignItems: "center",
         backgroundColor: colors.elevatedSurface,
@@ -515,4 +525,4 @@ function ActivityRow({
       <SymbolView name="chevron.right" tintColor={colors.tertiaryLabel} size={15} />
     </Pressable>
   );
-}
+});

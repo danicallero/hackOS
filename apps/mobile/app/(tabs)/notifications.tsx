@@ -1221,7 +1221,7 @@ const PreferencesView = memo(function PreferencesView({
             </Text>
             <Switch
               accessibilityLabel={`${t("notificationsQueueStaff")}, ${t("notificationsPush")}`}
-              disabled={savingKey !== null}
+              disabled={savingKey === "queue.staff:push"}
               style={{ alignSelf: "center" }}
               value={enabledFor("queue.staff", "push")}
               onValueChange={(enabled) => void toggle("queue.staff", "push", enabled)}
@@ -1249,7 +1249,7 @@ const PreferencesView = memo(function PreferencesView({
                   </Text>
                   <Switch
                     accessibilityLabel={`${categoryLabel(category, t)}, ${channelLabel(channel, t)}`}
-                    disabled={savingKey !== null}
+                    disabled={savingKey === `${category}:${channel}`}
                     style={{ alignSelf: "center" }}
                     value={enabledFor(category, channel)}
                     onValueChange={(enabled) => void toggle(category, channel, enabled)}

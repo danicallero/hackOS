@@ -1,6 +1,6 @@
 import { EVENTS, type SseEnvelope } from "@hackos/shared/events";
 import { useFocusEffect, useScrollToTop } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, RefreshControl, Text, useColorScheme, View } from "react-native";
 import { EmptyState, StatusPill } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -111,6 +111,13 @@ export default function QueueScreen() {
     [entries],
   );
 
+  const renderQueueCard = useCallback(
+    ({ item }: { item: QueueEntry }) => (
+      <QueueCard item={item} precalled={precalled.has(item.entryId)} />
+    ),
+    [precalled],
+  );
+
   return (
     <FlatList
       ref={listRef}
@@ -139,7 +146,7 @@ export default function QueueScreen() {
           />
         )
       }
-      renderItem={({ item }) => <QueueCard item={item} precalled={precalled.has(item.entryId)} />}
+      renderItem={renderQueueCard}
     />
   );
 }
@@ -150,7 +157,13 @@ function combineCleanups(cleanups: Array<() => void>) {
   };
 }
 
-function QueueCard({ item, precalled }: { item: QueueEntry; precalled: boolean }) {
+const QueueCard = memo(function QueueCard({
+  item,
+  precalled,
+}: {
+  item: QueueEntry;
+  precalled: boolean;
+}) {
   const { t } = useLocale();
   const calledRoom = item.status === "called" ? item.room : null;
   const eta = formatEta(item.etaMinutes, t);
@@ -274,7 +287,7 @@ function QueueCard({ item, precalled }: { item: QueueEntry; precalled: boolean }
       )}
     </View>
   );
-}
+});
 
 function QueueMetric({
   icon,
