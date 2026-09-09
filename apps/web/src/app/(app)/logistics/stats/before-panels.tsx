@@ -22,13 +22,19 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   ArrowUpIcon,
+  BadgeCheckIcon,
   BarChart3Icon,
+  Clock3Icon,
   EyeIcon,
   EyeOffIcon,
+  FileTextIcon,
+  HourglassIcon,
   LayoutDashboardIcon,
   LineChartIcon,
   PieChartIcon,
   RotateCcwIcon,
+  ShieldXIcon,
+  TimerOffIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DragHandle } from "@/components/common/drag-handle";
@@ -578,15 +584,6 @@ function OverviewPanel({
       : confirmed === undefined || fallbackSent === 0
         ? null
         : Math.round((confirmed / fallbackSent) * 100);
-  const lifecycleRows: StatsChartDatum[] = stats?.funnel
-    ? [
-        { label: t("pendingConfirmation"), n: stats.funnel.still_in_window },
-        { label: t("confirmed"), n: stats.funnel.confirmed },
-        { label: t("declined"), n: stats.funnel.declined },
-        { label: t("dataStatusExpired"), n: stats.funnel.expired },
-      ]
-    : [];
-
   return (
     <SectionCard title={t("statisticsOverviewPanel")} icon={LayoutDashboardIcon} className="h-full">
       {loading && !stats ? (
@@ -619,48 +616,60 @@ function OverviewPanel({
           }
         />
       ) : (
-        <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard label={t("submittedApplications")} value={submitted} className="h-full" />
-            <StatCard label={t("confirmed")} value={confirmed ?? "—"} className="h-full" />
-            <StatCard label={t("rejected")} value={overview?.rejected ?? "—"} className="h-full" />
-            <StatCard
-              label={t("confirmationRate")}
-              value={rate === null ? "—" : `${rate}%`}
-              className="h-full"
-            />
-          </div>
-          <div className="grid gap-3 lg:grid-cols-3 xl:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))]">
-            <div className="space-y-4 rounded-lg border p-5 lg:col-span-3 xl:col-span-1">
-              <div className="space-y-1">
-                <h3 className="text-balance text-sm font-semibold">{t("confirmationLifecycle")}</h3>
-                <p className="text-muted-foreground text-pretty text-xs">
-                  {t("confirmationLifecycleHint")}
-                </p>
-              </div>
-              <StatsChart data={lifecycleRows} type="bar" title={t("confirmationLifecycle")} />
-            </div>
-            <StatCard
-              label={t("expiredConfirmations")}
-              value={overview?.expired_confirmations ?? "—"}
-              className="h-full"
-            />
-            <StatCard
-              label={t("stillAbleToConfirm")}
-              value={overview?.still_able_to_confirm ?? "—"}
-              className="h-full"
-            />
-            <StatCard
-              label={t("averageConfirmationTime")}
-              value={hours(
-                overview?.average_confirmation_time_hours ?? stats?.time_to_confirm_hours?.avg,
-                t,
-              )}
-              hint={`${t("medianConfirmationTime")}: ${hours(stats?.time_to_confirm_hours?.median, t)}`}
-              className="h-full"
-            />
-          </div>
-        </>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <StatCard
+            label={t("submittedApplications")}
+            value={submitted}
+            icon={FileTextIcon}
+            tone="info"
+            className="h-full"
+          />
+          <StatCard
+            label={t("confirmed")}
+            value={confirmed ?? "—"}
+            icon={BadgeCheckIcon}
+            tone="success"
+            className="h-full"
+          />
+          <StatCard
+            label={t("rejected")}
+            value={overview?.rejected ?? "—"}
+            icon={ShieldXIcon}
+            tone="danger"
+            className="h-full"
+          />
+          <StatCard
+            label={t("confirmationRate")}
+            value={rate === null ? "—" : `${rate}%`}
+            icon={BadgeCheckIcon}
+            tone="success"
+            className="h-full"
+          />
+          <StatCard
+            label={t("expiredConfirmations")}
+            value={overview?.expired_confirmations ?? "—"}
+            icon={TimerOffIcon}
+            tone="warning"
+            className="h-full"
+          />
+          <StatCard
+            label={t("stillAbleToConfirm")}
+            value={overview?.still_able_to_confirm ?? "—"}
+            icon={HourglassIcon}
+            tone="info"
+            className="h-full"
+          />
+          <StatCard
+            label={t("averageConfirmationTime")}
+            value={hours(
+              overview?.average_confirmation_time_hours ?? stats?.time_to_confirm_hours?.avg,
+              t,
+            )}
+            hint={`${t("medianConfirmationTime")}: ${hours(stats?.time_to_confirm_hours?.median, t)}`}
+            icon={Clock3Icon}
+            className="h-full sm:col-span-2 lg:col-span-1 xl:col-span-2"
+          />
+        </div>
       )}
     </SectionCard>
   );

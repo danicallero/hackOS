@@ -14,6 +14,7 @@ export function StatCard({
   icon: Icon,
   delta,
   footer,
+  tone = "neutral",
   className,
 }: {
   label: string;
@@ -24,16 +25,32 @@ export function StatCard({
   delta?: { value: string; direction: "up" | "down" };
   /** Slot under the value — e.g. a <UsageMeter> or sparkline. */
   footer?: React.ReactNode;
+  /** Semantic emphasis for dashboards; labels/icons must still communicate meaning. */
+  tone?: "neutral" | "success" | "danger" | "warning" | "info";
   className?: string;
 }) {
+  const toneClass = {
+    neutral: "",
+    success: "border-success/30 bg-success/5",
+    danger: "border-destructive/30 bg-destructive/5",
+    warning: "border-warning/30 bg-warning/5",
+    info: "border-info/30 bg-info/5",
+  }[tone];
+  const accentClass = {
+    neutral: "text-foreground",
+    success: "text-success",
+    danger: "text-destructive",
+    warning: "text-warning-foreground",
+    info: "text-info",
+  }[tone];
   return (
-    <Card className={cn("gap-0 p-5", className)}>
+    <Card className={cn("gap-0 p-5", toneClass, className)}>
       <div className="flex items-center justify-between gap-2">
         <span className="text-muted-foreground text-sm font-medium">{label}</span>
-        {Icon && <Icon className="text-muted-foreground size-4 shrink-0" />}
+        {Icon && <Icon className={cn("size-4 shrink-0", accentClass)} aria-hidden="true" />}
       </div>
       <div className="mt-2 flex items-baseline gap-2">
-        <span className="text-2xl font-semibold tabular-nums">{value}</span>
+        <span className={cn("text-2xl font-semibold tabular-nums", accentClass)}>{value}</span>
         {delta && (
           <span
             className={cn(

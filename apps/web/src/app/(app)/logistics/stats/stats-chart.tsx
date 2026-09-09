@@ -94,9 +94,13 @@ function LineChart({ data, title }: { data: StatsChartDatum[]; title: string }) 
     series,
     points: points.filter((point) => (point.series ?? "") === series).sort((a, b) => a.x - b.x),
   }));
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => ({
-    value: Math.round(scaleMax * ratio * 10) / 10,
-    y: padding.top + innerHeight - innerHeight * ratio,
+  const yTickValues =
+    scaleMax <= 4
+      ? Array.from({ length: scaleMax + 1 }, (_, value) => value)
+      : [0, 0.25, 0.5, 0.75, 1].map((ratio) => Math.round(scaleMax * ratio));
+  const yTicks = [...new Set(yTickValues)].map((value) => ({
+    value,
+    y: padding.top + innerHeight - (value / scaleMax) * innerHeight,
   }));
 
   return (
