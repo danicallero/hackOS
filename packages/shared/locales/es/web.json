@@ -2467,7 +2467,7 @@
   "applicationScopeLabel": "Ámbito de solicitud",
   "roleScopeLabel": "Ámbito de rol",
   "noApplicationStatistics": "No hay estadísticas de solicitudes",
-  "includeInStatistics": "Incluir en estadísticas",
+  "includeInStatistics": "Integrar en estadísticas de Logistics",
   "applicationData": "Datos del formulario",
   "manageStatisticsVisibility": "Gestionar visibilidad",
   "statisticsRoles": "Roles con acceso a Stats",
