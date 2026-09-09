@@ -26,7 +26,24 @@ describe("statistics layout", () => {
         overview: { width: 2, height: 1 },
         "shirt-sizes": { width: 1, height: 1 },
       },
+      tones: {},
     });
+  });
+
+  it("keeps valid panel and KPI tones while dropping obsolete color preferences", () => {
+    expect(
+      sanitizeStatsLayout(
+        {
+          tones: {
+            overview: "info",
+            "overview:kpi:confirmed": "success",
+            "missing:kpi:value": "danger",
+            "shirt-sizes": "purple",
+          },
+        },
+        ["overview", "shirt-sizes"],
+      ).tones,
+    ).toEqual({ overview: "info", "overview:kpi:confirmed": "success" });
   });
 
   it("chooses an appropriate chart default for each data shape", () => {
