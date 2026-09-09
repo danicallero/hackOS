@@ -13,10 +13,10 @@ describe("final route-policy ledger", () => {
   it("has the exact classified rows, allowlists, and sole Better Auth exemption", async () => {
     app = await buildTestApp();
     const rows = app.routePolicyLedger.filter((row) => row.method !== "HEAD");
-    expect(rows).toHaveLength(353);
+    expect(rows).toHaveLength(354);
     expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(18);
     expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(12);
-    expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(47);
+    expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(48);
     // +2 (H8): GET .../seed-diff and POST .../reset-to-default, both gated
     // by permissions:manage like every other role-mutation route.
     // +4 (H8): GET/POST /api/role-grant-rules and PATCH/DELETE
@@ -31,6 +31,8 @@ describe("final route-policy ledger", () => {
     // capability-only, deliberately not the owner-inclusive edit policy.
     // +1 (H12): POST /api/universities/:id/normalize, the staff-only
     // consolidation of duplicate university rows.
+    // +1 (H27): GET /api/applications/stats/forms, the permission-filtered
+    // form picker for panel-level statistics readers.
     expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(208);
     expect(rows.filter((row) => row.policy.kind === "contextual")).toHaveLength(68);
     expect(app.routePolicyExemptions).toEqual([

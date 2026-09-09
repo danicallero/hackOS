@@ -18,6 +18,10 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { ActionGroup } from "@/components/common/action-group";
 import { AlertModal } from "@/components/common/alert-modal";
+import {
+  PermissionStateControl,
+  permissionStateMessageKey,
+} from "@/components/common/permission-state-control";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -37,7 +41,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
-import { type MessageKey, type Translate, useLocale } from "@/lib/i18n";
+import { type Translate, useLocale } from "@/lib/i18n";
 import type { PermissionState, RoleSeedDiff, RoleSummary, UserListItem } from "@/lib/types";
 import { useUrlTab } from "@/lib/url-tab";
 import { cn } from "@/lib/utils";
@@ -48,8 +52,6 @@ import {
   prettifyCapability,
   userDisplayName,
 } from "./helpers";
-
-const STATE_ORDER: PermissionState[] = ["deny", "inherit", "allow"];
 
 const detailsSchema = (t: Translate) =>
   z.object({
@@ -423,7 +425,8 @@ export function RoleEditor({
             >
               <span className="truncate font-mono text-xs">{entry.capability}</span>
               <span className="text-muted-foreground shrink-0 text-xs">
-                {t(capabilityStateKey(entry.current))} → {t(capabilityStateKey(entry.default))}
+                {t(permissionStateMessageKey(entry.current))} →{" "}
+                {t(permissionStateMessageKey(entry.default))}
               </span>
             </li>
           ))}
@@ -546,14 +549,6 @@ function RoleNavRow({ label, onClick }: { label: string; onClick: () => void }) 
   );
 }
 
-function capabilityStateKey(state: PermissionState): MessageKey {
-  return state === "allow"
-    ? "capabilityStateAllow"
-    : state === "deny"
-      ? "capabilityStateDeny"
-      : "capabilityStateInherit";
-}
-
 function CapabilityGroup({
   domain,
   capabilities,
@@ -601,7 +596,7 @@ function CapabilityGroup({
                 )}
                 <p className="text-muted-foreground truncate font-mono text-xs">{cap}</p>
               </div>
-              <CapabilityStateControl
+              <PermissionStateControl
                 state={caps[cap] ?? "inherit"}
                 disabled={disabled}
                 onChange={(state) => onChange(cap, state)}
@@ -611,39 +606,6 @@ function CapabilityGroup({
         })}
       </CollapsibleContent>
     </Collapsible>
-  );
-}
-
-function CapabilityStateControl({
-  state,
-  disabled,
-  onChange,
-}: {
-  state: PermissionState;
-  disabled: boolean;
-  onChange: (state: PermissionState) => void;
-}) {
-  const { t } = useLocale();
-  return (
-    <div className="inline-flex overflow-hidden rounded-md border">
-      {STATE_ORDER.map((candidate, i) => (
-        <button
-          key={candidate}
-          type="button"
-          disabled={disabled}
-          onClick={() => onChange(candidate)}
-          className={cn(
-            "px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-            i > 0 && "border-l",
-            state === candidate
-              ? "bg-primary text-primary-foreground"
-              : "hover:bg-muted text-muted-foreground",
-          )}
-        >
-          {t(capabilityStateKey(candidate))}
-        </button>
-      ))}
-    </div>
   );
 }
 

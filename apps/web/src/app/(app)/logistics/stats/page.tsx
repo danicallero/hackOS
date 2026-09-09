@@ -5,7 +5,6 @@ import { EVENTS } from "@hackos/shared/events";
 import {
   ActivityIcon,
   BadgeCheckIcon,
-  ClipboardListIcon,
   DownloadIcon,
   RefreshCwIcon,
   ShieldCheckIcon,
@@ -42,12 +41,11 @@ import {
   type PresenceHours,
   type StaffScanRankingRow,
 } from "@/lib/logistics";
-import { useCan } from "@/lib/session";
+import { useCan, useMe } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
 import { BeforePanels } from "./before-panels";
 import {
   type ApplicationStats,
-  applicationStatusLabel,
   type DataPhase,
   defaultDataPhase,
   errorMessage,
@@ -100,13 +98,12 @@ const DATA_PHASES: DataPhase[] = ["before", "during", "after"];
 
 export default function LogisticsStatsPage() {
   const { t } = useLocale();
+  const me = useMe();
   const canLogisticsStats = useCan(CAPABILITIES.LOGISTICS_STATS);
   const canManageStatistics = useCan(CAPABILITIES.STATISTICS_MANAGE);
-  const canStats = canLogisticsStats || canManageStatistics;
-  const canManageApplications = useCan(CAPABILITIES.APPLICATIONS_MANAGE);
-  const canReviewApplications = useCan(CAPABILITIES.APPLICATIONS_REVIEW);
-  const canDecideApplications = useCan(CAPABILITIES.APPLICATIONS_DECIDE);
-  const canApplications = canManageApplications || canReviewApplications || canDecideApplications;
+  const canExport = useCan(CAPABILITIES.EXPORTS_RUN);
+  const canGeneralStats = canLogisticsStats;
+  const canStats = canGeneralStats || canManageStatistics || Boolean(me?.hasStatisticsPanels);
   const {
     tab: phase,
     setTab: setPhase,
@@ -115,12 +112,14 @@ export default function LogisticsStatsPage() {
     values: DATA_PHASES,
     defaultValue: "before",
   });
+  const activePhase = canGeneralStats ? phase : "before";
   const phaseWasChosen = useRef(Boolean(requested && DATA_PHASES.includes(requested as DataPhase)));
   const [applications, setApplications] = useState<ApplicationOption[]>([]);
   const [applicationId, setApplicationId] = useState<number | null>(null);
   const [applicationStats, setApplicationStats] = useState<ApplicationStats | null>(null);
   const [beforeLoading, setBeforeLoading] = useState(false);
   const [beforeError, setBeforeError] = useState<string | null>(null);
+  const beforeRequest = useRef(0);
   const [hours, setHours] = useState<PresenceHours[]>([]);
   const [afterLoading, setAfterLoading] = useState(false);
   const [afterError, setAfterError] = useState<string | null>(null);
@@ -129,7 +128,7 @@ export default function LogisticsStatsPage() {
     logisticsApi.stats,
     "/api/logistics/stream",
     LOGISTICS_EVENTS,
-    { enabled: canStats },
+    { enabled: canGeneralStats },
   );
 
   useEffect(() => {
@@ -143,31 +142,41 @@ export default function LogisticsStatsPage() {
   }, [canStats, setPhase]);
 
   useEffect(() => {
-    if (!canStats || !canApplications) return;
+    if (!canStats) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setBeforeLoading(true);
     api
-      .get<{ applications: ApplicationOption[] }>("/api/applications")
+      .get<{ applications: ApplicationOption[] }>("/api/applications/stats/forms")
       .then(({ applications: items }) => {
         setApplications(items);
-        setApplicationId((current) => current ?? items[0]?.id ?? null);
+        setApplicationId((current) =>
+          current !== null && items.some((item) => item.id === current)
+            ? current
+            : (items[0]?.id ?? null),
+        );
       })
       .catch((error) => setBeforeError(errorMessage(error, t("couldNotLoadStatistics"))))
       .finally(() => setBeforeLoading(false));
-  }, [canApplications, canStats, t]);
+  }, [canStats, t]);
 
   const loadBefore = useCallback(async () => {
-    if (!applicationId) return;
+    const requestId = ++beforeRequest.current;
+    if (!applicationId) {
+      setApplicationStats(null);
+      setBeforeLoading(false);
+      return;
+    }
     setBeforeLoading(true);
     setBeforeError(null);
+    setApplicationStats(null);
     try {
-      setApplicationStats(
-        await api.get<ApplicationStats>(`/api/applications/${applicationId}/stats`),
-      );
+      const next = await api.get<ApplicationStats>(`/api/applications/${applicationId}/stats`);
+      if (requestId === beforeRequest.current) setApplicationStats(next);
     } catch (error) {
-      setBeforeError(errorMessage(error, t("couldNotLoadStatistics")));
+      if (requestId === beforeRequest.current)
+        setBeforeError(errorMessage(error, t("couldNotLoadStatistics")));
     } finally {
-      setBeforeLoading(false);
+      if (requestId === beforeRequest.current) setBeforeLoading(false);
     }
   }, [applicationId, t]);
 
@@ -177,7 +186,7 @@ export default function LogisticsStatsPage() {
   }, [loadBefore]);
 
   const loadAfter = useCallback(async () => {
-    if (!canStats) return;
+    if (!canGeneralStats) return;
     setAfterLoading(true);
     setAfterError(null);
     try {
@@ -187,7 +196,7 @@ export default function LogisticsStatsPage() {
     } finally {
       setAfterLoading(false);
     }
-  }, [canStats, t]);
+  }, [canGeneralStats, t]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -206,11 +215,11 @@ export default function LogisticsStatsPage() {
   return (
     <div className="space-y-6" data-wide>
       <PageHeader title={t("logisticsStats")} />
-      <Tabs value={phase} onValueChange={selectPhase}>
+      <Tabs value={activePhase} onValueChange={selectPhase}>
         <TabBar aria-label={t("eventPhaseLabel")} className="w-full sm:w-fit">
           <TabsTrigger value="before">{t("phaseBefore")}</TabsTrigger>
-          <TabsTrigger value="during">{t("phaseDuring")}</TabsTrigger>
-          <TabsTrigger value="after">{t("phaseAfter")}</TabsTrigger>
+          {canGeneralStats && <TabsTrigger value="during">{t("phaseDuring")}</TabsTrigger>}
+          {canGeneralStats && <TabsTrigger value="after">{t("phaseAfter")}</TabsTrigger>}
         </TabBar>
         <TabsContent value="before" className="mt-4">
           <BeforePanel
@@ -218,7 +227,8 @@ export default function LogisticsStatsPage() {
             applicationId={applicationId}
             stats={applicationStats}
             loading={beforeLoading}
-            error={canApplications ? beforeError : t("applicationStatsAdditionalAccess")}
+            error={beforeError}
+            canExport={canExport}
             onApplicationChange={setApplicationId}
             onRetry={loadBefore}
           />
@@ -241,6 +251,7 @@ function BeforePanel({
   stats,
   loading,
   error,
+  canExport,
   onApplicationChange,
   onRetry,
 }: {
@@ -249,78 +260,52 @@ function BeforePanel({
   stats: ApplicationStats | null;
   loading: boolean;
   error: string | null;
+  canExport: boolean;
   onApplicationChange: (id: number) => void;
   onRetry: () => void;
 }) {
   const { t } = useLocale();
-  const statusRows = Object.entries(stats?.counts_by_status ?? {}).map(([status, count]) => ({
-    status,
-    count,
-  }));
-  const statusColumns: Column<(typeof statusRows)[number]>[] = [
-    {
-      id: "status",
-      header: t("statusColumn"),
-      cell: (row) => applicationStatusLabel(row.status, t),
-      sortValue: (row) => row.status,
-    },
-    {
-      id: "count",
-      header: t("columnPeople"),
-      align: "right",
-      cell: (row) => row.count,
-      sortValue: (row) => row.count,
-    },
-  ];
   const download = `${API_URL}${exportUrl("/api/exports/applications.csv", { applicationId })}`;
   return (
     <div className="space-y-4">
-      <SectionCard
-        title={t("phaseBefore")}
-        state={<Freshness kind={error || !stats ? "incomplete" : "actual"} />}
-        action={
-          <div className="flex flex-wrap gap-2">
-            <Select
-              value={applicationId ? String(applicationId) : ""}
-              onValueChange={(value) => onApplicationChange(Number(value))}
-            >
-              <SelectTrigger aria-label={t("selectApplicationForStats")} className="w-full sm:w-64">
-                <SelectValue placeholder={t("selectApplicationForStats")} />
-              </SelectTrigger>
-              <SelectContent>
-                {applications.map((application) => (
-                  <SelectItem key={application.id} value={String(application.id)}>
-                    {application.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {applicationId ? (
-              <Button asChild variant="outline">
-                <a href={download}>
-                  <DownloadIcon className="size-4" aria-hidden="true" />
-                  {t("exportFilteredData")}
-                </a>
-              </Button>
-            ) : (
-              <Button variant="outline" disabled>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Select
+          value={applicationId ? String(applicationId) : ""}
+          onValueChange={(value) => onApplicationChange(Number(value))}
+        >
+          <SelectTrigger aria-label={t("selectApplicationForStats")} className="w-full sm:w-64">
+            <SelectValue placeholder={t("selectApplicationForStats")} />
+          </SelectTrigger>
+          <SelectContent>
+            {applications.map((application) => (
+              <SelectItem key={application.id} value={String(application.id)}>
+                {application.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {canExport &&
+          (applicationId ? (
+            <Button asChild variant="outline">
+              <a href={download}>
                 <DownloadIcon className="size-4" aria-hidden="true" />
                 {t("exportFilteredData")}
-              </Button>
-            )}
-          </div>
-        }
-      >
-        <DataTable
-          columns={statusColumns}
-          data={statusRows}
-          getRowId={(row) => row.status}
-          loading={loading}
-          error={error ? { message: error, onRetry } : undefined}
-          empty={{ icon: ClipboardListIcon, title: t("noApplicationStatistics") }}
-        />
-      </SectionCard>
-      <BeforePanels stats={stats} />
+              </a>
+            </Button>
+          ) : (
+            <Button variant="outline" disabled>
+              <DownloadIcon className="size-4" aria-hidden="true" />
+              {t("exportFilteredData")}
+            </Button>
+          ))}
+      </div>
+      <BeforePanels
+        applicationId={applicationId}
+        stats={stats}
+        loading={loading}
+        error={error}
+        onRetry={onRetry}
+      />
     </div>
   );
 }

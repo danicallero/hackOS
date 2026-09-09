@@ -173,7 +173,7 @@ export interface ApplicationStats {
     granted_role_name: string | null;
     capacity: number | null;
   };
-  counts_by_status: Record<string, number>;
+  counts_by_status?: Record<string, number>;
   funnel: {
     sent: number;
     still_in_window: number;

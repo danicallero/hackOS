@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   resolveStatisticsPanelAccess,
+  resolveStatisticsPanelDecisions,
   statisticsPanelKeys,
 } from "../../src/modules/applications/stats.js";
 
@@ -37,5 +38,15 @@ describe("dynamic application statistics panels", () => {
         { panelKey: "food-intolerances", rolePosition: 100, state: "inherit" },
       ]),
     ).toEqual(new Set(["shirt-sizes"]));
+  });
+
+  it("returns the winning explicit panel state for a general-access fallback", () => {
+    expect(
+      resolveStatisticsPanelDecisions([
+        { panelKey: "overview", rolePosition: 100, state: "allow" },
+        { panelKey: "overview", rolePosition: 200, state: "deny" },
+        { panelKey: "funnel", rolePosition: 100, state: "inherit" },
+      ]),
+    ).toEqual(new Map([["overview", "deny"]]));
   });
 });

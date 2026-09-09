@@ -531,9 +531,15 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           .query(
             `SELECT EXISTS (
              SELECT 1
-             FROM application_stats_panel_role_access pa
-             JOIN user_roles ur ON ur.role_id = pa.role_id AND ur.user_id = $1
-             WHERE pa.state = 'allow'
+             FROM (
+               SELECT DISTINCT ON (pa.application_id, pa.panel_key) pa.state
+               FROM application_stats_panel_role_access pa
+               JOIN user_roles ur ON ur.role_id = pa.role_id AND ur.user_id = $1
+               JOIN roles r ON r.id = pa.role_id AND r.deleted_at IS NULL
+               WHERE pa.state <> 'inherit'
+               ORDER BY pa.application_id, pa.panel_key, r.position DESC
+             ) AS effective
+             WHERE effective.state = 'allow'
            ) AS "exists"`,
             [userId],
           )
