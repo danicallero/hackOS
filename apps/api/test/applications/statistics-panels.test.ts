@@ -1,18 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
+  mergeConfiguredStatisticsBuckets,
   resolveStatisticsPanelAccess,
   resolveStatisticsPanelDecisions,
   statisticsPanelKeys,
 } from "../../src/modules/applications/stats.js";
 
 describe("dynamic application statistics panels", () => {
-  it("keeps base panels and only exposes safe/reportable fields", () => {
+  it("keeps base panels and only exposes explicitly published fields", () => {
     expect([
       ...statisticsPanelKeys([
         { key: "gender", kind: "select" },
         { key: "bio", kind: "textarea" },
         { key: "notes", kind: "text", reporting: true },
-        { key: "Secret", kind: "text" },
+        { key: "Secret", kind: "select" },
+        { key: "age", kind: "date", statistics: { enabled: true } },
       ]),
     ]).toEqual(
       expect.arrayContaining([
@@ -20,12 +22,14 @@ describe("dynamic application statistics panels", () => {
         "funnel",
         "shirt-sizes",
         "food-intolerances",
-        "field:gender",
         "field:notes",
+        "field:age",
       ]),
     );
     expect(statisticsPanelKeys([{ key: "bio", kind: "textarea" }]).has("field:bio")).toBe(false);
-    expect(statisticsPanelKeys([{ key: "Secret", kind: "select" }]).has("field:secret")).toBe(true);
+    expect(statisticsPanelKeys([{ key: "Secret", kind: "select" }]).has("field:secret")).toBe(
+      false,
+    );
   });
 
   it("applies H8 precedence and defaults to deny", () => {
@@ -48,5 +52,22 @@ describe("dynamic application statistics panels", () => {
         { panelKey: "funnel", rolePosition: 100, state: "inherit" },
       ]),
     ).toEqual(new Map([["overview", "deny"]]));
+  });
+
+  it("preserves configured zero-value options and checkbox defaults", () => {
+    expect(
+      mergeConfiguredStatisticsBuckets(
+        [{ value: "Male", n: 4 }],
+        [{ value: "Male" }, { value: "Female" }, { value: "Other" }],
+      ),
+    ).toEqual([
+      { value: "Male", n: 4 },
+      { value: "Female", n: 0 },
+      { value: "Other", n: 0 },
+    ]);
+    expect(mergeConfiguredStatisticsBuckets([], [], "checkbox")).toEqual([
+      { value: "true", n: 0 },
+      { value: "false", n: 0 },
+    ]);
   });
 });

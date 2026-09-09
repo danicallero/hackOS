@@ -9,6 +9,7 @@ import { registerNotificationsModule } from "./notifications/index.js";
 import { registerProjectsModule } from "./projects/index.js";
 import { registerQueueModule } from "./queue/index.js";
 import { registerSponsorsModule } from "./sponsors/index.js";
+import { registerStatisticsModule } from "./statistics/index.js";
 import { registerTelemetryModule } from "./telemetry/index.js";
 
 /**
@@ -28,5 +29,6 @@ export async function registerModules(app: FastifyInstance): Promise<void> {
   await registerProjectsModule(app); // WS-B1 (H16-H17)
   await registerQueueModule(app); // WS-B2 (H29-H42)
   await registerSponsorsModule(app); // WS-G  (H43-H45)
+  await registerStatisticsModule(app); // H27 generic statistics dashboard
   registerTelemetryModule(app); // H38, H41-H42, #544 browser observations
 }

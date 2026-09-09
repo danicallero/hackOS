@@ -93,6 +93,9 @@ Architecture & modules:
 - [Synthetic reviewer fixtures](./reviewer-fixtures.md) — the isolated account
   generation workflow, marked participant queue, synthetic-operator scope,
   credential-use signal, and deployment assumptions.
+- [Statistics dashboard](./statistics-dashboard.md) — the generic scope and
+  panel catalog, configurable question publication, server-side aggregation
+  and transformations, layout persistence, and granular statistics ACLs.
 
 Frontend (web & mobile):
 

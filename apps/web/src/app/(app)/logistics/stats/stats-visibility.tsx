@@ -1,22 +1,30 @@
 "use client";
 
-import { EyeIcon, LoaderCircleIcon } from "lucide-react";
+import { ChevronDownIcon, EyeIcon, LoaderCircleIcon, PlusIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { PermissionStateControl } from "@/components/common/permission-state-control";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ApiError, api } from "@/lib/api";
 import { type I18nText, type MessageKey, pickText, useLocale } from "@/lib/i18n";
 import type { PermissionState } from "@/lib/types";
 
 type State = PermissionState;
 type Access = {
+  scope_key?: string;
   panel_key: string;
   role_id: number;
   state: State;
-  role_name: string;
-  position: number;
+  role_name?: string;
+  position?: number;
 };
 type Role = {
   id: number;
@@ -30,6 +38,10 @@ const BASE_PANEL_LABELS: Record<string, MessageKey> = {
   funnel: "applicationFunnel",
   "shirt-sizes": "shirtSizeDistribution",
   "food-intolerances": "dietaryDistribution",
+  "applications-over-time": "applicationsOverTime",
+  "confirmations-over-time": "confirmationsOverTime",
+  "applications-by-hour": "submissionsByHour",
+  "applications-by-day-of-week": "submissionsByDay",
 };
 
 function panelLabel(
@@ -47,7 +59,13 @@ function panelLabel(
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-export function StatsVisibility({ applicationId }: { applicationId: number | null }) {
+export function StatsVisibility({
+  applicationId,
+  scopeKey,
+}: {
+  applicationId: number | null;
+  scopeKey?: string;
+}) {
   const { language, t } = useLocale();
   const [open, setOpen] = useState(false);
   const [access, setAccess] = useState<Access[]>([]);
@@ -57,25 +75,38 @@ export function StatsVisibility({ applicationId }: { applicationId: number | nul
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
+  const [expandedRoles, setExpandedRoles] = useState<Set<number>>(new Set());
+  const [additionalRoleId, setAdditionalRoleId] = useState<string>("");
 
   useEffect(() => {
-    if (!open || !applicationId) return;
+    if (!open || (!applicationId && !scopeKey)) return;
     let active = true;
     setLoading(true);
     setError(null);
+    const roleScope = scopeKey?.startsWith("role:") === true;
+    const endpoint = roleScope
+      ? "/api/statistics/access"
+      : `/api/applications/${applicationId}/stats/access`;
     api
       .get<{
         access: Access[];
         roles: Role[];
-        panel_keys: string[];
+        panel_keys?: string[];
         panel_labels?: Record<string, I18nText>;
-      }>(`/api/applications/${applicationId}/stats/access`)
+        scopes?: Array<{ key: string; panelKeys: string[] }>;
+      }>(endpoint)
       .then((data) => {
         if (!active) return;
-        setAccess(data.access);
+        setAccess(
+          roleScope ? data.access.filter((row) => row.scope_key === scopeKey) : data.access,
+        );
         setRoles(data.roles);
-        setPanels(data.panel_keys);
+        setIncludedRoleIds(new Set());
+        setPanels(
+          data.panel_keys ?? data.scopes?.find((scope) => scope.key === scopeKey)?.panelKeys ?? [],
+        );
         setPanelLabels(data.panel_labels ?? {});
+        setExpandedRoles(new Set());
       })
       .catch((err) => {
         if (active) setError(err instanceof ApiError ? err.message : t("couldNotLoadStatistics"));
@@ -86,19 +117,21 @@ export function StatsVisibility({ applicationId }: { applicationId: number | nul
     return () => {
       active = false;
     };
-  }, [applicationId, open, t]);
+  }, [applicationId, open, scopeKey, t]);
 
   async function setPanelState(panelKey: string, roleId: number, state: State) {
-    if (!applicationId) return;
+    if (!applicationId && !scopeKey) return;
+    const roleScope = scopeKey?.startsWith("role:") === true;
     const requestKey = `${roleId}:${panelKey}`;
     setPending(requestKey);
     setError(null);
     try {
-      await api.put(`/api/applications/${applicationId}/stats/access`, {
-        panel_key: panelKey,
-        role_id: roleId,
-        state,
-      });
+      await api.put(
+        roleScope ? "/api/statistics/access" : `/api/applications/${applicationId}/stats/access`,
+        roleScope
+          ? { scope_key: scopeKey, panel_key: panelKey, role_id: roleId, state }
+          : { panel_key: panelKey, role_id: roleId, state },
+      );
       const role = roles.find((item) => item.id === roleId);
       setAccess((current) => [
         ...current.filter((row) => !(row.panel_key === panelKey && row.role_id === roleId)),
@@ -116,6 +149,37 @@ export function StatsVisibility({ applicationId }: { applicationId: number | nul
       setPending(null);
     }
   }
+
+  const [includedRoleIds, setIncludedRoleIds] = useState<Set<number>>(new Set());
+  const rolesWithStatisticsAccess = roles.filter(
+    (role) =>
+      role.general_state === "allow" ||
+      access.some((row) => row.role_id === role.id && row.state === "allow"),
+  );
+  const addableRoles = roles.filter(
+    (role) =>
+      !rolesWithStatisticsAccess.some((item) => item.id === role.id) &&
+      !includedRoleIds.has(role.id),
+  );
+
+  function addRole(roleId: string) {
+    const numericId = Number(roleId);
+    if (!numericId) return;
+    const role = roles.find((item) => item.id === numericId);
+    if (!role) return;
+    // The role becomes a compact, expandable row immediately. Its panels stay
+    // INHERIT until the manager explicitly grants one, so Add role never
+    // broadens access by accident.
+    setAdditionalRoleId("");
+    setExpandedRoles((current) => new Set([...current, numericId]));
+    // Keep the selected role in the automatic list through a local marker.
+    setIncludedRoleIds((current) => new Set([...current, numericId]));
+  }
+
+  const managedRoles = roles.filter(
+    (role) =>
+      rolesWithStatisticsAccess.some((item) => item.id === role.id) || includedRoleIds.has(role.id),
+  );
 
   return (
     <SectionCard
@@ -144,60 +208,126 @@ export function StatsVisibility({ applicationId }: { applicationId: number | nul
               {error}
             </p>
           )}
-          <div className="divide-border divide-y rounded-md border">
-            {roles.map((role) => (
-              <div key={role.id} className="p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="truncate text-sm font-semibold">{role.name}</h3>
-                    <p className="text-muted-foreground text-xs tabular-nums">
-                      {t("rolePosition", { position: role.position })}
-                    </p>
-                  </div>
-                  <StatusBadge
-                    tone={
-                      role.general_state === "allow"
-                        ? "success"
-                        : role.general_state === "deny"
-                          ? "danger"
-                          : "neutral"
-                    }
-                    dot={false}
-                  >
-                    {t(
-                      role.general_state === "allow"
-                        ? "statisticsGeneralAllowed"
-                        : role.general_state === "deny"
-                          ? "statisticsGeneralDenied"
-                          : "statisticsGeneralInherited",
-                    )}
-                  </StatusBadge>
-                </div>
-                <div className="mt-4 divide-border divide-y border-t">
-                  {panels.map((panel) => {
-                    const state =
-                      access.find((row) => row.role_id === role.id && row.panel_key === panel)
-                        ?.state ?? "inherit";
-                    return (
-                      <div
-                        key={panel}
-                        className="flex flex-wrap items-center justify-between gap-3 py-2.5"
+          <p className="text-muted-foreground text-pretty text-sm">
+            {t("statisticsInheritanceHint")}
+          </p>
+          <div className="space-y-2">
+            {managedRoles.length === 0 ? (
+              <p className="text-muted-foreground rounded-md border p-4 text-sm">
+                {t("noStatisticsRoles")}
+              </p>
+            ) : (
+              managedRoles.map((role) => {
+                const expanded = expandedRoles.has(role.id);
+                return (
+                  <div key={role.id} className="rounded-md border">
+                    <button
+                      type="button"
+                      className="flex min-h-12 w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-expanded={expanded}
+                      onClick={() =>
+                        setExpandedRoles((current) => {
+                          const next = new Set(current);
+                          if (next.has(role.id)) next.delete(role.id);
+                          else next.add(role.id);
+                          return next;
+                        })
+                      }
+                    >
+                      <ChevronDownIcon
+                        className={`text-muted-foreground size-4 shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`}
+                        aria-hidden="true"
+                      />
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                        {role.name}
+                      </span>
+                      <StatusBadge
+                        tone={
+                          role.general_state === "allow"
+                            ? "success"
+                            : role.general_state === "deny"
+                              ? "danger"
+                              : "neutral"
+                        }
+                        dot={false}
                       >
-                        <span className="text-sm font-medium">
-                          {panelLabel(panel, panelLabels, language, t)}
-                        </span>
-                        <PermissionStateControl
-                          state={state}
-                          disabled={pending !== null}
-                          onChange={(next) => void setPanelState(panel, role.id, next)}
-                        />
+                        {t(
+                          role.general_state === "allow"
+                            ? "statisticsGeneralAllowed"
+                            : role.general_state === "deny"
+                              ? "statisticsGeneralDenied"
+                              : "statisticsGeneralInherited",
+                        )}
+                      </StatusBadge>
+                    </button>
+                    {expanded && (
+                      <div className="space-y-3 border-t px-4 py-4">
+                        <p className="text-muted-foreground text-xs">
+                          {t("statisticsRolePermissionHint", { position: role.position })}
+                        </p>
+                        <div className="space-y-2">
+                          {panels.map((panel) => {
+                            const state =
+                              access.find(
+                                (row) => row.role_id === role.id && row.panel_key === panel,
+                              )?.state ?? "inherit";
+                            const inheritedAllow = role.general_state === "allow";
+                            return (
+                              <div
+                                key={panel}
+                                className="flex flex-wrap items-center justify-between gap-3 rounded-md border px-3 py-3"
+                              >
+                                <span className="min-w-0 flex-1 text-sm font-medium">
+                                  {panelLabel(panel, panelLabels, language, t)}
+                                </span>
+                                <div className="flex flex-wrap items-center justify-end gap-2">
+                                  {state === "inherit" && (
+                                    <StatusBadge
+                                      tone={inheritedAllow ? "success" : "danger"}
+                                      dot={false}
+                                    >
+                                      {t(
+                                        inheritedAllow
+                                          ? "statisticsInheritedAllow"
+                                          : "statisticsInheritedDeny",
+                                      )}
+                                    </StatusBadge>
+                                  )}
+                                  <PermissionStateControl
+                                    state={state}
+                                    disabled={pending !== null}
+                                    onChange={(next) => void setPanelState(panel, role.id, next)}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+                    )}
+                  </div>
+                );
+              })
+            )}
           </div>
+          {addableRoles.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 border-t pt-4">
+              <Select value={additionalRoleId} onValueChange={addRole}>
+                <SelectTrigger className="min-w-52" aria-label={t("addStatisticsRole")}>
+                  <SelectValue placeholder={t("selectRoleToAdd")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {addableRoles.map((role) => (
+                    <SelectItem key={role.id} value={String(role.id)}>
+                      {role.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-muted-foreground text-xs">{t("addStatisticsRoleHint")}</span>
+              <PlusIcon className="text-muted-foreground size-4" aria-hidden="true" />
+            </div>
+          )}
         </div>
       )}
     </SectionCard>

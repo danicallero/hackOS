@@ -532,12 +532,22 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             `SELECT EXISTS (
              SELECT 1
              FROM (
-               SELECT DISTINCT ON (pa.application_id, pa.panel_key) pa.state
-               FROM application_stats_panel_role_access pa
-               JOIN user_roles ur ON ur.role_id = pa.role_id AND ur.user_id = $1
-               JOIN roles r ON r.id = pa.role_id AND r.deleted_at IS NULL
-               WHERE pa.state <> 'inherit'
-               ORDER BY pa.application_id, pa.panel_key, r.position DESC
+               SELECT DISTINCT ON (resource_key, panel_key) state
+               FROM (
+                 SELECT 'application:' || pa.application_id::text AS resource_key,
+                        pa.panel_key, pa.state, r.position
+                   FROM application_stats_panel_role_access pa
+                   JOIN user_roles ur ON ur.role_id = pa.role_id AND ur.user_id = $1
+                   JOIN roles r ON r.id = pa.role_id AND r.deleted_at IS NULL
+                  WHERE pa.state <> 'inherit'
+                 UNION ALL
+                 SELECT sa.scope_key AS resource_key, sa.panel_key, sa.state, r.position
+                   FROM statistics_scope_panel_role_access sa
+                   JOIN user_roles ur ON ur.role_id = sa.role_id AND ur.user_id = $1
+                   JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
+                  WHERE sa.state <> 'inherit'
+               ) decisions
+               ORDER BY resource_key, panel_key, position DESC
              ) AS effective
              WHERE effective.state = 'allow'
            ) AS "exists"`,

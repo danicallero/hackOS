@@ -890,6 +890,7 @@ export function FieldEditor({
   const { t } = useLocale();
   const uid = useId();
   const cardRef = useRef<HTMLDivElement>(null);
+  const statisticsEnabled = field.statistics?.enabled === true || field.reporting === true;
   useClickOutside(cardRef, onDeactivate, active);
 
   const topRow = (
@@ -1146,10 +1147,126 @@ export function FieldEditor({
             </Label>
             <Switch
               id={`reporting-${uid}`}
-              checked={field.reporting === true}
-              onCheckedChange={(reporting) => onChange({ reporting })}
+              checked={statisticsEnabled}
+              onCheckedChange={(reporting) =>
+                onChange({
+                  reporting,
+                  statistics: {
+                    ...(field.statistics ?? {}),
+                    enabled: reporting,
+                  },
+                })
+              }
             />
           </div>
+          {statisticsEnabled && (
+            <div className="grid gap-3 border-t pt-4 @md:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label htmlFor={`statistics-visualization-${uid}`}>
+                  {t("statisticsVisualizationLabel")}
+                </Label>
+                <Select
+                  value={field.statistics?.visualization ?? "bar"}
+                  onValueChange={(visualization) =>
+                    onChange({
+                      statistics: {
+                        ...(field.statistics ?? { enabled: true }),
+                        enabled: true,
+                        visualization: visualization as "bar" | "pie" | "line",
+                      },
+                    })
+                  }
+                >
+                  <SelectTrigger id={`statistics-visualization-${uid}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bar">{t("chartTypeBar")}</SelectItem>
+                    <SelectItem value="pie">{t("chartTypePie")}</SelectItem>
+                    <SelectItem value="line">{t("chartTypeLine")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor={`statistics-transformation-${uid}`}>
+                  {t("statisticsTransformationLabel")}
+                </Label>
+                <Select
+                  value={field.statistics?.transformation ?? "none"}
+                  onValueChange={(transformation) =>
+                    onChange({
+                      statistics: {
+                        ...(field.statistics ?? { enabled: true }),
+                        enabled: true,
+                        transformation: transformation as "none" | "age" | "study_level",
+                      },
+                    })
+                  }
+                >
+                  <SelectTrigger id={`statistics-transformation-${uid}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">{t("statisticsTransformationNone")}</SelectItem>
+                    <SelectItem value="age">{t("statisticsTransformationAge")}</SelectItem>
+                    <SelectItem value="study_level">
+                      {t("statisticsTransformationStudyLevel")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor={`statistics-aggregation-${uid}`}>
+                  {t("statisticsAggregationLabel")}
+                </Label>
+                <Select
+                  value={field.statistics?.aggregation ?? "count"}
+                  onValueChange={(aggregation) =>
+                    onChange({
+                      statistics: {
+                        ...(field.statistics ?? { enabled: true }),
+                        enabled: true,
+                        aggregation: aggregation as "count" | "sum" | "average",
+                      },
+                    })
+                  }
+                >
+                  <SelectTrigger id={`statistics-aggregation-${uid}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="count">{t("statisticsAggregationCount")}</SelectItem>
+                    <SelectItem value="sum">{t("statisticsAggregationSum")}</SelectItem>
+                    <SelectItem value="average">{t("statisticsAggregationAverage")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {field.statistics?.transformation === "study_level" && (
+                <div className="space-y-1.5 @md:col-span-3">
+                  <Label htmlFor={`statistics-program-years-${uid}`}>
+                    {t("statisticsProgramYearsLabel")}
+                  </Label>
+                  <Input
+                    id={`statistics-program-years-${uid}`}
+                    type="number"
+                    min={1}
+                    max={12}
+                    value={field.statistics.program_years ?? 4}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      onChange({
+                        statistics: {
+                          ...(field.statistics ?? { enabled: true }),
+                          enabled: true,
+                          program_years: value === "" ? undefined : Number(value),
+                        },
+                      });
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </details>
 

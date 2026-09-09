@@ -21,11 +21,12 @@ describe("statistics layout", () => {
       hidden: ["funnel"],
       charts: { funnel: "pie" },
       sections: [{ id: "main", title: "Main", panelKeys: ["funnel"] }],
+      sizes: {},
     });
   });
 
   it("chooses an appropriate chart default for each data shape", () => {
-    expect(defaultStatsChartType("submissions-by-day")).toBe("line");
+    expect(defaultStatsChartType("applications-over-time")).toBe("line");
     expect(defaultStatsChartType("field:consent", "checkbox")).toBe("pie");
     expect(defaultStatsChartType("shirt-sizes")).toBe("bar");
   });

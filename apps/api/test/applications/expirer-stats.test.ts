@@ -138,6 +138,13 @@ describe("pre-event stats (H27)", () => {
     expect(body.counts_by_status.confirmed).toBe(2);
     expect(body.counts_by_status.declined).toBe(1);
     expect(body.counts_by_status.review).toBe(1);
+    expect(body.overview).toMatchObject({
+      submitted: 4,
+      confirmed: 2,
+      rejected: 0,
+      expired_confirmations: 0,
+      still_able_to_confirm: 0,
+    });
 
     // confirmed-only intolerances: nut-free x2, gluten-free x1 (u3 declined, excluded)
     const intoleranceMap = Object.fromEntries(

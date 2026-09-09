@@ -6,6 +6,7 @@ import {
   ActivityIcon,
   BadgeCheckIcon,
   DownloadIcon,
+  LayoutDashboardIcon,
   RefreshCwIcon,
   ShieldCheckIcon,
   SoupIcon,
@@ -16,6 +17,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { MultiSelect } from "@/components/common/multi-select";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { StatCard } from "@/components/common/stat-card";
@@ -23,13 +25,6 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { TabBar } from "@/components/common/tab-bar";
 import type { PublicEvent } from "@/components/public/public-types";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { api } from "@/lib/api";
@@ -52,6 +47,8 @@ import {
   exportUrl,
   FRESHNESS_LABEL_KEYS,
   type FreshnessKind,
+  type StatisticsScope,
+  type StatisticsScopesResponse,
 } from "./model";
 import { StatsVisibility } from "./stats-visibility";
 
@@ -63,11 +60,6 @@ const LOGISTICS_EVENTS = [
   EVENTS.LOGISTICS_MEAL_SCAN_BATCH,
   EVENTS.LOGISTICS_WALLET_PASS_UPDATED,
 ];
-
-interface ApplicationOption {
-  id: number;
-  name: string;
-}
 
 interface LiveStatsState {
   data: LogisticsStats | null;
@@ -114,12 +106,15 @@ export default function LogisticsStatsPage() {
   });
   const activePhase = canGeneralStats ? phase : "before";
   const phaseWasChosen = useRef(Boolean(requested && DATA_PHASES.includes(requested as DataPhase)));
-  const [applications, setApplications] = useState<ApplicationOption[]>([]);
-  const [applicationId, setApplicationId] = useState<number | null>(null);
+  const [scopes, setScopes] = useState<StatisticsScope[]>([]);
+  const [selectedScopeKeys, setSelectedScopeKeys] = useState<string[]>([]);
+  const [scopesLoading, setScopesLoading] = useState(false);
+  const [scopesLoaded, setScopesLoaded] = useState(false);
   const [applicationStats, setApplicationStats] = useState<ApplicationStats | null>(null);
   const [beforeLoading, setBeforeLoading] = useState(false);
   const [beforeError, setBeforeError] = useState<string | null>(null);
   const beforeRequest = useRef(0);
+  const [editMode, setEditMode] = useState(false);
   const [hours, setHours] = useState<PresenceHours[]>([]);
   const [afterLoading, setAfterLoading] = useState(false);
   const [afterError, setAfterError] = useState<string | null>(null);
@@ -128,7 +123,7 @@ export default function LogisticsStatsPage() {
     logisticsApi.stats,
     "/api/logistics/stream",
     LOGISTICS_EVENTS,
-    { enabled: canGeneralStats },
+    { enabled: canGeneralStats && activePhase === "during" },
   );
 
   useEffect(() => {
@@ -143,25 +138,35 @@ export default function LogisticsStatsPage() {
 
   useEffect(() => {
     if (!canStats) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setBeforeLoading(true);
+    setScopesLoading(true);
+    setBeforeError(null);
     api
-      .get<{ applications: ApplicationOption[] }>("/api/applications/stats/forms")
-      .then(({ applications: items }) => {
-        setApplications(items);
-        setApplicationId((current) =>
-          current !== null && items.some((item) => item.id === current)
-            ? current
-            : (items[0]?.id ?? null),
-        );
+      .get<StatisticsScopesResponse>("/api/statistics/scopes")
+      .then(({ scopes: items }) => {
+        setScopes(items);
+        setSelectedScopeKeys((current) => {
+          const valid = current.filter((key) => items.some((item) => item.key === key));
+          if (valid.length > 0) return valid;
+          const firstApplication = items.find((item) => item.kind === "application");
+          return firstApplication ? [firstApplication.key] : items[0] ? [items[0].key] : [];
+        });
+        setScopesLoaded(true);
       })
       .catch((error) => setBeforeError(errorMessage(error, t("couldNotLoadStatistics"))))
-      .finally(() => setBeforeLoading(false));
+      .finally(() => setScopesLoading(false));
   }, [canStats, t]);
+
+  const selectedScopes = scopes.filter((scope) => selectedScopeKeys.includes(scope.key));
+  const selectedApplicationIds = selectedScopes
+    .filter((scope) => scope.kind === "application")
+    .map((scope) => scope.id);
+  const selectedApplicationId =
+    selectedApplicationIds.length === 1 ? selectedApplicationIds[0] : null;
+  const layoutKey = selectedScopeKeys.slice().sort().join("|");
 
   const loadBefore = useCallback(async () => {
     const requestId = ++beforeRequest.current;
-    if (!applicationId) {
+    if (!scopesLoaded || selectedScopeKeys.length === 0) {
       setApplicationStats(null);
       setBeforeLoading(false);
       return;
@@ -170,7 +175,9 @@ export default function LogisticsStatsPage() {
     setBeforeError(null);
     setApplicationStats(null);
     try {
-      const next = await api.get<ApplicationStats>(`/api/applications/${applicationId}/stats`);
+      const next = await api.post<ApplicationStats>("/api/statistics/query", {
+        scopes: selectedScopeKeys,
+      });
       if (requestId === beforeRequest.current) setApplicationStats(next);
     } catch (error) {
       if (requestId === beforeRequest.current)
@@ -178,7 +185,7 @@ export default function LogisticsStatsPage() {
     } finally {
       if (requestId === beforeRequest.current) setBeforeLoading(false);
     }
-  }, [applicationId, t]);
+  }, [scopesLoaded, selectedScopeKeys, t]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -186,7 +193,7 @@ export default function LogisticsStatsPage() {
   }, [loadBefore]);
 
   const loadAfter = useCallback(async () => {
-    if (!canGeneralStats) return;
+    if (!canGeneralStats || activePhase !== "after") return;
     setAfterLoading(true);
     setAfterError(null);
     try {
@@ -196,7 +203,7 @@ export default function LogisticsStatsPage() {
     } finally {
       setAfterLoading(false);
     }
-  }, [canGeneralStats, t]);
+  }, [activePhase, canGeneralStats, t]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -214,25 +221,38 @@ export default function LogisticsStatsPage() {
 
   return (
     <div className="space-y-6" data-wide>
-      <PageHeader title={t("logisticsStats")} />
       <Tabs value={activePhase} onValueChange={selectPhase}>
-        <TabBar aria-label={t("eventPhaseLabel")} className="w-full sm:w-fit">
-          <TabsTrigger value="before">{t("phaseBefore")}</TabsTrigger>
-          {canGeneralStats && <TabsTrigger value="during">{t("phaseDuring")}</TabsTrigger>}
-          {canGeneralStats && <TabsTrigger value="after">{t("phaseAfter")}</TabsTrigger>}
-        </TabBar>
+        <PageHeader
+          title={t("logisticsStats")}
+          secondaryActions={
+            <StatisticsToolbar
+              activePhase={activePhase}
+              canGeneralStats={canGeneralStats}
+              canExport={canExport}
+              editMode={editMode}
+              scopes={scopes}
+              selectedScopeKeys={selectedScopeKeys}
+              onScopeChange={setSelectedScopeKeys}
+              onEditModeChange={setEditMode}
+            />
+          }
+        />
         <TabsContent value="before" className="mt-4">
           <BeforePanel
-            applications={applications}
-            applicationId={applicationId}
+            applicationId={selectedApplicationId}
+            layoutKey={layoutKey}
             stats={applicationStats}
-            loading={beforeLoading}
+            loading={beforeLoading || scopesLoading}
             error={beforeError}
-            canExport={canExport}
-            onApplicationChange={setApplicationId}
+            editMode={editMode}
             onRetry={loadBefore}
           />
-          {canManageStatistics && <StatsVisibility applicationId={applicationId} />}
+          {canManageStatistics && selectedScopeKeys.length === 1 && (
+            <StatsVisibility
+              applicationId={selectedApplicationId}
+              scopeKey={selectedScopeKeys[0]}
+            />
+          )}
         </TabsContent>
         <TabsContent value="during" className="mt-4">
           <DuringPanel stats={liveStats} />
@@ -245,68 +265,114 @@ export default function LogisticsStatsPage() {
   );
 }
 
-function BeforePanel({
-  applications,
-  applicationId,
-  stats,
-  loading,
-  error,
+function StatisticsToolbar({
+  activePhase,
+  canGeneralStats,
   canExport,
-  onApplicationChange,
-  onRetry,
+  editMode,
+  scopes,
+  selectedScopeKeys,
+  onScopeChange,
+  onEditModeChange,
 }: {
-  applications: ApplicationOption[];
-  applicationId: number | null;
-  stats: ApplicationStats | null;
-  loading: boolean;
-  error: string | null;
+  activePhase: DataPhase;
+  canGeneralStats: boolean;
   canExport: boolean;
-  onApplicationChange: (id: number) => void;
-  onRetry: () => void;
+  editMode: boolean;
+  scopes: StatisticsScope[];
+  selectedScopeKeys: string[];
+  onScopeChange: (keys: string[]) => void;
+  onEditModeChange: (editing: boolean) => void;
 }) {
   const { t } = useLocale();
-  const download = `${API_URL}${exportUrl("/api/exports/applications.csv", { applicationId })}`;
+  const scopeOptions = scopes.map((scope) => ({
+    value: scope.key,
+    label: scope.name,
+    description: scope.kind === "application" ? t("applicationScopeLabel") : t("roleScopeLabel"),
+  }));
+  const exportPath = exportUrl("/api/exports/statistics.csv", {
+    scopes: selectedScopeKeys.join(","),
+  });
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Select
-          value={applicationId ? String(applicationId) : ""}
-          onValueChange={(value) => onApplicationChange(Number(value))}
-        >
-          <SelectTrigger aria-label={t("selectApplicationForStats")} className="w-full sm:w-64">
-            <SelectValue placeholder={t("selectApplicationForStats")} />
-          </SelectTrigger>
-          <SelectContent>
-            {applications.map((application) => (
-              <SelectItem key={application.id} value={String(application.id)}>
-                {application.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {canExport &&
-          (applicationId ? (
-            <Button asChild variant="outline">
-              <a href={download}>
+    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+      <TabBar aria-label={t("eventPhaseLabel")} className="w-fit">
+        <TabsTrigger value="before">{t("phaseBefore")}</TabsTrigger>
+        {canGeneralStats && <TabsTrigger value="during">{t("phaseDuring")}</TabsTrigger>}
+        {canGeneralStats && <TabsTrigger value="after">{t("phaseAfter")}</TabsTrigger>}
+      </TabBar>
+      <div className="min-w-56 flex-1 sm:max-w-80">
+        <MultiSelect
+          options={scopeOptions}
+          value={selectedScopeKeys}
+          onChange={onScopeChange}
+          placeholder={t("selectStatisticsScopes")}
+          searchPlaceholder={t("searchStatisticsScopes")}
+          emptyText={t("noStatisticsScopes")}
+          aria-label={t("selectStatisticsScopes")}
+        />
+      </div>
+      <span className="text-muted-foreground whitespace-nowrap text-xs" role="status">
+        {selectedScopeKeys.length > 1
+          ? t("aggregatedStatisticsScopes", { count: selectedScopeKeys.length })
+          : t("singleStatisticsScope")}
+      </span>
+      {activePhase === "before" && (
+        <>
+          {canExport && selectedScopeKeys.length > 0 ? (
+            <Button asChild variant="outline" size="sm">
+              <a href={`${API_URL}${exportPath}`}>
                 <DownloadIcon className="size-4" aria-hidden="true" />
-                {t("exportFilteredData")}
+                {t("exportThisData")}
               </a>
             </Button>
           ) : (
-            <Button variant="outline" disabled>
+            <Button variant="outline" size="sm" disabled>
               <DownloadIcon className="size-4" aria-hidden="true" />
-              {t("exportFilteredData")}
+              {t("exportThisData")}
             </Button>
-          ))}
-      </div>
-      <BeforePanels
-        applicationId={applicationId}
-        stats={stats}
-        loading={loading}
-        error={error}
-        onRetry={onRetry}
-      />
+          )}
+          <Button
+            variant={editMode ? "secondary" : "outline"}
+            size="sm"
+            aria-pressed={editMode}
+            onClick={() => onEditModeChange(!editMode)}
+          >
+            <LayoutDashboardIcon className="size-4" aria-hidden="true" />
+            {editMode ? t("finishCustomizePanel") : t("customizePanel")}
+          </Button>
+        </>
+      )}
     </div>
+  );
+}
+
+function BeforePanel({
+  applicationId,
+  layoutKey,
+  stats,
+  loading,
+  error,
+  editMode,
+  onRetry,
+}: {
+  applicationId: number | null;
+  layoutKey: string;
+  stats: ApplicationStats | null;
+  loading: boolean;
+  error: string | null;
+  editMode: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <BeforePanels
+      applicationId={applicationId}
+      layoutKey={layoutKey}
+      stats={stats}
+      loading={loading}
+      error={error}
+      editMode={editMode}
+      onRetry={onRetry}
+    />
   );
 }
 

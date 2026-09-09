@@ -392,22 +392,39 @@ leaks into user-facing text.
 
 ### Application statistics
 
-`GET /api/applications/stats/forms` lists only forms the caller can use in the
-statistics workspace. The general audience is selected in the role capability
-editor with `logistics:stats`; those readers inherit
-access to every reportable panel; `GET /api/applications/:id/stats` then applies
-the winning per-panel `allow`/`inherit`/`deny` exception from the caller's
-assigned roles. A direct panel `allow` can also share one panel with someone
-who has no general statistics capability, while `deny` overrides the general
-fallback. Statistics managers see every panel and can manage the exceptions
-through `GET`/`PUT /api/applications/:id/stats/access` (the latter requires
-`statistics:manage`), using the same role-position tri-state semantics as H8.
-New reportable field panels remain private until explicitly allowed unless the
-role has general statistics access. Checkbox fields count every application
-response: values other than explicit `true` are aggregated as `false`, so an
-unanswered checkbox is visible as “No”. Personal panel visibility, order,
-chart type, and custom section preferences are stored through
-`/api/me/ui-prefs` and therefore follow the account across devices.
+The generic dashboard boundary is `GET /api/statistics/scopes` followed by
+`POST /api/statistics/query`. Scopes are explicit `application:<id>` and
+`role:<id>` resources; the response exposes only scopes and panel ids the
+caller is authorized to query. A query may select compatible scopes together,
+and aggregation happens in Postgres/service code before the response is sent
+to the browser. `GET /api/exports/statistics.csv` reuses that same query
+boundary and never exports raw application answers or derived source fields.
+
+The general audience is selected in the role capability editor with
+`logistics:stats`. Those readers inherit reportable application panels and
+generic role dimensions; the winning per-panel `allow`/`inherit`/`deny`
+exception from the caller's assigned roles applies at query time. A direct
+panel `allow` can share a limited statistic with someone who has no general
+statistics capability, while `deny` overrides the general fallback. Statistics
+managers can manage application overrides through
+`GET`/`PUT /api/applications/:id/stats/access` and role-scope overrides through
+`GET`/`PUT /api/statistics/access`, using the same role-position tri-state
+semantics as H8.
+
+`GET /api/applications/stats/forms` and `GET /api/applications/:id/stats` remain
+compatible legacy resources. New application-question panels are opt-in via
+the field's `statistics` configuration (the legacy `reporting` flag remains a
+compatibility alias). Migration 0818 backfills existing choice fields so an
+existing deployment does not lose its prior panels; newly added questions do
+not become statistics automatically. Configured enum options are retained
+when their response count is zero. Sensitive derived dimensions such as age
+and study level are calculated server-side against the event reference date;
+the raw source value is never included in a statistics response.
+
+Personal panel visibility, order, size, chart type, and layout preferences are
+stored through `/api/me/ui-prefs` and therefore follow the account across
+devices. The server treats those preferences as presentation only; scope and
+panel authorization is never delegated to them.
 
 ## Exploring the live API
 
