@@ -62,7 +62,7 @@ describe("push channel", () => {
       "ExponentPushToken[bbb]",
     ]);
     expect(messages[0]!.title).toBe("Go to the door of Sala 1");
-    expect(messages[0]!.body).toBe("Wait at the door for General. We'll tell you when to enter.");
+    expect(messages[0]!.body).toBe("Wait outside for General. Do not enter until we tell you to.");
     expect(messages[0]!.channelId).toBe("default");
     expect((await getOutboxRow(id)).status).toBe("sent");
   });
