@@ -12,7 +12,8 @@ import {
 } from "../../src/modules/statistics/service.js";
 
 describe("generic statistics catalog", () => {
-  it("canonicalizes the old time-series ids without creating duplicate panels", () => {
+  it("canonicalizes retired panel ids without creating duplicate panels", () => {
+    expect(canonicalStatisticsPanelKey("funnel")).toBe("overview");
     expect(canonicalStatisticsPanelKey("submissions-by-day")).toBe("applications-over-time");
     expect(panelDefinition("confirmations-by-day")?.key).toBe("confirmations-over-time");
   });

@@ -6,7 +6,7 @@
 
 export type StatisticsScopeKind = "application" | "role";
 
-export type StatisticsPanelDataKind = "metrics" | "funnel" | "series" | "distribution";
+export type StatisticsPanelDataKind = "metrics" | "series" | "distribution";
 
 export interface StatisticsPanelDefinition {
   key: string;
@@ -18,7 +18,6 @@ export interface StatisticsPanelDefinition {
 
 export const STATISTICS_BASE_PANEL_KEYS = [
   "overview",
-  "funnel",
   "applications-over-time",
   "confirmations-over-time",
   "applications-by-hour",
@@ -33,6 +32,7 @@ export const STATISTICS_BASE_PANEL_KEYS = [
  * Evolution does not create two visualizations for the same series.
  */
 export const LEGACY_STATISTICS_PANEL_ALIASES: Record<string, string> = {
+  funnel: "overview",
   "submissions-by-day": "applications-over-time",
   "confirmations-by-day": "confirmations-over-time",
   "submissions-by-hour": "applications-by-hour",
@@ -47,13 +47,6 @@ export const STATISTICS_PANEL_CATALOG: readonly StatisticsPanelDefinition[] = [
   {
     key: "overview",
     dataKind: "metrics",
-    supportedScopeKinds: ["application"],
-    supportsMultipleScopes: true,
-    supportsAggregation: true,
-  },
-  {
-    key: "funnel",
-    dataKind: "funnel",
     supportedScopeKinds: ["application"],
     supportsMultipleScopes: true,
     supportsAggregation: true,

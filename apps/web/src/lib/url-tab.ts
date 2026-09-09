@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 export interface UrlTabOptions<T extends string> {
   values: readonly T[];
@@ -32,6 +32,8 @@ export function useUrlTab<T extends string>({ values, defaultValue, aliases }: U
   const requested = searchParams.get("tab");
   const valuesKey = values.join("\u0000");
   const resolved = resolveUrlTab(requested, { values, defaultValue, aliases });
+  const navigation = useRef({ pathname, requested, router, search: searchParams.toString() });
+  navigation.current = { pathname, requested, router, search: searchParams.toString() };
 
   // The rendered tab is local state, not `resolved` directly: on a page
   // whose child re-renders constantly (e.g. a live-updating SSE query),
@@ -56,12 +58,16 @@ export function useUrlTab<T extends string>({ values, defaultValue, aliases }: U
     (next: string) => {
       if (!valuesKey.split("\u0000").includes(next)) return;
       setTabState(next as T);
-      const params = new URLSearchParams(searchParams.toString());
+      const current = navigation.current;
+      if (current.requested === next) return;
+      const params = new URLSearchParams(current.search);
       params.set("tab", next);
       const query = params.toString();
-      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+      current.router.replace(query ? `${current.pathname}?${query}` : current.pathname, {
+        scroll: false,
+      });
     },
-    [pathname, router, searchParams, valuesKey],
+    [valuesKey],
   );
 
   return { tab, setTab, requested };

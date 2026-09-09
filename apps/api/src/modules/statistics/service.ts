@@ -524,10 +524,10 @@ export async function queryStatistics(
   }
   if (!allowedPanelSet.has("overview")) {
     delete result.overview;
+    delete result.funnel;
     delete result.counts_by_status;
     delete result.time_to_confirm_hours;
   }
-  if (!allowedPanelSet.has("funnel")) delete result.funnel;
   if (!allowedPanelSet.has("shirt-sizes")) delete result.shirt_sizes_confirmed;
   if (!allowedPanelSet.has("food-intolerances")) delete result.food_intolerances_confirmed;
 

@@ -224,6 +224,7 @@ export default function LogisticsStatsPage() {
       <Tabs value={activePhase} onValueChange={selectPhase}>
         <PageHeader
           title={t("logisticsStats")}
+          className="sm:flex-col sm:items-stretch xl:flex-row xl:items-start"
           secondaryActions={
             <StatisticsToolbar
               activePhase={activePhase}
@@ -294,7 +295,7 @@ function StatisticsToolbar({
     scopes: selectedScopeKeys.join(","),
   });
   return (
-    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+    <div className="flex w-full flex-wrap items-center gap-2 xl:w-auto">
       <TabBar aria-label={t("eventPhaseLabel")} className="w-fit">
         <TabsTrigger value="before">{t("phaseBefore")}</TabsTrigger>
         {canGeneralStats && <TabsTrigger value="during">{t("phaseDuring")}</TabsTrigger>}

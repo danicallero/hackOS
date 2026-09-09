@@ -16,11 +16,12 @@ main data path is the generic endpoint.
 
 The catalog lives in `apps/api/src/modules/statistics/catalog.ts`. A panel
 definition declares its data kind, supported scope kinds, and whether it can be
-aggregated across scopes. Application panels such as the overview, funnel, and
-time series are separate from generic user dimensions such as shirt size and
-food intolerance. Form-question panels are generated only for fields explicitly
-published through `field.statistics` (with `reporting` retained as a legacy
-compatibility flag).
+aggregated across scopes. The application overview composes headline metrics,
+the confirmation lifecycle, and supporting application activity panels; the
+lifecycle is not a duplicate standalone panel. Application-only time series are
+separate from generic user dimensions such as shirt size and food intolerance.
+Form-question panels are generated only for fields explicitly published through
+`field.statistics` (with `reporting` retained as a legacy compatibility flag).
 
 Scope keys are stable resource identifiers: `application:<id>` and
 `role:<id>`. The API validates every selected key against the caller's
@@ -66,17 +67,27 @@ no override                     → inherited general capability
 An explicit deny removes the panel even when the role has general Logistics
 access. An explicit panel allow can expose a limited panel to a role without
 general Logistics access. The scopes endpoint, query endpoint, and statistics
-CSV all resolve the same effective permissions.
+CSV all resolve the same effective permissions. Limited-access roles can also
+be removed from a scope, which deletes their panel overrides while leaving the
+role and its general capabilities unchanged.
 
 ## Layout and customization
 
 The dashboard stores presentation preferences in the existing
 `users.ui_prefs` namespace through `/api/me/ui-prefs`. The `stats-layout` value
 contains panel identity, visibility, chart choice, grid order, and bounded
-width/height. Customization mode turns the panel area into a direct sortable
-grid with keyboard-accessible move and resize controls. Unknown panel ids are
-ignored by the sanitizer and new panels receive catalog defaults, so older
-preferences cannot blank or break a dashboard.
+width/height. It also stores semantic panel and Overview KPI tones and the
+user-defined order of the KPI cards; values are
+restricted to the design system's neutral, positive, critical, warning, and
+informational roles. Customization mode turns the panel area into a direct
+sortable grid with keyboard-accessible drag handles and resize controls. The
+Overview cards form their own nested sortable grid, so their order can be
+personalized without moving the complete Overview panel. Grid rows grow
+with their content so expanded access settings cannot overlap a panel. Unknown
+panel ids are ignored by the sanitizer and new panels receive catalog defaults,
+so older preferences cannot blank or break a dashboard. The default layout
+gives the composed overview additional width, and users can reset their
+personal layout to current catalog defaults.
 
 ## Configuration and compatibility
 
@@ -85,6 +96,8 @@ table and backfills the old implicit choice-question behavior into the explicit
 publication flag. It does not alter the immutable 0817 migration. Existing
 layout and field configurations remain readable; old time-series ACL/layout
 ids are canonicalized to the descriptive `applications-*` ids at read time.
+The retired standalone `funnel` id is likewise canonicalized to `overview` so
+existing access rules continue to apply to the composed panel.
 
 Question publication and visualization metadata are stored with the application
 template, so deployment/event configuration remains the source of truth rather

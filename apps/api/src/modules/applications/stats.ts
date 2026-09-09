@@ -6,7 +6,7 @@ import { requireApplication } from "./service.js";
 
 /**
  * Pre-event statistics (H27, capability LOGISTICS_STATS). Counts by status,
- * the confirmation funnel, submission/confirmation time series (per day, per
+ * the confirmation lifecycle, submission/confirmation time series (per day, per
  * hour-of-day, per day-of-week), time-to-confirm summary, an optional
  * template-field histogram, and shirt-size / food-intolerance distributions.
  *
@@ -35,10 +35,17 @@ export function resolveStatisticsPanelDecisions(
   decisions: StatisticsPanelDecision[],
 ): Map<string, "allow" | "deny"> {
   const byPanel = new Map<string, StatisticsPanelDecision>();
-  for (const decision of [...decisions].sort((a, b) => b.rolePosition - a.rolePosition)) {
+  for (const decision of decisions) {
     const panelKey = canonicalStatisticsPanelKey(decision.panelKey);
-    if (!byPanel.has(panelKey) && decision.state !== "inherit")
+    const current = byPanel.get(panelKey);
+    if (
+      decision.state !== "inherit" &&
+      (!current ||
+        decision.rolePosition > current.rolePosition ||
+        (decision.rolePosition === current.rolePosition && decision.state === "deny"))
+    ) {
       byPanel.set(panelKey, { ...decision, panelKey });
+    }
   }
   return new Map(
     [...byPanel.entries()].map(
@@ -279,10 +286,10 @@ export async function applicationStats(
 function filterStatisticsPanels(result: Record<string, unknown>, allowed: Set<string>): void {
   if (!allowed.has("overview")) {
     delete result.overview;
+    delete result.funnel;
     delete result.counts_by_status;
     delete result.time_to_confirm_hours;
   }
-  if (!allowed.has("funnel")) delete result.funnel;
   if (!allowed.has("shirt-sizes")) delete result.shirt_sizes_confirmed;
   if (!allowed.has("food-intolerances")) delete result.food_intolerances_confirmed;
   const timeSeries = result.time_series as Record<string, unknown> | undefined;

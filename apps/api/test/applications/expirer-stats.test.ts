@@ -6,6 +6,7 @@ import { pool } from "../../src/db/pool.js";
 import {
   asUser,
   buildTestApp,
+  createRole,
   createUser,
   createUserWithCapabilities,
   truncateAll,
@@ -185,6 +186,57 @@ describe("pre-event stats (H27)", () => {
       headers: asUser(pleb),
     });
     expect(res.statusCode).toBe(403);
+  });
+
+  it("removes every limited-role override from application and role scopes", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.STATISTICS_MANAGE]);
+    const targetRole = await createRole([], { name: "Limited statistics" });
+    const scopeRole = await createRole([], { name: "Participants" });
+    const appId = await createApplication();
+    await pool.query(
+      `UPDATE roles SET position = 3000
+        WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1 LIMIT 1)`,
+      [manager],
+    );
+    await pool.query(`UPDATE roles SET position = 1000 WHERE id = $1`, [targetRole]);
+    await pool.query(`UPDATE roles SET position = 500 WHERE id = $1`, [scopeRole]);
+    await pool.query(
+      `INSERT INTO application_stats_panel_role_access
+         (application_id, panel_key, role_id, state)
+       VALUES ($1, 'overview', $2, 'allow'), ($1, 'shirt-sizes', $2, 'deny')`,
+      [appId, targetRole],
+    );
+    await pool.query(
+      `INSERT INTO statistics_scope_panel_role_access (scope_key, panel_key, role_id, state)
+       VALUES ($1, 'shirt-sizes', $2, 'allow'), ($1, 'food-intolerances', $2, 'deny')`,
+      [`role:${scopeRole}`, targetRole],
+    );
+
+    const applicationDelete = await a.inject({
+      method: "DELETE",
+      url: `/api/applications/${appId}/stats/access/${targetRole}`,
+      headers: asUser(manager),
+    });
+    expect(applicationDelete.statusCode).toBe(200);
+    const roleDelete = await a.inject({
+      method: "DELETE",
+      url: `/api/statistics/access/${targetRole}?scope_key=role:${scopeRole}`,
+      headers: asUser(manager),
+    });
+    expect(roleDelete.statusCode).toBe(200);
+
+    const { rows } = await pool.query(
+      `SELECT
+         (SELECT count(*)::int FROM application_stats_panel_role_access
+           WHERE application_id = $1 AND role_id = $2) AS application_rows,
+         (SELECT count(*)::int FROM statistics_scope_panel_role_access
+           WHERE scope_key = $3 AND role_id = $2) AS role_rows,
+         (SELECT count(*)::int FROM audit_log
+           WHERE actor_id = $4 AND action = 'access_removed') AS audit_rows`,
+      [appId, targetRole, `role:${scopeRole}`, manager],
+    );
+    expect(rows[0]).toEqual({ application_rows: 0, role_rows: 0, audit_rows: 2 });
   });
 
   it("excludes anonymized applicants from every count (H54)", async () => {

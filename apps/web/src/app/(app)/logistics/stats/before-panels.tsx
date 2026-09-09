@@ -22,19 +22,27 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   ArrowUpIcon,
+  BadgeCheckIcon,
   BarChart3Icon,
+  Clock3Icon,
   EyeIcon,
   EyeOffIcon,
+  FileTextIcon,
+  HourglassIcon,
   LayoutDashboardIcon,
   LineChartIcon,
   PieChartIcon,
+  RotateCcwIcon,
+  ShieldXIcon,
+  TimerOffIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type Column, DataTable } from "@/components/common/data-table";
 import { DragHandle } from "@/components/common/drag-handle";
+import { EmptyState } from "@/components/common/empty-state";
 import { IconButton } from "@/components/common/icon-button";
 import { SectionCard } from "@/components/common/section-card";
-import { StatCard } from "@/components/common/stat-card";
+import { StatCard, type StatTone, statToneSurfaceClass } from "@/components/common/stat-card";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -42,12 +50,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { LOCALE_CODES, type MessageKey, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { uiPrefsApi } from "@/lib/logistics";
 import { cn } from "@/lib/utils";
-import { type ApplicationStats, applicationStatusLabel } from "./model";
+import type { ApplicationStats } from "./model";
 import { StatsChart, type StatsChartDatum, type StatsChartType } from "./stats-chart";
-import { defaultStatsChartType, type StatsLayoutConfig, sanitizeStatsLayout } from "./stats-layout";
+import {
+  defaultStatsChartType,
+  defaultStatsPanelSize,
+  type StatsLayoutConfig,
+  sanitizeStatsLayout,
+} from "./stats-layout";
 
 const STORAGE_KEY = "hackos:applicationStatsLayouts:v1";
 
@@ -58,9 +72,20 @@ interface DistributionDefinition {
   defaultChart: StatsChartType;
 }
 
+const STAT_TONES: StatTone[] = ["neutral", "success", "danger", "warning", "info"];
+
+const DEFAULT_OVERVIEW_TONES: Record<string, StatTone> = {
+  submitted: "info",
+  confirmed: "success",
+  rejected: "danger",
+  rate: "success",
+  expired: "warning",
+  available: "info",
+  time: "neutral",
+};
+
 const BASE_PANEL_LABELS: Record<string, MessageKey> = {
   overview: "statisticsOverviewPanel",
-  funnel: "applicationFunnel",
   "shirt-sizes": "shirtSizeDistribution",
   "food-intolerances": "dietaryDistribution",
   "applications-over-time": "applicationsOverTime",
@@ -74,7 +99,6 @@ function panelKeysForStats(stats: ApplicationStats | null): string[] {
   if (stats.panel_keys && stats.panel_keys.length > 0) return stats.panel_keys;
   const keys: string[] = [];
   if (stats.counts_by_status !== undefined) keys.push("overview");
-  if (stats.funnel !== undefined) keys.push("funnel");
   if (stats.shirt_sizes_confirmed !== undefined) keys.push("shirt-sizes");
   if (stats.food_intolerances_confirmed !== undefined) keys.push("food-intolerances");
   if (stats.time_series?.submissions_by_day !== undefined) keys.push("applications-over-time");
@@ -240,11 +264,18 @@ export function BeforePanels({
   };
 
   const resizePanel = (key: string, axis: "width" | "height", delta: -1 | 1) => {
-    const current = effectiveLayout.sizes[key] ?? { width: 1, height: 1 };
+    const current = effectiveLayout.sizes[key] ?? defaultStatsPanelSize(key);
     const nextValue = Math.max(1, Math.min(2, current[axis] + delta)) as 1 | 2;
     saveLayout({
       ...effectiveLayout,
       sizes: { ...effectiveLayout.sizes, [key]: { ...current, [axis]: nextValue } },
+    });
+  };
+
+  const setTone = (key: string, tone: StatTone) => {
+    saveLayout({
+      ...effectiveLayout,
+      tones: { ...effectiveLayout.tones, [key]: tone },
     });
   };
 
@@ -257,7 +288,12 @@ export function BeforePanels({
           loading={loading}
           error={error}
           onRetry={onRetry}
-          onHide={() => togglePanel(key)}
+          editMode={editMode}
+          tone={effectiveLayout.tones.overview ?? "neutral"}
+          kpiTones={effectiveLayout.tones}
+          onToneChange={setTone}
+          kpiOrder={effectiveLayout.overviewOrder}
+          onKpiOrderChange={(overviewOrder) => saveLayout({ ...effectiveLayout, overviewOrder })}
         />
       );
     }
@@ -269,13 +305,13 @@ export function BeforePanels({
         title={definition.title}
         rows={definition.rows}
         chartType={effectiveLayout.charts[key] ?? definition.defaultChart}
+        tone={effectiveLayout.tones[key] ?? "neutral"}
         onChartTypeChange={(chartType) =>
           saveLayout({
             ...effectiveLayout,
             charts: { ...effectiveLayout.charts, [key]: chartType },
           })
         }
-        onHide={() => togglePanel(key)}
       />
     );
   };
@@ -283,22 +319,34 @@ export function BeforePanels({
   return (
     <div className="space-y-5">
       {editMode && (
-        <p className="text-muted-foreground text-pretty text-sm" role="status">
-          {t("statisticsEditModeHint")}
-        </p>
+        <div className="bg-muted/30 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
+          <p className="text-muted-foreground min-w-0 flex-1 text-pretty text-sm" role="status">
+            {t("statisticsEditModeHint")}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => saveLayout(sanitizeStatsLayout(null, availablePanelKeys))}
+          >
+            <RotateCcwIcon aria-hidden="true" />
+            {t("resetStatisticsLayout")}
+          </Button>
+        </div>
       )}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onPanelDragEnd}>
         <SortableContext items={renderedKeys} strategy={rectSortingStrategy}>
-          <div className="grid auto-rows-[minmax(18rem,auto)] gap-4 xl:grid-cols-2">
+          <div className="grid items-start gap-4 xl:grid-cols-2">
             {renderedKeys.map((key) => (
               <SortablePanel
                 key={key}
                 id={key}
                 editMode={editMode}
                 hidden={effectiveLayout.hidden.includes(key)}
-                width={effectiveLayout.sizes[key]?.width ?? 1}
-                height={effectiveLayout.sizes[key]?.height ?? 1}
+                width={effectiveLayout.sizes[key]?.width ?? defaultStatsPanelSize(key).width}
+                height={effectiveLayout.sizes[key]?.height ?? defaultStatsPanelSize(key).height}
                 label={panelTitle(key, labels, t)}
+                tone={effectiveLayout.tones[key] ?? "neutral"}
+                onToneChange={(tone) => setTone(key, tone)}
                 onResize={(axis, delta) => resizePanel(key, axis, delta)}
                 onToggleVisibility={() => togglePanel(key)}
               >
@@ -319,6 +367,8 @@ function SortablePanel({
   width,
   height,
   label,
+  tone,
+  onToneChange,
   onResize,
   onToggleVisibility,
   children,
@@ -329,6 +379,8 @@ function SortablePanel({
   width: 1 | 2;
   height: 1 | 2;
   label: string;
+  tone: StatTone;
+  onToneChange: (tone: StatTone) => void;
   onResize: (axis: "width" | "height", delta: -1 | 1) => void;
   onToggleVisibility: () => void;
   children: React.ReactNode;
@@ -343,9 +395,9 @@ function SortablePanel({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "min-w-0",
+        "flex min-w-0 flex-col",
         width === 2 && "xl:col-span-2",
-        height === 2 && "xl:row-span-2",
+        height === 2 && "min-h-[38rem]",
         editMode && "rounded-lg outline outline-1 outline-dashed outline-border",
         hidden && "opacity-60",
       )}
@@ -358,6 +410,7 @@ function SortablePanel({
             label={t("reorderStatisticsPanelAria", { name: label })}
           />
           <span className="min-w-0 flex-1 truncate px-1 text-xs font-medium">{label}</span>
+          <ToneSelect value={tone} label={label} onChange={onToneChange} />
           <IconButton
             label={hidden ? t("showStatisticsPanel") : t("hideStatisticsPanel")}
             variant="ghost"
@@ -409,6 +462,54 @@ function SortablePanel({
   );
 }
 
+function ToneSelect({
+  value,
+  label,
+  onChange,
+}: {
+  value: StatTone;
+  label: string;
+  onChange: (tone: StatTone) => void;
+}) {
+  const { t } = useLocale();
+  const toneLabels: Record<StatTone, MessageKey> = {
+    neutral: "statisticsColorNeutral",
+    success: "statisticsColorSuccess",
+    danger: "statisticsColorDanger",
+    warning: "statisticsColorWarning",
+    info: "statisticsColorInfo",
+  };
+  const dotClass: Record<StatTone, string> = {
+    neutral: "bg-muted-foreground",
+    success: "bg-success",
+    danger: "bg-destructive",
+    warning: "bg-warning",
+    info: "bg-info",
+  };
+  return (
+    <Select value={value} onValueChange={(next) => onChange(next as StatTone)}>
+      <SelectTrigger
+        size="sm"
+        className="h-7 w-9 gap-0 px-1.5"
+        aria-label={t("statisticsColorFor", { name: label })}
+      >
+        <span className={cn("size-3 rounded-full", dotClass[value])} aria-hidden="true" />
+        <SelectValue className="sr-only" />
+      </SelectTrigger>
+      <SelectContent align="end">
+        {STAT_TONES.map((tone) => (
+          <SelectItem key={tone} value={tone}>
+            <span className="flex items-center gap-2">
+              <span className={cn("size-3 rounded-full", dotClass[tone])} aria-hidden="true" />
+              {t(toneLabels[tone])}
+            </span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 function buildDistributionDefinitions(
   stats: ApplicationStats | null,
   language: "en" | "es" | "gl",
@@ -421,19 +522,6 @@ function buildDistributionDefinitions(
       new Date(`${bucket}T00:00:00Z`),
     );
   const definitions: DistributionDefinition[] = [];
-  if (stats.funnel) {
-    definitions.push({
-      key: "funnel",
-      title: t("applicationFunnel"),
-      defaultChart: "bar",
-      rows: [
-        { label: t("pendingConfirmation"), n: stats.funnel.still_in_window },
-        { label: t("confirmed"), n: stats.funnel.confirmed },
-        { label: t("declined"), n: stats.funnel.declined },
-        { label: t("dataStatusExpired"), n: stats.funnel.expired },
-      ],
-    });
-  }
   if (stats.shirt_sizes_confirmed) {
     definitions.push({
       key: "shirt-sizes",
@@ -561,34 +649,25 @@ function OverviewPanel({
   loading,
   error,
   onRetry,
-  onHide,
+  editMode,
+  tone,
+  kpiTones,
+  onToneChange,
+  kpiOrder,
+  onKpiOrderChange,
 }: {
   stats: ApplicationStats | null;
   loading: boolean;
   error: string | null;
   onRetry: () => void;
-  onHide: () => void;
+  editMode: boolean;
+  tone: StatTone;
+  kpiTones: Record<string, StatTone>;
+  onToneChange: (key: string, tone: StatTone) => void;
+  kpiOrder: string[];
+  onKpiOrderChange: (order: string[]) => void;
 }) {
   const { t } = useLocale();
-  const statusRows = Object.entries(stats?.counts_by_status ?? {}).map(([status, count]) => ({
-    status,
-    count,
-  }));
-  const statusColumns: Column<(typeof statusRows)[number]>[] = [
-    {
-      id: "status",
-      header: t("statusColumn"),
-      cell: (row) => applicationStatusLabel(row.status, t),
-      sortValue: (row) => row.status,
-    },
-    {
-      id: "count",
-      header: t("columnPeople"),
-      align: "right",
-      cell: (row) => row.count,
-      sortValue: (row) => row.count,
-    },
-  ];
   const confirmed = stats?.overview?.confirmed ?? stats?.funnel?.confirmed;
   const submitted =
     stats?.overview?.submitted ??
@@ -604,45 +683,222 @@ function OverviewPanel({
       : confirmed === undefined || fallbackSent === 0
         ? null
         : Math.round((confirmed / fallbackSent) * 100);
-
+  const kpiSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const onKpiDragEnd = (event: DragEndEvent) => {
+    if (!event.over || event.active.id === event.over.id) return;
+    const from = kpiOrder.indexOf(String(event.active.id));
+    const to = kpiOrder.indexOf(String(event.over.id));
+    if (from !== -1 && to !== -1) onKpiOrderChange(arrayMove(kpiOrder, from, to));
+  };
+  const cardAction = (
+    key: string,
+    label: string,
+    defaultTone: StatTone,
+    dragHandle?: React.ReactNode,
+  ) =>
+    editMode ? (
+      <div className="flex items-center gap-0.5">
+        {dragHandle}
+        <ToneSelect
+          value={kpiTones[`overview:kpi:${key}`] ?? defaultTone}
+          label={label}
+          onChange={(next) => onToneChange(`overview:kpi:${key}`, next)}
+        />
+      </div>
+    ) : undefined;
+  const cards: Record<string, (dragHandle: React.ReactNode) => React.ReactNode> = {
+    submitted: (dragHandle) => (
+      <StatCard
+        label={t("submittedApplications")}
+        value={submitted}
+        icon={FileTextIcon}
+        tone={kpiTones["overview:kpi:submitted"] ?? DEFAULT_OVERVIEW_TONES.submitted}
+        action={cardAction(
+          "submitted",
+          t("submittedApplications"),
+          DEFAULT_OVERVIEW_TONES.submitted,
+          dragHandle,
+        )}
+        className="h-full"
+      />
+    ),
+    confirmed: (dragHandle) => (
+      <StatCard
+        label={t("confirmed")}
+        value={confirmed ?? "—"}
+        icon={BadgeCheckIcon}
+        tone={kpiTones["overview:kpi:confirmed"] ?? DEFAULT_OVERVIEW_TONES.confirmed}
+        action={cardAction(
+          "confirmed",
+          t("confirmed"),
+          DEFAULT_OVERVIEW_TONES.confirmed,
+          dragHandle,
+        )}
+        className="h-full"
+      />
+    ),
+    rejected: (dragHandle) => (
+      <StatCard
+        label={t("rejected")}
+        value={overview?.rejected ?? "—"}
+        icon={ShieldXIcon}
+        tone={kpiTones["overview:kpi:rejected"] ?? DEFAULT_OVERVIEW_TONES.rejected}
+        action={cardAction("rejected", t("rejected"), DEFAULT_OVERVIEW_TONES.rejected, dragHandle)}
+        className="h-full"
+      />
+    ),
+    rate: (dragHandle) => (
+      <StatCard
+        label={t("confirmationRate")}
+        value={rate === null ? "—" : `${rate}%`}
+        icon={BadgeCheckIcon}
+        tone={kpiTones["overview:kpi:rate"] ?? DEFAULT_OVERVIEW_TONES.rate}
+        action={cardAction("rate", t("confirmationRate"), DEFAULT_OVERVIEW_TONES.rate, dragHandle)}
+        className="h-full"
+      />
+    ),
+    expired: (dragHandle) => (
+      <StatCard
+        label={t("expiredConfirmations")}
+        value={overview?.expired_confirmations ?? "—"}
+        icon={TimerOffIcon}
+        tone={kpiTones["overview:kpi:expired"] ?? DEFAULT_OVERVIEW_TONES.expired}
+        action={cardAction(
+          "expired",
+          t("expiredConfirmations"),
+          DEFAULT_OVERVIEW_TONES.expired,
+          dragHandle,
+        )}
+        className="h-full"
+      />
+    ),
+    available: (dragHandle) => (
+      <StatCard
+        label={t("stillAbleToConfirm")}
+        value={overview?.still_able_to_confirm ?? "—"}
+        icon={HourglassIcon}
+        tone={kpiTones["overview:kpi:available"] ?? DEFAULT_OVERVIEW_TONES.available}
+        action={cardAction(
+          "available",
+          t("stillAbleToConfirm"),
+          DEFAULT_OVERVIEW_TONES.available,
+          dragHandle,
+        )}
+        className="h-full"
+      />
+    ),
+    time: (dragHandle) => (
+      <StatCard
+        label={t("averageConfirmationTime")}
+        value={hours(
+          overview?.average_confirmation_time_hours ?? stats?.time_to_confirm_hours?.avg,
+          t,
+        )}
+        hint={`${t("medianConfirmationTime")}: ${hours(stats?.time_to_confirm_hours?.median, t)}`}
+        icon={Clock3Icon}
+        tone={kpiTones["overview:kpi:time"] ?? DEFAULT_OVERVIEW_TONES.time}
+        action={cardAction(
+          "time",
+          t("averageConfirmationTime"),
+          DEFAULT_OVERVIEW_TONES.time,
+          dragHandle,
+        )}
+        className="h-full"
+      />
+    ),
+  };
   return (
     <SectionCard
       title={t("statisticsOverviewPanel")}
       icon={LayoutDashboardIcon}
-      action={
-        <IconButton label={t("hideStatisticsPanel")} variant="ghost" onClick={onHide}>
-          <EyeOffIcon aria-hidden="true" />
-        </IconButton>
-      }
+      className={cn("h-full", statToneSurfaceClass[tone])}
     >
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label={t("submittedApplications")} value={submitted} />
-        <StatCard label={t("confirmed")} value={confirmed ?? "—"} />
-        <StatCard label={t("rejected")} value={overview?.rejected ?? "—"} />
-        <StatCard label={t("confirmationRate")} value={rate === null ? "—" : `${rate}%`} />
-        <StatCard
-          label={t("expiredConfirmations")}
-          value={overview?.expired_confirmations ?? "—"}
-        />
-        <StatCard label={t("stillAbleToConfirm")} value={overview?.still_able_to_confirm ?? "—"} />
-        <StatCard
-          label={t("averageConfirmationTime")}
-          value={hours(
-            overview?.average_confirmation_time_hours ?? stats?.time_to_confirm_hours?.avg,
-            t,
+      {loading && !stats ? (
+        <div
+          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+          role="status"
+          aria-label={t("loading")}
+        >
+          {["submitted", "confirmed", "rejected", "rate", "pending", "expired", "able", "time"].map(
+            (key) => (
+              <Skeleton key={key} className="h-28 rounded-lg" />
+            ),
           )}
-          hint={`${t("medianConfirmationTime")}: ${hours(stats?.time_to_confirm_hours?.median, t)}`}
+        </div>
+      ) : error && !stats ? (
+        <div className="space-y-3 rounded-lg border border-destructive/30 p-5" role="alert">
+          <p className="text-destructive text-pretty text-sm">{error}</p>
+          <Button variant="outline" size="sm" onClick={onRetry}>
+            {t("retry")}
+          </Button>
+        </div>
+      ) : !stats ? (
+        <EmptyState
+          icon={LayoutDashboardIcon}
+          title={t("noApplicationStatistics")}
+          action={
+            <Button variant="outline" size="sm" onClick={onRetry}>
+              {t("retry")}
+            </Button>
+          }
         />
-      </div>
-      <DataTable
-        columns={statusColumns}
-        data={statusRows}
-        getRowId={(row) => row.status}
-        loading={loading}
-        error={error ? { message: error, onRetry } : undefined}
-        empty={{ icon: LayoutDashboardIcon, title: t("noApplicationStatistics") }}
-      />
+      ) : (
+        <DndContext
+          sensors={kpiSensors}
+          collisionDetection={closestCenter}
+          onDragEnd={onKpiDragEnd}
+        >
+          <SortableContext items={kpiOrder} strategy={rectSortingStrategy}>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {kpiOrder.map((key) => (
+                <SortableOverviewKpi key={key} id={key} label={key} wide={key === "time"}>
+                  {(dragHandle) => cards[key]?.(dragHandle)}
+                </SortableOverviewKpi>
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      )}
     </SectionCard>
+  );
+}
+
+function SortableOverviewKpi({
+  id,
+  label,
+  wide,
+  children,
+}: {
+  id: string;
+  label: string;
+  wide: boolean;
+  children: (dragHandle: React.ReactNode) => React.ReactNode;
+}) {
+  const { t } = useLocale();
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "min-w-0",
+        wide && "sm:col-span-2 lg:col-span-1 xl:col-span-2",
+        isDragging && "z-10 opacity-80 shadow-lg",
+      )}
+    >
+      {children(
+        <DragHandle
+          attributes={attributes}
+          listeners={listeners}
+          label={t("reorderStatisticsKpiAria", { name: label })}
+        />,
+      )}
+    </div>
   );
 }
 
@@ -657,61 +913,48 @@ function Distribution({
   rows,
   chartType,
   onChartTypeChange,
-  onHide,
+  tone,
 }: {
   title: string;
   rows: StatsChartDatum[];
   chartType: StatsChartType;
   onChartTypeChange: (chartType: StatsChartType) => void;
-  onHide: () => void;
+  tone: StatTone;
 }) {
   const { t } = useLocale();
   return (
     <SectionCard
       title={title}
+      className={cn("h-full", statToneSurfaceClass[tone])}
       action={
-        <div className="flex flex-wrap items-center gap-2">
-          <Select
-            value={chartType}
-            onValueChange={(value) => onChartTypeChange(value as StatsChartType)}
-          >
-            <SelectTrigger
-              size="sm"
-              className="w-28"
-              aria-label={t("selectChartTypeFor", { title })}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="bar">
-                <span className="flex items-center gap-2">
-                  <BarChart3Icon aria-hidden="true" />
-                  {t("chartTypeBar")}
-                </span>
-              </SelectItem>
-              <SelectItem value="pie">
-                <span className="flex items-center gap-2">
-                  <PieChartIcon aria-hidden="true" />
-                  {t("chartTypePie")}
-                </span>
-              </SelectItem>
-              <SelectItem value="line">
-                <span className="flex items-center gap-2">
-                  <LineChartIcon aria-hidden="true" />
-                  {t("chartTypeLine")}
-                </span>
-              </SelectItem>
-            </SelectContent>
-          </Select>
-          <IconButton
-            label={t("hideStatisticsPanel")}
-            variant="ghost"
-            size="icon-sm"
-            onClick={onHide}
-          >
-            <EyeOffIcon aria-hidden="true" />
-          </IconButton>
-        </div>
+        <Select
+          value={chartType}
+          onValueChange={(value) => onChartTypeChange(value as StatsChartType)}
+        >
+          <SelectTrigger size="sm" className="w-28" aria-label={t("selectChartTypeFor", { title })}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="bar">
+              <span className="flex items-center gap-2">
+                <BarChart3Icon aria-hidden="true" />
+                {t("chartTypeBar")}
+              </span>
+            </SelectItem>
+            <SelectItem value="pie">
+              <span className="flex items-center gap-2">
+                <PieChartIcon aria-hidden="true" />
+                {t("chartTypePie")}
+              </span>
+            </SelectItem>
+            <SelectItem value="line">
+              <span className="flex items-center gap-2">
+                <LineChartIcon aria-hidden="true" />
+                {t("chartTypeLine")}
+              </span>
+            </SelectItem>
+          </SelectContent>
+        </Select>
       }
     >
       {rows.length === 0 ? (

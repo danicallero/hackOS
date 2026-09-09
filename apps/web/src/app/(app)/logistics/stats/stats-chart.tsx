@@ -62,7 +62,7 @@ function BarChart({ data, title }: { data: StatsChartDatum[]; title: string }) {
 }
 
 function LineChart({ data, title }: { data: StatsChartDatum[]; title: string }) {
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [activeColumn, setActiveColumn] = useState<number | null>(null);
   const width = 640;
   const height = 250;
   const padding = { top: 18, right: 18, bottom: 42, left: 48 };
@@ -72,138 +72,192 @@ function LineChart({ data, title }: { data: StatsChartDatum[]; title: string }) 
   const scaleMax = Math.max(max, 1);
   const xLabels = [...new Set(data.map((row) => row.label))];
   const xIndex = new Map(xLabels.map((label, index) => [label, index]));
-  const points = data.map((row) => {
+  const xForIndex = (index: number) =>
+    padding.left +
+    (xLabels.length <= 1 ? innerWidth / 2 : (index / (xLabels.length - 1)) * innerWidth);
+  const points = data.map((row, dataIndex) => {
+    const column = xIndex.get(row.label)!;
     const x =
       padding.left +
-      (xLabels.length <= 1
-        ? innerWidth / 2
-        : (xIndex.get(row.label)! / (xLabels.length - 1)) * innerWidth);
+      (xLabels.length <= 1 ? innerWidth / 2 : (column / (xLabels.length - 1)) * innerWidth);
     const y = padding.top + innerHeight - (row.n / scaleMax) * innerHeight;
-    return { ...row, x, y };
+    return { ...row, dataIndex, column, x, y };
   });
-  const active = activeIndex === null ? null : points[activeIndex];
+  const activePoints =
+    activeColumn === null ? [] : points.filter((point) => point.column === activeColumn);
+  const activeX = activeColumn === null ? null : xForIndex(activeColumn);
+  const activeAnchor = activePoints.reduce<(typeof points)[number] | null>(
+    (current, point) => (!current || point.y < current.y ? point : current),
+    null,
+  );
   const lineSeries = [...new Set(data.map((row) => row.series ?? ""))].map((series) => ({
     series,
     points: points.filter((point) => (point.series ?? "") === series).sort((a, b) => a.x - b.x),
   }));
-  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => ({
-    value: Math.round(scaleMax * ratio * 10) / 10,
-    y: padding.top + innerHeight - innerHeight * ratio,
+  const yTickValues =
+    scaleMax <= 4
+      ? Array.from({ length: scaleMax + 1 }, (_, value) => value)
+      : [0, 0.25, 0.5, 0.75, 1].map((ratio) => Math.round(scaleMax * ratio));
+  const yTicks = [...new Set(yTickValues)].map((value) => ({
+    value,
+    y: padding.top + innerHeight - (value / scaleMax) * innerHeight,
   }));
 
   return (
-    <div className="space-y-3">
-      <div className="relative">
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          role="img"
-          aria-label={title}
-          className="h-auto max-h-64 w-full overflow-visible"
-        >
-          {yTicks.map((tick) => (
-            <g key={tick.y}>
-              <line
-                x1={padding.left}
-                x2={width - padding.right}
-                y1={tick.y}
-                y2={tick.y}
-                stroke="var(--border)"
-                strokeDasharray="3 4"
-              />
-              <text
-                x={padding.left - 8}
-                y={tick.y + 4}
-                textAnchor="end"
-                className="fill-muted-foreground text-[11px] tabular-nums"
-              >
-                {tick.value}
-              </text>
-            </g>
-          ))}
-          <line
-            x1={padding.left}
-            x2={width - padding.right}
-            y1={height - padding.bottom}
-            y2={height - padding.bottom}
-            stroke="var(--border)"
-          />
-          {lineSeries.map(
-            (series, index) =>
-              series.points.length > 1 && (
-                <polyline
-                  key={series.series || "default"}
-                  fill="none"
-                  stroke={CHART_COLORS[index % CHART_COLORS.length]}
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  points={series.points.map((point) => `${point.x},${point.y}`).join(" ")}
-                />
-              ),
-          )}
-          {active && (
+    <div className="relative">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={title}
+        className="h-auto max-h-64 w-full overflow-visible"
+        onMouseLeave={() => setActiveColumn(null)}
+      >
+        {yTicks.map((tick) => (
+          <g key={tick.y}>
             <line
-              x1={active.x}
-              x2={active.x}
-              y1={padding.top}
-              y2={height - padding.bottom}
-              stroke="var(--chart-1)"
-              strokeDasharray="4 4"
+              x1={padding.left}
+              x2={width - padding.right}
+              y1={tick.y}
+              y2={tick.y}
+              stroke="var(--border)"
+              strokeDasharray="3 4"
             />
-          )}
-          {points.map((point, index) => (
-            <g key={`${point.label}-${point.series ?? ""}-${point.x}-${point.y}`}>
-              {/* biome-ignore lint/a11y/noStaticElementInteractions: SVG points mirror the keyboard data key below. */}
-              <circle
-                cx={point.x}
-                cy={point.y}
-                r={activeIndex === index ? 7 : 4}
-                fill={
-                  CHART_COLORS[
-                    lineSeries.findIndex((series) => series.series === (point.series ?? "")) %
-                      CHART_COLORS.length
-                  ]
-                }
-                stroke={activeIndex === index ? "var(--background)" : undefined}
-                strokeWidth={activeIndex === index ? 3 : undefined}
-                onMouseEnter={() => setActiveIndex(index)}
-                onMouseLeave={() => setActiveIndex(null)}
+            <text
+              x={padding.left - 8}
+              y={tick.y + 4}
+              textAnchor="end"
+              className="fill-muted-foreground text-[11px] tabular-nums"
+            >
+              {tick.value}
+            </text>
+          </g>
+        ))}
+        <line
+          x1={padding.left}
+          x2={width - padding.right}
+          y1={height - padding.bottom}
+          y2={height - padding.bottom}
+          stroke="var(--border)"
+        />
+        {lineSeries.map(
+          (series, index) =>
+            series.points.length > 1 && (
+              <polyline
+                key={series.series || "default"}
+                fill="none"
+                stroke={CHART_COLORS[index % CHART_COLORS.length]}
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                points={series.points.map((point) => `${point.x},${point.y}`).join(" ")}
               />
-            </g>
-          ))}
-          {xLabels.map((label, index) => {
-            const x =
-              padding.left +
-              (xLabels.length <= 1 ? innerWidth / 2 : (index / (xLabels.length - 1)) * innerWidth);
-            return (
-              <text
-                key={label}
-                x={x}
-                y={height - 14}
-                textAnchor="middle"
-                className="fill-muted-foreground text-[11px]"
-              >
-                {shortLabel(label)}
-              </text>
-            );
-          })}
-        </svg>
-        {active && (
-          <div className="bg-popover text-popover-foreground pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 rounded-md border px-3 py-2 text-xs shadow-sm">
-            <div className="font-medium">{active.label}</div>
-            <div className="tabular-nums">
-              {active.series ? `${active.series}: ` : ""}
-              {active.n}
-            </div>
-          </div>
+            ),
         )}
-      </div>
-      <DataKey
-        data={data}
-        colors={data.some((row) => row.series !== undefined)}
-        activeIndex={activeIndex}
-        onActiveIndexChange={setActiveIndex}
-      />
+        {activeX !== null && (
+          <line
+            x1={activeX}
+            x2={activeX}
+            y1={padding.top}
+            y2={height - padding.bottom}
+            stroke="var(--chart-1)"
+            strokeDasharray="4 4"
+          />
+        )}
+        {points.map((point) => (
+          <g key={`${point.label}-${point.series ?? ""}-${point.x}-${point.y}`}>
+            <circle
+              cx={point.x}
+              cy={point.y}
+              r={activeColumn === point.column ? 6 : 4}
+              fill={
+                CHART_COLORS[
+                  lineSeries.findIndex((series) => series.series === (point.series ?? "")) %
+                    CHART_COLORS.length
+                ]
+              }
+              stroke={activeColumn === point.column ? "var(--background)" : undefined}
+              strokeWidth={activeColumn === point.column ? 3 : undefined}
+            />
+          </g>
+        ))}
+        {xLabels.map((label, index) => {
+          const x = xForIndex(index);
+          return (
+            <text
+              key={label}
+              x={x}
+              y={height - 14}
+              textAnchor="middle"
+              className="fill-muted-foreground text-[11px]"
+            >
+              {shortLabel(label)}
+            </text>
+          );
+        })}
+        {xLabels.map((label, index) => {
+          const x = xForIndex(index);
+          const previousX = index === 0 ? padding.left : xForIndex(index - 1);
+          const nextX = index === xLabels.length - 1 ? width - padding.right : xForIndex(index + 1);
+          const start = index === 0 ? padding.left : (previousX + x) / 2;
+          const end = index === xLabels.length - 1 ? width - padding.right : (x + nextX) / 2;
+          const values = points
+            .filter((point) => point.column === index)
+            .map((point) => `${point.series ? `${point.series}: ` : ""}${point.n}`)
+            .join(", ");
+          return (
+            // biome-ignore lint/a11y/noStaticElementInteractions: each SVG column is a focusable chart inspection target.
+            <rect
+              key={`hit-${label}`}
+              x={start}
+              y={padding.top}
+              width={Math.max(end - start, 1)}
+              height={innerHeight}
+              fill="transparent"
+              tabIndex={0}
+              aria-label={`${label}. ${values}`}
+              onMouseEnter={() => setActiveColumn(index)}
+              onFocus={() => setActiveColumn(index)}
+              onBlur={() => setActiveColumn(null)}
+            />
+          );
+        })}
+      </svg>
+      {activeAnchor && (
+        <div
+          className={cn(
+            "bg-popover text-popover-foreground pointer-events-none absolute z-10 rounded-md border px-3 py-2 text-xs shadow-sm",
+            activeAnchor.x / width < 0.18
+              ? "translate-x-0"
+              : activeAnchor.x / width > 0.82
+                ? "-translate-x-full"
+                : "-translate-x-1/2",
+            activeAnchor.y < 52 ? "mt-2" : "-mt-2 -translate-y-full",
+          )}
+          style={{
+            left: `${(activeAnchor.x / width) * 100}%`,
+            top: `${(activeAnchor.y / height) * 100}%`,
+          }}
+        >
+          <div className="text-muted-foreground font-medium">{activeAnchor.label}</div>
+          {activePoints.map((point) => (
+            <div
+              key={point.dataIndex}
+              className="flex items-center justify-between gap-4 tabular-nums"
+            >
+              <span>{point.series || title}</span>
+              <span className="font-semibold">{point.n}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <ul className="sr-only">
+        {data.map((row) => (
+          <li key={`${row.label}-${row.series ?? ""}`}>
+            {row.label}: {row.series ? `${row.series}: ` : ""}
+            {row.n}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

@@ -82,6 +82,20 @@ describe("useUrlTab URL behavior (UX-03)", () => {
     });
   });
 
+  it("does not replace history when the canonical tab is already selected", () => {
+    navigation.query = "filter=open&tab=overview";
+    act(() => root.render(createElement(Harness)));
+    act(() => latest?.setTab("overview"));
+    expect(routerReplace).not.toHaveBeenCalled();
+  });
+
+  it("keeps the setter stable across parent rerenders", () => {
+    act(() => root.render(createElement(Harness)));
+    const firstSetter = latest?.setTab;
+    act(() => root.render(createElement(Harness)));
+    expect(latest?.setTab).toBe(firstSetter);
+  });
+
   it("tracks a back/forward-style URL change on rerender", () => {
     navigation.query = "tab=overview";
     act(() => root.render(createElement(Harness)));

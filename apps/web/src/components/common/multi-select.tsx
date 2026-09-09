@@ -126,7 +126,7 @@ export function MultiSelect({
         <div
           ref={boxRef}
           className={cn(
-            "flex min-h-[var(--control-height-default)] w-full items-center gap-2 rounded-control border bg-background px-2",
+            "relative flex min-h-[var(--control-height-default)] w-full items-center gap-2 rounded-control border bg-background px-2",
             value.length > 0 && "py-1",
             disabled && "opacity-50",
             className,
@@ -136,7 +136,7 @@ export function MultiSelect({
               eat half the control and push the trigger (and its placeholder) into
               the middle of the box instead of leaving it left-aligned. */}
           {value.length > 0 && (
-            <span className="flex min-w-0 flex-wrap gap-1">
+            <span className="pointer-events-none relative z-10 flex min-w-0 flex-wrap gap-1 pr-9">
               {value.map((v) => (
                 <Badge key={v} variant="secondary" className="gap-1">
                   {labelOf(v)}
@@ -146,7 +146,7 @@ export function MultiSelect({
                     size="icon-xs"
                     variant="ghost"
                     onClick={() => toggle(v)}
-                    className="text-muted-foreground hover:text-foreground rounded-full"
+                    className="text-muted-foreground hover:text-foreground pointer-events-auto rounded-full"
                   >
                     <XIcon aria-hidden="true" className="size-3" />
                   </IconButton>
@@ -174,7 +174,9 @@ export function MultiSelect({
                 // With badges the label is sr-only, so the chevron is the only
                 // visible child: pin it to the far edge of the control instead
                 // of leaving it floating where the label used to start.
-                value.length > 0 ? "justify-end" : "justify-between",
+                value.length > 0
+                  ? "absolute inset-0 h-full w-full justify-end rounded-control px-3"
+                  : "justify-between",
               )}
             >
               <span className={cn(value.length > 0 && "sr-only", "truncate")}>
