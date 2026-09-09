@@ -44,6 +44,14 @@ const statisticsScopeAccessBody = z
   })
   .strict();
 
+const statisticsScopeAccessDeleteParams = z.object({
+  roleId: z.coerce.number().int().positive(),
+});
+
+const statisticsScopeAccessDeleteQuery = z.object({
+  scope_key: z.string().regex(/^role:[0-9]+$/),
+});
+
 function sendCsv(reply: FastifyReply, filename: string, csv: string) {
   reply.header("content-type", "text/csv; charset=utf-8");
   reply.header("content-disposition", `attachment; filename="${filename}"`);
@@ -209,6 +217,67 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
           action: "access_changed",
           before: before[0] ?? null,
           after: { ...req.body, panel_key: panelKey },
+        });
+        return { ok: true };
+      });
+    },
+  );
+
+  r.delete(
+    "/api/statistics/access/:roleId",
+    {
+      preHandler: requireAuth,
+      config: routeAccess({ kind: "authenticated" }),
+      schema: {
+        summary: "Remove a role's generic statistics overrides",
+        description:
+          "Removes every panel override for one role on the selected role scope without changing the role's general Statistics capability.",
+        params: statisticsScopeAccessDeleteParams,
+        querystring: statisticsScopeAccessDeleteQuery,
+      },
+    },
+    async (req) => {
+      if (!(await userHasCapability(req.userId as number, CAPABILITIES.STATISTICS_MANAGE, req))) {
+        throw new ForbiddenError("Missing capability: statistics:manage");
+      }
+      const parsed = parseStatisticsScopeKey(req.query.scope_key);
+      if (parsed?.kind !== "role") {
+        throw new ForbiddenError("Statistics scope is not configurable");
+      }
+      return withTransaction(async (client) => {
+        await lockRoleGraph(client);
+        const { rows: scopeRoles } = await client.query(
+          `SELECT id FROM roles WHERE id = $1 AND deleted_at IS NULL`,
+          [parsed.id],
+        );
+        if (!scopeRoles[0]) throw new ForbiddenError("Statistics scope is not available");
+        const { rows: roleRows } = await client.query(
+          `SELECT position FROM roles WHERE id = $1 AND deleted_at IS NULL`,
+          [req.params.roleId],
+        );
+        if (!roleRows[0]) throw new ForbiddenError("Role not found");
+        await requireRoleMutationAuthority(
+          client,
+          req.userId as number,
+          Number(roleRows[0].position),
+        );
+        const { rows: before } = await client.query(
+          `SELECT panel_key, state FROM statistics_scope_panel_role_access
+            WHERE scope_key = $1 AND role_id = $2 ORDER BY panel_key`,
+          [req.query.scope_key, req.params.roleId],
+        );
+        await client.query(
+          `DELETE FROM statistics_scope_panel_role_access
+            WHERE scope_key = $1 AND role_id = $2`,
+          [req.query.scope_key, req.params.roleId],
+        );
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "statistics_scope_role_access",
+          entityId: `${req.query.scope_key}:${req.params.roleId}`,
+          action: "access_removed",
+          before,
+          after: null,
         });
         return { ok: true };
       });

@@ -28,13 +28,15 @@ import {
   LayoutDashboardIcon,
   LineChartIcon,
   PieChartIcon,
+  RotateCcwIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type Column, DataTable } from "@/components/common/data-table";
 import { DragHandle } from "@/components/common/drag-handle";
+import { EmptyState } from "@/components/common/empty-state";
 import { IconButton } from "@/components/common/icon-button";
 import { SectionCard } from "@/components/common/section-card";
 import { StatCard } from "@/components/common/stat-card";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -42,12 +44,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { LOCALE_CODES, type MessageKey, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { uiPrefsApi } from "@/lib/logistics";
 import { cn } from "@/lib/utils";
-import { type ApplicationStats, applicationStatusLabel } from "./model";
+import type { ApplicationStats } from "./model";
 import { StatsChart, type StatsChartDatum, type StatsChartType } from "./stats-chart";
-import { defaultStatsChartType, type StatsLayoutConfig, sanitizeStatsLayout } from "./stats-layout";
+import {
+  defaultStatsChartType,
+  defaultStatsPanelSize,
+  type StatsLayoutConfig,
+  sanitizeStatsLayout,
+} from "./stats-layout";
 
 const STORAGE_KEY = "hackos:applicationStatsLayouts:v1";
 
@@ -60,7 +68,6 @@ interface DistributionDefinition {
 
 const BASE_PANEL_LABELS: Record<string, MessageKey> = {
   overview: "statisticsOverviewPanel",
-  funnel: "applicationFunnel",
   "shirt-sizes": "shirtSizeDistribution",
   "food-intolerances": "dietaryDistribution",
   "applications-over-time": "applicationsOverTime",
@@ -74,7 +81,6 @@ function panelKeysForStats(stats: ApplicationStats | null): string[] {
   if (stats.panel_keys && stats.panel_keys.length > 0) return stats.panel_keys;
   const keys: string[] = [];
   if (stats.counts_by_status !== undefined) keys.push("overview");
-  if (stats.funnel !== undefined) keys.push("funnel");
   if (stats.shirt_sizes_confirmed !== undefined) keys.push("shirt-sizes");
   if (stats.food_intolerances_confirmed !== undefined) keys.push("food-intolerances");
   if (stats.time_series?.submissions_by_day !== undefined) keys.push("applications-over-time");
@@ -240,7 +246,7 @@ export function BeforePanels({
   };
 
   const resizePanel = (key: string, axis: "width" | "height", delta: -1 | 1) => {
-    const current = effectiveLayout.sizes[key] ?? { width: 1, height: 1 };
+    const current = effectiveLayout.sizes[key] ?? defaultStatsPanelSize(key);
     const nextValue = Math.max(1, Math.min(2, current[axis] + delta)) as 1 | 2;
     saveLayout({
       ...effectiveLayout,
@@ -251,14 +257,7 @@ export function BeforePanels({
   const renderPanel = (key: string) => {
     if (key === "overview") {
       return (
-        <OverviewPanel
-          key={key}
-          stats={stats}
-          loading={loading}
-          error={error}
-          onRetry={onRetry}
-          onHide={() => togglePanel(key)}
-        />
+        <OverviewPanel key={key} stats={stats} loading={loading} error={error} onRetry={onRetry} />
       );
     }
     const definition = definitionByKey.get(key);
@@ -275,7 +274,6 @@ export function BeforePanels({
             charts: { ...effectiveLayout.charts, [key]: chartType },
           })
         }
-        onHide={() => togglePanel(key)}
       />
     );
   };
@@ -283,9 +281,19 @@ export function BeforePanels({
   return (
     <div className="space-y-5">
       {editMode && (
-        <p className="text-muted-foreground text-pretty text-sm" role="status">
-          {t("statisticsEditModeHint")}
-        </p>
+        <div className="bg-muted/30 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
+          <p className="text-muted-foreground min-w-0 flex-1 text-pretty text-sm" role="status">
+            {t("statisticsEditModeHint")}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => saveLayout(sanitizeStatsLayout(null, availablePanelKeys))}
+          >
+            <RotateCcwIcon aria-hidden="true" />
+            {t("resetStatisticsLayout")}
+          </Button>
+        </div>
       )}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onPanelDragEnd}>
         <SortableContext items={renderedKeys} strategy={rectSortingStrategy}>
@@ -296,8 +304,8 @@ export function BeforePanels({
                 id={key}
                 editMode={editMode}
                 hidden={effectiveLayout.hidden.includes(key)}
-                width={effectiveLayout.sizes[key]?.width ?? 1}
-                height={effectiveLayout.sizes[key]?.height ?? 1}
+                width={effectiveLayout.sizes[key]?.width ?? defaultStatsPanelSize(key).width}
+                height={effectiveLayout.sizes[key]?.height ?? defaultStatsPanelSize(key).height}
                 label={panelTitle(key, labels, t)}
                 onResize={(axis, delta) => resizePanel(key, axis, delta)}
                 onToggleVisibility={() => togglePanel(key)}
@@ -421,19 +429,6 @@ function buildDistributionDefinitions(
       new Date(`${bucket}T00:00:00Z`),
     );
   const definitions: DistributionDefinition[] = [];
-  if (stats.funnel) {
-    definitions.push({
-      key: "funnel",
-      title: t("applicationFunnel"),
-      defaultChart: "bar",
-      rows: [
-        { label: t("pendingConfirmation"), n: stats.funnel.still_in_window },
-        { label: t("confirmed"), n: stats.funnel.confirmed },
-        { label: t("declined"), n: stats.funnel.declined },
-        { label: t("dataStatusExpired"), n: stats.funnel.expired },
-      ],
-    });
-  }
   if (stats.shirt_sizes_confirmed) {
     definitions.push({
       key: "shirt-sizes",
@@ -561,34 +556,13 @@ function OverviewPanel({
   loading,
   error,
   onRetry,
-  onHide,
 }: {
   stats: ApplicationStats | null;
   loading: boolean;
   error: string | null;
   onRetry: () => void;
-  onHide: () => void;
 }) {
   const { t } = useLocale();
-  const statusRows = Object.entries(stats?.counts_by_status ?? {}).map(([status, count]) => ({
-    status,
-    count,
-  }));
-  const statusColumns: Column<(typeof statusRows)[number]>[] = [
-    {
-      id: "status",
-      header: t("statusColumn"),
-      cell: (row) => applicationStatusLabel(row.status, t),
-      sortValue: (row) => row.status,
-    },
-    {
-      id: "count",
-      header: t("columnPeople"),
-      align: "right",
-      cell: (row) => row.count,
-      sortValue: (row) => row.count,
-    },
-  ];
   const confirmed = stats?.overview?.confirmed ?? stats?.funnel?.confirmed;
   const submitted =
     stats?.overview?.submitted ??
@@ -604,44 +578,90 @@ function OverviewPanel({
       : confirmed === undefined || fallbackSent === 0
         ? null
         : Math.round((confirmed / fallbackSent) * 100);
+  const lifecycleRows: StatsChartDatum[] = stats?.funnel
+    ? [
+        { label: t("pendingConfirmation"), n: stats.funnel.still_in_window },
+        { label: t("confirmed"), n: stats.funnel.confirmed },
+        { label: t("declined"), n: stats.funnel.declined },
+        { label: t("dataStatusExpired"), n: stats.funnel.expired },
+      ]
+    : [];
 
   return (
-    <SectionCard
-      title={t("statisticsOverviewPanel")}
-      icon={LayoutDashboardIcon}
-      action={
-        <IconButton label={t("hideStatisticsPanel")} variant="ghost" onClick={onHide}>
-          <EyeOffIcon aria-hidden="true" />
-        </IconButton>
-      }
-    >
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label={t("submittedApplications")} value={submitted} />
-        <StatCard label={t("confirmed")} value={confirmed ?? "—"} />
-        <StatCard label={t("rejected")} value={overview?.rejected ?? "—"} />
-        <StatCard label={t("confirmationRate")} value={rate === null ? "—" : `${rate}%`} />
-        <StatCard
-          label={t("expiredConfirmations")}
-          value={overview?.expired_confirmations ?? "—"}
-        />
-        <StatCard label={t("stillAbleToConfirm")} value={overview?.still_able_to_confirm ?? "—"} />
-        <StatCard
-          label={t("averageConfirmationTime")}
-          value={hours(
-            overview?.average_confirmation_time_hours ?? stats?.time_to_confirm_hours?.avg,
-            t,
+    <SectionCard title={t("statisticsOverviewPanel")} icon={LayoutDashboardIcon} className="h-full">
+      {loading && !stats ? (
+        <div
+          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+          role="status"
+          aria-label={t("loading")}
+        >
+          {["submitted", "confirmed", "rejected", "rate", "pending", "expired", "able", "time"].map(
+            (key) => (
+              <Skeleton key={key} className="h-28 rounded-lg" />
+            ),
           )}
-          hint={`${t("medianConfirmationTime")}: ${hours(stats?.time_to_confirm_hours?.median, t)}`}
+        </div>
+      ) : error && !stats ? (
+        <div className="space-y-3 rounded-lg border border-destructive/30 p-5" role="alert">
+          <p className="text-destructive text-pretty text-sm">{error}</p>
+          <Button variant="outline" size="sm" onClick={onRetry}>
+            {t("retry")}
+          </Button>
+        </div>
+      ) : !stats ? (
+        <EmptyState
+          icon={LayoutDashboardIcon}
+          title={t("noApplicationStatistics")}
+          action={
+            <Button variant="outline" size="sm" onClick={onRetry}>
+              {t("retry")}
+            </Button>
+          }
         />
-      </div>
-      <DataTable
-        columns={statusColumns}
-        data={statusRows}
-        getRowId={(row) => row.status}
-        loading={loading}
-        error={error ? { message: error, onRetry } : undefined}
-        empty={{ icon: LayoutDashboardIcon, title: t("noApplicationStatistics") }}
-      />
+      ) : (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard label={t("submittedApplications")} value={submitted} className="h-full" />
+            <StatCard label={t("confirmed")} value={confirmed ?? "—"} className="h-full" />
+            <StatCard label={t("rejected")} value={overview?.rejected ?? "—"} className="h-full" />
+            <StatCard
+              label={t("confirmationRate")}
+              value={rate === null ? "—" : `${rate}%`}
+              className="h-full"
+            />
+          </div>
+          <div className="grid gap-3 lg:grid-cols-3 xl:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))]">
+            <div className="space-y-4 rounded-lg border p-5 lg:col-span-3 xl:col-span-1">
+              <div className="space-y-1">
+                <h3 className="text-balance text-sm font-semibold">{t("confirmationLifecycle")}</h3>
+                <p className="text-muted-foreground text-pretty text-xs">
+                  {t("confirmationLifecycleHint")}
+                </p>
+              </div>
+              <StatsChart data={lifecycleRows} type="bar" title={t("confirmationLifecycle")} />
+            </div>
+            <StatCard
+              label={t("expiredConfirmations")}
+              value={overview?.expired_confirmations ?? "—"}
+              className="h-full"
+            />
+            <StatCard
+              label={t("stillAbleToConfirm")}
+              value={overview?.still_able_to_confirm ?? "—"}
+              className="h-full"
+            />
+            <StatCard
+              label={t("averageConfirmationTime")}
+              value={hours(
+                overview?.average_confirmation_time_hours ?? stats?.time_to_confirm_hours?.avg,
+                t,
+              )}
+              hint={`${t("medianConfirmationTime")}: ${hours(stats?.time_to_confirm_hours?.median, t)}`}
+              className="h-full"
+            />
+          </div>
+        </>
+      )}
     </SectionCard>
   );
 }
@@ -657,61 +677,46 @@ function Distribution({
   rows,
   chartType,
   onChartTypeChange,
-  onHide,
 }: {
   title: string;
   rows: StatsChartDatum[];
   chartType: StatsChartType;
   onChartTypeChange: (chartType: StatsChartType) => void;
-  onHide: () => void;
 }) {
   const { t } = useLocale();
   return (
     <SectionCard
       title={title}
+      className="h-full"
       action={
-        <div className="flex flex-wrap items-center gap-2">
-          <Select
-            value={chartType}
-            onValueChange={(value) => onChartTypeChange(value as StatsChartType)}
-          >
-            <SelectTrigger
-              size="sm"
-              className="w-28"
-              aria-label={t("selectChartTypeFor", { title })}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="bar">
-                <span className="flex items-center gap-2">
-                  <BarChart3Icon aria-hidden="true" />
-                  {t("chartTypeBar")}
-                </span>
-              </SelectItem>
-              <SelectItem value="pie">
-                <span className="flex items-center gap-2">
-                  <PieChartIcon aria-hidden="true" />
-                  {t("chartTypePie")}
-                </span>
-              </SelectItem>
-              <SelectItem value="line">
-                <span className="flex items-center gap-2">
-                  <LineChartIcon aria-hidden="true" />
-                  {t("chartTypeLine")}
-                </span>
-              </SelectItem>
-            </SelectContent>
-          </Select>
-          <IconButton
-            label={t("hideStatisticsPanel")}
-            variant="ghost"
-            size="icon-sm"
-            onClick={onHide}
-          >
-            <EyeOffIcon aria-hidden="true" />
-          </IconButton>
-        </div>
+        <Select
+          value={chartType}
+          onValueChange={(value) => onChartTypeChange(value as StatsChartType)}
+        >
+          <SelectTrigger size="sm" className="w-28" aria-label={t("selectChartTypeFor", { title })}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="bar">
+              <span className="flex items-center gap-2">
+                <BarChart3Icon aria-hidden="true" />
+                {t("chartTypeBar")}
+              </span>
+            </SelectItem>
+            <SelectItem value="pie">
+              <span className="flex items-center gap-2">
+                <PieChartIcon aria-hidden="true" />
+                {t("chartTypePie")}
+              </span>
+            </SelectItem>
+            <SelectItem value="line">
+              <span className="flex items-center gap-2">
+                <LineChartIcon aria-hidden="true" />
+                {t("chartTypeLine")}
+              </span>
+            </SelectItem>
+          </SelectContent>
+        </Select>
       }
     >
       {rows.length === 0 ? (

@@ -1,7 +1,9 @@
 "use client";
 
-import { ChevronDownIcon, EyeIcon, LoaderCircleIcon, PlusIcon } from "lucide-react";
+import { ChevronDownIcon, EyeIcon, LoaderCircleIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
+import { AlertModal } from "@/components/common/alert-modal";
+import { IconButton } from "@/components/common/icon-button";
 import { PermissionStateControl } from "@/components/common/permission-state-control";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -35,7 +37,6 @@ type Role = {
 
 const BASE_PANEL_LABELS: Record<string, MessageKey> = {
   overview: "statisticsOverviewPanel",
-  funnel: "applicationFunnel",
   "shirt-sizes": "shirtSizeDistribution",
   "food-intolerances": "dietaryDistribution",
   "applications-over-time": "applicationsOverTime",
@@ -77,6 +78,7 @@ export function StatsVisibility({
   const [pending, setPending] = useState<string | null>(null);
   const [expandedRoles, setExpandedRoles] = useState<Set<number>>(new Set());
   const [additionalRoleId, setAdditionalRoleId] = useState<string>("");
+  const [roleToRemove, setRoleToRemove] = useState<Role | null>(null);
 
   useEffect(() => {
     if (!open || (!applicationId && !scopeKey)) return;
@@ -176,6 +178,52 @@ export function StatsVisibility({
     setIncludedRoleIds((current) => new Set([...current, numericId]));
   }
 
+  async function removeRoleAccess(role: Role) {
+    const hasPersistedAccess = access.some((row) => row.role_id === role.id);
+    if (!hasPersistedAccess) {
+      setIncludedRoleIds((current) => {
+        const next = new Set(current);
+        next.delete(role.id);
+        return next;
+      });
+      setExpandedRoles((current) => {
+        const next = new Set(current);
+        next.delete(role.id);
+        return next;
+      });
+      setRoleToRemove(null);
+      return;
+    }
+    if (!applicationId && !scopeKey) return;
+    const roleScope = scopeKey?.startsWith("role:") === true;
+    setPending(`remove:${role.id}`);
+    setError(null);
+    try {
+      await api.delete(
+        roleScope
+          ? `/api/statistics/access/${role.id}`
+          : `/api/applications/${applicationId}/stats/access/${role.id}`,
+        roleScope ? { query: { scope_key: scopeKey } } : undefined,
+      );
+      setAccess((current) => current.filter((row) => row.role_id !== role.id));
+      setIncludedRoleIds((current) => {
+        const next = new Set(current);
+        next.delete(role.id);
+        return next;
+      });
+      setExpandedRoles((current) => {
+        const next = new Set(current);
+        next.delete(role.id);
+        return next;
+      });
+      setRoleToRemove(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t("couldNotRemoveStatisticsRole"));
+    } finally {
+      setPending(null);
+    }
+  }
+
   const managedRoles = roles.filter(
     (role) =>
       rolesWithStatisticsAccess.some((item) => item.id === role.id) || includedRoleIds.has(role.id),
@@ -220,48 +268,66 @@ export function StatsVisibility({
               managedRoles.map((role) => {
                 const expanded = expandedRoles.has(role.id);
                 return (
-                  <div key={role.id} className="rounded-md border">
-                    <button
-                      type="button"
-                      className="flex min-h-12 w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      aria-expanded={expanded}
-                      onClick={() =>
-                        setExpandedRoles((current) => {
-                          const next = new Set(current);
-                          if (next.has(role.id)) next.delete(role.id);
-                          else next.add(role.id);
-                          return next;
-                        })
-                      }
-                    >
-                      <ChevronDownIcon
-                        className={`text-muted-foreground size-4 shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`}
-                        aria-hidden="true"
-                      />
-                      <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                        {role.name}
-                      </span>
-                      <StatusBadge
-                        tone={
-                          role.general_state === "allow"
-                            ? "success"
-                            : role.general_state === "deny"
-                              ? "danger"
-                              : "neutral"
+                  <div key={role.id} className="overflow-hidden rounded-lg border">
+                    <div className="flex min-h-12 items-center">
+                      <button
+                        type="button"
+                        className="flex min-h-12 min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-expanded={expanded}
+                        aria-controls={`statistics-role-${role.id}`}
+                        onClick={() =>
+                          setExpandedRoles((current) => {
+                            const next = new Set(current);
+                            if (next.has(role.id)) next.delete(role.id);
+                            else next.add(role.id);
+                            return next;
+                          })
                         }
-                        dot={false}
                       >
-                        {t(
-                          role.general_state === "allow"
-                            ? "statisticsGeneralAllowed"
-                            : role.general_state === "deny"
-                              ? "statisticsGeneralDenied"
-                              : "statisticsGeneralInherited",
-                        )}
-                      </StatusBadge>
-                    </button>
+                        <ChevronDownIcon
+                          className={`text-muted-foreground size-4 shrink-0 ${expanded ? "rotate-180" : ""}`}
+                          aria-hidden="true"
+                        />
+                        <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                          {role.name}
+                        </span>
+                        <StatusBadge
+                          tone={
+                            role.general_state === "allow"
+                              ? "success"
+                              : role.general_state === "deny"
+                                ? "danger"
+                                : "neutral"
+                          }
+                          dot={false}
+                        >
+                          {t(
+                            role.general_state === "allow"
+                              ? "statisticsGeneralAllowed"
+                              : role.general_state === "deny"
+                                ? "statisticsGeneralDenied"
+                                : "statisticsGeneralInherited",
+                          )}
+                        </StatusBadge>
+                      </button>
+                      {role.general_state !== "allow" && (
+                        <IconButton
+                          label={t("removeStatisticsRole", { name: role.name })}
+                          variant="ghost"
+                          size="icon-sm"
+                          className="mr-3 shrink-0 text-muted-foreground hover:text-destructive"
+                          disabled={pending !== null}
+                          onClick={() => setRoleToRemove(role)}
+                        >
+                          <Trash2Icon aria-hidden="true" />
+                        </IconButton>
+                      )}
+                    </div>
                     {expanded && (
-                      <div className="space-y-3 border-t px-4 py-4">
+                      <div
+                        id={`statistics-role-${role.id}`}
+                        className="space-y-4 border-t px-4 py-4"
+                      >
                         <p className="text-muted-foreground text-xs">
                           {t("statisticsRolePermissionHint", { position: role.position })}
                         </p>
@@ -311,7 +377,7 @@ export function StatsVisibility({
             )}
           </div>
           {addableRoles.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 border-t pt-4">
+            <div className="bg-muted/30 flex flex-wrap items-center gap-3 rounded-lg border p-3">
               <Select value={additionalRoleId} onValueChange={addRole}>
                 <SelectTrigger className="min-w-52" aria-label={t("addStatisticsRole")}>
                   <SelectValue placeholder={t("selectRoleToAdd")} />
@@ -325,11 +391,25 @@ export function StatsVisibility({
                 </SelectContent>
               </Select>
               <span className="text-muted-foreground text-xs">{t("addStatisticsRoleHint")}</span>
-              <PlusIcon className="text-muted-foreground size-4" aria-hidden="true" />
             </div>
           )}
         </div>
       )}
+      <AlertModal
+        open={roleToRemove !== null}
+        onOpenChange={(next) => {
+          if (!next && pending === null) setRoleToRemove(null);
+        }}
+        title={t("removeStatisticsRoleTitle")}
+        description={t("removeStatisticsRoleDescription", { name: roleToRemove?.name ?? "" })}
+        cancelLabel={t("cancel")}
+        confirmLabel={t("remove")}
+        destructive
+        pending={pending?.startsWith("remove:") === true}
+        onConfirm={() => {
+          if (roleToRemove) void removeRoleAccess(roleToRemove);
+        }}
+      />
     </SectionCard>
   );
 }

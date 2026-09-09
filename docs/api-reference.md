@@ -409,7 +409,9 @@ statistics capability, while `deny` overrides the general fallback. Statistics
 managers can manage application overrides through
 `GET`/`PUT /api/applications/:id/stats/access` and role-scope overrides through
 `GET`/`PUT /api/statistics/access`, using the same role-position tri-state
-semantics as H8.
+semantics as H8. The corresponding role-specific `DELETE` resources clear all
+statistics overrides for that role and scope without changing its general
+Logistics capability.
 
 `GET /api/applications/stats/forms` and `GET /api/applications/:id/stats` remain
 compatible legacy resources. New application-question panels are opt-in via

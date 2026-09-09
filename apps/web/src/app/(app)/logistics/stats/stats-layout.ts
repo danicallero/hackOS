@@ -16,6 +16,10 @@ export interface StatsLayoutConfig {
   sizes: Record<string, { width: 1 | 2; height: 1 | 2 }>;
 }
 
+export function defaultStatsPanelSize(panelKey: string): { width: 1 | 2; height: 1 | 2 } {
+  return { width: panelKey === "overview" ? 2 : 1, height: 1 };
+}
+
 export function defaultStatsChartType(panelKey: string, fieldKind?: string): StatsChartType {
   if (
     panelKey.includes("by-day") ||
@@ -73,6 +77,7 @@ export function sanitizeStatsLayout(raw: unknown, availablePanelKeys: string[]):
       };
     }
   }
+  for (const key of availablePanelKeys) sizes[key] ??= defaultStatsPanelSize(key);
   return {
     order,
     hidden: [...new Set(hidden)],

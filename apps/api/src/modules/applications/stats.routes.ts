@@ -1,6 +1,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
+import { z } from "zod";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireAuth, requireCapability, userHasCapability } from "../../lib/capabilities.js";
@@ -11,6 +12,32 @@ import { canonicalStatisticsPanelKey } from "../statistics/catalog.js";
 import { idParamSchema, statsPanelAccessSchema, statsQuerySchema } from "./schemas.js";
 import { requireApplication } from "./service.js";
 import { allowedStatisticsPanels, applicationStats, statisticsPanelKeys } from "./stats.js";
+
+const statsAccessRoleParamsSchema = idParamSchema.extend({
+  roleId: z.coerce.number().int().positive(),
+});
+
+type StatsAccessRow = {
+  panel_key: string;
+  role_id: number;
+  state: "allow" | "inherit" | "deny";
+  role_name: string;
+  position: number;
+};
+
+function canonicalAccessRows(rows: StatsAccessRow[]): StatsAccessRow[] {
+  const priority = { inherit: 0, allow: 1, deny: 2 } as const;
+  const canonical = new Map<string, StatsAccessRow>();
+  for (const row of rows) {
+    const panelKey = canonicalStatisticsPanelKey(row.panel_key);
+    const key = `${panelKey}:${row.role_id}`;
+    const previous = canonical.get(key);
+    if (!previous || priority[row.state] > priority[previous.state]) {
+      canonical.set(key, { ...row, panel_key: panelKey });
+    }
+  }
+  return [...canonical.values()];
+}
 
 /** H27 (LOGISTICS_STATS): pre-event statistics panel for one form. */
 export function registerStatsRoutes(app: FastifyInstance): void {
@@ -62,10 +89,7 @@ export function registerStatsRoutes(app: FastifyInstance): void {
       return {
         panel_keys: [...panelKeys],
         panel_labels: panelLabels,
-        access: rows.map((row: { panel_key: string }) => ({
-          ...row,
-          panel_key: canonicalStatisticsPanelKey(row.panel_key),
-        })),
+        access: canonicalAccessRows(rows as StatsAccessRow[]),
         roles,
       };
     },
@@ -99,9 +123,21 @@ export function registerStatsRoutes(app: FastifyInstance): void {
         if (!roles[0]) throw new ForbiddenError("Role not found");
         await requireRoleMutationAuthority(client, req.userId as number, Number(roles[0].position));
         const { rows: before } = await client.query(
-          `SELECT state FROM application_stats_panel_role_access WHERE application_id = $1 AND panel_key = $2 AND role_id = $3`,
-          [application.id, panelKey, req.body.role_id],
+          `SELECT panel_key, state FROM application_stats_panel_role_access
+            WHERE application_id = $1 AND panel_key = ANY($2::text[]) AND role_id = $3`,
+          [
+            application.id,
+            panelKey === "overview" ? ["overview", "funnel"] : [panelKey],
+            req.body.role_id,
+          ],
         );
+        if (panelKey === "overview") {
+          await client.query(
+            `DELETE FROM application_stats_panel_role_access
+              WHERE application_id = $1 AND panel_key = 'funnel' AND role_id = $2`,
+            [application.id, req.body.role_id],
+          );
+        }
         await client.query(
           `INSERT INTO application_stats_panel_role_access (application_id, panel_key, role_id, state)
          VALUES ($1, $2, $3, $4)
@@ -115,6 +151,50 @@ export function registerStatsRoutes(app: FastifyInstance): void {
           action: "access_changed",
           before: before[0] ?? null,
           after: { ...req.body, panel_key: panelKey },
+        });
+        return { ok: true };
+      }),
+  );
+
+  r.delete(
+    "/api/applications/:id/stats/access/:roleId",
+    {
+      preHandler: requireCapability(CAPABILITIES.STATISTICS_MANAGE),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.STATISTICS_MANAGE }),
+      schema: {
+        summary: "Remove a role's application statistics overrides",
+        description:
+          "Removes every panel-specific override for one role on this application scope without changing the role's general Statistics capability.",
+        params: statsAccessRoleParamsSchema,
+      },
+    },
+    async (req) =>
+      withTransaction(async (client) => {
+        await lockRoleGraph(client);
+        const application = await requireApplication(client, req.params.id);
+        const { rows: roles } = await client.query(
+          `SELECT position FROM roles WHERE id = $1 AND deleted_at IS NULL`,
+          [req.params.roleId],
+        );
+        if (!roles[0]) throw new ForbiddenError("Role not found");
+        await requireRoleMutationAuthority(client, req.userId as number, Number(roles[0].position));
+        const { rows: before } = await client.query(
+          `SELECT panel_key, state FROM application_stats_panel_role_access
+            WHERE application_id = $1 AND role_id = $2 ORDER BY panel_key`,
+          [application.id, req.params.roleId],
+        );
+        await client.query(
+          `DELETE FROM application_stats_panel_role_access
+            WHERE application_id = $1 AND role_id = $2`,
+          [application.id, req.params.roleId],
+        );
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "application_statistics_role_access",
+          entityId: `${application.id}:${req.params.roleId}`,
+          action: "access_removed",
+          before,
+          after: null,
         });
         return { ok: true };
       }),

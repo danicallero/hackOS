@@ -19,7 +19,6 @@ describe("dynamic application statistics panels", () => {
     ]).toEqual(
       expect.arrayContaining([
         "overview",
-        "funnel",
         "shirt-sizes",
         "food-intolerances",
         "field:notes",
@@ -50,6 +49,15 @@ describe("dynamic application statistics panels", () => {
         { panelKey: "overview", rolePosition: 100, state: "allow" },
         { panelKey: "overview", rolePosition: 200, state: "deny" },
         { panelKey: "funnel", rolePosition: 100, state: "inherit" },
+      ]),
+    ).toEqual(new Map([["overview", "deny"]]));
+  });
+
+  it("lets a deny win conflicting legacy funnel and overview rules at the same position", () => {
+    expect(
+      resolveStatisticsPanelDecisions([
+        { panelKey: "funnel", rolePosition: 100, state: "allow" },
+        { panelKey: "overview", rolePosition: 100, state: "deny" },
       ]),
     ).toEqual(new Map([["overview", "deny"]]));
   });
