@@ -2872,6 +2872,7 @@
   "statisticsPanels": "Paneles de estadísticas",
   "statisticsPanelsHint": "Muestra, oculta, ordena y agrupa los paneles de tu panel de control.",
   "statisticsEditModeHint": "Arrastra los paneles para reordenarlos. Usa las flechas para cambiar su tamaño.",
+  "reorderStatisticsKpiAria": "Reordenar la métrica {name}",
   "resetStatisticsLayout": "Restablecer diseño",
   "customizePanel": "Personalizar panel",
   "finishCustomizePanel": "Terminar personalización",

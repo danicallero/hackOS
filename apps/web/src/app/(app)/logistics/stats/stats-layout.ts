@@ -3,6 +3,15 @@ import type { StatsChartType } from "./stats-chart";
 
 const CHART_TYPES: StatsChartType[] = ["bar", "pie", "line"];
 const STAT_TONES: StatTone[] = ["neutral", "success", "danger", "warning", "info"];
+export const OVERVIEW_KPI_KEYS = [
+  "submitted",
+  "confirmed",
+  "rejected",
+  "rate",
+  "expired",
+  "available",
+  "time",
+] as const;
 
 export interface StatsSection {
   id: string;
@@ -17,6 +26,7 @@ export interface StatsLayoutConfig {
   sections: StatsSection[];
   sizes: Record<string, { width: 1 | 2; height: 1 | 2 }>;
   tones: Record<string, StatTone>;
+  overviewOrder: string[];
 }
 
 export function defaultStatsPanelSize(panelKey: string): { width: 1 | 2; height: 1 | 2 } {
@@ -90,6 +100,15 @@ export function sanitizeStatsLayout(raw: unknown, availablePanelKeys: string[]):
       }
     }
   }
+  const rawOverviewOrder = Array.isArray(value.overviewOrder) ? value.overviewOrder : [];
+  const overviewOrder = [
+    ...rawOverviewOrder.filter(
+      (key): key is string =>
+        typeof key === "string" &&
+        OVERVIEW_KPI_KEYS.includes(key as (typeof OVERVIEW_KPI_KEYS)[number]),
+    ),
+    ...OVERVIEW_KPI_KEYS.filter((key) => !rawOverviewOrder.includes(key)),
+  ].filter((key, index, all) => all.indexOf(key) === index);
   return {
     order,
     hidden: [...new Set(hidden)],
@@ -97,5 +116,6 @@ export function sanitizeStatsLayout(raw: unknown, availablePanelKeys: string[]):
     sections,
     sizes,
     tones,
+    overviewOrder,
   };
 }

@@ -76,10 +76,13 @@ role and its general capabilities unchanged.
 The dashboard stores presentation preferences in the existing
 `users.ui_prefs` namespace through `/api/me/ui-prefs`. The `stats-layout` value
 contains panel identity, visibility, chart choice, grid order, and bounded
-width/height. It also stores semantic panel and Overview KPI tones; values are
+width/height. It also stores semantic panel and Overview KPI tones and the
+user-defined order of the KPI cards; values are
 restricted to the design system's neutral, positive, critical, warning, and
 informational roles. Customization mode turns the panel area into a direct
-sortable grid with keyboard-accessible move and resize controls. Grid rows grow
+sortable grid with keyboard-accessible drag handles and resize controls. The
+Overview cards form their own nested sortable grid, so their order can be
+personalized without moving the complete Overview panel. Grid rows grow
 with their content so expanded access settings cannot overlap a panel. Unknown
 panel ids are ignored by the sanitizer and new panels receive catalog defaults,
 so older preferences cannot blank or break a dashboard. The default layout

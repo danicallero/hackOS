@@ -2872,6 +2872,7 @@
   "statisticsPanels": "Paneis de estatísticas",
   "statisticsPanelsHint": "Mostra, agocha, ordena e agrupa os paneis do teu cadro de mando.",
   "statisticsEditModeHint": "Arrastra os paneis para reordenalos. Usa as frechas para cambiar o seu tamaño.",
+  "reorderStatisticsKpiAria": "Reordenar a métrica {name}",
   "resetStatisticsLayout": "Restablecer deseño",
   "customizePanel": "Personalizar panel",
   "finishCustomizePanel": "Rematar personalización",

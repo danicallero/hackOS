@@ -2872,6 +2872,7 @@
   "statisticsPanels": "Statistics panels",
   "statisticsPanelsHint": "Show, hide, order, and group the panels in your dashboard.",
   "statisticsEditModeHint": "Drag panels to reorder them. Use the arrow controls to resize them.",
+  "reorderStatisticsKpiAria": "Reorder {name} metric",
   "resetStatisticsLayout": "Reset layout",
   "customizePanel": "Customize panel",
   "finishCustomizePanel": "Finish customizing",

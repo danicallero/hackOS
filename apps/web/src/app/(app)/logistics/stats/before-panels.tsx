@@ -292,6 +292,8 @@ export function BeforePanels({
           tone={effectiveLayout.tones.overview ?? "neutral"}
           kpiTones={effectiveLayout.tones}
           onToneChange={setTone}
+          kpiOrder={effectiveLayout.overviewOrder}
+          onKpiOrderChange={(overviewOrder) => saveLayout({ ...effectiveLayout, overviewOrder })}
         />
       );
     }
@@ -651,6 +653,8 @@ function OverviewPanel({
   tone,
   kpiTones,
   onToneChange,
+  kpiOrder,
+  onKpiOrderChange,
 }: {
   stats: ApplicationStats | null;
   loading: boolean;
@@ -660,6 +664,8 @@ function OverviewPanel({
   tone: StatTone;
   kpiTones: Record<string, StatTone>;
   onToneChange: (key: string, tone: StatTone) => void;
+  kpiOrder: string[];
+  onKpiOrderChange: (order: string[]) => void;
 }) {
   const { t } = useLocale();
   const confirmed = stats?.overview?.confirmed ?? stats?.funnel?.confirmed;
@@ -677,6 +683,133 @@ function OverviewPanel({
       : confirmed === undefined || fallbackSent === 0
         ? null
         : Math.round((confirmed / fallbackSent) * 100);
+  const kpiSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const onKpiDragEnd = (event: DragEndEvent) => {
+    if (!event.over || event.active.id === event.over.id) return;
+    const from = kpiOrder.indexOf(String(event.active.id));
+    const to = kpiOrder.indexOf(String(event.over.id));
+    if (from !== -1 && to !== -1) onKpiOrderChange(arrayMove(kpiOrder, from, to));
+  };
+  const cardAction = (
+    key: string,
+    label: string,
+    defaultTone: StatTone,
+    dragHandle?: React.ReactNode,
+  ) =>
+    editMode ? (
+      <div className="flex items-center gap-0.5">
+        {dragHandle}
+        <ToneSelect
+          value={kpiTones[`overview:kpi:${key}`] ?? defaultTone}
+          label={label}
+          onChange={(next) => onToneChange(`overview:kpi:${key}`, next)}
+        />
+      </div>
+    ) : undefined;
+  const cards: Record<string, (dragHandle: React.ReactNode) => React.ReactNode> = {
+    submitted: (dragHandle) => (
+      <StatCard
+        label={t("submittedApplications")}
+        value={submitted}
+        icon={FileTextIcon}
+        tone={kpiTones["overview:kpi:submitted"] ?? DEFAULT_OVERVIEW_TONES.submitted}
+        action={cardAction(
+          "submitted",
+          t("submittedApplications"),
+          DEFAULT_OVERVIEW_TONES.submitted,
+          dragHandle,
+        )}
+        className="h-full"
+      />
+    ),
+    confirmed: (dragHandle) => (
+      <StatCard
+        label={t("confirmed")}
+        value={confirmed ?? "—"}
+        icon={BadgeCheckIcon}
+        tone={kpiTones["overview:kpi:confirmed"] ?? DEFAULT_OVERVIEW_TONES.confirmed}
+        action={cardAction(
+          "confirmed",
+          t("confirmed"),
+          DEFAULT_OVERVIEW_TONES.confirmed,
+          dragHandle,
+        )}
+        className="h-full"
+      />
+    ),
+    rejected: (dragHandle) => (
+      <StatCard
+        label={t("rejected")}
+        value={overview?.rejected ?? "—"}
+        icon={ShieldXIcon}
+        tone={kpiTones["overview:kpi:rejected"] ?? DEFAULT_OVERVIEW_TONES.rejected}
+        action={cardAction("rejected", t("rejected"), DEFAULT_OVERVIEW_TONES.rejected, dragHandle)}
+        className="h-full"
+      />
+    ),
+    rate: (dragHandle) => (
+      <StatCard
+        label={t("confirmationRate")}
+        value={rate === null ? "—" : `${rate}%`}
+        icon={BadgeCheckIcon}
+        tone={kpiTones["overview:kpi:rate"] ?? DEFAULT_OVERVIEW_TONES.rate}
+        action={cardAction("rate", t("confirmationRate"), DEFAULT_OVERVIEW_TONES.rate, dragHandle)}
+        className="h-full"
+      />
+    ),
+    expired: (dragHandle) => (
+      <StatCard
+        label={t("expiredConfirmations")}
+        value={overview?.expired_confirmations ?? "—"}
+        icon={TimerOffIcon}
+        tone={kpiTones["overview:kpi:expired"] ?? DEFAULT_OVERVIEW_TONES.expired}
+        action={cardAction(
+          "expired",
+          t("expiredConfirmations"),
+          DEFAULT_OVERVIEW_TONES.expired,
+          dragHandle,
+        )}
+        className="h-full"
+      />
+    ),
+    available: (dragHandle) => (
+      <StatCard
+        label={t("stillAbleToConfirm")}
+        value={overview?.still_able_to_confirm ?? "—"}
+        icon={HourglassIcon}
+        tone={kpiTones["overview:kpi:available"] ?? DEFAULT_OVERVIEW_TONES.available}
+        action={cardAction(
+          "available",
+          t("stillAbleToConfirm"),
+          DEFAULT_OVERVIEW_TONES.available,
+          dragHandle,
+        )}
+        className="h-full"
+      />
+    ),
+    time: (dragHandle) => (
+      <StatCard
+        label={t("averageConfirmationTime")}
+        value={hours(
+          overview?.average_confirmation_time_hours ?? stats?.time_to_confirm_hours?.avg,
+          t,
+        )}
+        hint={`${t("medianConfirmationTime")}: ${hours(stats?.time_to_confirm_hours?.median, t)}`}
+        icon={Clock3Icon}
+        tone={kpiTones["overview:kpi:time"] ?? DEFAULT_OVERVIEW_TONES.time}
+        action={cardAction(
+          "time",
+          t("averageConfirmationTime"),
+          DEFAULT_OVERVIEW_TONES.time,
+          dragHandle,
+        )}
+        className="h-full"
+      />
+    ),
+  };
   return (
     <SectionCard
       title={t("statisticsOverviewPanel")}
@@ -713,126 +846,59 @@ function OverviewPanel({
           }
         />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          <StatCard
-            label={t("submittedApplications")}
-            value={submitted}
-            icon={FileTextIcon}
-            tone={kpiTones["overview:kpi:submitted"] ?? DEFAULT_OVERVIEW_TONES.submitted}
-            action={
-              editMode && (
-                <ToneSelect
-                  value={kpiTones["overview:kpi:submitted"] ?? DEFAULT_OVERVIEW_TONES.submitted}
-                  label={t("submittedApplications")}
-                  onChange={(next) => onToneChange("overview:kpi:submitted", next)}
-                />
-              )
-            }
-            className="h-full"
-          />
-          <StatCard
-            label={t("confirmed")}
-            value={confirmed ?? "—"}
-            icon={BadgeCheckIcon}
-            tone={kpiTones["overview:kpi:confirmed"] ?? DEFAULT_OVERVIEW_TONES.confirmed}
-            action={
-              editMode && (
-                <ToneSelect
-                  value={kpiTones["overview:kpi:confirmed"] ?? DEFAULT_OVERVIEW_TONES.confirmed}
-                  label={t("confirmed")}
-                  onChange={(next) => onToneChange("overview:kpi:confirmed", next)}
-                />
-              )
-            }
-            className="h-full"
-          />
-          <StatCard
-            label={t("rejected")}
-            value={overview?.rejected ?? "—"}
-            icon={ShieldXIcon}
-            tone={kpiTones["overview:kpi:rejected"] ?? DEFAULT_OVERVIEW_TONES.rejected}
-            action={
-              editMode && (
-                <ToneSelect
-                  value={kpiTones["overview:kpi:rejected"] ?? DEFAULT_OVERVIEW_TONES.rejected}
-                  label={t("rejected")}
-                  onChange={(next) => onToneChange("overview:kpi:rejected", next)}
-                />
-              )
-            }
-            className="h-full"
-          />
-          <StatCard
-            label={t("confirmationRate")}
-            value={rate === null ? "—" : `${rate}%`}
-            icon={BadgeCheckIcon}
-            tone={kpiTones["overview:kpi:rate"] ?? DEFAULT_OVERVIEW_TONES.rate}
-            action={
-              editMode && (
-                <ToneSelect
-                  value={kpiTones["overview:kpi:rate"] ?? DEFAULT_OVERVIEW_TONES.rate}
-                  label={t("confirmationRate")}
-                  onChange={(next) => onToneChange("overview:kpi:rate", next)}
-                />
-              )
-            }
-            className="h-full"
-          />
-          <StatCard
-            label={t("expiredConfirmations")}
-            value={overview?.expired_confirmations ?? "—"}
-            icon={TimerOffIcon}
-            tone={kpiTones["overview:kpi:expired"] ?? DEFAULT_OVERVIEW_TONES.expired}
-            action={
-              editMode && (
-                <ToneSelect
-                  value={kpiTones["overview:kpi:expired"] ?? DEFAULT_OVERVIEW_TONES.expired}
-                  label={t("expiredConfirmations")}
-                  onChange={(next) => onToneChange("overview:kpi:expired", next)}
-                />
-              )
-            }
-            className="h-full"
-          />
-          <StatCard
-            label={t("stillAbleToConfirm")}
-            value={overview?.still_able_to_confirm ?? "—"}
-            icon={HourglassIcon}
-            tone={kpiTones["overview:kpi:available"] ?? DEFAULT_OVERVIEW_TONES.available}
-            action={
-              editMode && (
-                <ToneSelect
-                  value={kpiTones["overview:kpi:available"] ?? DEFAULT_OVERVIEW_TONES.available}
-                  label={t("stillAbleToConfirm")}
-                  onChange={(next) => onToneChange("overview:kpi:available", next)}
-                />
-              )
-            }
-            className="h-full"
-          />
-          <StatCard
-            label={t("averageConfirmationTime")}
-            value={hours(
-              overview?.average_confirmation_time_hours ?? stats?.time_to_confirm_hours?.avg,
-              t,
-            )}
-            hint={`${t("medianConfirmationTime")}: ${hours(stats?.time_to_confirm_hours?.median, t)}`}
-            icon={Clock3Icon}
-            tone={kpiTones["overview:kpi:time"] ?? DEFAULT_OVERVIEW_TONES.time}
-            action={
-              editMode && (
-                <ToneSelect
-                  value={kpiTones["overview:kpi:time"] ?? DEFAULT_OVERVIEW_TONES.time}
-                  label={t("averageConfirmationTime")}
-                  onChange={(next) => onToneChange("overview:kpi:time", next)}
-                />
-              )
-            }
-            className="h-full sm:col-span-2 lg:col-span-1 xl:col-span-2"
-          />
-        </div>
+        <DndContext
+          sensors={kpiSensors}
+          collisionDetection={closestCenter}
+          onDragEnd={onKpiDragEnd}
+        >
+          <SortableContext items={kpiOrder} strategy={rectSortingStrategy}>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {kpiOrder.map((key) => (
+                <SortableOverviewKpi key={key} id={key} label={key} wide={key === "time"}>
+                  {(dragHandle) => cards[key]?.(dragHandle)}
+                </SortableOverviewKpi>
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
     </SectionCard>
+  );
+}
+
+function SortableOverviewKpi({
+  id,
+  label,
+  wide,
+  children,
+}: {
+  id: string;
+  label: string;
+  wide: boolean;
+  children: (dragHandle: React.ReactNode) => React.ReactNode;
+}) {
+  const { t } = useLocale();
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "min-w-0",
+        wide && "sm:col-span-2 lg:col-span-1 xl:col-span-2",
+        isDragging && "z-10 opacity-80 shadow-lg",
+      )}
+    >
+      {children(
+        <DragHandle
+          attributes={attributes}
+          listeners={listeners}
+          label={t("reorderStatisticsKpiAria", { name: label })}
+        />,
+      )}
+    </div>
   );
 }
 

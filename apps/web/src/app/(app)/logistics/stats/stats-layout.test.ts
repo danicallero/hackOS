@@ -27,7 +27,15 @@ describe("statistics layout", () => {
         "shirt-sizes": { width: 1, height: 1 },
       },
       tones: {},
+      overviewOrder: ["submitted", "confirmed", "rejected", "rate", "expired", "available", "time"],
     });
+  });
+
+  it("preserves a valid overview KPI order and appends newly introduced KPIs", () => {
+    expect(
+      sanitizeStatsLayout({ overviewOrder: ["time", "confirmed", "missing", "time"] }, ["overview"])
+        .overviewOrder,
+    ).toEqual(["time", "confirmed", "submitted", "rejected", "rate", "expired", "available"]);
   });
 
   it("keeps valid panel and KPI tones while dropping obsolete color preferences", () => {
