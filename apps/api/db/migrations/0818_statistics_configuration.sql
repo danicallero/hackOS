@@ -23,22 +23,9 @@ UPDATE applications a
    )
  WHERE jsonb_typeof(a.template) = 'array';
 
-UPDATE application_form_versions v
-   SET template = COALESCE(
-     (
-       SELECT jsonb_agg(
-         CASE
-           WHEN field->>'kind' IN ('select', 'multiselect', 'checkbox', 'university')
-                AND NOT (field ? 'reporting')
-             THEN field || '{"reporting": true}'::jsonb
-           ELSE field
-         END ORDER BY ordinal
-       )
-       FROM jsonb_array_elements(v.template) WITH ORDINALITY AS fields(field, ordinal)
-     ),
-     '[]'::jsonb
-   )
- WHERE jsonb_typeof(v.template) = 'array';
+/* Form versions are immutable H54 snapshots. Their historical templates must
+ * remain byte-for-byte stable; statistics use the current application
+ * template above for configuration and never rewrite a submitted snapshot. */
 
 /* Generic scope ACLs use the same role-position and permission_state model as
  * application_stats_panel_role_access. `scope_key` is an opaque resource key
