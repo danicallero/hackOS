@@ -52,8 +52,8 @@
   "scannerStateAttention": "Necesita atención",
   "scannerAwaitingAcknowledgement": "Esperando la confirmación del servidor.",
   "scannerOfflineWaiting": "Sigue guardado; se reintentará cuando vuelva la conexión.",
-  "queueStatusWaiting": "En espera",
-  "queueStatusCalled": "Llamado",
+  "queueStatusWaiting": "En cola",
+  "queueStatusCalled": "Esperando en la puerta",
   "queueStatusPresenting": "Presentando",
   "queueStatusCompleted": "Evaluado",
   "queueStatusDisqualified": "Descalificado"

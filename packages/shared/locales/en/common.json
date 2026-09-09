@@ -52,8 +52,8 @@
   "scannerStateAttention": "Needs attention",
   "scannerAwaitingAcknowledgement": "Waiting for server acknowledgement.",
   "scannerOfflineWaiting": "Still saved; it will retry when the connection returns.",
-  "queueStatusWaiting": "Waiting",
-  "queueStatusCalled": "Called",
+  "queueStatusWaiting": "In queue",
+  "queueStatusCalled": "Waiting at the door",
   "queueStatusPresenting": "Presenting",
   "queueStatusCompleted": "Scored",
   "queueStatusDisqualified": "Disqualified"

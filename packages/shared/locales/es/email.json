@@ -35,15 +35,15 @@
     "queue": {
       "called": {
         "subject": "Han llamado a tu equipo",
-        "body": "Hola {{name}},\n\nHan llamado a tu equipo {{teamName}} para {{challengeName}}. Dirígete a la sala {{roomName}} y espera en la puerta hasta que te llamen."
+        "body": "Hola {{name}},\n\nHan llamado a vuestro equipo {{teamName}} para {{challengeName}}. Id a la puerta de la sala {{roomName}} y esperad fuera. No entréis todavía."
       },
       "precall": {
-        "subject": "Te toca pronto",
-        "body": "Hola {{name}},\n\nA tu equipo {{teamName}} le llamarán en unos {{etaMinutes}} minutos para {{challengeName}}. Ve preparándote."
+        "subject": "Prepárate: te llamaremos pronto",
+        "body": "Hola {{name}},\n\nLlamaremos pronto a vuestro equipo {{teamName}} para {{challengeName}}. Preparaos, pero aún no vayáis a la sala. Tiempo aproximado: {{etaMinutes}} minutos."
       },
       "enter": {
         "subject": "Ya puedes entrar",
-        "body": "Hola {{name}},\n\nEs el turno de tu equipo para {{challengeName}}. Entra ya a la sala {{roomName}}."
+        "body": "Hola {{name}},\n\nEntrad ahora en la sala {{roomName}}. Es el turno de vuestro equipo para {{challengeName}}."
       },
       "message": {
         "subject": "Mensaje sobre {{challengeName}}",
@@ -76,8 +76,8 @@
   "push": {
     "queue": {
       "precall": {
-        "title": "Te toca pronto — prepárate",
-        "body": "Llamarán a tu equipo {{teamName}} para {{challengeName}} en unos {{etaMinutes}} minutos."
+        "title": "Preparaos: os llamaremos pronto",
+        "body": "Aún no vayáis a la sala. Llamaremos a {{teamName}} para {{challengeName}} en unos {{etaMinutes}} minutos."
       },
       "staff": {
         "enter": {
@@ -94,11 +94,11 @@
         "body": "{{message}}"
       },
       "called": {
-        "title": "Ve a esperar a la sala {{roomName}}",
-        "body": "Espera en la puerta para {{challengeName}}. Te avisaremos para entrar."
+        "title": "Ve a la puerta de {{roomName}}",
+        "body": "Espera fuera para {{challengeName}}. No entres hasta recibir el aviso."
       },
       "enter": {
-        "title": "Entra ya en la sala {{roomName}}",
+        "title": "Entra ahora en {{roomName}}",
         "body": "Es el turno de tu equipo para {{challengeName}}."
       }
     },

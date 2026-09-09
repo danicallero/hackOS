@@ -35,15 +35,15 @@
     "queue": {
       "called": {
         "subject": "Chamaron ao teu equipo",
-        "body": "Ola {{name}},\n\nChamaron ao teu equipo {{teamName}} para {{challengeName}}. Diríxete á sala {{roomName}} e agarda na porta ata que te chamen."
+        "body": "Ola {{name}},\n\nChamaron ao voso equipo {{teamName}} para {{challengeName}}. Ide á porta da sala {{roomName}} e agardade fóra. Aínda non entredes."
       },
       "precall": {
-        "subject": "Tócache pronto",
-        "body": "Ola {{name}},\n\nAo teu equipo {{teamName}} chamaranlle en uns {{etaMinutes}} minutos para {{challengeName}}. Vai preparándote."
+        "subject": "Prepárate: chamarémosvos axiña",
+        "body": "Ola {{name}},\n\nChamarémosvos axiña ao voso equipo {{teamName}} para {{challengeName}}. Preparádevos, pero aínda non vaiades á sala. Tempo aproximado: {{etaMinutes}} minutos."
       },
       "enter": {
         "subject": "Xa podes entrar",
-        "body": "Ola {{name}},\n\nÉ a quenda do teu equipo para {{challengeName}}. Entra xa á sala {{roomName}}."
+        "body": "Ola {{name}},\n\nEntrade agora na sala {{roomName}}. É a quenda do voso equipo para {{challengeName}}."
       },
       "message": {
         "subject": "Mensaxe sobre {{challengeName}}",
@@ -76,8 +76,8 @@
   "push": {
     "queue": {
       "precall": {
-        "title": "Tócache pronto — prepárate",
-        "body": "Chamaran ao teu equipo {{teamName}} para {{challengeName}} en uns {{etaMinutes}} minutos."
+        "title": "Preparádevos: chamarémosvos axiña",
+        "body": "Aínda non vaiades á sala. Chamaremos ao equipo {{teamName}} para {{challengeName}} en uns {{etaMinutes}} minutos."
       },
       "staff": {
         "enter": {
@@ -94,11 +94,11 @@
         "body": "{{message}}"
       },
       "called": {
-        "title": "Vai agardar á sala {{roomName}}",
-        "body": "Agarda na porta para {{challengeName}}. Avisarémoste cando poidas entrar."
+        "title": "Vai á porta de {{roomName}}",
+        "body": "Agardade fóra para {{challengeName}}. Non entredes ata recibir o aviso."
       },
       "enter": {
-        "title": "Entra xa na sala {{roomName}}",
+        "title": "Entra agora na sala {{roomName}}",
         "body": "É a quenda do teu equipo para {{challengeName}}."
       }
     },

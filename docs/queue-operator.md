@@ -69,6 +69,53 @@ assignments; those sponsor/admin operations belong to the queue configuration
 and detail surfaces in PR #528. Queue ordering still goes through the existing
 audited position engine.
 
+## Door buffer policy
+
+The number of teams called to wait at a room door is a buffer, not a second
+queue. It must be sized per room and per queue group, and must count distinct
+teams (`repo_id`), not people or challenge memberships. A project entered in
+several challenges of the same shared queue is still one team to call.
+
+The operational rule is:
+
+- large or busy queue: keep **two teams** called and waiting at each active
+  room door;
+- small queue: keep **one team** called and waiting at each active room door;
+- never call more teams than the number of eligible teams still waiting;
+- after one team enters, refill the room's buffer immediately when another
+  eligible team exists.
+
+For an initial event-day policy, treat a queue with five or fewer eligible
+teams remaining as small and use a one-team door buffer. Above five, use two.
+This threshold is an operational starting point, not a domain invariant: it
+should be configurable or tuned from observed travel time, no-shows, and the
+average judging duration.
+
+The trade-off is intentional. Two teams are the safer default because one
+team can be late or unavailable while the other remains ready. One team is
+more appropriate for a five-project queue because pre-calling half the queue
+creates unnecessary movement and makes the “wait at the door” state harder to
+understand. With a one-team buffer, the operator must refill immediately when
+the team enters; a completely idle-free guarantee is only possible while a
+second team is already at the door.
+
+If a queue group is served by `R` active rooms, the target is `R` or `2R`
+called teams respectively. It is not multiplied by the number of challenges
+in the group. The target is capped by the eligible, non-busy teams available;
+the cross-room member-busy guard may therefore leave a room below target.
+
+Participant-facing stages must remain explicit:
+
+1. **Pre-call:** “Get ready. We will call you soon. Do not go to the room
+   yet.”
+2. **Called to door:** “Go to the door of Room X and wait outside. Do not
+   enter yet.”
+3. **Enter:** “Enter Room X now. It is your turn.”
+
+The `called` state must never be labelled as “your turn” without saying that
+the team is waiting outside. The operator actions should use equally explicit
+labels: **Call to door**, **Remind: wait outside**, and **Call to enter**.
+
 ## Emergency full reset
 
 Event settings → **Danger zone** contains an event-wide recovery reset. The tab

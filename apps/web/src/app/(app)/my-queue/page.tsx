@@ -104,7 +104,7 @@ export default function MyQueuePage() {
           const room = p.roomName
             ? formatRoom({ id: p.roomId, name: p.roomName, location: p.roomLocation })
             : t("yourRoom");
-          toast.success(t("yourTurn", { room }), { duration: 12_000 });
+          toast.success(t("queueGoToDoor", { room }), { duration: 12_000 });
         }
       } else if (env.type === EVENTS.USER_QUEUE_PRECALL) {
         const p = env.data as PrecallPayload;
@@ -295,7 +295,7 @@ function CalledNotice({ entry }: { entry: MyQueueEntry }) {
       </div>
       <div className="min-w-0 space-y-1">
         <p className="text-base font-semibold">
-          {t("yourTurn", { room: entry.room ? formatRoom(entry.room) : t("yourRoom") })}
+          {t("queueGoToDoor", { room: entry.room ? formatRoom(entry.room) : t("yourRoom") })}
         </p>
         <p className="text-success/90 text-sm">
           {textForDisplay(entry.challengeTitle as TranslatedText)} · {entry.repoName}

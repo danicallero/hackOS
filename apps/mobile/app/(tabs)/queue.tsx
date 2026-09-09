@@ -1,7 +1,17 @@
 import { EVENTS, type SseEnvelope } from "@hackos/shared/events";
 import { useFocusEffect, useScrollToTop } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, RefreshControl, Text, useColorScheme, View } from "react-native";
+import {
+  FlatList,
+  Modal,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Text,
+  useColorScheme,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { EmptyState, StatusPill } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
@@ -10,6 +20,7 @@ import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { subscribeToCategory } from "@/lib/notification-events";
+import { hasSeenQueueTutorial, markQueueTutorialSeen } from "@/lib/queue-tutorial";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { subscribeToServerEvent } from "@/lib/server-events";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
@@ -40,10 +51,34 @@ export default function QueueScreen() {
   useColorScheme();
   const { t } = useLocale();
   const { me } = useMeContext();
+  const userId = me?.id ?? null;
   const androidTopInset = useAndroidTopInset();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const [precalled, setPrecalled] = useState<Set<number>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
+  const [queueTutorialVisible, setQueueTutorialVisible] = useState(false);
+  const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    let cancelled = false;
+    if (userId == null) {
+      setQueueTutorialVisible(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+    void hasSeenQueueTutorial(userId).then((seen) => {
+      if (!cancelled) setQueueTutorialVisible(!seen);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  const dismissQueueTutorial = useCallback(() => {
+    setQueueTutorialVisible(false);
+    if (userId != null) void markQueueTutorialSeen(userId);
+  }, [userId]);
 
   const fetchQueue = useCallback(() => apiFetch<QueueEntry[]>("/api/queue/me"), []);
   const { data, loading, error, staleSince, load } = useCachedApi(
@@ -119,35 +154,158 @@ export default function QueueScreen() {
   );
 
   return (
-    <FlatList
-      ref={listRef}
-      data={orderedEntries}
-      keyExtractor={(item) => String(item.entryId)}
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{
-        flexGrow: 1,
-        gap: 12,
-        padding: 16,
-        paddingBottom: tabBarBottomInset + 16,
-        paddingTop: 16 + androidTopInset,
-      }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      ListHeaderComponent={<StaleDataBanner updatedAt={staleSince} />}
-      ListEmptyComponent={
-        loading ? (
-          <RequestFeedback loading />
-        ) : error ? (
-          <RequestFeedback error={error} onRetry={() => void load()} />
-        ) : (
-          <EmptyState
-            icon="person.line.dotted.person.fill"
-            title={t("queueEmptyTitle")}
-            description={t("queueEmpty")}
-          />
-        )
-      }
-      renderItem={renderQueueCard}
-    />
+    <>
+      <FlatList
+        ref={listRef}
+        data={orderedEntries}
+        keyExtractor={(item) => String(item.entryId)}
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={{
+          flexGrow: 1,
+          gap: 12,
+          padding: 16,
+          paddingBottom: tabBarBottomInset + 16,
+          paddingTop: 16 + androidTopInset,
+        }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        ListHeaderComponent={<StaleDataBanner updatedAt={staleSince} />}
+        ListEmptyComponent={
+          loading ? (
+            <RequestFeedback loading />
+          ) : error ? (
+            <RequestFeedback error={error} onRetry={() => void load()} />
+          ) : (
+            <EmptyState
+              icon="person.line.dotted.person.fill"
+              title={t("queueEmptyTitle")}
+              description={t("queueEmpty")}
+            />
+          )
+        }
+        renderItem={renderQueueCard}
+      />
+      <QueueTutorial
+        visible={queueTutorialVisible}
+        bottomInset={insets.bottom}
+        onDismiss={dismissQueueTutorial}
+      />
+    </>
+  );
+}
+
+function QueueTutorial({
+  visible,
+  bottomInset,
+  onDismiss,
+}: {
+  visible: boolean;
+  bottomInset: number;
+  onDismiss: () => void;
+}) {
+  const { t } = useLocale();
+  const steps = [
+    {
+      icon: "bell.badge.fill" as const,
+      title: t("queueHowItWorksPrepareTitle"),
+      body: t("queueHowItWorksPrepareBody"),
+    },
+    {
+      icon: "door.left.hand.closed" as const,
+      title: t("queueHowItWorksDoorTitle"),
+      body: t("queueHowItWorksDoorBody"),
+    },
+    {
+      icon: "door.left.hand.open" as const,
+      title: t("queueHowItWorksEnterTitle"),
+      body: t("queueHowItWorksEnterBody"),
+    },
+  ];
+
+  return (
+    <Modal
+      animationType="slide"
+      accessibilityViewIsModal
+      onRequestClose={onDismiss}
+      transparent
+      visible={visible}
+    >
+      <View style={{ backgroundColor: colors.background, flex: 1, paddingTop: 20 }}>
+        <ScrollView
+          contentContainerStyle={{
+            gap: 20,
+            padding: 24,
+            paddingBottom: Math.max(bottomInset, 16) + 24,
+          }}
+          contentInsetAdjustmentBehavior="automatic"
+        >
+          <View style={{ gap: 8 }}>
+            <Text
+              accessibilityRole="header"
+              selectable
+              style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}
+            >
+              {t("queueHowItWorksTitle")}
+            </Text>
+            <Text selectable style={{ color: colors.secondaryLabel, fontSize: 16, lineHeight: 23 }}>
+              {t("queueHowItWorksIntro")}
+            </Text>
+          </View>
+
+          <View style={{ gap: 12 }}>
+            {steps.map((step) => (
+              <View
+                key={step.title}
+                style={{
+                  backgroundColor: colors.surface,
+                  borderCurve: "continuous",
+                  borderRadius: 16,
+                  flexDirection: "row",
+                  gap: 12,
+                  padding: 16,
+                }}
+              >
+                <SymbolView
+                  accessible={false}
+                  name={step.icon}
+                  size={22}
+                  tintColor={colors.accent}
+                />
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text selectable style={{ color: colors.label, fontSize: 17, fontWeight: "700" }}>
+                    {step.title}
+                  </Text>
+                  <Text
+                    selectable
+                    style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 21 }}
+                  >
+                    {step.body}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+
+          <Pressable
+            accessibilityLabel={t("queueHowItWorksDone")}
+            accessibilityRole="button"
+            onPress={onDismiss}
+            style={({ pressed }) => ({
+              alignItems: "center",
+              backgroundColor: colors.accent,
+              borderCurve: "continuous",
+              borderRadius: 14,
+              minHeight: 52,
+              justifyContent: "center",
+              opacity: pressed ? 0.7 : 1,
+            })}
+          >
+            <Text style={{ color: colors.accentText, fontSize: 17, fontWeight: "700" }}>
+              {t("queueHowItWorksDone")}
+            </Text>
+          </Pressable>
+        </ScrollView>
+      </View>
+    </Modal>
   );
 }
 

@@ -374,7 +374,12 @@ distributed to other Expo Router apps without importing hackOS code.
   is installed, it falls back to the existing Expo share/save sheet.
   `queue.tsx` refetches immediately on a "queue" push
   (below) and also polls `GET /api/queue/me` every 15s while focused as a
-  fallback. `notifications.tsx` pages past the initial 20 inbox messages on
+  fallback. On the first visit to My queue for each account, the app shows a
+  persisted native tutorial explaining the three participant-facing stages:
+  get ready (do not go to the room), wait outside the door, and enter only
+  after the explicit entry notice or staff instruction. The tutorial is stored
+  in account-scoped SecureStore and does not change the queue state machine.
+  `notifications.tsx` pages past the initial 20 inbox messages on
   demand, allows an expanded message to be deleted after native confirmation,
   and mirrors the web activity/kind reminder preferences. On Android its
   inbox mounts the same native scroll gesture boundary as Schedule, so
