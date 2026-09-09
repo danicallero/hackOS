@@ -22,6 +22,8 @@ lifecycle is not a duplicate standalone panel. Application-only time series are
 separate from generic user dimensions such as shirt size and food intolerance.
 Form-question panels are generated only for fields explicitly published through
 `field.statistics` (with `reporting` retained as a legacy compatibility flag).
+The application builder presents that opt-in as integration into Logistics;
+the same configured field is included in the dashboard and its authorized CSV.
 
 Scope keys are stable resource identifiers: `application:<id>` and
 `role:<id>`. The API validates every selected key against the caller's
@@ -50,6 +52,8 @@ data rather than chart logic. `age` uses the event's stable reference date
 `study_level` maps graduation years relative to the event year and configured
 program length. Neither transformation returns its source value. The
 statistics export uses the same authorized aggregate response as the dashboard.
+That export includes headline metrics, visible time series, logistics
+distributions, and integrated application-question distributions.
 
 ## Permission resolution
 

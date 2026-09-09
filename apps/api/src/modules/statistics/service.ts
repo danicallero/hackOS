@@ -574,6 +574,21 @@ export async function statisticsCsv(
     | Array<{ label: Record<string, string>; n: number }>
     | undefined) ?? [])
     add("food-intolerances", row.label.en ?? "", row.n);
+  const seriesPanels: Record<string, { panel: string; category: string }> = {
+    submissions_by_day: { panel: "applications-over-time", category: "bucket" },
+    confirmations_by_day: { panel: "confirmations-over-time", category: "bucket" },
+    submissions_by_hour_of_day: { panel: "applications-by-hour", category: "hour" },
+    submissions_by_day_of_week: { panel: "applications-by-day-of-week", category: "dow" },
+  };
+  for (const [seriesKey, rows] of Object.entries(
+    (result.time_series as Record<string, Array<Record<string, unknown>>> | undefined) ?? {},
+  )) {
+    const definition = seriesPanels[seriesKey];
+    if (!definition) continue;
+    for (const row of rows) {
+      add(definition.panel, String(row[definition.category] ?? ""), Number(row.n ?? 0));
+    }
+  }
   for (const distribution of (result.field_distributions as
     | Array<{
         field: { key: string; label: Record<string, string> };

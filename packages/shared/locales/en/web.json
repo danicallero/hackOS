@@ -2467,7 +2467,7 @@
   "applicationScopeLabel": "Application scope",
   "roleScopeLabel": "Role scope",
   "noApplicationStatistics": "No application statistics",
-  "includeInStatistics": "Include in statistics",
+  "includeInStatistics": "Integrate into Logistics statistics",
   "applicationData": "Form data",
   "manageStatisticsVisibility": "Manage visibility",
   "statisticsRoles": "Roles with Stats access",
