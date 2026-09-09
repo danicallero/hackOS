@@ -65,3 +65,42 @@ concrete blocker.
 ### Exceptions
 If the user explicitly says “draft”, “review”, or otherwise narrows the PR
 request, follow that more specific instruction.
+
+## [R003] Verify URL synchronization under rerenders
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-09-09
+
+### Trigger
+When a client component synchronizes tabs, filters, dialogs, or other local
+state with the browser URL.
+
+### Mistake
+A URL setter changed identity across renders and wrote the already-canonical
+value repeatedly from an effect, eventually exceeding the browser's
+`history.replaceState` rate limit. Static checks did not expose the loop, and
+runtime verification happened only after committing.
+
+### Lesson
+URL synchronization must be idempotent and stable under unrelated rerenders.
+Never call `pushState`, `replaceState`, `router.push`, or `router.replace` when
+the canonical target already matches the current URL.
+
+### Action
+Keep URL mutation callbacks referentially stable, read changing navigation
+inputs through a current ref when needed, and guard same-value writes before
+calling the router. Perform runtime interaction verification before committing
+URL-synchronized UI changes.
+
+### Validation
+Add tests proving that the setter remains stable across rerenders and that
+selecting the current canonical value performs no history mutation. Exercise
+the affected interaction in a running browser and confirm no repeated requests,
+navigation, or runtime security error occurs.
+
+### Exceptions
+An intentionally repeated navigation is allowed only when the product behavior
+explicitly requires a refresh and uses a dedicated refresh action rather than
+implicit state synchronization.
