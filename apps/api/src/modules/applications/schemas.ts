@@ -56,6 +56,30 @@ const optionSchema = z.object({
 });
 
 /**
+ * H27: a question becomes a statistics panel only when its author explicitly
+ * publishes it.  Keeping the panel configuration beside the question keeps
+ * the deployment/form snapshot as the source of truth for both the response
+ * validator and the reporting catalog.
+ */
+export const STATISTICS_VISUALIZATIONS = ["bar", "pie", "line"] as const;
+export const STATISTICS_AGGREGATIONS = ["count", "sum", "average"] as const;
+export const STATISTICS_TRANSFORMATIONS = ["none", "age", "study_level"] as const;
+
+export const statisticsConfigSchema = z
+  .object({
+    enabled: z.boolean().default(false),
+    label: i18nSchema.optional(),
+    visualization: z.enum(STATISTICS_VISUALIZATIONS).optional(),
+    aggregation: z.enum(STATISTICS_AGGREGATIONS).default("count"),
+    transformation: z.enum(STATISTICS_TRANSFORMATIONS).default("none"),
+    /** Four-year programmes are the default; event authors can override this. */
+    program_years: z.number().int().min(1).max(12).optional(),
+  })
+  .strict();
+
+export type StatisticsConfig = z.infer<typeof statisticsConfigSchema>;
+
+/**
  * Response-validation rules (H11), checked by `validateResponses` at submit
  * time on top of the kind-shape check. Which sub-fields apply depends on
  * `kind`: min_length/max_length/pattern for text/textarea, min/max for
@@ -112,12 +136,12 @@ export const templateFieldSchema = z
     /** Optional stable reporting dimension; never controls retention by itself. */
     anonymous_audit_dimension: anonymousAuditDimensionSchema,
     /**
-     * Opt a free-form/number field into the aggregate pre-event dashboard.
-     * Choice fields are safe and included by default; this explicit switch is
-     * required for every other kind so identifiers and prose never become a
-     * report merely because a form author added a question.
+     * Legacy H27 switch.  Existing deployments are backfilled to preserve
+     * their old choice-field panels; new questions must opt in explicitly.
      */
     reporting: z.boolean().optional(),
+    /** H27 configurable question-statistics definition. */
+    statistics: statisticsConfigSchema.optional(),
   })
   .refine(
     (f) => !(f.kind === "select" || f.kind === "multiselect") || (f.options?.length ?? 0) > 0,

@@ -13,10 +13,17 @@ export interface StatsLayoutConfig {
   hidden: string[];
   charts: Record<string, StatsChartType>;
   sections: StatsSection[];
+  sizes: Record<string, { width: 1 | 2; height: 1 | 2 }>;
 }
 
 export function defaultStatsChartType(panelKey: string, fieldKind?: string): StatsChartType {
-  if (panelKey.includes("by-day") || panelKey.includes("by-hour") || panelKey.includes("by-dow")) {
+  if (
+    panelKey.includes("by-day") ||
+    panelKey.includes("by-hour") ||
+    panelKey.includes("by-dow") ||
+    panelKey.includes("over-time") ||
+    panelKey === "applications-by-day-of-week"
+  ) {
     return "line";
   }
   if (fieldKind === "checkbox") return "pie";
@@ -55,10 +62,22 @@ export function sanitizeStatsLayout(raw: unknown, availablePanelKeys: string[]):
         return [{ id: item.id, title: item.title, panelKeys }];
       })
     : [];
+  const sizes: Record<string, { width: 1 | 2; height: 1 | 2 }> = {};
+  if (value.sizes && typeof value.sizes === "object") {
+    for (const [key, rawSize] of Object.entries(value.sizes as Record<string, unknown>)) {
+      if (!available.has(key) || !rawSize || typeof rawSize !== "object") continue;
+      const size = rawSize as Record<string, unknown>;
+      sizes[key] = {
+        width: size.width === 2 ? 2 : 1,
+        height: size.height === 2 ? 2 : 1,
+      };
+    }
+  }
   return {
     order,
     hidden: [...new Set(hidden)],
     charts,
     sections,
+    sizes,
   };
 }

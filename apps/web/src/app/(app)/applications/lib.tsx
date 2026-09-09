@@ -42,6 +42,15 @@ export interface FieldOption {
   label: I18nText;
 }
 
+export interface StatisticsConfig {
+  enabled: boolean;
+  label?: I18nText;
+  visualization?: "bar" | "pie" | "line";
+  aggregation?: "count" | "sum" | "average";
+  transformation?: "none" | "age" | "study_level";
+  program_years?: number;
+}
+
 export interface TemplateField {
   key: string;
   label: I18nText;
@@ -67,8 +76,10 @@ export interface TemplateField {
   retention_mode?: "none" | "anonymous_audit";
   /** Optional open semantic slug for anonymous-audit reporting. */
   anonymous_audit_dimension?: string | null;
-  /** Include this answer's aggregate distribution in pre-event statistics. */
+  /** Legacy form of the explicit statistics publication switch. */
   reporting?: boolean;
+  /** Configuration for this question's aggregate statistics panel. */
+  statistics?: StatisticsConfig;
 }
 
 /** Response-validation rules (H11) — which sub-fields apply depends on the

@@ -11,31 +11,30 @@ import {
 } from "@dnd-kit/core";
 import {
   arrayMove,
+  rectSortingStrategy,
   SortableContext,
   sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
+  useSortable,
 } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
+  ArrowDownIcon,
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  ArrowUpIcon,
   BarChart3Icon,
+  EyeIcon,
   EyeOffIcon,
-  GripVerticalIcon,
   LayoutDashboardIcon,
   LineChartIcon,
   PieChartIcon,
-  PlusIcon,
-  Trash2Icon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
-import { DragHandle, SortableItem } from "@/components/common/drag-handle";
+import { DragHandle } from "@/components/common/drag-handle";
 import { IconButton } from "@/components/common/icon-button";
-import { Modal } from "@/components/common/modal";
 import { SectionCard } from "@/components/common/section-card";
 import { StatCard } from "@/components/common/stat-card";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -45,6 +44,7 @@ import {
 } from "@/components/ui/select";
 import { LOCALE_CODES, type MessageKey, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { uiPrefsApi } from "@/lib/logistics";
+import { cn } from "@/lib/utils";
 import { type ApplicationStats, applicationStatusLabel } from "./model";
 import { StatsChart, type StatsChartDatum, type StatsChartType } from "./stats-chart";
 import { defaultStatsChartType, type StatsLayoutConfig, sanitizeStatsLayout } from "./stats-layout";
@@ -63,23 +63,26 @@ const BASE_PANEL_LABELS: Record<string, MessageKey> = {
   funnel: "applicationFunnel",
   "shirt-sizes": "shirtSizeDistribution",
   "food-intolerances": "dietaryDistribution",
-  "submissions-by-day": "submissionEvolution",
-  "confirmations-by-day": "confirmationEvolution",
-  "submissions-by-hour": "submissionsByHour",
-  "submissions-by-dow": "submissionsByDay",
+  "applications-over-time": "applicationsOverTime",
+  "confirmations-over-time": "confirmationsOverTime",
+  "applications-by-hour": "submissionsByHour",
+  "applications-by-day-of-week": "submissionsByDay",
 };
 
 function panelKeysForStats(stats: ApplicationStats | null): string[] {
   if (!stats) return ["overview"];
+  if (stats.panel_keys && stats.panel_keys.length > 0) return stats.panel_keys;
   const keys: string[] = [];
   if (stats.counts_by_status !== undefined) keys.push("overview");
   if (stats.funnel !== undefined) keys.push("funnel");
   if (stats.shirt_sizes_confirmed !== undefined) keys.push("shirt-sizes");
   if (stats.food_intolerances_confirmed !== undefined) keys.push("food-intolerances");
-  if (stats.time_series?.submissions_by_day !== undefined) keys.push("submissions-by-day");
-  if (stats.time_series?.confirmations_by_day !== undefined) keys.push("confirmations-by-day");
-  if (stats.time_series?.submissions_by_hour_of_day !== undefined) keys.push("submissions-by-hour");
-  if (stats.time_series?.submissions_by_day_of_week !== undefined) keys.push("submissions-by-dow");
+  if (stats.time_series?.submissions_by_day !== undefined) keys.push("applications-over-time");
+  if (stats.time_series?.confirmations_by_day !== undefined) keys.push("confirmations-over-time");
+  if (stats.time_series?.submissions_by_hour_of_day !== undefined)
+    keys.push("applications-by-hour");
+  if (stats.time_series?.submissions_by_day_of_week !== undefined)
+    keys.push("applications-by-day-of-week");
   for (const field of stats.field_distributions ?? [])
     keys.push(`field:${field.field.key.toLowerCase()}`);
   return keys;
@@ -90,18 +93,18 @@ function panelTitle(key: string, labels: Map<string, string>, t: Translate): str
   return base ? t(base) : (labels.get(key) ?? key.replace(/^field:/, "").replaceAll(/[-_.]/g, " "));
 }
 
-function readLocalLayout(applicationId: number): unknown {
+function readLocalLayout(layoutKey: string): unknown {
   try {
-    const raw = JSON.parse(localStorage.getItem(`${STORAGE_KEY}:${applicationId}`) ?? "null");
+    const raw = JSON.parse(localStorage.getItem(`${STORAGE_KEY}:${layoutKey}`) ?? "null");
     return raw;
   } catch {
     return null;
   }
 }
 
-function writeLocalLayout(applicationId: number, layout: StatsLayoutConfig): void {
+function writeLocalLayout(layoutKey: string, layout: StatsLayoutConfig): void {
   try {
-    localStorage.setItem(`${STORAGE_KEY}:${applicationId}`, JSON.stringify(layout));
+    localStorage.setItem(`${STORAGE_KEY}:${layoutKey}`, JSON.stringify(layout));
   } catch {
     // localStorage is an acceleration only; the account preference remains authoritative.
   }
@@ -109,33 +112,38 @@ function writeLocalLayout(applicationId: number, layout: StatsLayoutConfig): voi
 
 export function BeforePanels({
   applicationId,
+  layoutKey,
   stats,
   loading,
   error,
   onRetry,
+  editMode = false,
 }: {
   applicationId: number | null;
+  layoutKey?: string;
   stats: ApplicationStats | null;
   loading: boolean;
   error: string | null;
   onRetry: () => void;
+  editMode?: boolean;
 }) {
   const { language, t } = useLocale();
+  const resolvedLayoutKey = layoutKey ?? (applicationId ? String(applicationId) : "");
   const availablePanelKeys = useMemo(() => panelKeysForStats(stats), [stats]);
   const [layout, setLayout] = useState<StatsLayoutConfig>(() =>
     sanitizeStatsLayout(null, ["overview"]),
   );
-  const loadedApplication = useRef<number | null>(null);
+  const loadedLayout = useRef<string | null>(null);
   const availablePanelKeysRef = useRef(availablePanelKeys);
   availablePanelKeysRef.current = availablePanelKeys;
   const rawLayouts = useRef<Record<string, unknown>>({});
   const storedLayouts = useRef<Record<string, unknown>>({});
 
   useEffect(() => {
-    if (!applicationId || loadedApplication.current === applicationId) return;
-    loadedApplication.current = applicationId;
-    const local = readLocalLayout(applicationId);
-    rawLayouts.current[String(applicationId)] = local;
+    if (!resolvedLayoutKey || loadedLayout.current === resolvedLayoutKey) return;
+    loadedLayout.current = resolvedLayoutKey;
+    const local = readLocalLayout(resolvedLayoutKey);
+    rawLayouts.current[resolvedLayoutKey] = local;
     setLayout(sanitizeStatsLayout(local, availablePanelKeysRef.current));
     let active = true;
     uiPrefsApi
@@ -147,12 +155,12 @@ export function BeforePanels({
             ? (prefs.applicationStatsLayouts as Record<string, unknown>)
             : {};
         storedLayouts.current = remoteStore;
-        const remote = remoteStore[String(applicationId)] ?? prefs.applicationStatsPanels;
+        const remote = remoteStore[resolvedLayoutKey] ?? prefs.applicationStatsPanels;
         if (remote) {
-          rawLayouts.current[String(applicationId)] = remote;
+          rawLayouts.current[resolvedLayoutKey] = remote;
           const next = sanitizeStatsLayout(remote, availablePanelKeysRef.current);
           setLayout(next);
-          writeLocalLayout(applicationId, next);
+          writeLocalLayout(resolvedLayoutKey, next);
         }
       })
       .catch(() => {
@@ -161,13 +169,13 @@ export function BeforePanels({
     return () => {
       active = false;
     };
-  }, [applicationId]);
+  }, [resolvedLayoutKey]);
 
   useEffect(() => {
-    if (!applicationId) return;
-    const raw = rawLayouts.current[String(applicationId)];
+    if (!resolvedLayoutKey) return;
+    const raw = rawLayouts.current[resolvedLayoutKey];
     if (raw !== undefined) setLayout(sanitizeStatsLayout(raw, availablePanelKeys));
-  }, [applicationId, availablePanelKeys]);
+  }, [resolvedLayoutKey, availablePanelKeys]);
 
   const effectiveLayout = useMemo(
     () => sanitizeStatsLayout(layout, availablePanelKeys),
@@ -178,7 +186,7 @@ export function BeforePanels({
       new Map(
         (stats?.field_distributions ?? []).map((distribution) => [
           `field:${distribution.field.key.toLowerCase()}`,
-          pickText(distribution.field.label, language),
+          pickText(distribution.field.statistics?.label ?? distribution.field.label, language),
         ]),
       ),
     [language, stats?.field_distributions],
@@ -187,14 +195,14 @@ export function BeforePanels({
   const saveLayout = useCallback(
     (next: StatsLayoutConfig) => {
       setLayout(next);
-      if (!applicationId) return;
-      rawLayouts.current[String(applicationId)] = next;
-      writeLocalLayout(applicationId, next);
-      const nextStore = { ...storedLayouts.current, [String(applicationId)]: next };
+      if (!resolvedLayoutKey) return;
+      rawLayouts.current[resolvedLayoutKey] = next;
+      writeLocalLayout(resolvedLayoutKey, next);
+      const nextStore = { ...storedLayouts.current, [resolvedLayoutKey]: next };
       storedLayouts.current = nextStore;
       void uiPrefsApi.set("applicationStatsLayouts", nextStore).catch(() => {});
     },
-    [applicationId],
+    [resolvedLayoutKey],
   );
 
   const togglePanel = (panelKey: string) => {
@@ -215,8 +223,30 @@ export function BeforePanels({
   const visibleKeys = effectiveLayout.order.filter(
     (key) => availablePanelKeys.includes(key) && !effectiveLayout.hidden.includes(key),
   );
-  const groupedKeys = new Set(effectiveLayout.sections.flatMap((section) => section.panelKeys));
-  const unsectioned = visibleKeys.filter((key) => !groupedKeys.has(key));
+  const gridKeys = effectiveLayout.order.filter((key) => availablePanelKeys.includes(key));
+  const renderedKeys = editMode ? gridKeys : visibleKeys;
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const onPanelDragEnd = (event: DragEndEvent) => {
+    if (!editMode || !event.over || event.active.id === event.over.id) return;
+    const from = effectiveLayout.order.indexOf(String(event.active.id));
+    const to = effectiveLayout.order.indexOf(String(event.over.id));
+    if (from === -1 || to === -1) return;
+    saveLayout({ ...effectiveLayout, order: arrayMove(effectiveLayout.order, from, to) });
+  };
+
+  const resizePanel = (key: string, axis: "width" | "height", delta: -1 | 1) => {
+    const current = effectiveLayout.sizes[key] ?? { width: 1, height: 1 };
+    const nextValue = Math.max(1, Math.min(2, current[axis] + delta)) as 1 | 2;
+    saveLayout({
+      ...effectiveLayout,
+      sizes: { ...effectiveLayout.sizes, [key]: { ...current, [axis]: nextValue } },
+    });
+  };
 
   const renderPanel = (key: string) => {
     if (key === "overview") {
@@ -252,35 +282,129 @@ export function BeforePanels({
 
   return (
     <div className="space-y-5">
-      <div className="flex justify-end">
-        <StatsLayoutControls
-          layout={effectiveLayout}
-          panelKeys={effectiveLayout.order}
-          panelLabels={
-            new Map(effectiveLayout.order.map((key) => [key, panelTitle(key, labels, t)]))
-          }
-          onChange={saveLayout}
-        />
-      </div>
-      {effectiveLayout.sections.map((section) => {
-        const keys = visibleKeys.filter((key) => section.panelKeys.includes(key));
-        if (keys.length === 0) return null;
-        return (
-          <section
-            key={section.id}
-            aria-labelledby={`stats-section-${section.id}`}
-            className="space-y-3"
-          >
-            <h2 id={`stats-section-${section.id}`} className="type-section-title text-balance">
-              {section.title}
-            </h2>
-            <div className="grid gap-4 xl:grid-cols-2">{keys.map(renderPanel)}</div>
-          </section>
-        );
-      })}
-      {unsectioned.length > 0 && (
-        <div className="grid gap-4 xl:grid-cols-2">{unsectioned.map(renderPanel)}</div>
+      {editMode && (
+        <p className="text-muted-foreground text-pretty text-sm" role="status">
+          {t("statisticsEditModeHint")}
+        </p>
       )}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onPanelDragEnd}>
+        <SortableContext items={renderedKeys} strategy={rectSortingStrategy}>
+          <div className="grid auto-rows-[minmax(18rem,auto)] gap-4 xl:grid-cols-2">
+            {renderedKeys.map((key) => (
+              <SortablePanel
+                key={key}
+                id={key}
+                editMode={editMode}
+                hidden={effectiveLayout.hidden.includes(key)}
+                width={effectiveLayout.sizes[key]?.width ?? 1}
+                height={effectiveLayout.sizes[key]?.height ?? 1}
+                label={panelTitle(key, labels, t)}
+                onResize={(axis, delta) => resizePanel(key, axis, delta)}
+                onToggleVisibility={() => togglePanel(key)}
+              >
+                {renderPanel(key)}
+              </SortablePanel>
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
+    </div>
+  );
+}
+
+function SortablePanel({
+  id,
+  editMode,
+  hidden,
+  width,
+  height,
+  label,
+  onResize,
+  onToggleVisibility,
+  children,
+}: {
+  id: string;
+  editMode: boolean;
+  hidden: boolean;
+  width: 1 | 2;
+  height: 1 | 2;
+  label: string;
+  onResize: (axis: "width" | "height", delta: -1 | 1) => void;
+  onToggleVisibility: () => void;
+  children: React.ReactNode;
+}) {
+  const { t } = useLocale();
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
+    id,
+    disabled: !editMode,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "min-w-0",
+        width === 2 && "xl:col-span-2",
+        height === 2 && "xl:row-span-2",
+        editMode && "rounded-lg outline outline-1 outline-dashed outline-border",
+        hidden && "opacity-60",
+      )}
+    >
+      {editMode && (
+        <div className="bg-muted/30 mb-2 flex flex-wrap items-center gap-1 rounded-control border px-1 py-1">
+          <DragHandle
+            attributes={attributes}
+            listeners={listeners}
+            label={t("reorderStatisticsPanelAria", { name: label })}
+          />
+          <span className="min-w-0 flex-1 truncate px-1 text-xs font-medium">{label}</span>
+          <IconButton
+            label={hidden ? t("showStatisticsPanel") : t("hideStatisticsPanel")}
+            variant="ghost"
+            size="icon-sm"
+            onClick={onToggleVisibility}
+          >
+            {hidden ? <EyeIcon aria-hidden="true" /> : <EyeOffIcon aria-hidden="true" />}
+          </IconButton>
+          <IconButton
+            label={t("decreasePanelWidth")}
+            variant="ghost"
+            size="icon-sm"
+            disabled={width === 1}
+            onClick={() => onResize("width", -1)}
+          >
+            <ArrowLeftIcon aria-hidden="true" />
+          </IconButton>
+          <IconButton
+            label={t("increasePanelWidth")}
+            variant="ghost"
+            size="icon-sm"
+            disabled={width === 2}
+            onClick={() => onResize("width", 1)}
+          >
+            <ArrowRightIcon aria-hidden="true" />
+          </IconButton>
+          <IconButton
+            label={t("decreasePanelHeight")}
+            variant="ghost"
+            size="icon-sm"
+            disabled={height === 1}
+            onClick={() => onResize("height", -1)}
+          >
+            <ArrowUpIcon aria-hidden="true" />
+          </IconButton>
+          <IconButton
+            label={t("increasePanelHeight")}
+            variant="ghost"
+            size="icon-sm"
+            disabled={height === 2}
+            onClick={() => onResize("height", 1)}
+          >
+            <ArrowDownIcon aria-hidden="true" />
+          </IconButton>
+        </div>
+      )}
+      {children}
     </div>
   );
 }
@@ -291,6 +415,7 @@ function buildDistributionDefinitions(
   t: Translate,
 ): DistributionDefinition[] {
   if (!stats) return [];
+  const hasPanel = (key: string) => stats.panel_keys?.includes(key) === true;
   const dateLabel = (bucket: string) =>
     new Intl.DateTimeFormat(LOCALE_CODES[language], { day: "numeric", month: "short" }).format(
       new Date(`${bucket}T00:00:00Z`),
@@ -302,8 +427,7 @@ function buildDistributionDefinitions(
       title: t("applicationFunnel"),
       defaultChart: "bar",
       rows: [
-        { label: t("decisionsSent"), n: stats.funnel.sent },
-        { label: t("dataStatusAccepted"), n: stats.funnel.still_in_window },
+        { label: t("pendingConfirmation"), n: stats.funnel.still_in_window },
         { label: t("confirmed"), n: stats.funnel.confirmed },
         { label: t("declined"), n: stats.funnel.declined },
         { label: t("dataStatusExpired"), n: stats.funnel.expired },
@@ -330,39 +454,45 @@ function buildDistributionDefinitions(
     });
   }
   const series = stats.time_series;
-  if (series?.submissions_by_day !== undefined) {
+  if (series?.submissions_by_day !== undefined || hasPanel("applications-over-time")) {
     definitions.push({
-      key: "submissions-by-day",
-      title: t("submissionEvolution"),
+      key: "applications-over-time",
+      title: t("applicationsOverTime"),
       defaultChart: "line",
-      rows: series.submissions_by_day.map((row) => ({ label: dateLabel(row.bucket), n: row.n })),
+      rows: (series?.submissions_by_day ?? []).map((row) => ({
+        label: dateLabel(row.bucket),
+        n: row.n,
+      })),
     });
   }
-  if (series?.confirmations_by_day !== undefined) {
+  if (series?.confirmations_by_day !== undefined || hasPanel("confirmations-over-time")) {
     definitions.push({
-      key: "confirmations-by-day",
-      title: t("confirmationEvolution"),
+      key: "confirmations-over-time",
+      title: t("confirmationsOverTime"),
       defaultChart: "line",
-      rows: series.confirmations_by_day.map((row) => ({ label: dateLabel(row.bucket), n: row.n })),
+      rows: (series?.confirmations_by_day ?? []).map((row) => ({
+        label: dateLabel(row.bucket),
+        n: row.n,
+      })),
     });
   }
-  if (series?.submissions_by_hour_of_day !== undefined) {
+  if (series?.submissions_by_hour_of_day !== undefined || hasPanel("applications-by-hour")) {
     definitions.push({
-      key: "submissions-by-hour",
+      key: "applications-by-hour",
       title: t("submissionsByHour"),
       defaultChart: "line",
-      rows: series.submissions_by_hour_of_day.map((row) => ({
+      rows: (series?.submissions_by_hour_of_day ?? []).map((row) => ({
         label: String(row.hour).padStart(2, "0"),
         n: row.n,
       })),
     });
   }
-  if (series?.submissions_by_day_of_week !== undefined) {
+  if (series?.submissions_by_day_of_week !== undefined || hasPanel("applications-by-day-of-week")) {
     definitions.push({
-      key: "submissions-by-dow",
+      key: "applications-by-day-of-week",
       title: t("submissionsByDay"),
       defaultChart: "line",
-      rows: series.submissions_by_day_of_week.map((row) => ({
+      rows: (series?.submissions_by_day_of_week ?? []).map((row) => ({
         label: new Intl.DateTimeFormat(LOCALE_CODES[language], { weekday: "short" }).format(
           new Date(Date.UTC(2024, 0, 7 + row.dow)),
         ),
@@ -377,21 +507,53 @@ function buildDistributionDefinitions(
     );
     definitions.push({
       key,
-      title: pickText(distribution.field.label, language),
-      defaultChart: defaultStatsChartType(key, distribution.field.kind),
+      title: distribution.field.statistics?.label
+        ? pickText(distribution.field.statistics.label, language)
+        : distribution.field.statistics?.transformation === "age"
+          ? t("ageDistribution")
+          : distribution.field.statistics?.transformation === "study_level"
+            ? t("studyLevelDistribution")
+            : pickText(distribution.field.label, language),
+      defaultChart:
+        distribution.field.statistics?.visualization ??
+        defaultStatsChartType(key, distribution.field.kind),
       rows: distribution.buckets.map((bucket) => ({
-        label:
-          labels.get(bucket.value) ??
-          (bucket.value === "true"
-            ? t("booleanYes")
-            : bucket.value === "false"
-              ? t("booleanNo")
-              : bucket.value),
+        label: statisticsBucketLabel(
+          bucket.value,
+          distribution.field.statistics?.transformation,
+          labels.get(bucket.value),
+          t,
+        ),
         n: bucket.n,
       })),
     });
   }
   return definitions;
+}
+
+function statisticsBucketLabel(
+  value: string,
+  transformation: "none" | "age" | "study_level" | undefined,
+  optionLabel: string | undefined,
+  t: Translate,
+): string {
+  if (optionLabel) return optionLabel;
+  if (value === "total") return t("statisticsTotal");
+  if (value === "average") return t("statisticsAverage");
+  if (value === "true") return t("booleanYes");
+  if (value === "false") return t("booleanNo");
+  if (transformation === "age") return t("ageYearsLabel", { value });
+  if (transformation === "study_level") {
+    const labels: Record<string, MessageKey> = {
+      final_year: "studyLevelFinalYear",
+      year_3: "studyLevelThirdYear",
+      year_2: "studyLevelSecondYear",
+      year_1: "studyLevelFirstYear",
+      other: "studyLevelOther",
+    };
+    return labels[value] ? t(labels[value]) : value;
+  }
+  return value;
 }
 
 function OverviewPanel({
@@ -427,13 +589,21 @@ function OverviewPanel({
       sortValue: (row) => row.count,
     },
   ];
-  const sent = stats?.funnel?.sent ?? 0;
-  const confirmed = stats?.funnel?.confirmed;
-  const submitted = Object.entries(stats?.counts_by_status ?? {}).reduce(
-    (total, [status, count]) => total + (status === "draft" ? 0 : count),
-    0,
-  );
-  const rate = confirmed === undefined || sent === 0 ? null : Math.round((confirmed / sent) * 100);
+  const confirmed = stats?.overview?.confirmed ?? stats?.funnel?.confirmed;
+  const submitted =
+    stats?.overview?.submitted ??
+    Object.entries(stats?.counts_by_status ?? {}).reduce(
+      (total, [status, count]) => total + (status === "draft" ? 0 : count),
+      0,
+    );
+  const overview = stats?.overview;
+  const fallbackSent = stats?.funnel?.sent ?? 0;
+  const rate =
+    overview?.confirmation_rate != null
+      ? Math.round(overview.confirmation_rate * 100)
+      : confirmed === undefined || fallbackSent === 0
+        ? null
+        : Math.round((confirmed / fallbackSent) * 100);
 
   return (
     <SectionCard
@@ -448,10 +618,19 @@ function OverviewPanel({
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label={t("submittedApplications")} value={submitted} />
         <StatCard label={t("confirmed")} value={confirmed ?? "—"} />
+        <StatCard label={t("rejected")} value={overview?.rejected ?? "—"} />
         <StatCard label={t("confirmationRate")} value={rate === null ? "—" : `${rate}%`} />
         <StatCard
+          label={t("expiredConfirmations")}
+          value={overview?.expired_confirmations ?? "—"}
+        />
+        <StatCard label={t("stillAbleToConfirm")} value={overview?.still_able_to_confirm ?? "—"} />
+        <StatCard
           label={t("averageConfirmationTime")}
-          value={hours(stats?.time_to_confirm_hours?.avg, t)}
+          value={hours(
+            overview?.average_confirmation_time_hours ?? stats?.time_to_confirm_hours?.avg,
+            t,
+          )}
           hint={`${t("medianConfirmationTime")}: ${hours(stats?.time_to_confirm_hours?.median, t)}`}
         />
       </div>
@@ -541,248 +720,5 @@ function Distribution({
         <StatsChart data={rows} type={chartType} title={title} />
       )}
     </SectionCard>
-  );
-}
-
-function StatsLayoutControls({
-  layout,
-  panelKeys,
-  panelLabels,
-  onChange,
-}: {
-  layout: StatsLayoutConfig;
-  panelKeys: string[];
-  panelLabels: Map<string, string>;
-  onChange: (layout: StatsLayoutConfig) => void;
-}) {
-  const { t } = useLocale();
-  const [createSectionOpen, setCreateSectionOpen] = useState(false);
-  const [sectionName, setSectionName] = useState("");
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
-
-  function onPanelDragEnd(event: DragEndEvent) {
-    if (!event.over || event.active.id === event.over.id) return;
-    const from = panelKeys.indexOf(String(event.active.id));
-    const to = panelKeys.indexOf(String(event.over.id));
-    if (from === -1 || to === -1) return;
-    onChange({ ...layout, order: arrayMove(layout.order, from, to) });
-  }
-
-  function onSectionDragEnd(event: DragEndEvent) {
-    if (!event.over || event.active.id === event.over.id) return;
-    const from = layout.sections.findIndex((section) => section.id === event.active.id);
-    const to = layout.sections.findIndex((section) => section.id === event.over?.id);
-    if (from === -1 || to === -1) return;
-    onChange({ ...layout, sections: arrayMove(layout.sections, from, to) });
-  }
-
-  function setVisible(panelKey: string, visible: boolean) {
-    onChange({
-      ...layout,
-      hidden: visible
-        ? layout.hidden.filter((key) => key !== panelKey)
-        : [...layout.hidden, panelKey],
-    });
-  }
-
-  function setSection(panelKey: string, sectionId: string) {
-    onChange({
-      ...layout,
-      sections: layout.sections.map((section) => ({
-        ...section,
-        panelKeys:
-          section.id === sectionId
-            ? [...new Set([...section.panelKeys, panelKey])]
-            : section.panelKeys.filter((key) => key !== panelKey),
-      })),
-    });
-  }
-
-  function createSection(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const title = sectionName.trim();
-    if (!title) return;
-    const id = `section-${Date.now()}`;
-    onChange({ ...layout, sections: [...layout.sections, { id, title, panelKeys: [] }] });
-    setSectionName("");
-    setCreateSectionOpen(false);
-  }
-
-  function deleteSection(id: string) {
-    onChange({ ...layout, sections: layout.sections.filter((section) => section.id !== id) });
-  }
-
-  return (
-    <>
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button variant="outline" size="sm">
-            <GripVerticalIcon className="size-4" aria-hidden="true" />
-            {t("customizeStatistics")}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent
-          align="end"
-          className="max-h-[min(70vh,36rem)] w-[min(34rem,calc(100vw-2rem))] overflow-y-auto"
-        >
-          <div className="space-y-4">
-            <div>
-              <h2 className="font-medium text-sm text-balance">{t("statisticsPanels")}</h2>
-              <p className="text-muted-foreground text-pretty text-xs">
-                {t("statisticsPanelsHint")}
-              </p>
-            </div>
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={onPanelDragEnd}
-            >
-              <SortableContext items={panelKeys} strategy={verticalListSortingStrategy}>
-                <div className="space-y-1">
-                  {panelKeys.map((panelKey) => {
-                    const visible = !layout.hidden.includes(panelKey);
-                    const section = layout.sections.find((item) =>
-                      item.panelKeys.includes(panelKey),
-                    );
-                    return (
-                      <SortableItem key={panelKey} id={panelKey}>
-                        {(drag) => (
-                          <div className="flex items-center gap-1.5 rounded-md px-1 py-1">
-                            <DragHandle
-                              attributes={drag.attributes}
-                              listeners={drag.listeners}
-                              label={t("reorderStatisticsPanelAria", {
-                                name: panelLabels.get(panelKey) ?? panelKey,
-                              })}
-                            />
-                            <Checkbox
-                              id={`stats-panel-${panelKey}`}
-                              checked={visible}
-                              onCheckedChange={(checked) => setVisible(panelKey, checked === true)}
-                            />
-                            <label
-                              htmlFor={`stats-panel-${panelKey}`}
-                              className="min-w-0 flex-1 truncate text-sm"
-                            >
-                              {panelLabels.get(panelKey) ?? panelKey}
-                            </label>
-                            <Select
-                              value={section?.id ?? "__none"}
-                              onValueChange={(value) =>
-                                setSection(panelKey, value === "__none" ? "" : value)
-                              }
-                            >
-                              <SelectTrigger
-                                size="sm"
-                                className="w-32"
-                                aria-label={t("moveStatisticsPanelAria", {
-                                  name: panelLabels.get(panelKey) ?? panelKey,
-                                })}
-                              >
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__none">{t("noStatisticsSection")}</SelectItem>
-                                {layout.sections.map((item) => (
-                                  <SelectItem key={item.id} value={item.id}>
-                                    {item.title}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
-                      </SortableItem>
-                    );
-                  })}
-                </div>
-              </SortableContext>
-            </DndContext>
-            <div className="space-y-2 border-t pt-3">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="font-medium text-sm">{t("statisticsSections")}</h3>
-                <Button variant="ghost" size="sm" onClick={() => setCreateSectionOpen(true)}>
-                  <PlusIcon className="size-4" aria-hidden="true" />
-                  {t("addStatisticsSection")}
-                </Button>
-              </div>
-              {layout.sections.length > 0 ? (
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={onSectionDragEnd}
-                >
-                  <SortableContext
-                    items={layout.sections.map((section) => section.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    <div className="space-y-1">
-                      {layout.sections.map((section) => (
-                        <SortableItem key={section.id} id={section.id}>
-                          {(drag) => (
-                            <div className="flex items-center gap-1 rounded-md px-1 py-1">
-                              <DragHandle
-                                attributes={drag.attributes}
-                                listeners={drag.listeners}
-                                label={t("reorderStatisticsSectionAria", { name: section.title })}
-                              />
-                              <span className="min-w-0 flex-1 truncate text-sm">
-                                {section.title}
-                              </span>
-                              <IconButton
-                                label={t("removeStatisticsSection", { name: section.title })}
-                                variant="ghost"
-                                size="icon-sm"
-                                onClick={() => deleteSection(section.id)}
-                              >
-                                <Trash2Icon aria-hidden="true" />
-                              </IconButton>
-                            </div>
-                          )}
-                        </SortableItem>
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-              ) : (
-                <p className="text-muted-foreground text-pretty text-xs">
-                  {t("noStatisticsSections")}
-                </p>
-              )}
-            </div>
-          </div>
-        </PopoverContent>
-      </Popover>
-      <Modal
-        open={createSectionOpen}
-        onOpenChange={setCreateSectionOpen}
-        title={t("addStatisticsSection")}
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setCreateSectionOpen(false)}>
-              {t("cancel")}
-            </Button>
-            <Button type="submit" form="statistics-section-form">
-              {t("createStatisticsSection")}
-            </Button>
-          </>
-        }
-      >
-        <form id="statistics-section-form" onSubmit={createSection} className="space-y-3">
-          <label htmlFor="statistics-section-name" className="type-label">
-            {t("statisticsSectionName")}
-          </label>
-          <Input
-            id="statistics-section-name"
-            value={sectionName}
-            onChange={(event) => setSectionName(event.target.value)}
-            autoFocus
-          />
-        </form>
-      </Modal>
-    </>
   );
 }

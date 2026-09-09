@@ -6,7 +6,8 @@ import { audit } from "../../lib/audit.js";
 import { requireAuth, requireCapability, userHasCapability } from "../../lib/capabilities.js";
 import { ForbiddenError } from "../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
-import { requireRoleMutationAuthority } from "../identity/role-authority.js";
+import { lockRoleGraph, requireRoleMutationAuthority } from "../identity/role-authority.js";
+import { canonicalStatisticsPanelKey } from "../statistics/catalog.js";
 import { idParamSchema, statsPanelAccessSchema, statsQuerySchema } from "./schemas.js";
 import { requireApplication } from "./service.js";
 import { allowedStatisticsPanels, applicationStats, statisticsPanelKeys } from "./stats.js";
@@ -52,10 +53,21 @@ export function registerStatsRoutes(app: FastifyInstance): void {
       const panelKeys = statisticsPanelKeys(application.template);
       const panelLabels = Object.fromEntries(
         application.template
-          .map((field) => [`field:${field.key.toLowerCase()}`, field.label] as const)
+          .map(
+            (field) =>
+              [`field:${field.key.toLowerCase()}`, field.statistics?.label ?? field.label] as const,
+          )
           .filter(([key]) => panelKeys.has(key)),
       );
-      return { panel_keys: [...panelKeys], panel_labels: panelLabels, access: rows, roles };
+      return {
+        panel_keys: [...panelKeys],
+        panel_labels: panelLabels,
+        access: rows.map((row: { panel_key: string }) => ({
+          ...row,
+          panel_key: canonicalStatisticsPanelKey(row.panel_key),
+        })),
+        roles,
+      };
     },
   );
 
@@ -74,8 +86,10 @@ export function registerStatsRoutes(app: FastifyInstance): void {
     },
     async (req) =>
       withTransaction(async (client) => {
+        await lockRoleGraph(client);
         const application = await requireApplication(client, req.params.id);
-        if (!statisticsPanelKeys(application.template).has(req.body.panel_key)) {
+        const panelKey = canonicalStatisticsPanelKey(req.body.panel_key);
+        if (!statisticsPanelKeys(application.template).has(panelKey)) {
           throw new ForbiddenError("Statistics panel is not reportable");
         }
         const { rows: roles } = await client.query(
@@ -86,21 +100,21 @@ export function registerStatsRoutes(app: FastifyInstance): void {
         await requireRoleMutationAuthority(client, req.userId as number, Number(roles[0].position));
         const { rows: before } = await client.query(
           `SELECT state FROM application_stats_panel_role_access WHERE application_id = $1 AND panel_key = $2 AND role_id = $3`,
-          [application.id, req.body.panel_key, req.body.role_id],
+          [application.id, panelKey, req.body.role_id],
         );
         await client.query(
           `INSERT INTO application_stats_panel_role_access (application_id, panel_key, role_id, state)
          VALUES ($1, $2, $3, $4)
          ON CONFLICT (application_id, panel_key, role_id) DO UPDATE SET state = EXCLUDED.state`,
-          [application.id, req.body.panel_key, req.body.role_id, req.body.state],
+          [application.id, panelKey, req.body.role_id, req.body.state],
         );
         await audit(client, {
           actorId: req.userId,
           entityType: "application_statistics_panel",
-          entityId: `${application.id}:${req.body.panel_key}`,
+          entityId: `${application.id}:${panelKey}`,
           action: "access_changed",
           before: before[0] ?? null,
-          after: req.body,
+          after: { ...req.body, panel_key: panelKey },
         });
         return { ok: true };
       }),
@@ -160,7 +174,7 @@ export function registerStatsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Pre-event statistics for one form",
         description:
-          "Aggregate counts for a form's responses (H27) — status breakdown, time series, logistics distributions, and form-driven field distributions. A caller with general logistics-statistics access inherits every reportable panel unless a higher-priority role denies it; direct panel grants can also share one panel. Choice fields are included automatically; other fields must be explicitly marked reportable in the form builder. Checkbox values other than explicit true, including unanswered responses, count as false. `field` can request one field histogram directly.",
+          "Aggregate counts for a form's responses (H27) — status breakdown, time series, logistics distributions, and explicitly published form-question distributions. A caller with general logistics-statistics access inherits every reportable panel unless a higher-priority role denies it; direct panel grants can also share one panel. New questions stay private until their statistics configuration is enabled; legacy choice panels are preserved by migration. Checkbox values other than explicit true, including unanswered responses, count as false. `field` can request one field histogram directly.",
         params: idParamSchema,
         querystring: statsQuerySchema,
       },
