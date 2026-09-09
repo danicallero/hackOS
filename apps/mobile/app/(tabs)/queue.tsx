@@ -9,14 +9,23 @@ import {
   ScrollView,
   Text,
   useColorScheme,
+  useWindowDimensions,
   View,
 } from "react-native";
+import Animated, {
+  FadeIn,
+  FadeInLeft,
+  FadeInRight,
+  FadeOut,
+  useReducedMotion,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { EmptyState, StatusPill } from "@/components/native-ui";
+import { ActionButton, EmptyState, StatusPill } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
+import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { subscribeToCategory } from "@/lib/notification-events";
@@ -168,7 +177,12 @@ export default function QueueScreen() {
           paddingTop: 16 + androidTopInset,
         }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        ListHeaderComponent={<StaleDataBanner updatedAt={staleSince} />}
+        ListHeaderComponent={
+          <View style={{ gap: 12 }}>
+            <StaleDataBanner updatedAt={staleSince} />
+            <QueueTutorialTrigger onPress={() => setQueueTutorialVisible(true)} />
+          </View>
+        }
         ListEmptyComponent={
           loading ? (
             <RequestFeedback loading />
@@ -187,22 +201,85 @@ export default function QueueScreen() {
       <QueueTutorial
         visible={queueTutorialVisible}
         bottomInset={insets.bottom}
+        topInset={insets.top}
         onDismiss={dismissQueueTutorial}
       />
     </>
   );
 }
 
-function QueueTutorial({
+function QueueTutorialTrigger({ onPress }: { onPress: () => void }) {
+  const { t } = useLocale();
+  const reducedMotion = useReducedMotion();
+
+  return (
+    <Pressable
+      accessibilityHint={t("queueHowItWorksRevisitHint")}
+      accessibilityLabel={t("queueHowItWorksTitle")}
+      accessibilityRole="button"
+      onPress={() => {
+        void haptic("light");
+        onPress();
+      }}
+      testID="queue-tutorial-open"
+      style={({ pressed }) => ({
+        alignItems: "center",
+        backgroundColor: colors.accentSurface,
+        borderCurve: "continuous",
+        borderRadius: 14,
+        flexDirection: "row",
+        gap: 12,
+        minHeight: 70,
+        opacity: pressed ? 0.84 : 1,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        transform: reducedMotion ? undefined : [{ scale: pressed ? 0.96 : 1 }],
+      })}
+    >
+      <View
+        style={{
+          alignItems: "center",
+          backgroundColor: colors.surface,
+          borderRadius: 12,
+          height: 42,
+          justifyContent: "center",
+          width: 42,
+        }}
+      >
+        <SymbolView name="questionmark.circle" size={22} tintColor={colors.onAccentSurface} />
+      </View>
+      <View style={{ flex: 1, gap: 3 }}>
+        <Text selectable style={{ color: colors.onAccentSurface, fontSize: 16, fontWeight: "700" }}>
+          {t("queueHowItWorksTitle")}
+        </Text>
+        <Text selectable style={{ color: colors.onAccentSurface, fontSize: 13, lineHeight: 18 }}>
+          {t("queueHowItWorksRevisitBody")}
+        </Text>
+      </View>
+      <SymbolView
+        accessible={false}
+        name="chevron.right"
+        size={18}
+        tintColor={colors.onAccentSurface}
+      />
+    </Pressable>
+  );
+}
+
+export function QueueTutorial({
   visible,
   bottomInset,
+  topInset,
   onDismiss,
 }: {
   visible: boolean;
   bottomInset: number;
+  topInset: number;
   onDismiss: () => void;
 }) {
   const { t } = useLocale();
+  const reducedMotion = useReducedMotion();
+  const { fontScale, width } = useWindowDimensions();
   const steps = [
     {
       icon: "bell.badge.fill" as const,
@@ -213,6 +290,7 @@ function QueueTutorial({
       icon: "door.left.hand.closed" as const,
       title: t("queueHowItWorksDoorTitle"),
       body: t("queueHowItWorksDoorBody"),
+      note: t("queueHowItWorksDoorNote"),
     },
     {
       icon: "door.left.hand.open" as const,
@@ -220,90 +298,290 @@ function QueueTutorial({
       body: t("queueHowItWorksEnterBody"),
     },
   ];
+  const [stepIndex, setStepIndex] = useState(0);
+  const [stepDirection, setStepDirection] = useState<1 | -1>(1);
+  const [hasNavigated, setHasNavigated] = useState(false);
+  const [bodyHeight, setBodyHeight] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const scrollRef = useRef<ScrollView>(null);
+  const currentStep = steps[stepIndex];
+  const currentStepKey = currentStep?.icon ?? "";
+  const bodyParagraphs = currentStep?.body.split(/\n\n+/) ?? [];
+  const scrollEnabled = viewportHeight > 0 && bodyHeight > viewportHeight + 1;
+  const stackFooterActions = width < 320 || fontScale > 1.3;
+  const stepEntering = reducedMotion
+    ? FadeIn.duration(140)
+    : stepDirection > 0
+      ? FadeInRight.duration(180)
+      : FadeInLeft.duration(180);
+
+  useEffect(() => {
+    if (!visible) {
+      setStepIndex(0);
+      setStepDirection(1);
+      setHasNavigated(false);
+      setBodyHeight(0);
+      setViewportHeight(0);
+      return;
+    }
+    setStepIndex(0);
+    setStepDirection(1);
+    setHasNavigated(false);
+  }, [visible]);
+
+  useEffect(() => {
+    if (!visible || !currentStepKey) return;
+    scrollRef.current?.scrollTo({ animated: false, y: 0 });
+  }, [currentStepKey, visible]);
+
+  const goBack = useCallback(() => {
+    if (stepIndex === 0) return;
+    void haptic("selection");
+    setStepDirection(-1);
+    setHasNavigated(true);
+    setStepIndex((current) => current - 1);
+  }, [stepIndex]);
+
+  const advance = useCallback(() => {
+    if (stepIndex === steps.length - 1) {
+      void haptic("success");
+      onDismiss();
+      return;
+    }
+    void haptic("selection");
+    setStepDirection(1);
+    setHasNavigated(true);
+    setStepIndex((current) => current + 1);
+  }, [onDismiss, stepIndex, steps.length]);
+
+  if (!currentStep) return null;
 
   return (
     <Modal
-      animationType="slide"
+      animationType={reducedMotion ? "fade" : "slide"}
       accessibilityViewIsModal
       onRequestClose={onDismiss}
       transparent
       visible={visible}
     >
-      <View style={{ backgroundColor: colors.background, flex: 1, paddingTop: 20 }}>
-        <ScrollView
-          contentContainerStyle={{
-            gap: 20,
-            padding: 24,
-            paddingBottom: Math.max(bottomInset, 16) + 24,
+      <View style={{ backgroundColor: colors.background, flex: 1 }}>
+        <View
+          style={{
+            flex: 1,
+            paddingHorizontal: 24,
+            paddingTop: Math.max(24, topInset + 12),
           }}
-          contentInsetAdjustmentBehavior="automatic"
         >
-          <View style={{ gap: 8 }}>
-            <Text
-              accessibilityRole="header"
-              selectable
-              style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}
-            >
-              {t("queueHowItWorksTitle")}
-            </Text>
-            <Text selectable style={{ color: colors.secondaryLabel, fontSize: 16, lineHeight: 23 }}>
-              {t("queueHowItWorksIntro")}
-            </Text>
-          </View>
-
-          <View style={{ gap: 12 }}>
-            {steps.map((step) => (
-              <View
-                key={step.title}
+          <View
+            style={{
+              alignSelf: "center",
+              flex: 1,
+              gap: 24,
+              maxWidth: 560,
+              width: "100%",
+            }}
+          >
+            <View style={{ alignItems: "center", gap: 8 }}>
+              <Text
+                accessibilityRole="header"
+                selectable
                 style={{
-                  backgroundColor: colors.surface,
-                  borderCurve: "continuous",
-                  borderRadius: 16,
-                  flexDirection: "row",
-                  gap: 12,
-                  padding: 16,
+                  color: colors.label,
+                  fontSize: 28,
+                  fontWeight: "800",
+                  textAlign: "center",
                 }}
               >
-                <SymbolView
-                  accessible={false}
-                  name={step.icon}
-                  size={22}
-                  tintColor={colors.accent}
-                />
-                <View style={{ flex: 1, gap: 4 }}>
-                  <Text selectable style={{ color: colors.label, fontSize: 17, fontWeight: "700" }}>
-                    {step.title}
-                  </Text>
-                  <Text
-                    selectable
-                    style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 21 }}
-                  >
-                    {step.body}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </View>
+                {t("queueHowItWorksTitle")}
+              </Text>
+              <Text
+                selectable
+                style={{
+                  color: colors.secondaryLabel,
+                  fontSize: 16,
+                  lineHeight: 23,
+                  textAlign: "center",
+                }}
+              >
+                {t("queueHowItWorksIntro")}
+              </Text>
+            </View>
 
+            <ScrollView
+              bounces={scrollEnabled}
+              contentContainerStyle={{
+                alignItems: "center",
+                flexGrow: 1,
+                justifyContent: "center",
+                paddingVertical: 24,
+              }}
+              contentInsetAdjustmentBehavior="never"
+              onContentSizeChange={(_, height) => setBodyHeight(height)}
+              onLayout={({ nativeEvent }) => setViewportHeight(nativeEvent.layout.height)}
+              ref={scrollRef}
+              scrollEnabled={scrollEnabled}
+              showsVerticalScrollIndicator={scrollEnabled}
+              style={{ flex: 1 }}
+              testID="queue-tutorial-scroll"
+            >
+              <Animated.View
+                accessibilityLiveRegion={hasNavigated ? "polite" : "none"}
+                entering={hasNavigated ? stepEntering : undefined}
+                exiting={hasNavigated ? FadeOut.duration(reducedMotion ? 100 : 120) : undefined}
+                key={`queue-tutorial-step-${stepIndex}`}
+                style={{
+                  alignItems: "center",
+                  alignSelf: "center",
+                  gap: 18,
+                  maxWidth: 480,
+                  paddingHorizontal: 24,
+                  paddingVertical: 28,
+                  width: "100%",
+                }}
+              >
+                <View
+                  style={{
+                    alignItems: "center",
+                    backgroundColor: colors.accentSurface,
+                    borderRadius: 32,
+                    height: 64,
+                    justifyContent: "center",
+                    width: 64,
+                  }}
+                >
+                  <SymbolView
+                    accessible={false}
+                    name={currentStep.icon}
+                    size={30}
+                    tintColor={colors.onAccentSurface}
+                  />
+                </View>
+                <Text
+                  accessibilityRole="header"
+                  selectable
+                  style={{
+                    color: colors.label,
+                    fontSize: 22,
+                    fontWeight: "800",
+                    textAlign: "center",
+                  }}
+                >
+                  {currentStep.title}
+                </Text>
+                <View style={{ gap: 12, maxWidth: 420, width: "100%" }}>
+                  {bodyParagraphs.map((paragraph) => (
+                    <Text
+                      key={`${currentStepKey}-${paragraph}`}
+                      selectable
+                      style={{
+                        color:
+                          paragraph === bodyParagraphs[0] ? colors.label : colors.secondaryLabel,
+                        fontSize: 16,
+                        fontWeight: paragraph === bodyParagraphs[0] ? "600" : "400",
+                        lineHeight: 24,
+                        textAlign: "center",
+                      }}
+                    >
+                      {paragraph}
+                    </Text>
+                  ))}
+                </View>
+                {currentStep.note ? (
+                  <View
+                    style={{
+                      alignItems: "flex-start",
+                      alignSelf: "center",
+                      flexDirection: "row",
+                      gap: 8,
+                      maxWidth: 420,
+                      width: "100%",
+                    }}
+                  >
+                    <View style={{ height: 18, marginTop: 3, width: 18 }}>
+                      <SymbolView
+                        accessible={false}
+                        name="questionmark.circle"
+                        size={18}
+                        tintColor={colors.tertiaryLabel}
+                      />
+                    </View>
+                    <Text
+                      selectable
+                      style={{
+                        color: colors.secondaryLabel,
+                        flex: 1,
+                        fontSize: 15,
+                        lineHeight: 22,
+                      }}
+                    >
+                      {currentStep.note}
+                    </Text>
+                  </View>
+                ) : null}
+              </Animated.View>
+            </ScrollView>
+          </View>
+        </View>
+        <View
+          style={{
+            backgroundColor: colors.background,
+            gap: 4,
+            paddingBottom: Math.max(bottomInset, 12),
+            paddingHorizontal: 24,
+            paddingTop: 4,
+          }}
+        >
           <Pressable
-            accessibilityLabel={t("queueHowItWorksDone")}
+            accessibilityLabel={t("queueHowItWorksSkip")}
             accessibilityRole="button"
-            onPress={onDismiss}
+            hitSlop={8}
+            onPress={() => {
+              void haptic("light");
+              onDismiss();
+            }}
             style={({ pressed }) => ({
               alignItems: "center",
-              backgroundColor: colors.accent,
-              borderCurve: "continuous",
-              borderRadius: 14,
-              minHeight: 52,
+              alignSelf: "center",
               justifyContent: "center",
-              opacity: pressed ? 0.7 : 1,
+              minHeight: 44,
+              opacity: pressed ? 0.6 : 1,
+              paddingHorizontal: 12,
             })}
           >
-            <Text style={{ color: colors.accentText, fontSize: 17, fontWeight: "700" }}>
-              {t("queueHowItWorksDone")}
+            <Text style={{ color: colors.accent, fontSize: 15, fontWeight: "600" }}>
+              {t("queueHowItWorksSkip")}
             </Text>
           </Pressable>
-        </ScrollView>
+          <View
+            style={{
+              alignSelf: "center",
+              flexDirection: stackFooterActions ? "column" : "row",
+              gap: 10,
+              maxWidth: 560,
+              width: "100%",
+            }}
+          >
+            <ActionButton
+              disabled={stepIndex === 0}
+              haptic={false}
+              icon="chevron.left"
+              label={t("queueHowItWorksBack")}
+              onPress={goBack}
+              style={stackFooterActions ? { width: "100%" } : { flex: 1 }}
+              variant="outlined"
+            />
+            <ActionButton
+              haptic={false}
+              icon={stepIndex === steps.length - 1 ? "checkmark.circle.fill" : "chevron.right"}
+              label={
+                stepIndex === steps.length - 1 ? t("queueHowItWorksDone") : t("queueHowItWorksNext")
+              }
+              onPress={advance}
+              style={stackFooterActions ? { width: "100%" } : { flex: 1 }}
+              variant="filled"
+            />
+          </View>
+        </View>
       </View>
     </Modal>
   );

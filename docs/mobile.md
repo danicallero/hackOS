@@ -377,8 +377,16 @@ distributed to other Expo Router apps without importing hackOS code.
   fallback. On the first visit to My queue for each account, the app shows a
   persisted native tutorial explaining the three participant-facing stages:
   get ready (do not go to the room), wait outside the door, and enter only
-  after the explicit entry notice or staff instruction. The tutorial is stored
-  in account-scoped SecureStore and does not change the queue state machine.
+  after the explicit entry notice or staff instruction. The tutorial shows one
+  stage at a time with Back/Next controls; participants can skip it and reopen
+  it from the queue screen's "How the queue works" card at any time. The title
+  and subtitle stay anchored at the safe-area top, while the centered active
+  stage gets the available space and the centered Skip action sits above the
+  fixed footer buttons without a divider. The measured body only becomes
+  scrollable when a smaller screen, taller stage, or Dynamic Type needs it;
+  stage changes use a short directional fade, reduced to an opacity-only
+  crossfade when Reduce Motion is enabled. Completion is stored in
+  account-scoped SecureStore and does not change the queue state machine.
   `notifications.tsx` pages past the initial 20 inbox messages on
   demand, allows an expanded message to be deleted after native confirmation,
   and mirrors the web activity/kind reminder preferences. On Android its
