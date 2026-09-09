@@ -41,12 +41,21 @@ export function registerStatsRoutes(app: FastifyInstance): void {
         [application.id],
       );
       const { rows: roles } = await pool.query(
-        `SELECT id, name, position FROM roles
-          WHERE deleted_at IS NULL AND ($1::integer IS NULL OR position < $1)
-          ORDER BY position DESC`,
-        [actorPosition],
+        `SELECT r.id, r.name, r.position, COALESCE(rc.state, 'inherit') AS general_state
+           FROM roles r
+           LEFT JOIN role_capabilities rc
+             ON rc.role_id = r.id AND rc.capability = $2
+          WHERE r.deleted_at IS NULL AND ($1::integer IS NULL OR r.position < $1)
+          ORDER BY r.position DESC`,
+        [actorPosition, CAPABILITIES.LOGISTICS_STATS],
       );
-      return { panel_keys: [...statisticsPanelKeys(application.template)], access: rows, roles };
+      const panelKeys = statisticsPanelKeys(application.template);
+      const panelLabels = Object.fromEntries(
+        application.template
+          .map((field) => [`field:${field.key.toLowerCase()}`, field.label] as const)
+          .filter(([key]) => panelKeys.has(key)),
+      );
+      return { panel_keys: [...panelKeys], panel_labels: panelLabels, access: rows, roles };
     },
   );
 
@@ -98,6 +107,52 @@ export function registerStatsRoutes(app: FastifyInstance): void {
   );
 
   r.get(
+    "/api/applications/stats/forms",
+    {
+      preHandler: requireAuth,
+      config: routeAccess({ kind: "authenticated" }),
+      schema: {
+        summary: "List application forms available for statistics",
+        description:
+          "Returns only the application forms for which the caller has at least one allowed statistics panel. Statistics managers receive every form; general readers also inherit all non-denied panels, while panel-only readers receive only forms with an explicit panel grant.",
+      },
+    },
+    async (req) => {
+      const manages = await userHasCapability(
+        req.userId as number,
+        CAPABILITIES.STATISTICS_MANAGE,
+        req,
+      );
+      const generalAccess = await userHasCapability(
+        req.userId as number,
+        CAPABILITIES.LOGISTICS_STATS,
+        req,
+      );
+      const { rows } = await pool.query<{ id: number; name: string }>(
+        `SELECT id, name FROM applications ORDER BY id`,
+      );
+      if (manages) return { applications: rows };
+
+      const accessible = await Promise.all(
+        rows.map(async (application) => ({
+          application,
+          panels: await allowedStatisticsPanels(
+            application.id,
+            req.userId as number,
+            generalAccess,
+          ),
+        })),
+      );
+      const applications = accessible
+        .filter(({ panels }) => panels.size > 0)
+        .map(({ application }) => application);
+      if (applications.length === 0)
+        throw new ForbiddenError("No statistics panels are shared with you");
+      return { applications };
+    },
+  );
+
+  r.get(
     "/api/applications/:id/stats",
     {
       preHandler: requireAuth,
@@ -105,7 +160,7 @@ export function registerStatsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Pre-event statistics for one form",
         description:
-          "Aggregate counts for a form's responses (H27) — status breakdown, time series, logistics distributions, and form-driven field distributions. Choice fields are included automatically; other fields must be explicitly marked reportable in the form builder. `field` can request one field histogram directly.",
+          "Aggregate counts for a form's responses (H27) — status breakdown, time series, logistics distributions, and form-driven field distributions. A caller with general logistics-statistics access inherits every reportable panel unless a higher-priority role denies it; direct panel grants can also share one panel. Choice fields are included automatically; other fields must be explicitly marked reportable in the form builder. Checkbox values other than explicit true, including unanswered responses, count as false. `field` can request one field histogram directly.",
         params: idParamSchema,
         querystring: statsQuerySchema,
       },
@@ -114,7 +169,8 @@ export function registerStatsRoutes(app: FastifyInstance): void {
       const userId = req.userId as number;
       const manages = await userHasCapability(userId, CAPABILITIES.STATISTICS_MANAGE, req);
       if (manages) return applicationStats(req.params.id, req.query.field);
-      const allowed = await allowedStatisticsPanels(req.params.id, userId);
+      const generalAccess = await userHasCapability(userId, CAPABILITIES.LOGISTICS_STATS, req);
+      const allowed = await allowedStatisticsPanels(req.params.id, userId, generalAccess);
       if (allowed.size === 0) throw new ForbiddenError("No statistics panels are shared with you");
       return applicationStats(req.params.id, req.query.field, allowed);
     },

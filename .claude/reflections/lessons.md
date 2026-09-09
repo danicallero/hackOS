@@ -34,3 +34,34 @@ validated.
 ### Exceptions
 None for source changes. Documentation-only changes may skip package tests,
 but must still run the checks relevant to the edited documentation or tooling.
+
+## [R002] Treat “PR” as an imperative request
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-09-09
+
+### Trigger
+When the user says “PR” in the context of a completed change.
+
+### Mistake
+The agent treated the short message “PR” as ambiguous and asked whether the
+user wanted a pull request opened.
+
+### Lesson
+“PR” means the user wants the pull request opened, not a clarification about
+whether to do so.
+
+### Action
+Use the repository's pull-request workflow immediately: inspect the branch and
+worktree, run the required checks, prepare the required PR body, and open the
+pull request. Ask only if a real external-state blocker prevents opening it.
+
+### Validation
+Confirm the pull-request command succeeds and report the resulting URL or the
+concrete blocker.
+
+### Exceptions
+If the user explicitly says “draft”, “review”, or otherwise narrows the PR
+request, follow that more specific instruction.

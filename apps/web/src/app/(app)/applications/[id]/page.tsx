@@ -214,7 +214,7 @@ export default function ApplicationDetailPage() {
         }
       />
 
-      {canStats && stats && <StatsStrip stats={stats} />}
+      {canStats && stats?.counts_by_status && <StatsStrip stats={stats} />}
 
       {applicationTabs.length > 0 && (
         <Tabs value={tab} onValueChange={changeTab}>
@@ -288,7 +288,7 @@ export default function ApplicationDetailPage() {
 
 function StatsStrip({ stats }: { stats: ApplicationStats }) {
   const { t } = useLocale();
-  const c = stats.counts_by_status;
+  const c = stats.counts_by_status ?? {};
   const nonDraft = Object.entries(c)
     .filter(([s]) => s !== "draft")
     .reduce((a, [, v]) => a + v, 0);

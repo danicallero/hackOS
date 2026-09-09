@@ -33,16 +33,26 @@ export type StatisticsPanelDecision = {
 };
 
 /** H8 resolver: highest role position with an explicit decision wins. */
-export function resolveStatisticsPanelAccess(decisions: StatisticsPanelDecision[]): Set<string> {
+export function resolveStatisticsPanelDecisions(
+  decisions: StatisticsPanelDecision[],
+): Map<string, "allow" | "deny"> {
   const byPanel = new Map<string, StatisticsPanelDecision>();
   for (const decision of [...decisions].sort((a, b) => b.rolePosition - a.rolePosition)) {
     if (!byPanel.has(decision.panelKey) && decision.state !== "inherit")
       byPanel.set(decision.panelKey, decision);
   }
+  return new Map(
+    [...byPanel.entries()].map(
+      ([panelKey, decision]) => [panelKey, decision.state as "allow" | "deny"] as const,
+    ),
+  );
+}
+
+export function resolveStatisticsPanelAccess(decisions: StatisticsPanelDecision[]): Set<string> {
   return new Set(
-    [...byPanel.values()]
-      .filter((decision) => decision.state === "allow")
-      .map((decision) => decision.panelKey),
+    [...resolveStatisticsPanelDecisions(decisions)]
+      .filter(([, state]) => state === "allow")
+      .map(([panelKey]) => panelKey),
   );
 }
 
@@ -62,9 +72,11 @@ export function statisticsPanelKeys(
 export async function allowedStatisticsPanels(
   applicationId: number,
   userId: number,
+  generalAccess = false,
 ): Promise<Set<string>> {
+  const application = await requireApplication(pool, applicationId);
   const { rows } = await pool.query(
-    `SELECT DISTINCT ON (a.panel_key) a.panel_key, a.state
+    `SELECT a.panel_key, a.state, r.position
        FROM application_stats_panel_role_access a
        JOIN user_roles ur ON ur.role_id = a.role_id AND ur.user_id = $2
        JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
@@ -72,12 +84,21 @@ export async function allowedStatisticsPanels(
       ORDER BY a.panel_key, r.position DESC`,
     [applicationId, userId],
   );
-  return resolveStatisticsPanelAccess(
-    (rows as Array<{ panel_key: string; state: "allow" | "deny" }>).map((row) => ({
-      panelKey: row.panel_key,
-      rolePosition: 0,
-      state: row.state,
-    })),
+  const decisions = resolveStatisticsPanelDecisions(
+    (rows as Array<{ panel_key: string; state: "allow" | "deny"; position: number }>).map(
+      (row) => ({
+        panelKey: row.panel_key,
+        rolePosition: Number(row.position),
+        state: row.state,
+      }),
+    ),
+  );
+  const availablePanels = statisticsPanelKeys(application.template);
+  return new Set(
+    [...availablePanels].filter((panelKey) => {
+      const explicit = decisions.get(panelKey);
+      return explicit ? explicit === "allow" : generalAccess;
+    }),
   );
 }
 
@@ -231,12 +252,24 @@ export async function applicationStats(
 function filterStatisticsPanels(result: Record<string, unknown>, allowed: Set<string>): void {
   if (!allowed.has("overview")) {
     delete result.counts_by_status;
-    delete result.time_series;
     delete result.time_to_confirm_hours;
   }
   if (!allowed.has("funnel")) delete result.funnel;
   if (!allowed.has("shirt-sizes")) delete result.shirt_sizes_confirmed;
   if (!allowed.has("food-intolerances")) delete result.food_intolerances_confirmed;
+  const timeSeries = result.time_series as Record<string, unknown> | undefined;
+  if (timeSeries) {
+    const timeSeriesPanels: Record<string, string> = {
+      submissions_by_day: "submissions-by-day",
+      confirmations_by_day: "confirmations-by-day",
+      submissions_by_hour_of_day: "submissions-by-hour",
+      submissions_by_day_of_week: "submissions-by-dow",
+    };
+    for (const [seriesKey, panelKey] of Object.entries(timeSeriesPanels)) {
+      if (!allowed.has(panelKey)) delete timeSeries[seriesKey];
+    }
+    if (Object.keys(timeSeries).length === 0) delete result.time_series;
+  }
   result.field_distributions = (
     (result.field_distributions as Array<{ field: { key: string } }>) ?? []
   ).filter((panel) => allowed.has(fieldPanelKey(panel.field.key)));
@@ -280,15 +313,26 @@ async function fieldHistogram(
          GROUP BY elem ORDER BY n DESC`,
         [applicationId, field],
       )
-    : await pool.query(
-        `SELECT (r.responses ->> $2) AS value, count(*)::int AS n
+    : def.kind === "checkbox"
+      ? await pool.query(
+          `SELECT CASE WHEN r.responses ->> $2 = 'true' THEN 'true' ELSE 'false' END AS value,
+                  count(*)::int AS n
+             FROM application_responses r
+             JOIN users u ON u.id = r.user_id
+            WHERE r.application_id = $1
+              AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
+            GROUP BY value ORDER BY value DESC`,
+          [applicationId, field],
+        )
+      : await pool.query(
+          `SELECT (r.responses ->> $2) AS value, count(*)::int AS n
          FROM application_responses r
          JOIN users u ON u.id = r.user_id
          WHERE r.application_id = $1 AND r.responses ? $2
            AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
          GROUP BY value ORDER BY n DESC`,
-        [applicationId, field],
-      );
+          [applicationId, field],
+        );
   return { field, buckets: rows };
 }
 
@@ -352,6 +396,19 @@ async function distributionBuckets(applicationId: number, key: string, kind: str
         WHERE r.application_id = $1 AND r.responses ? $2
           AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
         GROUP BY value ORDER BY n DESC, value`,
+      [applicationId, key],
+    );
+    return rows;
+  }
+  if (kind === "checkbox") {
+    const { rows } = await pool.query(
+      `SELECT CASE WHEN r.responses ->> $2 = 'true' THEN 'true' ELSE 'false' END AS value,
+              count(*)::int AS n
+         FROM application_responses r
+         JOIN users u ON u.id = r.user_id
+        WHERE r.application_id = $1
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
+        GROUP BY value ORDER BY value DESC`,
       [applicationId, key],
     );
     return rows;

@@ -392,12 +392,22 @@ leaks into user-facing text.
 
 ### Application statistics
 
-`GET /api/applications/:id/stats` returns only panels allowed by the caller's
-role-position ACL. `GET`/`PUT /api/applications/:id/stats/access` (the latter
-requires `statistics:manage`) manage per-panel `allow`/`inherit`/`deny` rows;
-new reportable field panels are private until published. Personal hidden-panel
-preferences are stored through `/api/me/ui-prefs` and therefore follow the
-account across devices.
+`GET /api/applications/stats/forms` lists only forms the caller can use in the
+statistics workspace. The general audience is selected in the role capability
+editor with `logistics:stats`; those readers inherit
+access to every reportable panel; `GET /api/applications/:id/stats` then applies
+the winning per-panel `allow`/`inherit`/`deny` exception from the caller's
+assigned roles. A direct panel `allow` can also share one panel with someone
+who has no general statistics capability, while `deny` overrides the general
+fallback. Statistics managers see every panel and can manage the exceptions
+through `GET`/`PUT /api/applications/:id/stats/access` (the latter requires
+`statistics:manage`), using the same role-position tri-state semantics as H8.
+New reportable field panels remain private until explicitly allowed unless the
+role has general statistics access. Checkbox fields count every application
+response: values other than explicit `true` are aggregated as `false`, so an
+unanswered checkbox is visible as “No”. Personal panel visibility, order,
+chart type, and custom section preferences are stored through
+`/api/me/ui-prefs` and therefore follow the account across devices.
 
 ## Exploring the live API
 

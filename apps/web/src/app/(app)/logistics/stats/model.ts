@@ -85,28 +85,28 @@ export interface ApplicationStats {
     granted_role_name: string | null;
     capacity: number | null;
   };
-  counts_by_status: Record<string, number>;
-  funnel: {
+  counts_by_status?: Record<string, number>;
+  funnel?: {
     sent: number;
     still_in_window: number;
     expired: number;
     declined: number;
     confirmed: number;
   };
-  time_series: {
+  time_series?: {
     submissions_by_day: Array<{ bucket: string; n: number }>;
     confirmations_by_day: Array<{ bucket: string; n: number }>;
     submissions_by_hour_of_day: Array<{ hour: number; n: number }>;
     submissions_by_day_of_week: Array<{ dow: number; n: number }>;
   };
-  time_to_confirm_hours: { avg: number | null; median: number | null };
-  shirt_sizes_confirmed: Array<{ value: string; n: number }>;
-  food_intolerances_confirmed: Array<{
+  time_to_confirm_hours?: { avg: number | null; median: number | null };
+  shirt_sizes_confirmed?: Array<{ value: string; n: number }>;
+  food_intolerances_confirmed?: Array<{
     intolerance_id: number;
     label: I18nText;
     n: number;
   }>;
-  field_distributions: Array<{
+  field_distributions?: Array<{
     field: {
       key: string;
       kind: string;
