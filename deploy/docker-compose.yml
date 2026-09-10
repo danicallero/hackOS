@@ -179,6 +179,7 @@ services:
   # ── one-shot: apply DB migrations, then exit (advisory-locked) ──────────
   migrate:
     image: *api-image
+    pull_policy: always
     command: ["node", "dist/migrate.js"]
     environment: *app-env
     depends_on:
@@ -191,6 +192,7 @@ services:
   api:
     <<: *hardening
     image: *api-image
+    pull_policy: always
     # H10/H53: repeat the advisory-locked migration check here as a guard for
     # redeploys that reuse an already-completed one-shot `migrate` container.
     command: ["sh", "-c", "node dist/migrate.js && exec node dist/server.js"]
@@ -252,6 +254,7 @@ services:
   web:
     <<: *hardening
     image: "${WEB_IMAGE_REPO:-hackos-web}:${IMAGE_TAG:-main}"
+    pull_policy: always
     networks: [edge]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/ || exit 1"]
@@ -277,6 +280,7 @@ services:
   worker:
     <<: *hardening
     image: *api-image
+    pull_policy: always
     command: ["node", "dist/worker.js"]
     environment:
       <<: *app-env
