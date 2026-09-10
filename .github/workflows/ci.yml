@@ -55,14 +55,38 @@ jobs:
             grep -Eq "$1" "$changed_files"
           }
 
+          has_non_locale_package_change() {
+            grep -Ev '^packages/shared/locales/[^/]+/(common|email|mobile|web)\.json$' "$changed_files" \
+              | grep -Eq '^packages/'
+          }
+
           api=false
           web=false
           mobile=false
 
-          # Shared packages, dependency/toolchain changes, and workflow changes
-          # can affect every workspace and therefore run every quality gate.
-          if has_change '^(packages/|patches/|\.github/|\.dockerignore$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.node-version$|biome\.json$|tsconfig[^/]*\.json$)'; then
+          # Shared code, dependency/toolchain changes, and workflow changes can
+          # affect every workspace and therefore run every quality gate. Locale
+          # files are classified separately below: each client imports only its
+          # own catalog, while `common` is shared by web and mobile.
+          if has_non_locale_package_change || has_change '^(patches/|\.github/|\.dockerignore$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.node-version$|biome\.json$|tsconfig[^/]*\.json$)'; then
             api=true
+            web=true
+            mobile=true
+          fi
+
+          if has_change '^packages/shared/locales/[^/]+/email\.json$'; then
+            api=true
+          fi
+
+          if has_change '^packages/shared/locales/[^/]+/web\.json$'; then
+            web=true
+          fi
+
+          if has_change '^packages/shared/locales/[^/]+/mobile\.json$'; then
+            mobile=true
+          fi
+
+          if has_change '^packages/shared/locales/[^/]+/common\.json$'; then
             web=true
             mobile=true
           fi
