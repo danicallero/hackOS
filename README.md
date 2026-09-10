@@ -211,15 +211,16 @@ API tests use real Postgres and Valkey. The test harness resets and migrates
 `hackos_test`, and the suite runs serially to keep state-dependent integration
 tests deterministic.
 
-Pull requests and pushes to `main` run the same checks in GitHub Actions. Lint,
-the API production-image build, the selective `typecheck` check, and the API,
-web and mobile unit suites are separate required checks. Workspace checks run
-only when their area changes; shared packages, dependency/toolchain changes,
-and workflow changes run all affected gates. The API image job exercises the
-same Dockerfile and production dependency deployment used by Dokploy. The API
-test job provides fresh Postgres, Valkey and Mailpit service containers plus
-health-checked MinIO, then provisions the test bucket; local API runs still use
-`pnpm infra:up` and the commands above.
+Pull requests run validation in GitHub Actions: lint, selective typechecks,
+API/web production-image builds, and the API, web and mobile test suites remain
+separate parallel checks. Workspace checks run only when their area changes;
+shared packages, dependency/toolchain changes, and workflow changes run all
+affected gates. A push to `main` instead publishes only the affected ARM64 API
+and/or web production images to GHCR. API and worker consume the same published
+API image, so Dokploy only pulls it and never rebuilds it on the Raspberry Pi.
+The API test job provides fresh Postgres, Valkey and Mailpit service containers
+plus health-checked MinIO, then provisions the test bucket; local API runs
+still use `pnpm infra:up` and the commands above.
 
 ## Repository guide
 

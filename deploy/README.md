@@ -208,9 +208,9 @@ file:
 - `deploy/services/postgres/docker-compose.yml`
 - `deploy/services/valkey/docker-compose.yml`
 - `deploy/services/minio/docker-compose.yml`
-- `deploy/services/api/docker-compose.yml`  ← builds the image + runs migrations
-- `deploy/services/worker/docker-compose.yml`
-- `deploy/services/web/docker-compose.yml`  ← its own Traefik router/domain, never behind the api's
+- `deploy/services/api/docker-compose.yml`  ← pulls the published image + runs migrations
+- `deploy/services/worker/docker-compose.yml`  ← pulls that same API image
+- `deploy/services/web/docker-compose.yml`  ← pulls its own published image; its own Traefik router/domain, never behind the api's
 
 Nothing inherits automatically: in **each** service's own Environment
 Variables box, paste the matching `deploy/services/<service>/dokploy.env.example`
@@ -221,6 +221,53 @@ for the full per-variable explanation). Uncomment/add service-only vars only
 if you want to override a default. Attach `API_DOMAIN`/`WEB_DOMAIN` as the
 domains on the **api**/**web** services respectively (Dokploy fills the
 Traefik cert); the compose files already carry the router labels.
+
+### 3a. Use the published ARM64 images
+
+The CI workflow validates production Dockerfiles on pull requests. A push to
+`main` then publishes `linux/arm64` images to GHCR, which is the architecture
+of the Raspberry Pi host. Add these non-secret values to the Dokploy
+**Environment** before the first pull:
+
+```dotenv
+IMAGE_REPO=ghcr.io/danicallero/hackos-api
+WEB_IMAGE_REPO=ghcr.io/danicallero/hackos-web
+IMAGE_TAG=main
+```
+
+`main` is the moving production channel and makes a normal Dokploy redeploy
+pull the newest successful main build. Every publish also creates
+`sha-<commit>` tags; set `IMAGE_TAG` to one of those for a deterministic
+rollback, then redeploy `api`, `worker`, and/or `web` as appropriate. The
+GitHub repository variables `PRODUCTION_API_URL` and `PRODUCTION_SITE_URL`
+must match the production HTTPS origins because Next.js compiles both values
+into the web image. No `build:` key remains in the production compose files:
+Dokploy must pull rather than compile on the Pi.
+
+The CI workflow triggers the three Dokploy deployments only after the matching
+image push succeeds. Store these three generated Compose deploy URLs as GitHub
+repository **Actions secrets** (never as variables or committed text):
+
+```text
+DOKPLOY_API_DEPLOY_WEBHOOK
+DOKPLOY_WORKER_DEPLOY_WEBHOOK
+DOKPLOY_WEB_DEPLOY_WEBHOOK
+```
+
+Because this Dokploy instance is reachable only through Tailscale, also create
+a Tailscale tag such as `tag:ci`, grant that tag access to `danipi`, and create
+a federated identity/OIDC client with the `auth_keys` scope. Store its client ID
+and audience as the GitHub Actions secrets `TS_OAUTH_CLIENT_ID` and
+`TS_AUDIENCE`. The workflow creates an ephemeral CI node, calls the three
+webhooks over the tailnet, and removes that node when the job ends. This follows
+the [Tailscale GitHub Action](https://tailscale.com/docs/integrations/github/github-action)
+workload-identity flow; no Dokploy endpoint is exposed publicly.
+
+The API publish calls the API and worker endpoints because both run the same
+image; the web publish calls only the web endpoint. Dokploy then pulls the
+published `main` tag from GHCR and recreates the service. Do not also configure
+a source-push webhook for these same services, or every main push will deploy
+twice.
 
 Not using Dokploy? Skip the `dokploy.env.example` files — they're Dokploy's
 own template syntax, resolved before Docker ever sees it, and never appear

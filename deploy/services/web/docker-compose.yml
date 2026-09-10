@@ -16,19 +16,12 @@
 # Add https://${WEB_DOMAIN} to the api's CORS_ORIGINS so credentialed requests
 # from the browser are allowed.
 #
-# NEXT_PUBLIC_API_URL is baked into the client bundle at build time; each
-# domain builds its own image (Dokploy build from source, or a prebuilt image
-# per instance).
+# NEXT_PUBLIC_API_URL is baked into the client bundle by GitHub Actions. The
+# published image is therefore tied to this production domain.
 
 services:
   web:
     image: "${WEB_IMAGE_REPO:-hackos-web}:${IMAGE_TAG:-latest}"
-    build:
-      context: ../../..
-      dockerfile: apps/web/Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: "https://${API_DOMAIN}"
-        NEXT_PUBLIC_SITE_URL: "https://${WEB_DOMAIN}"
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped

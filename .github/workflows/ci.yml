@@ -116,10 +116,10 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   api-image:
-    name: API production image
+    name: API production image (validation)
     needs: changes
-    if: needs.changes.outputs.api == 'true'
-    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
@@ -129,8 +129,26 @@ jobs:
       - name: Build API production image
         run: docker build --file apps/api/Dockerfile --tag hackos-api:ci .
 
+  web-image:
+    name: Web production image (validation)
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      # Build the standalone image, not only the test/dev server. These URLs
+      # are placeholders: production values are injected by publish-web.
+      - name: Build web production image
+        run: >-
+          docker build --file apps/web/Dockerfile --tag hackos-web:ci
+          --build-arg NEXT_PUBLIC_API_URL=https://api.example.test
+          --build-arg NEXT_PUBLIC_SITE_URL=https://web.example.test .
+
   lint:
     name: lint
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -156,7 +174,7 @@ jobs:
   typecheck:
     name: typecheck
     needs: changes
-    if: needs.changes.outputs.typecheck == 'true'
+    if: github.event_name == 'pull_request' && needs.changes.outputs.typecheck == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -191,7 +209,7 @@ jobs:
   api-test:
     name: API integration tests
     needs: changes
-    if: needs.changes.outputs.api == 'true'
+    if: github.event_name == 'pull_request' && needs.changes.outputs.api == 'true'
     runs-on: ubuntu-latest
     env:
       CI: true
@@ -308,7 +326,7 @@ jobs:
   web-test:
     name: web unit tests
     needs: changes
-    if: needs.changes.outputs.web == 'true'
+    if: github.event_name == 'pull_request' && needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     env:
       CI: true
@@ -336,7 +354,7 @@ jobs:
   browser-smoke:
     name: browser critical-flow smoke
     needs: changes
-    if: needs.changes.outputs.web == 'true'
+    if: github.event_name == 'pull_request' && needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     env:
       CI: true
@@ -367,7 +385,7 @@ jobs:
   mobile-test:
     name: mobile unit tests
     needs: changes
-    if: needs.changes.outputs.mobile == 'true'
+    if: github.event_name == 'pull_request' && needs.changes.outputs.mobile == 'true'
     runs-on: ubuntu-latest
     env:
       CI: true
@@ -391,3 +409,137 @@ jobs:
 
       - name: Run mobile unit tests
         run: pnpm --filter @hackos/mobile test
+
+  publish-api:
+    name: Publish API image (arm64)
+    needs: changes
+    if: github.event_name == 'push' && needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # API and worker deliberately consume this one image. `main` lets Dokploy
+      # follow the production channel; the SHA tag is the immutable rollback.
+      - name: Build and publish API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/hackos-api:main
+            ghcr.io/${{ github.repository_owner }}/hackos-api:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=hackos-api-arm64
+          cache-to: type=gha,mode=max,scope=hackos-api-arm64
+
+
+  publish-web:
+    name: Publish web image (arm64)
+    needs: changes
+    if: github.event_name == 'push' && needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Check production URLs
+        env:
+          PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
+          PRODUCTION_SITE_URL: ${{ vars.PRODUCTION_SITE_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$PRODUCTION_API_URL"
+          test -n "$PRODUCTION_SITE_URL"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          platforms: linux/arm64
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.PRODUCTION_API_URL }}
+            NEXT_PUBLIC_SITE_URL=${{ vars.PRODUCTION_SITE_URL }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/hackos-web:main
+            ghcr.io/${{ github.repository_owner }}/hackos-web:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=hackos-web-arm64
+          cache-to: type=gha,mode=max,scope=hackos-web-arm64
+
+
+  deploy-dokploy:
+    name: Trigger Dokploy deployments through Tailscale
+    needs: [changes, publish-api, publish-web]
+    if: >-
+      always() && github.event_name == 'push' &&
+      (needs.publish-api.result == 'success' || needs.publish-web.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Connect to the tailnet
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ secrets.TS_AUDIENCE }}
+          tags: tag:ci
+          ping: danipi.hamster-cat.ts.net
+
+      - name: Trigger API and worker deployments
+        if: needs.publish-api.result == 'success'
+        env:
+          DOKPLOY_API_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_API_DEPLOY_WEBHOOK }}
+          DOKPLOY_WORKER_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_WORKER_DEPLOY_WEBHOOK }}
+        run: |
+          set -euo pipefail
+          for webhook in "$DOKPLOY_API_DEPLOY_WEBHOOK" "$DOKPLOY_WORKER_DEPLOY_WEBHOOK"; do
+            test -n "$webhook"
+            curl --fail --silent --show-error --retry 3 --retry-delay 5 \
+              --request POST "$webhook"
+          done
+
+      - name: Trigger web deployment
+        if: needs.publish-web.result == 'success'
+        env:
+          DOKPLOY_WEB_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_WEB_DEPLOY_WEBHOOK }}
+        run: |
+          set -euo pipefail
+          test -n "$DOKPLOY_WEB_DEPLOY_WEBHOOK"
+          curl --fail --silent --show-error --retry 3 --retry-delay 5 \
+            --request POST "$DOKPLOY_WEB_DEPLOY_WEBHOOK"
