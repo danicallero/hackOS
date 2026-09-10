@@ -135,7 +135,7 @@ test("propagates an external judging transition without a page reload", async ({
   });
 
   await expect(room).toContainText("Deterministic Team");
-  await expect(room.getByRole("heading", { name: "Waiting room" })).toBeVisible();
+  await expect(room.getByRole("heading", { name: "Waiting at the door" })).toBeVisible();
   await expect(room.getByRole("button", { name: "More actions" })).toBeVisible();
   expect(await page.evaluate(() => performance.getEntriesByType("navigation").length)).toBe(1);
 });

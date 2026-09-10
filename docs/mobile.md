@@ -178,17 +178,20 @@ hackOS adapter: capability policy, localized destinations, and the native
 distributed to other Expo Router apps without importing hackOS code.
 
 - `lib/tabs.ts` (`primaryTabs`/`overflowTabs`) — pure functions mapping
-  `me.capabilities`, `me.badgeId`, and `me.hasQueueItems` to the custom tab bar;
+  `me.capabilities`, `me.attendeeType`, and `me.hasQueueItems` to the custom tab
+  bar;
   see `docs/navigation.md` for the
   full model. Every platform uses `components/opaque-router-tabs.tsx` through
   the reusable `components/router-tabs.tsx` shell: iOS 26+ renders Liquid
   Glass surfaces, while earlier iOS and Android use the same geometry with
   solid surfaces. Five total destinations are shown directly on compact
   layouts; tablet-width layouts can place up to six before using `Others`,
-  whose bar surface and circle become 56pt instead of 64pt. With no
-  scan capability, Schedule, Wallet, Notifications, and Account are direct;
-  Queue joins them only after accreditation or when the account has an actual
-  queue entry. For `ACCREDIT_SCAN`/`PRESENCE_SCAN`/`ACTIVITY_SCAN` (or the
+  whose bar surface and circle become 56pt instead of 64pt. With no scan
+  capability, Schedule, Wallet, Notifications, and Account are direct; Queue
+  joins them for participants even before the first queue entry so the empty
+  state and tutorial are available. Other accounts see Queue only when they
+  have an actual queue entry. For
+  `ACCREDIT_SCAN`/`PRESENCE_SCAN`/`ACTIVITY_SCAN` (or the
   admin `*` wildcard) holders, the daily tools take the bar — Schedule,
   Scanner, Activities (for `ACTIVITY_SCAN`), Notifications — and Queue,
   Wallet, Account, and any secondary operations stay in Others. Queue-only
@@ -374,7 +377,20 @@ distributed to other Expo Router apps without importing hackOS code.
   is installed, it falls back to the existing Expo share/save sheet.
   `queue.tsx` refetches immediately on a "queue" push
   (below) and also polls `GET /api/queue/me` every 15s while focused as a
-  fallback. `notifications.tsx` pages past the initial 20 inbox messages on
+  fallback. On the first visit to My queue for each account, the app shows a
+  persisted native tutorial explaining the three participant-facing stages:
+  get ready (do not go to the room), wait outside the door, and enter only
+  after the explicit entry notice or staff instruction. The tutorial shows one
+  stage at a time with Back/Next controls; participants can skip it and reopen
+  it from the queue screen's "How the queue works" card at any time. The title
+  and subtitle stay anchored at the safe-area top, while the centered active
+  stage gets the available space and the centered Skip action sits above the
+  fixed footer buttons without a divider. The measured body only becomes
+  scrollable when a smaller screen, taller stage, or Dynamic Type needs it;
+  stage changes use a short directional fade, reduced to an opacity-only
+  crossfade when Reduce Motion is enabled. Completion is stored in
+  account-scoped SecureStore and does not change the queue state machine.
+  `notifications.tsx` pages past the initial 20 inbox messages on
   demand, allows an expanded message to be deleted after native confirmation,
   and mirrors the web activity/kind reminder preferences. On Android its
   inbox mounts the same native scroll gesture boundary as Schedule, so

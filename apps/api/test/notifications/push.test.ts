@@ -61,8 +61,8 @@ describe("push channel", () => {
       "ExponentPushToken[aaa]",
       "ExponentPushToken[bbb]",
     ]);
-    expect(messages[0]!.title).toBe("Go wait at room Sala 1");
-    expect(messages[0]!.body).toBe("Wait at the door for General. We'll tell you when to enter.");
+    expect(messages[0]!.title).toBe("Go to the door of Sala 1");
+    expect(messages[0]!.body).toBe("Wait outside for General. Do not enter until we tell you to.");
     expect(messages[0]!.channelId).toBe("default");
     expect((await getOutboxRow(id)).status).toBe("sent");
   });
@@ -94,7 +94,7 @@ describe("push channel", () => {
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, { body: string }];
     const [message] = JSON.parse(init.body) as { title: string; body: string }[];
     expect(message).toMatchObject({
-      title: "Enter room Sala 2 now",
+      title: "Enter Sala 2 now",
       body: "It's your team's turn for Sustainability.",
     });
   });
@@ -126,8 +126,8 @@ describe("push channel", () => {
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, { body: string }];
     const [message] = JSON.parse(init.body) as { title: string; body: string }[];
     expect(message).toMatchObject({
-      title: "You're up soon — get ready",
-      body: "Your team Rocket will be called for Sustainability in about 8 minutes.",
+      title: "Get ready: we’ll call you soon",
+      body: "Do not go to the room yet. We’ll call Rocket for Sustainability in about 8 minutes.",
     });
   });
 

@@ -15,13 +15,16 @@ import {
 } from "./tabs";
 
 describe("visibleTabs (H55)", () => {
-  it("hides My queue before accreditation when the user has no queue entry", () => {
+  it("hides My queue for non-participants with no queue entry", () => {
     expect(visibleTabs([])).toEqual(["schedule", "wallet", "notifications", "account"]);
   });
 
-  it("shows My queue after accreditation or when an exceptional queue entry exists", () => {
-    expect(visibleTabs([], { accredited: true, hasQueueItems: false })).toContain("queue");
-    expect(visibleTabs([], { accredited: false, hasQueueItems: true })).toContain("queue");
+  it("shows My queue to participants before their first queue entry", () => {
+    expect(visibleTabs([], { isParticipant: true, hasQueueItems: false })).toContain("queue");
+  });
+
+  it("shows My queue to any account that has a queue entry", () => {
+    expect(visibleTabs([], { isParticipant: false, hasQueueItems: true })).toContain("queue");
   });
 
   it("adds the scan destination for any of the three scan capabilities", () => {
@@ -46,9 +49,9 @@ describe("visibleTabs (H55)", () => {
 });
 
 describe("primaryTabs (H55; the custom bar keeps five direct tabs when they fit)", () => {
-  it("keeps Account in Others while preserving Wallet before accreditation", () => {
+  it("keeps Account in Others while preserving Wallet for non-participants", () => {
     expect(primaryTabs([])).toEqual(["schedule", "wallet", "notifications"]);
-    expect(primaryTabs([], { accredited: true, hasQueueItems: false })).toEqual([
+    expect(primaryTabs([], { isParticipant: true, hasQueueItems: false })).toEqual([
       "schedule",
       "queue",
       "wallet",

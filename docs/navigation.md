@@ -33,11 +33,11 @@ check). A multi-capability account keeps every relevant destination
 simultaneously; nothing is hidden to make room for something else, and there
 is no role switcher.
 
-`GET /api/me` also returns `isEnterpriseJudge` and `isSponsorRep` booleans
-(`apps/api/src/modules/identity/role.ts#computeMembershipFlags`) precisely so
-navigation can check both facts independently — the single `role` field
-collapses a sponsor rep who also judges to `"judge"`, which would hide their
-sponsor workspace if nav gated on `role` instead.
+`GET /api/me` also returns `isEnterpriseJudge`, `isSponsorRep`, and the
+functional `attendeeType` (`participant`/`mentor`) precisely so navigation can
+check association facts independently — the single `role` field collapses a
+sponsor rep who also judges to `"judge"`, which would hide their sponsor
+workspace if nav gated on `role` instead.
 
 ## Web: personal area + workspaces
 
@@ -148,9 +148,10 @@ separate `Others` circle is needed. The full route registry remains mounted so
 hidden destinations stay routable:
 
 - **Non-operator account**: schedule, wallet, notifications, and **Account**
-  are direct. **My queue** appears only after a badge is assigned or the
-  account has an actual queue entry, including exceptional sponsor/staff/mentor
-  membership; Wallet remains unconditional for every mobile account.
+  are direct. **My queue** is visible to participants even before their first
+  queue entry so they can see the empty state and tutorial; mentors, sponsors,
+  and other accounts only see it once they have an actual queue entry. Wallet
+  remains unconditional for every mobile account.
 - **Operator** (any of `accredit:scan`, `presence:scan`, `activity:scan`, or
   the admin wildcard): the daily shift tools take the bar — schedule,
   **Scanner**, Activities (`activity:scan` holders only), notifications —
