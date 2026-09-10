@@ -7,6 +7,10 @@ import type { Me } from "./types";
 
 const ME_CACHE_KEY = "me";
 
+type MeApiResponse = Omit<Me, "role"> & {
+  visibleRoleName: string | null;
+};
+
 /**
  * Loads GET /api/me and refetches on app foreground (H55: "al cambiar los
  * permisos de alguien, sus pestañas cambian sin reinstalar nada" — a
@@ -53,8 +57,11 @@ export function useMe(enabled: boolean) {
       // lines up with `ScannerPerson.role` (fed by a differently-named SQL
       // view) and every mobile screen that reads `Me.role` gets the actual
       // highest-visible role instead of silently seeing `undefined`.
-      const raw = await apiFetch<Omit<Me, "role"> & { visibleRoleName: string | null }>("/api/me");
-      const data: Me = { ...raw, role: raw.visibleRoleName };
+      const raw = await apiFetch<MeApiResponse>("/api/me");
+      const data: Me = {
+        ...raw,
+        role: raw.visibleRoleName,
+      };
       if (currentRequest !== requestId.current) return;
       hasData.current = true;
       setMe(data);

@@ -447,3 +447,11 @@ full page at `applications/[id]/page.tsx`.
   opening a modal. Removed the modal, its form state, react-hook-form setup,
   and the role-fetch effect that only existed to feed it — none of it is
   referenced from this file anymore.
+
+### Follow-up: stable question-card disclosure
+
+Expanding and collapsing a long question editor now preserves the card's
+viewport anchor instead of leaving the user several cards below it after the
+layout contracts. Expanded cards expose a sticky, explicitly labelled collapse
+action; opening remains a native button interaction, and drag/reorder controls
+remain independently keyboard accessible.

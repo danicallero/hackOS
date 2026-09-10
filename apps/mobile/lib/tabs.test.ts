@@ -19,12 +19,16 @@ describe("visibleTabs (H55)", () => {
     expect(visibleTabs([])).toEqual(["schedule", "wallet", "notifications", "account"]);
   });
 
-  it("shows My queue to participants before their first queue entry", () => {
-    expect(visibleTabs([], { isParticipant: true, hasQueueItems: false })).toContain("queue");
+  it("shows My queue to accounts with the personal queue capability", () => {
+    expect(visibleTabs([CAPABILITIES.QUEUE_STATUS])).toContain("queue");
   });
 
   it("shows My queue to any account that has a queue entry", () => {
-    expect(visibleTabs([], { isParticipant: false, hasQueueItems: true })).toContain("queue");
+    expect(visibleTabs([], { hasQueueItems: true })).toContain("queue");
+  });
+
+  it("does not infer Queue access from a display role", () => {
+    expect(visibleTabs([], { hasQueueItems: false })).not.toContain("queue");
   });
 
   it("adds the scan destination for any of the three scan capabilities", () => {
@@ -51,7 +55,7 @@ describe("visibleTabs (H55)", () => {
 describe("primaryTabs (H55; the custom bar keeps five direct tabs when they fit)", () => {
   it("keeps Account in Others while preserving Wallet for non-participants", () => {
     expect(primaryTabs([])).toEqual(["schedule", "wallet", "notifications"]);
-    expect(primaryTabs([], { isParticipant: true, hasQueueItems: false })).toEqual([
+    expect(primaryTabs([CAPABILITIES.QUEUE_STATUS])).toEqual([
       "schedule",
       "queue",
       "wallet",
