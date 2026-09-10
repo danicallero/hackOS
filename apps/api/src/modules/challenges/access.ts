@@ -119,8 +119,12 @@ export async function assertCanViewPanel(
     `SELECT 1
        FROM challenges c
        JOIN sponsors author ON author.id = c.author
-       JOIN enterprise_judges ej ON ej.enterprise_id = author.enterprise_id
-      WHERE ej.user_id = $1 AND c.id = $2 AND c.is_test_account = $3
+       LEFT JOIN enterprise_judges ej
+              ON ej.enterprise_id = author.enterprise_id AND ej.user_id = $1
+       LEFT JOIN sponsors mine
+              ON mine.enterprise_id = author.enterprise_id AND mine.user_id = $1
+      WHERE (ej.user_id = $1 OR mine.user_id = $1)
+        AND c.id = $2 AND c.is_test_account = $3
       LIMIT 1`,
     [userId, challengeId, fixtureMarker],
   );

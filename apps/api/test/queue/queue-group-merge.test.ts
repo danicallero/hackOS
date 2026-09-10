@@ -561,36 +561,48 @@ describe("judging-form merge", () => {
     expect(res.json().criteria.map((q: { key: string }) => q.key)).toEqual(["innovation"]);
   });
 
-  it("refuses to give a 1:1 group a name or form of its own", async () => {
+  it("allows a 1:1 group to have its own name but not its own judging form", async () => {
     const { challengeIds } = await createEnterpriseChallenges(1);
-    const res = await app.inject({
+    const groupId = await queueGroupOf(challengeIds[0]!);
+    const renamed = await app.inject({
       method: "PATCH",
-      url: `/api/queue/groups/${await queueGroupOf(challengeIds[0]!)}`,
+      url: `/api/queue/groups/${groupId}`,
       headers: asUser(adminId),
       payload: { displayName: "Hand-picked" },
     });
-    expect(res.statusCode).toBe(400);
+    expect(renamed.statusCode).toBe(200);
+    expect(renamed.json().displayName).toBe("Hand-picked");
+
+    const form = await app.inject({
+      method: "PATCH",
+      url: `/api/queue/groups/${groupId}`,
+      headers: asUser(adminId),
+      payload: { criteria: [scale("innovation", "Innovation")] },
+    });
+    expect(form.statusCode).toBe(400);
   });
 });
 
 describe("display name", () => {
-  it("follows a renamed challenge while the group is 1:1, and stops once merged", async () => {
+  it("keeps an independent 1:1 queue name when its challenge is renamed", async () => {
     const { pool } = await import("../../src/db/pool.js");
     const { roomView } = await import("../../src/modules/queue/reads.js");
-    const { enterpriseId, challengeIds } = await createEnterpriseChallenges(2);
+    const { challengeIds } = await createEnterpriseChallenges(2);
     const [first] = challengeIds as [number, number];
     const roomId = await createRoom();
-    await assignQueueGroupToRoom(roomId, await queueGroupOf(first));
+    const groupId = await queueGroupOf(first);
+    await assignQueueGroupToRoom(roomId, groupId);
+
+    const renamedQueue = await app.inject({
+      method: "PATCH",
+      url: `/api/queue/groups/${groupId}`,
+      headers: asUser(adminId),
+      payload: { displayName: "Hand-picked" },
+    });
+    expect(renamedQueue.statusCode).toBe(200);
 
     await pool.query(`UPDATE challenges SET title = 'Renamed' WHERE id = $1`, [first]);
-    expect((await roomView(roomId)).challenge?.title).toBe("Renamed");
-
-    await merge(enterpriseId, challengeIds, "ACME's Challenges");
-    expect((await roomView(roomId)).challenge?.title).toBe("ACME's Challenges");
-
-    // An admin-chosen shared name is never overwritten by a challenge rename.
-    await pool.query(`UPDATE challenges SET title = 'Renamed again' WHERE id = $1`, [first]);
-    expect((await roomView(roomId)).challenge?.title).toBe("ACME's Challenges");
+    expect((await roomView(roomId)).challenge?.title).toBe("Hand-picked");
   });
 
   it("labels a participant's queue with the shared name", async () => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
+import { EVENTS } from "@hackos/shared/events";
 import {
   createContext,
   useCallback,
@@ -10,6 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useEventSource } from "../hooks/use-event-source";
 import { ApiError, api } from "./api";
 import type { Me } from "./types";
 
@@ -82,6 +84,15 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [refresh]);
+
+  // Judge assignments are enterprise mutations. Refresh the caller's
+  // association facts as soon as that topic changes so the judging workspace
+  // appears (or disappears) without a full-page reload.
+  useEventSource("/api/events/stream?topic=sponsors", {
+    events: [EVENTS.DOMAIN_CHANGED],
+    onEvent: refresh,
+    enabled: status === "authenticated",
+  });
 
   const value = useMemo<SessionContextValue>(() => {
     const caps = new Set<string>(me?.capabilities ?? []);

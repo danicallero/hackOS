@@ -470,40 +470,14 @@ export default function QueueDetailPage() {
               <Label htmlFor="queue-name" className="sr-only">
                 {t("queueName")}
               </Label>
-              {/* A one-challenge queue is named by its challenge and follows a
-                  rename of it; only a shared queue has a name of its own. */}
-              <Input
-                id="queue-name"
-                value={name}
-                disabled={!shared}
-                onChange={(e) => setName(e.target.value)}
-              />
-              {shared ? (
-                <Button
-                  variant="outline"
-                  disabled={busy || !name.trim() || name.trim() === queue.group.display_name}
-                  onClick={() => void rename()}
-                >
-                  {t("save")}
-                </Button>
-              ) : (
-                <p className="text-muted-foreground text-xs">
-                  {queue.challenges.length === 1 ? (
-                    <>
-                      {t("queueNameFollowsChallengePrefix")}{" "}
-                      <Link
-                        href={`/challenges/${queue.challenges[0].id}`}
-                        className="text-foreground underline underline-offset-2"
-                      >
-                        {t("queueNameFollowsChallengeLink")}
-                      </Link>
-                      .
-                    </>
-                  ) : (
-                    t("queueNameFollowsChallenge")
-                  )}
-                </p>
-              )}
+              <Input id="queue-name" value={name} onChange={(e) => setName(e.target.value)} />
+              <Button
+                variant="outline"
+                disabled={busy || !name.trim() || name.trim() === queue.group.display_name}
+                onClick={() => void rename()}
+              >
+                {t("save")}
+              </Button>
             </div>
           </SectionCard>
 

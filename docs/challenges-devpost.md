@@ -328,7 +328,10 @@ global capability or the exact contextual relationship receive `403`.
 - `sponsors:manage` and `queue:admin` remain global for their challenge
   operations. A sponsor row grants access only to its enterprise's challenges;
   an `enterprise_judges(enterprise_id, user_id)` row grants read/panel access
-  to that enterprise's challenges only, never edit access. `JUDGE_PANEL` and
+  to that enterprise's challenges only, never edit access. Sponsor
+  representatives receive the same judging access by default for their own
+  enterprise's rooms and challenges, without needing a redundant roster row.
+  `JUDGE_PANEL` and
   `QUEUE_OPERATE` also grant the panel preview capability where the route policy
   allows it.
 - Enterprise profile routes resolve `:id` before authorizing. A representative

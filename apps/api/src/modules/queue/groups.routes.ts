@@ -293,9 +293,9 @@ export function registerQueueGroupRoutes(app: FastifyInstance): void {
       schema: {
         params: queueGroupIdParam,
         body: updateQueueGroupBody,
-        summary: "Rename a shared queue or edit its judging form",
+        summary: "Rename a judging queue or edit a shared queue's judging form",
         description:
-          "Saves the admin's review of a merged group: the name judges, teams and venue screens see, and the questions its single judging form asks. Only a shared group has either — a one-challenge group is named by its challenge and scored by that challenge's own form. Permitted for a global queue/sponsor administrator or a representative of the group's enterprise.",
+          "Saves the queue name judges, teams and venue screens see. A shared queue may also update its single judging form; a one-challenge queue keeps that challenge's form. Permitted for a global queue/sponsor administrator or a representative of the group's enterprise.",
       },
     },
     async (req) => {
