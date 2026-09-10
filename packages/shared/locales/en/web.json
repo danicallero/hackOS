@@ -2248,6 +2248,7 @@
   "dropQuestionsHereDesc": "Drag a question here",
   "placeholderTextLabel": "Placeholder text",
   "duplicateQuestion": "Duplicate question",
+  "collapseQuestion": "Collapse question",
   "moreOptions": "More options",
   "responseValidation": "Response validation",
   "minLengthLabel": "Minimum length",

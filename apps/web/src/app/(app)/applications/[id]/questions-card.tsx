@@ -29,6 +29,7 @@ import {
   ArrowUpIcon,
   CalendarIcon,
   ChevronDownIcon,
+  ChevronUpIcon,
   CircleDotIcon,
   CopyIcon,
   EyeIcon,
@@ -45,6 +46,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
 import { dragOverlayDropAnimation } from "@/components/common/drag-handle";
@@ -73,12 +75,12 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Surface } from "@/components/ui/surface";
 import { Switch } from "@/components/ui/switch";
-import { useClickOutside } from "@/hooks/use-click-outside";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
 import { type MessageKey, type Translate, useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
 import type { Language } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import {
   type ApplicationForm,
   FIELD_KINDS,
@@ -472,10 +474,6 @@ export function QuestionsCard({
     return null;
   }
 
-  function hasI18nText(v: I18nText | undefined): v is I18nText {
-    return !!v && Object.values(v).some((s) => s.trim());
-  }
-
   function save() {
     const err = validate();
     if (err) {
@@ -503,30 +501,7 @@ export function QuestionsCard({
       // The server re-validates with templateSchema/sectionsSchema (unique
       // keys, option kinds, every field.section_key resolves to a section).
       await api.patch<ApplicationForm>(`/api/applications/${form.id}`, {
-        template: fields.map((f) => ({
-          key: f.key.trim(),
-          label: f.label,
-          kind: f.kind,
-          required: f.required,
-          ...(OPTION_KINDS.includes(f.kind) ? { options: f.options } : {}),
-          ...(f.kind === FILE_KIND
-            ? {
-                ...(f.allowed_file_types?.length
-                  ? { allowed_file_types: f.allowed_file_types }
-                  : {}),
-                ...(f.max_file_size_mb ? { max_file_size_mb: f.max_file_size_mb } : {}),
-                ...(f.shareable_with_sponsors ? { shareable_with_sponsors: true } : {}),
-              }
-            : {}),
-          ...(f.section_key ? { section_key: f.section_key } : {}),
-          ...(hasI18nText(f.help_text) ? { help_text: f.help_text } : {}),
-          ...(hasI18nText(f.placeholder) ? { placeholder: f.placeholder } : {}),
-          ...(f.validation && VALIDATABLE_KINDS.has(f.kind) ? { validation: f.validation } : {}),
-          retention_mode: f.retention_mode ?? "none",
-          ...(f.retention_mode === "anonymous_audit" && f.anonymous_audit_dimension
-            ? { anonymous_audit_dimension: f.anonymous_audit_dimension.trim() }
-            : {}),
-        })),
+        template: fields.map(serializeApplicationField),
         sections: sections.map((s) => ({
           key: s.key.trim(),
           title: s.title,
@@ -847,6 +822,43 @@ const FIELD_KIND_ICON: Record<FieldKind, LucideIcon> = {
  *  count) is meaningful — see `checkFieldValidation` in the API's service.ts. */
 const VALIDATABLE_KINDS = new Set<FieldKind>(["text", "textarea", "number", "multiselect"]);
 
+function hasI18nText(v: I18nText | undefined): v is I18nText {
+  return !!v && Object.values(v).some((s) => s.trim());
+}
+
+/** Serialize the editor model explicitly so client-only ids never reach the
+ * API while every persisted question policy survives a save. */
+export function serializeApplicationField(field: TemplateField): TemplateField {
+  return {
+    key: field.key.trim(),
+    label: field.label,
+    kind: field.kind,
+    required: field.required,
+    ...(OPTION_KINDS.includes(field.kind) ? { options: field.options } : {}),
+    ...(field.kind === FILE_KIND
+      ? {
+          ...(field.allowed_file_types?.length
+            ? { allowed_file_types: field.allowed_file_types }
+            : {}),
+          ...(field.max_file_size_mb ? { max_file_size_mb: field.max_file_size_mb } : {}),
+          ...(field.shareable_with_sponsors ? { shareable_with_sponsors: true } : {}),
+        }
+      : {}),
+    ...(field.section_key ? { section_key: field.section_key } : {}),
+    ...(hasI18nText(field.help_text) ? { help_text: field.help_text } : {}),
+    ...(hasI18nText(field.placeholder) ? { placeholder: field.placeholder } : {}),
+    ...(field.validation && VALIDATABLE_KINDS.has(field.kind)
+      ? { validation: field.validation }
+      : {}),
+    retention_mode: field.retention_mode ?? "none",
+    ...(field.retention_mode === "anonymous_audit" && field.anonymous_audit_dimension
+      ? { anonymous_audit_dimension: field.anonymous_audit_dimension.trim() }
+      : {}),
+    ...(field.reporting !== undefined ? { reporting: field.reporting } : {}),
+    ...(field.statistics ? { statistics: field.statistics } : {}),
+  };
+}
+
 /** Kinds where the applicant types free text, so a custom placeholder is
  *  meaningful (choice/date/file/university kinds have their own UI instead). */
 const TYPED_KINDS = new Set<FieldKind>(["text", "textarea", "number"]);
@@ -890,12 +902,32 @@ export function FieldEditor({
   const { t } = useLocale();
   const uid = useId();
   const cardRef = useRef<HTMLDivElement>(null);
+  const expandedHeaderRef = useRef<HTMLDivElement>(null);
   const statisticsEnabled = field.statistics?.enabled === true || field.reporting === true;
-  useClickOutside(cardRef, onDeactivate, active);
+
+  const changeActivePreservingPosition = (change: () => void, anchorBefore: HTMLElement | null) => {
+    const beforeTop = anchorBefore?.getBoundingClientRect().top;
+    flushSync(change);
+    if (beforeTop === undefined) return;
+    const afterTop = cardRef.current?.getBoundingClientRect().top;
+    if (afterTop !== undefined) window.scrollBy({ top: afterTop - beforeTop });
+  };
 
   const topRow = (
-    <div className="flex items-center gap-1">
+    <div
+      ref={active ? expandedHeaderRef : undefined}
+      className={cn(
+        "flex items-center gap-1",
+        active &&
+          "bg-card sticky top-2 z-10 -mx-2 -mt-2 rounded-control border px-2 py-1 shadow-sm",
+      )}
+    >
       {dragHandle}
+      {active && (
+        <span className="min-w-0 flex-1 truncate px-1 text-sm font-medium">
+          {field.label[primaryLocale] || field.key}
+        </span>
+      )}
       <IconButton
         type="button"
         variant="ghost"
@@ -922,14 +954,37 @@ export function FieldEditor({
       >
         <ArrowDownIcon className="size-3.5" aria-hidden="true" />
       </IconButton>
+      {active && (
+        <IconButton
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          label={t("collapseQuestion")}
+          onClick={(event) => {
+            event.stopPropagation();
+            changeActivePreservingPosition(onDeactivate, expandedHeaderRef.current);
+          }}
+        >
+          <ChevronUpIcon className="size-4" aria-hidden="true" />
+        </IconButton>
+      )}
     </div>
   );
 
   if (!active) {
     return (
-      <Surface padding="compact" className="hover:border-primary/40 space-y-3 transition-colors">
+      <Surface
+        ref={cardRef}
+        padding="compact"
+        className="hover:border-primary/40 space-y-3 transition-colors"
+      >
         {topRow}
-        <button type="button" onClick={onActivate} className="w-full text-left">
+        <button
+          type="button"
+          aria-expanded="false"
+          onClick={() => changeActivePreservingPosition(onActivate, cardRef.current)}
+          className="focus-visible:ring-ring w-full rounded-control text-left focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        >
           <div className="pointer-events-none">
             <FieldPreviewRow field={field} locale={primaryLocale} />
           </div>
@@ -964,7 +1019,7 @@ export function FieldEditor({
       ref={cardRef}
       padding="compact"
       onClick={(e) => e.stopPropagation()}
-      className="border-l-primary space-y-4 border-l-4"
+      className="border-l-primary scroll-mt-20 space-y-4 border-l-4"
     >
       {topRow}
 

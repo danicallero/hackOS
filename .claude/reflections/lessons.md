@@ -104,3 +104,38 @@ navigation, or runtime security error occurs.
 An intentionally repeated navigation is allowed only when the product behavior
 explicitly requires a refresh and uses a dedicated refresh action rather than
 implicit state synchronization.
+
+## [R004] Preserve context across disclosure layout changes
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-09-10
+
+### Trigger
+When expanding or collapsing a card, accordion, inspector, or other sizeable
+progressive-disclosure region in a scrollable page.
+
+### Mistake
+The disclosure changed document height without preserving a visible anchor, so
+collapsing a long card left the viewport showing unrelated items farther down.
+
+### Lesson
+Disclosure must preserve spatial context. After a large region changes size,
+the control or card the user acted on should remain visible at the same useful
+viewport position whenever possible.
+
+### Action
+Use an explicit disclosure control, capture its viewport position before the
+state update, and restore the resulting card to that anchor after the update.
+For long expanded regions, keep the collapse control reachable without relying
+on click-outside behavior.
+
+### Validation
+Open and close short and long items near the top, middle, and bottom of a real
+scrolling viewport. Confirm the acted-on item remains visible, then repeat with
+keyboard activation and at a narrow width.
+
+### Exceptions
+Navigation to a deliberately focused destination or a user-requested “jump to”
+action may intentionally change scroll position.
