@@ -15,7 +15,9 @@ import {
   useColorScheme,
   View,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import QRCode from "react-native-qrcode-svg";
+import { runOnJS } from "react-native-reanimated";
 import { ActionButton, EmptyState, InfoRow, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SegmentedControl } from "@/components/segmented-control";
@@ -225,6 +227,24 @@ export default function WalletScreen() {
   if (!ticket)
     return <RequestFeedback loading={loading} error={error} onRetry={() => void load()} />;
 
+  // Swipe left/right over the ticket/badge card to switch tabs, instead of
+  // only the SegmentedControl above it. Matches the ScheduleNotificationsSheet
+  // back-swipe's threshold pattern: activeOffsetX requires a clearly
+  // horizontal drag before this claims the gesture at all, and failOffsetY
+  // yields immediately to the page's vertical ScrollView otherwise.
+  const walletSwipeGesture = Gesture.Pan()
+    .activeOffsetX([-20, 20])
+    .failOffsetY([-15, 15])
+    .onEnd((event) => {
+      if (event.translationX < -60 && selectedIndex < 1) {
+        runOnJS(haptic)("selection");
+        runOnJS(setSelectedIndex)(selectedIndex + 1);
+      } else if (event.translationX > 60 && selectedIndex > 0) {
+        runOnJS(haptic)("selection");
+        runOnJS(setSelectedIndex)(selectedIndex - 1);
+      }
+    });
+
   const purpose = selectedIndex === 0 ? "ticket" : "badge";
   const value = purpose === "ticket" ? ticket.ticketToken : ticket.badgeId;
   const label = purpose === "ticket" ? t("ticketLabel") : t("badgeLabel");
@@ -369,64 +389,71 @@ export default function WalletScreen() {
         onChange={setSelectedIndex}
       />
 
-      {value ? (
-        <View
-          style={{
-            alignItems: "center",
-            backgroundColor: colors.surface,
-            borderCurve: "continuous",
-            borderRadius: 20,
-            gap: 16,
-            padding: 18,
-          }}
-        >
-          <View style={{ alignItems: "center", gap: 5 }}>
-            <SymbolView
-              name={purpose === "ticket" ? "ticket.fill" : "key.card.fill"}
-              tintColor={colors.accent}
-              size={28}
-              accessible={false}
+      <GestureDetector gesture={walletSwipeGesture}>
+        {/* A single host View child, not the raw ternary — GestureDetector
+            needs to attach to one component that forwards a native ref, and
+            `EmptyState` (the other branch) doesn't. */}
+        <View>
+          {value ? (
+            <View
+              style={{
+                alignItems: "center",
+                backgroundColor: colors.surface,
+                borderCurve: "continuous",
+                borderRadius: 20,
+                gap: 16,
+                padding: 18,
+              }}
+            >
+              <View style={{ alignItems: "center", gap: 5 }}>
+                <SymbolView
+                  name={purpose === "ticket" ? "ticket.fill" : "key.card.fill"}
+                  tintColor={colors.accent}
+                  size={28}
+                  accessible={false}
+                />
+                <Text selectable style={{ color: colors.label, fontSize: 22, fontWeight: "700" }}>
+                  {label}
+                </Text>
+                <Text
+                  selectable
+                  style={{ color: colors.secondaryLabel, fontSize: 14, textAlign: "center" }}
+                >
+                  {t("walletScanHint")}
+                </Text>
+              </View>
+              <View
+                accessibilityLabel={t("walletQrCode", { label })}
+                accessibilityRole="image"
+                accessible
+                style={{
+                  backgroundColor: colors.qrBackground,
+                  borderCurve: "continuous",
+                  borderRadius: 16,
+                  maxWidth: "100%",
+                  padding: 16,
+                }}
+              >
+                <QRCode value={value} size={196} />
+              </View>
+              {purpose === "badge" ? (
+                <Text
+                  selectable
+                  style={{ color: colors.secondaryLabel, fontFamily: "SpaceMono", fontSize: 13 }}
+                >
+                  {ticket.badgeId}
+                </Text>
+              ) : null}
+            </View>
+          ) : (
+            <EmptyState
+              icon="key.card"
+              title={purpose === "ticket" ? t("ticketNotReadyTitle") : t("badgeNotReadyTitle")}
+              description={purpose === "ticket" ? t("noTicketYet") : t("noBadgeYet")}
             />
-            <Text selectable style={{ color: colors.label, fontSize: 22, fontWeight: "700" }}>
-              {label}
-            </Text>
-            <Text
-              selectable
-              style={{ color: colors.secondaryLabel, fontSize: 14, textAlign: "center" }}
-            >
-              {t("walletScanHint")}
-            </Text>
-          </View>
-          <View
-            accessibilityLabel={t("walletQrCode", { label })}
-            accessibilityRole="image"
-            accessible
-            style={{
-              backgroundColor: colors.qrBackground,
-              borderCurve: "continuous",
-              borderRadius: 16,
-              maxWidth: "100%",
-              padding: 16,
-            }}
-          >
-            <QRCode value={value} size={196} />
-          </View>
-          {purpose === "badge" ? (
-            <Text
-              selectable
-              style={{ color: colors.secondaryLabel, fontFamily: "SpaceMono", fontSize: 13 }}
-            >
-              {ticket.badgeId}
-            </Text>
-          ) : null}
+          )}
         </View>
-      ) : (
-        <EmptyState
-          icon="key.card"
-          title={purpose === "ticket" ? t("ticketNotReadyTitle") : t("badgeNotReadyTitle")}
-          description={purpose === "ticket" ? t("noTicketYet") : t("noBadgeYet")}
-        />
-      )}
+      </GestureDetector>
 
       {/*
         Readable identity info alongside the QR — useful for anyone who isn't

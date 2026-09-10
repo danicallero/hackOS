@@ -504,6 +504,7 @@ function PlainInfoRow({
         borderBottomColor: colors.separator,
         borderBottomWidth: last ? 0 : 0.5,
         flexDirection: "row",
+        gap: 12,
         justifyContent: "space-between",
         paddingVertical: 14,
       }}
@@ -511,7 +512,13 @@ function PlainInfoRow({
       <Text selectable style={[noTextShadow, { color: colors.secondaryLabel, fontSize: 16 }]}>
         {label}
       </Text>
-      <Text selectable style={[noTextShadow, { color: colors.label, fontSize: 16 }]}>
+      <Text
+        selectable
+        style={[
+          noTextShadow,
+          { color: colors.label, flexShrink: 1, fontSize: 16, textAlign: "right" },
+        ]}
+      >
         {value}
       </Text>
     </View>
