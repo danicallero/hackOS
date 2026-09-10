@@ -2247,6 +2247,7 @@
   "dropQuestionsHereDesc": "Arrastra una pregunta aquí",
   "placeholderTextLabel": "Texto de ejemplo",
   "duplicateQuestion": "Duplicar pregunta",
+  "collapseQuestion": "Contraer pregunta",
   "moreOptions": "Más opciones",
   "responseValidation": "Validación de respuesta",
   "minLengthLabel": "Longitud mínima",
