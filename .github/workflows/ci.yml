@@ -91,8 +91,16 @@ jobs:
             mobile=true
           fi
 
-          if has_change '^(apps/api/|docker-compose\.yml$)'; then
+          # Deployment manifests affect the production API, worker, and web
+          # images even when application source files are unchanged. Publishing
+          # both images is required before Dokploy can recreate services from
+          # the new Compose configuration.
+          if has_change '^(apps/api/|deploy/|docker-compose\.yml$)'; then
             api=true
+          fi
+
+          if has_change '^deploy/'; then
+            web=true
           fi
 
           if has_change '^apps/web/'; then
