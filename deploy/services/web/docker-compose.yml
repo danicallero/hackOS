@@ -22,6 +22,7 @@
 services:
   web:
     image: "${WEB_IMAGE_REPO:-hackos-web}:${IMAGE_TAG:-main}"
+    pull_policy: always
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
