@@ -1507,6 +1507,17 @@ describe("H8 default seeded role set (0805)", () => {
     );
     expect(mentor).toHaveLength(1);
     expect(mentor[0].capabilities).toEqual({});
+
+    const { rows: participant } = await pool.query(
+      `SELECT rsd.capabilities
+         FROM roles r
+         JOIN role_seed_defaults rsd ON rsd.role_id = r.id
+        WHERE r.name = 'Participant'`,
+    );
+    expect(participant).toHaveLength(1);
+    expect(participant[0].capabilities).toEqual({
+      [CAPABILITIES.QUEUE_STATUS]: "allow",
+    });
   });
 
   it("seeds ten role-assignment-triggered rules (0812) that all imply Organizer, and one fires end-to-end", async () => {
