@@ -19,7 +19,7 @@
 #            worker (egress for mail/push). Datastores never join it.
 # ─────────────────────────────────────────────────────────────────────────
 
-x-api-image: &api-image "${IMAGE_REPO:-hackos-api}:${IMAGE_TAG:-latest}"
+x-api-image: &api-image "${IMAGE_REPO:-hackos-api}:${IMAGE_TAG:-main}"
 
 # App-tier env shared by api / worker / migrate. Anchored so the three stay
 # in lockstep — change a secret once, all three pick it up.
@@ -251,7 +251,7 @@ services:
   # never touches the private datastores.
   web:
     <<: *hardening
-    image: "${WEB_IMAGE_REPO:-hackos-web}:${IMAGE_TAG:-latest}"
+    image: "${WEB_IMAGE_REPO:-hackos-web}:${IMAGE_TAG:-main}"
     networks: [edge]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/ || exit 1"]
