@@ -34,6 +34,8 @@ jest.mock("@/lib/i18n", () => ({
       ({
         scheduleReminderOn: "Reminder on",
         scheduleReminderOff: "Reminder off",
+        scheduleMentorOnlyBadge: "Mentors only",
+        scheduleSponsorOnlyBadge: "Sponsors only",
         typeMeal: "Meal",
         typeOther: "Other",
       })[key] ?? key,
@@ -126,6 +128,27 @@ describe("schedule list (H374)", () => {
 
     await screen.findByText("Check-in");
     expect(screen.getByText("Mesa 1").props.numberOfLines).toBeUndefined();
+  });
+
+  it("marks activities restricted to sponsors or mentors", async () => {
+    const restrictedItems = [
+      { ...items[0], audiences: ["sponsor"], id: 3, title: "Sponsor reception" },
+      { ...items[1], audiences: ["mentor"], id: 4, title: "Mentor briefing" },
+    ];
+    (apiFetch as jest.Mock).mockImplementation(
+      (path: string, _init?: { method?: string; body?: string }) => {
+        if (path === "/api/public/activities") return Promise.resolve({ items: restrictedItems });
+        if (path === "/api/me/notification-preferences") {
+          return Promise.resolve({ ...emptyPreferences, overrides: [] });
+        }
+        return Promise.resolve({});
+      },
+    );
+
+    await renderMobile(<ScheduleScreen />);
+
+    expect(await screen.findByText("Sponsors only")).toBeTruthy();
+    expect(screen.getByText("Mentors only")).toBeTruthy();
   });
 
   it("toggles the reminder straight from the list without opening the detail view", async () => {
