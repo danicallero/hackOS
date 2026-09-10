@@ -484,7 +484,8 @@ architecture: [`mobile.md`](./mobile.md).**
   tabs. `Others` stays a separate native menu trigger.
   - **Participants** (no scan capability): schedule, queue, wallet,
     notifications, and **Account** are all direct because the set has five
-    destinations.
+    destinations. Queue remains visible before the first queue entry so its
+    empty state can explain what to expect and expose the tutorial.
   - **Operators** (any scan capability or admin `*`): daily tools win the
     bar — schedule, **Scanner**, Activities (only with `activity:scan`),
     notifications — and the separate **"Others" overflow selector** holds
@@ -620,7 +621,8 @@ rg -n 'tracking-(tight|wide|wider|widest)' apps/web/src/components
 The system never does these. Treat a diff that introduces one as a bug:
 
 1. No role-based UI. `me.role` is display-only; gating is always by
-   capability or association fact (`isEnterpriseJudge`, `isSponsorRep`).
+   capability or association fact (`attendeeType`, `isEnterpriseJudge`,
+   `isSponsorRep`).
 2. No hardcoded colours (hex/oklch) or off-token spacing in components.
 3. No hardcoded user-facing strings — everything through the i18n dictionary,
    all three locales at once.

@@ -5,14 +5,14 @@ import type { OverflowTabKey } from "./overflow-tabs";
 export type TabKey = "schedule" | "notifications" | "scan" | "activities" | OverflowTabKey;
 
 export interface PersonalTabContext {
-  accredited: boolean;
+  isParticipant: boolean;
   hasQueueItems: boolean;
 }
 
-const NO_PERSONAL_QUEUE: PersonalTabContext = { accredited: false, hasQueueItems: false };
+const NO_PERSONAL_QUEUE: PersonalTabContext = { isParticipant: false, hasQueueItems: false };
 
 export function canSeeMyQueue(context: PersonalTabContext): boolean {
-  return context.accredited || context.hasQueueItems;
+  return context.isParticipant || context.hasQueueItems;
 }
 
 const STAFF_SCAN_CAPABILITIES = [
@@ -62,8 +62,9 @@ export function visibleTabs(
 }
 
 /**
- * Tabs shown directly in the custom tab bar. My queue is a personal resource,
- * so it appears only after accreditation or real queue membership. The bar reserves a separate
+ * Tabs shown directly in the custom tab bar. A participant can see My queue
+ * before their first queue entry so the empty state and tutorial remain useful;
+ * other accounts need real queue membership. The bar reserves a separate
  * Others circle only when the complete set is crowded. Operators prioritize
  * their daily tools here; five destinations fit directly, while larger sets
  * use four direct tabs plus Others.

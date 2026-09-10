@@ -182,8 +182,8 @@ import { render, screen } from "@testing-library/react-native";
 import { OpaqueRouterTabs } from "@/components/opaque-router-tabs";
 
 const DEFAULT_PROPS = {
-  accredited: false,
   capabilities: [],
+  isParticipant: false,
   hasQueueItems: false,
   hasUnreadNotifications: false,
 };

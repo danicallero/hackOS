@@ -120,7 +120,7 @@ const REGISTERED_TAB_ROUTES: RouterTabRoute[] = [
 
 export interface OpaqueRouterTabsProps {
   capabilities: string[];
-  accredited: boolean;
+  isParticipant: boolean;
   hasQueueItems: boolean;
   hasUnreadNotifications: boolean;
 }
@@ -132,7 +132,7 @@ export interface OpaqueRouterTabsProps {
  */
 export function OpaqueRouterTabs({
   capabilities,
-  accredited,
+  isParticipant,
   hasQueueItems,
   hasUnreadNotifications,
 }: OpaqueRouterTabsProps) {
@@ -145,7 +145,7 @@ export function OpaqueRouterTabs({
     : (systemColorScheme ?? "light");
   const tabIconColor = fallbackColorScheme === "dark" ? "#98989e" : "#6c6c70";
   const tabSelectedColor = fallbackColorScheme === "dark" ? "#0a84ff" : "#007aff";
-  const personalTabContext = { accredited, hasQueueItems };
+  const personalTabContext = { isParticipant, hasQueueItems };
   const primaryTabKeys = primaryTabs(capabilities, personalTabContext);
   const overflowTabKeys = overflowTabs(capabilities, personalTabContext);
   const directTabLimit = routerTabBarDirectTabsForWidth(width);

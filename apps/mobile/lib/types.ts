@@ -34,6 +34,8 @@ export interface Me {
   createdAt: string;
   /** The user's actual highest-visible role name, or null when none (H8 — badge_category retired). */
   role: string | null;
+  /** Functional attendee association, independent of the display role. */
+  attendeeType: "participant" | "mentor" | null;
   mobileAccess: boolean;
   hasQueueItems: boolean;
   capabilities: string[];

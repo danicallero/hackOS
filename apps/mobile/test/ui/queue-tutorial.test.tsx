@@ -23,6 +23,8 @@ jest.mock("@/lib/i18n", () => ({
         queueHowItWorksPrepareTitle: "1. Get ready",
         queueHowItWorksSkip: "Skip",
         queueHowItWorksTitle: "How the queue works",
+        queueEmpty: "Once your project joins a judging queue, your live status will appear here.",
+        queueEmptyTitle: "Not in a queue yet",
       })[key] ?? key,
   }),
 }));
@@ -59,10 +61,17 @@ jest.mock("@/theme/colors", () => ({
   },
 }));
 
-import { QueueTutorial } from "@/app/(tabs)/queue";
+import QueueScreen, { QueueTutorial } from "@/app/(tabs)/queue";
 import { renderMobile } from "./render";
 
 describe("queue tutorial (H38)", () => {
+  it("keeps the tutorial available from the no-queue state", async () => {
+    await renderMobile(<QueueScreen />);
+
+    expect(screen.getByRole("header", { name: "Not in a queue yet" })).toBeTruthy();
+    expect(screen.getByTestId("queue-tutorial-open")).toBeTruthy();
+  });
+
   it("moves through the three distinct instructions and finishes from the fixed actions", async () => {
     const onDismiss = jest.fn();
     const user = userEvent.setup();

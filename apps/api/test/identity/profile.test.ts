@@ -194,6 +194,7 @@ describe("GET /api/me (H7)", () => {
     const plain = await createUser();
     const plainRes = await a.inject({ method: "GET", url: "/api/me", headers: asUser(plain) });
     expect(plainRes.json().visibleRoleName).toBeNull();
+    expect(plainRes.json().attendeeType).toBeNull();
 
     const named = await createUser();
     const roleId = await createRole([CAPABILITIES.ACCREDIT_SCAN], { name: "Event Director" });
@@ -208,11 +209,13 @@ describe("GET /api/me (H7)", () => {
     await grantAttendeeRole(participant, "participant");
     const pRes = await a.inject({ method: "GET", url: "/api/me", headers: asUser(participant) });
     expect(pRes.json().visibleRoleName).toBe("Participant");
+    expect(pRes.json().attendeeType).toBe("participant");
 
     const mentor = await createUser();
     await grantAttendeeRole(mentor, "mentor");
     const mRes = await a.inject({ method: "GET", url: "/api/me", headers: asUser(mentor) });
     expect(mRes.json().visibleRoleName).toBe("Mentor");
+    expect(mRes.json().attendeeType).toBe("mentor");
 
     // A capability holder, enterprise judge, or sponsor rep with NO visible
     // role of their own shows null here too — capabilities/relationships are
