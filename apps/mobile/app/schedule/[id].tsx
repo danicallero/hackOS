@@ -211,7 +211,10 @@ export default function ScheduleDetailScreen() {
       ) : (
         <Stack.Screen
           options={{
-            title: "",
+            // Let UIKit own the large-to-compact title transition. It keeps
+            // the activity name alongside the native back and reminder items
+            // and applies its own single-line tail ellipsis when collapsed.
+            title: item?.title ?? t("scheduleDetails"),
             headerRight:
               item && reminderOn !== null
                 ? () => (

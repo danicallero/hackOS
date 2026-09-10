@@ -498,7 +498,9 @@ distributed to other Expo Router apps without importing hackOS code.
 - `app/schedule/[id].tsx` — iOS uses the native large-title navigation bar
   (`headerLargeTitle` + `headerTransparent` on the `schedule/[id]`
   `Stack.Screen` in `app/_layout.tsx`, `contentInsetAdjustmentBehavior=
-  "automatic"` on the `ScrollView`). Android uses the same in-screen glass
+  "automatic"` on the `ScrollView`): the activity title is the native title,
+  so it collapses into one tail-ellipsized line beside the system Back and
+  reminder controls. Android uses the same in-screen glass
   chrome as the Schedule tab: a single-line, tail-ellipsized title with back
   and reminder actions, clear of its status-bar inset, rather than the native
   Material app bar. The Android header is pinned above the scroll view; the
@@ -509,7 +511,9 @@ distributed to other Expo Router apps without importing hackOS code.
   back reads "Horario" via `headerBackTitle`; on Android those actions live
   in the custom header. Admins get a floating glass pencil (bottom-right,
   clear of the home indicator) that opens the same `ScheduleFormModal` as the
-  list's swipe-to-edit.
+  list's swipe-to-edit. List cards visibly mark staff-only, sponsor-only, and
+  mentor-only activities when their audience is restricted to exactly that
+  group.
 
 ## Operator screens
 

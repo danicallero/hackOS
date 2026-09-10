@@ -110,6 +110,24 @@ function audienceMatches(item: ScheduleItem, selected: AudienceFilterValue[]): b
   return item.audiences.some((audience) => selected.includes(audience));
 }
 
+/** A one-audience item needs the same visibility cue as a staff-only item. */
+function scheduleAudienceOnlyBadge(
+  item: ScheduleItem,
+  t: ReturnType<typeof useLocale>["t"],
+): string | null {
+  if (item.audiences.length === 0) return t("scheduleStaffOnlyBadge");
+  if (item.audiences.length !== 1) return null;
+
+  switch (item.audiences[0]) {
+    case "sponsor":
+      return t("scheduleSponsorOnlyBadge");
+    case "mentor":
+      return t("scheduleMentorOnlyBadge");
+    case "participant":
+      return null;
+  }
+}
+
 /** `query` is already trimmed and lowercased by the caller. */
 function scheduleItemMatchesQuery(item: ScheduleItem, query: string): boolean {
   return (
@@ -820,6 +838,7 @@ function ScheduleCard({
   const { t } = useLocale();
   const router = useRouter();
   const truncated = isScheduleCardTruncated(item);
+  const audienceBadge = scheduleAudienceOnlyBadge(item, t);
   const startsAt = new Date(item.startsAt);
   const endsAt = new Date(item.endsAt);
   const time = startsAt.toLocaleTimeString(language, {
@@ -952,9 +971,9 @@ function ScheduleCard({
               >
                 {item.title}
               </Text>
-              {item.audiences.length === 0 ? (
+              {audienceBadge ? (
                 <StatusPill tone="neutral" style={{ alignSelf: "center" }}>
-                  {t("scheduleStaffOnlyBadge")}
+                  {audienceBadge}
                 </StatusPill>
               ) : item.visibility === "hidden" ? (
                 <StatusPill tone="warning" style={{ alignSelf: "center" }}>
