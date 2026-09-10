@@ -21,7 +21,7 @@
 
 services:
   web:
-    image: "${WEB_IMAGE_REPO:-hackos-web}:${IMAGE_TAG:-latest}"
+    image: "${WEB_IMAGE_REPO:-hackos-web}:${IMAGE_TAG:-main}"
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
