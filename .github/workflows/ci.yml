@@ -531,6 +531,9 @@ jobs:
           for webhook in "$DOKPLOY_API_DEPLOY_WEBHOOK" "$DOKPLOY_WORKER_DEPLOY_WEBHOOK"; do
             test -n "$webhook"
             curl --fail --silent --show-error --retry 3 --retry-delay 5 \
+              --header 'Content-Type: application/json' \
+              --header 'X-GitHub-Event: push' \
+              --data-binary "@$GITHUB_EVENT_PATH" \
               --request POST "$webhook"
           done
 
@@ -542,4 +545,7 @@ jobs:
           set -euo pipefail
           test -n "$DOKPLOY_WEB_DEPLOY_WEBHOOK"
           curl --fail --silent --show-error --retry 3 --retry-delay 5 \
+            --header 'Content-Type: application/json' \
+            --header 'X-GitHub-Event: push' \
+            --data-binary "@$GITHUB_EVENT_PATH" \
             --request POST "$DOKPLOY_WEB_DEPLOY_WEBHOOK"
