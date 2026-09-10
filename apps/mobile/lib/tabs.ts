@@ -5,15 +5,10 @@ import type { OverflowTabKey } from "./overflow-tabs";
 export type TabKey = "schedule" | "notifications" | "scan" | "activities" | OverflowTabKey;
 
 export interface PersonalTabContext {
-  isParticipant: boolean;
   hasQueueItems: boolean;
 }
 
-const NO_PERSONAL_QUEUE: PersonalTabContext = { isParticipant: false, hasQueueItems: false };
-
-export function canSeeMyQueue(context: PersonalTabContext): boolean {
-  return context.isParticipant || context.hasQueueItems;
-}
+const NO_PERSONAL_QUEUE: PersonalTabContext = { hasQueueItems: false };
 
 const STAFF_SCAN_CAPABILITIES = [
   CAPABILITIES.ACCREDIT_SCAN,
@@ -23,6 +18,10 @@ const STAFF_SCAN_CAPABILITIES = [
 
 export function has(capabilities: string[], capability: string): boolean {
   return capabilities.includes(capability) || capabilities.includes(CAPABILITIES.ADMIN_ALL);
+}
+
+export function canSeeMyQueue(capabilities: string[], context: PersonalTabContext): boolean {
+  return has(capabilities, CAPABILITIES.QUEUE_STATUS) || context.hasQueueItems;
 }
 
 export function isOperator(capabilities: string[]): boolean {
@@ -52,7 +51,8 @@ export function queueOperationsInPrimaryBar(capabilities: string[]): boolean {
 
 /**
  * H22/H55: which tabs a signed-in user sees, driven by effective capabilities
- * and concrete personal-resource facts (never by illustrative `role`).
+ * and concrete personal-resource facts (never by illustrative `role` or a
+ * role name such as "Participant").
  */
 export function visibleTabs(
   capabilities: string[],
@@ -62,9 +62,10 @@ export function visibleTabs(
 }
 
 /**
- * Tabs shown directly in the custom tab bar. A participant can see My queue
- * before their first queue entry so the empty state and tutorial remain useful;
- * other accounts need real queue membership. The bar reserves a separate
+ * Tabs shown directly in the custom tab bar. An account with the personal
+ * queue capability can see My queue before its first queue entry so the empty
+ * state and tutorial remain useful; other accounts need real queue membership.
+ * The bar reserves a separate
  * Others circle only when the complete set is crowded. Operators prioritize
  * their daily tools here; five destinations fit directly, while larger sets
  * use four direct tabs plus Others.
@@ -79,7 +80,7 @@ export function primaryTabs(
   if (!isOperator(capabilities)) {
     return [
       "schedule",
-      ...(canSeeMyQueue(context) ? (["queue"] as const) : []),
+      ...(canSeeMyQueue(capabilities, context) ? (["queue"] as const) : []),
       "wallet",
       "notifications",
     ];
@@ -100,7 +101,7 @@ export function overflowTabs(
 ): OverflowTabKey[] {
   if (!isOperator(capabilities) && !canOperateQueues(capabilities)) return ["account"];
   return [
-    ...(canSeeMyQueue(context) ? (["queue"] as const) : []),
+    ...(canSeeMyQueue(capabilities, context) ? (["queue"] as const) : []),
     "wallet",
     "account",
     ...(isOperator(capabilities) && canOperateQueues(capabilities)

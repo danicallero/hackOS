@@ -72,7 +72,6 @@ export default function TabLayout() {
     <View style={{ flex: 1 }}>
       <OpaqueRouterTabs
         capabilities={capabilities}
-        isParticipant={me.attendeeType === "participant"}
         hasQueueItems={me.hasQueueItems}
         hasUnreadNotifications={hasUnreadNotifications}
       />

@@ -34,10 +34,13 @@ simultaneously; nothing is hidden to make room for something else, and there
 is no role switcher.
 
 `GET /api/me` also returns `isEnterpriseJudge`, `isSponsorRep`, and the
-functional `attendeeType` (`participant`/`mentor`) precisely so navigation can
-check association facts independently — the single `role` field collapses a
-sponsor rep who also judges to `"judge"`, which would hide their sponsor
-workspace if nav gated on `role` instead.
+effective capability set precisely so navigation can check association and
+permission facts independently — the single `role` field collapses a sponsor
+rep who also judges to `"judge"`, which would hide their sponsor workspace if
+nav gated on `role` instead. The mobile personal Queue tab uses the stable
+`queue:status` capability for the pre-enrollment empty state, or
+`hasQueueItems` when the account already has an active personal queue entry;
+neither path depends on a role name.
 
 ## Web: personal area + workspaces
 

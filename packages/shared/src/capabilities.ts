@@ -40,6 +40,7 @@ export const CAPABILITIES = {
   INTOLERANCES_MANAGE: "intolerances:manage", // maintain the food-intolerance dictionary
 
   // queue & judging (H29-H40)
+  QUEUE_STATUS: "queue:status", // view your own queue status
   QUEUE_OPERATE: "queue:operate", // call/skip/no-show/pause/requeue
   QUEUE_ADMIN: "queue:admin", // rooms, assignments, settings, disqualify
   JUDGE_PANEL: "judge:panel", // bring in / start / evaluate
@@ -112,6 +113,7 @@ export const CAPABILITY_DESCRIPTIONS: Record<Capability, string> = {
   "activity:scan": "Scan meals and registrable activities",
   "logistics:stats": "View attendance and logistics statistics panels",
   "intolerances:manage": "Maintain the food-intolerance dictionary",
+  "queue:status": "View your own judging queue and status",
   "queue:operate": "Call, skip, mark no-show, pause, or requeue teams",
   "queue:admin": "Manage rooms, assignments, settings, and disqualifications",
   "judge:panel": "Bring in, start, and evaluate judging sessions",

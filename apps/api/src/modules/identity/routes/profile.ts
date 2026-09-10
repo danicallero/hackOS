@@ -35,7 +35,6 @@ import { issueRemovalPin } from "../removal-pin.js";
 import {
   type AssignedRoleSummary,
   assignAttendeeRole,
-  attendeeTypeFromAssignedRoles,
   computeMembershipFlags,
   getAssignedRoles,
   getHighestVisibleRoleName,
@@ -488,8 +487,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             // Any assigned, non-deleted role with eventAccess=true — drives
             // ticket/wallet exposure and mobile-app access.
             hasEventAccess: z.boolean(),
-            /** Functional attendee association used by participant-facing navigation. */
-            attendeeType: z.enum(["participant", "mentor"]).nullable(),
             // issue #424: My project/My queue nav items are hidden until the
             // caller actually has one — visible-but-empty misleads sponsors
             // and participants who hold the capability but nothing to show.
@@ -569,7 +566,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         roles,
         ...membership,
         hasEventAccess: eventAccess,
-        attendeeType: attendeeTypeFromAssignedRoles(roles),
         hasProject,
         hasQueueItems,
         canCreateProject,

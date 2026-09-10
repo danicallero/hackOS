@@ -178,8 +178,8 @@ hackOS adapter: capability policy, localized destinations, and the native
 distributed to other Expo Router apps without importing hackOS code.
 
 - `lib/tabs.ts` (`primaryTabs`/`overflowTabs`) — pure functions mapping
-  `me.capabilities`, `me.attendeeType`, and `me.hasQueueItems` to the custom tab
-  bar;
+  `me.capabilities` (including `queue:status`) and `me.hasQueueItems` to the
+  custom tab bar;
   see `docs/navigation.md` for the
   full model. Every platform uses `components/opaque-router-tabs.tsx` through
   the reusable `components/router-tabs.tsx` shell: iOS 26+ renders Liquid
@@ -188,9 +188,11 @@ distributed to other Expo Router apps without importing hackOS code.
   layouts; tablet-width layouts can place up to six before using `Others`,
   whose bar surface and circle become 56pt instead of 64pt. With no scan
   capability, Schedule, Wallet, Notifications, and Account are direct; Queue
-  joins them for participants even before the first queue entry so the empty
-  state and tutorial are available. Other accounts see Queue only when they
-  have an actual queue entry. For
+  joins them for accounts with `queue:status` even before the first queue
+  entry so the empty state and tutorial are available. Other accounts see
+  Queue only when they have an actual queue entry. `queue:status` is assigned
+  through the configurable role-permission editor, never inferred from a role
+  name. For
   `ACCREDIT_SCAN`/`PRESENCE_SCAN`/`ACTIVITY_SCAN` (or the
   admin `*` wildcard) holders, the daily tools take the bar — Schedule,
   Scanner, Activities (for `ACTIVITY_SCAN`), Notifications — and Queue,

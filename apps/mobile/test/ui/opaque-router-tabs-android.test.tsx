@@ -183,7 +183,6 @@ import { OpaqueRouterTabs } from "@/components/opaque-router-tabs";
 
 const DEFAULT_PROPS = {
   capabilities: [],
-  isParticipant: false,
   hasQueueItems: false,
   hasUnreadNotifications: false,
 };
