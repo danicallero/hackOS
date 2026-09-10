@@ -522,7 +522,7 @@ export async function splitQueueGroup(input: {
 /**
  * The admin's review/edit of a merged group: its name and its judging form.
  * Only a shared group has a form of its own — a 1:1 group's form is its
- * challenge's, and its name follows that challenge's title.
+ * challenge's. Every group nevertheless has its own editable queue name.
  */
 export async function updateQueueGroup(input: {
   queueGroupId: number;
@@ -544,8 +544,8 @@ export async function updateQueueGroup(input: {
       .rows[0];
     if (!before) throw new NotFoundError("Queue group not found", { queueGroupId });
     const shared = (before.challenges as unknown[]).length > 1;
-    if (!shared) {
-      throw new BadRequestError("Queue group is not shared", { queueGroupId });
+    if (!shared && criteria !== undefined) {
+      throw new BadRequestError("Only shared queues have their own judging form", { queueGroupId });
     }
     // The name is safe to change at any time; the questions are not, once
     // somebody has answered them.

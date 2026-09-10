@@ -1,19 +1,11 @@
 "use client";
 
-import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { I18nText, Question } from "@hackos/shared/questions";
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  DownloadIcon,
-  HistoryIcon,
-  PlusIcon,
-  Trash2Icon,
-  TriangleAlertIcon,
-  TrophyIcon,
-} from "lucide-react";
+import { HistoryIcon, Trash2Icon, TrophyIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -56,16 +48,11 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
-import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
-import { exportUrls } from "@/lib/queue";
-import { useSessionContext } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
-import { useChallengeRoomStatus } from "../judging-mode";
 import {
   asI18n,
   type Challenge,
-  challengeState,
   i18nWithEnglishFallback,
   type Prize,
   textForDisplay,
@@ -112,25 +99,17 @@ type DevpostPrize = {
   mappedChallengeTitle: string | null;
 };
 
-function exportHref(path: string): string {
-  return `${API_URL}${path}`;
-}
-
 export function EditCard({
   challenge,
   canAdmin,
   canMapPrizes,
-  canManageRooms,
   devpostPrizes,
-  timezone,
   onSaved,
 }: {
   challenge: Challenge;
   canAdmin: boolean;
   canMapPrizes: boolean;
-  canManageRooms: boolean;
   devpostPrizes: DevpostPrize[];
-  timezone: string | null;
   onSaved: () => Promise<void>;
 }) {
   const { t } = useLocale();
@@ -233,8 +212,6 @@ export function EditCard({
   }
 
   const generalDisabled = !canAdmin && challenge.visibility === "visible";
-  const watchedVisibility = useWatch({ control: form.control, name: "visibility" });
-  const watchedAvailableFrom = useWatch({ control: form.control, name: "availableFrom" });
   const hasUnsavedChanges =
     form.formState.isDirty ||
     JSON.stringify(titleI18n) !==
@@ -387,7 +364,6 @@ export function EditCard({
                           min={0}
                           value={field.value}
                           onChange={(e) => field.onChange(e.target.value)}
-                          disabled={!canAdmin}
                         />
                       </FormControl>
                       <FormMessage />
@@ -396,7 +372,6 @@ export function EditCard({
                 />
               </div>
             </SectionCard>
-            {canManageRooms && <JudgingModeCard challengeId={challenge.id} />}
           </TabsContent>
 
           <TabsContent value="winners" className="space-y-6 pt-4">
@@ -449,14 +424,6 @@ export function EditCard({
                 />
               </div>
             </SectionCard>
-            <RevealPreviewCard
-              titleEn={titleI18n.en}
-              descriptionEn={descriptionI18n.en}
-              prizes={prizes}
-              visibility={watchedVisibility}
-              availableFrom={watchedAvailableFrom}
-              timezone={timezone}
-            />
             {canAdmin && (
               <SectionCard title={t("dangerZoneTitle")}>
                 <div className="flex items-center justify-between gap-4">
@@ -517,133 +484,6 @@ export function EditCard({
         </div>
       </form>
     </Form>
-  );
-}
-
-// ── Publish tab: scheduled-reveal timezone + public outcome preview (H45) ───
-
-function RevealPreviewCard({
-  titleEn,
-  descriptionEn,
-  prizes,
-  visibility,
-  availableFrom,
-  timezone,
-}: {
-  titleEn: string;
-  descriptionEn: string;
-  prizes: Prize[];
-  visibility: "visible" | "hidden";
-  availableFrom: string;
-  timezone: string | null;
-}) {
-  const { t } = useLocale();
-  const state = challengeState({
-    visibility,
-    available_from: fromDatetimeLocal(availableFrom),
-  });
-  const revealDate = availableFrom ? new Date(availableFrom) : null;
-  const revealValid = revealDate && !Number.isNaN(revealDate.getTime());
-
-  return (
-    <SectionCard title={t("scheduledRevealTitle")}>
-      <div className="space-y-4">
-        {state === "draft" && (
-          <p className="text-muted-foreground text-sm">{t("draftStateDesc")}</p>
-        )}
-        {state === "scheduled" && revealValid && (
-          <p className="text-sm">
-            {t("revealScheduledForDesc", {
-              date: revealDate.toLocaleString(undefined, {
-                dateStyle: "medium",
-                timeStyle: "short",
-              }),
-              timezone: timezone ?? t("eventTimezoneUnknown"),
-            })}
-          </p>
-        )}
-        {state === "public" && <p className="text-sm">{t("revealPublicNowDesc")}</p>}
-
-        <div className="rounded-lg border p-4">
-          <p className="text-muted-foreground mb-2 text-xs uppercase">{t("publicPreviewLabel")}</p>
-          <p className="font-medium">{titleEn || t("untitledChallenge")}</p>
-          {descriptionEn && (
-            <p className="text-muted-foreground mt-1 line-clamp-3 text-sm">{descriptionEn}</p>
-          )}
-          {prizes.length > 0 && (
-            <ul className="mt-2 flex flex-wrap gap-2">
-              {prizes.map((prize) => (
-                <li key={prize.name}>
-                  <StatusBadge tone="neutral">{prize.name}</StatusBadge>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-    </SectionCard>
-  );
-}
-
-// ── Judging tab: external mode + CSV export + unresolved room gaps (H46) ────
-
-function JudgingModeCard({ challengeId }: { challengeId: number }) {
-  const { t } = useLocale();
-  const { can, canAny } = useSessionContext();
-  const canExport = canAny(CAPABILITIES.JUDGING_EXPORT, CAPABILITIES.QUEUE_ADMIN);
-  const { loading, mode, gaps } = useChallengeRoomStatus(challengeId, true);
-
-  return (
-    <SectionCard title={t("judgingModeTitle")}>
-      {loading ? (
-        <Spinner className="size-5" />
-      ) : (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <StatusBadge tone={mode === "external" ? "warning" : "success"}>
-              {mode === "external" ? t("externalJudgingBadge") : t("queueJudgingBadge")}
-            </StatusBadge>
-            <p className="text-muted-foreground text-sm">
-              {mode === "external" ? t("externalJudgingDesc") : t("queueJudgingDesc")}
-            </p>
-          </div>
-
-          {gaps.length > 0 && (
-            <div className="flex items-start gap-2 rounded-md border p-3 text-sm">
-              <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-amber-600" />
-              <p>
-                {gaps.length === 1
-                  ? t("roomsMissingJudgesDescOne")
-                  : t("roomsMissingJudgesDescOther", { count: gaps.length })}
-              </p>
-            </div>
-          )}
-
-          {canExport ? (
-            <div className="flex flex-wrap gap-2">
-              <Button asChild variant="outline" size="sm">
-                <a href={exportHref(exportUrls(challengeId).evaluations)}>
-                  <DownloadIcon className="size-4" />
-                  {t("exportEvaluationsCsv")}
-                </a>
-              </Button>
-              {mode === "queue" && (
-                <Button asChild variant="outline" size="sm">
-                  <a href={exportHref(exportUrls(challengeId).queue)}>
-                    <DownloadIcon className="size-4" />
-                    {t("exportQueueCsv")}
-                  </a>
-                </Button>
-              )}
-            </div>
-          ) : (
-            !can(CAPABILITIES.JUDGING_EXPORT) && (
-              <p className="text-muted-foreground text-sm">{t("askAdminForExportAccess")}</p>
-            )
-          )}
-        </div>
-      )}
-    </SectionCard>
   );
 }
 
@@ -760,7 +600,6 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
   const [winners, setWinners] = useState<Winner[]>([]);
   const [eligible, setEligible] = useState<EligibleRepo[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newRank, setNewRank] = useState("");
   const [newRepoId, setNewRepoId] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -786,15 +625,17 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
     void load();
   }, [load]);
 
-  async function addWinner() {
-    const rank = Number(newRank);
-    const repoId = Number(newRepoId);
-    if (!Number.isInteger(rank) || rank < 1 || !Number.isInteger(repoId)) return;
+  async function addWinner(repoId: number) {
+    // Selecting a team always appends the next placement. Reordering a winner
+    // is not a separate task from choosing one, so there is no unexplained
+    // rank field to fill in.
+    const occupied = new Set(winners.map((winner) => winner.rank));
+    let rank = 1;
+    while (occupied.has(rank)) rank += 1;
     setBusy(true);
     try {
       await api.put(`/api/challenges/${challengeId}/winners/${rank}`, { repoId });
       toast.success(t("winnerSaved"));
-      setNewRank("");
       setNewRepoId("");
       await load();
     } catch (err) {
@@ -853,46 +694,31 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
             </ul>
           )}
 
-          <div className="grid gap-2 sm:grid-cols-[100px_minmax(200px,1fr)_auto]">
-            <div>
-              <Label htmlFor="winner-rank-input" className="sr-only">
-                {t("rankInputLabel")}
-              </Label>
-              <Input
-                id="winner-rank-input"
-                type="number"
-                min={1}
-                placeholder={t("rankPlaceholder")}
-                value={newRank}
-                onChange={(e) => setNewRank(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="winner-project-select" className="sr-only">
-                {t("winnerProjectSelectLabel")}
-              </Label>
-              <Select value={newRepoId} onValueChange={setNewRepoId}>
-                <SelectTrigger id="winner-project-select">
-                  <SelectValue placeholder={t("selectProjectPlaceholder")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {eligible.map((repo) => (
+          <div>
+            <Label htmlFor="winner-project-select" className="sr-only">
+              {t("winnerProjectSelectLabel")}
+            </Label>
+            <Select
+              value={newRepoId}
+              disabled={busy}
+              onValueChange={(value) => {
+                setNewRepoId(value);
+                void addWinner(Number(value));
+              }}
+            >
+              <SelectTrigger id="winner-project-select">
+                <SelectValue placeholder={t("selectProjectPlaceholder")} />
+              </SelectTrigger>
+              <SelectContent>
+                {eligible
+                  .filter((repo) => !winners.some((winner) => winner.repoId === repo.id))
+                  .map((repo) => (
                     <SelectItem key={repo.id} value={String(repo.id)}>
                       {repo.name}
                     </SelectItem>
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              disabled={busy || !newRank || !newRepoId}
-              onClick={addWinner}
-            >
-              <PlusIcon className="size-4" />
-              {t("save")}
-            </Button>
+              </SelectContent>
+            </Select>
           </div>
         </div>
       )}

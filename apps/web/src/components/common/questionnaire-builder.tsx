@@ -236,7 +236,7 @@ export function JudgingPanelBuilder({
   const { t } = useLocale();
   const questionTypes = useMemo(() => buildQuestionTypes(t), [t]);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
   const dndSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -269,15 +269,16 @@ export function JudgingPanelBuilder({
   };
 
   function handleDragStart(event: DragStartEvent) {
-    setDragIndex(Number(event.active.id));
+    setDragId(String(event.active.id));
   }
 
   function handleDragEnd(event: DragEndEvent) {
-    setDragIndex(null);
+    setDragId(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = Number(active.id);
-    const newIndex = Number(over.id);
+    const oldIndex = value.findIndex((question) => question.key === active.id);
+    const newIndex = value.findIndex((question) => question.key === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
     onChange(arrayMove(value, oldIndex, newIndex));
     setActiveIndex((prev) =>
       prev === null
@@ -327,14 +328,14 @@ export function JudgingPanelBuilder({
         collisionDetection={closestCenter}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
-        onDragCancel={() => setDragIndex(null)}
+        onDragCancel={() => setDragId(null)}
       >
         <SortableContext
-          items={value.map((_, index) => String(index))}
+          items={value.map((question) => question.key)}
           strategy={verticalListSortingStrategy}
         >
           {value.map((question, index) => (
-            <SortableItem key={String(index)} id={String(index)} hideWhileDragging>
+            <SortableItem key={question.key} id={question.key} hideWhileDragging>
               {(drag) => (
                 <JudgingQuestionRow
                   question={question}
@@ -358,9 +359,12 @@ export function JudgingPanelBuilder({
           ))}
         </SortableContext>
         <DragOverlay dropAnimation={dragOverlayDropAnimation}>
-          {dragIndex !== null && (
+          {dragId !== null && (
             <Surface padding="compact" className="shadow-floating">
-              <QuestionRowPreview question={value[dragIndex]} index={dragIndex} />
+              <QuestionRowPreview
+                question={value.find((question) => question.key === dragId)!}
+                index={value.findIndex((question) => question.key === dragId)}
+              />
             </Surface>
           )}
         </DragOverlay>
@@ -422,6 +426,7 @@ function JudgingQuestionRow({
       {dragHandle}
       <IconButton
         label={t("moveFieldUp")}
+        className="text-muted-foreground hover:text-foreground"
         disabled={disabled || index === 0}
         onClick={() => onMove(-1)}
       >
@@ -429,6 +434,7 @@ function JudgingQuestionRow({
       </IconButton>
       <IconButton
         label={t("moveFieldDown")}
+        className="text-muted-foreground hover:text-foreground"
         disabled={disabled || index === count - 1}
         onClick={() => onMove(1)}
       >

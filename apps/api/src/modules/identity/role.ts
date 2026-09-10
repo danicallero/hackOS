@@ -156,7 +156,13 @@ export async function computeMembershipFlags(
       [userId],
     ),
   ]);
-  return { isEnterpriseJudge: judgeRows.length > 0, isSponsorRep: sponsorRows.length > 0 };
+  // A sponsor representative judges the rooms of their own enterprise by
+  // default.  The explicit roster remains for external judges; it must not be
+  // required for the people who own the challenge in the first place.
+  return {
+    isEnterpriseJudge: judgeRows.length > 0 || sponsorRows.length > 0,
+    isSponsorRep: sponsorRows.length > 0,
+  };
 }
 
 /**
