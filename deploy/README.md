@@ -244,6 +244,31 @@ must match the production HTTPS origins because Next.js compiles both values
 into the web image. No `build:` key remains in the production compose files:
 Dokploy must pull rather than compile on the Pi.
 
+The CI workflow triggers the three Dokploy deployments only after the matching
+image push succeeds. Store these three generated Compose deploy URLs as GitHub
+repository **Actions secrets** (never as variables or committed text):
+
+```text
+DOKPLOY_API_DEPLOY_WEBHOOK
+DOKPLOY_WORKER_DEPLOY_WEBHOOK
+DOKPLOY_WEB_DEPLOY_WEBHOOK
+```
+
+Because this Dokploy instance is reachable only through Tailscale, also create
+a Tailscale tag such as `tag:ci`, grant that tag access to `danipi`, and create
+a federated identity/OIDC client with the `auth_keys` scope. Store its client ID
+and audience as the GitHub Actions secrets `TS_OAUTH_CLIENT_ID` and
+`TS_AUDIENCE`. The workflow creates an ephemeral CI node, calls the three
+webhooks over the tailnet, and removes that node when the job ends. This follows
+the [Tailscale GitHub Action](https://tailscale.com/docs/integrations/github/github-action)
+workload-identity flow; no Dokploy endpoint is exposed publicly.
+
+The API publish calls the API and worker endpoints because both run the same
+image; the web publish calls only the web endpoint. Dokploy then pulls the
+published `main` tag from GHCR and recreates the service. Do not also configure
+a source-push webhook for these same services, or every main push will deploy
+twice.
+
 Not using Dokploy? Skip the `dokploy.env.example` files — they're Dokploy's
 own template syntax, resolved before Docker ever sees it, and never appear
 inside the compose YAML itself. Run the same compose files with a literal

@@ -426,6 +426,7 @@ jobs:
           cache-from: type=gha,scope=hackos-api-arm64
           cache-to: type=gha,mode=max,scope=hackos-api-arm64
 
+
   publish-web:
     name: Publish web image (arm64)
     needs: changes
@@ -475,3 +476,46 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=hackos-web-arm64
           cache-to: type=gha,mode=max,scope=hackos-web-arm64
+
+
+  deploy-dokploy:
+    name: Trigger Dokploy deployments through Tailscale
+    needs: [changes, publish-api, publish-web]
+    if: >-
+      always() && github.event_name == 'push' &&
+      (needs.publish-api.result == 'success' || needs.publish-web.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Connect to the tailnet
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ secrets.TS_AUDIENCE }}
+          tags: tag:ci
+          ping: danipi.hamster-cat.ts.net
+
+      - name: Trigger API and worker deployments
+        if: needs.publish-api.result == 'success'
+        env:
+          DOKPLOY_API_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_API_DEPLOY_WEBHOOK }}
+          DOKPLOY_WORKER_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_WORKER_DEPLOY_WEBHOOK }}
+        run: |
+          set -euo pipefail
+          for webhook in "$DOKPLOY_API_DEPLOY_WEBHOOK" "$DOKPLOY_WORKER_DEPLOY_WEBHOOK"; do
+            test -n "$webhook"
+            curl --fail --silent --show-error --retry 3 --retry-delay 5 \
+              --request POST "$webhook"
+          done
+
+      - name: Trigger web deployment
+        if: needs.publish-web.result == 'success'
+        env:
+          DOKPLOY_WEB_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_WEB_DEPLOY_WEBHOOK }}
+        run: |
+          set -euo pipefail
+          test -n "$DOKPLOY_WEB_DEPLOY_WEBHOOK"
+          curl --fail --silent --show-error --retry 3 --retry-delay 5 \
+            --request POST "$DOKPLOY_WEB_DEPLOY_WEBHOOK"
