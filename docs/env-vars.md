@@ -110,7 +110,7 @@ need them.
 | `STACK_NAME` | compose-level | no (default) | Namespaces this instance's Traefik router names (`${STACK_NAME}-api`) so multiple hackOS instances can share one Traefik without router-name collisions. |
 | `PROXY_NETWORK` | compose-level | no (default `dokploy-network`) | The Traefik-managed edge network `api` and `web` join to receive public traffic. The single-stack worker may also join it for outbound egress, but has no router. |
 | `CERT_RESOLVER` | compose-level | no (default `letsencrypt`) | Which Traefik ACME resolver issues the TLS certificates for the `API_DOMAIN` and `WEB_DOMAIN` routers. |
-| `IMAGE_REPO`, `IMAGE_TAG` | compose-level | no | Which prebuilt image to pull; ignored entirely if Dokploy builds from source instead. Pin `IMAGE_TAG` to a released version in production — never `:latest`. |
+| `IMAGE_REPO`, `IMAGE_TAG` | compose-level | yes for production | API image and tag pulled by both `migrate`/`api` and `worker`. CI publishes `main` (the deploy channel) and immutable `sha-<commit>` tags; use a SHA tag for a rollback. Never use `:latest`. |
 | `API_MEM_LIMIT` | compose-level | no | Memory cap, default `512m`. |
 | `INSTANCE_NETWORK` | compose-level | no | Private network joined to reach postgres/valkey/minio by name. |
 
@@ -149,10 +149,10 @@ starts.
 
 | Variable | Kind | Required | What it does |
 |---|---|---|---|
-| `API_DOMAIN` | build arg | yes | Becomes `NEXT_PUBLIC_API_URL=https://${API_DOMAIN}`, compiled directly into the client bundle. Changing it means rebuilding the image — restarting the existing container serves the old API URL forever. |
-| `WEB_DOMAIN` | compose-level | yes | The `Host()` rule for this service's **own** Traefik router — deliberately separate from `API_DOMAIN`'s router, since the web app is never routed together with the api. It also becomes `NEXT_PUBLIC_SITE_URL=https://${WEB_DOMAIN}` at web build time so canonical and social-card URLs point at the web origin. |
+| `API_DOMAIN` | compose-level | yes | The API router's public host. CI receives the matching complete origin through GitHub variable `PRODUCTION_API_URL` and compiles it as `NEXT_PUBLIC_API_URL` in the web image; changing either requires a new web-image publish. |
+| `WEB_DOMAIN` | compose-level | yes | The `Host()` rule for this service's **own** Traefik router — deliberately separate from `API_DOMAIN`'s router. CI receives the matching complete origin through GitHub variable `PRODUCTION_SITE_URL` and compiles it into canonical/social URLs. |
 | `STACK_NAME`, `PROXY_NETWORK`, `CERT_RESOLVER` | compose-level | no (defaults) | Same Traefik-naming role as on `api`. |
-| `WEB_IMAGE_REPO`, `IMAGE_TAG` | compose-level | no | Pinned image tag for prebuilt-image deploys. |
+| `WEB_IMAGE_REPO`, `IMAGE_TAG` | compose-level | yes for production | Web image/tag pulled from GHCR. CI publishes `main` plus immutable `sha-<commit>` rollback tags; never use `:latest`. |
 | `WEB_MEM_LIMIT` | compose-level | no | Memory cap, default `256m`. |
 
 Remember to add `https://${WEB_DOMAIN}` to the **api**'s `CORS_ORIGINS` —
