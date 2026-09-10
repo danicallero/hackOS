@@ -94,21 +94,6 @@ export interface AssignedRoleSummary {
   eventAccess: boolean;
 }
 
-export type AttendeeType = "participant" | "mentor";
-
-/**
- * Association fact for participant-facing navigation. This deliberately
- * reads the complete assigned-role set instead of the single display role:
- * a participant who also holds an operational role keeps participant tools.
- */
-export function attendeeTypeFromAssignedRoles(
-  roles: readonly Pick<AssignedRoleSummary, "name">[],
-): AttendeeType | null {
-  if (roles.some((role) => role.name === ATTENDEE_ROLE_NAMES.participant)) return "participant";
-  if (roles.some((role) => role.name === ATTENDEE_ROLE_NAMES.mentor)) return "mentor";
-  return null;
-}
-
 /**
  * The user's complete assigned-role set (H8), highest position first — not
  * just the single displayed role `getHighestVisibleRoleName` returns above.

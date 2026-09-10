@@ -7,32 +7,9 @@ import type { Me } from "./types";
 
 const ME_CACHE_KEY = "me";
 
-interface AssignedProfileRole {
-  name: string;
-}
-
-type MeApiResponse = Omit<Me, "role" | "attendeeType"> & {
+type MeApiResponse = Omit<Me, "role"> & {
   visibleRoleName: string | null;
-  /** Optional while mobile clients roll forward alongside the API field. */
-  attendeeType?: Me["attendeeType"];
-  /** Present on the pre-attendeeType /api/me response and retained for rollout compatibility. */
-  roles?: AssignedProfileRole[];
 };
-
-/**
- * Keeps participant navigation working while an app and API deployment are
- * on different versions. The complete assigned-role list is the fallback,
- * never the single display role: a participant who also has an operational
- * role must still receive the participant queue tab.
- */
-function attendeeTypeFromProfile(raw: MeApiResponse): Me["attendeeType"] {
-  if (raw.attendeeType === "participant" || raw.attendeeType === "mentor") {
-    return raw.attendeeType;
-  }
-  if (raw.roles?.some((role) => role.name === "Participant")) return "participant";
-  if (raw.roles?.some((role) => role.name === "Mentor")) return "mentor";
-  return null;
-}
 
 /**
  * Loads GET /api/me and refetches on app foreground (H55: "al cambiar los
@@ -84,7 +61,6 @@ export function useMe(enabled: boolean) {
       const data: Me = {
         ...raw,
         role: raw.visibleRoleName,
-        attendeeType: attendeeTypeFromProfile(raw),
       };
       if (currentRequest !== requestId.current) return;
       hasData.current = true;

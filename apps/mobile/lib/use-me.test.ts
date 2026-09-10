@@ -110,21 +110,6 @@ describe("useMe foreground revalidation (H55)", () => {
     expect(result.current.loading).toBe(true);
     expect(result.current.me).toBeNull();
   });
-
-  it("derives the participant association from assigned roles during API rollout", async () => {
-    mockApiFetch.mockResolvedValue({
-      id: 1,
-      visibleRoleName: "Organizer",
-      roles: [{ name: "Organizer" }, { name: "Participant" }],
-      capabilities: [],
-      hasQueueItems: false,
-    });
-
-    const { result } = await renderHook(() => useMe(true));
-
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.me?.attendeeType).toBe("participant");
-  });
 });
 
 describe("useMe offline fallback", () => {

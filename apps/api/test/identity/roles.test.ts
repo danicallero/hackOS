@@ -1266,7 +1266,7 @@ describe("H8 default seeded role set (0805)", () => {
         CAPABILITIES.AUDIT_READ,
       ],
       Mentor: [],
-      Participant: [],
+      Participant: [CAPABILITIES.QUEUE_STATUS],
     };
     for (const [name, caps] of Object.entries(expected)) {
       const { rows: roleRows } = await pool.query(
@@ -1497,8 +1497,8 @@ describe("H8 default seeded role set (0805)", () => {
       Object.keys(eventDirector[0].capabilities).map(() => "allow"),
     );
 
-    // A capability-less seeded role (Mentor/Participant/Sponsor) still gets a
-    // snapshot row — an empty object, not a missing row.
+    // A capability-less seeded role (Mentor/Sponsor) still gets a snapshot
+    // row — an empty object, not a missing row.
     const { rows: mentor } = await pool.query(
       `SELECT rsd.capabilities
          FROM roles r
