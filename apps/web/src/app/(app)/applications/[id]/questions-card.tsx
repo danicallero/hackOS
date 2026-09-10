@@ -472,10 +472,6 @@ export function QuestionsCard({
     return null;
   }
 
-  function hasI18nText(v: I18nText | undefined): v is I18nText {
-    return !!v && Object.values(v).some((s) => s.trim());
-  }
-
   function save() {
     const err = validate();
     if (err) {
@@ -503,30 +499,7 @@ export function QuestionsCard({
       // The server re-validates with templateSchema/sectionsSchema (unique
       // keys, option kinds, every field.section_key resolves to a section).
       await api.patch<ApplicationForm>(`/api/applications/${form.id}`, {
-        template: fields.map((f) => ({
-          key: f.key.trim(),
-          label: f.label,
-          kind: f.kind,
-          required: f.required,
-          ...(OPTION_KINDS.includes(f.kind) ? { options: f.options } : {}),
-          ...(f.kind === FILE_KIND
-            ? {
-                ...(f.allowed_file_types?.length
-                  ? { allowed_file_types: f.allowed_file_types }
-                  : {}),
-                ...(f.max_file_size_mb ? { max_file_size_mb: f.max_file_size_mb } : {}),
-                ...(f.shareable_with_sponsors ? { shareable_with_sponsors: true } : {}),
-              }
-            : {}),
-          ...(f.section_key ? { section_key: f.section_key } : {}),
-          ...(hasI18nText(f.help_text) ? { help_text: f.help_text } : {}),
-          ...(hasI18nText(f.placeholder) ? { placeholder: f.placeholder } : {}),
-          ...(f.validation && VALIDATABLE_KINDS.has(f.kind) ? { validation: f.validation } : {}),
-          retention_mode: f.retention_mode ?? "none",
-          ...(f.retention_mode === "anonymous_audit" && f.anonymous_audit_dimension
-            ? { anonymous_audit_dimension: f.anonymous_audit_dimension.trim() }
-            : {}),
-        })),
+        template: fields.map(serializeApplicationField),
         sections: sections.map((s) => ({
           key: s.key.trim(),
           title: s.title,
@@ -846,6 +819,43 @@ const FIELD_KIND_ICON: Record<FieldKind, LucideIcon> = {
 /** Kinds where a response-validation rule (length/pattern/range/selection
  *  count) is meaningful — see `checkFieldValidation` in the API's service.ts. */
 const VALIDATABLE_KINDS = new Set<FieldKind>(["text", "textarea", "number", "multiselect"]);
+
+function hasI18nText(v: I18nText | undefined): v is I18nText {
+  return !!v && Object.values(v).some((s) => s.trim());
+}
+
+/** Serialize the editor model explicitly so client-only ids never reach the
+ * API while every persisted question policy survives a save. */
+export function serializeApplicationField(field: TemplateField): TemplateField {
+  return {
+    key: field.key.trim(),
+    label: field.label,
+    kind: field.kind,
+    required: field.required,
+    ...(OPTION_KINDS.includes(field.kind) ? { options: field.options } : {}),
+    ...(field.kind === FILE_KIND
+      ? {
+          ...(field.allowed_file_types?.length
+            ? { allowed_file_types: field.allowed_file_types }
+            : {}),
+          ...(field.max_file_size_mb ? { max_file_size_mb: field.max_file_size_mb } : {}),
+          ...(field.shareable_with_sponsors ? { shareable_with_sponsors: true } : {}),
+        }
+      : {}),
+    ...(field.section_key ? { section_key: field.section_key } : {}),
+    ...(hasI18nText(field.help_text) ? { help_text: field.help_text } : {}),
+    ...(hasI18nText(field.placeholder) ? { placeholder: field.placeholder } : {}),
+    ...(field.validation && VALIDATABLE_KINDS.has(field.kind)
+      ? { validation: field.validation }
+      : {}),
+    retention_mode: field.retention_mode ?? "none",
+    ...(field.retention_mode === "anonymous_audit" && field.anonymous_audit_dimension
+      ? { anonymous_audit_dimension: field.anonymous_audit_dimension.trim() }
+      : {}),
+    ...(field.reporting !== undefined ? { reporting: field.reporting } : {}),
+    ...(field.statistics ? { statistics: field.statistics } : {}),
+  };
+}
 
 /** Kinds where the applicant types free text, so a custom placeholder is
  *  meaningful (choice/date/file/university kinds have their own UI instead). */

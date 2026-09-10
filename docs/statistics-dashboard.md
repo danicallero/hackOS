@@ -24,6 +24,9 @@ Form-question panels are generated only for fields explicitly published through
 `field.statistics` (with `reporting` retained as a legacy compatibility flag).
 The application builder presents that opt-in as integration into Logistics;
 the same configured field is included in the dashboard and its authorized CSV.
+The editor serializer preserves both the current `statistics` object and the
+legacy `reporting` alias when saving a form, so reloading the builder cannot
+silently disable an integration.
 
 Scope keys are stable resource identifiers: `application:<id>` and
 `role:<id>`. The API validates every selected key against the caller's
