@@ -1,0 +1,156 @@
+name: Detect changed areas
+description: Classify changed files for selective CI checks and CD image publishing.
+
+inputs:
+  event_name:
+    description: GitHub event that started the caller workflow.
+    required: true
+  before_sha:
+    description: Previous commit for a push event.
+    required: false
+    default: ""
+  base_sha:
+    description: Pull request base commit.
+    required: false
+    default: ""
+  sha:
+    description: Commit being validated or published.
+    required: true
+
+outputs:
+  api:
+    description: API workspace quality checks are required.
+    value: ${{ steps.filter.outputs.api }}
+  web:
+    description: Web workspace quality checks are required.
+    value: ${{ steps.filter.outputs.web }}
+  mobile:
+    description: Mobile workspace quality checks are required.
+    value: ${{ steps.filter.outputs.mobile }}
+  browser:
+    description: Browser smoke tests are required.
+    value: ${{ steps.filter.outputs.browser }}
+  api_image:
+    description: The production API image must be validated or published.
+    value: ${{ steps.filter.outputs.api_image }}
+  web_image:
+    description: The production web image must be validated or published.
+    value: ${{ steps.filter.outputs.web_image }}
+  typecheck:
+    description: At least one workspace typecheck is required.
+    value: ${{ steps.filter.outputs.typecheck }}
+
+runs:
+  using: composite
+  steps:
+    - name: Classify changed paths
+      id: filter
+      shell: bash
+      env:
+        EVENT_NAME: ${{ inputs.event_name }}
+        BEFORE_SHA: ${{ inputs.before_sha }}
+        BASE_SHA: ${{ inputs.base_sha }}
+        SHA: ${{ inputs.sha }}
+      run: |
+        set -euo pipefail
+
+        changed_files="$RUNNER_TEMP/hackos-changed-files.txt"
+        if [[ "$EVENT_NAME" == "pull_request" ]]; then
+          git diff --name-only "$BASE_SHA" "$SHA" > "$changed_files"
+        elif [[ "$BEFORE_SHA" =~ ^0+$ ]]; then
+          git diff-tree --root --no-commit-id --name-only -r "$SHA" > "$changed_files"
+        else
+          git diff --name-only "$BEFORE_SHA" "$SHA" > "$changed_files"
+        fi
+
+        echo "Changed paths:"
+        sed -n '1,120p' "$changed_files"
+
+        has_change() {
+          grep -Eq "$1" "$changed_files"
+        }
+
+        has_non_locale_package_change() {
+          if grep -Ev '^packages/shared/locales/[^/]+/(common|email|mobile|web)\.json$' "$changed_files" \
+            | grep -Eq '^packages/'; then
+            return 0
+          fi
+          return 1
+        }
+
+        api=false
+        web=false
+        mobile=false
+        browser=false
+        api_image=false
+        web_image=false
+
+        if has_non_locale_package_change || has_change '^(patches/|\.github/|\.dockerignore$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.node-version$|biome\.json$|tsconfig[^/]*\.json$)'; then
+          api=true
+          web=true
+          mobile=true
+          browser=true
+          api_image=true
+          web_image=true
+        fi
+
+        if has_change '^packages/shared/locales/[^/]+/email\.json$'; then
+          api=true
+          api_image=true
+        fi
+
+        if has_change '^packages/shared/locales/[^/]+/web\.json$'; then
+          web=true
+          browser=true
+          web_image=true
+        fi
+
+        if has_change '^packages/shared/locales/[^/]+/mobile\.json$'; then
+          mobile=true
+        fi
+
+        if has_change '^packages/shared/locales/[^/]+/common\.json$'; then
+          web=true
+          mobile=true
+          browser=true
+          web_image=true
+        fi
+
+        if has_change '^(deploy/|docker-compose\.yml$)'; then
+          api_image=true
+          web_image=true
+        fi
+
+        if has_change '^apps/api/'; then
+          api=true
+          api_image=true
+        fi
+
+        if has_change '^apps/web/'; then
+          web=true
+          browser=true
+          web_image=true
+        fi
+
+        if has_change '^(apps/mobile/|e2e/mobile/)'; then
+          mobile=true
+        fi
+
+        if has_change '^e2e/browser/'; then
+          browser=true
+        fi
+
+        typecheck=false
+        if [[ "$api" == true || "$web" == true || "$mobile" == true ]]; then
+          typecheck=true
+        fi
+
+        {
+          echo "api=$api"
+          echo "web=$web"
+          echo "mobile=$mobile"
+          echo "browser=$browser"
+          echo "api_image=$api_image"
+          echo "web_image=$web_image"
+          echo "typecheck=$typecheck"
+        } >> "$GITHUB_OUTPUT"
