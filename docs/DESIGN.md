@@ -298,6 +298,7 @@ anything else.
 | A group of adjacent actions | `ActionGroup` (wraps with the shared 8 px gap) | Repeated per-page flex/gap wrappers with divergent wrapping |
 | An icon-only action | `IconButton` (localized `label`, token-backed hit area) | A bare `<button>` or `Button` with a hand-written `size-*` override |
 | A combobox/multi-select inside a `Modal` or `SidePanelEditor` | `MultiSelect`/`UniversityPicker`/`UserPicker`/`EntityCombobox` with `inDialog` | The same control without it — its list then either can't scroll or spills outside the overlay |
+| An interactive overlay inside another overlay | Use the shared `DropdownMenu`, `Select`, or `Popover`; their content stays in the nearest overlay scope. Give a common combobox `inDialog` so its list uses the same scope | A body-ported child that steals focus, clips, or makes the parent dismiss when its trigger is clicked again |
 | Pick one row from a table-backed list (users, enterprises, activities, …) | `UserPicker` (server-searched) or `EntityCombobox` (client-filtered, already-fetched list) | A `Select` dumping every row flat — unusable once the table grows past a handful of rows |
 | A set of same-shaped objects users drill into (esp. mobile) | Cards / drill-down list rows | A horizontally scrolling table |
 | Zero-state | `EmptyState` with one direct CTA | Prose explaining where to navigate |
