@@ -4,8 +4,8 @@ import { CopyIcon, UserPlusIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { EntityCombobox } from "@/components/common/entity-combobox";
-import { Modal } from "@/components/common/modal";
 import { MultiSelect } from "@/components/common/multi-select";
+import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -93,7 +93,7 @@ export function InviteUserDialog() {
     : "";
 
   return (
-    <Modal
+    <SidePanelEditor
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
@@ -201,6 +201,6 @@ export function InviteUserDialog() {
           </div>
         </div>
       )}
-    </Modal>
+    </SidePanelEditor>
   );
 }

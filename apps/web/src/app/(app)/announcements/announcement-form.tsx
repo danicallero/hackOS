@@ -4,8 +4,8 @@ import { ChevronDownIcon, MegaphoneIcon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DateTimeInput } from "@/components/common/datetime-input";
-import { Modal } from "@/components/common/modal";
 import { SectionCard } from "@/components/common/section-card";
+import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SubmitButton } from "@/components/common/submit-button";
 import { type UserOption, UserPicker } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
@@ -327,7 +327,22 @@ export function AnnouncementFormModal({
   }
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title={title} icon={MegaphoneIcon} size="xl">
+    <SidePanelEditor
+      open={open}
+      onOpenChange={onOpenChange}
+      title={title}
+      icon={MegaphoneIcon}
+      footer={
+        <>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
+            {t("cancel")}
+          </Button>
+          <SubmitButton pending={pending} onClick={submit} disabled={!values.title}>
+            {submitLabel}
+          </SubmitButton>
+        </>
+      }
+    >
       <div className="space-y-6">
         <SectionCard title={t("announcementContentSection")}>
           <div className="space-y-4">
@@ -660,17 +675,8 @@ export function AnnouncementFormModal({
             </p>
           )}
         </SectionCard>
-
-        <div className="flex justify-end gap-2 border-t pt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
-            {t("cancel")}
-          </Button>
-          <SubmitButton pending={pending} onClick={submit} disabled={!values.title}>
-            {submitLabel}
-          </SubmitButton>
-        </div>
       </div>
-    </Modal>
+    </SidePanelEditor>
   );
 }
 
