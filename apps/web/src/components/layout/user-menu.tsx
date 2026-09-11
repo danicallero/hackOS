@@ -91,20 +91,29 @@ export function UserMenu({ className }: { className?: string }) {
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         {sidebarState === "collapsed" && (
-          <DropdownMenuItem
-            onClick={() =>
-              setTheme(theme === "dark" ? "light" : theme === "light" ? "system" : "dark")
-            }
-          >
-            {theme === "dark" ? (
-              <MoonIcon className="size-4" />
-            ) : theme === "light" ? (
-              <SunIcon className="size-4" />
-            ) : (
-              <MonitorIcon className="size-4" />
-            )}
-            {t("toggleTheme")}
-          </DropdownMenuItem>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              {theme === "dark" ? (
+                <MoonIcon className="size-4" />
+              ) : theme === "light" ? (
+                <SunIcon className="size-4" />
+              ) : (
+                <MonitorIcon className="size-4" />
+              )}
+              {t("toggleTheme")}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem onClick={() => setTheme("light")}>
+                <SunIcon className="size-4" /> {t("light")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme("dark")}>
+                <MoonIcon className="size-4" /> {t("dark")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTheme("system")}>
+                <MonitorIcon className="size-4" /> {t("system")}
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={handleSignOut}>
