@@ -189,11 +189,12 @@ Badges, meters and charts all take a `tone`. Never hardcode a hex.
 
 ### 3. Layout — `components/layout/*`
 
-`AppSidebar`, `UserMenu`, `AuthGuard` and `VerificationBanner` make up the
-authed shell. The sidebar header owns the only collapse control; account and
-theme controls live in its footer, with language as a quick setting inside the
-account menu. There is no global workspace bar: each page renders its own name
-in `PageHeader` `h1`.
+`AppSidebar`, `NotificationSidebarTrigger`, `UserMenu`, `AuthGuard` and
+`VerificationBanner` make up the authed shell. The desktop sidebar header owns
+the collapse control; narrow screens expose the same control in a fixed leading
+corner. There is no global workspace bar: each page renders its own name in
+`PageHeader` `h1`, whose title block reserves that leading space on narrow
+screens and starts in the same 12px top band as the fixed control.
 
 ## Page structure — when a page becomes a directory
 

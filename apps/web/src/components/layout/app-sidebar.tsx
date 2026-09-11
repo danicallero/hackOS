@@ -275,7 +275,7 @@ export function AppSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem className="ml-auto group-data-[collapsible=icon]:mx-auto">
-            <SidebarTrigger />
+            <SidebarTrigger hasUnreadNotifications={unreadCount > 0} />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
@@ -366,4 +366,11 @@ export function AppSidebar() {
       <SidebarRail />
     </Sidebar>
   );
+}
+
+/** Keeps H50/H51 unread notifications discoverable from the mobile shell control. */
+export function NotificationSidebarTrigger({ className }: { className?: string }) {
+  const unreadCount = useUnreadCount();
+
+  return <SidebarTrigger className={className} hasUnreadNotifications={unreadCount > 0} />;
 }

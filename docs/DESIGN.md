@@ -106,18 +106,23 @@ surfaces — never from stacking rounded rectangles around every region.
   turn the page area into a second card beside the sidebar.
 - **The first content surface aligns with navigation.** Wide operational
   surfaces (`data-wide`) keep a small top inset so their first component begins
-  on the same horizontal rhythm as the sidebar header. Standard pages retain
-  the larger page-header breathing room; vertical separation is earned below
-  the component, not by an arbitrary offset above it.
+  on the same horizontal rhythm as the sidebar header. Standard desktop pages
+  retain the larger page-header breathing room; on narrow web screens, the
+  fixed sidebar control shares the top band and `PageHeader` reserves adjacent
+  inline space for its title. The narrow content inset matches the control's
+  12px top inset so the title line starts beside the button. Vertical
+  separation is earned below the component, not by an arbitrary offset above
+  it.
 - **Curvature follows ownership.** Controls use the 6 px control radius;
   inline `Surface`/`SectionCard` groupings use 8 px; the floating sidebar uses
   12 px; overlays use their token-backed 8 px radius. A rounded edge signals a
   bounded, movable or elevated thing — it is not decorative chrome for the
   page canvas.
 - **Quiet chrome, clear content.** There is no global workspace bar. The page
-  canvas begins with its own `PageHeader`; the sidebar header owns the single
-  collapse control. This preserves vertical space and prevents a second title
-  hierarchy from competing with the page `h1`.
+  canvas begins with its own `PageHeader`; the desktop sidebar header owns the
+  collapse control, while narrow web screens place the same control in the
+  fixed leading corner. This preserves vertical space and prevents a second
+  title hierarchy from competing with the page `h1`.
 - **Depth is scarce.** Inline cards remain border-only. The sidebar, menus,
   sheets and dialogs earn elevation because they sit above or beside the task.
   Avoid background washes, gratuitous shadows and inset outlines that create

@@ -44,11 +44,11 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        "flex flex-col gap-(--space-within-section) sm:flex-row sm:items-start sm:justify-between",
+        "flex flex-col gap-(--space-within-section) md:flex-row md:items-start md:justify-between",
         className,
       )}
     >
-      <div className="flex min-w-0 items-start gap-(--space-related)">
+      <div className="flex min-w-0 items-start gap-(--space-related) pl-12 md:pl-0">
         {leading && <div className="shrink-0">{leading}</div>}
         <div className="min-w-0 space-y-1">
           {context && <div className="type-meta">{context}</div>}
@@ -63,7 +63,7 @@ export function PageHeader({
         </div>
       </div>
       {actionContent && (
-        <ActionGroup className="sm:shrink-0 sm:justify-end">{actionContent}</ActionGroup>
+        <ActionGroup className="md:shrink-0 md:justify-end">{actionContent}</ActionGroup>
       )}
     </header>
   );

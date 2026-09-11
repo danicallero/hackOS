@@ -42,6 +42,29 @@ export class SignInPage {
   }
 }
 
+/** Minimal authenticated profile for browser checks of the shared app shell. */
+export const shellUser = {
+  id: 1,
+  email: "operator@example.com",
+  emailVerified: true,
+  name: "Shell",
+  surname: "Operator",
+  language: "en",
+  capabilities: ["queue:operate"],
+  visibleRoleName: "Staff",
+  roles: [],
+  isEnterpriseJudge: false,
+  isSponsorRep: false,
+  hasEventAccess: true,
+  hasProject: false,
+  hasQueueItems: false,
+  canCreateProject: false,
+  profileLocked: false,
+  hasStatisticsPanels: false,
+  accountState: "active",
+  removal: null,
+};
+
 type UiFixtures = {
   signIn: SignInPage;
 };
