@@ -2283,7 +2283,6 @@
   "reaccept": "Volver a aceptar",
   "reacceptDeclinedExpired": "Volver a aceptar (rechazada/caducada)",
   "reaccepted": "Vuelta a aceptar.",
-  "reacceptedUnsent": "Vuelta a aceptar (sin enviar).",
   "reject": "Rechazar",
   "rejectedUnsentStatus": "rechazada (sin enviar)",
   "rejectedUnsentToast": "Rechazada (sin enviar).",

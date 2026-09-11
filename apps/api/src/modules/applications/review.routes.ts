@@ -8,6 +8,7 @@ import {
   requireCapability,
   userHasCapability,
 } from "../../lib/capabilities.js";
+import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import {
   batchDecideSchema,
@@ -256,12 +257,12 @@ export function registerReviewRoutes(app: FastifyInstance): void {
   r.post(
     "/api/responses/:responseId/re-accept",
     {
-      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      preHandler: [requireCapability(CAPABILITIES.APPLICATIONS_DECIDE), idempotencyGuard],
       config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: {
         summary: "Re-accept a response",
         description:
-          "Moves a declined, rejected, or expired response back to accepted with a fresh confirmation token and email; re-checks capacity.",
+          "Moves a declined, rejected, or expired response back to accepted with a fresh confirmation token and applicant notification in each enabled in-app, email, and push channel; re-checks capacity. An Idempotency-Key replays the completed operation without sending duplicate notifications.",
         params: responseIdParamSchema,
       },
     },
@@ -465,12 +466,12 @@ export function registerReviewRoutes(app: FastifyInstance): void {
   r.post(
     "/api/responses/batch/re-accept",
     {
-      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      preHandler: [requireCapability(CAPABILITIES.APPLICATIONS_DECIDE), idempotencyGuard],
       config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
       schema: {
         summary: "Batch re-accept",
         description:
-          "Moves each declined, rejected, or expired response id back to accepted, re-checking capacity for each.",
+          "Moves each declined, rejected, or expired response id back to accepted, enqueuing applicant notifications in each enabled in-app, email, and push channel, and re-checking capacity for each. An Idempotency-Key replays the completed batch without repeating notifications.",
         body: batchIdsSchema,
       },
     },

@@ -2202,8 +2202,11 @@ function DecisionMenu({
                 disabled={busy}
                 onSelect={() =>
                   void run(
-                    t("reacceptedUnsent"),
-                    () => api.post(`/api/responses/${responseId}/re-accept`),
+                    t("reaccepted"),
+                    () =>
+                      api.post(`/api/responses/${responseId}/re-accept`, undefined, {
+                        headers: { "Idempotency-Key": crypto.randomUUID() },
+                      }),
                     { refresh: false, nextStatus: "accepted" },
                   )
                 }
