@@ -986,14 +986,27 @@ describe("re-accept (admin)", () => {
     expect((await getUserSensitive(userId)).dietary_data_state).toBe("present");
     expect((await getUserSensitive(userId)).food_intolerances).toEqual([7]);
 
-    // a fresh decision email was enqueued
+    // A fresh decision notification was enqueued for every default-enabled
+    // channel. The email row still carries the confirmation links.
     const { rows: outbox } = await pool.query(
-      `SELECT payload FROM notification_outbox WHERE user_id = $1`,
+      `SELECT channel, payload FROM notification_outbox WHERE user_id = $1 ORDER BY id`,
       [userId],
     );
-    expect(outbox.length).toBeGreaterThanOrEqual(2);
-    const last = outbox[outbox.length - 1];
-    expect(last.payload.template).toBe("application.decision");
+    expect(outbox.slice(-3).map((row) => row.channel)).toEqual(["in_app", "email", "push"]);
+    expect(outbox.slice(-3).every((row) => row.payload.template === "application.decision")).toBe(
+      true,
+    );
+    const email = outbox.slice(-3).find((row) => row.channel === "email");
+    expect(email?.payload.vars.decisionDetails).toContain("/applications/confirm?token=");
+
+    const inbox = await a.inject({
+      method: "GET",
+      url: "/api/me/notifications",
+      headers: asUser(userId),
+    });
+    expect(inbox.statusCode).toBe(200);
+    expect(inbox.json().total).toBe(1);
+    expect(inbox.json().items[0].payload.subject).toBe("A decision on your application");
 
     // the new token can confirm
     const token = await latestConfirmationToken(userId);
@@ -1004,6 +1017,41 @@ describe("re-accept (admin)", () => {
     });
     expect(confirm.statusCode).toBe(200);
     expect(confirm.json().status).toBe("confirmed");
+  });
+
+  it("replays a keyed re-accept without duplicating notifications", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { userId, responseId } = await toAcceptedSent(appId);
+
+    await a.inject({
+      method: "POST",
+      url: `/api/me/responses/${responseId}/decline`,
+      headers: asUser(userId),
+    });
+
+    const key = `re-accept-${crypto.randomUUID()}`;
+    const first = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/re-accept`,
+      headers: { ...asUser(decider), "Idempotency-Key": key },
+    });
+    expect(first.statusCode).toBe(200);
+
+    const replay = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/re-accept`,
+      headers: { ...asUser(decider), "Idempotency-Key": key },
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.headers["idempotency-replayed"]).toBe("true");
+    expect(replay.json()).toEqual(first.json());
+
+    const { rows } = await pool.query(
+      `SELECT channel FROM notification_outbox WHERE user_id = $1 ORDER BY id`,
+      [userId],
+    );
+    expect(rows.map((row) => row.channel)).toEqual(["email", "in_app", "email", "push"]);
   });
 
   it("does not issue a ticket on re-accept until the response is confirmed again", async () => {

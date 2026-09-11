@@ -629,9 +629,15 @@ export function ResponsesTab({
                   <DropdownMenuItem
                     onClick={() =>
                       batchAction(t("reaccepted"), () =>
-                        api.post("/api/responses/batch/re-accept", {
-                          response_ids: selectedArr.map((r) => r.id),
-                        }),
+                        api.post(
+                          "/api/responses/batch/re-accept",
+                          {
+                            response_ids: selectedArr.map((r) => r.id),
+                          },
+                          {
+                            headers: { "Idempotency-Key": crypto.randomUUID() },
+                          },
+                        ),
                       )
                     }
                   >

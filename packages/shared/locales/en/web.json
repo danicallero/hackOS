@@ -2283,7 +2283,6 @@
   "reaccept": "Re-accept",
   "reacceptDeclinedExpired": "Re-accept (declined/expired)",
   "reaccepted": "Re-accepted.",
-  "reacceptedUnsent": "Re-accepted (unsent).",
   "reject": "Reject",
   "rejectedUnsentStatus": "rejected (unsent)",
   "rejectedUnsentToast": "Rejected (unsent).",

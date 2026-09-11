@@ -15,6 +15,8 @@ import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js"
 import { reconcileTicketAccess } from "../logistics/tickets.js";
 import { issueWalletAccessToken } from "../logistics/wallet-access.js";
 import { enqueueWalletSync } from "../logistics/wallet-sync.js";
+import { notify } from "../notifications/service.js";
+import type { EmailPayload } from "../notifications/templates.js";
 import type { FormSection, TemplateField } from "./schemas.js";
 
 /**
@@ -1159,8 +1161,8 @@ export async function resendDecision(
 
 /**
  * Re-accept a declined, rejected, or expired response — moves it back to
- * `accepted` with a fresh confirmation token and email. Admin operation
- * (APPLICATIONS_DECIDE) that re-checks capacity.
+ * `accepted` with a fresh confirmation token and applicant notification.
+ * Admin operation (APPLICATIONS_DECIDE) that re-checks capacity.
  */
 export async function reAccept(
   actorId: number,
@@ -1190,7 +1192,7 @@ export async function reAccept(
       [resp.id],
     );
 
-    await enqueueDecisionEmailRow(client, resp.user_id, user, app, "accepted", token);
+    await enqueueDecisionNotificationRows(client, resp.user_id, user, app, "accepted", token);
 
     await audit(client, {
       actorId,
@@ -1532,6 +1534,42 @@ async function enqueueDecisionEmailRow(
   decision: "accepted" | "rejected",
   confirmToken: string | null,
 ): Promise<void> {
+  const payload = decisionNotificationPayload(user, app, decision, confirmToken);
+  await client.query(
+    `INSERT INTO notification_outbox (user_id, category, channel, payload)
+     VALUES ($1, 'application', 'email', $2::jsonb)`,
+    [userId, JSON.stringify(payload)],
+  );
+}
+
+/**
+ * Re-accept is a new applicant-facing decision, not only an internal state
+ * change. Use the generic H51 dispatcher so the applicant gets the channels
+ * enabled in their preferences; the email payload still carries the fresh
+ * confirmation links (H14, H15).
+ */
+async function enqueueDecisionNotificationRows(
+  client: pg.PoolClient,
+  userId: number,
+  user: UserComms,
+  app: ApplicationRow,
+  decision: "accepted" | "rejected",
+  confirmToken: string | null,
+): Promise<void> {
+  await notify(client, {
+    userId,
+    category: "application",
+    channels: ["in_app", "email", "push"],
+    payload: decisionNotificationPayload(user, app, decision, confirmToken),
+  });
+}
+
+function decisionNotificationPayload(
+  user: UserComms,
+  app: ApplicationRow,
+  decision: "accepted" | "rejected",
+  confirmToken: string | null,
+): EmailPayload {
   const countdown =
     decision === "accepted" && confirmToken
       ? formatRemainingTime(new Date(Date.now() + app.confirmation_window_hours * 3_600_000))
@@ -1540,24 +1578,17 @@ async function enqueueDecisionEmailRow(
     decision === "accepted" && confirmToken
       ? `\n\nYou have been accepted. Please confirm your spot, or if you can't make it please let us know so we can give your spot to someone else:\n\n[Accept my spot](${config.WEB_URL}/applications/confirm?token=${confirmToken})\n[No, I can't make it](${config.WEB_URL}/applications/decline?token=${confirmToken})\n\n${countdown}\n\nAfter that time your spot will be automatically released.`
       : "";
-  await client.query(
-    `INSERT INTO notification_outbox (user_id, category, channel, payload)
-     VALUES ($1, 'application', 'email', $2::jsonb)`,
-    [
-      userId,
-      JSON.stringify({
-        template: "application.decision",
-        recipient: user.email,
-        language: user.language,
-        vars: {
-          name: user.name ?? "",
-          applicationName: app.name,
-          decision,
-          decisionDetails,
-        },
-      }),
-    ],
-  );
+  return {
+    template: "application.decision",
+    recipient: user.email,
+    language: user.language,
+    vars: {
+      name: user.name ?? "",
+      applicationName: app.name,
+      decision,
+      decisionDetails,
+    },
+  };
 }
 
 export interface ResponseDetail {

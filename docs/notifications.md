@@ -123,6 +123,15 @@ itself. Two background workers do the actual work:
 their preferences matrix even with zero override rows; `queue` is the one
 mandatory (non-optional) category (H51).
 
+Application re-accepts (`POST /api/responses/:responseId/re-accept`, H14/H15)
+use this same pipeline with category `application` and the candidate channels
+`in_app`, `email`, and `push`. The user's preferences still filter those
+optional channels. The payload is the `application.decision` template and the
+acceptance email contains the fresh confirm/decline links for the new token.
+The route accepts `Idempotency-Key`, so a client retry replays the state change
+without creating another set of notification rows. Batch re-accept uses the
+same contract for the whole request.
+
 Push batches are sent to every current token for the user. A batch is marked
 `sent` when at least one Expo ticket succeeds; a failed ticket is logged by the
 worker with its platform and a masked token. This avoids retrying a push to a
