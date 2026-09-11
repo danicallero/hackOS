@@ -225,8 +225,9 @@ Traefik cert); the compose files already carry the router labels.
 ### 3a. Use the published ARM64 images
 
 The CI workflow validates production Dockerfiles on pull requests. A push to
-`main` then publishes `linux/arm64` images to GHCR, which is the architecture
-of the Raspberry Pi host. Add these non-secret values to the Dokploy
+`main` runs the separate CD workflow, which publishes `linux/arm64` images to
+GHCR, the architecture of the Raspberry Pi host. Add these non-secret values
+to the Dokploy
 **Environment** before the first pull:
 
 ```dotenv
@@ -244,9 +245,11 @@ must match the production HTTPS origins because Next.js compiles both values
 into the web image. No `build:` key remains in the production compose files:
 Dokploy must pull rather than compile on the Pi.
 
-The CI workflow triggers the three Dokploy deployments only after the matching
-image push succeeds. Store these three generated Compose deploy URLs as GitHub
-repository **Actions secrets** (never as variables or committed text):
+The CD workflow triggers the three Dokploy deployments only after the matching
+image push succeeds. Its deployment job targets the GitHub `production`
+environment, so configure required reviewers there if production approval is
+needed. Store these three generated Compose deploy URLs as GitHub repository
+**Actions secrets** (never as variables or committed text):
 
 ```text
 DOKPLOY_API_DEPLOY_WEBHOOK
@@ -258,7 +261,7 @@ Because this Dokploy instance is reachable only through Tailscale, also create
 a Tailscale tag such as `tag:ci`, grant that tag access to `danipi`, and create
 a federated identity/OIDC client with the `auth_keys` scope. Store its client ID
 and audience as the GitHub Actions secrets `TS_OAUTH_CLIENT_ID` and
-`TS_AUDIENCE`. The workflow creates an ephemeral CI node, calls the three
+`TS_AUDIENCE`. The CD workflow creates an ephemeral CI node, calls the three
 webhooks over the tailnet, and removes that node when the job ends. This follows
 the [Tailscale GitHub Action](https://tailscale.com/docs/integrations/github/github-action)
 workload-identity flow; no Dokploy endpoint is exposed publicly.
