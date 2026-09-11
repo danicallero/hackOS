@@ -280,6 +280,7 @@ function SidebarTrigger({
       {hasUnreadNotifications && (isMobile || state === "collapsed") && (
         <span
           aria-hidden
+          data-sidebar="unread-indicator"
           className="border-background bg-destructive absolute -top-0.5 -right-0.5 size-2 rounded-full border"
         />
       )}

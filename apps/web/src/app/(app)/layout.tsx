@@ -1,7 +1,7 @@
-import { AppSidebar } from "@/components/layout/app-sidebar";
+import { AppSidebar, NotificationSidebarTrigger } from "@/components/layout/app-sidebar";
 import { AuthGuard } from "@/components/layout/auth-guard";
 import { VerificationBanner } from "@/components/layout/verification-banner";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
 /**
  * Authenticated app shell: a capability-filtered navigation panel and an
@@ -14,10 +14,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <AppSidebar />
         <SidebarInset className="min-w-0 bg-shell">
           <div className="pointer-events-none fixed top-3 left-3 z-40 md:hidden">
-            <SidebarTrigger className="pointer-events-auto bg-background/90 shadow-sm backdrop-blur" />
+            <NotificationSidebarTrigger className="pointer-events-auto bg-background/90 shadow-sm backdrop-blur" />
           </div>
           <VerificationBanner />
-          <main className="min-w-0 flex-1 px-4 pt-16 pb-6 has-data-wide:pt-16 sm:px-6 md:pt-6 lg:pt-8 lg:pb-8 lg:has-data-wide:pt-2">
+          <main className="min-w-0 flex-1 px-4 pt-6 pb-6 sm:px-6 md:pt-6 lg:pt-8 lg:pb-8 lg:has-data-wide:pt-2">
             {/* Pages opt into a wider column with data-wide (e.g. the judging
                 panel's two-column operator layout). Everything else shares
                 this one width — a page whose content looks sparse here
