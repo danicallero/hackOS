@@ -246,10 +246,8 @@ into the web image. No `build:` key remains in the production compose files:
 Dokploy must pull rather than compile on the Pi.
 
 The CD workflow triggers the three Dokploy deployments only after the matching
-image push succeeds. Its deployment job targets the GitHub `production`
-environment, so configure required reviewers there if production approval is
-needed. Store these three generated Compose deploy URLs as GitHub repository
-**Actions secrets** (never as variables or committed text):
+image push succeeds. Store these three generated Compose deploy URLs as GitHub
+repository **Actions secrets** (never as variables or committed text):
 
 ```text
 DOKPLOY_API_DEPLOY_WEBHOOK
