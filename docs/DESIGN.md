@@ -334,6 +334,8 @@ Tables and lists:
   Long free-text cells truncate with a native title, while row actions stay in
   a stable trailing column. Primary create actions for a table align to that
   trailing edge, close to the side-panel origin.
+- User tables stay text-first when no profile image exists; do not synthesize
+  initials into avatar circles, which adds height without adding identity.
 - An inline-editable grid navigates like a spreadsheet: arrows move between
   cells, Tab/Enter commit and move, Escape reverts — and both the row-selection
   checkbox and the row actions are cells too, so nothing in a row needs a
