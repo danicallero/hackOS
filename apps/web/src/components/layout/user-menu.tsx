@@ -57,7 +57,7 @@ export function UserMenu({ className }: { className?: string }) {
           </span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="right" align="end" sideOffset={8} className="w-56">
+      <DropdownMenuContent align="end" sideOffset={8} className="w-56">
         <DropdownMenuLabel className="flex flex-col">
           <span className="truncate">
             {me.name} {me.surname}
