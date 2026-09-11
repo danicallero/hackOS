@@ -1,7 +1,8 @@
 "use client";
 
-import { LanguagesIcon, LogOutIcon, UserIcon } from "lucide-react";
+import { LanguagesIcon, LogOutIcon, MonitorIcon, MoonIcon, SunIcon, UserIcon } from "lucide-react";
 import Link from "next/link";
+import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -26,6 +27,7 @@ import { cn } from "@/lib/utils";
 export function UserMenu({ className }: { className?: string }) {
   const { me, refresh } = useSessionContext();
   const { language, setLanguage, t } = useLocale();
+  const { setTheme } = useTheme();
   if (!me) return null;
 
   async function handleSignOut() {
@@ -84,6 +86,22 @@ export function UserMenu({ className }: { className?: string }) {
                 </DropdownMenuRadioItem>
               ))}
             </DropdownMenuRadioGroup>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <SunIcon className="size-4" /> {t("toggleTheme")}
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuItem onClick={() => setTheme("light")}>
+              <SunIcon className="size-4" /> {t("light")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme("dark")}>
+              <MoonIcon className="size-4" /> {t("dark")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme("system")}>
+              <MonitorIcon className="size-4" /> {t("system")}
+            </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSeparator />

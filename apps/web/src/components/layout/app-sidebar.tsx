@@ -357,7 +357,7 @@ export function AppSidebar() {
       <SidebarFooter className="border-t border-sidebar-border/80 px-2 py-2">
         <div className="flex items-center gap-1">
           <UserMenu className="min-w-0" />
-          <div className="ml-auto shrink-0">
+          <div className="ml-auto shrink-0 group-data-[collapsible=icon]:hidden">
             <ThemeToggle />
           </div>
         </div>
