@@ -17,6 +17,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useSidebar } from "@/components/ui/sidebar";
 import { signOut } from "@/lib/auth-client";
 import { languageName, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
@@ -27,7 +28,8 @@ import { cn } from "@/lib/utils";
 export function UserMenu({ className }: { className?: string }) {
   const { me, refresh } = useSessionContext();
   const { language, setLanguage, t } = useLocale();
-  const { setTheme } = useTheme();
+  const { setTheme, theme } = useTheme();
+  const { state: sidebarState } = useSidebar();
   if (!me) return null;
 
   async function handleSignOut() {
@@ -88,22 +90,22 @@ export function UserMenu({ className }: { className?: string }) {
             </DropdownMenuRadioGroup>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <SunIcon className="size-4" /> {t("toggleTheme")}
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuItem onClick={() => setTheme("light")}>
-              <SunIcon className="size-4" /> {t("light")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setTheme("dark")}>
-              <MoonIcon className="size-4" /> {t("dark")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setTheme("system")}>
-              <MonitorIcon className="size-4" /> {t("system")}
-            </DropdownMenuItem>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
+        {sidebarState === "collapsed" && (
+          <DropdownMenuItem
+            onClick={() =>
+              setTheme(theme === "dark" ? "light" : theme === "light" ? "system" : "dark")
+            }
+          >
+            {theme === "dark" ? (
+              <MoonIcon className="size-4" />
+            ) : theme === "light" ? (
+              <SunIcon className="size-4" />
+            ) : (
+              <MonitorIcon className="size-4" />
+            )}
+            {t("toggleTheme")}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={handleSignOut}>
           <LogOutIcon className="size-4" /> {t("signOut")}
