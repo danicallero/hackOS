@@ -289,7 +289,9 @@ export function ActivityRow({
             onSave={saveAudiences}
           />
         ) : (
-          audienceSummary(item.audiences ?? [], t)
+          <span className="block truncate" title={audienceSummary(item.audiences ?? [], t)}>
+            {audienceSummary(item.audiences ?? [], t)}
+          </span>
         );
       case "scannable":
         return canEdit ? (
@@ -340,8 +342,12 @@ export function ActivityRow({
             placeholder={t("locationLabel")}
             onSave={saveLocation}
           />
+        ) : item.location ? (
+          <span className="block truncate" title={item.location}>
+            {item.location}
+          </span>
         ) : (
-          (item.location ?? <span className="text-muted-foreground">—</span>)
+          <span className="text-muted-foreground">—</span>
         );
       case "item":
         return (
@@ -365,14 +371,22 @@ export function ActivityRow({
       case "owners":
         return canEdit ? (
           <EditableOwnersCell item={item} onUpdate={onUpdate} />
+        ) : ownerNames(item) ? (
+          <span className="block truncate" title={ownerNames(item)}>
+            {ownerNames(item)}
+          </span>
         ) : (
-          ownerNames(item) || <span className="text-muted-foreground">—</span>
+          <span className="text-muted-foreground">—</span>
         );
       case "notes":
         return canEdit ? (
           <EditableTextCell value={item.notes ?? ""} onSave={saveNotes} />
+        ) : item.notes ? (
+          <span className="block truncate" title={item.notes}>
+            {item.notes}
+          </span>
         ) : (
-          (item.notes ?? <span className="text-muted-foreground">—</span>)
+          <span className="text-muted-foreground">—</span>
         );
       default:
         return null;

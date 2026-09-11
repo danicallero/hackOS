@@ -329,6 +329,11 @@ Tables and lists:
 - No two columns in one table share a header: a repeated header makes sorting
   do two different things depending on which one is clicked (#299).
 - Bulk actions appear only after selection and state what set they affect.
+- Wide operational tables preserve readable column widths and scroll
+  horizontally instead of compressing every field into an overlapping grid.
+  Long free-text cells truncate with a native title, while row actions stay in
+  a stable trailing column. Primary create actions for a table align to that
+  trailing edge, close to the side-panel origin.
 - An inline-editable grid navigates like a spreadsheet: arrows move between
   cells, Tab/Enter commit and move, Escape reverts — and both the row-selection
   checkbox and the row actions are cells too, so nothing in a row needs a
