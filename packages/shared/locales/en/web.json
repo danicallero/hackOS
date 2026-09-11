@@ -210,6 +210,8 @@
   "currentBadge": "Current badge",
   "qrNotAvailable": "{item} not available.",
   "toggleSidebar": "Toggle sidebar",
+  "navigationPersonal": "Personal",
+  "navigationWorkspaces": "Workspaces",
   "selectAll": "Select all",
   "selectRow": "Select row",
   "openRow": "Open row",

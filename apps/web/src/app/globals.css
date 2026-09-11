@@ -30,6 +30,11 @@
   --hackos-radius-overlay: 0.5rem;
   --hackos-shadow-floating: 0 4px 12px oklch(0.141 0.005 285.823 / 12%);
   --hackos-shadow-overlay: 0 18px 48px oklch(0.141 0.005 285.823 / 24%);
+  /* Application chrome: the shell is a quiet working frame, while panels and
+     overlays establish the interaction hierarchy. */
+  --hackos-shell: oklch(0.975 0.002 286.32);
+  --hackos-sidebar-width: 15rem;
+  --hackos-sidebar-width-icon: 3.25rem;
   --font-size-page-title: 1.5rem;
   --line-height-page-title: 2rem;
   --font-size-section-title: 1.125rem;
@@ -122,6 +127,7 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.552 0.016 285.938);
+  --hackos-shell: oklch(0.16 0.006 285.885);
 }
 
 @theme inline {
@@ -175,12 +181,15 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-shell: var(--hackos-shell);
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
   --animate-accordion-down: accordion-down 0.2s ease-out;
   --animate-accordion-up: accordion-up 0.2s ease-out;
+  --animate-sidebar-group-expand: sidebar-group-expand 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-sidebar-group-collapse: sidebar-group-collapse 140ms ease-in;
   @keyframes accordion-down {
     from {
       height: 0;
@@ -197,6 +206,30 @@
       height: 0;
     }
   }
+  @keyframes sidebar-group-expand {
+    from {
+      height: 0;
+      opacity: 0;
+      transform: translateY(-2px);
+    }
+    to {
+      height: var(--radix-collapsible-content-height);
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes sidebar-group-collapse {
+    from {
+      height: var(--radix-collapsible-content-height);
+      opacity: 1;
+      transform: translateY(0);
+    }
+    to {
+      height: 0;
+      opacity: 0;
+      transform: translateY(-2px);
+    }
+  }
 }
 
 @layer base {
@@ -208,6 +241,8 @@
     font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
     font-size: var(--font-size-body);
     line-height: var(--line-height-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
@@ -234,6 +269,29 @@
     color: var(--muted-foreground);
     font-size: var(--font-size-meta);
     line-height: var(--line-height-meta);
+  }
+
+  /* A restrained, themed scrollbar keeps long editor panels from introducing
+     platform-coloured chrome into the workspace. */
+  * {
+    scrollbar-color: color-mix(in oklch, var(--muted-foreground) 35%, transparent) transparent;
+    scrollbar-width: thin;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-clip: padding-box;
+    background-color: color-mix(in oklch, var(--muted-foreground) 35%, transparent);
+    border: 3px solid transparent;
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklch, var(--muted-foreground) 55%, transparent);
   }
 }
 

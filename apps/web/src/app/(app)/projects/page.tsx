@@ -162,12 +162,6 @@ export default function ProjectsPage() {
           canImport || canEdit ? (
             <div className="flex flex-wrap gap-2">
               {/* H18: native creation, so an event can run without Devpost. */}
-              {canEdit && (
-                <ProjectFormDialog
-                  mode={{ kind: "create" }}
-                  onSaved={(repoId) => router.push(`/projects/${repoId}`)}
-                />
-              )}
               {canImport && (
                 <Button
                   variant={canEdit ? "outline" : "default"}
@@ -176,6 +170,12 @@ export default function ProjectsPage() {
                   <UploadIcon className="size-4" />
                   {t("importFromDevpost")}
                 </Button>
+              )}
+              {canEdit && (
+                <ProjectFormDialog
+                  mode={{ kind: "create" }}
+                  onSaved={(repoId) => router.push(`/projects/${repoId}`)}
+                />
               )}
             </div>
           ) : undefined

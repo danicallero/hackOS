@@ -63,7 +63,7 @@ src/
     (auth)/            unauthenticated flows — centered card shell (H1–H5)
       login, signup, forgot-password, reset-password, verify-email,
       claim-account, applications (public application form)
-    (app)/             authenticated shell — sidebar + top bar, AuthGuard
+    (app)/             authenticated shell — sidebar + workspace bar, AuthGuard
       personal area (my-applications, my-project, my-queue, wallet, inbox,
       schedule, settings/profile — no dashboard/home page, schedule is the
       landing destination) · staff workspaces (applications, projects,
@@ -131,6 +131,11 @@ Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
 `QrCode`, `MultiSelect`, `TemplateFieldControl`, `FileUploadField`, `UserPicker`,
 `EntityCombobox`, `ActionGroup`, `IconButton`.
 
+`SidePanelEditor` is the focused-record counterpart to `Modal`: it opens a
+right-side editor over the current workspace, with a fixed title/actions area
+and independently scrollable form body. Use it for a single record's details;
+keep blocking confirmations in `Modal` and deep, bookmarkable workflows on a route.
+
 ### Control sizing — one geometry contract
 
 Buttons, inputs, selects, command inputs, and tabs use the same token-backed
@@ -178,11 +183,11 @@ Badges, meters and charts all take a `tone`. Never hardcode a hex.
 
 ### 3. Layout — `components/layout/*`
 
-`AppSidebar`, `UserMenu`, `AuthGuard`, `VerificationBanner`, `HeaderTitle` — the
-authed shell. `HeaderTitle` shows the *workspace* the route belongs to
-(`workspaceForPath` in `lib/nav.ts`), never the nav leaf: the page renders its
-own name in its `PageHeader` `h1`, and one destination gets one name, so
-`nav.ts` and the page `h1` share a message key.
+`AppSidebar`, `UserMenu`, `AuthGuard` and `VerificationBanner` make up the
+authed shell. The sidebar header owns the only collapse control; account and
+theme controls live in its footer, with language as a quick setting inside the
+account menu. There is no global workspace bar: each page renders its own name
+in `PageHeader` `h1`.
 
 ## Page structure — when a page becomes a directory
 

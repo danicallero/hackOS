@@ -4,7 +4,7 @@ import { useState } from "react";
 
 /**
  * Where a Radix popover should be portaled when its trigger lives inside a
- * <Modal>/<Dialog>.
+ * <Modal>/<Dialog>/<SidePanelEditor>.
  *
  * Body (the default) is outside the dialog's scroll-lock (react-remove-scroll),
  * so the option list silently refuses to scroll. Rendering inline instead keeps
@@ -21,7 +21,9 @@ import { useState } from "react";
 export function useDialogPortal(inDialog: boolean) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const container = inDialog
-    ? ((anchor?.closest('[data-slot="dialog-content"]') as HTMLElement | null) ?? null)
+    ? ((anchor?.closest(
+        '[data-slot="dialog-content"], [data-slot="sheet-content"]',
+      ) as HTMLElement | null) ?? null)
     : null;
 
   return {

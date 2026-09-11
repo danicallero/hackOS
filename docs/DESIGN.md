@@ -84,11 +84,44 @@ Each row: value → intent → boundary.
 | Data | `tabular-nums` | Any column of numbers. Monospace only for identifiers and timers — never for prose. |
 | Controls | 24 px tiny/icon-xs, 32 px compact, 36 px default, 40 px prominent; 6 px radius | Tiny is for icon-only remove/inline affordances; compact is for dense staff tables; prominent is for mobile-friendly/primary flows. Use component `size` variants, never one-off height utilities. Multiline `Textarea` uses a separate 64 px minimum token. |
 | Surfaces | 8 px radius, semantic border + background | **No shadow for inline grouping** — border-only. |
+| App frame | 12 px radius, subtle border + small shadow | Desktop navigation is the one floating panel; the main content stays on the shared shell canvas without an outer card. |
 | Overlays | 8 px radius; small shadow (menus/popovers), large shadow (modals) | Elevation communicates "floating above the page" and nothing else. |
 | Full radius | pills, avatars | Nowhere else. |
 
 Uppercase/letter-spacing is not a hierarchy tool — use scale, weight, and
 colour; reserve uppercase for real codes (badge IDs, room codes).
+
+### Authenticated shell aesthetic
+
+**The authenticated product is one quiet operational canvas, with navigation
+as its only floating frame.** It should feel composed rather than assembled:
+content, header and surrounding canvas share one base tone; hierarchy comes
+from spacing, type, borders and the small number of deliberately elevated
+surfaces — never from stacking rounded rectangles around every region.
+
+- **One canvas, one floating navigation panel.** `SidebarProvider` and
+  `SidebarInset` use the shell tone. The desktop `AppSidebar` uses the
+  `floating` variant: a 12 px rounded, subtly bordered panel with a small
+  shadow. The content canvas has no outer border, shadow or radius. Do not
+  turn the page area into a second card beside the sidebar.
+- **The first content surface aligns with navigation.** Wide operational
+  surfaces (`data-wide`) keep a small top inset so their first component begins
+  on the same horizontal rhythm as the sidebar header. Standard pages retain
+  the larger page-header breathing room; vertical separation is earned below
+  the component, not by an arbitrary offset above it.
+- **Curvature follows ownership.** Controls use the 6 px control radius;
+  inline `Surface`/`SectionCard` groupings use 8 px; the floating sidebar uses
+  12 px; overlays use their token-backed 8 px radius. A rounded edge signals a
+  bounded, movable or elevated thing — it is not decorative chrome for the
+  page canvas.
+- **Quiet chrome, clear content.** There is no global workspace bar. The page
+  canvas begins with its own `PageHeader`; the sidebar header owns the single
+  collapse control. This preserves vertical space and prevents a second title
+  hierarchy from competing with the page `h1`.
+- **Depth is scarce.** Inline cards remain border-only. The sidebar, menus,
+  sheets and dialogs earn elevation because they sit above or beside the task.
+  Avoid background washes, gratuitous shadows and inset outlines that create
+  several competing planes.
 
 ## 3. Containers
 
@@ -112,6 +145,43 @@ title/description/action out of `CardHeader` also re-invents the spacing and
 re-introduces the description-restates-the-title pattern.
 Public marketing cards may use more whitespace but keep the same radius and
 colour tokens.
+
+### Authenticated navigation
+
+**Navigation explains the available work without becoming another dashboard.**
+
+- The brand is the visual anchor of the header and may be larger than a nav
+  row; it is not a second sidebar toggle.
+- Render the stable personal destinations first, then one breathing divider,
+  then the capability-filtered workspaces. `navigationPersonal` and
+  `navigationWorkspaces` are structural labels, not destinations.
+- Workspace labels are low-emphasis group headings. They may disclose their
+  children, but they never receive the selected-row surface. Only the active
+  leaf route gets the active background and inset border. When route prefixes
+  overlap, select the deepest matching leaf — never show two selected rows.
+- Children revealed by an expanded workspace are indented one navigation level
+  (`pl-8`) from their group heading. The indent is structural, not another
+  colour treatment; it disappears in the icon rail, where every item returns
+  to the shared icon alignment.
+- Workspace expansion is independent, not an accordion: opening a different
+  category must not close the category containing the current route. Navigation
+  changes the selected leaf; it never removes context before the reader has
+  moved away from it. Keep exactly the category containing the current route
+  plus, at most, the most recently opened category; opening another replaces
+  that secondary expansion.
+- Expanded children animate as one compact disclosure (height, opacity and a
+  2 px settle) rather than appearing row by row; collapse is slightly faster
+  than expand. The chevron follows the same motion, and all of it disables for
+  `prefers-reduced-motion`.
+- Use vertical breathing room around category changes and workspace headings;
+  do not solve categorisation with repeated heavy dividers or all-caps labels.
+  In the collapsed icon rail the labels reduce to non-interactive separators
+  and every destination remains directly reachable.
+- The footer is an account utility row: identity is text-first (name and email,
+  no fabricated initials or fallback avatar); the appearance control sits at
+  the row's trailing edge. The account menu contains Profile, the quick
+  language switcher, and Sign out. On the icon rail, text can hide but the
+  account action remains a labelled icon.
 
 ```tsx
 <SectionCard
@@ -137,11 +207,13 @@ id) → one `primaryAction` + optional `secondaryActions`.
   `leading` and the identity line in `meta` — don't hand-roll a second header
   layout with its own `h1` size and an `ml-auto` action block, which strands
   the actions on their own right-aligned row as soon as the title row wraps.
-- **The top bar carries the workspace, the page carries its own name.** The
-  sticky app-shell bar names the containing workspace; the `h1` names the
-  destination. Never render the same string in both, and never give one
-  destination two names — `nav.ts` and the page `h1` reference the same
-  message key (issue #297).
+- **The page carries its own name.** There is no global workspace title bar;
+  every destination has one `h1` in its `PageHeader`. Navigation communicates
+  the containing workspace, so never add a second, competing page title.
+- **Persistent utilities belong in the navigation footer.** Account and
+  appearance controls stay together below navigation; language is a quick
+  setting in the account menu. The top bar is reserved for orientation and the
+  sidebar control.
 - **`context` is the parent crumb, not a second back button.** On detail
   routes it links to the list the record came from; don't repeat that link as
   a header action.
@@ -187,11 +259,23 @@ match:
 | A record's own detail — several sections, its own data, something a reader will link to, come back to, or read alongside a list | A **route** (`/thing/[id]`, or a detail pane beside the list) | A `Modal`, however big |
 | Secondary detail that belongs *with* a section and is only sometimes wanted | Inline disclosure (`Collapsible` / `Accordion`) inside the `SectionCard` | A dialog opened from a row |
 | A whole alternative view of the same page's subject | A `TabBar` sub-view (§4) | A dialog per view |
+| A focused record editor that benefits from keeping the parent list visible | `SidePanelEditor` | A modal that turns into a scrollable mini-page |
 | One short decision, confirmation, or small form | `Modal` / `AlertModal` | A route for a two-field form |
 
 Two smells that mean a dialog has outgrown itself: it scrolls internally on a
 laptop, or it contains its own tabs, its own list *and* its own form. Both mean
 it should have been a route.
+
+### Side-panel editor anatomy
+
+**A focused editor is a companion to the current page, not a replacement for
+it.** `SidePanelEditor` opens from the right on desktop with an inset, rounded
+sheet, preserving enough of the parent list or workspace to maintain context.
+Its title/description header and action footer stay fixed; only the form body
+scrolls. The trigger belongs at the trailing edge of its action group so the
+direction of travel (page → panel) is visually predictable. On narrow screens,
+the same primitive may use the platform's full-height sheet behaviour rather
+than squeezing a desktop panel into the viewport.
 
 **Never put a table, a live-updating list, or a record's primary content in a
 dialog.** A queue, a roster, a set of results are things people scan, sort and
@@ -204,6 +288,7 @@ anything else.
 | --- | --- | --- |
 | Confirm an irreversible/destructive action | `AlertModal` | `Modal` with a red button, `window.confirm` |
 | A short, self-contained dialog that passed the test above | `Modal` (controlled or `trigger`) | Hand-rolled Radix Dialog; anything the table above sends to a route |
+| A single-record editor opened from a list or workspace | `SidePanelEditor` | Recreating a right sheet's focus, close, header and footer behavior in a route component |
 | Report a failed load/submit in place | `ContextualError` (+ retry) | A toast alone |
 | Confirm a completed action | Toast (sonner) | A modal interrupting the flow |
 | Communicate entity status | `StatusBadge` with a `tone` (queue states: `QueueStatusBadge`) | Coloured text, custom pills |
@@ -212,7 +297,7 @@ anything else.
 | A horizontal tab bar | `TabBar` (scrolls itself when the triggers outgrow the container) | Bare `TabsList` with a per-page `overflow-x-auto` wrapper or `flex-wrap`, which the fixed pill height clips |
 | A group of adjacent actions | `ActionGroup` (wraps with the shared 8 px gap) | Repeated per-page flex/gap wrappers with divergent wrapping |
 | An icon-only action | `IconButton` (localized `label`, token-backed hit area) | A bare `<button>` or `Button` with a hand-written `size-*` override |
-| A combobox/multi-select inside a `Modal` | `MultiSelect`/`UniversityPicker`/`UserPicker`/`EntityCombobox` with `inDialog` | The same control without it — its list then either can't scroll or spills outside the dialog |
+| A combobox/multi-select inside a `Modal` or `SidePanelEditor` | `MultiSelect`/`UniversityPicker`/`UserPicker`/`EntityCombobox` with `inDialog` | The same control without it — its list then either can't scroll or spills outside the overlay |
 | Pick one row from a table-backed list (users, enterprises, activities, …) | `UserPicker` (server-searched) or `EntityCombobox` (client-filtered, already-fetched list) | A `Select` dumping every row flat — unusable once the table grows past a handful of rows |
 | A set of same-shaped objects users drill into (esp. mobile) | Cards / drill-down list rows | A horizontally scrolling table |
 | Zero-state | `EmptyState` with one direct CTA | Prose explaining where to navigate |
@@ -244,6 +329,13 @@ Tables and lists:
 - No two columns in one table share a header: a repeated header makes sorting
   do two different things depending on which one is clicked (#299).
 - Bulk actions appear only after selection and state what set they affect.
+- Wide operational tables preserve readable column widths and scroll
+  horizontally instead of compressing every field into an overlapping grid.
+  Long free-text cells truncate with a native title, while row actions stay in
+  a stable trailing column. Primary create actions for a table align to that
+  trailing edge, close to the side-panel origin.
+- User tables stay text-first when no profile image exists; do not synthesize
+  initials into avatar circles, which adds height without adding identity.
 - An inline-editable grid navigates like a spreadsheet: arrows move between
   cells, Tab/Enter commit and move, Escape reverts — and both the row-selection
   checkbox and the row actions are cells too, so nothing in a row needs a
@@ -409,8 +501,8 @@ workspaces with per-device persistence; conventions in
 - File organisation: when a route outgrows a single `page.tsx`, follow the
   "Page structure" rule in `apps/web/README.md` — split by independently
   meaningful parts (tabs, modals, decision logic), never by line count alone.
-- Dark-first, Dokploy-family visual identity; light and dark both fully
-  supported via `next-themes` — every screen must read correctly in both.
+- Dark-first operational visual identity; light and dark both fully supported
+  via `next-themes` — every screen must read correctly in both.
 - Navigation: `lib/nav.ts` (`PERSONAL_NAV` + `WORKSPACES`) rendered by
   `AppSidebar`. Workspaces are collapsible groups; the expanded workspace
   persists per device (`localStorage` `hackos-last-workspace`); the icon rail

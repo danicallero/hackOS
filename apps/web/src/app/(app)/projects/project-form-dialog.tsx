@@ -7,8 +7,8 @@
 import { FolderPlusIcon, type LucideIcon, PencilIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Modal } from "@/components/common/modal";
 import { MultiSelect, type MultiSelectOption } from "@/components/common/multi-select";
+import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -117,7 +117,7 @@ export function ProjectFormDialog({
       : t("newProject");
 
   return (
-    <Modal
+    <SidePanelEditor
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
@@ -193,6 +193,6 @@ export function ProjectFormDialog({
           </div>
         )}
       </div>
-    </Modal>
+    </SidePanelEditor>
   );
 }
