@@ -79,8 +79,8 @@ export function TimezonePicker({
   onChange: (value: string) => void;
   disabled?: boolean;
   /**
-   * Set true when this lives inside a <Modal>/<Dialog> so the popover portals
-   * into the dialog panel via `useDialogPortal` — see `MultiSelect`.
+   * Set true when this lives inside a <Modal>/<Dialog>, <SidePanelEditor>, or
+   * another overlay so the popover stays in that surface via `useDialogPortal`.
    */
   inDialog?: boolean;
   className?: string;

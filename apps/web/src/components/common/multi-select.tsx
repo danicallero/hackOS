@@ -29,8 +29,9 @@ export interface MultiSelectOption {
  * group, filters…). Options are `{ value, label, description }`; `value` is a
  * string[] of selected values. Fully controlled and prop-driven.
  *
- * `inDialog`: set it true when this lives inside a <Modal>/<Dialog> so the
- * popover is portaled into the dialog panel — see `useDialogPortal`.
+ * `inDialog`: set it true when this lives inside a <Modal>/<Dialog>,
+ * <SidePanelEditor>, or another overlay so the popover stays in that surface
+ * — see `useDialogPortal`.
  */
 export function MultiSelect({
   options,

@@ -4,12 +4,24 @@ import * as React from "react"
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 import { Select as SelectPrimitive } from "radix-ui"
 
+import {
+  assignRef,
+  OverlayPortalContext,
+  useOverlayPortalContext,
+  useOverlayPortalState,
+} from "@/hooks/use-dialog-portal"
 import { cn } from "@/lib/utils"
 
 function Select({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Root>) {
-  return <SelectPrimitive.Root data-slot="select" {...props} />
+  const overlay = useOverlayPortalState()
+
+  return (
+    <OverlayPortalContext.Provider value={overlay}>
+      <SelectPrimitive.Root data-slot="select" {...props} />
+    </OverlayPortalContext.Provider>
+  )
 }
 
 function SelectGroup({
@@ -24,15 +36,29 @@ function SelectValue({
   return <SelectPrimitive.Value data-slot="select-value" {...props} />
 }
 
-function SelectTrigger({
+const SelectTrigger = React.forwardRef<
+  HTMLButtonElement,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> & {
+    /** `content` is the deliberate opt-in for a value that may wrap. */
+    size?: "sm" | "default" | "lg" | "content"
+  }
+>(function SelectTrigger({
   className,
   size = "default",
   children,
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Trigger> & {
-  /** `content` is the deliberate opt-in for a value that may wrap. */
+}: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> & {
   size?: "sm" | "default" | "lg" | "content"
-}) {
+}, forwardedRef) {
+  const { container, registerAnchor } = useOverlayPortalContext() ?? {}
+  const triggerRef = React.useCallback(
+    (node: HTMLButtonElement | null) => {
+      registerAnchor?.(node)
+      assignRef(forwardedRef, node)
+    },
+    [forwardedRef, registerAnchor],
+  )
+
   return (
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
@@ -42,6 +68,10 @@ function SelectTrigger({
         className
       )}
       {...props}
+      ref={triggerRef}
+      // Radix Select's content uses a modal DismissableLayer; keep this
+      // trigger targetable while a nested select is open.
+      style={container ? { ...props.style, pointerEvents: "auto" } : props.style}
     >
       {children}
       <SelectPrimitive.Icon asChild>
@@ -49,17 +79,20 @@ function SelectTrigger({
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   )
-}
+})
 
 function SelectContent({
   className,
   children,
   position = "item-aligned",
   align = "center",
+  collisionBoundary,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
+  const { container } = useOverlayPortalContext() ?? {}
+
   return (
-    <SelectPrimitive.Portal>
+    <SelectPrimitive.Portal container={container ?? undefined}>
       <SelectPrimitive.Content
         data-slot="select-content"
         className={cn(
@@ -70,6 +103,7 @@ function SelectContent({
         )}
         position={position}
         align={align}
+        collisionBoundary={collisionBoundary ?? container ?? undefined}
         {...props}
       >
         <SelectScrollUpButton />

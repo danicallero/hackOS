@@ -151,11 +151,17 @@ wrap. `ActionGroup` owns wrapping and the 8 px gap for adjacent actions, while
 consistent.
 
 Popovers (`MultiSelect`, `UniversityPicker`, `TimezonePicker`, `UserPicker`,
-`EntityCombobox`) take an `inDialog` prop: inside a `Modal` it portals the list
-into the dialog panel via `useDialogPortal`, which is the only place that is
-both inside the dialog's scroll-lock and outside the modal body's scroller.
-Pass it, or the option list either refuses to scroll or spills past the dialog
+`EntityCombobox`) take an `inDialog` prop: inside a `Modal`, `SidePanelEditor`,
+`AlertModal`, or another overlay it portals the list into that surface via
+`useDialogPortal`, which keeps the list inside the active focus/dismissal scope.
+Pass it, or the option list either refuses to scroll or spills past the overlay
 edge.
+
+`DropdownMenu`, `Select`, and `Popover` detect when their trigger lives inside a
+`Modal`, `SidePanelEditor`, `AlertModal`, or another overlay and keep their
+content in that surface's dismissable layer. Call sites do not need a second
+portal or a manual `modal={false}` override for nested menus; the trigger stays
+operable while the child is open.
 
 **Picking a user or an entity from a list — don't hand-roll a `<Select>`.**
 `UserPicker` is a type-ahead combobox over a server-searched user endpoint
