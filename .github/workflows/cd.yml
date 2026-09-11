@@ -133,9 +133,6 @@ jobs:
       (needs.publish-api.result == 'success' || needs.publish-web.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment:
-      name: production
-      url: ${{ vars.PRODUCTION_SITE_URL }}
     permissions:
       contents: read
       id-token: write
