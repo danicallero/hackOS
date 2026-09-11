@@ -26,5 +26,5 @@ test("keeps mobile shell notifications and page heading visible together", async
   expect(triggerBox).not.toBeNull();
   expect(headingBox).not.toBeNull();
   expect(headingBox?.x).toBeGreaterThan((triggerBox?.x ?? 0) + (triggerBox?.width ?? 0));
-  expect(headingBox?.y).toBeLessThan((triggerBox?.y ?? 0) + (triggerBox?.height ?? 0) + 16);
+  expect(Math.abs((headingBox?.y ?? 0) - (triggerBox?.y ?? 0))).toBeLessThanOrEqual(2);
 });

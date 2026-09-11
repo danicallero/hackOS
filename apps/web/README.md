@@ -188,7 +188,7 @@ Badges, meters and charts all take a `tone`. Never hardcode a hex.
 the collapse control; narrow screens expose the same control in a fixed leading
 corner. There is no global workspace bar: each page renders its own name in
 `PageHeader` `h1`, whose title block reserves that leading space on narrow
-screens.
+screens and starts in the same 12px top band as the fixed control.
 
 ## Page structure — when a page becomes a directory
 

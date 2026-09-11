@@ -109,8 +109,10 @@ surfaces — never from stacking rounded rectangles around every region.
   on the same horizontal rhythm as the sidebar header. Standard desktop pages
   retain the larger page-header breathing room; on narrow web screens, the
   fixed sidebar control shares the top band and `PageHeader` reserves adjacent
-  inline space for its title. Vertical separation is earned below the
-  component, not by an arbitrary offset above it.
+  inline space for its title. The narrow content inset matches the control's
+  12px top inset so the title line starts beside the button. Vertical
+  separation is earned below the component, not by an arbitrary offset above
+  it.
 - **Curvature follows ownership.** Controls use the 6 px control radius;
   inline `Surface`/`SectionCard` groupings use 8 px; the floating sidebar uses
   12 px; overlays use their token-backed 8 px radius. A rounded edge signals a
