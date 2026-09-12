@@ -247,9 +247,9 @@ export default function QueuePage() {
   return (
     // App-like layout: the room selector pins to the top, the queue panel stays
     // put on the left, and only the right column (project + scoring) scrolls.
-    // At xl we clamp the whole page to the viewport (100dvh minus the app chrome:
-    // 3.5rem header + 2rem+2rem main py-8) so the outer page never scrolls.
-    <div className="flex flex-col gap-5 xl:h-[calc(100dvh-7.5rem)]" data-wide>
+    // At xl we fill the remaining viewport height so the outer page never scrolls.
+    // -mt-8 cancels the parent main's pt-8 so the panel starts flush at the top.
+    <div className="-mt-8 flex flex-col gap-5 xl:flex-1" data-wide>
       <Surface padding="none" className="p-5">
         {/* Fluid header (H29, issue #61): the two field columns grow/shrink and
             the action cluster drops to its own row under tight widths (tiling
@@ -397,10 +397,10 @@ export default function QueuePage() {
           />
         </div>
       ) : (
-        // Two-column region fills the remaining height. Left column is pinned and
-        // scrolls internally if the queue is long; right column is the scroll area.
+        // Two-column region fills the remaining height. Left column is a fixed
+        // container whose internal queue list scrolls; right column is the scroll area.
         <div className="grid gap-5 xl:min-h-0 xl:flex-1 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <div className="xl:min-h-0 xl:overflow-y-auto">
+          <div className="xl:min-h-0">
             <QueuePanel
               view={view}
               progress={progress.data}
@@ -484,8 +484,8 @@ export default function QueuePage() {
           </div>
 
           {/* Main column: evaluated project card, then scoring / questions
-              flowing directly below it. This column owns the page scroll. */}
-          <div className="space-y-5 xl:min-h-0 xl:overflow-y-auto">
+              flowing directly below it. This column scrolls independently. */}
+          <div className="space-y-5 xl:min-h-0 xl:overflow-y-auto scrollbar-none [&::-webkit-scrollbar]:hidden">
             <PresentationPanel
               entry={active}
               challenge={activeChallenge}

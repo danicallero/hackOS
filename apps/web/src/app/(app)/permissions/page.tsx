@@ -461,13 +461,13 @@ export default function PermissionsPage() {
 
   const roleActions = (
     <>
-      <Button variant="outline" onClick={() => setAllRulesOpen(true)}>
+      <Button size="sm" variant="outline" onClick={() => setAllRulesOpen(true)}>
         <ZapIcon /> {t("allGrantRulesButton")}
       </Button>
-      <Button variant="outline" onClick={toggleTrash}>
+      <Button size="sm" variant="outline" onClick={toggleTrash}>
         <Trash2Icon /> {t("trashTitle")}
       </Button>
-      <Button onClick={() => setCreateOpen(true)}>
+      <Button size="sm" onClick={() => setCreateOpen(true)}>
         <PlusIcon /> {t("newRole")}
       </Button>
     </>

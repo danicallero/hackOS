@@ -19,6 +19,7 @@ export function GenerateQueuesAction({
   return (
     <>
       <Button
+        size="sm"
         onClick={onGenerate}
         disabled={busy}
         aria-busy={busy}

@@ -175,10 +175,10 @@ export function QueuePanel({
   const trimmed = query.trim();
 
   return (
-    <Surface padding="none" className="overflow-hidden">
+    <Surface padding="none" className="flex flex-col overflow-hidden">
       <QueueStatsCard progress={progress} pace={pace} />
       <Separator />
-      <div className="space-y-5 p-5">
+      <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-5 scrollbar-none [&::-webkit-scrollbar]:hidden">
         <QueueList
           title={t("waitingRoomCount", { count: calledEntries.length })}
           entries={calledEntries}
@@ -201,7 +201,7 @@ export function QueuePanel({
 
         <Separator />
 
-        <div className="space-y-3">
+        <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold">
@@ -245,7 +245,6 @@ export function QueuePanel({
             title=""
             entries={waitingEntries}
             empty={t("noTeamsChallengeQueue")}
-            scroll
             desiredMinutesPerTeam={pace?.desiredMinutesPerTeam ?? null}
             calledTooLongThresholdMinutes={pace?.calledTooLongThresholdMinutes ?? null}
             renderActions={(entry) => {
@@ -488,7 +487,6 @@ export function QueueList({
   entries,
   empty,
   compact,
-  scroll,
   desiredMinutesPerTeam,
   calledTooLongThresholdMinutes,
   renderActions,
@@ -497,7 +495,6 @@ export function QueueList({
   entries: QueueEntry[];
   empty: string;
   compact?: boolean;
-  scroll?: boolean;
   desiredMinutesPerTeam?: number | null;
   calledTooLongThresholdMinutes?: number | null;
   renderActions: (entry: QueueEntry) => React.ReactNode;
@@ -511,7 +508,7 @@ export function QueueList({
           {empty}
         </p>
       ) : (
-        <ul className={cn("space-y-2", scroll && "max-h-96 overflow-y-auto pr-1")}>
+        <ul className="space-y-2">
           {entries.map((entry, index) => (
             <li key={entry.id} className="rounded-md border p-3">
               <div className="flex items-start justify-between gap-3">
