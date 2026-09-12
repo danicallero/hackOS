@@ -767,6 +767,7 @@
   "onTime": "On time",
   "scoring": "Scoring",
   "scoringFormDesc": "A scoring form appears when a team is in the room.",
+  "noActiveEvaluation": "No evaluation in progress",
   "noActiveEntrySelected": "No active entry selected.",
   "saveDraft": "Save draft",
   "saveCorrection": "Save correction",

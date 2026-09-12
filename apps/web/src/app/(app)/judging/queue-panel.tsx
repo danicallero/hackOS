@@ -9,6 +9,7 @@ import {
   ArrowUpToLineIcon,
   DoorOpenIcon,
   ListOrderedIcon,
+  type LucideIcon,
   MoreHorizontalIcon,
   RotateCcwIcon,
   SearchIcon,
@@ -41,6 +42,7 @@ import type {
 } from "@/lib/queue";
 import { cn } from "@/lib/utils";
 import { entryLabel } from "./helpers";
+import { JudgingEmptyState } from "./judging-empty-state";
 import { TeamSearch } from "./team-search";
 
 export function QueueStatsCard({
@@ -175,14 +177,15 @@ export function QueuePanel({
   const trimmed = query.trim();
 
   return (
-    <Surface padding="none" className="flex flex-col overflow-hidden">
+    <Surface padding="none" className="flex h-full min-h-0 flex-col overflow-hidden">
       <QueueStatsCard progress={progress} pace={pace} />
       <Separator />
-      <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-5 scrollbar-none [&::-webkit-scrollbar]:hidden">
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-5 scrollbar-none [&::-webkit-scrollbar]:hidden">
         <QueueList
           title={t("waitingRoomCount", { count: calledEntries.length })}
           entries={calledEntries}
           empty={t("noTeamsWaitingDoor")}
+          emptyIcon={DoorOpenIcon}
           compact
           desiredMinutesPerTeam={pace?.desiredMinutesPerTeam ?? null}
           calledTooLongThresholdMinutes={pace?.calledTooLongThresholdMinutes ?? null}
@@ -201,7 +204,7 @@ export function QueuePanel({
 
         <Separator />
 
-        <div className="flex flex-col gap-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold">
@@ -245,6 +248,9 @@ export function QueuePanel({
             title=""
             entries={waitingEntries}
             empty={t("noTeamsChallengeQueue")}
+            emptyIcon={ListOrderedIcon}
+            className="min-h-0 flex-1"
+            emptyClassName="min-h-0 flex-1"
             desiredMinutesPerTeam={pace?.desiredMinutesPerTeam ?? null}
             calledTooLongThresholdMinutes={pace?.calledTooLongThresholdMinutes ?? null}
             renderActions={(entry) => {
@@ -486,6 +492,9 @@ export function QueueList({
   title,
   entries,
   empty,
+  emptyIcon: EmptyIcon,
+  emptyClassName,
+  className,
   compact,
   desiredMinutesPerTeam,
   calledTooLongThresholdMinutes,
@@ -494,6 +503,9 @@ export function QueueList({
   title: string;
   entries: QueueEntry[];
   empty: string;
+  emptyIcon?: LucideIcon;
+  emptyClassName?: string;
+  className?: string;
   compact?: boolean;
   desiredMinutesPerTeam?: number | null;
   calledTooLongThresholdMinutes?: number | null;
@@ -501,12 +513,14 @@ export function QueueList({
 }) {
   const { t } = useLocale();
   return (
-    <div className="space-y-3">
+    <div className={cn("flex flex-col gap-3", className)}>
       {title && <h3 className="text-sm font-semibold">{title}</h3>}
       {entries.length === 0 ? (
-        <p className="text-muted-foreground rounded-md border border-dashed px-3 py-6 text-center text-sm">
-          {empty}
-        </p>
+        <JudgingEmptyState
+          className={emptyClassName}
+          icon={EmptyIcon ?? ListOrderedIcon}
+          title={empty}
+        />
       ) : (
         <ul className="space-y-2">
           {entries.map((entry, index) => (
