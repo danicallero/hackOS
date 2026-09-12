@@ -247,9 +247,16 @@ export default function QueuePage() {
   return (
     // App-like layout: the room selector pins to the top, the queue panel stays
     // put on the left, and only the right column (project + scoring) scrolls.
-    // At xl we clamp the whole page to the viewport (100dvh minus the app chrome:
-    // 3.5rem header + 2rem+2rem main py-8) so the outer page never scrolls.
-    <div className="flex flex-col gap-5 xl:h-[calc(100dvh-7.5rem)]" data-wide>
+    // At xl we fill the shell from the floating sidebar's 8px top inset to the
+    // viewport bottom so the outer page never scrolls. Keep the explicit height
+    // from shrinking inside the flex parent; otherwise the main's bottom padding
+    // leaves a gap below the panels. The negative margin bridges the main's 2rem
+    // page padding to that top inset.
+    <div
+      className="flex min-h-0 flex-col gap-5 xl:-mt-6 xl:h-[calc(100svh-1rem)] xl:shrink-0 xl:overflow-hidden"
+      data-wide
+      data-judging-page
+    >
       <Surface padding="none" className="p-5">
         {/* Fluid header (H29, issue #61): the two field columns grow/shrink and
             the action cluster drops to its own row under tight widths (tiling
@@ -397,10 +404,10 @@ export default function QueuePage() {
           />
         </div>
       ) : (
-        // Two-column region fills the remaining height. Left column is pinned and
-        // scrolls internally if the queue is long; right column is the scroll area.
-        <div className="grid gap-5 xl:min-h-0 xl:flex-1 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <div className="xl:min-h-0 xl:overflow-y-auto">
+        // Two-column region fills the remaining height. Left column is a fixed
+        // container whose internal queue list scrolls; right column is the scroll area.
+        <div className="grid min-h-0 gap-5 xl:h-0 xl:flex-1 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <div className="xl:h-full xl:min-h-0">
             <QueuePanel
               view={view}
               progress={progress.data}
@@ -483,28 +490,30 @@ export default function QueuePage() {
             />
           </div>
 
-          {/* Main column: evaluated project card, then scoring / questions
-              flowing directly below it. This column owns the page scroll. */}
-          <div className="space-y-5 xl:min-h-0 xl:overflow-y-auto">
-            <PresentationPanel
-              entry={active}
-              challenge={activeChallenge}
-              pace={pace.data}
-              waitingRoomCount={view.called.length}
-              nextWaitingEntry={view.next[0] ?? null}
-              firstCalledEntry={view.called[0] ?? null}
-              canJudge={canJudge}
-              canOperate={canOperate}
-              busy={busy}
-              onEntryAction={(entry, action, body, label) =>
-                mutate(
-                  `${action}-${entry.id}`,
-                  () => entryAction(entry.id, action, body, crypto.randomUUID()),
-                  label,
-                )
-              }
-              onManualCall={handleManualCall}
-            />
+          {/* Main column: presentation stays visible above the evaluation; the
+              scoring card owns the remaining height and scrolls its body. */}
+          <div className="flex min-h-0 flex-col gap-5 overflow-hidden xl:h-full">
+            <div className="shrink-0">
+              <PresentationPanel
+                entry={active}
+                challenge={activeChallenge}
+                pace={pace.data}
+                waitingRoomCount={view.called.length}
+                nextWaitingEntry={view.next[0] ?? null}
+                firstCalledEntry={view.called[0] ?? null}
+                canJudge={canJudge}
+                canOperate={canOperate}
+                busy={busy}
+                onEntryAction={(entry, action, body, label) =>
+                  mutate(
+                    `${action}-${entry.id}`,
+                    () => entryAction(entry.id, action, body, crypto.randomUUID()),
+                    label,
+                  )
+                }
+                onManualCall={handleManualCall}
+              />
+            </div>
 
             <ReviewForm
               entry={selectedReviewEntry ?? active}
@@ -512,7 +521,10 @@ export default function QueuePage() {
               panel={view.challenge?.judging_panel_criteria ?? null}
               roomId={activeRoomId}
               canJudge={
-                canJudge && (active?.status === "presenting" || selectedReviewEntry != null)
+                canJudge &&
+                (active?.status === "in_room" ||
+                  active?.status === "presenting" ||
+                  selectedReviewEntry != null)
               }
               onCloseExisting={selectedReviewEntry ? () => setSelectedReviewEntry(null) : undefined}
             />

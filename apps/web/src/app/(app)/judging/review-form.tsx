@@ -6,7 +6,13 @@
 
 import { EVENTS } from "@hackos/shared/events";
 import type { Question } from "@hackos/shared/questions";
-import { AlertTriangleIcon, CheckCircle2Icon, WifiOffIcon } from "lucide-react";
+import {
+  AlertTriangleIcon,
+  CheckCircle2Icon,
+  DoorOpenIcon,
+  ListChecksIcon,
+  WifiOffIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { type Answers, normalizeAnswers, QuestionField } from "@/components/common/question-field";
@@ -33,6 +39,7 @@ import {
 } from "@/lib/queue";
 import type { Challenge } from "../challenges/shared";
 import { EMPTY_PANEL, errorMessage } from "./helpers";
+import { JudgingEmptyState } from "./judging-empty-state";
 
 export function ReviewForm({
   entry,
@@ -188,11 +195,25 @@ export function ReviewForm({
     conflict: t("collaborationConflict"),
     unsaved: t("unsavedChanges"),
   }[syncState];
+  const cardClassName = "relative flex min-h-0 flex-1 flex-col";
+  const bodyClassName =
+    "min-h-0 flex-1 overflow-y-auto scrollbar-none [&::-webkit-scrollbar]:hidden";
 
   if (!entry) {
     return (
-      <SectionCard title={t("scoring")} description={t("scoringFormDesc")}>
-        <p className="text-muted-foreground text-sm">{t("noActiveEntrySelected")}</p>
+      <SectionCard
+        title={t("scoring")}
+        description={t("scoringFormDesc")}
+        className={cardClassName}
+        headerClassName="p-3 sm:p-4"
+        bodyClassName={`${bodyClassName} flex flex-col`}
+      >
+        <JudgingEmptyState
+          className="flex-1"
+          icon={DoorOpenIcon}
+          title={t("noActiveEvaluation")}
+          description={t("scoringFormDesc")}
+        />
       </SectionCard>
     );
   }
@@ -201,6 +222,9 @@ export function ReviewForm({
     <SectionCard
       title={t("scoring")}
       icon={CheckCircle2Icon}
+      className={cardClassName}
+      headerClassName="p-3 sm:p-4"
+      bodyClassName={`${bodyClassName} flex flex-col pb-24 sm:pb-24`}
       action={
         <div className="flex flex-wrap items-center gap-2">
           <span role="status" aria-live="polite" className="text-muted-foreground text-sm">
@@ -216,9 +240,11 @@ export function ReviewForm({
         </div>
       }
       footer={
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="pointer-events-auto flex flex-wrap justify-end gap-2">
           <Button
+            className="shadow-sm"
             variant="outline"
+            size="sm"
             disabled={!canJudge || saving || loading}
             onClick={() => save(false)}
           >
@@ -226,6 +252,8 @@ export function ReviewForm({
           </Button>
           {status !== "submitted" && (
             <Button
+              className="shadow-sm"
+              size="sm"
               disabled={!canJudge || saving || loading || requiredUnansweredCount > 0}
               onClick={() => save(true)}
             >
@@ -235,11 +263,16 @@ export function ReviewForm({
           )}
         </div>
       }
+      footerClassName="pointer-events-none absolute inset-x-4 bottom-4 z-10 p-0 sm:p-0"
     >
       {loading ? (
         <Spinner />
       ) : panel.length === 0 ? (
-        <p className="text-muted-foreground text-sm">{t("noJudgingCriteria")}</p>
+        <JudgingEmptyState
+          className="flex-1"
+          icon={ListChecksIcon}
+          title={t("noJudgingCriteria")}
+        />
       ) : (
         <div className="space-y-5">
           {saveError && (

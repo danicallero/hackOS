@@ -150,18 +150,21 @@ export default function QueueOperationsPage() {
         }
         secondaryActions={
           tab === "rooms" ? (
-            <label
-              className="text-muted-foreground flex items-center gap-2 text-sm"
-              htmlFor="arrival-hints"
-              title={t("arrivalHintsDescription")}
-            >
-              <Switch
-                id="arrival-hints"
-                checked={arrivalHints}
-                onCheckedChange={toggleArrivalHints}
-              />
-              {t("arrivalHints")}
-            </label>
+            <div className="flex h-[var(--control-height-compact)] items-center">
+              <label
+                className="text-muted-foreground flex items-center gap-2 text-sm"
+                htmlFor="arrival-hints"
+                title={t("arrivalHintsDescription")}
+              >
+                <Switch
+                  size="sm"
+                  id="arrival-hints"
+                  checked={arrivalHints}
+                  onCheckedChange={toggleArrivalHints}
+                />
+                {t("arrivalHints")}
+              </label>
+            </div>
           ) : undefined
         }
       />
