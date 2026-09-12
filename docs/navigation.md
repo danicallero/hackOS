@@ -169,16 +169,27 @@ hidden destinations stay routable:
   the person also has a scanner capability, Queue operations joins Others so
   Scanner stays directly reachable.
 
-The "Others" slot is a **native dropdown selector**, not a screen. It is a
+The "Others" slot is a **dropdown selector**, not a screen. It is a
 direct custom button in its own perfect circle; it does not need fake
-`role="search"` semantics or a full-width layer over another tab. iOS and
-Android use `@expo/ui/community/menu` for the native dropdown, with a 64pt
-bar, a 64pt circular control, and 16pt horizontal display padding on both
-platforms so the iOS SwiftUI `Menu` and Android Compose dropdown share the
-same geometry and hit target (tablet-width layouts use a slightly thinner 56pt
-surface and can fit up to six direct destinations). Selecting an item navigates to the corresponding overflow
-pseudo-tab with the same replacement contract below; the native menu exposes
-the current overflow section as the single checked choice.
+`role="search"` semantics or a full-width layer over another tab. iOS uses
+`@expo/ui/community/menu`'s native SwiftUI `Menu`, with a 64pt bar, a 64pt
+circular control, and 16pt horizontal display padding (tablet-width layouts
+use a slightly thinner 56pt surface and can fit up to six direct
+destinations). Android renders the same trigger geometry but skips
+`@expo/ui`'s Android path: its Jetpack Compose `DropdownMenu` fallback is a
+plain system list with none of SwiftUI `Menu`'s card chrome, so
+`components/opaque-router-tabs.tsx`'s `AndroidOverflowMenu` instead
+reproduces that card look by hand — an anchored `Modal` + `GlassView` panel
+(the same recipe `ScheduleFilterPanel` uses), positioned from a
+`measureInWindow` reading of the trigger circle, and takes the same
+`fallbackColorScheme` `OpaqueRouterTabs` already resolves for the rest of the
+bar — light or dark with the system everywhere, forced dark over the
+scanner's own camera view (`isDarkScannerSurface`) — so the card's surface,
+text, and dividers always match the screen it floats over. iOS's native
+`Menu` needs no such prop; UIKit adapts it to the system appearance itself.
+Selecting an item navigates to the corresponding overflow pseudo-tab with the
+same replacement contract below; both menu implementations mark the current
+overflow section as the selected row.
 
 Selection simulates tab navigation
 (`apps/mobile/lib/operations-navigation.ts`
@@ -197,7 +208,8 @@ tabs. On release, the tab whose cell contains the final finger coordinate is
 selected with the same replacement semantics; navigation never fires midway
 through the drag. The gesture runs through native gesture-handler/Reanimated
 worklets so JS-thread stalls do not make the lens jump. The separate Others
-circle remains a native menu and is not part of the scrub sequence.
+circle remains its own menu (native on iOS, hand-rolled on Android — see
+above) and is not part of the scrub sequence.
 
 `RouterTabs` also publishes its geometry through `useRouterTabBarInsets()`.
 Routes rendered by its `TabSlot` can use `contentBottomInset` for

@@ -86,7 +86,12 @@ export function ScheduleNotificationsSheet({
               backgroundColor: colors.background,
               left: 0,
               minHeight: (viewingKind ? 60 : 86) + sheetTopInset,
-              paddingHorizontal: 52,
+              // The close/back FloatingGlassButton sits at `left: 16` and is
+              // 44 wide (right edge at 60), so 52 of horizontal padding was 8
+              // short of clearing it — on Android (edge-to-edge, no page-sheet
+              // inset) the centered subtitle text is wide enough to reach that
+              // gap and render under the button.
+              paddingHorizontal: Platform.OS === "android" ? 64 : 52,
               paddingTop: sheetTopInset + 16,
               position: "absolute",
               right: 0,
