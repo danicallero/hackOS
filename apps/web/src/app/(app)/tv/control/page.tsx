@@ -194,7 +194,7 @@ export default function TvControlPage() {
         title={t("tvControl")}
         description={t("tvControlDesc")}
         primaryAction={
-          <Button variant="outline" asChild>
+          <Button size="sm" variant="outline" asChild>
             <a href="/tv" target="_blank" rel="noreferrer">
               {t("openTvDisplay")}
             </a>

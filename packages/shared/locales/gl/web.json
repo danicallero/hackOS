@@ -767,6 +767,7 @@
   "onTime": "En tempo",
   "scoring": "Avaliación",
   "scoringFormDesc": "O formulario de avaliación aparece cando hai un equipo na sala.",
+  "noActiveEvaluation": "Ningunha avaliación en curso",
   "noActiveEntrySelected": "Ningunha entrada activa seleccionada.",
   "saveDraft": "Gardar borrador",
   "saveCorrection": "Gardar corrección",

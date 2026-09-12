@@ -16,6 +16,8 @@ export function SectionCard({
   state,
   action,
   footer,
+  headerClassName,
+  footerClassName,
   className,
   bodyClassName,
   children,
@@ -37,6 +39,10 @@ export function SectionCard({
   action?: React.ReactNode;
   /** Right-aligned row below the body, separated by its own top border. */
   footer?: React.ReactNode;
+  /** Additional classes for the header row. */
+  headerClassName?: string;
+  /** Additional classes for the footer row. */
+  footerClassName?: string;
   className?: string;
   /** className for the body wrapper specifically, separate from the section's own. */
   bodyClassName?: string;
@@ -52,7 +58,12 @@ export function SectionCard({
       className={cn("overflow-hidden", className)}
     >
       {(hasHeaderText || Icon || leading || state || action) && (
-        <div className="flex flex-col gap-(--space-within-section) p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5">
+        <div
+          className={cn(
+            "flex flex-col gap-(--space-within-section) p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5",
+            headerClassName,
+          )}
+        >
           <div className="flex items-start gap-3">
             {leading ?? (Icon && <Icon className="text-muted-foreground mt-0.5 size-5 shrink-0" />)}
             <div className="space-y-1">
@@ -77,7 +88,9 @@ export function SectionCard({
         {children}
       </div>
       {footer && (
-        <ActionGroup className="justify-end px-4 pb-4 sm:px-5 sm:pb-5">{footer}</ActionGroup>
+        <ActionGroup className={cn("justify-end px-4 pb-4 sm:px-5 sm:pb-5", footerClassName)}>
+          {footer}
+        </ActionGroup>
       )}
     </Section>
   );

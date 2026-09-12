@@ -133,7 +133,7 @@ export default function ReviewDetailPage() {
           title={loadError ?? t("couldNotLoadReviews")}
           description={t("reviewDetailAccessDesc")}
           action={
-            <Button asChild variant="outline">
+            <Button size="sm" asChild variant="outline">
               <Link href="/queue/reviews">
                 <ArrowLeftIcon className="size-4" />
                 {t("backToReviews")}
@@ -160,7 +160,7 @@ export default function ReviewDetailPage() {
         }
         primaryAction={
           canMessage ? (
-            <Button onClick={() => setMessageOpen(true)}>
+            <Button size="sm" onClick={() => setMessageOpen(true)}>
               <SendIcon className="size-4" />
               {t("messageTeam")}
             </Button>

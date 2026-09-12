@@ -26,6 +26,7 @@ import { getRepoChallenges, type QueueEntry, type RepoChallenge, type RoomPace }
 import { cn } from "@/lib/utils";
 import type { Challenge } from "../challenges/shared";
 import { challengeName, entryLabel, secondsLabel } from "./helpers";
+import { JudgingEmptyState } from "./judging-empty-state";
 
 export function PresentationPanel({
   entry,
@@ -96,17 +97,16 @@ export function PresentationPanel({
       <Separator />
       <div className="space-y-4 p-5">
         {!entry ? (
-          <div className="flex min-h-64 flex-col items-center justify-center rounded-md border border-dashed p-6 text-center">
-            <DoorOpenIcon className="text-muted-foreground mb-3 size-8" />
-            <p className="text-sm font-medium">{t("noPresentationInProgress")}</p>
-            <p className="text-muted-foreground mt-1 text-sm">
-              {waitingRoomCount > 0 ? t("teamsWaitingDoor") : t("callNextTeamPrompt")}
-            </p>
-            {(nextWaitingEntry || firstCalledEntry) && (
-              <div className="mt-4 flex gap-2">
+          <JudgingEmptyState
+            icon={DoorOpenIcon}
+            title={t("noPresentationInProgress")}
+            description={waitingRoomCount > 0 ? t("teamsWaitingDoor") : t("callNextTeamPrompt")}
+            action={
+              <>
                 {nextWaitingEntry && (
                   <Button
                     variant="outline"
+                    size="sm"
                     disabled={!canOperate || busy != null}
                     onClick={() => onManualCall(nextWaitingEntry, "called")}
                   >
@@ -116,6 +116,7 @@ export function PresentationPanel({
                 )}
                 {waitingRoomCount > 0 && firstCalledEntry && (
                   <Button
+                    size="sm"
                     disabled={!canJudge || busy != null}
                     onClick={() =>
                       onEntryAction(
@@ -130,9 +131,9 @@ export function PresentationPanel({
                     {t("bringInNextTeam")}
                   </Button>
                 )}
-              </div>
-            )}
-          </div>
+              </>
+            }
+          />
         ) : (
           <>
             <ProjectInfo entry={entry} challenge={challenge} />
