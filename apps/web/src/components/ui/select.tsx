@@ -4,12 +4,24 @@ import * as React from "react"
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 import { Select as SelectPrimitive } from "radix-ui"
 
+import {
+  assignRef,
+  OverlayPortalContext,
+  useOverlayPortalContext,
+  useOverlayPortalState,
+} from "@/hooks/use-dialog-portal"
 import { cn } from "@/lib/utils"
 
 function Select({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Root>) {
-  return <SelectPrimitive.Root data-slot="select" {...props} />
+  const overlay = useOverlayPortalState()
+
+  return (
+    <OverlayPortalContext.Provider value={overlay}>
+      <SelectPrimitive.Root data-slot="select" {...props} />
+    </OverlayPortalContext.Provider>
+  )
 }
 
 function SelectGroup({
@@ -24,24 +36,42 @@ function SelectValue({
   return <SelectPrimitive.Value data-slot="select-value" {...props} />
 }
 
-function SelectTrigger({
+const SelectTrigger = React.forwardRef<
+  HTMLButtonElement,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> & {
+    /** `content` is the deliberate opt-in for a value that may wrap. */
+    size?: "sm" | "default" | "lg" | "content"
+  }
+>(function SelectTrigger({
   className,
   size = "default",
   children,
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Trigger> & {
-  /** `content` is the deliberate opt-in for a value that may wrap. */
+}: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger> & {
   size?: "sm" | "default" | "lg" | "content"
-}) {
+}, forwardedRef) {
+  const { container, registerAnchor } = useOverlayPortalContext() ?? {}
+  const triggerRef = React.useCallback(
+    (node: HTMLButtonElement | null) => {
+      registerAnchor?.(node)
+      assignRef(forwardedRef, node)
+    },
+    [forwardedRef, registerAnchor],
+  )
+
   return (
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
       data-size={size}
       className={cn(
-        "flex w-fit max-w-full min-w-0 items-center justify-between gap-2 rounded-control border border-input bg-transparent px-3 py-1.5 text-sm whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 data-placeholder:text-muted-foreground data-[size=default]:h-[var(--control-height-default)] data-[size=sm]:h-[var(--control-height-compact)] data-[size=lg]:h-[var(--control-height-prominent)] data-[size=content]:h-auto data-[size=content]:min-h-[var(--control-height-default)] data-[size=content]:whitespace-normal data-[size=content]:py-2 *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:flex-1 *:data-[slot=select-value]:truncate *:data-[slot=select-value]:whitespace-nowrap *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 data-[size=content]:*:data-[slot=select-value]:whitespace-normal data-[size=content]:*:data-[slot=select-value]:text-pretty dark:bg-input/50 dark:hover:bg-input/70 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
+        "flex w-fit max-w-full min-w-0 items-center justify-between gap-2 rounded-control border border-input bg-transparent px-3 py-1.5 text-sm whitespace-nowrap shadow-xs transition-[border-color,color,box-shadow] outline-none hover:border-foreground/25 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 data-placeholder:text-muted-foreground data-[size=default]:h-[var(--control-height-default)] data-[size=sm]:h-[var(--control-height-compact)] data-[size=lg]:h-[var(--control-height-prominent)] data-[size=content]:h-auto data-[size=content]:min-h-[var(--control-height-default)] data-[size=content]:whitespace-normal data-[size=content]:py-2 *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:flex-1 *:data-[slot=select-value]:truncate *:data-[slot=select-value]:whitespace-nowrap *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 data-[size=content]:*:data-[slot=select-value]:whitespace-normal data-[size=content]:*:data-[slot=select-value]:text-pretty dark:bg-input/50 dark:hover:bg-input/70 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
         className
       )}
       {...props}
+      ref={triggerRef}
+      // Radix Select's content uses a modal DismissableLayer; keep this
+      // trigger targetable while a nested select is open.
+      style={container ? { ...props.style, pointerEvents: "auto" } : props.style}
     >
       {children}
       <SelectPrimitive.Icon asChild>
@@ -49,17 +79,20 @@ function SelectTrigger({
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   )
-}
+})
 
 function SelectContent({
   className,
   children,
   position = "item-aligned",
   align = "center",
+  collisionBoundary,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
+  const { container } = useOverlayPortalContext() ?? {}
+
   return (
-    <SelectPrimitive.Portal>
+    <SelectPrimitive.Portal container={container ?? undefined}>
       <SelectPrimitive.Content
         data-slot="select-content"
         className={cn(
@@ -70,6 +103,7 @@ function SelectContent({
         )}
         position={position}
         align={align}
+        collisionBoundary={collisionBoundary ?? container ?? undefined}
         {...props}
       >
         <SelectScrollUpButton />

@@ -471,7 +471,7 @@ describe("manual search (H37)", () => {
     });
   });
 
-  it("lets a sponsor rep search their own challenge without a judge roster row/capabilities, but not others' (H46)", async () => {
+  it("lets a sponsor rep judge their own challenge without a judge roster row/capabilities, but not others' (H46)", async () => {
     const { pool } = await import("../../src/db/pool.js");
     const owner = await createUser();
     const enterprise = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [
@@ -499,6 +499,22 @@ describe("manual search (H37)", () => {
       headers: asUser(rep),
     });
     expect(res.statusCode).toBe(200);
+
+    const me = await app.inject({ method: "GET", url: "/api/me", headers: asUser(rep) });
+    expect(me.json().isEnterpriseJudge).toBe(true);
+
+    const { repoId } = await createRepoWithTeam(
+      undefined,
+      `Sponsor judge ${crypto.randomUUID().slice(0, 4)}`,
+    );
+    const entryId = await enqueueRepo(challengeId, repoId, 1);
+    const review = await app.inject({
+      method: "PATCH",
+      url: `/api/queue/entries/${entryId}/review`,
+      headers: asUser(rep),
+      payload: { scores: { innovation: 7 } },
+    });
+    expect(review.statusCode).toBe(200);
 
     const otherChallengeId = await createChallenge({ judgingPanelCriteria: CRITERIA });
     const forbidden = await app.inject({

@@ -334,11 +334,11 @@ export default function QueueDetailPage() {
               {filteredEntries.map((entry) => {
                 const movable = entry.status === "waiting" || entry.status === "called";
                 // A called team has already entered the waiting room, so it
-                // has no "teams ahead of entering it" rank (`entry.position`
-                // is null) — default its move-to-position control to the
-                // front of the waiting line, same as the judging panel does.
-                const displayPosition = entry.position ?? 1;
-                const requestedPosition = movePositions[entry.id] ?? String(displayPosition);
+                // has no waiting-line position. Keep its position control
+                // editable, but don't show a fabricated rank in the list.
+                const displayPosition = entry.position;
+                const fallbackPosition = displayPosition ?? 1;
+                const requestedPosition = movePositions[entry.id] ?? String(fallbackPosition);
                 const parsedPosition = Number(requestedPosition);
                 const canMove = Number.isInteger(parsedPosition) && parsedPosition > 0;
                 const isDropTarget = dragOver?.entryId === entry.id;
@@ -402,7 +402,7 @@ export default function QueueDetailPage() {
                         onKeyDown={(event) => {
                           if (event.key === "Enter") {
                             event.preventDefault();
-                            if (canMove) commitPosition(entry.id, displayPosition);
+                            if (canMove) commitPosition(entry.id, fallbackPosition);
                           }
                           if (event.key === "Escape") setEditingPosition(null);
                         }}
@@ -415,17 +415,21 @@ export default function QueueDetailPage() {
                         variant="ghost"
                         size="sm"
                         disabled={!movable || busy}
-                        aria-label={t("positionHash", { position: displayPosition })}
+                        aria-label={
+                          displayPosition == null
+                            ? t("moveTeamToPosition", { team: entry.repo_name })
+                            : t("positionHash", { position: displayPosition })
+                        }
                         onClick={() => {
                           setMovePositions((current) => ({
                             ...current,
-                            [entry.id]: String(displayPosition),
+                            [entry.id]: String(fallbackPosition),
                           }));
                           setEditingPosition(entry.id);
                         }}
                         className="text-foreground hover:bg-muted/60 w-10 shrink-0 px-1.5 text-sm font-semibold tabular-nums disabled:pointer-events-none disabled:opacity-100"
                       >
-                        #{displayPosition}
+                        {displayPosition == null ? null : `#${displayPosition}`}
                       </Button>
                     )}
                     <div className="min-w-0 flex-1">
@@ -470,40 +474,14 @@ export default function QueueDetailPage() {
               <Label htmlFor="queue-name" className="sr-only">
                 {t("queueName")}
               </Label>
-              {/* A one-challenge queue is named by its challenge and follows a
-                  rename of it; only a shared queue has a name of its own. */}
-              <Input
-                id="queue-name"
-                value={name}
-                disabled={!shared}
-                onChange={(e) => setName(e.target.value)}
-              />
-              {shared ? (
-                <Button
-                  variant="outline"
-                  disabled={busy || !name.trim() || name.trim() === queue.group.display_name}
-                  onClick={() => void rename()}
-                >
-                  {t("save")}
-                </Button>
-              ) : (
-                <p className="text-muted-foreground text-xs">
-                  {queue.challenges.length === 1 ? (
-                    <>
-                      {t("queueNameFollowsChallengePrefix")}{" "}
-                      <Link
-                        href={`/challenges/${queue.challenges[0].id}`}
-                        className="text-foreground underline underline-offset-2"
-                      >
-                        {t("queueNameFollowsChallengeLink")}
-                      </Link>
-                      .
-                    </>
-                  ) : (
-                    t("queueNameFollowsChallenge")
-                  )}
-                </p>
-              )}
+              <Input id="queue-name" value={name} onChange={(e) => setName(e.target.value)} />
+              <Button
+                variant="outline"
+                disabled={busy || !name.trim() || name.trim() === queue.group.display_name}
+                onClick={() => void rename()}
+              >
+                {t("save")}
+              </Button>
             </div>
           </SectionCard>
 

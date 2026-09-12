@@ -445,6 +445,8 @@
   "scheduleNotesLabel": "Notas de staff",
   "scheduleDraftBadge": "Borrador",
   "scheduleStaffOnlyBadge": "Solo staff",
+  "scheduleSponsorOnlyBadge": "Solo sponsor",
+  "scheduleMentorOnlyBadge": "Solo mentor",
   "scheduleOwnersLabel": "Personas responsables",
   "scheduleOwnersEmpty": "Nadie asignado todavía",
   "scheduleOwnerAdd": "Añadir persona responsable",

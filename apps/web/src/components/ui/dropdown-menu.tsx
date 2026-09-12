@@ -4,44 +4,84 @@ import * as React from "react"
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react"
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui"
 
+import {
+  assignRef,
+  OverlayPortalContext,
+  useOverlayPortalContext,
+  useOverlayPortalState,
+} from "@/hooks/use-dialog-portal"
 import { cn } from "@/lib/utils"
 import { overlayVariants } from "@/components/ui/surface"
 
 function DropdownMenu({
+  modal,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
-  return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />
-}
+  const overlay = useOverlayPortalState()
 
-function DropdownMenuPortal({
-  ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>) {
   return (
-    <DropdownMenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />
+    <OverlayPortalContext.Provider value={overlay}>
+      <DropdownMenuPrimitive.Root
+        data-slot="dropdown-menu"
+        {...props}
+        modal={modal ?? !overlay.container}
+      />
+    </OverlayPortalContext.Provider>
   )
 }
 
-function DropdownMenuTrigger({
+function DropdownMenuPortal({
+  container: explicitContainer,
   ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>) {
+  const { container: overlayContainer } = useOverlayPortalContext() ?? {}
+  const container = explicitContainer ?? overlayContainer
+
   return (
-    <DropdownMenuPrimitive.Trigger
-      data-slot="dropdown-menu-trigger"
+    <DropdownMenuPrimitive.Portal
+      data-slot="dropdown-menu-portal"
+      container={container ?? undefined}
       {...props}
     />
   )
 }
 
+const DropdownMenuTrigger = React.forwardRef<
+  HTMLButtonElement,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Trigger>
+>(function DropdownMenuTrigger(props, forwardedRef) {
+  const { registerAnchor } = useOverlayPortalContext() ?? {}
+  const triggerRef = React.useCallback(
+    (node: HTMLButtonElement | null) => {
+      registerAnchor?.(node)
+      assignRef(forwardedRef, node)
+    },
+    [forwardedRef, registerAnchor],
+  )
+
+  return (
+    <DropdownMenuPrimitive.Trigger
+      data-slot="dropdown-menu-trigger"
+      {...props}
+      ref={triggerRef}
+    />
+  )
+})
+
 function DropdownMenuContent({
   className,
   sideOffset = 4,
+  collisionBoundary,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
+  const { container } = useOverlayPortalContext() ?? {}
+
   return (
-    <DropdownMenuPrimitive.Portal>
+    <DropdownMenuPortal container={container ?? undefined}>
       <DropdownMenuPrimitive.Content
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
+        collisionBoundary={collisionBoundary ?? container ?? undefined}
         className={cn(
           overlayVariants({ elevation: "floating" }),
           "z-50 max-h-(--radix-dropdown-menu-content-available-height) min-w-32 origin-(--radix-dropdown-menu-content-transform-origin) overflow-x-hidden overflow-y-auto p-1 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
@@ -49,7 +89,7 @@ function DropdownMenuContent({
         )}
         {...props}
       />
-    </DropdownMenuPrimitive.Portal>
+    </DropdownMenuPortal>
   )
 }
 

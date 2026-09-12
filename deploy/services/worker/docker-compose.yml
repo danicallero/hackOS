@@ -77,10 +77,8 @@ x-app-env: &app-env
 
 services:
   worker:
-    image: "${IMAGE_REPO:-hackos-api}:${IMAGE_TAG:-latest}"
-    build:
-      context: ../../..
-      dockerfile: apps/api/Dockerfile
+    image: "${IMAGE_REPO:-hackos-api}:${IMAGE_TAG:-main}"
+    pull_policy: always
     command: ["node", "dist/worker.js"]
     security_opt:
       - no-new-privileges:true

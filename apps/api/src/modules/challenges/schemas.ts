@@ -56,7 +56,6 @@ export const CHALLENGE_GENERAL_FIELDS = [
   "devpostTags",
   "visibility",
   "availableFrom",
-  "maxInWaitingArea",
 ] as const;
 
 /**

@@ -17,7 +17,6 @@ import { type Column, DataTable } from "@/components/common/data-table";
 import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -43,7 +42,6 @@ import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
 import type { UserList, UserListItem } from "@/lib/types";
-import { initials } from "./[id]/shared";
 import { InvitationsModal } from "./invitations-tab";
 import { ReviewFixturesDialog } from "./review-fixtures-dialog";
 
@@ -159,10 +157,7 @@ function buildColumns(presentIds: Set<number> | null, t: Translate): Column<User
       header: t("name"),
       sortValue: (u) => `${u.surname ?? ""} ${u.name ?? ""}`.trim().toLowerCase(),
       cell: (u) => (
-        <div className="flex flex-wrap items-center gap-3">
-          <Avatar size="sm">
-            <AvatarFallback>{initials(u)}</AvatarFallback>
-          </Avatar>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="font-medium">{fullName(u)}</span>
           {u.isTestAccount && (
             <StatusBadge tone="warning" dot={false}>
@@ -268,11 +263,8 @@ function UserMobileRow({ user, t }: { user: UserListItem; t: Translate }) {
   return (
     <Link
       href={`/users/${user.id}`}
-      className="focus-visible:ring-ring flex min-w-0 items-start gap-3 px-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset"
+      className="focus-visible:ring-ring flex min-w-0 items-start px-4 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset"
     >
-      <Avatar size="sm">
-        <AvatarFallback>{initials(user)}</AvatarFallback>
-      </Avatar>
       <div className="min-w-0 flex-1 space-y-2">
         <div className="flex min-w-0 flex-wrap items-start gap-2">
           <span className="min-w-0 flex-1 wrap-break-word font-medium">{name}</span>
@@ -494,7 +486,7 @@ export default function UsersPage() {
 
       <div className="space-y-6">
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-          <div className="relative col-span-2 w-full sm:max-w-sm">
+          <div className="relative col-span-2 min-w-0 w-full sm:min-w-[12rem] sm:flex-[1_1_18rem] sm:max-w-[28rem]">
             <label htmlFor="user-search" className="sr-only">
               {t("searchUsers")}
             </label>
@@ -526,13 +518,6 @@ export default function UsersPage() {
               </IconButton>
             )}
           </div>
-          <span
-            role="status"
-            aria-live="polite"
-            className="text-muted-foreground col-span-2 text-xs tabular-nums sm:col-span-1"
-          >
-            {t("tableResultCount", { count: filteredUsers.length })}
-          </span>
           <Select value={emailFilter} onValueChange={setEmailFilter}>
             <SelectTrigger className="w-full sm:w-40">
               <SelectValue />
@@ -590,6 +575,13 @@ export default function UsersPage() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+          <span
+            role="status"
+            aria-live="polite"
+            className="text-muted-foreground col-span-2 justify-self-end text-xs tabular-nums sm:ml-auto sm:col-span-1"
+          >
+            {t("tableResultCount", { count: filteredUsers.length })}
+          </span>
         </div>
 
         <DataTable

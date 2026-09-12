@@ -1,9 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
 
 permissions:
@@ -21,6 +18,9 @@ jobs:
       api: ${{ steps.filter.outputs.api }}
       web: ${{ steps.filter.outputs.web }}
       mobile: ${{ steps.filter.outputs.mobile }}
+      browser: ${{ steps.filter.outputs.browser }}
+      api_image: ${{ steps.filter.outputs.api_image }}
+      web_image: ${{ steps.filter.outputs.web_image }}
       typecheck: ${{ steps.filter.outputs.typecheck }}
     steps:
       - name: Check out repository
@@ -30,80 +30,65 @@ jobs:
 
       - name: Classify changed paths
         id: filter
-        shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BEFORE_SHA: ${{ github.event.before }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-
-          changed_files="$RUNNER_TEMP/hackos-changed-files.txt"
-          if [[ "$EVENT_NAME" == "pull_request" ]]; then
-            git diff --name-only "$BASE_SHA" "$SHA" > "$changed_files"
-          elif [[ "$BEFORE_SHA" =~ ^0+$ ]]; then
-            git diff-tree --root --no-commit-id --name-only -r "$SHA" > "$changed_files"
-          else
-            git diff --name-only "$BEFORE_SHA" "$SHA" > "$changed_files"
-          fi
-
-          echo "Changed paths:"
-          sed -n '1,120p' "$changed_files"
-
-          has_change() {
-            grep -Eq "$1" "$changed_files"
-          }
-
-          api=false
-          web=false
-          mobile=false
-
-          # Shared packages, dependency/toolchain changes, and workflow changes
-          # can affect every workspace and therefore run every quality gate.
-          if has_change '^(packages/|patches/|\.github/|\.dockerignore$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.node-version$|biome\.json$|tsconfig[^/]*\.json$)'; then
-            api=true
-            web=true
-            mobile=true
-          fi
-
-          if has_change '^(apps/api/|docker-compose\.yml$)'; then
-            api=true
-          fi
-
-          if has_change '^apps/web/'; then
-            web=true
-          fi
-
-          if has_change '^(apps/mobile/|e2e/mobile/)'; then
-            mobile=true
-          fi
-
-          typecheck=false
-          if [[ "$api" == true || "$web" == true || "$mobile" == true ]]; then
-            typecheck=true
-          fi
-
-          {
-            echo "api=$api"
-            echo "web=$web"
-            echo "mobile=$mobile"
-            echo "typecheck=$typecheck"
-          } >> "$GITHUB_OUTPUT"
+        uses: ./.github/actions/detect-changes
+        with:
+          event_name: ${{ github.event_name }}
+          before_sha: ${{ github.event.before }}
+          base_sha: ${{ github.event.pull_request.base.sha }}
+          sha: ${{ github.sha }}
 
   api-image:
-    name: API production image
+    name: API production image (validation)
     needs: changes
-    if: needs.changes.outputs.api == 'true'
-    runs-on: ubuntu-latest
+    if: needs.changes.outputs.api_image == 'true'
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
 
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
       # `pnpm deploy` validates patches more strictly than a normal workspace
       # install; exercise the exact image path used by Dokploy (H55).
       - name: Build API production image
-        run: docker build --file apps/api/Dockerfile --tag hackos-api:ci .
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          platforms: linux/arm64
+          push: false
+          tags: hackos-api:ci
+          cache-from: type=gha,scope=hackos-api-arm64
+          cache-to: type=gha,mode=max,scope=hackos-api-arm64,ignore-error=true
+
+  web-image:
+    name: Web production image (validation)
+    needs: changes
+    if: needs.changes.outputs.web_image == 'true'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build the standalone image, not only the test/dev server. These URLs
+      # are placeholders: production values are injected by the CD workflow.
+      - name: Build web production image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          platforms: linux/arm64
+          push: false
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://api.example.test
+            NEXT_PUBLIC_SITE_URL=https://web.example.test
+          tags: hackos-web:ci
+          cache-from: type=gha,scope=hackos-web-arm64
+          cache-to: type=gha,mode=max,scope=hackos-web-arm64,ignore-error=true
 
   lint:
     name: lint
@@ -112,19 +97,8 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.19.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Set up workspace
+        uses: ./.github/actions/setup-node-pnpm
 
       - name: Run lint
         run: pnpm lint
@@ -138,19 +112,8 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.19.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Set up workspace
+        uses: ./.github/actions/setup-node-pnpm
 
       - name: Type-check API
         if: needs.changes.outputs.api == 'true'
@@ -232,19 +195,8 @@ jobs:
             minio/minio:latest \
             server /data --console-address ":9001"
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.19.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Set up workspace
+        uses: ./.github/actions/setup-node-pnpm
 
       - name: Wait for MinIO
         shell: bash
@@ -292,19 +244,8 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.19.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Set up workspace
+        uses: ./.github/actions/setup-node-pnpm
 
       - name: Run web unit tests
         run: pnpm --filter @hackos/web test
@@ -312,7 +253,7 @@ jobs:
   browser-smoke:
     name: browser critical-flow smoke
     needs: changes
-    if: needs.changes.outputs.web == 'true'
+    if: needs.changes.outputs.browser == 'true'
     runs-on: ubuntu-latest
     env:
       CI: true
@@ -320,19 +261,8 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.19.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Set up workspace
+        uses: ./.github/actions/setup-node-pnpm
 
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium
@@ -351,19 +281,8 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.19.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Set up workspace
+        uses: ./.github/actions/setup-node-pnpm
 
       - name: Run mobile unit tests
         run: pnpm --filter @hackos/mobile test

@@ -1,0 +1,207 @@
+name: CD
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hackos-production-release
+  cancel-in-progress: false
+
+jobs:
+  changes:
+    name: detect changed areas
+    runs-on: ubuntu-latest
+    outputs:
+      api_image: ${{ steps.filter.outputs.api_image }}
+      web_image: ${{ steps.filter.outputs.web_image }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed paths
+        id: filter
+        uses: ./.github/actions/detect-changes
+        with:
+          event_name: ${{ github.event_name }}
+          before_sha: ${{ github.event.before }}
+          sha: ${{ github.sha }}
+
+  publish-api:
+    name: Publish API image (arm64)
+    needs: changes
+    if: needs.changes.outputs.api_image == 'true'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # API and worker deliberately consume this one image. `main` lets Dokploy
+      # follow the production channel; the SHA tag is the immutable rollback.
+      - name: Build and publish API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/hackos-api:main
+            ghcr.io/${{ github.repository_owner }}/hackos-api:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=hackos-api-arm64
+          cache-to: type=gha,mode=max,scope=hackos-api-arm64
+
+  publish-web:
+    name: Publish web image (arm64)
+    needs: changes
+    if: needs.changes.outputs.web_image == 'true'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Check production URLs
+        env:
+          PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
+          PRODUCTION_SITE_URL: ${{ vars.PRODUCTION_SITE_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$PRODUCTION_API_URL"
+          test -n "$PRODUCTION_SITE_URL"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          platforms: linux/arm64
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.PRODUCTION_API_URL }}
+            NEXT_PUBLIC_SITE_URL=${{ vars.PRODUCTION_SITE_URL }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/hackos-web:main
+            ghcr.io/${{ github.repository_owner }}/hackos-web:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=hackos-web-arm64
+          cache-to: type=gha,mode=max,scope=hackos-web-arm64
+
+  deploy-dokploy:
+    name: Deploy changed services to Dokploy
+    needs: [publish-api, publish-web]
+    if: >-
+      always() &&
+      (needs.publish-api.result == 'success' || needs.publish-web.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Connect to the tailnet
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ secrets.TS_AUDIENCE }}
+          tags: tag:ci
+          ping: danipi.hamster-cat.ts.net
+
+      - name: Trigger API and worker deployments
+        if: needs.publish-api.result == 'success'
+        env:
+          DOKPLOY_API_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_API_DEPLOY_WEBHOOK }}
+          DOKPLOY_WORKER_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_WORKER_DEPLOY_WEBHOOK }}
+        run: |
+          set -euo pipefail
+
+          post_webhook() {
+            local service="$1"
+            local webhook="$2"
+            local response
+
+            if [[ -z "$webhook" ]]; then
+              echo "Missing Dokploy webhook for $service." >&2
+              return 1
+            fi
+
+            if ! response="$(curl --fail --silent --show-error --retry 3 --retry-delay 5 \
+              --header 'Content-Type: application/json' \
+              --header 'X-GitHub-Event: push' \
+              --data-binary "@$GITHUB_EVENT_PATH" \
+              --request POST "$webhook")"; then
+              echo "Dokploy webhook request failed for $service." >&2
+              return 1
+            fi
+
+            printf '%s\n' "$response"
+            if grep -Fq 'Branch Not Match' <<<"$response"; then
+              echo "Dokploy rejected the $service deployment because the branch did not match." >&2
+              return 1
+            fi
+          }
+
+          failures=0
+          post_webhook api "$DOKPLOY_API_DEPLOY_WEBHOOK" || failures=1
+          post_webhook worker "$DOKPLOY_WORKER_DEPLOY_WEBHOOK" || failures=1
+          exit "$failures"
+
+      - name: Trigger web deployment
+        if: always() && needs.publish-web.result == 'success'
+        env:
+          DOKPLOY_WEB_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_WEB_DEPLOY_WEBHOOK }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$DOKPLOY_WEB_DEPLOY_WEBHOOK" ]]; then
+            echo "Missing Dokploy webhook for web." >&2
+            exit 1
+          fi
+
+          response="$(curl --fail --silent --show-error --retry 3 --retry-delay 5 \
+            --header 'Content-Type: application/json' \
+            --header 'X-GitHub-Event: push' \
+            --data-binary "@$GITHUB_EVENT_PATH" \
+            --request POST "$DOKPLOY_WEB_DEPLOY_WEBHOOK")"
+          printf '%s\n' "$response"
+          if grep -Fq 'Branch Not Match' <<<"$response"; then
+            echo "Dokploy rejected the web deployment because the branch did not match." >&2
+            exit 1
+          fi

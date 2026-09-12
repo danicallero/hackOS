@@ -1,14 +1,18 @@
 "use client";
 
+import { ChevronRightIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Collapsible as CollapsiblePrimitive } from "radix-ui";
 import { useEffect, useState } from "react";
 import { BrandMark } from "@/components/common/brand";
+import { ThemeToggle } from "@/components/common/theme-toggle";
+import { UserMenu } from "@/components/layout/user-menu";
 import { Badge } from "@/components/ui/badge";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupLabel,
   SidebarHeader,
@@ -70,10 +74,26 @@ function useVisible() {
     });
 }
 
-function NavLink({ item, showUnreadDot }: { item: NavItem; showUnreadDot: boolean }) {
+function matchesPath(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function NavLink({
+  item,
+  showUnreadDot,
+  className,
+  isActive,
+}: {
+  item: NavItem;
+  showUnreadDot: boolean;
+  /** Children of an expanded workspace are offset from their category heading. */
+  className?: string;
+  /** A workspace supplies its deepest matching route so only one leaf is selected. */
+  isActive?: boolean;
+}) {
   const pathname = usePathname();
   const { t } = useLocale();
-  const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+  const active = isActive ?? matchesPath(pathname, item.href);
   const Icon = item.icon;
 
   if (item.soon) {
@@ -81,7 +101,7 @@ function NavLink({ item, showUnreadDot }: { item: NavItem; showUnreadDot: boolea
       <SidebarMenuItem>
         <SidebarMenuButton
           disabled
-          className="cursor-not-allowed opacity-55"
+          className={`cursor-not-allowed opacity-55 ${className ?? ""}`}
           tooltip={`${t(item.title)} — ${t("comingSoon")}`}
         >
           <Icon />
@@ -99,7 +119,7 @@ function NavLink({ item, showUnreadDot }: { item: NavItem; showUnreadDot: boolea
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild isActive={active} tooltip={t(item.title)}>
+      <SidebarMenuButton asChild isActive={active} tooltip={t(item.title)} className={className}>
         <Link href={item.href}>
           <span className="relative shrink-0 [&>svg]:size-4">
             <Icon />
@@ -133,6 +153,7 @@ function WorkspaceGroup({
   onOpen: (id: string, open: boolean) => void;
 }) {
   const { t } = useLocale();
+  const pathname = usePathname();
   const { state: railState, isMobile } = useSidebar();
   // The accordion only makes sense in the expanded rail; collapsed to icons
   // or on a mobile sheet, every item must stay directly reachable exactly
@@ -141,6 +162,13 @@ function WorkspaceGroup({
 
   const Icon = workspace.icon;
   const effectiveOpen = isIconRail || open;
+  const activeItem = items.reduce<NavItem | null>(
+    (closest, item) =>
+      matchesPath(pathname, item.href) && (!closest || item.href.length > closest.href.length)
+        ? item
+        : closest,
+    null,
+  );
 
   return (
     <CollapsiblePrimitive.Root
@@ -150,7 +178,7 @@ function WorkspaceGroup({
         onOpen(workspace.id, next);
       }}
     >
-      <SidebarGroup>
+      <SidebarGroup className="p-0">
         {isIconRail ? (
           // No interactive trigger in the icon rail: nothing to expand or
           // collapse there, so a focusable-but-invisible control would only
@@ -164,17 +192,15 @@ function WorkspaceGroup({
           <CollapsiblePrimitive.Trigger asChild>
             <SidebarGroupLabel
               asChild
-              className={`hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer ${active ? "bg-sidebar-accent/70 text-sidebar-accent-foreground" : ""}`}
+              className={`mt-2 mb-0.5 cursor-pointer px-3 ${active ? "text-sidebar-foreground" : "text-sidebar-foreground/60 hover:text-sidebar-foreground"}`}
             >
               <button type="button" aria-expanded={effectiveOpen} data-active={active || undefined}>
                 <Icon className="mr-2 size-4 shrink-0" />
                 <span className="flex-1 text-left">{t(workspace.label)}</span>
-                <span
+                <ChevronRightIcon
                   aria-hidden
-                  className={`transition-transform ${effectiveOpen ? "rotate-90" : ""}`}
-                >
-                  ›
-                </span>
+                  className={`size-3.5 transition-transform duration-180 ease-out motion-reduce:transition-none ${effectiveOpen ? "rotate-90" : ""}`}
+                />
               </button>
             </SidebarGroupLabel>
           </CollapsiblePrimitive.Trigger>
@@ -185,10 +211,16 @@ function WorkspaceGroup({
         >
           <span className="h-px w-4 bg-sidebar-border" />
         </div>
-        <CollapsiblePrimitive.Content>
+        <CollapsiblePrimitive.Content className="overflow-hidden data-[state=closed]:animate-sidebar-group-collapse data-[state=open]:animate-sidebar-group-expand motion-reduce:animate-none">
           <SidebarMenu>
             {items.map((item) => (
-              <NavLink key={item.href} item={item} showUnreadDot={false} />
+              <NavLink
+                key={item.href}
+                item={item}
+                showUnreadDot={false}
+                className="pl-8 group-data-[collapsible=icon]:p-2!"
+                isActive={item.href === activeItem?.href}
+              />
             ))}
           </SidebarMenu>
         </CollapsiblePrimitive.Content>
@@ -208,16 +240,15 @@ function WorkspaceGroup({
  */
 export function AppSidebar() {
   const pathname = usePathname();
+  const { t } = useLocale();
   const isVisible = useVisible();
   const unreadCount = useUnreadCount();
   const [lastWorkspace, setLastWorkspace] = useState(() => readLastWorkspace());
-  const [openWorkspace, setOpenWorkspace] = useState<string | null>(null);
+  const [recentWorkspaceId, setRecentWorkspaceId] = useState<string | null>(null);
   const activeWorkspaceId = workspaceForPath(pathname)?.id ?? null;
 
   useEffect(() => {
     if (!activeWorkspaceId) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setOpenWorkspace(activeWorkspaceId);
     setLastWorkspace(activeWorkspaceId);
     writeLastWorkspace(activeWorkspaceId);
   }, [activeWorkspaceId]);
@@ -225,15 +256,15 @@ export function AppSidebar() {
   const personalItems = PERSONAL_NAV.filter(isVisible);
 
   return (
-    <Sidebar collapsible="icon">
-      <SidebarHeader className="h-14 justify-center border-b px-2">
-        <SidebarMenu>
-          <SidebarMenuItem>
+    <Sidebar variant="floating" collapsible="icon">
+      <SidebarHeader className="h-14 shrink-0 justify-center border-b px-3">
+        <SidebarMenu className="flex-row items-center">
+          <SidebarMenuItem className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
             <SidebarMenuButton
               asChild
               size="lg"
               tooltip="hackOS"
-              className="gap-2.5 group-data-[collapsible=icon]:p-1.5!"
+              className="flex-1 gap-2.5 px-1 hover:bg-transparent"
             >
               <Link href="/timetable">
                 <BrandMark className="size-8 shrink-0 group-data-[collapsible=icon]:size-5" />
@@ -243,11 +274,17 @@ export function AppSidebar() {
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          <SidebarMenuItem className="ml-auto group-data-[collapsible=icon]:mx-auto">
+            <SidebarTrigger hasUnreadNotifications={unreadCount > 0} />
+          </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
 
-      <SidebarContent>
-        <SidebarGroup>
+      <SidebarContent className="gap-3 px-2 py-3">
+        <SidebarGroup className="p-0">
+          <SidebarGroupLabel className="px-2 group-data-[collapsible=icon]:sr-only">
+            {t("navigationPersonal")}
+          </SidebarGroupLabel>
           <SidebarMenu>
             {personalItems.map((item) => (
               <NavLink
@@ -258,6 +295,12 @@ export function AppSidebar() {
             ))}
           </SidebarMenu>
         </SidebarGroup>
+
+        <div className="mx-2 h-px shrink-0 bg-sidebar-border/80 group-data-[collapsible=icon]:mx-1" />
+
+        <SidebarGroupLabel className="px-2 group-data-[collapsible=icon]:sr-only">
+          {t("navigationWorkspaces")}
+        </SidebarGroupLabel>
 
         {(() => {
           const visibleWorkspaces = WORKSPACES.map((workspace) => ({
@@ -275,7 +318,7 @@ export function AppSidebar() {
               // A single visible item has nothing to collapse: an accordion
               // with one row is just a link wearing an extra click.
               return (
-                <SidebarGroup key={workspace.id}>
+                <SidebarGroup key={workspace.id} className="p-0">
                   <SidebarMenu>
                     <NavLink item={items[0]} showUnreadDot={false} />
                   </SidebarMenu>
@@ -292,14 +335,17 @@ export function AppSidebar() {
                 items={items}
                 active={containsActiveRoute}
                 open={
-                  openWorkspace === workspace.id || (openWorkspace === null && shouldOpenInitially)
+                  workspace.id === activeWorkspaceId ||
+                  workspace.id === recentWorkspaceId ||
+                  (!activeWorkspaceId && recentWorkspaceId === null && shouldOpenInitially)
                 }
                 onOpen={(id, nextOpen) => {
-                  const next = nextOpen ? id : null;
-                  setOpenWorkspace(next);
-                  if (next) {
-                    setLastWorkspace(next);
-                    writeLastWorkspace(next);
+                  if (nextOpen) {
+                    setRecentWorkspaceId(id);
+                    setLastWorkspace(id);
+                    writeLastWorkspace(id);
+                  } else if (id !== activeWorkspaceId) {
+                    setRecentWorkspaceId((current) => (current === id ? null : current));
                   }
                 }}
               />
@@ -308,12 +354,21 @@ export function AppSidebar() {
         })()}
       </SidebarContent>
 
+      <SidebarFooter className="border-t border-sidebar-border/80 px-2 py-2">
+        <div className="flex items-center gap-1">
+          <UserMenu className="min-w-0" />
+          <div className="ml-auto shrink-0 group-data-[collapsible=icon]:hidden">
+            <ThemeToggle />
+          </div>
+        </div>
+      </SidebarFooter>
+
       <SidebarRail />
     </Sidebar>
   );
 }
 
-/** Keeps unread notifications discoverable when the sidebar is collapsed to its icon rail. */
+/** Keeps H50/H51 unread notifications discoverable from the mobile shell control. */
 export function NotificationSidebarTrigger({ className }: { className?: string }) {
   const unreadCount = useUnreadCount();
 

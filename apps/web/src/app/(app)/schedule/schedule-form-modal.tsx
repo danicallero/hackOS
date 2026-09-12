@@ -10,8 +10,8 @@ import { CalendarDaysIcon, ChevronDownIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DateTimeInput } from "@/components/common/datetime-input";
-import { Modal } from "@/components/common/modal";
 import { SectionCard } from "@/components/common/section-card";
+import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
 import { type UserOption, UserPicker } from "@/components/common/user-picker";
@@ -292,7 +292,26 @@ export function ScheduleFormModal({
   }
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title={title} icon={CalendarDaysIcon} size="xl">
+    <SidePanelEditor
+      open={open}
+      onOpenChange={onOpenChange}
+      title={title}
+      icon={CalendarDaysIcon}
+      footer={
+        <>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
+            {t("cancel")}
+          </Button>
+          <SubmitButton
+            pending={pending}
+            onClick={submit}
+            disabled={!values.title || !values.startsAt || !values.endsAt}
+          >
+            {t("save")}
+          </SubmitButton>
+        </>
+      }
+    >
       <div className="space-y-5">
         <Field
           id="schedule-title"
@@ -550,21 +569,8 @@ export function ScheduleFormModal({
             )}
           </CollapsibleContent>
         </Collapsible>
-
-        <div className="flex justify-end gap-2 border-t pt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {t("cancel")}
-          </Button>
-          <SubmitButton
-            pending={pending}
-            onClick={submit}
-            disabled={!values.title || !values.startsAt || !values.endsAt}
-          >
-            {t("save")}
-          </SubmitButton>
-        </div>
       </div>
-    </Modal>
+    </SidePanelEditor>
   );
 }
 

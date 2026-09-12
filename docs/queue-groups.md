@@ -8,7 +8,8 @@ split "which enterprise a room belongs to" off from "which queue it serves".
 > **Status: complete.** Rooms, queue reads, ordering, the room-assignment
 > screen and the merge action all go through queue groups. An enterprise with
 > more than one challenge can merge selected challenges into one or more shared
-> queues from its judges tab; each challenge starts in a 1:1 group and behaves
+> queues from its judges tab; each challenge starts in a 1:1 group with its own
+> editable queue name and behaves
 > exactly as one-queue-per-challenge did until an explicit merge.
 >
 > **Room ownership is a separate decision from room serving (0413).** A room's
@@ -284,12 +285,12 @@ called team, whichever of the group's challenges that team applied to.
 
 ## Naming
 
-0412 also makes `display_name` trustworthy on its own: a trigger keeps a
-**solo** group's name following its challenge's title, and a merged group's
-admin-chosen name is never overwritten by a challenge rename. Every read
+`display_name` is trustworthy on its own. A solo group starts with its
+challenge title, but is an independent queue label: renaming it never changes
+the challenge and a later challenge rename does not overwrite it. Every read
 surface reads `display_name` unconditionally (`QUEUE_GROUP_LABEL_SQL` in
 `groups.ts`) — the room label, the reviews overview, the participant's "my
-queue", the TV. For a 1:1 group that is the challenge title, exactly as before.
+queue", the TV.
 
 The TV clusters rooms by `queue_group_id` rather than challenge id, so several
 rooms working one shared queue are a single card.

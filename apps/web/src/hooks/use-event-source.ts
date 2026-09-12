@@ -51,7 +51,10 @@ export function useEventSource(
   const eventsKey = events ? events.join(",") : "";
 
   useEffect(() => {
-    if (!enabled || !path) return;
+    // SSR and lightweight component-test environments do not provide the
+    // browser EventSource constructor. There is no stream to subscribe to in
+    // either case; the next mounted browser session performs the normal sync.
+    if (!enabled || !path || typeof EventSource === "undefined") return;
 
     const names = eventsKey ? eventsKey.split(",") : null;
     const unsubscribe = subscribeToSse(`${API_URL}${path}`, {

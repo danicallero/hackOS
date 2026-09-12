@@ -1,44 +1,30 @@
-import { LanguageSelect } from "@/components/common/language-select";
-import { ThemeToggle } from "@/components/common/theme-toggle";
 import { AppSidebar, NotificationSidebarTrigger } from "@/components/layout/app-sidebar";
 import { AuthGuard } from "@/components/layout/auth-guard";
-import { HeaderTitle } from "@/components/layout/header-title";
-import { UserMenu } from "@/components/layout/user-menu";
 import { VerificationBanner } from "@/components/layout/verification-banner";
-import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
 /**
- * Authenticated app shell (Dokploy-style): capability-filtered sidebar + a
- * compact top bar with the current workspace, and a centered content column.
- * The top bar carries the workspace, never the leaf — each page renders its
- * own name in its <PageHeader> h1 (issue #297).
+ * Authenticated app shell: a capability-filtered navigation panel and an
+ * uninterrupted content canvas. Each page owns its `PageHeader` and h1.
  */
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthGuard>
       <SidebarProvider>
         <AppSidebar />
-        <SidebarInset className="min-w-0">
-          <header className="bg-background/80 sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b px-4 backdrop-blur sm:px-6">
-            <NotificationSidebarTrigger className="-ml-1" />
-            <Separator orientation="vertical" className="mr-1 h-4!" />
-            <HeaderTitle />
-            <div className="ml-auto flex items-center gap-1">
-              <LanguageSelect />
-              <ThemeToggle />
-              <UserMenu />
-            </div>
-          </header>
+        <SidebarInset className="min-w-0 bg-shell">
+          <div className="pointer-events-none fixed top-3 left-3 z-40 md:hidden">
+            <NotificationSidebarTrigger className="pointer-events-auto bg-background/90 shadow-sm backdrop-blur" />
+          </div>
           <VerificationBanner />
-          <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:py-8">
+          <main className="min-w-0 flex-1 px-4 pt-3 pb-6 sm:px-6 md:pt-6 lg:pt-8 lg:pb-8 lg:has-data-wide:pt-2">
             {/* Pages opt into a wider column with data-wide (e.g. the judging
                 panel's two-column operator layout). Everything else shares
                 this one width — a page whose content looks sparse here
                 should fix its own layout (a field grid, a two-column
                 arrangement), not shrink the shared column, or the app ends
                 up with three different page widths instead of one. */}
-            <div className="mx-auto w-full max-w-6xl has-data-wide:max-w-none">{children}</div>
+            <div className="mx-auto w-full max-w-7xl has-data-wide:max-w-none">{children}</div>
           </main>
         </SidebarInset>
       </SidebarProvider>

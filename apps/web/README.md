@@ -63,7 +63,7 @@ src/
     (auth)/            unauthenticated flows — centered card shell (H1–H5)
       login, signup, forgot-password, reset-password, verify-email,
       claim-account, applications (public application form)
-    (app)/             authenticated shell — sidebar + top bar, AuthGuard
+    (app)/             authenticated shell — sidebar + workspace bar, AuthGuard
       personal area (my-applications, my-project, my-queue, wallet, inbox,
       schedule, settings/profile — no dashboard/home page, schedule is the
       landing destination) · staff workspaces (applications, projects,
@@ -131,6 +131,11 @@ Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
 `QrCode`, `MultiSelect`, `TemplateFieldControl`, `FileUploadField`, `UserPicker`,
 `EntityCombobox`, `ActionGroup`, `IconButton`.
 
+`SidePanelEditor` is the focused-record counterpart to `Modal`: it opens a
+right-side editor over the current workspace, with a fixed title/actions area
+and independently scrollable form body. Use it for a single record's details;
+keep blocking confirmations in `Modal` and deep, bookmarkable workflows on a route.
+
 ### Control sizing — one geometry contract
 
 Buttons, inputs, selects, command inputs, and tabs use the same token-backed
@@ -146,11 +151,17 @@ wrap. `ActionGroup` owns wrapping and the 8 px gap for adjacent actions, while
 consistent.
 
 Popovers (`MultiSelect`, `UniversityPicker`, `TimezonePicker`, `UserPicker`,
-`EntityCombobox`) take an `inDialog` prop: inside a `Modal` it portals the list
-into the dialog panel via `useDialogPortal`, which is the only place that is
-both inside the dialog's scroll-lock and outside the modal body's scroller.
-Pass it, or the option list either refuses to scroll or spills past the dialog
+`EntityCombobox`) take an `inDialog` prop: inside a `Modal`, `SidePanelEditor`,
+`AlertModal`, or another overlay it portals the list into that surface via
+`useDialogPortal`, which keeps the list inside the active focus/dismissal scope.
+Pass it, or the option list either refuses to scroll or spills past the overlay
 edge.
+
+`DropdownMenu`, `Select`, and `Popover` detect when their trigger lives inside a
+`Modal`, `SidePanelEditor`, `AlertModal`, or another overlay and keep their
+content in that surface's dismissable layer. Call sites do not need a second
+portal or a manual `modal={false}` override for nested menus; the trigger stays
+operable while the child is open.
 
 **Picking a user or an entity from a list — don't hand-roll a `<Select>`.**
 `UserPicker` is a type-ahead combobox over a server-searched user endpoint
@@ -178,11 +189,12 @@ Badges, meters and charts all take a `tone`. Never hardcode a hex.
 
 ### 3. Layout — `components/layout/*`
 
-`AppSidebar`, `UserMenu`, `AuthGuard`, `VerificationBanner`, `HeaderTitle` — the
-authed shell. `HeaderTitle` shows the *workspace* the route belongs to
-(`workspaceForPath` in `lib/nav.ts`), never the nav leaf: the page renders its
-own name in its `PageHeader` `h1`, and one destination gets one name, so
-`nav.ts` and the page `h1` share a message key.
+`AppSidebar`, `NotificationSidebarTrigger`, `UserMenu`, `AuthGuard` and
+`VerificationBanner` make up the authed shell. The desktop sidebar header owns
+the collapse control; narrow screens expose the same control in a fixed leading
+corner. There is no global workspace bar: each page renders its own name in
+`PageHeader` `h1`, whose title block reserves that leading space on narrow
+screens and starts in the same 12px top band as the fixed control.
 
 ## Page structure — when a page becomes a directory
 

@@ -49,17 +49,20 @@ async function ownsChallenge(userId: number, challengeId: number): Promise<boole
 }
 
 /**
- * A judge belongs to an enterprise roster (`enterprise_judges`), not to a
- * challenge or a room: judging a challenge means judging for the enterprise
- * that authored it.
+ * A judge belongs to an enterprise roster (`enterprise_judges`), while a
+ * sponsor representative judges their own enterprise by default. Judging a
+ * challenge therefore means belonging to its enterprise through either link.
  */
 async function judgesChallenge(userId: number, challengeId: number): Promise<boolean> {
   const { rowCount } = await pool.query(
     `SELECT 1
        FROM challenges c
        JOIN sponsors author ON author.id = c.author
-       JOIN enterprise_judges ej ON ej.enterprise_id = author.enterprise_id
-      WHERE c.id = $2 AND ej.user_id = $1
+       LEFT JOIN enterprise_judges ej
+              ON ej.enterprise_id = author.enterprise_id AND ej.user_id = $1
+       LEFT JOIN sponsors mine
+              ON mine.enterprise_id = author.enterprise_id AND mine.user_id = $1
+      WHERE c.id = $2 AND (ej.user_id = $1 OR mine.user_id = $1)
       LIMIT 1`,
     [userId, challengeId],
   );
@@ -76,8 +79,11 @@ async function judgesRoomEnterprise(userId: number, roomId: number): Promise<boo
     `SELECT 1
        FROM room_queue_groups rqg
        JOIN queue_groups qg ON qg.id = rqg.queue_group_id
-       JOIN enterprise_judges ej ON ej.enterprise_id = qg.enterprise_id
-      WHERE rqg.room_id = $2 AND ej.user_id = $1
+       LEFT JOIN enterprise_judges ej
+              ON ej.enterprise_id = qg.enterprise_id AND ej.user_id = $1
+       LEFT JOIN sponsors mine
+              ON mine.enterprise_id = qg.enterprise_id AND mine.user_id = $1
+      WHERE rqg.room_id = $2 AND (ej.user_id = $1 OR mine.user_id = $1)
       LIMIT 1`,
     [userId, roomId],
   );
@@ -208,8 +214,8 @@ export function requireEntryJudgeOrCapability(
     if (await hasAnyCapability(req, userId, capabilities)) return;
     const entryId = numberParam(req, "entryId");
     const challengeId = await entryChallengeId(entryId);
-    // Sponsor ownership authorizes the sponsor-facing review/export reads, not
-    // a judging-panel or queue-transition mutation on an owned challenge.
+    // Sponsor representatives judge their own enterprise by default; external
+    // judges reach the same scope through the enterprise roster.
     if (challengeId != null && (await judgesChallenge(userId, challengeId))) return;
     denied("queue entry", { entryId, capabilities });
   };

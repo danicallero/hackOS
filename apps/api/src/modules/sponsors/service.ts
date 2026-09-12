@@ -3,6 +3,7 @@ import { TRIGGER_EVENTS } from "@hackos/shared/role-grant-triggers";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { broadcast } from "../../lib/sse.js";
 import { lockRoleGraph } from "../identity/role-authority.js";
 import { applyRoleGrantRule } from "../identity/role-grants.js";
 import { broadcastForActiveUser } from "../logistics/active-broadcast.js";
@@ -375,6 +376,7 @@ export async function addEnterpriseMember(
     return { member: rows[0], user: userRows[0], ticketAccess };
   });
   await publishTicketAccess(userId, ticketAccess);
+  await broadcast(SSE_TOPICS.SPONSORS, EVENTS.DOMAIN_CHANGED, {});
   return {
     sponsorId: Number(member.id),
     userId,
@@ -439,6 +441,7 @@ export async function removeEnterpriseMember(
     return ticketAccess;
   });
   await publishTicketAccess(userId, ticketAccess);
+  await broadcast(SSE_TOPICS.SPONSORS, EVENTS.DOMAIN_CHANGED, {});
 }
 
 // ── judge roster (DELTA(Hxx): enterprise_judges replaces room_judges) ─────────
@@ -545,6 +548,7 @@ export async function addEnterpriseJudge(
     return { judge: judgeRow(judges[0]), ticketAccess };
   });
   await publishTicketAccess(userId, ticketAccess);
+  await broadcast(SSE_TOPICS.SPONSORS, EVENTS.DOMAIN_CHANGED, {});
   return judge;
 }
 
@@ -586,6 +590,7 @@ export async function removeEnterpriseJudge(
     return ticketAccess;
   });
   await publishTicketAccess(userId, ticketAccess);
+  await broadcast(SSE_TOPICS.SPONSORS, EVENTS.DOMAIN_CHANGED, {});
 }
 
 /**

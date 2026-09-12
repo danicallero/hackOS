@@ -15,14 +15,7 @@ import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { listDevpostPrizes } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
-import type { EventConfig } from "@/lib/types";
-import {
-  type Challenge,
-  canAccessSponsorWorkspace,
-  isScheduled,
-  textForDisplay,
-  visibilityTone,
-} from "../shared";
+import { type Challenge, isScheduled, textForDisplay, visibilityTone } from "../shared";
 
 type DevpostPrize = {
   name: string;
@@ -38,13 +31,11 @@ export default function ChallengeDetailPage() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const { t } = useLocale();
-  const { can, canAny, me } = useSessionContext();
+  const { can, canAny } = useSessionContext();
   const canAdmin = canAny(CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN);
   const canMapPrizes = can(CAPABILITIES.QUEUE_ADMIN);
-  const canManageRooms = canAccessSponsorWorkspace(canAdmin, Boolean(me?.isSponsorRep));
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [devpostPrizes, setDevpostPrizes] = useState<DevpostPrize[]>([]);
-  const [eventConfig, setEventConfig] = useState<Pick<EventConfig, "timezone"> | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -67,16 +58,6 @@ export default function ChallengeDetailPage() {
       setStatus("error");
     }
   }, [canMapPrizes, id, t]);
-
-  // The event timezone is anonymous (H45 public countdown feed) — reused
-  // here purely to label the scheduled-reveal instant, not to expose the
-  // admin-only event settings surface to sponsors.
-  useEffect(() => {
-    api
-      .get<Pick<EventConfig, "timezone">>("/api/public/event")
-      .then(setEventConfig)
-      .catch(() => setEventConfig(null));
-  }, []);
 
   // Soft, in-place refresh instead of a hard reload when another admin edits
   // this challenge elsewhere.
@@ -135,9 +116,7 @@ export default function ChallengeDetailPage() {
         challenge={challenge}
         canAdmin={canAdmin}
         canMapPrizes={canMapPrizes}
-        canManageRooms={canManageRooms}
         devpostPrizes={devpostPrizes}
-        timezone={eventConfig?.timezone ?? null}
         onSaved={load}
       />
     </div>

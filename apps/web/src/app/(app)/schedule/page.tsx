@@ -420,7 +420,7 @@ export default function SchedulePage() {
             collisionDetection={closestCenter}
             onDragEnd={onRowDragEnd}
           >
-            <Table className="table-fixed">
+            <Table className="table-fixed min-w-max">
               <colgroup>
                 {canEdit && <col style={{ width: 64 }} />}
                 {visibleColumns.map((id) => (
@@ -643,7 +643,7 @@ export default function SchedulePage() {
         // Zero-height so it never lengthens the page: the button floats over
         // the table's bottom-left corner and stays there while scrolling, so
         // adding an item never means going back up to the header (H59).
-        <div className="pointer-events-none sticky bottom-6 z-20 flex h-0 items-end">
+        <div className="pointer-events-none sticky bottom-6 z-20 flex h-0 items-end justify-end">
           <Button
             className="pointer-events-auto shadow-floating"
             onClick={() => setCreateOpen(true)}

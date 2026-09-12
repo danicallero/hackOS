@@ -17,8 +17,8 @@ import { z } from "zod";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { DateTimeInput } from "@/components/common/datetime-input";
-import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
+import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -424,7 +424,7 @@ function CreateEnterpriseModal({
   }
 
   return (
-    <Modal
+    <SidePanelEditor
       open={open}
       onOpenChange={onOpenChange}
       icon={Building2Icon}
@@ -578,6 +578,6 @@ function CreateEnterpriseModal({
           />
         </form>
       </Form>
-    </Modal>
+    </SidePanelEditor>
   );
 }

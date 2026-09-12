@@ -211,15 +211,25 @@ API tests use real Postgres and Valkey. The test harness resets and migrates
 `hackos_test`, and the suite runs serially to keep state-dependent integration
 tests deterministic.
 
-Pull requests and pushes to `main` run the same checks in GitHub Actions. Lint,
-the API production-image build, the selective `typecheck` check, and the API,
-web and mobile unit suites are separate required checks. Workspace checks run
-only when their area changes; shared packages, dependency/toolchain changes,
-and workflow changes run all affected gates. The API image job exercises the
-same Dockerfile and production dependency deployment used by Dokploy. The API
-test job provides fresh Postgres, Valkey and Mailpit service containers plus
-health-checked MinIO, then provisions the test bucket; local API runs still use
-`pnpm infra:up` and the commands above.
+Pull requests run the CI workflow (`.github/workflows/ci.yml`): lint, selective
+typechecks, production-image builds, and the API, web and mobile test suites
+remain separate parallel checks. Workspace checks run only when their area
+changes; shared packages, dependency/toolchain changes, and workflow changes
+run all affected gates. Deployment-only edits validate the affected production
+images without running unrelated workspace suites, and browser E2E edits run
+browser smoke independently.
+
+A push to `main` runs the separate CD workflow
+(`.github/workflows/cd.yml`), which publishes only the affected ARM64 API
+and/or web production images to GHCR and then triggers the matching Dokploy
+services. CI never publishes images or deploys; CD never repeats the test
+matrix. API and worker consume the same published API image, so Dokploy only
+pulls it and never rebuilds it on the Raspberry Pi.
+Protect `main` with the CI checks in branch protection; CD assumes only
+validated changes are merged there.
+The API test job provides fresh Postgres, Valkey and Mailpit service containers
+plus health-checked MinIO, then provisions the test bucket; local API runs
+still use `pnpm infra:up` and the commands above.
 
 ## Repository guide
 
