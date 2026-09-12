@@ -15,7 +15,6 @@ import { useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { StatusBadge } from "@/components/common/status-badge";
-import { ProjectDescription } from "@/components/projects/project-description";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
@@ -217,28 +216,28 @@ export function ProjectInfo({
 
   return (
     <div className="space-y-2">
-      <div className="rounded-md border bg-background p-3">
-        <div className="mb-1 flex items-center gap-2">
-          <UsersIcon className="text-muted-foreground size-4" />
-          <p className="text-xs font-semibold uppercase">{t("membersLabel")}</p>
+      <div className="grid gap-x-4 gap-y-2 rounded-md border bg-background p-3 sm:grid-cols-2">
+        <div className="flex min-w-0 items-start gap-2">
+          <UsersIcon className="text-muted-foreground mt-0.5 size-4 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase">{t("membersLabel")}</p>
+            <p className="text-sm font-medium text-pretty">
+              {members.length > 0
+                ? members
+                    .map(
+                      (member) =>
+                        `${member.name ?? ""} ${member.surname ?? ""}`.trim() || member.email,
+                    )
+                    .join(" · ")
+                : "—"}
+            </p>
+          </div>
         </div>
-        <p className="text-sm font-medium text-pretty">
-          {members.length > 0
-            ? members
-                .map(
-                  (member) => `${member.name ?? ""} ${member.surname ?? ""}`.trim() || member.email,
-                )
-                .join(" · ")
-            : "—"}
-        </p>
-      </div>
-
-      {entry.repo_description && (
-        <div className="rounded-md border bg-background p-3">
+        <div className="min-w-0">
           <p className="mb-1 text-xs font-semibold uppercase">{t("projectLabel")}</p>
-          <ProjectDescription text={entry.repo_description} />
+          <p className="truncate text-sm font-medium">{entryLabel(entry, t)}</p>
         </div>
-      )}
+      </div>
 
       {links.length > 0 && (
         <div className="grid gap-2 sm:grid-cols-3">
