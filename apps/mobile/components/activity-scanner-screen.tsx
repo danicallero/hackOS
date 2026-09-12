@@ -230,7 +230,14 @@ export function ActivityScannerScreen() {
         onPress={() =>
           router.push({
             pathname: "/(tabs)/activities/people",
-            params: { activityId: String(activityId) },
+            // Android's legacy (non-Liquid-Glass) header lands on a plain
+            // title with a separate search icon to tap; this jumps straight
+            // into search with the keyboard up instead. iOS uses the native
+            // `headerSearchBarOptions` bar there, unaffected by this param.
+            params:
+              process.env.EXPO_OS === "android"
+                ? { activityId: String(activityId), autoSearch: "1" }
+                : { activityId: String(activityId) },
           })
         }
       />

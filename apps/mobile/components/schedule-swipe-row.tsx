@@ -11,8 +11,22 @@ import { colors } from "@/theme/colors";
 // snaps shut the row mid-scroll and takes the edit/delete buttons along with
 // it. iOS doesn't exhibit this — its native scroll view already disambiguates
 // mostly-vertical touches before RNGH sees them — so only widen the
-// threshold on Android.
-const ANDROID_DRAG_OFFSET_FROM_RIGHT = -32;
+// threshold on Android. `Swipeable` has no vertical counterpart to this prop
+// (no `failOffsetY`), so a hard/fast scroll can still occasionally cross this
+// distance before RNGH's own touch-slop resolves the gesture as vertical;
+// this only reduces how often that happens, it can't rule it out (#626).
+const ANDROID_DRAG_OFFSET_FROM_RIGHT = -48;
+
+// Width of `ScheduleCard`'s non-interactive time column plus the gap before
+// the card itself — the only content `ScheduleSwipeRow` currently wraps. On
+// Android, `hitSlop` excludes that strip from the swipe pan's touch-starting
+// area entirely so a vertical scroll begun there is never even offered to
+// this row's gesture; instead of merely losing the horizontal-vs-vertical
+// tie-break there (as `dragOffsetFromRight` handles for the rest of the
+// row), it's not a candidate at all, and the row still slides in full once a
+// swipe starts over the card (`hitSlop` only gates where the gesture may
+// *begin*, not what it later drags).
+const ANDROID_TIME_COLUMN_HIT_EXCLUSION = 78;
 
 /**
  * Admin-only swipe-to-reveal edit/delete on a Horario row (H59 3c). Matches
@@ -47,6 +61,7 @@ export function ScheduleSwipeRow({
       rightThreshold={40}
       overshootRight={false}
       dragOffsetFromRight={Platform.OS === "android" ? ANDROID_DRAG_OFFSET_FROM_RIGHT : undefined}
+      hitSlop={Platform.OS === "android" ? { left: -ANDROID_TIME_COLUMN_HIT_EXCLUSION } : undefined}
       simultaneousWith={scrollGesture as SwipeableProps["simultaneousWith"]}
       renderRightActions={() => (
         <RevealActions
