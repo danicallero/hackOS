@@ -288,11 +288,11 @@ Traefik cert); the compose files already carry the router labels.
 
 ### 3a. Use the published ARM64 images
 
-Merging any protected release branch runs the CD workflow, which builds and
-publishes `linux/arm64` images to GHCR, the architecture of the Raspberry Pi
-host. A later merge from that release branch to `main` promotes the same image
-digest without rebuilding. Add these non-secret values to the production
-Dokploy **Environment**:
+Merging `implementation`, `integration`, or `staging` runs the CD workflow,
+which builds and publishes `linux/arm64` images to GHCR, the architecture of
+the Raspberry Pi host. A later merge from that release branch to `main` runs CD
+again and promotes the same image digest without rebuilding. Add these
+non-secret values to the production Dokploy **Environment**:
 
 ```dotenv
 IMAGE_REPO=ghcr.io/danicallero/hackos-api
