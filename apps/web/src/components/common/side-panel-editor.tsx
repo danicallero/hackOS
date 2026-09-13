@@ -41,7 +41,7 @@ export function SidePanelEditor({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       {trigger && (
-        <div className="ml-auto flex shrink-0 justify-end">
+        <div className="flex shrink-0 justify-end sm:ml-auto">
           <SheetTrigger asChild>{trigger}</SheetTrigger>
         </div>
       )}
