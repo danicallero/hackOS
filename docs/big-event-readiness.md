@@ -141,6 +141,9 @@ sample per request, grouped by the existing P0/P1/P2/P3 lane classifier. The
 fixture is intentionally separate from the normal dev database: it creates
 600 participants, 20 operators, 20 judges, four rooms, four TV clients, a
 600-entry queue, one meal activity, and a single enterprise judge roster.
+The role-position ordering layered onto those lanes, the route/topic mapping,
+and the reserved-capacity rules are documented in
+[`request-admission.md`](./request-admission.md).
 
 The run overlaps participant `GET /api/queue/me` refetches and personal SSE
 streams with queue calls, accreditation, meal scans, collaborative review

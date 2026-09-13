@@ -25,6 +25,7 @@ import { openApiSecurityForPolicy, registerRoutePolicyInfrastructure } from "./l
 import { broadcast } from "./lib/sse.js";
 import { mutationDomainForPath, publicContentMutationForPath } from "./lib/sse-routing.js";
 import { valkey } from "./lib/valkey.js";
+import { highestRolePosition } from "./modules/identity/role-authority.js";
 import { registerModules } from "./modules/index.js";
 import { authContextPlugin } from "./plugins/auth-context.js";
 import { requestContextPlugin } from "./plugins/request-context.js";
@@ -294,7 +295,17 @@ export async function buildApp(): Promise<App> {
     ) {
       return;
     }
-    const lease = await requestAdmission.acquire(lane);
+    let rolePosition: number | null = null;
+    if (req.userId != null) {
+      try {
+        rolePosition = await highestRolePosition(pool, req.userId);
+      } catch (err) {
+        // Admission is a resilience guard, not an authorization boundary;
+        // preserve the lane fallback if the optional H8 lookup is unavailable.
+        logSoftFailure(req, err, "request role-priority lookup failed");
+      }
+    }
+    const lease = await requestAdmission.acquire(lane, rolePosition);
     admissionLeases.set(req, lease);
   });
 

@@ -1,5 +1,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type pg from "pg";
+import type { Queryable } from "../../db/pool.js";
 import { getEffectiveCapabilities } from "../../lib/capabilities.js";
 import { ConflictError, ForbiddenError } from "../../lib/errors.js";
 
@@ -72,7 +73,7 @@ export function assertNotProtectedRole(role: { isProtected: boolean; name?: stri
 
 /** Highest role position among a user's assigned, non-deleted roles, or null if they hold none. */
 export async function highestRolePosition(
-  client: RoleGraphClient,
+  client: Queryable,
   userId: number,
 ): Promise<number | null> {
   const { rows } = await client.query(
