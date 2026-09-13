@@ -412,6 +412,25 @@ distributed to other Expo Router apps without importing hackOS code.
   (`lib/announcements-admin.ts`'s `fetchAnnouncementRecipientCandidates`),
   scoped to `ANNOUNCEMENTS_MANAGE` rather than the broader `USERS_READ`,
   mirroring `/api/schedule/owner-candidates`.
+- `app/(tabs)/wallet.tsx` — the ticket/badge toggle is a `SegmentedControl`
+  plus a swipe over the QR card itself as an alternative. The swipe gesture is
+  nested *inside* the page's `ScrollView` (the reverse of
+  `ScheduleNotificationsSheet`'s back-swipe, whose `GestureDetector` wraps the
+  `ScrollView`), so it declares itself simultaneous with a `Gesture.Native()`
+  stand-in for the `ScrollView` — without that relationship the ancestor
+  ScrollView's own gesture wins outright and the swipe never activates at all.
+  Switching sides (by swipe or by tapping the control) plays a directional
+  cross-slide: the incoming card enters from the side the drag came from
+  while the outgoing one exits the other way (Reanimated's
+  `SlideInLeft`/`SlideInRight`/`SlideOutLeft`/`SlideOutRight`, keyed on the
+  selected index so both play simultaneously). The swipeable host view keeps
+  a fixed `minHeight` matching the full card's own height, so a badge that
+  isn't assigned yet — a much shorter `EmptyState` — doesn't shrink the
+  touch area available for swiping back. Known remaining limitation: Android
+  reserves its screen-edge strips for the system Back gesture, which can
+  still swallow a swipe that starts very close to either edge before this
+  screen ever sees the touch; there is no in-app fix for that short of a
+  native `setSystemGestureExclusionRects` call.
 - `app/(tabs)/schedule.tsx` — the participant agenda, grouped by day. On first
   load it opens (unanimated) on whatever is happening now — the active card, or
   the "Now" divider drawn between entries when nothing is running — instead of
@@ -469,7 +488,9 @@ distributed to other Expo Router apps without importing hackOS code.
   Android and earlier iOS). Its direct surface is one native gesture
   surface: the selection lens follows the finger from touch-down and
   navigation commits on release to the tab cell under the finger, while the
-  separate Others circle remains the native dropdown. On the native-search path,
+  separate Others circle remains its own menu (native `MenuView` on iOS; a
+  hand-rolled card matching that look on Android — see `navigation.md`). On
+  the native-search path,
   `allowToolbarIntegration` is disabled so `integratedButton` stays in the
   header instead of being adopted by the custom bottom bar. The tab shell
   publishes `useRouterTabBarInsets()` from `lib/router-tabs-inset.ts` (the
@@ -490,7 +511,10 @@ distributed to other Expo Router apps without importing hackOS code.
   responsible-person picker). On Android, manager schedules also mount one
   native gesture on the `SectionList`; each row waits for that vertical gesture
   to fail before its horizontal swipe can activate, keeping diagonal/vertical
-  drags in the list (issue #626). Reminder writes use one serialized optimistic
+  drags in the list (issue #626). The row's `hitSlop` additionally excludes its
+  non-interactive time column from the swipe's touch-starting area entirely, so
+  a scroll begun there is never offered to the row gesture in the first place.
+  Reminder writes use one serialized optimistic
   queue: individual last-item category promotion is included in the same PUT,
   and committed preference snapshots update mounted caches without triggering
   inbox/unread reloads. Covered by `test/ui/schedule-list.test.tsx`,
