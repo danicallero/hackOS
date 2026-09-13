@@ -7,31 +7,30 @@
 # Reachability: it joins the proxy network (edge / dokploy-network), the same
 # network Traefik AND a Cloudflare Tunnel sidecar sit on. So:
 #   - Traefik routes ${WEB_DOMAIN} to it, and
-#   - a cloudflared tunnel can address it directly by name at
-#     http://web:3001 (or the collision-proof alias http://hackos-web:3001),
-#     mirroring the api's http://api:3000.
+#   - a cloudflared tunnel can address it directly on the edge network.
 # The web tier never touches the datastores, so it does NOT join the private
 # instance network.
 #
 # Add https://${WEB_DOMAIN} to the api's CORS_ORIGINS so credentialed requests
 # from the browser are allowed.
 #
-# NEXT_PUBLIC_API_URL is baked into the client bundle by GitHub Actions. The
-# published image is therefore tied to this production domain.
+# The image is environment-neutral. The running server exposes
+# /runtime-config.js from these environment-specific domains, so staging and
+# production can promote the same image digest.
 
 services:
   web:
     image: "${WEB_IMAGE_REPO:-hackos-web}:${IMAGE_TAG:-main}"
     pull_policy: always
+    environment:
+      API_DOMAIN: "${API_DOMAIN}"
+      WEB_DOMAIN: "${WEB_DOMAIN}"
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
     networks:
       edge:
-        # A unique, stable name on the shared proxy network so a tunnel can
-        # target http://hackos-web:3001 without colliding with any other
-        # Dokploy app that happens to have a service called "web".
-        aliases: [hackos-web]
+        aliases: ["${STACK_NAME:-hackos-event2026}-web"]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/ || exit 1"]
       interval: 15s

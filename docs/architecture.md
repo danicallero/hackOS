@@ -117,8 +117,9 @@ is the source of truth for each.
   talks to the API over the public internet like any other browser client, so it
   has no reason to be on the private network.
 - **Public:** its **own** Traefik router `${STACK_NAME}-web` on `${WEB_DOMAIN}`,
-  never served behind the API. `NEXT_PUBLIC_API_URL` is baked in at build time,
-  so each domain builds its own image.
+  never served behind the API. The running Next.js server serves
+  `/runtime-config.js` from its environment-specific `API_DOMAIN`/`WEB_DOMAIN`,
+  so staging and production can promote the same image digest.
 - **CORS coupling:** `https://${WEB_DOMAIN}` must be in the API's
   `CORS_ORIGINS` or the browser's credentialed calls are refused.
 
@@ -428,7 +429,9 @@ often a home server or a single Raspberry Pi, which is typically behind
 - **Ingress:** a **Cloudflare Tunnel** (`cloudflared`) instead of open ports —
   it dials *out* to Cloudflare, so the box is reachable **despite CGNAT** with
   no port forwarding. The tunnel sits on the `edge` network and reaches the
-  api/web containers by name (`http://api:3000`, `http://hackos-web:3001`);
+  api/web containers through their stack-qualified aliases
+  (`http://${STACK_NAME}-api:3000`, `http://${STACK_NAME}-web:3001`), so
+  production and staging can share the proxy network without ambiguous DNS;
   Traefik still handles internal routing.
 - **Admin plane:** **Tailscale** (100.x MagicDNS) for SSH/ops, off the public
   path. (This is also the source of the §3 DNS gotcha: a MagicDNS reconnect

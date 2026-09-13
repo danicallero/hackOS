@@ -1,15 +1,13 @@
 # hackOS web image. Build from the repo ROOT:
-#   docker build -f apps/web/Dockerfile -t hackos-web \
-#     --build-arg NEXT_PUBLIC_API_URL=https://api.example.com \
-#     --build-arg NEXT_PUBLIC_SITE_URL=https://web.example.com .
+#   docker build -f apps/web/Dockerfile -t hackos-web .
 #
 # The web frontend is a STANDALONE Next.js server. It is deployed as its own
 # service behind its OWN Traefik router (deploy/services/web) — it is never
 # served by, or routed together with, the API.
 #
-# NEXT_PUBLIC_API_URL and NEXT_PUBLIC_SITE_URL are inlined at build time, so
-# each instance/domain builds its own image (matches the "one stack per
-# instance" deploy model in deploy/README.md).
+# The image is environment-neutral. Each running container serves
+# /runtime-config.js from API_DOMAIN/WEB_DOMAIN so staging and production can
+# promote the exact same digest.
 
 FROM node:22-alpine AS base
 # Pre-install pnpm to avoid corepack's lazy download on every build
@@ -31,10 +29,6 @@ COPY apps/web/next.config.ts apps/web/tsconfig.json apps/web/postcss.config.mjs 
 COPY apps/web/src ./apps/web/src
 COPY apps/web/public ./apps/web/public
 
-ARG NEXT_PUBLIC_API_URL
-ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-ARG NEXT_PUBLIC_SITE_URL
-ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_LINT=false
 # Cache .next/cache across builds so Next's compilation step is incremental.
