@@ -211,24 +211,26 @@ API tests use real Postgres and Valkey. The test harness resets and migrates
 `hackos_test`, and the suite runs serially to keep state-dependent integration
 tests deterministic.
 
-Open every pull request as a draft. Normal feature PRs target the protected
-`integration` branch. Draft updates run only change detection and lint; marking
-one ready runs the selective typechecks and test suites. Container images are
-not built for these individual PRs, so several approved changes can be merged
-without building several copies of the same release.
+Open every pull request as a draft. Feature PRs may target the protected
+`integration` or `staging` branch, but never `main`. Draft updates run only
+change detection and lint; marking one ready runs the selective typechecks and
+test suites. Container images are not built for these individual PRs.
 
-When a batch is ready, open a promotion PR from `integration` to protected
-`staging`. Its combined tree gets the full CI test matrix. Merging it to
-`staging` is the only build: CD publishes the ARM64 API and web images once,
-tags them with both `staging` and the immutable staging commit SHA, and deploys
-the staging Dokploy Environment. After staging validation, promote `staging` to
-`main`; the main CD path copies those exact image digests to the production
-tags and deploys the existing production Dokploy Environment without rebuilding.
+The release paths are:
 
-CD listens only to `staging` and `main`, never `integration`. The existing main
+| Branch | CD behavior |
+| --- | --- |
+| `integration` | Aggregation only. Merge feature PRs here without building containers; promote the batch once to `staging` or `main` when it is ready. |
+| `staging` | A direct feature→staging PR or an integration→staging promotion builds and publishes the images, then deploys the optional staging Dokploy Environment for verification. |
+| `main` | An integration→main promotion builds and publishes the production images once. A staging→main promotion reuses the matching immutable staging digest; both paths deploy production. |
+
+This supports both a fast `integration` → `main` promotion and a verified
+path through `staging`. A feature branch can also go directly to `staging`; the
+merge to `staging` is what builds the release artifact. The existing main
 webhook, production deployment variables, and production Dokploy setup remain
-valid. Protect `integration`, `staging`, and `main`; CD assumes only validated
-promotion merges reach the two release branches.
+valid. Protect exactly `integration`, `staging`, and `main`; CI blocks direct
+main PRs and CD rejects a main commit that did not come from one of the two
+release branches.
 The API test job provides fresh Postgres, Valkey and Mailpit service containers
 plus health-checked MinIO, then provisions the test bucket; local API runs
 still use `pnpm infra:up` and the commands above.

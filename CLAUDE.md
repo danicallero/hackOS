@@ -101,8 +101,12 @@ container (`node dist/worker.js`) in production. Don't hardcode
 - **Open every pull request as a draft** (`gh pr create --draft` or the
   GitHub UI). Mark it ready for review only when the change is ready for the
   full CI matrix; draft updates intentionally run only lightweight checks.
-- Target feature PRs at `integration`; promote the combined `integration` tree
-  to `staging`, then promote the validated `staging` tree to `main`.
+- Target feature PRs at protected `integration` or `staging` as appropriate;
+  never promote a feature branch directly to `main`. `integration` is the
+  aggregation branch and does not build on every feature merge. A main
+  promotion must match the tree of `integration` or `staging`; the direct
+  `integration` path builds on main, while the `staging` path promotes the
+  immutable image already tested there.
 - **Never add AI-attribution to anything written for this repo.** No
   `Co-Authored-By: Claude ...` (or any other assistant) trailer, no
   `Generated with ...` footer, no session-link line — in commit messages, PR
