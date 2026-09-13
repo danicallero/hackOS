@@ -12,10 +12,6 @@ export function GET() {
       process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? process.env.API_DOMAIN,
       "http://localhost:3000",
     ),
-    siteUrl: normalizeOrigin(
-      process.env.SITE_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? process.env.WEB_DOMAIN,
-      "http://localhost:3001",
-    ),
   };
 
   return new Response(`window.__HACKOS_RUNTIME_CONFIG__=${JSON.stringify(config)};`, {

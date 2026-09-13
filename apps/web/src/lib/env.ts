@@ -1,6 +1,5 @@
 type RuntimeConfig = {
   apiUrl?: string;
-  siteUrl?: string;
 };
 
 declare global {
