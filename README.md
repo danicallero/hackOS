@@ -211,22 +211,24 @@ API tests use real Postgres and Valkey. The test harness resets and migrates
 `hackos_test`, and the suite runs serially to keep state-dependent integration
 tests deterministic.
 
-Pull requests run the CI workflow (`.github/workflows/ci.yml`): lint, selective
-typechecks, production-image builds, and the API, web and mobile test suites
-remain separate parallel checks. Workspace checks run only when their area
-changes; shared packages, dependency/toolchain changes, and workflow changes
-run all affected gates. Deployment-only edits validate the affected production
-images without running unrelated workspace suites, and browser E2E edits run
-browser smoke independently.
+Open every pull request as a draft. Normal feature PRs target the protected
+`integration` branch. Draft updates run only change detection and lint; marking
+one ready runs the selective typechecks and test suites. Container images are
+not built for these individual PRs, so several approved changes can be merged
+without building several copies of the same release.
 
-A push to `main` runs the separate CD workflow
-(`.github/workflows/cd.yml`), which publishes only the affected ARM64 API
-and/or web production images to GHCR and then triggers the matching Dokploy
-services. CI never publishes images or deploys; CD never repeats the test
-matrix. API and worker consume the same published API image, so Dokploy only
-pulls it and never rebuilds it on the Raspberry Pi.
-Protect `main` with the CI checks in branch protection; CD assumes only
-validated changes are merged there.
+When a batch is ready, open a promotion PR from `integration` to protected
+`staging`. Its combined tree gets the full CI test matrix. Merging it to
+`staging` is the only build: CD publishes the ARM64 API and web images once,
+tags them with both `staging` and the immutable staging commit SHA, and deploys
+the staging Dokploy Environment. After staging validation, promote `staging` to
+`main`; the main CD path copies those exact image digests to the production
+tags and deploys the existing production Dokploy Environment without rebuilding.
+
+CD listens only to `staging` and `main`, never `integration`. The existing main
+webhook, production deployment variables, and production Dokploy setup remain
+valid. Protect `integration`, `staging`, and `main`; CD assumes only validated
+promotion merges reach the two release branches.
 The API test job provides fresh Postgres, Valkey and Mailpit service containers
 plus health-checked MinIO, then provisions the test bucket; local API runs
 still use `pnpm infra:up` and the commands above.

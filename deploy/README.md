@@ -23,6 +23,7 @@ posture. Pick one per instance — don't mix them for the same instance.
 - [Architecture](#architecture)
 - [Environment variables: project (shared) vs service-only](#environment-variables-project-shared-vs-service-only)
 - [Wallet passes (H28)](#wallet-passes-h28)
+- [CI/CD release channels](#cicd-release-channels)
 - [Mode A — per-service on Dokploy (recommended)](#mode-a--per-service-on-dokploy-recommended)
 - [Mode B — single stack](#mode-b--single-stack)
 - [Splitting Postgres onto its own host (optional, advanced)](#splitting-postgres-onto-its-own-host-optional-advanced)
@@ -172,26 +173,80 @@ event doesn't compromise another (see [Multiple instances](#multiple-instances))
 
 ---
 
+## CI/CD release channels
+
+Use the protected branches as a promotion pipeline:
+
+`feature PRs → integration → staging → main`
+
+Open every PR as a draft. Feature PRs target `integration`; draft commits run
+change detection and lint, while Ready-for-review PRs run the selective
+typechecks and test suites. These individual PRs do not build container images.
+That lets several approved PRs accumulate in one combined tree.
+
+When the batch is ready, open a promotion PR from `integration` to `staging`.
+Its combined tree gets the full CI test matrix. Merging into `staging` runs the
+only container build for that batch: CD publishes the ARM64 API and web images
+with the mutable `staging` tags and immutable `sha-<staging-commit>` tags, then
+deploys Dokploy's `staging` Environment.
+
+After staging validation, open a promotion PR from `staging` to `main`. The
+main CD path promotes the exact staged image digests to the `main` and
+`sha-<main-commit>` tags and deploys Dokploy's existing `production`
+Environment. It does not rebuild the containers. CD listens only to `staging`
+and `main`, never `integration`.
+
+The existing `main` release keeps its current repository-level webhook secrets
+and production Dokploy configuration, so no production migration is required.
+Create a GitHub Actions Environment named `staging` and put the same three
+Dokploy secret names there, pointing to staging:
+
+| Release target | Branch | Variables | Secrets |
+|---|---|---|---|
+| Existing production configuration | `main` | Existing repository variables/configuration | Repository secrets `DOKPLOY_API_DEPLOY_WEBHOOK`, `DOKPLOY_WORKER_DEPLOY_WEBHOOK`, `DOKPLOY_WEB_DEPLOY_WEBHOOK` |
+| GitHub Environment `staging` | `staging` | No build-time URL variables; domains are read by the web container at runtime | The same three webhook names, pointing at staging |
+
+Keep `TS_OAUTH_CLIENT_ID` and `TS_AUDIENCE` as repository Actions secrets when
+both environments use the same Tailscale access. Both releases use the same
+`tag:ci` identity, `danipi` tailnet route, Tailscale network, and
+`dokploy-network` proxy; only the GitHub Environment's Dokploy webhook targets
+change. Configure each webhook to deploy its matching Dokploy Environment and
+branch.
+
+Protect `integration`, `staging`, and `main` with the repository rulesets. The
+checked-in workflow cannot create or protect remote branches; create each
+branch and apply the matching ruleset before using it in the promotion flow.
+
+---
+
 ## Mode A — per-service on Dokploy (recommended)
 
-### 1. Create the private network (once per instance)
+### 1. Create the private network (once per Environment)
 
 Dokploy doesn't create arbitrary app networks for you, so make the instance
-network on the host first:
+network on the host first. For production:
 
 ```sh
 docker network create hackos-event2026-net
 ```
 
-Use that exact name as `INSTANCE_NETWORK`. The `dokploy-network` (edge) already
-exists on any Dokploy host.
+If this project also has staging, create a second private network for it:
+
+```sh
+docker network create hackos-event2026-staging-net
+```
+
+Use the matching name as `INSTANCE_NETWORK` in each Dokploy Environment. The
+`dokploy-network` (edge) is shared by both Environments and already exists on
+any Dokploy host.
 
 ### 2. Create a Dokploy **Project** and set its Environment variables
 
-Create a project (e.g. `hackos-event2026`) and, inside it, an Environment
-(Dokploy usually gives you one by default — e.g. "production"). Paste the
-combined shared values into **that Environment's** variables tab — generate
-secrets first:
+Create a project (e.g. `hackos-event2026`) and, inside it, a `production`
+Environment (Dokploy usually gives you one by default). If you want the
+staging release channel, create a second Environment named `staging` in the
+same project. Paste the combined shared values into each Environment's
+variables tab — generate separate secrets first:
 
 ```sh
 ./deploy/scripts/gen-secrets.sh hackos-event2026 api.event2026.example.org > .env.event2026
@@ -199,11 +254,15 @@ secrets first:
 # shared values from deploy/.env.shared.example
 ```
 
-### 3. Add six services, each pointing at its compose file
+For staging, use a distinct `STACK_NAME`, `INSTANCE_NETWORK`, `API_DOMAIN`,
+`WEB_DOMAIN`, `CORS_ORIGINS`, and credentials. The two Environments must not
+share Postgres/Valkey/MinIO volumes or application secrets.
+
+### 3. Add six services per Environment, each pointing at its compose file
 
 For each of `postgres`, `valkey`, `minio`, `api`, `worker`, `web`, add a
-**Compose** service in the project that uses this repo and the corresponding
-file:
+**Compose** service under each Environment that uses this repo and the
+corresponding file:
 
 - `deploy/services/postgres/docker-compose.yml`
 - `deploy/services/valkey/docker-compose.yml`
@@ -224,11 +283,11 @@ Traefik cert); the compose files already carry the router labels.
 
 ### 3a. Use the published ARM64 images
 
-The CI workflow validates production Dockerfiles on pull requests. A push to
-`main` runs the separate CD workflow, which publishes `linux/arm64` images to
-GHCR, the architecture of the Raspberry Pi host. Add these non-secret values
-to the Dokploy
-**Environment** before the first pull:
+A merge to `staging` runs the separate CD workflow, which builds and publishes
+`linux/arm64` images to GHCR, the architecture of the Raspberry Pi host. A
+later merge from `staging` to `main` promotes those same image digests without
+rebuilding. Add these non-secret values to the production Dokploy
+**Environment**:
 
 ```dotenv
 IMAGE_REPO=ghcr.io/danicallero/hackos-api
@@ -236,18 +295,21 @@ WEB_IMAGE_REPO=ghcr.io/danicallero/hackos-web
 IMAGE_TAG=main
 ```
 
-`main` is the moving production channel and makes a normal Dokploy redeploy
-pull the newest successful main build. Every publish also creates
-`sha-<commit>` tags; set `IMAGE_TAG` to one of those for a deterministic
-rollback, then redeploy `api`, `worker`, and/or `web` as appropriate. The
-GitHub repository variables `PRODUCTION_API_URL` and `PRODUCTION_SITE_URL`
-must match the production HTTPS origins because Next.js compiles both values
-into the web image. No `build:` key remains in the production compose files:
-Dokploy must pull rather than compile on the Pi.
+For staging, use the same image repositories but set `IMAGE_TAG=staging` and
+use the staging domains. `main` and `staging` are moving environment channels;
+every staging publish also creates a `sha-<staging-commit>` tag, and main adds
+its own immutable release tag when it promotes the digest. Set `IMAGE_TAG` to
+one of those immutable tags for a deterministic rollback, then redeploy `api`,
+`worker`, and/or `web` as appropriate. The web image is environment-neutral:
+the running Next.js server serves `/runtime-config.js` from each environment's
+`API_DOMAIN` and `WEB_DOMAIN`. No `build:` key remains in the production
+compose files: Dokploy must pull rather than compile on the Raspberry Pi.
 
 The CD workflow triggers the three Dokploy deployments only after the matching
-image push succeeds. Store these three generated Compose deploy URLs as GitHub
-repository **Actions secrets** (never as variables or committed text):
+staging image build or main image promotion succeeds. Store the three generated Compose deploy URLs as
+GitHub **Actions secrets** (never as variables or committed text). Keep the
+existing repository-level secrets for `main`; add the same names to the
+`staging` GitHub Environment with staging URLs:
 
 ```text
 DOKPLOY_API_DEPLOY_WEBHOOK
@@ -260,15 +322,16 @@ a Tailscale tag such as `tag:ci`, grant that tag access to `danipi`, and create
 a federated identity/OIDC client with the `auth_keys` scope. Store its client ID
 and audience as the GitHub Actions secrets `TS_OAUTH_CLIENT_ID` and
 `TS_AUDIENCE`. The CD workflow creates an ephemeral CI node, calls the three
-webhooks over the tailnet, and removes that node when the job ends. This follows
-the [Tailscale GitHub Action](https://tailscale.com/docs/integrations/github/github-action)
+webhooks for the selected Environment over the tailnet, and removes that node
+when the job ends. This follows the [Tailscale GitHub
+Action](https://tailscale.com/docs/integrations/github/github-action)
 workload-identity flow; no Dokploy endpoint is exposed publicly.
 
 The API publish calls the API and worker endpoints because both run the same
 image; the web publish calls only the web endpoint. Dokploy then pulls the
-published `main` tag from GHCR and recreates the service. Do not also configure
-a source-push webhook for these same services, or every main push will deploy
-twice.
+published branch channel (`main` or `staging`) from GHCR and recreates the
+service. Do not also configure a source-push webhook for these same services,
+or every release-branch push will deploy twice.
 
 Not using Dokploy? Skip the `dokploy.env.example` files — they're Dokploy's
 own template syntax, resolved before Docker ever sees it, and never appear

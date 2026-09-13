@@ -1,3 +1,6 @@
+<!-- Open all pull requests as Draft. Mark this PR Ready for review only when
+     it is ready for the full CI matrix. -->
+
 # Summary
 
 <!-- Briefly describe what this PR does. Keep it to 1–3 sentences. -->
