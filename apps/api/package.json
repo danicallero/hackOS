@@ -19,7 +19,8 @@
     "superadmin:revoke": "node scripts/revoke-superadmin.mjs",
     "superadmin:list": "node scripts/list-superadmins.mjs",
     "route-policy:audit": "tsx scripts/route-policy-audit.ts",
-    "test": "vitest run",
+    "test": "node scripts/test-integration.mjs",
+    "test:serial": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
