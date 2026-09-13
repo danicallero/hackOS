@@ -272,11 +272,18 @@ hijacked. All of it is scraped at `/metrics` (`hackos_sse_local_connections`,
 
 **Event-day priority lanes (#544).** Non-streaming HTTP requests pass through
 an in-process admission scheduler derived from the existing per-process
-`DB_POOL_MAX` value; it does not resize or reconfigure the #540 pool. P0 is
-queue operators, judges and accreditation/presence staff; P1 is sponsor/judge
-collaboration; P2 is public TV/content; P3 is participant and other
-best-effort traffic. P0/P1 retain reserved admission slots while P2/P3 is
-busy, and the bounded best-effort wait queue may shed P2/P3 with `429`.
+`DB_POOL_MAX` value; it does not resize or reconfigure the #540 pool. The
+request user's highest-position assigned role is the primary priority: a
+higher `roles.position` is admitted before a lower one, while anonymous
+requests are below every assigned role. P0 is queue operators, judges and
+accreditation/presence staff; P1 is sponsor/judge collaboration; P2 is public
+TV/content; P3 is participant and other best-effort traffic. The lane remains
+the tie-breaker for requests at the same role priority. Reserved capacity keeps
+role-less P2/P3 traffic from consuming the operational share, while
+role-bearing requests participate in the role ordering. The bounded
+best-effort wait queue may shed P2/P3 with `429`.
+The complete route/topic classification, capacity formula, role examples, and
+edge cases live in [`request-admission.md`](./request-admission.md).
 Long-lived SSE requests bypass this scheduler so they continue to be governed
 only by #540's connection budgets and write backpressure. Monitor
 `hackos_http_requests_total`,

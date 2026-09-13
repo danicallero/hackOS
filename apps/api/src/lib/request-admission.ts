@@ -10,6 +10,7 @@ export interface RequestAdmissionLease {
 
 interface Waiter {
   lane: RequestLane;
+  rolePosition: number | null;
   queuedAt: bigint;
   resolve: (lease: RequestAdmissionLease) => void;
   reject: (error: Error) => void;
@@ -27,8 +28,8 @@ export interface RequestAdmissionOptions {
 
 /**
  * Small in-process priority gate for finite HTTP work (H29, H38, H41-H42,
- * H540, #544). P0/P1 share reserved capacity; P2/P3 remain FIFO within
- * their lane and cannot consume it.
+ * H540, #544). Role position orders queued requests first; reserved capacity
+ * keeps role-less P2/P3 traffic from consuming the operational share.
  */
 export class RequestAdmission {
   private readonly maxConcurrent: number;
@@ -64,10 +65,27 @@ export class RequestAdmission {
     return this.waiters.length;
   }
 
-  async acquire(lane: RequestLane, signal?: AbortSignal): Promise<RequestAdmissionLease> {
-    if (signal?.aborted) throw new Error("Request aborted while waiting for admission");
+  /**
+   * Acquire a slot for a request. Higher role positions are served first;
+   * the lane remains the tie-breaker for requests from users at the same
+   * hierarchy level (H8, #544).
+   */
+  async acquire(lane: RequestLane, signal?: AbortSignal): Promise<RequestAdmissionLease>;
+  async acquire(
+    lane: RequestLane,
+    rolePosition?: number | null,
+    signal?: AbortSignal,
+  ): Promise<RequestAdmissionLease>;
+  async acquire(
+    lane: RequestLane,
+    rolePositionOrSignal: number | null | AbortSignal = null,
+    signal?: AbortSignal,
+  ): Promise<RequestAdmissionLease> {
+    const rolePosition = isAbortSignal(rolePositionOrSignal) ? null : rolePositionOrSignal;
+    const waitSignal = isAbortSignal(rolePositionOrSignal) ? rolePositionOrSignal : signal;
+    if (waitSignal?.aborted) throw new Error("Request aborted while waiting for admission");
     const queuedAt = process.hrtime.bigint();
-    if (this.canAdmit(lane)) return this.start(lane, queuedAt);
+    if (this.canAdmit(lane, rolePosition)) return this.start(lane, queuedAt);
 
     if (
       (lane === "P2" || lane === "P3") &&
@@ -79,10 +97,11 @@ export class RequestAdmission {
     return new Promise<RequestAdmissionLease>((resolve, reject) => {
       const waiter: Waiter = {
         lane,
+        rolePosition,
         queuedAt,
         resolve,
         reject,
-        signal,
+        signal: waitSignal,
         settled: false,
       };
       const remove = () => {
@@ -100,7 +119,7 @@ export class RequestAdmission {
         reject(new Error("Request aborted while waiting for admission"));
         this.drain();
       };
-      signal?.addEventListener("abort", waiter.onAbort, { once: true });
+      waitSignal?.addEventListener("abort", waiter.onAbort, { once: true });
       this.waiters.push(waiter);
       this.updateQueueMetrics();
       this.drain();
@@ -114,9 +133,9 @@ export class RequestAdmission {
     );
   }
 
-  private canAdmit(lane: RequestLane): boolean {
+  private canAdmit(lane: RequestLane, rolePosition: number | null): boolean {
     if (this.active >= this.maxConcurrent) return false;
-    if (lane === "P2" || lane === "P3") {
+    if ((lane === "P2" || lane === "P3") && rolePosition === null) {
       return this.active < this.maxConcurrent - this.reservedHighPriority;
     }
     return true;
@@ -141,14 +160,13 @@ export class RequestAdmission {
   private drain(): void {
     while (this.active < this.maxConcurrent) {
       let bestIndex = -1;
-      let bestRank = Number.POSITIVE_INFINITY;
+      let bestWaiter: Waiter | undefined;
       for (let index = 0; index < this.waiters.length; index++) {
         const waiter = this.waiters[index];
-        if (!waiter || !this.canAdmit(waiter.lane)) continue;
-        const rank = requestLaneRank(waiter.lane);
-        if (rank < bestRank) {
+        if (!waiter || !this.canAdmit(waiter.lane, waiter.rolePosition)) continue;
+        if (!bestWaiter || compareWaiterPriority(waiter, bestWaiter) < 0) {
           bestIndex = index;
-          bestRank = rank;
+          bestWaiter = waiter;
         }
       }
       if (bestIndex < 0) break;
@@ -171,4 +189,21 @@ export class RequestAdmission {
       );
     }
   }
+}
+
+function compareWaiterPriority(left: Waiter, right: Waiter): number {
+  // A missing role is lower than every persisted role position, including
+  // migrated negative positions. `roles.position` is globally unique, so a
+  // same-position comparison only occurs for anonymous requests.
+  const leftRolePosition = left.rolePosition ?? Number.NEGATIVE_INFINITY;
+  const rightRolePosition = right.rolePosition ?? Number.NEGATIVE_INFINITY;
+  if (leftRolePosition !== rightRolePosition) {
+    return leftRolePosition > rightRolePosition ? -1 : 1;
+  }
+
+  return requestLaneRank(left.lane) - requestLaneRank(right.lane);
+}
+
+function isAbortSignal(value: number | null | AbortSignal): value is AbortSignal {
+  return typeof value === "object" && value !== null && "aborted" in value;
 }
