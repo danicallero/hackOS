@@ -246,10 +246,11 @@ once. No staging Environment is required for that fast path.
 If the staging route is enabled, add these values to the GitHub Actions
 Environment named `staging`:
 
-- `DOKPLOY_API_DEPLOY_WEBHOOK`, `DOKPLOY_WORKER_DEPLOY_WEBHOOK`, and
-  `DOKPLOY_WEB_DEPLOY_WEBHOOK` — the three matching staging Dokploy Environment
-  webhooks. Environment-scoped values override the repository-level values for
-  staging only.
+- `DOKPLOY_STAGING_API_DEPLOY_WEBHOOK`,
+  `DOKPLOY_STAGING_WORKER_DEPLOY_WEBHOOK`, and
+  `DOKPLOY_STAGING_WEB_DEPLOY_WEBHOOK` — the three matching staging Dokploy
+  Environment webhooks. They are deliberately distinct from the production
+  names so missing staging configuration cannot use production webhooks.
 
 Keep `TS_OAUTH_CLIENT_ID` and `TS_AUDIENCE` as repository Actions secrets. The
 production webhook secrets remain repository-level. The optional staging

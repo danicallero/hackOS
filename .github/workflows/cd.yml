@@ -255,8 +255,17 @@ jobs:
         env:
           DOKPLOY_API_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_API_DEPLOY_WEBHOOK }}
           DOKPLOY_WORKER_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_WORKER_DEPLOY_WEBHOOK }}
+          DOKPLOY_STAGING_API_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_STAGING_API_DEPLOY_WEBHOOK }}
+          DOKPLOY_STAGING_WORKER_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_STAGING_WORKER_DEPLOY_WEBHOOK }}
         run: |
           set -euo pipefail
+
+          api_webhook="$DOKPLOY_API_DEPLOY_WEBHOOK"
+          worker_webhook="$DOKPLOY_WORKER_DEPLOY_WEBHOOK"
+          if [[ "$GITHUB_REF_NAME" == "staging" ]]; then
+            api_webhook="$DOKPLOY_STAGING_API_DEPLOY_WEBHOOK"
+            worker_webhook="$DOKPLOY_STAGING_WORKER_DEPLOY_WEBHOOK"
+          fi
 
           post_webhook() {
             local service="$1"
@@ -285,17 +294,23 @@ jobs:
           }
 
           failures=0
-          post_webhook api "$DOKPLOY_API_DEPLOY_WEBHOOK" || failures=1
-          post_webhook worker "$DOKPLOY_WORKER_DEPLOY_WEBHOOK" || failures=1
+          post_webhook api "$api_webhook" || failures=1
+          post_webhook worker "$worker_webhook" || failures=1
           exit "$failures"
 
       - name: Trigger web deployment
         if: always() && needs.publish-web.result == 'success'
         env:
           DOKPLOY_WEB_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_WEB_DEPLOY_WEBHOOK }}
+          DOKPLOY_STAGING_WEB_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_STAGING_WEB_DEPLOY_WEBHOOK }}
         run: |
           set -euo pipefail
-          if [[ -z "$DOKPLOY_WEB_DEPLOY_WEBHOOK" ]]; then
+          web_webhook="$DOKPLOY_WEB_DEPLOY_WEBHOOK"
+          if [[ "$GITHUB_REF_NAME" == "staging" ]]; then
+            web_webhook="$DOKPLOY_STAGING_WEB_DEPLOY_WEBHOOK"
+          fi
+
+          if [[ -z "$web_webhook" ]]; then
             echo "Missing Dokploy webhook for web." >&2
             exit 1
           fi
@@ -304,7 +319,7 @@ jobs:
             --header 'Content-Type: application/json' \
             --header 'X-GitHub-Event: push' \
             --data-binary "@$GITHUB_EVENT_PATH" \
-            --request POST "$DOKPLOY_WEB_DEPLOY_WEBHOOK")"
+            --request POST "$web_webhook")"
           printf '%s\n' "$response"
           if grep -Fq 'Branch Not Match' <<<"$response"; then
             echo "Dokploy rejected the web deployment because the branch did not match." >&2

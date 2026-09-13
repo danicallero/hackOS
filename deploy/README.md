@@ -201,12 +201,12 @@ entering a protected release branch.
 The existing `main` release keeps its current repository-level webhook secrets
 and production Dokploy configuration, so no production migration is required.
 Only the optional staging route needs a GitHub Actions Environment named
-`staging` with the three Dokploy secret names pointing to staging:
+`staging` with separate Dokploy secret names pointing to staging:
 
 | Release target | Branch | Variables | Secrets |
 |---|---|---|---|
 | Existing production configuration | `main` | Existing repository variables/configuration | Repository secrets `DOKPLOY_API_DEPLOY_WEBHOOK`, `DOKPLOY_WORKER_DEPLOY_WEBHOOK`, `DOKPLOY_WEB_DEPLOY_WEBHOOK` |
-| Optional staging configuration | `staging` | No build-time URL variables; domains are read by the web container at runtime | The same three webhook names, pointing at staging |
+| Optional staging configuration | `staging` | No build-time URL variables; domains are read by the web container at runtime | Environment secrets `DOKPLOY_STAGING_API_DEPLOY_WEBHOOK`, `DOKPLOY_STAGING_WORKER_DEPLOY_WEBHOOK`, `DOKPLOY_STAGING_WEB_DEPLOY_WEBHOOK` |
 
 Keep `TS_OAUTH_CLIENT_ID` and `TS_AUDIENCE` as repository Actions secrets. The
 production deploy uses the `tag:ci` identity, `danipi` tailnet route, Tailscale
@@ -314,16 +314,20 @@ the running Next.js server serves `/runtime-config.js` from each environment's
 compose files: Dokploy must pull rather than compile on the Raspberry Pi.
 
 The CD workflow triggers the three Dokploy deployments only for a configured
-`staging` build or after the `main` image build/promotion succeeds. Store the three
+`staging` build or after the `main` image build/promotion succeeds. Store the
 generated Compose deploy URLs as GitHub **Actions secrets** (never as variables
-or committed text). Keep the existing repository-level secrets for `main`; if
-staging is enabled, add the same names to the `staging` GitHub Environment with
-staging URLs:
+or committed text). Keep the existing repository-level secrets for `main`. If
+staging is enabled, add separate names to the `staging` GitHub Environment so
+an incomplete staging setup can never fall back to production webhooks:
 
 ```text
 DOKPLOY_API_DEPLOY_WEBHOOK
 DOKPLOY_WORKER_DEPLOY_WEBHOOK
 DOKPLOY_WEB_DEPLOY_WEBHOOK
+
+DOKPLOY_STAGING_API_DEPLOY_WEBHOOK
+DOKPLOY_STAGING_WORKER_DEPLOY_WEBHOOK
+DOKPLOY_STAGING_WEB_DEPLOY_WEBHOOK
 ```
 
 Because this Dokploy instance is reachable only through Tailscale, also create
