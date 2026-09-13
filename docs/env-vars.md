@@ -233,10 +233,11 @@ service screens for every place the old value was pasted.
 
 ### GitHub Actions release environments
 
-`.github/workflows/cd.yml` uses the `production` GitHub Actions Environment
-only for the production deploy job. Pushes to `implementation` or `integration`
-build and publish release images without needing a deployment Environment. A
-push to optional `staging` also deploys its matching staging services; a later
+`.github/workflows/cd.yml` uses the `production` GitHub Actions Environment for
+the main deploy and the optional `staging` Environment for a staging deploy.
+Pushes to `implementation` or `integration` build and publish release images
+without needing a deployment Environment. A push to optional `staging` also
+deploys its matching staging services; a later
 `staging` → `main` promotion copies that immutable GHCR digest to the
 production tags without rebuilding. A direct `implementation`/`integration` →
 `main` promotion works without staging: main resolves whichever protected
