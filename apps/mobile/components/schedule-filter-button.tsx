@@ -133,10 +133,10 @@ export function ScheduleFilterPanel({
           }}
         >
           <GlassView
-            colorScheme="dark"
+            colorScheme="auto"
             glassEffectStyle="regular"
             style={{
-              borderColor: "rgba(255,255,255,0.14)",
+              borderColor: colors.separator,
               borderCurve: "continuous",
               borderRadius: 18,
               borderWidth: 0.5,
@@ -178,7 +178,7 @@ export function ScheduleFilterPanel({
                   onClear();
                 }}
                 style={{
-                  borderTopColor: "rgba(255,255,255,0.12)",
+                  borderTopColor: colors.separator,
                   borderTopWidth: 0.5,
                   paddingHorizontal: 14,
                   paddingVertical: 12,
@@ -206,7 +206,7 @@ function FilterSectionLabel({ label }: { label: string }) {
   return (
     <Text
       style={{
-        color: "rgba(255,255,255,0.6)",
+        color: colors.secondaryLabel,
         fontSize: 12,
         fontWeight: "600",
         paddingHorizontal: 14,
@@ -244,7 +244,7 @@ function FilterRow({
         paddingVertical: 10,
       }}
     >
-      <Text selectable={false} style={{ color: "white", flex: 1, fontSize: 15 }}>
+      <Text selectable={false} style={{ color: colors.label, flex: 1, fontSize: 15 }}>
         {label}
       </Text>
       {selected ? (

@@ -4,6 +4,7 @@ import { useFocusEffect, useNavigation, usePathname, useRouter } from "expo-rout
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
   FlatList,
+  Platform,
   Pressable,
   RefreshControl,
   Text,
@@ -12,6 +13,7 @@ import {
   View,
 } from "react-native";
 
+import { GlassView } from "@/components/glass-view";
 import { ActionButton, EmptyState, StatusPill } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
@@ -115,15 +117,45 @@ export function QueueOperationsScreen() {
           ]}
           onPressAction={({ nativeEvent }) => setRoomFilter(nativeEvent.event as typeof roomFilter)}
         >
-          <SymbolView
-            name={
-              roomFilter === "all"
-                ? "line.3.horizontal.decrease"
-                : "line.3.horizontal.decrease.circle.fill"
-            }
-            tintColor={colors.accent}
-            size={19}
-          />
+          {Platform.OS === "android" ? (
+            // Native-stack's headerRight gets iOS's automatic Liquid Glass
+            // pill chrome for free; Android has no equivalent, so this button
+            // rendered as a bare icon there. Match the same GlassView circle
+            // activities-screen/people-directory-screen already use for their
+            // Android header actions.
+            <GlassView
+              colorScheme="auto"
+              glassEffectStyle="regular"
+              isInteractive
+              style={{
+                alignItems: "center",
+                borderRadius: 22,
+                height: 44,
+                justifyContent: "center",
+                width: 44,
+              }}
+            >
+              <SymbolView
+                name={
+                  roomFilter === "all"
+                    ? "line.3.horizontal.decrease"
+                    : "line.3.horizontal.decrease.circle.fill"
+                }
+                tintColor={colors.accent}
+                size={19}
+              />
+            </GlassView>
+          ) : (
+            <SymbolView
+              name={
+                roomFilter === "all"
+                  ? "line.3.horizontal.decrease"
+                  : "line.3.horizontal.decrease.circle.fill"
+              }
+              tintColor={colors.accent}
+              size={19}
+            />
+          )}
         </MenuView>
       ),
       headerSearchBarOptions: {
