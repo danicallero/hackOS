@@ -24,7 +24,7 @@ export const browserRefetchStormBody = z.object({
     "public-content",
     "content",
   ]),
-  trigger: z.enum(["sse", "visibility", "retry", "manual"]),
+  trigger: z.enum(["sse", "visibility", "poll", "retry", "manual"]),
   refetches: z.number().int().min(1).max(1000),
   windowSeconds: z.number().int().min(1).max(300),
 });
