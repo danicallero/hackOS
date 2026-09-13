@@ -6,13 +6,28 @@ import { pool } from "../src/db/pool.js";
  * Call in beforeEach for DB-backed suites.
  */
 export async function truncateAll(): Promise<void> {
+  const tables = await testTableList();
+  if (tables === "") return;
+  await pool.query(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);
+}
+
+let tablesForTruncation: string | undefined;
+
+/**
+ * The schema is migrated once before a test process starts and is immutable
+ * for the remainder of that process. Discovering its tables before every
+ * test made isolation pay for the same catalog query more than a thousand
+ * times per run.
+ */
+async function testTableList(): Promise<string> {
+  if (tablesForTruncation !== undefined) return tablesForTruncation;
+
   const { rows } = await pool.query(
     `SELECT tablename FROM pg_tables
      WHERE schemaname = 'public' AND tablename NOT IN ('_migrations', 'queue_settings')`,
   );
-  if (rows.length === 0) return;
-  const tables = rows.map((r: { tablename: string }) => `"${r.tablename}"`).join(", ");
-  await pool.query(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);
+  tablesForTruncation = rows.map((r: { tablename: string }) => `"${r.tablename}"`).join(", ");
+  return tablesForTruncation;
 }
 
 /** Insert a bare user row; returns its id. */
