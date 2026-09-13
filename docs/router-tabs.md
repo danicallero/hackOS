@@ -52,7 +52,7 @@ The component has two layers:
 | Layer | Owns | Does not own |
 | --- | --- | --- |
 | `RouterTabs` | Expo Router tab registration, direct-tab rendering, Liquid Glass/opaque geometry, scrub gesture, selection lens, safe-area contract, direct-tab press callbacks | Capabilities, localization, icon choice, overflow destination policy, native menu actions |
-| `OpaqueRouterTabs` | hackOS capabilities, localized labels, SF Symbols, unread state, direct/overflow partitioning, `MenuView` actions, pseudo-tab replacement semantics | The shell's geometry or gesture implementation |
+| `OpaqueRouterTabs` | hackOS capabilities, localized labels, SF Symbols, unread state, direct/overflow partitioning, overflow menu actions (native `MenuView` on iOS, a hand-rolled matching card on Android), pseudo-tab replacement semantics | The shell's geometry or gesture implementation |
 
 Keep this boundary when adding destinations. A library consumer should be able
 to provide an arbitrary `Href`, icon React nodes, labels, and an already-built
@@ -457,7 +457,7 @@ the usual cause of lists ending too high.
 | --- | --- | --- | --- |
 | iOS 26+ | Native Liquid Glass with interactive selection surface | Expo Router triggers + native `MenuView` overflow | Keep content edge-to-edge and use the inset hook for reachable endings. |
 | iOS <26 | Opaque colour-scheme-aware surface with matching geometry | Same | Supply `fallbackTheme` for screens with an explicit dark surface. |
-| Android | Opaque colour-scheme-aware surface with matching geometry | Same native menu API and same trigger contract | Ensure the app has Gesture Handler/Reanimated configured; use the inset hook for navigation-bar clearance. |
+| Android | Opaque colour-scheme-aware surface with matching geometry | Same trigger contract; hackOS's `OpaqueRouterTabs` adapter renders a hand-rolled card menu here instead of `MenuView`'s Compose `DropdownMenu` fallback, to match the iOS card look (see `navigation.md`) | Ensure the app has Gesture Handler/Reanimated configured; use the inset hook for navigation-bar clearance. |
 | iPad / regular tablet width | Slightly thinner bar; up to six direct cells | Same | Treat width as a layout policy, not a different navigation model. |
 
 `expo-glass-effect` is the material seam. The reusable shell checks the same
