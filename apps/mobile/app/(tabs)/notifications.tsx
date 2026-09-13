@@ -366,8 +366,12 @@ const MessagesView = memo(function MessagesView({
     () => apiFetch<InboxResponse>(`/api/me/notifications?limit=${LIMIT}&offset=0&unread=true`),
     [],
   );
-  const all = useCachedApi(`user:${me?.id ?? "unknown"}:notifications:all`, fetchAll);
-  const unread = useCachedApi(`user:${me?.id ?? "unknown"}:notifications:unread`, fetchUnread);
+  const all = useCachedApi(`user:${me?.id ?? "unknown"}:notifications:all`, fetchAll, {
+    pollMs: 30_000,
+  });
+  const unread = useCachedApi(`user:${me?.id ?? "unknown"}:notifications:unread`, fetchUnread, {
+    pollMs: 30_000,
+  });
   const { data, loading, error, staleSince, load, setData } = unreadOnly ? unread : all;
 
   useEffect(() => {

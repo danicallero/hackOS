@@ -55,4 +55,20 @@ describe("browser refetch-storm telemetry (H38, #544)", () => {
     });
     expect(response.statusCode).toBe(400);
   });
+
+  it("accepts the bounded fallback-poll trigger", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/telemetry/refetch-storm",
+      payload: {
+        surface: "participant-queue",
+        topic: "user",
+        trigger: "poll",
+        refetches: 2,
+        windowSeconds: 30,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
 });
