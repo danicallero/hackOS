@@ -41,9 +41,12 @@ across the web and native clients or across locales, add a shared contract to
 `@hackos/shared/ui-test-ids` and wire it to `data-testid`/`testID` at the
 interactive control.
 
-Config: copy `.env.example` → `.env.local`. `NEXT_PUBLIC_API_URL` is the API
-origin (default `http://localhost:3000`). Because the web and API are different
-origins, the API must trust the web origin in **two** places:
+Config: copy `.env.example` → `.env.local`. `NEXT_PUBLIC_API_URL` is the local
+development override for the API origin (default `http://localhost:3000`). In
+deployment, the shared image serves `/runtime-config.js` from `API_DOMAIN` and
+`WEB_DOMAIN`, so staging and production can use the same image digest. Because
+the web and API are different origins, the API must trust the web origin in
+**two** places:
 
 - `CORS_ORIGINS` (API env) — browser CORS.
 - Better Auth `trustedOrigins` — derived from `CORS_ORIGINS`, plus
