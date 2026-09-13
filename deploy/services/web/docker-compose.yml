@@ -15,8 +15,8 @@
 # from the browser are allowed.
 #
 # The image is environment-neutral. The running server exposes
-# /runtime-config.js from these environment-specific domains, so staging and
-# production can promote the same image digest.
+# /runtime-config.js from the configured domains, so a staging build and its
+# later deployment can use the same image digest.
 
 services:
   web:
