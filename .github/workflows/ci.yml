@@ -2,6 +2,12 @@ name: CI
 
 on:
   pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+      - converted_to_draft
 
 permissions:
   contents: read
@@ -40,7 +46,9 @@ jobs:
   api-image:
     name: API production image (validation)
     needs: changes
-    if: needs.changes.outputs.api_image == 'true'
+    if: >-
+      github.event.pull_request.draft != true &&
+      needs.changes.outputs.api_image == 'true'
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Check out repository
@@ -65,7 +73,9 @@ jobs:
   web-image:
     name: Web production image (validation)
     needs: changes
-    if: needs.changes.outputs.web_image == 'true'
+    if: >-
+      github.event.pull_request.draft != true &&
+      needs.changes.outputs.web_image == 'true'
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Check out repository
@@ -106,7 +116,9 @@ jobs:
   typecheck:
     name: typecheck
     needs: changes
-    if: needs.changes.outputs.typecheck == 'true'
+    if: >-
+      github.event.pull_request.draft != true &&
+      needs.changes.outputs.typecheck == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -130,7 +142,9 @@ jobs:
   api-test:
     name: API integration tests
     needs: changes
-    if: needs.changes.outputs.api == 'true'
+    if: >-
+      github.event.pull_request.draft != true &&
+      needs.changes.outputs.api == 'true'
     runs-on: ubuntu-latest
     env:
       CI: true
@@ -236,7 +250,9 @@ jobs:
   web-test:
     name: web unit tests
     needs: changes
-    if: needs.changes.outputs.web == 'true'
+    if: >-
+      github.event.pull_request.draft != true &&
+      needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     env:
       CI: true
@@ -253,7 +269,9 @@ jobs:
   browser-smoke:
     name: browser critical-flow smoke
     needs: changes
-    if: needs.changes.outputs.browser == 'true'
+    if: >-
+      github.event.pull_request.draft != true &&
+      needs.changes.outputs.browser == 'true'
     runs-on: ubuntu-latest
     env:
       CI: true
@@ -273,7 +291,9 @@ jobs:
   mobile-test:
     name: mobile unit tests
     needs: changes
-    if: needs.changes.outputs.mobile == 'true'
+    if: >-
+      github.event.pull_request.draft != true &&
+      needs.changes.outputs.mobile == 'true'
     runs-on: ubuntu-latest
     env:
       CI: true

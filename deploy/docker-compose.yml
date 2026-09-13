@@ -208,7 +208,10 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
-    networks: [private, edge]
+    networks:
+      private: {}
+      edge:
+        aliases: ["${STACK_NAME:-hackos-event2026}-api"]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/healthz || exit 1"]
       interval: 15s
@@ -255,7 +258,9 @@ services:
     <<: *hardening
     image: "${WEB_IMAGE_REPO:-hackos-web}:${IMAGE_TAG:-main}"
     pull_policy: always
-    networks: [edge]
+    networks:
+      edge:
+        aliases: ["${STACK_NAME:-hackos-event2026}-web"]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/ || exit 1"]
       interval: 15s

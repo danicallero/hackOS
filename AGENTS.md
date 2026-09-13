@@ -163,6 +163,9 @@ to see the change without building it. Recipe and gotchas:
 
 ## Opening a PR
 
+- Open every PR as a draft (`gh pr create --draft` or the GitHub UI). Mark it
+  ready for review only when it is ready for the full CI matrix.
+
 Use [`.github/PULL_REQUEST_TEMPLATE.md`](./.github/PULL_REQUEST_TEMPLATE.md)
 as the PR body — fill in every section (delete Screenshots/Migration only if
 truly not applicable), don't replace it with a free-form summary.

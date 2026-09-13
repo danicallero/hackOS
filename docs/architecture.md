@@ -428,7 +428,9 @@ often a home server or a single Raspberry Pi, which is typically behind
 - **Ingress:** a **Cloudflare Tunnel** (`cloudflared`) instead of open ports —
   it dials *out* to Cloudflare, so the box is reachable **despite CGNAT** with
   no port forwarding. The tunnel sits on the `edge` network and reaches the
-  api/web containers by name (`http://api:3000`, `http://hackos-web:3001`);
+  api/web containers through their stack-qualified aliases
+  (`http://${STACK_NAME}-api:3000`, `http://${STACK_NAME}-web:3001`), so
+  production and staging can share the proxy network without ambiguous DNS;
   Traefik still handles internal routing.
 - **Admin plane:** **Tailscale** (100.x MagicDNS) for SSH/ops, off the public
   path. (This is also the source of the §3 DNS gotcha: a MagicDNS reconnect
