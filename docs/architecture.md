@@ -119,7 +119,8 @@ is the source of truth for each.
 - **Public:** its **own** Traefik router `${STACK_NAME}-web` on `${WEB_DOMAIN}`,
   never served behind the API. The running Next.js server serves
   `/runtime-config.js` from its environment-specific `API_DOMAIN`/`WEB_DOMAIN`,
-  so staging and production can promote the same image digest.
+  so an implementation/integration/staging build and its later deployment can
+  use the same image digest.
 - **CORS coupling:** `https://${WEB_DOMAIN}` must be in the API's
   `CORS_ORIGINS` or the browser's credentialed calls are refused.
 
@@ -431,8 +432,8 @@ often a home server or a single Raspberry Pi, which is typically behind
   no port forwarding. The tunnel sits on the `edge` network and reaches the
   api/web containers through their stack-qualified aliases
   (`http://${STACK_NAME}-api:3000`, `http://${STACK_NAME}-web:3001`), so
-  production and staging can share the proxy network without ambiguous DNS;
-  Traefik still handles internal routing.
+  separate stacks can share the proxy network without ambiguous DNS; Traefik
+  still handles internal routing.
 - **Admin plane:** **Tailscale** (100.x MagicDNS) for SSH/ops, off the public
   path. (This is also the source of the §3 DNS gotcha: a MagicDNS reconnect
   mid-deploy is what poisoned the worker's resolver.)

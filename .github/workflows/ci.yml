@@ -17,6 +17,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  release-source:
+    name: release source
+    if: github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a protected release branch
+        env:
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          case "$HEAD_BRANCH" in
+            implementation|integration|staging)
+              if [[ "$HEAD_REPOSITORY" != "$REPOSITORY" ]]; then
+                echo "Main promotions must come from a release branch in $REPOSITORY." >&2
+                exit 1
+              fi
+              ;;
+            *)
+              echo "Main promotions must come from implementation, integration, or staging; got $HEAD_BRANCH." >&2
+              exit 1
+              ;;
+          esac
+
   changes:
     name: detect changed areas
     runs-on: ubuntu-latest

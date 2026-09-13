@@ -165,8 +165,10 @@ to see the change without building it. Recipe and gotchas:
 
 - Open every PR as a draft (`gh pr create --draft` or the GitHub UI). Mark it
   ready for review only when it is ready for the full CI matrix.
-- Target feature PRs at `integration`; promote the combined `integration` tree
-  to `staging`, then promote the validated `staging` tree to `main`.
+- Target feature PRs at protected `implementation`, `integration`, or `staging`
+  as appropriate; never promote a feature branch directly to `main`. A main
+  release must match the tree of one of those release branches, whose build
+  publishes the immutable image digest that main promotes without rebuilding.
 
 Use [`.github/PULL_REQUEST_TEMPLATE.md`](./.github/PULL_REQUEST_TEMPLATE.md)
 as the PR body — fill in every section (delete Screenshots/Migration only if

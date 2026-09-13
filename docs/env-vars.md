@@ -110,7 +110,7 @@ need them.
 | `STACK_NAME` | compose-level | no (default) | Namespaces this instance's Traefik router names (`${STACK_NAME}-api`) and public proxy-network DNS aliases, so multiple hackOS instances/Environments can share one Traefik network without collisions. |
 | `PROXY_NETWORK` | compose-level | no (default `dokploy-network`) | The Traefik-managed edge network `api` and `web` join to receive public traffic. The single-stack worker may also join it for outbound egress, but has no router. |
 | `CERT_RESOLVER` | compose-level | no (default `letsencrypt`) | Which Traefik ACME resolver issues the TLS certificates for the `API_DOMAIN` and `WEB_DOMAIN` routers. |
-| `IMAGE_REPO`, `IMAGE_TAG` | compose-level | yes for a deployed environment | API image and tag pulled by both `migrate`/`api` and `worker`. CI builds the combined release once on `staging`, then promotes the same digest to `main`; use the matching channel per Dokploy Environment or a SHA tag for a rollback. Never use `:latest`. |
+| `IMAGE_REPO`, `IMAGE_TAG` | compose-level | yes for a deployed environment | API image and tag pulled by both `migrate`/`api` and `worker`. CI builds the combined release on protected `implementation`, `integration`, or `staging`, then `main` promotes the matching digest; use `main` for production, `staging` for the optional staging deployment, or a SHA tag for a rollback. Never use `:latest`. |
 | `API_MEM_LIMIT` | compose-level | no | Memory cap, default `512m`. |
 | `INSTANCE_NETWORK` | compose-level | no | Private network joined to reach postgres/valkey/minio by name. |
 
@@ -143,15 +143,15 @@ has no HTTP listener.
 ## web
 
 The web service receives its public domains at runtime and serves them through
-`/runtime-config.js`. This keeps the image environment-neutral, so staging and
-production can promote the same image digest.
+`/runtime-config.js`. This keeps the image environment-neutral, so a release
+branch and its later deployment can use the same image digest.
 
 | Variable | Kind | Required | What it does |
 |---|---|---|---|
 | `API_DOMAIN` | compose-level | yes | The API router's public host. The running web server exposes it through `/runtime-config.js` as the browser's API origin, so changing it does not require a new image build. |
 | `WEB_DOMAIN` | compose-level | yes | The `Host()` rule for this service's **own** Traefik router — deliberately separate from `API_DOMAIN`'s router. The running web server also uses it for canonical/social URLs through `/runtime-config.js`. |
 | `STACK_NAME`, `PROXY_NETWORK`, `CERT_RESOLVER` | compose-level | no (defaults) | Same Traefik-naming role as on `api`. |
-| `WEB_IMAGE_REPO`, `IMAGE_TAG` | compose-level | yes for a deployed environment | Web image/tag pulled from GHCR. CI builds the combined release once on `staging`, then promotes the same digest to `main`; use the matching channel per Dokploy Environment and never use `:latest`. |
+| `WEB_IMAGE_REPO`, `IMAGE_TAG` | compose-level | yes for a deployed environment | Web image/tag pulled from GHCR. CI builds the combined release on protected `implementation`, `integration`, or `staging`, then `main` promotes the matching digest; use `main` for production, `staging` for the optional staging deployment, or a SHA tag for a rollback. Never use `:latest`. |
 | `WEB_MEM_LIMIT` | compose-level | no | Memory cap, default `256m`. |
 
 Remember to add `https://${WEB_DOMAIN}` to the **api**'s `CORS_ORIGINS` —
@@ -166,14 +166,15 @@ screens:
 
 ```
 Project  (one hackOS instance, e.g. "hackos-event2026")
-└── Environment  (e.g. "production" and "staging")
+└── Environment  (e.g. "production", plus optional isolated environments)
     └── Service  (postgres, valkey, minio, api, worker, web)
 ```
 
 - **Project variables** — set once on the Project, referenced from any
   service anywhere inside it with `${{project.VARIABLE_NAME}}`.
 - **Environment variables** — set once on an Environment (a project can have
-  several, e.g. staging/production), referenced with
+  several, e.g. production and an optional verification environment),
+  referenced with
   `${{environment.VARIABLE_NAME}}`.
 - **Service variables** — a service's own box, referenced with
   `${{VARIABLE_NAME}}` (no prefix), and able to override anything from the
@@ -191,19 +192,19 @@ every service picks it up on next deploy).
 Since hackOS already treats **one Dokploy project = one hackathon instance**
 (see [Multiple instances](../deploy/README.md#multiple-instances)),
 **Environment variables are the natural home** for everything in the "read by
-two or more services" tables above. A production and staging Environment can
-live in the same project while keeping their domains, secrets, volumes, and
-private networks separate. Project-level works too for values that are
-intentionally identical across both environments; be explicit about which
-values are shared and which are environment-specific.
+two or more services" tables above. A production Environment and any optional
+verification Environment can live in the same project while keeping their
+domains, secrets, volumes, and private networks separate. Project-level works
+too for values that are intentionally identical across environments; be
+explicit about which values are shared and which are environment-specific.
 
 **Recipe:**
 
 1. Generate separate secrets for each Dokploy Environment
    (`deploy/scripts/gen-secrets.sh`) and paste the resulting `KEY=value` pairs
    into that Environment's variables tab, plus the non-secret shared values
-   from `deploy/.env.shared.example`. Do not reuse production database,
-   auth, storage, or signing secrets in staging.
+   from `deploy/.env.shared.example`. Do not reuse database, auth, storage, or
+   signing secrets between separately deployed hackOS environments.
 2. For each service, copy the matching file straight into that service's own
    Environment Variables box in Dokploy — these are checked into the repo so
    there's nothing to write by hand or keep in sync manually:
@@ -232,25 +233,31 @@ service screens for every place the old value was pasted.
 
 ### GitHub Actions release environments
 
-`.github/workflows/cd.yml` maps `main` to the GitHub Actions Environment named
-`production` and `staging` to the Environment named `staging`. The existing
-`main` path continues to use the repository-level `DOKPLOY_*_DEPLOY_WEBHOOK`
-values. Staging builds and publishes the combined release once; a later
-`staging` → `main` promotion copies those immutable GHCR digests to the
-production tags without rebuilding. No production configuration migration is
-required. Add these values to the new `staging` GitHub Environment:
+`.github/workflows/cd.yml` uses the `production` GitHub Actions Environment
+only for the production deploy job. Pushes to `implementation` or `integration`
+build and publish release images without needing a deployment Environment. A
+push to optional `staging` also deploys its matching staging services; a later
+`staging` → `main` promotion copies that immutable GHCR digest to the
+production tags without rebuilding. A direct `implementation`/`integration` →
+`main` promotion works without staging: main resolves whichever protected
+release branch has the same source tree and promotes its immutable digest. No
+staging Environment is required for that fast path.
+
+If the staging route is enabled, add these values to the GitHub Actions
+Environment named `staging`:
 
 - `DOKPLOY_API_DEPLOY_WEBHOOK`, `DOKPLOY_WORKER_DEPLOY_WEBHOOK`, and
   `DOKPLOY_WEB_DEPLOY_WEBHOOK` — the three matching staging Dokploy Environment
   webhooks. Environment-scoped values override the repository-level values for
   staging only.
 
-Keep `TS_OAUTH_CLIENT_ID` and `TS_AUDIENCE` as repository Actions secrets when
- production and staging share the same Tailscale access. The Dokploy Compose
-Environment still needs its own `API_DOMAIN`, `WEB_DOMAIN`, `STACK_NAME`,
-`INSTANCE_NETWORK`, secrets, and `IMAGE_TAG` (`main` for production,
-`staging` for staging). The web service reads the domains at runtime, so the
-same image digest is valid in both environments.
+Keep `TS_OAUTH_CLIENT_ID` and `TS_AUDIENCE` as repository Actions secrets. The
+production webhook secrets remain repository-level. The optional staging
+Environment needs separate webhook targets and its own Dokploy
+`API_DOMAIN`, `WEB_DOMAIN`, `STACK_NAME`, `INSTANCE_NETWORK`, secrets, and
+`IMAGE_TAG=staging`; the production service uses `IMAGE_TAG=main`. The web
+service reads domains at runtime, so the same image digest is valid in either
+deployment.
 
 ### Not using Dokploy? Nothing here changes the fallback path
 
