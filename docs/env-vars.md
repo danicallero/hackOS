@@ -110,7 +110,7 @@ need them.
 | `STACK_NAME` | compose-level | no (default) | Namespaces this instance's Traefik router names (`${STACK_NAME}-api`) and public proxy-network DNS aliases, so multiple hackOS instances/Environments can share one Traefik network without collisions. |
 | `PROXY_NETWORK` | compose-level | no (default `dokploy-network`) | The Traefik-managed edge network `api` and `web` join to receive public traffic. The single-stack worker may also join it for outbound egress, but has no router. |
 | `CERT_RESOLVER` | compose-level | no (default `letsencrypt`) | Which Traefik ACME resolver issues the TLS certificates for the `API_DOMAIN` and `WEB_DOMAIN` routers. |
-| `IMAGE_REPO`, `IMAGE_TAG` | compose-level | yes for a deployed environment | API image and tag pulled by both `migrate`/`api` and `worker`. CI publishes `main` (production), `staging`, and immutable `sha-<commit>` tags; use the matching channel per Dokploy Environment or a SHA tag for a rollback. Never use `:latest`. |
+| `IMAGE_REPO`, `IMAGE_TAG` | compose-level | yes for a deployed environment | API image and tag pulled by both `migrate`/`api` and `worker`. CI builds the combined release once on `staging`, then promotes the same digest to `main`; use the matching channel per Dokploy Environment or a SHA tag for a rollback. Never use `:latest`. |
 | `API_MEM_LIMIT` | compose-level | no | Memory cap, default `512m`. |
 | `INSTANCE_NETWORK` | compose-level | no | Private network joined to reach postgres/valkey/minio by name. |
 
@@ -142,17 +142,16 @@ has no HTTP listener.
 
 ## web
 
-The only service with **no runtime container env at all** for hackOS-specific
-config — `NEXT_PUBLIC_API_URL` is a Next.js public variable, so it has to be
-baked into the JS bundle at **build time**, not read when the container
-starts.
+The web service receives its public domains at runtime and serves them through
+`/runtime-config.js`. This keeps the image environment-neutral, so staging and
+production can promote the same image digest.
 
 | Variable | Kind | Required | What it does |
 |---|---|---|---|
-| `API_DOMAIN` | compose-level | yes | The API router's public host. For `main`, CI uses the existing repository variable `PRODUCTION_API_URL`; for `staging`, it uses the `staging` Environment's `DEPLOY_API_URL`, compiling the origin as `NEXT_PUBLIC_API_URL` in the web image. Changing either requires a new web-image publish. |
-| `WEB_DOMAIN` | compose-level | yes | The `Host()` rule for this service's **own** Traefik router — deliberately separate from `API_DOMAIN`'s router. For `main`, CI uses `PRODUCTION_SITE_URL`; for `staging`, it uses the `staging` Environment's `DEPLOY_SITE_URL`, compiling the origin into canonical/social URLs. |
+| `API_DOMAIN` | compose-level | yes | The API router's public host. The running web server exposes it through `/runtime-config.js` as the browser's API origin, so changing it does not require a new image build. |
+| `WEB_DOMAIN` | compose-level | yes | The `Host()` rule for this service's **own** Traefik router — deliberately separate from `API_DOMAIN`'s router. The running web server also uses it for canonical/social URLs through `/runtime-config.js`. |
 | `STACK_NAME`, `PROXY_NETWORK`, `CERT_RESOLVER` | compose-level | no (defaults) | Same Traefik-naming role as on `api`. |
-| `WEB_IMAGE_REPO`, `IMAGE_TAG` | compose-level | yes for a deployed environment | Web image/tag pulled from GHCR. CI publishes `main` (production), `staging`, and immutable `sha-<commit>` rollback tags; use the matching channel per Dokploy Environment and never use `:latest`. |
+| `WEB_IMAGE_REPO`, `IMAGE_TAG` | compose-level | yes for a deployed environment | Web image/tag pulled from GHCR. CI builds the combined release once on `staging`, then promotes the same digest to `main`; use the matching channel per Dokploy Environment and never use `:latest`. |
 | `WEB_MEM_LIMIT` | compose-level | no | Memory cap, default `256m`. |
 
 Remember to add `https://${WEB_DOMAIN}` to the **api**'s `CORS_ORIGINS` —
@@ -235,23 +234,23 @@ service screens for every place the old value was pasted.
 
 `.github/workflows/cd.yml` maps `main` to the GitHub Actions Environment named
 `production` and `staging` to the Environment named `staging`. The existing
-`main` path continues to read the repository-level `PRODUCTION_API_URL`,
-`PRODUCTION_SITE_URL`, and `DOKPLOY_*_DEPLOY_WEBHOOK` values. No production
-configuration migration is required. Add these values only to the new
-`staging` GitHub Environment:
+`main` path continues to use the repository-level `DOKPLOY_*_DEPLOY_WEBHOOK`
+values. Staging builds and publishes the combined release once; a later
+`staging` → `main` promotion copies those immutable GHCR digests to the
+production tags without rebuilding. No production configuration migration is
+required. Add these values to the new `staging` GitHub Environment:
 
-- `DEPLOY_API_URL` — the complete HTTPS API origin baked into the web image.
-- `DEPLOY_SITE_URL` — the complete HTTPS web origin baked into the web image.
 - `DOKPLOY_API_DEPLOY_WEBHOOK`, `DOKPLOY_WORKER_DEPLOY_WEBHOOK`, and
   `DOKPLOY_WEB_DEPLOY_WEBHOOK` — the three matching staging Dokploy Environment
   webhooks. Environment-scoped values override the repository-level values for
   staging only.
 
 Keep `TS_OAUTH_CLIENT_ID` and `TS_AUDIENCE` as repository Actions secrets when
-production and staging share the same Tailscale access. The Dokploy Compose
+ production and staging share the same Tailscale access. The Dokploy Compose
 Environment still needs its own `API_DOMAIN`, `WEB_DOMAIN`, `STACK_NAME`,
 `INSTANCE_NETWORK`, secrets, and `IMAGE_TAG` (`main` for production,
-`staging` for staging).
+`staging` for staging). The web service reads the domains at runtime, so the
+same image digest is valid in both environments.
 
 ### Not using Dokploy? Nothing here changes the fallback path
 

@@ -117,8 +117,9 @@ is the source of truth for each.
   talks to the API over the public internet like any other browser client, so it
   has no reason to be on the private network.
 - **Public:** its **own** Traefik router `${STACK_NAME}-web` on `${WEB_DOMAIN}`,
-  never served behind the API. `NEXT_PUBLIC_API_URL` is baked in at build time,
-  so each domain builds its own image.
+  never served behind the API. The running Next.js server serves
+  `/runtime-config.js` from its environment-specific `API_DOMAIN`/`WEB_DOMAIN`,
+  so staging and production can promote the same image digest.
 - **CORS coupling:** `https://${WEB_DOMAIN}` must be in the API's
   `CORS_ORIGINS` or the browser's credentialed calls are refused.
 

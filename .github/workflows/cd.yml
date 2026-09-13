@@ -59,10 +59,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # API and worker deliberately consume this one image. `main` lets Dokploy
-      # follow the selected environment's channel; the SHA tag is the immutable
-      # rollback.
-      - name: Build and publish API image
+      # The batch is built only after it lands on staging. API and worker
+      # deliberately consume this one image. Main promotes the immutable staged
+      # digest instead of rebuilding it.
+      - name: Build and publish staging API image
+        if: github.ref_name == 'staging'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -77,6 +78,34 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=hackos-api-arm64
           cache-to: type=gha,mode=max,scope=hackos-api-arm64
+
+      - name: Resolve staged API image
+        if: github.ref_name == 'main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          staging_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/staging" --jq '.object.sha')"
+          git fetch --no-tags origin "refs/heads/staging:refs/remotes/origin/staging"
+          if [[ "$(git rev-parse HEAD^{tree})" != "$(git rev-parse origin/staging^{tree})" ]]; then
+            echo "The main commit is not the same source tree as staging; promote staging through a PR." >&2
+            exit 1
+          fi
+          echo "SOURCE_IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER}/hackos-api:sha-${staging_sha}" >> "$GITHUB_ENV"
+
+      - name: Promote staged API image to production tags
+        if: github.ref_name == 'main'
+        env:
+          TARGET_IMAGE: ghcr.io/${{ github.repository_owner }}/hackos-api:main
+          TARGET_SHA_IMAGE: ghcr.io/${{ github.repository_owner }}/hackos-api:sha-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect "$SOURCE_IMAGE"
+          docker buildx imagetools create \
+            --tag "$TARGET_IMAGE" \
+            --tag "$TARGET_SHA_IMAGE" \
+            "$SOURCE_IMAGE"
 
   publish-web:
     name: Publish web image (arm64)
@@ -93,15 +122,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
 
-      - name: Check target environment URLs
-        env:
-          DEPLOY_API_URL: ${{ github.ref_name == 'main' && vars.PRODUCTION_API_URL || vars.DEPLOY_API_URL }}
-          DEPLOY_SITE_URL: ${{ github.ref_name == 'main' && vars.PRODUCTION_SITE_URL || vars.DEPLOY_SITE_URL }}
-        run: |
-          set -euo pipefail
-          test -n "$DEPLOY_API_URL"
-          test -n "$DEPLOY_SITE_URL"
-
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -112,16 +132,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and publish web image
+      - name: Build and publish staging web image
+        if: github.ref_name == 'staging'
         uses: docker/build-push-action@v6
         with:
           context: .
           file: apps/web/Dockerfile
           platforms: linux/arm64
           push: true
-          build-args: |
-            NEXT_PUBLIC_API_URL=${{ github.ref_name == 'main' && vars.PRODUCTION_API_URL || vars.DEPLOY_API_URL }}
-            NEXT_PUBLIC_SITE_URL=${{ github.ref_name == 'main' && vars.PRODUCTION_SITE_URL || vars.DEPLOY_SITE_URL }}
           tags: |
             ghcr.io/${{ github.repository_owner }}/hackos-web:${{ github.ref_name }}
             ghcr.io/${{ github.repository_owner }}/hackos-web:sha-${{ github.sha }}
@@ -130,6 +148,34 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=hackos-web-arm64
           cache-to: type=gha,mode=max,scope=hackos-web-arm64
+
+      - name: Resolve staged web image
+        if: github.ref_name == 'main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          staging_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/staging" --jq '.object.sha')"
+          git fetch --no-tags origin "refs/heads/staging:refs/remotes/origin/staging"
+          if [[ "$(git rev-parse HEAD^{tree})" != "$(git rev-parse origin/staging^{tree})" ]]; then
+            echo "The main commit is not the same source tree as staging; promote staging through a PR." >&2
+            exit 1
+          fi
+          echo "SOURCE_IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER}/hackos-web:sha-${staging_sha}" >> "$GITHUB_ENV"
+
+      - name: Promote staged web image to production tags
+        if: github.ref_name == 'main'
+        env:
+          TARGET_IMAGE: ghcr.io/${{ github.repository_owner }}/hackos-web:main
+          TARGET_SHA_IMAGE: ghcr.io/${{ github.repository_owner }}/hackos-web:sha-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect "$SOURCE_IMAGE"
+          docker buildx imagetools create \
+            --tag "$TARGET_IMAGE" \
+            --tag "$TARGET_SHA_IMAGE" \
+            "$SOURCE_IMAGE"
 
   deploy-dokploy:
     name: Deploy changed services to Dokploy

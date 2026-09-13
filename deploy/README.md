@@ -175,39 +175,47 @@ event doesn't compromise another (see [Multiple instances](#multiple-instances))
 
 ## CI/CD release channels
 
-The CI workflow (`.github/workflows/ci.yml`) keeps draft PR updates cheap: it
-runs change detection and lint only. Marking a PR **Ready for review** starts
-the selective typechecks, tests, and production-image validation; later
-commits to that ready PR run the same full checks.
+Use the protected branches as a promotion pipeline:
 
-The CD workflow (`.github/workflows/cd.yml`) runs only for pushes to protected
-release branches. A merge to `main` publishes the `main` image tags and
-deploys Dokploy's `production` Environment. A merge to `staging` publishes the
-`staging` image tags and deploys Dokploy's `staging` Environment. Both branches
-use the same GHCR repositories and ARM64 build path; every publish also gets a
-`sha-<commit>` tag for rollback.
+`feature PRs → integration → staging → main`
 
-The existing `main` release keeps using the current repository-level
-production variables and webhook secrets, so no production configuration
-migration is required. Create a GitHub Actions Environment named `staging` for
-the new branch:
+Open every PR as a draft. Feature PRs target `integration`; draft commits run
+change detection and lint, while Ready-for-review PRs run the selective
+typechecks and test suites. These individual PRs do not build container images.
+That lets several approved PRs accumulate in one combined tree.
+
+When the batch is ready, open a promotion PR from `integration` to `staging`.
+Its combined tree gets the full CI test matrix. Merging into `staging` runs the
+only container build for that batch: CD publishes the ARM64 API and web images
+with the mutable `staging` tags and immutable `sha-<staging-commit>` tags, then
+deploys Dokploy's `staging` Environment.
+
+After staging validation, open a promotion PR from `staging` to `main`. The
+main CD path promotes the exact staged image digests to the `main` and
+`sha-<main-commit>` tags and deploys Dokploy's existing `production`
+Environment. It does not rebuild the containers. CD listens only to `staging`
+and `main`, never `integration`.
+
+The existing `main` release keeps its current repository-level webhook secrets
+and production Dokploy configuration, so no production migration is required.
+Create a GitHub Actions Environment named `staging` and put the same three
+Dokploy secret names there, pointing to staging:
 
 | Release target | Branch | Variables | Secrets |
 |---|---|---|---|
-| Existing production configuration | `main` | Repository variables `PRODUCTION_API_URL`, `PRODUCTION_SITE_URL` | Repository secrets `DOKPLOY_API_DEPLOY_WEBHOOK`, `DOKPLOY_WORKER_DEPLOY_WEBHOOK`, `DOKPLOY_WEB_DEPLOY_WEBHOOK` |
-| GitHub Environment `staging` | `staging` | `DEPLOY_API_URL`, `DEPLOY_SITE_URL` | The same three `DOKPLOY_*_DEPLOY_WEBHOOK` names, pointing at staging |
+| Existing production configuration | `main` | Existing repository variables/configuration | Repository secrets `DOKPLOY_API_DEPLOY_WEBHOOK`, `DOKPLOY_WORKER_DEPLOY_WEBHOOK`, `DOKPLOY_WEB_DEPLOY_WEBHOOK` |
+| GitHub Environment `staging` | `staging` | No build-time URL variables; domains are read by the web container at runtime | The same three webhook names, pointing at staging |
 
 Keep `TS_OAUTH_CLIENT_ID` and `TS_AUDIENCE` as repository Actions secrets when
-both environments use the same Tailscale access. The workflow uses the same
+both environments use the same Tailscale access. Both releases use the same
 `tag:ci` identity, `danipi` tailnet route, Tailscale network, and
-`dokploy-network` proxy for both releases; only the GitHub Environment's
-Dokploy webhook targets change. Configure each webhook to deploy its matching
-Dokploy Environment and branch.
+`dokploy-network` proxy; only the GitHub Environment's Dokploy webhook targets
+change. Configure each webhook to deploy its matching Dokploy Environment and
+branch.
 
-Protect both `main` and `staging` and require the CI status checks listed in the
-repository's existing branch ruleset. The checked-in workflow cannot create or
-protect a remote branch, so create `staging` from the desired `main` commit and
-apply the same protection policy before using it as a release target.
+Protect `integration`, `staging`, and `main` with the repository rulesets. The
+checked-in workflow cannot create or protect remote branches; create each
+branch and apply the matching ruleset before using it in the promotion flow.
 
 ---
 
@@ -275,10 +283,11 @@ Traefik cert); the compose files already carry the router labels.
 
 ### 3a. Use the published ARM64 images
 
-The CI workflow validates the production Dockerfiles when a PR is ready for
-review. A push to `main` or `staging` runs the separate CD workflow, which
-publishes `linux/arm64` images to GHCR, the architecture of the Raspberry Pi
-host. Add these non-secret values to the production Dokploy **Environment**:
+A merge to `staging` runs the separate CD workflow, which builds and publishes
+`linux/arm64` images to GHCR, the architecture of the Raspberry Pi host. A
+later merge from `staging` to `main` promotes those same image digests without
+rebuilding. Add these non-secret values to the production Dokploy
+**Environment**:
 
 ```dotenv
 IMAGE_REPO=ghcr.io/danicallero/hackos-api
@@ -288,17 +297,16 @@ IMAGE_TAG=main
 
 For staging, use the same image repositories but set `IMAGE_TAG=staging` and
 use the staging domains. `main` and `staging` are moving environment channels;
-every publish also creates a `sha-<commit>` tag. Set `IMAGE_TAG` to one of
-those for a deterministic rollback, then redeploy `api`, `worker`, and/or
-`web` as appropriate. The GitHub Actions Environment variables
-`DEPLOY_API_URL` and `DEPLOY_SITE_URL` must match the staging HTTPS origins;
-the existing `PRODUCTION_API_URL` and `PRODUCTION_SITE_URL` repository
-variables continue to supply the main build. Next.js compiles these values into
-the web image. No `build:` key remains in the production compose files: Dokploy
-must pull rather than compile on the Pi.
+every staging publish also creates a `sha-<staging-commit>` tag, and main adds
+its own immutable release tag when it promotes the digest. Set `IMAGE_TAG` to
+one of those immutable tags for a deterministic rollback, then redeploy `api`,
+`worker`, and/or `web` as appropriate. The web image is environment-neutral:
+the running Next.js server serves `/runtime-config.js` from each environment's
+`API_DOMAIN` and `WEB_DOMAIN`. No `build:` key remains in the production
+compose files: Dokploy must pull rather than compile on the Raspberry Pi.
 
 The CD workflow triggers the three Dokploy deployments only after the matching
-image push succeeds. Store the three generated Compose deploy URLs as
+staging image build or main image promotion succeeds. Store the three generated Compose deploy URLs as
 GitHub **Actions secrets** (never as variables or committed text). Keep the
 existing repository-level secrets for `main`; add the same names to the
 `staging` GitHub Environment with staging URLs:

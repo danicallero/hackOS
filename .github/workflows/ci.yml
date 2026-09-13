@@ -25,8 +25,6 @@ jobs:
       web: ${{ steps.filter.outputs.web }}
       mobile: ${{ steps.filter.outputs.mobile }}
       browser: ${{ steps.filter.outputs.browser }}
-      api_image: ${{ steps.filter.outputs.api_image }}
-      web_image: ${{ steps.filter.outputs.web_image }}
       typecheck: ${{ steps.filter.outputs.typecheck }}
     steps:
       - name: Check out repository
@@ -42,63 +40,6 @@ jobs:
           before_sha: ${{ github.event.before }}
           base_sha: ${{ github.event.pull_request.base.sha }}
           sha: ${{ github.sha }}
-
-  api-image:
-    name: API production image (validation)
-    needs: changes
-    if: >-
-      github.event.pull_request.draft != true &&
-      needs.changes.outputs.api_image == 'true'
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v5
-
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # `pnpm deploy` validates patches more strictly than a normal workspace
-      # install; exercise the exact image path used by Dokploy (H55).
-      - name: Build API production image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: apps/api/Dockerfile
-          platforms: linux/arm64
-          push: false
-          tags: hackos-api:ci
-          cache-from: type=gha,scope=hackos-api-arm64
-          cache-to: type=gha,mode=max,scope=hackos-api-arm64,ignore-error=true
-
-  web-image:
-    name: Web production image (validation)
-    needs: changes
-    if: >-
-      github.event.pull_request.draft != true &&
-      needs.changes.outputs.web_image == 'true'
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v5
-
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # Build the standalone image, not only the test/dev server. These URLs
-      # are placeholders: production values are injected by the CD workflow.
-      - name: Build web production image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: apps/web/Dockerfile
-          platforms: linux/arm64
-          push: false
-          build-args: |
-            NEXT_PUBLIC_API_URL=https://api.example.test
-            NEXT_PUBLIC_SITE_URL=https://web.example.test
-          tags: hackos-web:ci
-          cache-from: type=gha,scope=hackos-web-arm64
-          cache-to: type=gha,mode=max,scope=hackos-web-arm64,ignore-error=true
 
   lint:
     name: lint

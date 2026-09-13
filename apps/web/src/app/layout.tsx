@@ -62,6 +62,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
+        <Script src="/runtime-config.js" strategy="beforeInteractive" />
         <Script src="/locale-bootstrap.js" strategy="beforeInteractive" />
       </head>
       <body className="bg-background text-foreground min-h-full">

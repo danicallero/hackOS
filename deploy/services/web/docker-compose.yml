@@ -14,13 +14,17 @@
 # Add https://${WEB_DOMAIN} to the api's CORS_ORIGINS so credentialed requests
 # from the browser are allowed.
 #
-# NEXT_PUBLIC_API_URL is baked into the client bundle by GitHub Actions. The
-# published image is therefore tied to this environment's domains.
+# The image is environment-neutral. The running server exposes
+# /runtime-config.js from these environment-specific domains, so staging and
+# production can promote the same image digest.
 
 services:
   web:
     image: "${WEB_IMAGE_REPO:-hackos-web}:${IMAGE_TAG:-main}"
     pull_policy: always
+    environment:
+      API_DOMAIN: "${API_DOMAIN}"
+      WEB_DOMAIN: "${WEB_DOMAIN}"
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped

@@ -251,13 +251,16 @@ services:
   # ── web frontend (Next.js, ingress via Traefik on its OWN router) ──────
   # Separate service, separate domain, separate Traefik router
   # (${STACK_NAME}-web). It is NEVER served by or routed with the api; the
-  # browser reaches the api directly at NEXT_PUBLIC_API_URL, so remember to add
-  # https://${WEB_DOMAIN} to the api's CORS_ORIGINS. Edge-only: the web tier
-  # never touches the private datastores.
+  # browser reaches the api directly using the runtime config served by this
+  # container, so remember to add https://${WEB_DOMAIN} to the api's
+  # CORS_ORIGINS. Edge-only: the web tier never touches the private datastores.
   web:
     <<: *hardening
     image: "${WEB_IMAGE_REPO:-hackos-web}:${IMAGE_TAG:-main}"
     pull_policy: always
+    environment:
+      API_DOMAIN: "${API_DOMAIN}"
+      WEB_DOMAIN: "${WEB_DOMAIN}"
     networks:
       edge:
         aliases: ["${STACK_NAME:-hackos-event2026}-web"]

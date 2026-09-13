@@ -211,28 +211,24 @@ API tests use real Postgres and Valkey. The test harness resets and migrates
 `hackos_test`, and the suite runs serially to keep state-dependent integration
 tests deterministic.
 
-Open every pull request as a draft. The CI workflow
-(`.github/workflows/ci.yml`) keeps draft PR updates cheap: they run only change
-detection and lint, so ordinary commits stay cheap.
-When a PR is marked **Ready for review**, and on every later update, the
-selective typechecks, production-image builds, and API, web, mobile, and
-browser test suites run as separate parallel checks. Workspace checks run only
-when their area changes; shared packages, dependency/toolchain changes, and
-workflow changes run all affected gates. Deployment-only edits validate the
-affected production images without running unrelated workspace suites, and
-browser E2E edits run browser smoke independently.
+Open every pull request as a draft. Normal feature PRs target the protected
+`integration` branch. Draft updates run only change detection and lint; marking
+one ready runs the selective typechecks and test suites. Container images are
+not built for these individual PRs, so several approved changes can be merged
+without building several copies of the same release.
 
-A push to `main` or `staging` runs the separate CD workflow
-(`.github/workflows/cd.yml`). `main` publishes the affected ARM64 images to the
-production channel and deploys the production Dokploy Environment; `staging`
-publishes the same images to the staging channel and deploys the staging
-Dokploy Environment. The existing `main` URL variables and repository webhook
-secrets remain valid; staging adds environment-scoped values. CI never
-publishes images or deploys; CD never repeats the test matrix. API and worker
-consume the same published API image, so Dokploy only pulls it and never
-rebuilds it on the Raspberry Pi.
-Protect both `main` and `staging` with the CI checks in branch protection; CD
-assumes only validated changes are merged there.
+When a batch is ready, open a promotion PR from `integration` to protected
+`staging`. Its combined tree gets the full CI test matrix. Merging it to
+`staging` is the only build: CD publishes the ARM64 API and web images once,
+tags them with both `staging` and the immutable staging commit SHA, and deploys
+the staging Dokploy Environment. After staging validation, promote `staging` to
+`main`; the main CD path copies those exact image digests to the production
+tags and deploys the existing production Dokploy Environment without rebuilding.
+
+CD listens only to `staging` and `main`, never `integration`. The existing main
+webhook, production deployment variables, and production Dokploy setup remain
+valid. Protect `integration`, `staging`, and `main`; CD assumes only validated
+promotion merges reach the two release branches.
 The API test job provides fresh Postgres, Valkey and Mailpit service containers
 plus health-checked MinIO, then provisions the test bucket; local API runs
 still use `pnpm infra:up` and the commands above.
