@@ -223,6 +223,7 @@ export function DataTable<T>({
   };
 
   const selectedCount = selectedIds?.size ?? 0;
+  const isEmpty = !error && !loading && rows.length === 0;
 
   function renderEmptyState() {
     return query.trim() || filteredEmpty?.active ? (
@@ -308,162 +309,162 @@ export function DataTable<T>({
         />
       )}
       <div className={cn("overflow-x-auto", renderMobileRow && "hidden md:block")}>
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              {selectable && (
-                <TableHead className="w-10">
-                  <Checkbox
-                    checked={allSelected}
-                    onCheckedChange={toggleAll}
-                    aria-label={t("selectAll")}
-                  />
-                </TableHead>
-              )}
-              {columns.map((col) => (
-                <TableHead
-                  key={col.id}
-                  aria-sort={
-                    sort?.id === col.id
-                      ? sort.dir === "asc"
-                        ? "ascending"
-                        : "descending"
-                      : col.sortValue
-                        ? "none"
-                        : undefined
-                  }
-                  className={cn(alignClass[col.align ?? "left"], col.width, col.headerClassName)}
-                >
-                  {col.sortValue ? (
-                    <button
-                      type="button"
-                      onClick={() => toggleSort(col.id)}
-                      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium transition-colors"
-                      aria-label={t("sortBy", {
-                        column:
-                          col.sortLabel ?? (typeof col.header === "string" ? col.header : col.id),
-                      })}
-                    >
-                      {col.header}
-                      {sort?.id === col.id ? (
-                        sort.dir === "asc" ? (
-                          <ArrowUpIcon className="size-3.5" />
-                        ) : (
-                          <ArrowDownIcon className="size-3.5" />
-                        )
-                      ) : (
-                        <ArrowUpDownIcon className="size-3.5 opacity-50" />
-                      )}
-                    </button>
-                  ) : (
-                    col.header
-                  )}
-                </TableHead>
-              ))}
-              {rowInteractionCol > 0 && (
-                <TableHead className="w-12">
-                  <span className="sr-only">{t("openRow")}</span>
-                </TableHead>
-              )}
-              {rowActions && <TableHead className="w-12" />}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {error ? (
+        {isEmpty ? (
+          <div className="min-w-0">{renderEmptyState()}</div>
+        ) : (
+          <Table>
+            <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={colCount} className="p-4">
-                  <ContextualError message={error.message} onRetry={error.onRetry} />
-                </TableCell>
-              </TableRow>
-            ) : loading ? (
-              Array.from({ length: pageSize ?? 5 }, (_, i) => `skeleton-row-${i}`).map((rowKey) => (
-                <TableRow key={rowKey} className="hover:bg-transparent">
-                  {Array.from({ length: colCount }, (_, j) => `${rowKey}-cell-${j}`).map(
-                    (cellKey) => (
-                      <TableCell key={cellKey}>
-                        <Skeleton className="h-4 w-full max-w-32" />
-                      </TableCell>
-                    ),
-                  )}
-                </TableRow>
-              ))
-            ) : rows.length === 0 ? (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={colCount} className="p-0">
-                  {renderEmptyState()}
-                </TableCell>
-              </TableRow>
-            ) : (
-              rows.map((row) => {
-                const rowId = getRowId(row);
-                const checked = selectable && selectedIds?.has(rowId);
-                const rowHref = getRowHref?.(row);
-                return (
-                  <TableRow
-                    key={rowId}
-                    className={rowInteractionCol > 0 ? "cursor-pointer" : undefined}
-                    onClick={
-                      rowInteractionCol > 0
-                        ? () => (rowHref ? router.push(rowHref) : onRowClick?.(row))
-                        : undefined
+                {selectable && (
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={allSelected}
+                      onCheckedChange={toggleAll}
+                      aria-label={t("selectAll")}
+                    />
+                  </TableHead>
+                )}
+                {columns.map((col) => (
+                  <TableHead
+                    key={col.id}
+                    aria-sort={
+                      sort?.id === col.id
+                        ? sort.dir === "asc"
+                          ? "ascending"
+                          : "descending"
+                        : col.sortValue
+                          ? "none"
+                          : undefined
                     }
+                    className={cn(alignClass[col.align ?? "left"], col.width, col.headerClassName)}
                   >
-                    {selectable && (
-                      <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={() => toggleOne(rowId)}
-                          aria-label={t("selectRow")}
-                        />
-                      </TableCell>
-                    )}
-                    {columns.map((col) => (
-                      <TableCell
-                        key={col.id}
-                        className={cn(alignClass[col.align ?? "left"], col.className)}
+                    {col.sortValue ? (
+                      <button
+                        type="button"
+                        onClick={() => toggleSort(col.id)}
+                        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium transition-colors"
+                        aria-label={t("sortBy", {
+                          column:
+                            col.sortLabel ?? (typeof col.header === "string" ? col.header : col.id),
+                        })}
                       >
-                        {col.cell(row)}
-                      </TableCell>
-                    ))}
-                    {rowInteractionCol > 0 && (
-                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                        {getRowHref ? (
-                          <IconButton
-                            variant="ghost"
-                            size="icon-lg"
-                            className="md:size-[var(--control-height-compact)]"
-                            asChild
-                            label={getRowLabel?.(row) ?? rowId}
-                          >
-                            <Link href={getRowHref(row)} aria-label={getRowLabel?.(row) ?? rowId}>
-                              <ChevronRightIcon className="size-4" aria-hidden="true" />
-                            </Link>
-                          </IconButton>
+                        {col.header}
+                        {sort?.id === col.id ? (
+                          sort.dir === "asc" ? (
+                            <ArrowUpIcon className="size-3.5" />
+                          ) : (
+                            <ArrowDownIcon className="size-3.5" />
+                          )
                         ) : (
-                          <IconButton
-                            type="button"
-                            variant="ghost"
-                            size="icon-lg"
-                            className="md:size-[var(--control-height-compact)]"
-                            onClick={() => onRowClick?.(row)}
-                            label={getRowLabel?.(row) ?? rowId}
-                          >
-                            <ChevronRightIcon className="size-4" aria-hidden="true" />
-                          </IconButton>
+                          <ArrowUpDownIcon className="size-3.5 opacity-50" />
                         )}
-                      </TableCell>
+                      </button>
+                    ) : (
+                      col.header
                     )}
-                    {rowActions && (
-                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                        {rowActions(row)}
-                      </TableCell>
-                    )}
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
+                  </TableHead>
+                ))}
+                {rowInteractionCol > 0 && (
+                  <TableHead className="w-12">
+                    <span className="sr-only">{t("openRow")}</span>
+                  </TableHead>
+                )}
+                {rowActions && <TableHead className="w-12" />}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {error ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={colCount} className="p-4">
+                    <ContextualError message={error.message} onRetry={error.onRetry} />
+                  </TableCell>
+                </TableRow>
+              ) : loading ? (
+                Array.from({ length: pageSize ?? 5 }, (_, i) => `skeleton-row-${i}`).map(
+                  (rowKey) => (
+                    <TableRow key={rowKey} className="hover:bg-transparent">
+                      {Array.from({ length: colCount }, (_, j) => `${rowKey}-cell-${j}`).map(
+                        (cellKey) => (
+                          <TableCell key={cellKey}>
+                            <Skeleton className="h-4 w-full max-w-32" />
+                          </TableCell>
+                        ),
+                      )}
+                    </TableRow>
+                  ),
+                )
+              ) : (
+                rows.map((row) => {
+                  const rowId = getRowId(row);
+                  const checked = selectable && selectedIds?.has(rowId);
+                  const rowHref = getRowHref?.(row);
+                  return (
+                    <TableRow
+                      key={rowId}
+                      className={rowInteractionCol > 0 ? "cursor-pointer" : undefined}
+                      onClick={
+                        rowInteractionCol > 0
+                          ? () => (rowHref ? router.push(rowHref) : onRowClick?.(row))
+                          : undefined
+                      }
+                    >
+                      {selectable && (
+                        <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={() => toggleOne(rowId)}
+                            aria-label={t("selectRow")}
+                          />
+                        </TableCell>
+                      )}
+                      {columns.map((col) => (
+                        <TableCell
+                          key={col.id}
+                          className={cn(alignClass[col.align ?? "left"], col.className)}
+                        >
+                          {col.cell(row)}
+                        </TableCell>
+                      ))}
+                      {rowInteractionCol > 0 && (
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                          {getRowHref ? (
+                            <IconButton
+                              variant="ghost"
+                              size="icon-lg"
+                              className="md:size-[var(--control-height-compact)]"
+                              asChild
+                              label={getRowLabel?.(row) ?? rowId}
+                            >
+                              <Link href={getRowHref(row)} aria-label={getRowLabel?.(row) ?? rowId}>
+                                <ChevronRightIcon className="size-4" aria-hidden="true" />
+                              </Link>
+                            </IconButton>
+                          ) : (
+                            <IconButton
+                              type="button"
+                              variant="ghost"
+                              size="icon-lg"
+                              className="md:size-[var(--control-height-compact)]"
+                              onClick={() => onRowClick?.(row)}
+                              label={getRowLabel?.(row) ?? rowId}
+                            >
+                              <ChevronRightIcon className="size-4" aria-hidden="true" />
+                            </IconButton>
+                          )}
+                        </TableCell>
+                      )}
+                      {rowActions && (
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                          {rowActions(row)}
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        )}
       </div>
       {renderMobileRow && (
         <div className="md:hidden">

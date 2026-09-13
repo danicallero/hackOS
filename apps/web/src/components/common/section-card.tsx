@@ -64,19 +64,21 @@ export function SectionCard({
             headerClassName,
           )}
         >
-          <div className="flex items-start gap-3">
+          <div className="flex min-w-0 items-start gap-3">
             {leading ?? (Icon && <Icon className="text-muted-foreground mt-0.5 size-5 shrink-0" />)}
-            <div className="space-y-1">
+            <div className="min-w-0 space-y-1">
               {title !== undefined && (
                 <div className="flex flex-wrap items-center gap-(--space-related)">
-                  <h2 id={titleId} className="type-section-title text-balance">
+                  <h2 id={titleId} className="type-section-title wrap-break-word text-balance">
                     {title}
                   </h2>
                   {state && <div className="shrink-0">{state}</div>}
                 </div>
               )}
               {description && (
-                <p className="text-muted-foreground text-pretty text-sm">{description}</p>
+                <p className="text-muted-foreground wrap-break-word text-pretty text-sm">
+                  {description}
+                </p>
               )}
             </div>
           </div>
