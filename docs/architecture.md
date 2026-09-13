@@ -292,7 +292,8 @@ notifications remain immediate. Their scheduling and fan-out outcomes are expose
 `hackos_queue_participant_invalidations_total{outcome="queued|coalesced|dropped|degraded"}`.
 For browser-only refetch storms the optional
 `POST /api/telemetry/refetch-storm` contract accepts only bounded enum fields
-(`surface`, `topic`, `trigger`) plus `refetches` (1–1000) and
+(`surface`, `topic`, `trigger` — `sse`, `visibility`, `poll`, `retry`, or
+`manual`) plus `refetches` (1–1000) and
 `windowSeconds` (1–300). It never accepts identities, URLs, user agents or free text, keeping
 `hackos_browser_refetch_storms_total` and related metrics low-cardinality.
 

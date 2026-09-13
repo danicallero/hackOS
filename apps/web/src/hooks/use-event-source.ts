@@ -23,6 +23,10 @@ import { subscribeToSse } from "@/lib/sse-broker";
 
 export type SseEnvelope<T = unknown> = { type: string; id: string; at: string; data: T };
 
+/** Keep live views usable when a browser suspends the tab or loses SSE. */
+const FALLBACK_POLL_MS = 15_000;
+const BACKGROUND_REVALIDATION_MS = 60_000;
+
 interface UseEventSourceOptions {
   /** Event names to listen for; omit to catch every message via `onmessage`. */
   events?: readonly string[];
@@ -119,9 +123,11 @@ export function useLiveQuery<T>(
   const requestRef = useRef<{
     cancelled: boolean;
     queuedTrigger: RealtimeRefetchTrigger | null;
+    trigger: RealtimeRefetchTrigger;
   } | null>(null);
   const disposedRef = useRef(false);
   const refetchRef = useRef<(trigger?: RealtimeRefetchTrigger) => void>(() => undefined);
+  const dataRef = useRef<T | null>(null);
 
   const refetch = useCallback(
     (trigger: RealtimeRefetchTrigger = "manual") => {
@@ -133,7 +139,11 @@ export function useLiveQuery<T>(
         return;
       }
 
-      const request = { cancelled: false, queuedTrigger: null as RealtimeRefetchTrigger | null };
+      const request = {
+        cancelled: false,
+        queuedTrigger: null as RealtimeRefetchTrigger | null,
+        trigger,
+      };
       requestRef.current = request;
       observeRefetch(telemetryScope, trigger);
 
@@ -141,11 +151,25 @@ export function useLiveQuery<T>(
         .current()
         .then((d) => {
           if (!request.cancelled) {
+            dataRef.current = d;
             setData(d);
             setError(null);
           }
         })
-        .catch((e) => !request.cancelled && setError(e))
+        .catch((e) => {
+          if (request.cancelled) return;
+          // An already-rendered read model is better than replacing a live
+          // screen with a transient error while SSE is recovering. Manual
+          // retries still surface their failure so the user has a clear way
+          // to act (H38, H41-H42).
+          if (
+            dataRef.current === null ||
+            request.trigger === "manual" ||
+            request.trigger === "retry"
+          ) {
+            setError(e);
+          }
+        })
         .finally(() => {
           if (!request.cancelled) setLoading(false);
           if (requestRef.current !== request) return;
@@ -193,6 +217,48 @@ export function useLiveQuery<T>(
   );
 
   const { connected } = useEventSource(streamPath, { events: eventNames, onEvent, enabled });
+
+  // Browser backgrounding can suspend EventSource without delivering an
+  // event. Revalidate once after a meaningful hidden interval, even if the
+  // browser still reports the stream as open (H38, H41-H42).
+  const hiddenAtRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!enabled || typeof document === "undefined") return;
+    if (document.visibilityState === "hidden" && hiddenAtRef.current === null) {
+      hiddenAtRef.current = Date.now();
+    }
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAtRef.current ??= Date.now();
+        return;
+      }
+      if (document.visibilityState !== "visible") return;
+
+      const hiddenAt = hiddenAtRef.current;
+      hiddenAtRef.current = null;
+      if (
+        hiddenAt !== null &&
+        (Date.now() - hiddenAt >= BACKGROUND_REVALIDATION_MS || !connected)
+      ) {
+        refetch("visibility");
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [connected, enabled, refetch]);
+
+  // Once the stream reports an error, use a bounded read-model poll until it
+  // recovers. The timer is visible-tab-only, so a background tab does not
+  // create a request burst when the OS throttles its timers (H38, H41-H42).
+  useEffect(() => {
+    if (!enabled || connected || typeof document === "undefined") return;
+    const poll = window.setInterval(() => {
+      if (document.visibilityState === "visible") refetch("poll");
+    }, FALLBACK_POLL_MS);
+    return () => window.clearInterval(poll);
+  }, [connected, enabled, refetch]);
 
   useEffect(
     () => () => {
