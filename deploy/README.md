@@ -177,27 +177,26 @@ event doesn't compromise another (see [Multiple instances](#multiple-instances))
 
 Use the protected branches as a promotion pipeline:
 
-`feature PRs → implementation/integration → optional staging → main`
+`feature PRs → integration → optional staging → main`
 
-Open every PR as a draft. Feature PRs may target `implementation`,
-`integration`, or `staging`; they must never target `main` directly. Draft
-commits run change detection and lint, while Ready-for-review PRs run the
-selective typechecks and test suites. These individual PRs do not build
-container images.
+Open every PR as a draft. Feature PRs may target `integration` or `staging`;
+they must never target `main` directly. Draft commits run change detection and
+lint, while Ready-for-review PRs run the selective typechecks and test suites.
+These individual PRs do not build container images.
 
-The release branches provide three supported routes:
+The three protected branches provide these supported routes:
 
 | Branch | CD behavior |
 |---|---|
-| `implementation` or `integration` | Build and publish ARM64 API/web images with an immutable `sha-<commit>` tag; no Dokploy deployment is required. |
-| `staging` | Build and publish the images, then deploy the optional staging Dokploy Environment for verification. A feature branch may merge here directly, or a batch may arrive from `implementation`/`integration`. |
-| `main` | Match its tree against `staging`, `implementation`, or `integration`, promote the matching immutable image digest to the production tags, and deploy production without rebuilding. |
+| `integration` | Aggregation only. Merge feature PRs here without building containers; promote the batch once to `staging` or `main` when it is ready. |
+| `staging` | A direct feature→staging PR or an integration→staging promotion builds and publishes the images, then deploys the optional staging Dokploy Environment for verification. |
+| `main` | An integration→main promotion builds and publishes the production images once. A staging→main promotion matches the staging tree and promotes its immutable image digest without rebuilding. Both paths deploy production. |
 
-Use the fast `implementation`/`integration` → `main` route when there is no
-time or need for a staging deployment. Use `staging` → `main` when the release
-needs an environment check first. In both cases CI blocks a direct main PR and
-the main tree check prevents a feature branch from reaching production without
-first entering a protected release branch.
+Use the fast `integration` → `main` route when there is no time or need for a
+staging deployment. Use `staging` → `main` when the release needs an
+environment check first. In both cases CI blocks a direct main PR and the main
+tree check prevents a feature branch from reaching production without first
+entering a protected release branch.
 
 The existing `main` release keeps its current repository-level webhook secrets
 and production Dokploy configuration, so no production migration is required.
@@ -215,9 +214,9 @@ network, and `dokploy-network` proxy. If staging is enabled, its three
 webhooks use the same tailnet identity but point to the separate staging
 Dokploy services.
 
-Protect `implementation`, `integration`, `staging`, and `main` with the
-repository rulesets. The checked-in workflow cannot create or protect remote
-branches; create each branch and apply the matching ruleset before using it in
+Protect exactly `integration`, `staging`, and `main` with the repository
+ruleset. The checked-in workflow cannot create or protect remote branches;
+create these three branches and apply the matching ruleset before using them in
 the promotion flow.
 
 ---
@@ -288,11 +287,13 @@ Traefik cert); the compose files already carry the router labels.
 
 ### 3a. Use the published ARM64 images
 
-Merging `implementation`, `integration`, or `staging` runs the CD workflow,
-which builds and publishes `linux/arm64` images to GHCR, the architecture of
-the Raspberry Pi host. A later merge from that release branch to `main` runs CD
-again and promotes the same image digest without rebuilding. Add these
-non-secret values to the production Dokploy **Environment**:
+Merging into `staging` runs the CD workflow, which builds and publishes
+`linux/arm64` images to GHCR, the architecture of the Raspberry Pi host. A
+later `staging` → `main` promotion runs CD again and promotes the same image
+digest without rebuilding. Merging into `integration` does not run CD. A fast
+`integration` → `main` promotion runs CD on `main`, where the production images
+are built and published once. Add these non-secret values to the production
+Dokploy **Environment**:
 
 ```dotenv
 IMAGE_REPO=ghcr.io/danicallero/hackos-api
@@ -301,18 +302,19 @@ IMAGE_TAG=main
 ```
 
 If staging is enabled, use the same image repositories but set
-`IMAGE_TAG=staging` and use the staging domains. `implementation`, `integration`,
-and `staging` are moving release channels; every release publish also creates a
-`sha-<release-commit>` tag, and main adds its own immutable release tag when it
-promotes the digest. Set `IMAGE_TAG` to one of those immutable tags for a
-deterministic rollback, then redeploy `api`, `worker`, and/or `web` as
-appropriate. The web image is environment-neutral:
+`IMAGE_TAG=staging` and use the staging domains. `staging` is a moving
+verification channel; every staging publish creates a `sha-<release-commit>`
+tag, and main adds its own immutable release tag when it promotes that digest.
+The direct integration→main path creates the main immutable tag during its
+build. Set `IMAGE_TAG` to one of those immutable tags for a deterministic
+rollback, then redeploy `api`, `worker`, and/or `web` as appropriate. The web
+image is environment-neutral:
 the running Next.js server serves `/runtime-config.js` from each environment's
 `API_DOMAIN` and `WEB_DOMAIN`. No `build:` key remains in the production
 compose files: Dokploy must pull rather than compile on the Raspberry Pi.
 
 The CD workflow triggers the three Dokploy deployments only for a configured
-`staging` build or after the `main` image promotion succeeds. Store the three
+`staging` build or after the `main` image build/promotion succeeds. Store the three
 generated Compose deploy URLs as GitHub **Actions secrets** (never as variables
 or committed text). Keep the existing repository-level secrets for `main`; if
 staging is enabled, add the same names to the `staging` GitHub Environment with
@@ -337,10 +339,10 @@ workload-identity flow; no Dokploy endpoint is exposed publicly.
 The API publish calls the API and worker endpoints because both run the same
 image; the web publish calls only the web endpoint. Dokploy then pulls the
 published deployment channel (`main`, or `staging` when that optional route is
-enabled) from GHCR and recreates the service. `implementation` and
-`integration` are build-only channels. Do not also configure a source-push
-webhook for these same services, or every release-branch push will deploy
-twice.
+enabled) from GHCR and recreates the service. `integration` is intentionally
+build-free, so it has no deployment channel. Do not also configure a
+source-push webhook for these same services, or every `staging`/`main` release
+push will deploy twice.
 
 Not using Dokploy? Skip the `dokploy.env.example` files — they're Dokploy's
 own template syntax, resolved before Docker ever sees it, and never appear

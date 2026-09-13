@@ -19,25 +19,29 @@ concurrency:
 jobs:
   release-source:
     name: release source
-    if: github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
     steps:
       - name: Require a protected release branch
         env:
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
           HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
           HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
+          if [[ "$BASE_BRANCH" != "main" ]]; then
+            echo "Release-source validation applies only to promotions into main."
+            exit 0
+          fi
           case "$HEAD_BRANCH" in
-            implementation|integration|staging)
+            integration|staging)
               if [[ "$HEAD_REPOSITORY" != "$REPOSITORY" ]]; then
                 echo "Main promotions must come from a release branch in $REPOSITORY." >&2
                 exit 1
               fi
               ;;
             *)
-              echo "Main promotions must come from implementation, integration, or staging; got $HEAD_BRANCH." >&2
+              echo "Main promotions must come from integration or staging; got $HEAD_BRANCH." >&2
               exit 1
               ;;
           esac

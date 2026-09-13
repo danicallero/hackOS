@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-      - implementation
-      - integration
       - staging
 
 permissions:
@@ -36,10 +34,65 @@ jobs:
           before_sha: ${{ github.event.before }}
           sha: ${{ github.sha }}
 
+  release-source:
+    name: resolve release source
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.resolve.outputs.mode }}
+      source_branch: ${{ steps.resolve.outputs.source_branch }}
+      source_sha: ${{ steps.resolve.outputs.source_sha }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Resolve build or promotion path
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$GITHUB_REF_NAME" == "staging" ]]; then
+            echo "mode=build" >> "$GITHUB_OUTPUT"
+            echo "source_branch=staging" >> "$GITHUB_OUTPUT"
+            echo "source_sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          staging_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/staging" --jq '.object.sha')"
+          integration_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/integration" --jq '.object.sha')"
+          git fetch --no-tags origin \
+            "refs/heads/staging:refs/remotes/origin/staging" \
+            "refs/heads/integration:refs/remotes/origin/integration"
+
+          if [[ "$(git rev-parse HEAD^{tree})" == "$(git rev-parse origin/staging^{tree})" ]]; then
+            echo "mode=promote" >> "$GITHUB_OUTPUT"
+            echo "source_branch=staging" >> "$GITHUB_OUTPUT"
+            echo "source_sha=$staging_sha" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$(git rev-parse HEAD^{tree})" == "$(git rev-parse origin/integration^{tree})" ]]; then
+            echo "mode=build" >> "$GITHUB_OUTPUT"
+            echo "source_branch=integration" >> "$GITHUB_OUTPUT"
+            echo "source_sha=$integration_sha" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "The main commit must match the tree of staging or integration; promote main through one of those branches." >&2
+          exit 1
+
   publish-api:
     name: Publish API image (arm64)
-    needs: changes
-    if: needs.changes.outputs.api_image == 'true'
+    needs: [changes, release-source]
+    if: >-
+      needs.changes.outputs.api_image == 'true' &&
+      needs.release-source.result == 'success'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     permissions:
@@ -59,11 +112,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # A release branch build is the artifact source for a later promotion.
-      # API and worker deliberately consume this one image. Main promotes the
-      # matching immutable digest instead of rebuilding it.
-      - name: Build and publish release API image
-        if: github.ref_name != 'main'
+      # Staging builds for verification. Main builds only for the fast
+      # integration -> main path; a staging -> main promotion reuses the
+      # immutable staging digest instead.
+      - name: Build and publish API release image
+        if: github.ref_name == 'staging' || needs.release-source.outputs.mode == 'build'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -79,40 +132,21 @@ jobs:
           cache-from: type=gha,scope=hackos-api-arm64
           cache-to: type=gha,mode=max,scope=hackos-api-arm64
 
-      - name: Resolve release API image
-        if: github.ref_name == 'main'
+      - name: Resolve staging API image
+        if: github.ref_name == 'main' && needs.release-source.outputs.mode == 'promote'
         env:
-          GH_TOKEN: ${{ github.token }}
+          SOURCE_BRANCH: ${{ needs.release-source.outputs.source_branch }}
+          SOURCE_SHA: ${{ needs.release-source.outputs.source_sha }}
         shell: bash
         run: |
           set -euo pipefail
-          source_branch=""
-          source_sha=""
-          for candidate in staging implementation integration; do
-            if ! candidate_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${candidate}" --jq '.object.sha')"; then
-              continue
-            fi
-            git fetch --no-tags origin "refs/heads/${candidate}:refs/remotes/origin/${candidate}"
-            if [[ "$(git rev-parse HEAD^{tree})" == "$(git rev-parse "origin/${candidate}^{tree}")" ]]; then
-              candidate_image="ghcr.io/${GITHUB_REPOSITORY_OWNER}/hackos-api:sha-${candidate_sha}"
-              if ! docker buildx imagetools inspect "$candidate_image" >/dev/null 2>&1; then
-                echo "The $candidate tree matches, but $candidate_image is not published; checking the next release branch." >&2
-                continue
-              fi
-              source_branch="$candidate"
-              source_sha="$candidate_sha"
-              break
-            fi
-          done
-          if [[ -z "$source_branch" ]]; then
-            echo "The main commit must match the tree of staging, implementation, or integration; promote main through one of those branches." >&2
-            exit 1
-          fi
-          echo "Promoting the $source_branch release image ($source_sha)."
-          echo "SOURCE_IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER}/hackos-api:sha-${source_sha}" >> "$GITHUB_ENV"
+          source_image="ghcr.io/${GITHUB_REPOSITORY_OWNER}/hackos-api:sha-${SOURCE_SHA}"
+          docker buildx imagetools inspect "$source_image"
+          echo "Promoting the $SOURCE_BRANCH release image ($SOURCE_SHA)."
+          echo "SOURCE_IMAGE=$source_image" >> "$GITHUB_ENV"
 
-      - name: Promote release API image to production tags
-        if: github.ref_name == 'main'
+      - name: Promote staging API image to production tags
+        if: github.ref_name == 'main' && needs.release-source.outputs.mode == 'promote'
         env:
           TARGET_IMAGE: ghcr.io/${{ github.repository_owner }}/hackos-api:main
           TARGET_SHA_IMAGE: ghcr.io/${{ github.repository_owner }}/hackos-api:sha-${{ github.sha }}
@@ -126,8 +160,10 @@ jobs:
 
   publish-web:
     name: Publish web image (arm64)
-    needs: changes
-    if: needs.changes.outputs.web_image == 'true'
+    needs: [changes, release-source]
+    if: >-
+      needs.changes.outputs.web_image == 'true' &&
+      needs.release-source.result == 'success'
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     permissions:
@@ -147,8 +183,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and publish release web image
-        if: github.ref_name != 'main'
+      - name: Build and publish web release image
+        if: github.ref_name == 'staging' || needs.release-source.outputs.mode == 'build'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -164,40 +200,21 @@ jobs:
           cache-from: type=gha,scope=hackos-web-arm64
           cache-to: type=gha,mode=max,scope=hackos-web-arm64
 
-      - name: Resolve release web image
-        if: github.ref_name == 'main'
+      - name: Resolve staging web image
+        if: github.ref_name == 'main' && needs.release-source.outputs.mode == 'promote'
         env:
-          GH_TOKEN: ${{ github.token }}
+          SOURCE_BRANCH: ${{ needs.release-source.outputs.source_branch }}
+          SOURCE_SHA: ${{ needs.release-source.outputs.source_sha }}
         shell: bash
         run: |
           set -euo pipefail
-          source_branch=""
-          source_sha=""
-          for candidate in staging implementation integration; do
-            if ! candidate_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${candidate}" --jq '.object.sha')"; then
-              continue
-            fi
-            git fetch --no-tags origin "refs/heads/${candidate}:refs/remotes/origin/${candidate}"
-            if [[ "$(git rev-parse HEAD^{tree})" == "$(git rev-parse "origin/${candidate}^{tree}")" ]]; then
-              candidate_image="ghcr.io/${GITHUB_REPOSITORY_OWNER}/hackos-web:sha-${candidate_sha}"
-              if ! docker buildx imagetools inspect "$candidate_image" >/dev/null 2>&1; then
-                echo "The $candidate tree matches, but $candidate_image is not published; checking the next release branch." >&2
-                continue
-              fi
-              source_branch="$candidate"
-              source_sha="$candidate_sha"
-              break
-            fi
-          done
-          if [[ -z "$source_branch" ]]; then
-            echo "The main commit must match the tree of staging, implementation, or integration; promote main through one of those branches." >&2
-            exit 1
-          fi
-          echo "Promoting the $source_branch release image ($source_sha)."
-          echo "SOURCE_IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER}/hackos-web:sha-${source_sha}" >> "$GITHUB_ENV"
+          source_image="ghcr.io/${GITHUB_REPOSITORY_OWNER}/hackos-web:sha-${SOURCE_SHA}"
+          docker buildx imagetools inspect "$source_image"
+          echo "Promoting the $SOURCE_BRANCH release image ($SOURCE_SHA)."
+          echo "SOURCE_IMAGE=$source_image" >> "$GITHUB_ENV"
 
-      - name: Promote release web image to production tags
-        if: github.ref_name == 'main'
+      - name: Promote staging web image to production tags
+        if: github.ref_name == 'main' && needs.release-source.outputs.mode == 'promote'
         env:
           TARGET_IMAGE: ghcr.io/${{ github.repository_owner }}/hackos-web:main
           TARGET_SHA_IMAGE: ghcr.io/${{ github.repository_owner }}/hackos-web:sha-${{ github.sha }}
@@ -211,10 +228,11 @@ jobs:
 
   deploy-dokploy:
     name: Deploy changed services to Dokploy
-    needs: [publish-api, publish-web]
+    needs: [publish-api, publish-web, release-source]
     if: >-
       always() &&
       (github.ref_name == 'staging' || github.ref_name == 'main') &&
+      needs.release-source.result == 'success' &&
       (needs.publish-api.result == 'success' || needs.publish-web.result == 'success')
     environment:
       name: ${{ github.ref_name == 'main' && 'production' || 'staging' }}

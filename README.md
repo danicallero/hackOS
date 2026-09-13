@@ -212,26 +212,25 @@ API tests use real Postgres and Valkey. The test harness resets and migrates
 tests deterministic.
 
 Open every pull request as a draft. Feature PRs may target the protected
-`implementation`, `integration`, or `staging` branch, but never `main`.
-Draft updates run only change detection and lint; marking one ready runs the
-selective typechecks and test suites. Container images are not built for these
-individual PRs.
+`integration` or `staging` branch, but never `main`. Draft updates run only
+change detection and lint; marking one ready runs the selective typechecks and
+test suites. Container images are not built for these individual PRs.
 
 The release paths are:
 
 | Branch | CD behavior |
 | --- | --- |
-| `implementation` or `integration` | Build and publish ARM64 API/web images, with an immutable `sha-<commit>` tag; no Dokploy deployment is required. |
-| `staging` | Build and publish the images, then deploy the optional staging Dokploy Environment for verification. |
-| `main` | Accept only a tree already present on `staging`, `implementation`, or `integration`; promote that exact image digest to production tags and deploy production without rebuilding. |
+| `integration` | Aggregation only. Merge feature PRs here without building containers; promote the batch once to `staging` or `main` when it is ready. |
+| `staging` | A direct feature→staging PR or an integration→staging promotion builds and publishes the images, then deploys the optional staging Dokploy Environment for verification. |
+| `main` | An integration→main promotion builds and publishes the production images once. A staging→main promotion reuses the matching immutable staging digest; both paths deploy production. |
 
-This supports both a fast `implementation`/`integration` → `main` promotion
-and a verified path through `staging`. A feature branch can also go directly
-to `staging`; the merge to `staging` is what builds the release artifact. The
-existing main webhook, production deployment variables, and production
-Dokploy setup remain valid. Protect `implementation`, `integration`,
-`staging`, and `main`; CI blocks direct main PRs and CD rejects a main commit
-that did not pass through one of the three release branches.
+This supports both a fast `integration` → `main` promotion and a verified
+path through `staging`. A feature branch can also go directly to `staging`; the
+merge to `staging` is what builds the release artifact. The existing main
+webhook, production deployment variables, and production Dokploy setup remain
+valid. Protect exactly `integration`, `staging`, and `main`; CI blocks direct
+main PRs and CD rejects a main commit that did not come from one of the two
+release branches.
 The API test job provides fresh Postgres, Valkey and Mailpit service containers
 plus health-checked MinIO, then provisions the test bucket; local API runs
 still use `pnpm infra:up` and the commands above.
