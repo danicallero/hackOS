@@ -38,7 +38,15 @@ import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
 
 export function PeopleDirectoryScreen() {
-  const { activityId } = useLocalSearchParams<{ activityId?: string }>();
+  const { activityId, autoSearch } = useLocalSearchParams<{
+    activityId?: string;
+    /** Set by the scanner's "search participants" entry point (H22-H26) so the
+     *  legacy (non-Liquid-Glass) header opens straight into search with the
+     *  keyboard up, instead of landing on the plain title + a search icon the
+     *  operator has to tap first. iOS's native `headerSearchBarOptions` bar
+     *  below isn't driven by `searchOpen`, so this has no effect there. */
+    autoSearch?: string;
+  }>();
   const router = useRouter();
   const pathname = usePathname();
   const navigation = useNavigation();
@@ -46,7 +54,7 @@ export function PeopleDirectoryScreen() {
   const insets = useSafeAreaInsets();
   const sync = useScannerSync();
   const [query, setQuery] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(autoSearch === "1");
   const [roleFilter, setRoleFilter] = useState<"all" | string>("all");
   const [people, setPeople] = useState<ScannerPerson[]>([]);
   const [loading, setLoading] = useState(true);

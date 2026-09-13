@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { type ReactNode, useEffect, useState } from "react";
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, { type SharedValue, useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -504,6 +504,12 @@ function SwipeableQueueRow({
         <DeleteRevealAction progress={progress} onDelete={onDelete} />
       )}
       rightThreshold={40}
+      // Default RNGH activation threshold is 10px — on Android that's easy
+      // to trip from the horizontal drift of a vertical scroll through this
+      // modal's plain ScrollView (no scroll/pan simultaneity wiring here),
+      // which partially opens the row and leaves its red delete background
+      // showing behind the content. iOS doesn't need the wider threshold.
+      dragOffsetFromRight={Platform.OS === "android" ? -32 : undefined}
     >
       {children}
     </Swipeable>
