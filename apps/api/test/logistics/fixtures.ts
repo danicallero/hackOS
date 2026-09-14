@@ -67,9 +67,17 @@ export async function createBadgePass(
 ): Promise<number> {
   const googleObjectId = platform === "google" ? `test-issuer.badge-${crypto.randomUUID()}` : null;
   const { rows } = await pool.query(
-    `INSERT INTO wallet_passes (user_id, purpose, platform, serial_number, authentication_token, google_object_id)
-     VALUES ($1, 'badge', $2, $3, $4, $5) RETURNING id`,
-    [userId, platform, `sn-${crypto.randomUUID()}`, `at-${crypto.randomUUID()}`, googleObjectId],
+    `INSERT INTO wallet_passes
+       (user_id, purpose, platform, serial_number, authentication_token, google_object_id, google_object_type)
+     VALUES ($1, 'badge', $2, $3, $4, $5, $6) RETURNING id`,
+    [
+      userId,
+      platform,
+      `sn-${crypto.randomUUID()}`,
+      `at-${crypto.randomUUID()}`,
+      googleObjectId,
+      platform === "google" ? "generic" : null,
+    ],
   );
   return rows[0].id;
 }
