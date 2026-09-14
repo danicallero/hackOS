@@ -21,7 +21,7 @@ export type RealtimeTopic =
   | "public-content"
   | "content";
 
-export type RealtimeRefetchTrigger = "sse" | "visibility" | "retry" | "manual";
+export type RealtimeRefetchTrigger = "sse" | "visibility" | "poll" | "retry" | "manual";
 
 export interface RealtimeTelemetryScope {
   surface: RealtimeSurface;

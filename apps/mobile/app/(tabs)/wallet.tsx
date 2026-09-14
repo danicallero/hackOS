@@ -89,7 +89,9 @@ export default function WalletScreen() {
     error,
     staleSince,
     load,
-  } = useCachedApi(me ? walletCacheKey(me.id) : "user:unknown:wallet", fetchTicket);
+  } = useCachedApi(me ? walletCacheKey(me.id) : "user:unknown:wallet", fetchTicket, {
+    pollMs: 30_000,
+  });
   const [refreshing, setRefreshing] = useState(false);
 
   async function onRefresh() {
