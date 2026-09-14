@@ -16,7 +16,6 @@ import {
   XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
@@ -39,7 +38,7 @@ import {
 import { Surface } from "@/components/ui/surface";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { api } from "@/lib/api";
-import { useLocale } from "@/lib/i18n";
+import { type Translate, useLocale } from "@/lib/i18n";
 import { workspaceAccess } from "@/lib/judging-workspace";
 import {
   type ChallengeProgress,
@@ -60,12 +59,32 @@ import {
   searchTeams,
 } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import type { Challenge } from "../challenges/shared";
 
-import { challengeName, errorMessage, exportHref } from "./helpers";
+import { challengeName, errorMessage, exportHref, queueErrorToastContent } from "./helpers";
 import { PresentationPanel } from "./presentation-panel";
 import { QueuePanel } from "./queue-panel";
 import { ReviewForm } from "./review-form";
+
+function showQueueError(t: Translate, err: unknown, fallbackTitle: string) {
+  const copy = queueErrorToastContent(
+    err,
+    fallbackTitle,
+    t("couldNotCallTeam"),
+    t("teamCallBlockedDescription"),
+  );
+  toast.error(
+    copy.title,
+    copy.description
+      ? {
+          description: copy.description,
+          ...(copy.isBusyTeam ? { autopilot: { expand: 0, collapse: 0 } } : {}),
+        }
+      : undefined,
+  );
+  return copy.message;
+}
 
 export default function QueuePage() {
   const { can, me } = useSessionContext();
@@ -147,7 +166,7 @@ export default function QueuePage() {
     } catch (err) {
       const message = errorMessage(err, t("couldNotLoadQueueSetup"));
       setActionError(message);
-      toast.error(message);
+      showQueueError(t, err, t("couldNotLoadQueueSetup"));
     } finally {
       setRoomsLoading(false);
     }
@@ -171,9 +190,8 @@ export default function QueuePage() {
         toast.success(success);
         await refreshLive();
       } catch (err) {
-        const message = errorMessage(err, t("queueActionFailed"));
+        const message = showQueueError(t, err, t("queueActionFailed"));
         setActionError(message);
-        toast.error(message);
       } finally {
         setBusy(null);
       }
@@ -219,9 +237,8 @@ export default function QueuePage() {
         if (!cancelled) setSearchResults(hits);
       } catch (err) {
         if (!cancelled) {
-          const message = errorMessage(err, t("searchFailed"));
+          const message = showQueueError(t, err, t("searchFailed"));
           setActionError(message);
-          toast.error(message);
         }
       } finally {
         if (!cancelled) setSearching(false);

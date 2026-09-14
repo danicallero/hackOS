@@ -242,7 +242,44 @@ jobs:
       contents: read
       id-token: write
     steps:
+      - name: Check Dokploy deployment configuration
+        id: deployment-config
+        env:
+          TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          TS_AUDIENCE: ${{ secrets.TS_AUDIENCE }}
+          DOKPLOY_STAGING_API_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_STAGING_API_DEPLOY_WEBHOOK }}
+          DOKPLOY_STAGING_WORKER_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_STAGING_WORKER_DEPLOY_WEBHOOK }}
+          DOKPLOY_STAGING_WEB_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_STAGING_WEB_DEPLOY_WEBHOOK }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$GITHUB_REF_NAME" == "main" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          missing=()
+          for variable in \
+            TS_OAUTH_CLIENT_ID \
+            TS_AUDIENCE \
+            DOKPLOY_STAGING_API_DEPLOY_WEBHOOK \
+            DOKPLOY_STAGING_WORKER_DEPLOY_WEBHOOK \
+            DOKPLOY_STAGING_WEB_DEPLOY_WEBHOOK; do
+            if [[ -z "${!variable}" ]]; then
+              missing+=("$variable")
+            fi
+          done
+
+          if ((${#missing[@]} > 0)); then
+            echo "Staging Dokploy is not configured; skipping deployment. Missing: ${missing[*]}"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Connect to the tailnet
+        if: steps.deployment-config.outputs.enabled == 'true'
         uses: tailscale/github-action@v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
@@ -251,7 +288,9 @@ jobs:
           ping: danipi.hamster-cat.ts.net
 
       - name: Trigger API and worker deployments
-        if: needs.publish-api.result == 'success'
+        if: >-
+          steps.deployment-config.outputs.enabled == 'true' &&
+          needs.publish-api.result == 'success'
         env:
           DOKPLOY_API_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_API_DEPLOY_WEBHOOK }}
           DOKPLOY_WORKER_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_WORKER_DEPLOY_WEBHOOK }}
@@ -299,7 +338,9 @@ jobs:
           exit "$failures"
 
       - name: Trigger web deployment
-        if: always() && needs.publish-web.result == 'success'
+        if: >-
+          steps.deployment-config.outputs.enabled == 'true' &&
+          needs.publish-web.result == 'success'
         env:
           DOKPLOY_WEB_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_WEB_DEPLOY_WEBHOOK }}
           DOKPLOY_STAGING_WEB_DEPLOY_WEBHOOK: ${{ secrets.DOKPLOY_STAGING_WEB_DEPLOY_WEBHOOK }}

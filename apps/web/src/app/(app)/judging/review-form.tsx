@@ -14,7 +14,6 @@ import {
   WifiOffIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import { type Answers, normalizeAnswers, QuestionField } from "@/components/common/question-field";
 import { ReviewStatusBadge } from "@/components/common/review-status-badge";
 import { SectionCard } from "@/components/common/section-card";
@@ -37,6 +36,7 @@ import {
   type QueueEntry,
   saveReview,
 } from "@/lib/queue";
+import { toast } from "@/lib/toast";
 import type { Challenge } from "../challenges/shared";
 import { EMPTY_PANEL, errorMessage } from "./helpers";
 import { JudgingEmptyState } from "./judging-empty-state";
@@ -170,9 +170,12 @@ export function ReviewForm({
         setVersions(await getReviewVersions(entry.id));
         if (announce) toast.success(submit ? t("reviewSubmitted") : t("draftSaved"));
       } catch (err) {
-        const message = errorMessage(err, t("couldNotSaveReview"));
+        const fallback = t("couldNotSaveReview");
+        const message = errorMessage(err, fallback);
         setSaveError(message);
-        if (announce) toast.error(message);
+        if (announce) {
+          toast.error(fallback, message === fallback ? undefined : { description: message });
+        }
       } finally {
         savingRef.current = false;
         setSaving(false);

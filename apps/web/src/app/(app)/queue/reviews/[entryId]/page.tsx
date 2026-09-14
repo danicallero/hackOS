@@ -11,7 +11,6 @@ import { ArrowLeftIcon, ClipboardListIcon, LockIcon, SendIcon, UsersIcon } from 
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
@@ -35,6 +34,7 @@ import {
   saveReviewFromOverview,
 } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import { textForDisplay } from "../../../challenges/shared";
 
 export default function ReviewDetailPage() {
@@ -89,11 +89,17 @@ export default function ReviewDetailPage() {
       if (!detail) return;
       setSaving(true);
       try {
-        await saveReviewFromOverview(detail.entryId, { scores: answers, notes, submit });
-        toast.success(submit ? t("reviewSubmitted") : t("evaluationUpdated"));
+        await toast.promise(
+          saveReviewFromOverview(detail.entryId, { scores: answers, notes, submit }),
+          {
+            loading: { title: submit ? t("submitReview") : t("saveReview") },
+            success: { title: submit ? t("reviewSubmitted") : t("evaluationUpdated") },
+            error: { title: t("couldNotSaveReview") },
+          },
+        );
         await load();
-      } catch (err) {
-        toast.error(err instanceof ApiError ? err.message : t("couldNotSaveReview"));
+      } catch {
+        // The promise toast already reports the failure.
       } finally {
         setSaving(false);
       }
@@ -105,12 +111,17 @@ export default function ReviewDetailPage() {
     if (!detail || !message.trim()) return;
     setSending(true);
     try {
-      const { recipients } = await messageReviewTeam(detail.entryId, message.trim());
-      toast.success(t("teamMessageSent", { count: recipients }));
+      await toast.promise(messageReviewTeam(detail.entryId, message.trim()), {
+        loading: { title: t("sending") },
+        success: ({ recipients }) => ({
+          title: t("teamMessageSent", { count: recipients }),
+        }),
+        error: { title: t("couldNotSendTeamMessage") },
+      });
       setMessage("");
       setMessageOpen(false);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSendTeamMessage"));
+    } catch {
+      // The promise toast already reports the failure.
     } finally {
       setSending(false);
     }

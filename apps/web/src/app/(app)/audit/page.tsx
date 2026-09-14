@@ -10,7 +10,6 @@ import { EVENTS } from "@hackos/shared/events";
 import { ChevronRightIcon, ScrollTextIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { DateTimeInput } from "@/components/common/datetime-input";
@@ -28,6 +27,7 @@ import { fromDatetimeLocal, shortDateTimeFmt } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { type AuditRow, type AuditVocabularyEntry, notificationsApi } from "@/lib/notifications";
 import { useCan } from "@/lib/session";
+import { toast } from "@/lib/toast";
 
 const LIMIT = 50;
 

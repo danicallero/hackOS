@@ -2,7 +2,6 @@
 
 import { RefreshCwIcon, ShieldCheckIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
 import { Modal } from "@/components/common/modal";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -10,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ApiError, api } from "@/lib/api";
 import { shortDateTimeFmt } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
 
 const dateFmt = shortDateTimeFmt;
 

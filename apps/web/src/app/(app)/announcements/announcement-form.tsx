@@ -2,7 +2,6 @@
 
 import { ChevronDownIcon, MegaphoneIcon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
@@ -32,6 +31,7 @@ import type {
   NotificationChannel,
 } from "@/lib/notifications";
 import { notificationsApi } from "@/lib/notifications";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 const AUDIENCES: AnnouncementAudience[] = ["sponsor", "participant", "mentor", "staff"];

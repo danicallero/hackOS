@@ -8,7 +8,6 @@
 import { EVENTS } from "@hackos/shared/events";
 import { GavelIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
@@ -18,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
 import type { UserList } from "@/lib/types";
 
 interface Judge {

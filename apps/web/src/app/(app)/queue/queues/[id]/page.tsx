@@ -20,7 +20,6 @@ import {
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { type DragEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
@@ -34,7 +33,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import {
   getAssignableRooms,
@@ -47,6 +45,7 @@ import {
   updateQueueGroup,
 } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
+import { showErrorToast, toast } from "@/lib/toast";
 import { canAccessSponsorWorkspace } from "../../../challenges/shared";
 
 export default function QueueDetailPage() {
@@ -154,7 +153,7 @@ export default function QueueDetailPage() {
       setName(updated.displayName);
       toast.success(t("queueRenamed"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveQueue"));
+      showErrorToast(err, t("couldNotSaveQueue"));
     } finally {
       setBusy(false);
     }
@@ -173,7 +172,7 @@ export default function QueueDetailPage() {
       toast.success(t("queueRoomsSaved"));
     } catch (err) {
       setRoomIds(previous);
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveQueueRooms"));
+      showErrorToast(err, t("couldNotSaveQueueRooms"));
     } finally {
       setRoomsBusy(false);
     }
@@ -188,13 +187,7 @@ export default function QueueDetailPage() {
       setCriteria(updated.criteria ?? []);
       toast.success(t("queueCriteriaSaved"));
     } catch (err) {
-      toast.error(
-        err instanceof ApiError
-          ? err.message
-          : err instanceof Error
-            ? err.message
-            : t("couldNotSaveQueueCriteria"),
-      );
+      showErrorToast(err, t("couldNotSaveQueueCriteria"));
     } finally {
       setCriteriaBusy(false);
     }
@@ -209,7 +202,7 @@ export default function QueueDetailPage() {
       await load();
       toast.success(t("queueTeamMoved"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotMoveQueueTeam"));
+      showErrorToast(err, t("couldNotMoveQueueTeam"));
     } finally {
       setBusy(false);
     }
@@ -224,7 +217,7 @@ export default function QueueDetailPage() {
       await load();
       toast.success(t("queueTeamSentToEnd"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotMoveQueueTeam"));
+      showErrorToast(err, t("couldNotMoveQueueTeam"));
     } finally {
       setBusy(false);
     }

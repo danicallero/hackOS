@@ -7,13 +7,13 @@
 
 import { FileIcon, PaperclipIcon, UploadIcon, XIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
-import { toast } from "sonner";
 import { FileLink } from "@/components/common/file-link";
 import { IconButton } from "@/components/common/icon-button";
 import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
 import { apiUpload } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
 
 export function FileUploadField({
   applicationId,
@@ -75,18 +75,23 @@ export function FileUploadField({
     try {
       const body = new FormData();
       body.append("file", file);
-      const payload = await apiUpload<{ key: string }>(
-        `/api/applications/${applicationId}/upload/${encodeURIComponent(fieldKey)}`,
-        body,
+      const payload = await toast.promise(
+        apiUpload<{ key: string }>(
+          `/api/applications/${applicationId}/upload/${encodeURIComponent(fieldKey)}`,
+          body,
+        ),
+        {
+          loading: { title: t("uploading"), description: file.name },
+          success: { title: t("fileUploaded"), description: file.name },
+          error: { title: t("uploadFailed"), description: file.name },
+        },
       );
       // Store the private object key; reads resolve to a presigned URL on demand.
       onChange(payload.key);
       setUploadError(null);
-      toast.success(t("fileUploaded"));
     } catch {
       const message = t("uploadFailed");
       setUploadError(message);
-      toast.error(message);
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";

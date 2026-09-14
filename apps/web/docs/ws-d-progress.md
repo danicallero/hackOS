@@ -35,7 +35,7 @@ Imports only WS0/shared pieces — nothing redefined:
   whose challenge received a `user.queue.precall`. Pre-call is an event, not a
   read-model field, so we track precalled challenge ids in local state and clear
   one when its `called` event arrives.
-- **Toasts (sonner)**: `toast.success` on call (12s), `toast(...)` on pre-call;
+- **Toasts (Sileo)**: `toast.success` on call (12s), `toast(...)` on pre-call;
   de-duped per entry id via a ref so debounce/StrictMode don't double-fire.
 - **EmptyState** when the user has no queued projects; error surfaces the
   `ApiError.message` verbatim via `toast.error`.

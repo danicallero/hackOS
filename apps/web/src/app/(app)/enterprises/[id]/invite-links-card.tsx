@@ -3,7 +3,6 @@
 import { EVENTS } from "@hackos/shared/events";
 import { LinkIcon, PlusIcon, UserRoundIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -17,6 +16,7 @@ import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { ApiError, api } from "@/lib/api";
 import { shortDateTimeFmt } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
 import type { EnterpriseInviteLink } from "@/lib/types";
 
 const dateFmt = shortDateTimeFmt;

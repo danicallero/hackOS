@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
 import { ReviewModal } from "@/components/applications/review-modal";
 import { AlertModal } from "@/components/common/alert-modal";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -45,6 +44,7 @@ import { ApiError, api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { pickText, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import {
   type FormSection,
   fmtDateTime,

@@ -5,7 +5,6 @@ import { EVENTS } from "@hackos/shared/events";
 import { EyeIcon, EyeOffIcon, PlusIcon, TrophyIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
@@ -16,6 +15,7 @@ import { ApiError, api } from "@/lib/api";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import {
   type Challenge,
   canAccessSponsorWorkspace,

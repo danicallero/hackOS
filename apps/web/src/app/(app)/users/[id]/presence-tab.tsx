@@ -6,7 +6,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { ClockIcon, DownloadIcon, PlusIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { EmptyState } from "@/components/common/empty-state";
@@ -40,6 +39,7 @@ import {
 } from "@/lib/logistics";
 import { conflictBounds, guaranteedMinutes, provisionalMinutes } from "@/lib/presence-timeline";
 import { useCan, useSessionContext } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import { formatUserDate } from "./shared";
 
 interface PresenceData {

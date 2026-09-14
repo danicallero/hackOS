@@ -9,7 +9,7 @@ vi.mock("@/lib/i18n", () => ({
 vi.mock("@/lib/logistics", () => ({
   logisticsApi: { googleWalletSaveUrl: vi.fn() },
 }));
-vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
+vi.mock("@/lib/toast", () => ({ toast: { error: vi.fn() } }));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;

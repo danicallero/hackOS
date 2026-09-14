@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import { CapabilityGate } from "@/components/common/capability-gate";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { IconButton } from "@/components/common/icon-button";
@@ -41,6 +40,7 @@ import { shortDateFmt } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import type { UserList, UserListItem } from "@/lib/types";
 import { InvitationsModal } from "./invitations-tab";
 import { ReviewFixturesDialog } from "./review-fixtures-dialog";

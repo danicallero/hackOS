@@ -24,7 +24,6 @@ import type { ActivityKind } from "@hackos/shared/activity-kinds";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { CalendarClockIcon, EyeIcon, EyeOffIcon, PlusIcon, SearchIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -47,6 +46,7 @@ import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem, type ScheduleAudience } from "@/lib/logistics";
 import { useCan, useMe } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import { ActivityRow } from "./schedule-activity-row";
 import {
   AudienceFilterPopover,

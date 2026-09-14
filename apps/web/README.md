@@ -16,12 +16,41 @@ backend, one workstream at a time.
 - **shadcn/ui** (new-york style, zinc base) as the primitive layer.
 - **Better Auth** browser client (`better-auth/react`) against the API's
   `/api/auth/*`.
-- **react-hook-form + zod** for forms, **sonner** for toasts,
+- **react-hook-form + zod** for forms, **Sileo** for toasts,
   **next-themes** for light/dark, **lucide-react** for icons,
  **qrcode.react** for locally-rendered QR codes, so QR payloads never need to
   travel to a third-party image service.
 - `@hackos/shared` for the capability catalogue and SSE event contract — the
   same single source the API uses.
+
+## Toasts
+
+Use `@/lib/toast` rather than importing Sileo directly. Toasts live in the
+top-right and are compact by default; a `description` or `action` expands only
+when the user hovers or focuses it, keeping feedback from covering the current
+workspace. Their surface is intentionally inverted (light toast on dark UI,
+dark toast on light UI), with state colors tuned for that surface. The adapter
+also exposes Sileo's richer flows:
+
+- `toast.promise(...)` for operations with loading, success and error states.
+- `toast.loading(...)` for a long-running operation that must remain visible.
+- `toast.action(...)` for an intentional action-state toast.
+- `toast.icon(...)` when a contextual custom icon communicates better than a
+  status icon.
+- `action`, `description`, `icon`, `position`, `duration: null`, and `styles`
+  for context-specific feedback.
+
+Routine success/info messages use short defaults (2.4s/2s) so live queue
+updates do not pile up; errors, warnings and actions stay visible longer. The
+adapter keeps at most three temporary toasts per position, protects persistent
+loading work, and coalesces identical plain feedback without restarting its
+timeline. A blocking queue-call error opens with its explanation already
+visible, while each notification keeps its own Sileo timeline when another
+toast arrives.
+
+Use an action only when it has a real consequence (for example, Undo). Keep
+critical failures inline with a retry path; a toast should confirm or guide,
+not be the only error surface.
 
 ## Local development
 

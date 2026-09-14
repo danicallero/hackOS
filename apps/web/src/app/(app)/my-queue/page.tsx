@@ -20,7 +20,6 @@
 import { EVENTS } from "@hackos/shared/events";
 import { DoorOpenIcon, HourglassIcon, TicketIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -32,6 +31,7 @@ import { type SseEnvelope, useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { getMyQueue, type MyQueueEntry, type MyQueueRoom } from "@/lib/queue";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { type TranslatedText, textForDisplay } from "../challenges/shared";
 
@@ -104,13 +104,16 @@ export default function MyQueuePage() {
           const room = p.roomName
             ? formatRoom({ id: p.roomId, name: p.roomName, location: p.roomLocation })
             : t("yourRoom");
-          toast.success(t("queueGoToDoor", { room }), { duration: 12_000 });
+          toast.success(t("queueGoToDoor", { room }), { duration: 7_000 });
         }
       } else if (env.type === EVENTS.USER_QUEUE_PRECALL) {
         const p = env.data as PrecallPayload;
         setPrecalled((prev) => new Set(prev).add(p.entryId));
         const eta = formatEta(p.etaMinutes, t);
-        toast(`${t("getReady")}${eta ? ` (${eta})` : ""}`);
+        toast.info(t("getReady"), {
+          description: eta ?? undefined,
+          duration: 5_000,
+        });
       }
     },
     [t],

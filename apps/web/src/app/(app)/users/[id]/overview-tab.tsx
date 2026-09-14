@@ -8,7 +8,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { UserIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
 import { z } from "zod";
 import { AlertModal } from "@/components/common/alert-modal";
 import { MultiSelect } from "@/components/common/multi-select";
@@ -39,6 +38,7 @@ import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
 import { isLanguage, LANGS, languageName, pickText, useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import type { Intolerance, Language, UserDetail } from "@/lib/types";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

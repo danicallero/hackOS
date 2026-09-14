@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { ThemeProvider } from "next-themes";
 import { CookieNotice } from "@/components/layout/cookie-notice";
-import { Toaster } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/sileo";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LocaleProvider } from "@/lib/i18n";
 import { SessionProvider } from "@/lib/session";
@@ -13,7 +13,7 @@ import { SessionProvider } from "@/lib/session";
  * - next-themes: dark-first, with class strategy on <html>.
  * - SessionProvider: /api/me + capability gating (H8/H55).
  * - TooltipProvider: required once for all shadcn tooltips.
- * - Toaster: sonner toasts for success/business-error feedback.
+ * - Toaster: Sileo toasts for success, status, action and business-error feedback.
  *
  * There is no global "reload the page on any mutation" mechanism — every
  * page that needs live data owns a scoped `useAutoRefresh` (or a focused
@@ -32,7 +32,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <LocaleProvider>
           <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
           {!isKiosk && <CookieNotice />}
-          <Toaster position="bottom-right" />
+          <Toaster position="top-right" />
         </LocaleProvider>
       </SessionProvider>
     </ThemeProvider>

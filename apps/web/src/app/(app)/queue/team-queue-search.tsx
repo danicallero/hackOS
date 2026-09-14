@@ -9,7 +9,6 @@ import {
   XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -30,6 +29,7 @@ import {
   type RepoChallenge,
   type RoomView,
 } from "@/lib/queue";
+import { showErrorToast, toast } from "@/lib/toast";
 
 type TeamCandidate = { repoId: number; repoName: string };
 
@@ -237,12 +237,9 @@ export function TeamQueueSearch({
       await loadMemberships(entry.repo_id);
       onChanged();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError
-          ? err.message
-          : action === "disqualify"
-            ? t("queueTeamDisqualifyFailed")
-            : t("queueTeamMoveFailed"),
+      showErrorToast(
+        err,
+        action === "disqualify" ? t("queueTeamDisqualifyFailed") : t("queueTeamMoveFailed"),
       );
     } finally {
       setBusyEntryId(null);

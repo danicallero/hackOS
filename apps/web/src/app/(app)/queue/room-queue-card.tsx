@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { Modal } from "@/components/common/modal";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { Spinner } from "@/components/common/spinner";
@@ -19,7 +18,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Surface } from "@/components/ui/surface";
-import { ApiError } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
 import {
   entryAction,
@@ -29,6 +27,7 @@ import {
   type RoomView,
   searchTeams,
 } from "@/lib/queue";
+import { showErrorToast, toast } from "@/lib/toast";
 import { textForDisplay } from "../challenges/shared";
 
 export function RoomQueueCard({
@@ -80,7 +79,7 @@ export function RoomQueueCard({
         if (!cancelled) setResults(hits);
       } catch (err) {
         if (!cancelled) {
-          toast.error(err instanceof ApiError ? err.message : t("teamSearchFailed"));
+          showErrorToast(err, t("teamSearchFailed"));
         }
       } finally {
         if (!cancelled) setSearching(false);
@@ -101,7 +100,7 @@ export function RoomQueueCard({
       setResults([]);
       onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("queueActionFailed"));
+      showErrorToast(err, t("queueActionFailed"));
     } finally {
       setBusy(null);
     }

@@ -4,7 +4,6 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { GlobeIcon, MonitorUpIcon, RadioIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { ContextualError } from "@/components/common/contextual-error";
 import { PageHeader } from "@/components/common/page-header";
@@ -25,6 +24,7 @@ import { ApiError } from "@/lib/api";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { isLanguage, languageName, useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import {
   clearTvOverride,
   DEFAULT_LIVE_CONFIG,

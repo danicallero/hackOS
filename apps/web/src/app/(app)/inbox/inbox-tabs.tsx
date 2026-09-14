@@ -26,7 +26,6 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
@@ -57,6 +56,7 @@ import {
   type PreferencesResponse,
   STATIC_CATEGORIES,
 } from "@/lib/notifications";
+import { toast } from "@/lib/toast";
 
 const LIMIT = 20;
 const PERSONAL_STREAM = "/api/queue/me/stream";
