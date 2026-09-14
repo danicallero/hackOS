@@ -32,20 +32,16 @@ export function PresentationPanel({
   challenge,
   pace,
   waitingRoomCount,
-  nextWaitingEntry,
   firstCalledEntry,
   canJudge,
   canOperate,
   busy,
   onEntryAction,
-  onManualCall,
 }: {
   entry: QueueEntry | null;
   challenge: Challenge | null;
   pace: RoomPace | null;
   waitingRoomCount: number;
-  /** Front of the challenge queue (status `waiting`) — powers the "call next" shortcut. */
-  nextWaitingEntry: QueueEntry | null;
   /** Front of the waiting room (status `called`) — powers the "bring in next" shortcut. */
   firstCalledEntry: QueueEntry | null;
   canJudge: boolean;
@@ -53,11 +49,10 @@ export function PresentationPanel({
   busy: string | null;
   onEntryAction: (
     entry: QueueEntry,
-    action: "start" | "complete" | "send-back" | "bring-in",
+    action: "start" | "complete" | "send-back" | "bring-in" | "notify-enter",
     body: Record<string, unknown> | undefined,
     label: string,
   ) => void;
-  onManualCall: (entry: QueueEntry, targetStatus: "called" | "in_room") => void;
 }) {
   const { t } = useLocale();
   const isPresenting = entry?.status === "presenting";
@@ -102,12 +97,19 @@ export function PresentationPanel({
             description={waitingRoomCount > 0 ? t("teamsWaitingDoor") : t("callNextTeamPrompt")}
             action={
               <>
-                {nextWaitingEntry && (
+                {firstCalledEntry && (
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={!canOperate || busy != null}
-                    onClick={() => onManualCall(nextWaitingEntry, "called")}
+                    disabled={(!canOperate && !canJudge) || busy != null}
+                    onClick={() =>
+                      onEntryAction(
+                        firstCalledEntry,
+                        "notify-enter",
+                        undefined,
+                        t("entranceNoticeSent"),
+                      )
+                    }
                   >
                     <SendIcon className="size-4" />
                     {t("callNextTeam")}

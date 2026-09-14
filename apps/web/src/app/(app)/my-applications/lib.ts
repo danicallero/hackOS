@@ -7,9 +7,11 @@
 // the public read of open forms). Types are declared locally per module rules.
 
 import { ApiError } from "@/lib/api";
-import { type I18nText, LOCALE_CODES, type MessageKey, pickText, type Translate } from "@/lib/i18n";
+import { type I18nText, LOCALE_CODES, type Translate } from "@/lib/i18n";
 import type { Tone } from "@/lib/tones";
 import type { Language } from "@/lib/types";
+
+export { fieldErrorsFromApi } from "@/lib/application-validation";
 
 export const FIELD_KINDS = [
   "text",
@@ -121,55 +123,6 @@ export interface MyResponseDetail {
 
 /** A single response value, keyed by field.key in the responses object. */
 export type FieldValue = string | number | boolean | string[] | null | undefined;
-
-/** Extract the per-field errors the API returns on failed template validation. */
-/** Generic fallback copy per server validation-rule error code (H11), used
- *  when the field itself has no builder-defined `validation.error_message`. */
-const VALIDATION_ERROR_KEYS: Record<string, MessageKey> = {
-  "too short": "tooShort",
-  "too long": "tooLong",
-  "invalid format": "invalidFormat",
-  "too small": "tooSmall",
-  "too large": "tooLarge",
-  "too few selected": "tooFewSelected",
-  "too many selected": "tooManySelected",
-  "must contain text": "mustContainText",
-  "must not contain text": "mustNotContainText",
-  "invalid email": "invalidEmail",
-  "invalid url": "invalidUrl",
-};
-
-export function fieldErrorsFromApi(
-  err: unknown,
-  t: Translate,
-  template?: TemplateField[],
-  lang?: Language,
-): Record<string, string> {
-  if (err instanceof ApiError && err.details && typeof err.details === "object") {
-    const fields = (err.details as { fields?: unknown }).fields;
-    if (fields && typeof fields === "object") {
-      return Object.fromEntries(
-        Object.entries(fields).map(([key, value]) => {
-          const message = String(value);
-          if (message === "required") return [key, t("fieldRequired")];
-          if (message === "invalid option") return [key, t("fieldInvalidOption")];
-          if (message === "must be a number") return [key, t("fieldMustBeNumber")];
-          const validationKey = VALIDATION_ERROR_KEYS[message];
-          if (validationKey) {
-            const field = template?.find((f) => f.key === key);
-            const custom =
-              field?.validation?.error_message && lang
-                ? pickText(field.validation.error_message, lang)
-                : "";
-            return [key, custom || t(validationKey)];
-          }
-          return [key, t("fieldInvalid")];
-        }),
-      );
-    }
-  }
-  return {};
-}
 
 export function isNotFoundError(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404;

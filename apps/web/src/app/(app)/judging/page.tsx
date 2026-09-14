@@ -190,8 +190,7 @@ export default function QueuePage() {
         toast.success(success);
         await refreshLive();
       } catch (err) {
-        const message = showQueueError(t, err, t("queueActionFailed"));
-        setActionError(message);
+        showQueueError(t, err, t("queueActionFailed"));
       } finally {
         setBusy(null);
       }
@@ -199,8 +198,7 @@ export default function QueuePage() {
     [refreshLive, t],
   );
 
-  // Shared by the queue panel's per-entry actions and the empty-room
-  // "call next" / "bring in next" shortcuts on the presentation panel.
+  // Used by the queue panel's per-entry manual status changes.
   const handleManualCall = useCallback(
     (entry: QueueEntry, targetStatus: "called" | "in_room") =>
       activeRoomId &&
@@ -237,8 +235,7 @@ export default function QueuePage() {
         if (!cancelled) setSearchResults(hits);
       } catch (err) {
         if (!cancelled) {
-          const message = showQueueError(t, err, t("searchFailed"));
-          setActionError(message);
+          showQueueError(t, err, t("searchFailed"));
         }
       } finally {
         if (!cancelled) setSearching(false);
@@ -516,7 +513,6 @@ export default function QueuePage() {
                 challenge={activeChallenge}
                 pace={pace.data}
                 waitingRoomCount={view.called.length}
-                nextWaitingEntry={view.next[0] ?? null}
                 firstCalledEntry={view.called[0] ?? null}
                 canJudge={canJudge}
                 canOperate={canOperate}
@@ -528,7 +524,6 @@ export default function QueuePage() {
                     label,
                   )
                 }
-                onManualCall={handleManualCall}
               />
             </div>
 
