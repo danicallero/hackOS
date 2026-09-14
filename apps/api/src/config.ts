@@ -226,6 +226,10 @@ const envSchema = z.object({
    * as Apple above — see APPLE_PASS_CERTIFICATE_PEM comment.
    */
   GOOGLE_WALLET_ISSUER_ID: z.string().optional(),
+  // Existing Event Ticket classes may have a legacy/custom ID that is not
+  // derivable from the numeric issuer ID. When set, ticket JWTs reference
+  // this exact class and omit inline class creation.
+  GOOGLE_WALLET_EVENT_TICKET_CLASS_ID: z.string().optional(),
   GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL: z.string().optional(),
   GOOGLE_WALLET_PRIVATE_KEY_PEM: z.string().optional(),
 

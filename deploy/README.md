@@ -140,7 +140,8 @@ repo.
 | `APPLE_APNS_ENVIRONMENT` | `production` (default) or `sandbox` — which APNs gateway pass-update pushes go to. |
 | `APPLE_PASS_APP_STORE_ID` | Numeric App Store ID of the hackOS mobile app (the digits in its App Store URL). Optional; when set, passes link to the app (back of the pass + lock-screen suggestion) and tapping it opens the app via `MOBILE_APP_SCHEME`. |
 | `GOOGLE_WALLET_ISSUER_ID` | Your Google Wallet issuer account ID. |
-| `GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL` | Service account with the Wallet Object Issuer role, scoped to that issuer only. |
+| `GOOGLE_WALLET_EVENT_TICKET_CLASS_ID` | Exact approved Event Ticket class ID from Pay & Wallet Console (for this issuer: `3388000000023085754.pass.org.gpul.hackudc`). |
+| `GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL` | Service account email used to sign JWTs and call the REST API; authorize it as a **Developer** user in the Google Pay & Wallet Console for this issuer. |
 | `GOOGLE_WALLET_PRIVATE_KEY_PEM` 🔒 | base64 of that service account's private key (PEM), from its JSON key file. |
 
 **Getting the Apple values**: in Apple Developer → Certificates, Identifiers
@@ -154,14 +155,28 @@ from Apple's PKI page. Then for each file:
 base64 -i cert.pem | tr -d '\n'   # → APPLE_PASS_CERTIFICATE_PEM
 ```
 
-**Getting the Google values**: in Google Cloud IAM, create a service
-account scoped to Wallet Object Issuer for your issuer only (not a
-project-wide role), download its JSON key, then:
+**Getting the Google values**: in Google Cloud, enable the Google Wallet API,
+create a service account, and download its JSON key. Then:
 
 ```sh
 jq -r .client_email key.json                                # → GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL
 jq -r .private_key key.json | base64 | tr -d '\n'            # → GOOGLE_WALLET_PRIVATE_KEY_PEM
 ```
+
+Cloud IAM is only half of the authorization setup: in the Google Pay & Wallet
+Business Console, invite the same service-account email under **Users** with
+**Developer** access for the issuer. Verify `GOOGLE_WALLET_ISSUER_ID` against
+the issuer ID shown in that console; it is not automatically the service
+account's Cloud IAM unique ID.
+
+Google ticket passes use `EventTicketClass`/`EventTicketObject`; the issuer's
+event-ticket class is refreshed when event name, schedule, or venue settings
+change. The JWT `origins` claim is derived from `WEB_URL`, so set that to the
+browser origin where the Add to Google Wallet button is rendered. Google
+issuers start in Demo Mode and can only issue to configured test users until
+[publishing access](https://developers.google.com/wallet/tickets/events/test-and-go-live/request-publishing-access)
+is granted. Test the complete save flow on Android before launch, then verify
+the issuer's publishing access in the Google Pay & Wallet console.
 
 **Never commit these files or their base64 blobs.** If a key leaks, revoke
 it immediately at the source — in Apple Developer (revoke the certificate)

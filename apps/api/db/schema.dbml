@@ -1046,6 +1046,7 @@ Table wallet_passes {
   serial_number text [not null]
   authentication_token text [not null]
   google_object_id text
+  google_object_type text
   status text [not null, default: `'active'::text`]
   created_at "timestamp with time zone" [not null, default: `now()`]
   last_updated_at "timestamp with time zone" [not null, default: `now()`]

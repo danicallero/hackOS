@@ -61,5 +61,6 @@ const { privateKey: googlePrivateKey } = generateKeyPairSync("rsa", {
 export const testGooglePrivateKeyPem = googlePrivateKey;
 
 process.env.GOOGLE_WALLET_ISSUER_ID = "3388000000022222222";
+process.env.GOOGLE_WALLET_EVENT_TICKET_CLASS_ID = "3388000000022222222.hackos_event_ticket";
 process.env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL = "test@hackos-test.iam.gserviceaccount.com";
 process.env.GOOGLE_WALLET_PRIVATE_KEY_PEM = Buffer.from(testGooglePrivateKeyPem).toString("base64");

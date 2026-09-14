@@ -23,6 +23,7 @@ import {
 } from "../logistics/estimate.js";
 import { expireGoogleObject } from "../logistics/google-wallet.js";
 import { PASS_TYPE_IDENTIFIER } from "../logistics/wallet.js";
+import type { GoogleObjectType } from "../logistics/wallet-passes.js";
 import { queueFixtureMarker } from "../queue/broadcast.js";
 import { REPO_MEMBER_RELATION_SQL } from "../queue/membership.js";
 import { type DeletedQueueEntryNotification, notifyDeletedQueueEntries } from "../queue/notify.js";
@@ -38,6 +39,11 @@ import {
 
 export type AccountRemovalAction = "delete" | "anonymize";
 const REMOVAL_RETRY_QUEUE = "account-removal-retries";
+
+interface GoogleWalletObjectRef {
+  objectId: string;
+  objectType: GoogleObjectType;
+}
 
 /** The only non-form value that is always retained: system-generated time. */
 export const VERIFIED_PRESENCE_AUDIT_FIELD = "guaranteed venue-presence time";
@@ -85,7 +91,7 @@ interface RemovalPreparation {
   uploadPrefixes: string[];
   exportPrefixes: string[];
   storageKeys: string[];
-  googleWalletObjectIds: string[];
+  googleWalletObjectIds: GoogleWalletObjectRef[];
   appleWalletPushTokens: string[];
   requiresVenueExit: boolean;
 }
@@ -601,9 +607,10 @@ async function collectWalletArtifacts(client: Queryable, userId: number): Promis
   const { rows } = await client.query<{
     id: number;
     google_object_id: string | null;
+    google_object_type: GoogleObjectType | null;
     push_token: string | null;
   }>(
-    `SELECT wp.id, wp.google_object_id, wpd.push_token
+    `SELECT wp.id, wp.google_object_id, wp.google_object_type, wpd.push_token
        FROM wallet_passes wp
        LEFT JOIN wallet_pass_devices wpd ON wpd.pass_id = wp.id
       WHERE wp.user_id = $1`,
@@ -612,9 +619,15 @@ async function collectWalletArtifacts(client: Queryable, userId: number): Promis
   return {
     walletPassIds: [...new Set(rows.map((row) => row.id))],
     googleWalletObjectIds: [
-      ...new Set(
-        rows.map((row) => row.google_object_id).filter((value): value is string => Boolean(value)),
-      ),
+      ...new Map(
+        rows
+          .filter((row) => Boolean(row.google_object_id))
+          .map((row) => {
+            const objectId = row.google_object_id as string;
+            const objectType = row.google_object_type ?? "generic";
+            return [`${objectType}:${objectId}`, { objectId, objectType }];
+          }),
+      ).values(),
     ],
     appleWalletPushTokens: [
       ...new Set(
@@ -632,9 +645,10 @@ async function collectWalletArtifactsByPassIds(
   const { rows } = await client.query<{
     id: number;
     google_object_id: string | null;
+    google_object_type: GoogleObjectType | null;
     push_token: string | null;
   }>(
-    `SELECT wp.id, wp.google_object_id, wpd.push_token
+    `SELECT wp.id, wp.google_object_id, wp.google_object_type, wpd.push_token
        FROM wallet_passes wp
        LEFT JOIN wallet_pass_devices wpd ON wpd.pass_id = wp.id
       WHERE wp.id = ANY($1::int[])`,
@@ -643,9 +657,15 @@ async function collectWalletArtifactsByPassIds(
   return {
     walletPassIds: [...new Set(rows.map((row) => row.id))],
     googleWalletObjectIds: [
-      ...new Set(
-        rows.map((row) => row.google_object_id).filter((value): value is string => Boolean(value)),
-      ),
+      ...new Map(
+        rows
+          .filter((row) => Boolean(row.google_object_id))
+          .map((row) => {
+            const objectId = row.google_object_id as string;
+            const objectType = row.google_object_type ?? "generic";
+            return [`${objectType}:${objectId}`, { objectId, objectType }];
+          }),
+      ).values(),
     ],
     appleWalletPushTokens: [
       ...new Set(
@@ -818,8 +838,8 @@ async function invalidateWalletProviders(
   preparation: Pick<RemovalPreparation, "googleWalletObjectIds" | "appleWalletPushTokens">,
 ): Promise<void> {
   try {
-    for (const objectId of preparation.googleWalletObjectIds) {
-      await expireGoogleObject(objectId);
+    for (const object of preparation.googleWalletObjectIds) {
+      await expireGoogleObject(object.objectId, object.objectType);
     }
     for (const pushToken of preparation.appleWalletPushTokens) {
       try {

@@ -1,7 +1,7 @@
-# Event config & the Apple Wallet pass — architecture
+# Event config & Apple/Google Wallet passes — architecture
 
 Covers the `event` module (the `event_config` singleton, H45/H47) and how the
-`logistics` module's Apple Wallet pass (H28) renders from it. Functional source
+`logistics` module's Apple and Google Wallet passes (H28) render from it. Functional source
 of truth is `plan/historias-hackos.md`; where this document and the stories
 disagree, the stories win.
 
@@ -29,8 +29,8 @@ sending `null` clears a nullable field.
 | --- | --- |
 | `name`, `tagline` | Event identity, shown on the public site and on the pass back. |
 | `timezone` | IANA zone name; formats the date/time printed on the pass. |
-| `event_starts_at` | **Doors open** — when attendees can arrive at the venue. This (not the hacking start) is the date/time shown on the Apple Wallet pass and its `relevantDate`. |
-| `event_ends_at` | **Event over** — distinct from `hacking_ends_at` (multi-day events keep going after submissions close). Becomes the Wallet pass's `expirationDate`, so Wallet stops surfacing the pass afterwards. `CHECK (ends > starts)`. |
+| `event_starts_at` | **Doors open** — when attendees can arrive at the venue. This (not the hacking start) is the date/time shown on the Apple Wallet pass and Google EventTicketObject's `validTimeInterval`. |
+| `event_ends_at` | **Event over** — distinct from `hacking_ends_at` (multi-day events keep going after submissions close). Becomes the Apple pass's `expirationDate` and the Google object's validity end, so Wallet stops surfacing the pass afterwards. `CHECK (ends > starts)`. |
 | `hacking_starts_at`, `hacking_ends_at` | The publicly-"spoken" hacking window; drives the countdown. `CHECK (ends > starts)`. |
 | `show_start_countdown` | Live "hacking starts in" countdown before the start, vs a frozen duration. |
 | `participants_can_create_projects` | H19 policy switch: while `true`, an admitted participant may create another own project (`POST /api/me/projects`); there is no per-participant project-count cap. See `docs/challenges-devpost.md` §1.3. Default `false`. |
@@ -99,8 +99,43 @@ the event is baked into issued passes. Composition:
   the pass simply has no app link.
 
 Saving `PUT /api/event` with an actual change bumps every issued Apple pass's
-`update_tag` and enqueues a wallet push, so Wallet devices refetch immediately
-(no-op saves push nothing).
+`update_tag`, enqueues a wallet push, and patches the shared Google event-ticket
+class, so existing passes reflect the edit promptly (no-op saves do nothing).
+
+### Google Wallet event tickets
+
+Google tickets use the platform's event-ticket resources, not Generic passes:
+
+- `/api/me/wallet/google/ticket` signs a `savetowallet` JWT containing one
+  `eventTicketObject` referencing the approved class configured by
+  `GOOGLE_WALLET_EVENT_TICKET_CLASS_ID` (currently
+  `3388000000023085754.pass.org.gpul.hackudc`).
+  The object ID is unique and contains no internal user ID.
+- The JWT includes the required `origins` claim, derived from the `WEB_URL`
+  origin, and is signed with the configured service-account key using RS256.
+  The resulting link follows Google's `https://pay.google.com/gp/v/save/<JWT>`
+  format and is kept below Google's recommended 1,800-character limit by the
+  compact payload.
+- Event name, doors-open/start/end times, venue text, venue coordinates, the
+  ticket holder, ticket number, QR barcode, and validity interval are sent in
+  the shapes documented by Google's [EventTicketClass](https://developers.google.com/wallet/reference/rest/v1/eventticketclass)
+  and [EventTicketObject](https://developers.google.com/wallet/reference/rest/v1/eventticketobject)
+  APIs. Class refreshes use `PATCH eventTicketClass/{resourceId}`; object
+  invalidation uses `PATCH eventTicketObject/{resourceId}`.
+- Badges remain Generic passes. The `wallet_passes.google_object_type` column
+  records the resource family so expiry and account-removal cleanup never call
+  a Generic endpoint for an Event Ticket. Existing production ticket rows are
+  backfilled as `generic` and are retired/expired when their owner next asks
+  for a Google ticket; new ticket rows are `event_ticket`.
+
+Google's [add-to flow](https://developers.google.com/wallet/tickets/events/overview/add-to-google-wallet-flow)
+is intentionally asynchronous: generating a link does not call the REST API;
+the class/object are materialized when the holder saves the pass. Event-wide
+configuration updates therefore tolerate a not-yet-materialized class (404)
+and retry all other provider failures through the wallet worker. Before a
+production rollout, complete the issuer's [publishing-access](https://developers.google.com/wallet/tickets/events/test-and-go-live/request-publishing-access)
+requirements; newly-created issuers are limited to configured test users in
+Demo Mode.
 
 ### How a device learns about a change (H28)
 
