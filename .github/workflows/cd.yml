@@ -235,7 +235,9 @@ jobs:
       needs.release-source.result == 'success' &&
       (needs.publish-api.result == 'success' || needs.publish-web.result == 'success')
     environment:
-      name: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+      name: >-
+        ${{ github.ref_name == 'main' && 'production' ||
+        github.ref_name == 'staging' && 'staging' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
