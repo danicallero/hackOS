@@ -1,0 +1,37 @@
+{
+  "aud": "google",
+  "origins": ["https://os.hackudc.com"],
+  "iss": "hackos-wallet@hackos-gpul.iam.gserviceaccount.com",
+  "iat": 1789374034,
+  "typ": "savetowallet",
+  "payload": {
+    "eventTicketObjects": [
+      {
+        "id": "3388000000023085754.ticket_test_001",
+        "classId": "3388000000023085754.pass.org.gpul.hackudc",
+        "state": "ACTIVE",
+        "ticketHolderName": "Test User",
+        "ticketNumber": "ticket-test-001",
+        "ticketType": {
+          "defaultValue": {
+            "language": "en-US",
+            "value": "Event ticket"
+          }
+        },
+        "hexBackgroundColor": "#1f2430",
+        "barcode": {
+          "type": "QR_CODE",
+          "value": "TEST-QR-001"
+        },
+        "validTimeInterval": {
+          "start": {
+            "date": "2026-09-06T15:00:00Z"
+          },
+          "end": {
+            "date": "2026-12-30T18:00:00Z"
+          }
+        }
+      }
+    ]
+  }
+}

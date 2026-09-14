@@ -675,15 +675,144 @@ describe("H28 Google Wallet", () => {
     const [, payloadB64] = jwt.split(".");
     const claims = JSON.parse(Buffer.from(payloadB64!, "base64url").toString("utf8"));
     expect(claims.iss).toBe("test@hackos-test.iam.gserviceaccount.com");
-    expect(claims.payload.genericObjects[0].barcode.value).toBe("ticket-google-1");
+    expect(claims.origins).toEqual(["http://localhost:3001"]);
+    expect(claims.payload.eventTicketClasses).toBeUndefined();
+    expect(claims.payload.eventTicketObjects[0]).toMatchObject({
+      classId: "3388000000022222222.hackos_event_ticket",
+      ticketHolderName: "Wallet",
+      ticketNumber: expect.stringMatching(/^ticket-/),
+      ticketType: { defaultValue: { value: "Event ticket" } },
+      barcode: { value: "ticket-google-1" },
+    });
+    expect(claims.payload.genericObjects).toBeUndefined();
+    expect(jwt.length).toBeLessThan(1800);
 
     const { pool } = await import("../../src/db/pool.js");
     const row = await pool.query(
-      `SELECT platform, google_object_id FROM wallet_passes WHERE user_id = $1`,
+      `SELECT platform, google_object_id, google_object_type FROM wallet_passes WHERE user_id = $1`,
       [uid],
     );
     expect(row.rows[0].platform).toBe("google");
-    expect(row.rows[0].google_object_id).toBe(claims.payload.genericObjects[0].id);
+    expect(row.rows[0].google_object_id).toBe(claims.payload.eventTicketObjects[0].id);
+    expect(row.rows[0].google_object_type).toBe("event_ticket");
+  });
+
+  it("includes the configured event schedule and venue in the Event Ticket resources", async () => {
+    const { pool } = await import("../../src/db/pool.js");
+    const uid = await createUser({ name: "Wallet" });
+    await pool.query(`UPDATE users SET surname = 'Holder' WHERE id = $1`, [uid]);
+    await pool.query(
+      `INSERT INTO event_config
+          (id, name, venue_name, venue_latitude, venue_longitude,
+           event_starts_at, event_ends_at, hacking_starts_at, hacking_ends_at)
+       VALUES (1, 'hackUDC 2026', 'Facultade de Informática', 42.2437866, -8.6952099,
+               '2026-09-06T15:00:00Z', '2026-09-07T18:00:00Z',
+               '2026-09-06T19:00:00Z', '2026-09-06T22:00:00Z')
+       ON CONFLICT (id) DO UPDATE SET
+         name = EXCLUDED.name, venue_name = EXCLUDED.venue_name,
+         venue_latitude = EXCLUDED.venue_latitude, venue_longitude = EXCLUDED.venue_longitude,
+         event_starts_at = EXCLUDED.event_starts_at, event_ends_at = EXCLUDED.event_ends_at,
+         hacking_starts_at = EXCLUDED.hacking_starts_at, hacking_ends_at = EXCLUDED.hacking_ends_at`,
+    );
+    await issueTicket(uid, "ticket-google-event-fields");
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/me/wallet/google/ticket",
+      headers: asUser(uid),
+    });
+    const jwt = res.json().saveUrl.slice("https://pay.google.com/gp/v/save/".length);
+    const claims = JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString("utf8"));
+    expect(claims.payload.eventTicketClasses).toBeUndefined();
+    expect(claims.payload.eventTicketObjects[0].classId).toBe(
+      "3388000000022222222.hackos_event_ticket",
+    );
+    expect(claims.payload.eventTicketObjects[0].validTimeInterval).toEqual({
+      start: { date: "2026-09-06T15:00:00.000Z" },
+      end: { date: "2026-09-07T18:00:00.000Z" },
+    });
+
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
+      if (url === "https://oauth2.googleapis.com/token") {
+        return new Response(JSON.stringify({ access_token: "test-token", expires_in: 3600 }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { processWalletSync } = await import("../../src/modules/logistics/wallet-sync.js");
+    const pass = await pool.query(
+      `SELECT id FROM wallet_passes WHERE user_id = $1 AND platform = 'google'`,
+      [uid],
+    );
+    await processWalletSync({ data: { passIds: [pass.rows[0].id], action: "refresh" } } as never);
+    const patchCall = fetchMock.mock.calls.find(([, init]) => init?.method === "PATCH");
+    expect(patchCall?.[0]).toBe(
+      "https://walletobjects.googleapis.com/walletobjects/v1/eventTicketClass/3388000000022222222.hackos_event_ticket",
+    );
+    expect(JSON.parse(patchCall![1]!.body as string).eventName.defaultValue.value).toBe(
+      "hackUDC 2026",
+    );
+    expect(JSON.parse(patchCall![1]!.body as string).dateTime).toEqual({
+      doorsOpen: "2026-09-06T15:00:00.000Z",
+      start: "2026-09-06T19:00:00.000Z",
+      end: "2026-09-07T18:00:00.000Z",
+    });
+  });
+
+  it("migrates a legacy generic ticket before issuing an Event Ticket", async () => {
+    const uid = await createUser({ name: "Legacy" });
+    await issueTicket(uid, "ticket-google-legacy");
+    const { pool } = await import("../../src/db/pool.js");
+    const legacyObjectId = "3388000000022222222.ticket_legacy";
+    const legacy = await pool.query(
+      `INSERT INTO wallet_passes
+         (user_id, purpose, platform, serial_number, authentication_token, google_object_id, google_object_type)
+       VALUES ($1, 'ticket', 'google', 'legacy-ticket', 'legacy-token', $2, 'generic')
+       RETURNING id`,
+      [uid, legacyObjectId],
+    );
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/me/wallet/google/ticket",
+      headers: asUser(uid),
+    });
+    expect(res.statusCode).toBe(200);
+
+    const passes = await pool.query(
+      `SELECT id, status, google_object_id, google_object_type
+         FROM wallet_passes WHERE user_id = $1 AND purpose = 'ticket' ORDER BY id`,
+      [uid],
+    );
+    expect(passes.rows).toEqual([
+      {
+        id: legacy.rows[0].id,
+        status: "voided",
+        google_object_id: legacyObjectId,
+        google_object_type: "generic",
+      },
+      expect.objectContaining({ status: "active", google_object_type: "event_ticket" }),
+    ]);
+
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
+      if (url === "https://oauth2.googleapis.com/token") {
+        return new Response(JSON.stringify({ access_token: "test-token", expires_in: 3600 }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { processWalletSync } = await import("../../src/modules/logistics/wallet-sync.js");
+    await processWalletSync({ data: { passIds: [legacy.rows[0].id] } } as never);
+    const patchCall = fetchMock.mock.calls.find(([, init]) => init?.method === "PATCH");
+    expect(patchCall?.[0]).toBe(
+      `https://walletobjects.googleapis.com/walletobjects/v1/genericObject/${legacyObjectId}`,
+    );
   });
 });
 

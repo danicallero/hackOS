@@ -2,19 +2,25 @@ import { createSign, randomBytes } from "node:crypto";
 import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
 import { NotFoundError, ServiceUnavailableError } from "../../lib/errors.js";
-import { ensurePassRecord, type Purpose, resolvePassIdentity } from "./wallet-passes.js";
+import {
+  ensureGooglePassRecord,
+  type GoogleObjectType,
+  type Purpose,
+  resolvePassIdentity,
+} from "./wallet-passes.js";
 
 /**
- * Google Wallet (H28). Uses the "Generic" pass type — unlike Event Ticket
- * classes it needs no Google review/allowlisting — with the class AND
- * object embedded inline in the "Save to Google Wallet" JWT, so issuing a
- * pass needs zero REST calls (no service-account OAuth round trip). The
- * REST API + OAuth are only needed to push a state change on rotation.
+ * Google Wallet (H28). Event tickets use Google's EventTicketClass and
+ * EventTicketObject resources, embedded inline in the signed Save to Google
+ * Wallet JWT. Badges remain Generic passes. Ticket classes are created and
+ * approved separately; issuing a ticket embeds only the object in the JWT.
+ * OAuth is used by the worker for class updates and expiration.
  */
 
 const WALLET_API_BASE = "https://walletobjects.googleapis.com/walletobjects/v1";
 const OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const OAUTH_SCOPE = "https://www.googleapis.com/auth/wallet_object.issuer";
+const ORGANIZATION_NAME = config.APPLE_PASS_ORGANIZATION;
 
 function requireConfigured(): void {
   if (!config.googleWalletConfigured) {
@@ -43,6 +49,17 @@ function classId(purpose: Purpose): string {
   return `${config.GOOGLE_WALLET_ISSUER_ID}.hackos_${purpose}`;
 }
 
+function eventTicketClassId(): string {
+  return (
+    config.GOOGLE_WALLET_EVENT_TICKET_CLASS_ID ??
+    `${config.GOOGLE_WALLET_ISSUER_ID}.hackos_event_ticket`
+  );
+}
+
+function localized(value: string) {
+  return { defaultValue: { language: "en-US", value } };
+}
+
 function genericClass(purpose: Purpose) {
   return { id: classId(purpose) };
 }
@@ -58,23 +75,133 @@ function genericObject(
     id: objectId,
     classId: classId(purpose),
     state,
-    cardTitle: { defaultValue: { language: "en", value: "hackOS" } },
-    header: {
-      defaultValue: {
-        language: "en",
-        value: purpose === "ticket" ? "hackOS ticket" : "hackOS badge",
-      },
-    },
-    subheader: { defaultValue: { language: "en", value: fullName } },
+    cardTitle: localized("hackOS"),
+    header: localized(purpose === "ticket" ? "hackOS ticket" : "hackOS badge"),
+    subheader: localized(fullName),
     hexBackgroundColor: "#1f2430",
     barcode: { type: "QR_CODE", value: barcodeValue },
+  };
+}
+
+interface GoogleEventConfig {
+  name: string | null;
+  venue_name: string | null;
+  venue_latitude: number | null;
+  venue_longitude: number | null;
+  event_starts_at: string | Date | null;
+  event_ends_at: string | Date | null;
+  hacking_starts_at: string | Date | null;
+  hacking_ends_at: string | Date | null;
+}
+
+async function readEventConfig(): Promise<GoogleEventConfig> {
+  const { rows } = await pool.query(
+    `SELECT name, venue_name, venue_latitude, venue_longitude,
+            event_starts_at, event_ends_at, hacking_starts_at, hacking_ends_at
+       FROM event_config WHERE id = 1`,
+  );
+  return (
+    rows[0] ?? {
+      name: null,
+      venue_name: null,
+      venue_latitude: null,
+      venue_longitude: null,
+      event_starts_at: null,
+      event_ends_at: null,
+      hacking_starts_at: null,
+      hacking_ends_at: null,
+    }
+  );
+}
+
+function isoDate(value: string | Date | null): string | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function eventDateTime(event: GoogleEventConfig) {
+  const doorsOpen = isoDate(event.event_starts_at);
+  const start = isoDate(event.hacking_starts_at ?? event.event_starts_at);
+  const end = isoDate(event.event_ends_at ?? event.hacking_ends_at);
+  const startMs = start ? Date.parse(start) : null;
+  const endMs = end ? Date.parse(end) : null;
+
+  return {
+    ...(doorsOpen ? { doorsOpen } : {}),
+    ...(start ? { start } : {}),
+    ...(start && end && startMs !== null && endMs !== null && endMs > startMs ? { end } : {}),
+  };
+}
+
+function validTimeInterval(event: GoogleEventConfig) {
+  const start = isoDate(event.event_starts_at ?? event.hacking_starts_at);
+  const end = isoDate(event.event_ends_at ?? event.hacking_ends_at);
+  const startMs = start ? Date.parse(start) : null;
+  const endMs = end ? Date.parse(end) : null;
+  if (!start || !end || startMs === null || endMs === null || endMs <= startMs) return {};
+  return { validTimeInterval: { start: { date: start }, end: { date: end } } };
+}
+
+function eventTicketClass(event: GoogleEventConfig) {
+  const eventName = event.name?.trim() || ORGANIZATION_NAME;
+  const venueName = event.venue_name?.trim();
+  const dateTime = eventDateTime(event);
+  const hasLocation =
+    event.venue_latitude !== null &&
+    event.venue_longitude !== null &&
+    Number.isFinite(event.venue_latitude) &&
+    Number.isFinite(event.venue_longitude);
+
+  return {
+    id: eventTicketClassId(),
+    eventName: localized(eventName),
+    eventId: eventTicketClassId(),
+    issuerName: ORGANIZATION_NAME,
+    localizedIssuerName: localized(ORGANIZATION_NAME),
+    reviewStatus: "UNDER_REVIEW",
+    hexBackgroundColor: "#1f2430",
+    ...(Object.keys(dateTime).length > 0 ? { dateTime } : {}),
+    ...(venueName
+      ? {
+          textModulesData: [{ id: "venue", header: "Venue", body: venueName }],
+        }
+      : {}),
+    // Google currently marks this legacy field as deprecated, but it remains
+    // part of EventTicketClass and is the only location shape represented by
+    // hackOS's existing venue model (name + coordinates).
+    ...(hasLocation
+      ? {
+          locations: [{ latitude: event.venue_latitude, longitude: event.venue_longitude }],
+        }
+      : {}),
+  };
+}
+
+function eventTicketObject(
+  objectId: string,
+  pass: { serial_number: string },
+  fullName: string,
+  barcodeValue: string,
+  event: GoogleEventConfig,
+) {
+  return {
+    id: objectId,
+    classId: eventTicketClassId(),
+    state: "ACTIVE",
+    ticketHolderName: fullName,
+    ticketNumber: pass.serial_number,
+    ticketType: localized("Event ticket"),
+    hexBackgroundColor: "#1f2430",
+    barcode: { type: "QR_CODE", value: barcodeValue },
+    ...validTimeInterval(event),
   };
 }
 
 async function passContent(
   userId: number,
   purpose: Purpose,
-): Promise<{ fullName: string; barcode: string }> {
+): Promise<{ fullName: string; barcode: string; event: GoogleEventConfig }> {
   const { rows } = await pool.query(
     `SELECT u.name, u.surname, u.badge_id, t.token
        FROM users u
@@ -84,33 +211,56 @@ async function passContent(
   );
   const u = rows[0];
   if (!u) throw new NotFoundError("User not found");
-  return resolvePassIdentity(u, userId, purpose);
+  return { ...resolvePassIdentity(u, userId, purpose), event: await readEventConfig() };
 }
 
 /**
  * Ensures a `wallet_passes` row (platform=google) and returns a "Save to
- * Google Wallet" link. Google upserts the class/object from the JWT payload
- * on save, so re-issuing after a rotation (fresh objectId, fresh row) just
- * works without deleting anything server-side.
+ * Google Wallet" link. The approved Event Ticket class is referenced by ID;
+ * the per-user object is carried by the signed JWT.
  */
 export async function buildGoogleSaveUrl(userId: number, purpose: Purpose): Promise<string> {
   requireConfigured();
 
-  const objectId = `${config.GOOGLE_WALLET_ISSUER_ID}.${purpose}_${userId}_${randomBytes(6).toString("hex")}`;
-  const pass = await ensurePassRecord(userId, purpose, "google", { googleObjectId: objectId });
-  const { fullName, barcode } = await passContent(userId, purpose);
+  const googleObjectType: GoogleObjectType = purpose === "ticket" ? "event_ticket" : "generic";
+  const objectId = `${config.GOOGLE_WALLET_ISSUER_ID}.${purpose}_${randomBytes(16).toString("hex")}`;
+  const { pass, retiredPassIds } = await ensureGooglePassRecord(
+    userId,
+    purpose,
+    objectId,
+    googleObjectType,
+  );
+  if (retiredPassIds.length > 0) {
+    const { enqueueWalletSync } = await import("./wallet-sync.js");
+    await enqueueWalletSync(retiredPassIds);
+  }
+  const { fullName, barcode, event } = await passContent(userId, purpose);
+
+  const payload =
+    purpose === "ticket"
+      ? {
+          // The Event Ticket class is created and approved in the Pay &
+          // Wallet Console (or patched through the REST API). Referencing an
+          // existing class keeps the save JWT compact and avoids asking
+          // Google to create a class with an incorrect/legacy ID.
+          eventTicketObjects: [
+            eventTicketObject(pass.google_object_id ?? objectId, pass, fullName, barcode, event),
+          ],
+        }
+      : {
+          genericClasses: [genericClass(purpose)],
+          genericObjects: [
+            genericObject(pass.google_object_id ?? objectId, purpose, fullName, barcode),
+          ],
+        };
 
   const jwt = signJwt({
     iss: config.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL,
     aud: "google",
     typ: "savetowallet",
     iat: Math.floor(Date.now() / 1000),
-    payload: {
-      genericClasses: [genericClass(purpose)],
-      genericObjects: [
-        genericObject(pass.google_object_id ?? objectId, purpose, fullName, barcode),
-      ],
-    },
+    origins: [new URL(config.WEB_URL).origin],
+    payload,
   });
   return `https://pay.google.com/gp/v/save/${jwt}`;
 }
@@ -146,11 +296,36 @@ async function getAccessToken(): Promise<string> {
   return cachedToken.token;
 }
 
-/** Marks a Google Wallet object expired (H28: rotation invalidates the old pass). */
-export async function expireGoogleObject(objectId: string): Promise<void> {
+/**
+ * Updates the shared EventTicketClass. Google propagates class changes to all
+ * saved EventTicketObjects, so one PATCH is enough for an event-wide edit.
+ * A class may not exist yet when a user only generated a link but did not save
+ * it; that 404 is harmless and is intentionally treated as a no-op.
+ */
+export async function refreshGoogleEventTicketClass(): Promise<void> {
   requireConfigured();
   const token = await getAccessToken();
-  const res = await fetch(`${WALLET_API_BASE}/genericObject/${objectId}`, {
+  const res = await fetch(`${WALLET_API_BASE}/eventTicketClass/${eventTicketClassId()}`, {
+    method: "PATCH",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify(eventTicketClass(await readEventConfig())),
+  });
+  if (res.status === 404) return;
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Google Wallet event ticket class update failed: ${res.status} ${body}`);
+  }
+}
+
+/** Marks a Google Wallet object expired (H28: rotation invalidates the old pass). */
+export async function expireGoogleObject(
+  objectId: string,
+  objectType: GoogleObjectType = "generic",
+): Promise<void> {
+  requireConfigured();
+  const token = await getAccessToken();
+  const resource = objectType === "event_ticket" ? "eventTicketObject" : "genericObject";
+  const res = await fetch(`${WALLET_API_BASE}/${resource}/${encodeURIComponent(objectId)}`, {
     method: "PATCH",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
     body: JSON.stringify({ state: "EXPIRED" }),

@@ -92,7 +92,8 @@ async function requirePassBySerial(
     ? "u.anonymized_at IS NULL AND (u.account_state = 'active' OR (u.account_state = 'removal_pending' AND wallet_passes.status = 'voided'))"
     : "u.account_state = 'active' AND u.anonymized_at IS NULL";
   const { rows } = await pool.query(
-    `SELECT id, user_id, purpose, serial_number, authentication_token, status, update_tag
+    `SELECT id, user_id, purpose, platform, serial_number, authentication_token,
+            google_object_id, google_object_type, status, update_tag
        FROM wallet_passes
       WHERE platform = 'apple' AND serial_number = $1 AND authentication_token = $2
         AND EXISTS (SELECT 1 FROM users u WHERE u.id = wallet_passes.user_id

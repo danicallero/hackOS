@@ -17,7 +17,10 @@ import {
   type RouteAccessPolicy,
   routeAccessOption as routeAccess,
 } from "../../lib/route-policy.js";
-import { bumpAllAppleWalletUpdateTags } from "../logistics/wallet-passes.js";
+import {
+  bumpAllAppleWalletUpdateTags,
+  listActiveWalletPassIds,
+} from "../logistics/wallet-passes.js";
 import { enqueueWalletSync } from "../logistics/wallet-sync.js";
 
 /**
@@ -349,7 +352,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update event config",
         description:
-          "Updates name/tagline/timezone, event start (doors open — the time shown on the Wallet pass), hacking window, venue (name + GPS), the Wallet pass back-field list, field-label overrides, per-field show/hide toggles, whether participants may create their own project (H19), presence-detection policy, whether invited sponsors/staff must supply a shirt size and/or see dietary-restriction fields when claiming their account (H10), and the shirt-size options offered by every picker in the app (H12). Fields omitted from the body are left unchanged. Each field is additionally gated by its own owning capability (EVENT_MANAGE for identity/timing, VENUE_MANAGE, WALLET_MANAGE, PRESENCE_MANAGE, INVITES_MANAGE for the sponsor/staff requirements, INTOLERANCES_MANAGE for shirtSizes) — a 403 names exactly which field(s) the caller lacks rights to. Issued Apple Wallet passes are pushed a refresh when the saved config actually changes.",
+          "Updates name/tagline/timezone, event start (doors open — the time shown on the Wallet pass), hacking window, venue (name + GPS), the Wallet pass back-field list, field-label overrides, per-field show/hide toggles, whether participants may create their own project (H19), presence-detection policy, whether invited sponsors/staff must supply a shirt size and/or see dietary-restriction fields when claiming their account (H10), and the shirt-size options offered by every picker in the app (H12). Fields omitted from the body are left unchanged. Each field is additionally gated by its own owning capability (EVENT_MANAGE for identity/timing, VENUE_MANAGE, WALLET_MANAGE, PRESENCE_MANAGE, INVITES_MANAGE for the sponsor/staff requirements, INTOLERANCES_MANAGE for shirtSizes) — a 403 names exactly which field(s) the caller lacks rights to. When the saved config actually changes, Apple Wallet devices are pushed and the shared Google Wallet event-ticket class is refreshed for saved tickets.",
         body: eventConfigBody,
       },
     },
@@ -512,13 +515,14 @@ export function registerEventRoutes(app: FastifyInstance): void {
       });
 
       // Apple Wallet passes render event name/venue/back fields fresh from
-      // event_config on every fetch — push every issued pass so Wallet
-      // refetches now instead of waiting for its next scheduled poll. Only
-      // when something actually changed, so clicking Save with no edits
-      // doesn't push every device.
+      // event_config on every fetch. Google event tickets inherit their
+      // event-wide fields from one EventTicketClass. Refresh both providers
+      // only when something actually changed, so clicking Save with no edits
+      // doesn't push every device or call Google's API.
       if (JSON.stringify(current) !== JSON.stringify(rows[0])) {
-        const passIds = await bumpAllAppleWalletUpdateTags();
-        await enqueueWalletSync(passIds);
+        const applePassIds = await bumpAllAppleWalletUpdateTags();
+        const activePassIds = await listActiveWalletPassIds();
+        await enqueueWalletSync([...new Set([...applePassIds, ...activePassIds])], "refresh");
       }
 
       return toAdmin(rows[0], judging);

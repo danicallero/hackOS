@@ -71,7 +71,8 @@ describe("scoped wallet access (issue #369)", () => {
     expect(res.statusCode).toBe(200);
     const jwt = res.json().saveUrl.slice("https://pay.google.com/gp/v/save/".length);
     const claims = JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString("utf8"));
-    expect(claims.payload.genericObjects[0].barcode.value).toBe("ticket-scoped-google");
+    expect(claims.origins).toEqual(["http://localhost:3001"]);
+    expect(claims.payload.eventTicketObjects[0].barcode.value).toBe("ticket-scoped-google");
   });
 
   it("gives the token holder's pass even when someone else is signed in", async () => {
@@ -89,7 +90,7 @@ describe("scoped wallet access (issue #369)", () => {
     expect(res.statusCode).toBe(200);
     const jwt = res.json().saveUrl.slice("https://pay.google.com/gp/v/save/".length);
     const claims = JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString("utf8"));
-    expect(claims.payload.genericObjects[0].barcode.value).toBe("ticket-owner");
+    expect(claims.payload.eventTicketObjects[0].barcode.value).toBe("ticket-owner");
   });
 
   it("rejects an unknown, expired or wrong-purpose token", async () => {

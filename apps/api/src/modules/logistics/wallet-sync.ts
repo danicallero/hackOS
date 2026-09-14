@@ -2,8 +2,9 @@ import { pool } from "../../db/pool.js";
 import { ServiceUnavailableError } from "../../lib/errors.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { ApplePushUnregisteredError, sendApplePush } from "./apple-push.js";
-import { expireGoogleObject } from "./google-wallet.js";
+import { expireGoogleObject, refreshGoogleEventTicketClass } from "./google-wallet.js";
 import { PASS_TYPE_IDENTIFIER } from "./wallet.js";
+import type { GoogleObjectType, Purpose } from "./wallet-passes.js";
 
 /**
  * Notifies devices after a `wallet_passes` row is voided (H28: badge
@@ -17,19 +18,32 @@ import { PASS_TYPE_IDENTIFIER } from "./wallet.js";
 
 const QUEUE_NAME = "logistics.wallet-sync";
 
+export type SyncAction = "invalidate" | "refresh";
+
 interface SyncJobData {
   passIds: number[];
+  action?: SyncAction;
 }
 
-export async function enqueueWalletSync(passIds: number[]): Promise<void> {
+export async function enqueueWalletSync(
+  passIds: number[],
+  action: SyncAction = "invalidate",
+): Promise<void> {
   if (passIds.length === 0) return;
-  await getQueue(QUEUE_NAME).add(`sync:${passIds.join(",")}`, { passIds } satisfies SyncJobData);
+  const uniquePassIds = [...new Set(passIds)].sort((a, b) => a - b);
+  await getQueue(QUEUE_NAME).add(`sync:${action}:${uniquePassIds.join(",")}`, {
+    passIds: uniquePassIds,
+    action,
+  } satisfies SyncJobData);
 }
 
 interface PassRow {
   id: number;
   platform: "apple" | "google";
+  purpose: Purpose;
   google_object_id: string | null;
+  google_object_type: GoogleObjectType | null;
+  status: string;
 }
 
 interface DeviceRow {
@@ -39,10 +53,33 @@ interface DeviceRow {
 }
 
 export async function processWalletSync(job: { data: SyncJobData }): Promise<void> {
+  const action = job.data.action ?? "invalidate";
   const { rows } = await pool.query(
-    `SELECT id, platform, google_object_id FROM wallet_passes WHERE id = ANY($1)`,
+    `SELECT id, platform, purpose, google_object_id, google_object_type, status
+       FROM wallet_passes WHERE id = ANY($1)`,
     [job.data.passIds],
   );
+
+  if (
+    action === "refresh" &&
+    (rows as PassRow[]).some(
+      (pass) =>
+        pass.platform === "google" &&
+        pass.purpose === "ticket" &&
+        pass.status !== "voided" &&
+        pass.google_object_type === "event_ticket",
+    )
+  ) {
+    try {
+      await refreshGoogleEventTicketClass();
+    } catch (err) {
+      if (err instanceof ServiceUnavailableError) {
+        console.warn("wallet: skipping Google class refresh,", err.message);
+      } else {
+        throw err;
+      }
+    }
+  }
 
   // One query for every apple pass's devices instead of one per pass (N+1).
   const applePassIds = (rows as PassRow[])
@@ -78,9 +115,9 @@ export async function processWalletSync(job: { data: SyncJobData }): Promise<voi
           throw err;
         }
       }
-    } else if (pass.platform === "google" && pass.google_object_id) {
+    } else if (action === "invalidate" && pass.platform === "google" && pass.google_object_id) {
       try {
-        await expireGoogleObject(pass.google_object_id);
+        await expireGoogleObject(pass.google_object_id, pass.google_object_type ?? "generic");
       } catch (err) {
         // Google was configured when the pass was issued but no longer is —
         // retrying won't help until redeploy, so log and move on instead of
