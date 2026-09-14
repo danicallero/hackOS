@@ -232,6 +232,36 @@ const envSchema = z.object({
   GOOGLE_WALLET_EVENT_TICKET_CLASS_ID: z.string().optional(),
   GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL: z.string().optional(),
   GOOGLE_WALLET_PRIVATE_KEY_PEM: z.string().optional(),
+  // Optional Event Ticket class branding. These must be publicly reachable
+  // HTTPS image URLs because Google fetches them while rendering the pass.
+  GOOGLE_WALLET_LOGO_URL: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z
+      .string()
+      .url()
+      .refine((value) => value.startsWith("https://"), "must use HTTPS")
+      .optional(),
+  ),
+  GOOGLE_WALLET_HERO_IMAGE_URL: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z
+      .string()
+      .url()
+      .refine((value) => value.startsWith("https://"), "must use HTTPS")
+      .optional(),
+  ),
+  GOOGLE_WALLET_WIDE_LOGO_URL: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z
+      .string()
+      .url()
+      .refine((value) => value.startsWith("https://"), "must use HTTPS")
+      .optional(),
+  ),
+  GOOGLE_WALLET_BACKGROUND_COLOR: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.string().regex(hexColor).optional(),
+  ),
 
   /**
    * Optional automatic translation for announcement content (H50). Entirely

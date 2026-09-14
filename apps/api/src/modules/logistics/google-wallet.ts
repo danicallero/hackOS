@@ -21,6 +21,7 @@ const WALLET_API_BASE = "https://walletobjects.googleapis.com/walletobjects/v1";
 const OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const OAUTH_SCOPE = "https://www.googleapis.com/auth/wallet_object.issuer";
 const ORGANIZATION_NAME = config.APPLE_PASS_ORGANIZATION;
+const BACKGROUND_COLOR = config.GOOGLE_WALLET_BACKGROUND_COLOR ?? "#1f2430";
 
 function requireConfigured(): void {
   if (!config.googleWalletConfigured) {
@@ -58,6 +59,15 @@ function eventTicketClassId(): string {
 
 function localized(value: string) {
   return { defaultValue: { language: "en-US", value } };
+}
+
+function walletImage(uri: string | undefined, description: string) {
+  const value = uri?.trim();
+  return value ? { sourceUri: { uri: value, description } } : undefined;
+}
+
+function templateItem(fieldPath: string) {
+  return { firstValue: { fields: [{ fieldPath }] } };
 }
 
 function genericClass(purpose: Purpose) {
@@ -147,11 +157,46 @@ function eventTicketClass(event: GoogleEventConfig) {
   const eventName = event.name?.trim() || ORGANIZATION_NAME;
   const venueName = event.venue_name?.trim();
   const dateTime = eventDateTime(event);
+  const logo = walletImage(config.GOOGLE_WALLET_LOGO_URL, "GPUL logo");
+  const heroImage = walletImage(config.GOOGLE_WALLET_HERO_IMAGE_URL, `${eventName} artwork`);
+  const wideLogo = walletImage(config.GOOGLE_WALLET_WIDE_LOGO_URL, `${eventName} wide logo`);
   const hasLocation =
     event.venue_latitude !== null &&
     event.venue_longitude !== null &&
     Number.isFinite(event.venue_latitude) &&
     Number.isFinite(event.venue_longitude);
+
+  const cardRowTemplateInfos = [];
+  if (dateTime.start && venueName) {
+    cardRowTemplateInfos.push({
+      twoItems: {
+        startItem: templateItem("class.dateTime.start"),
+        endItem: templateItem("class.venue.name"),
+      },
+    });
+  } else if (dateTime.start) {
+    cardRowTemplateInfos.push({ oneItem: { item: templateItem("class.dateTime.start") } });
+  } else if (venueName) {
+    cardRowTemplateInfos.push({ oneItem: { item: templateItem("class.venue.name") } });
+  }
+  cardRowTemplateInfos.push({
+    twoItems: {
+      startItem: templateItem("object.ticketHolderName"),
+      endItem: templateItem("object.ticketType"),
+    },
+  });
+
+  const detailsItemInfos = [
+    ...(dateTime.start ? [{ item: templateItem("class.dateTime.start") }] : []),
+    ...(dateTime.doorsOpen && dateTime.doorsOpen !== dateTime.start
+      ? [{ item: templateItem("class.dateTime.doorsOpen") }]
+      : []),
+    ...(dateTime.end ? [{ item: templateItem("class.dateTime.end") }] : []),
+    ...(venueName ? [{ item: templateItem("class.venue.name") }] : []),
+    { item: templateItem("object.ticketHolderName") },
+    { item: templateItem("object.ticketType") },
+    { item: templateItem("object.ticketNumber") },
+  ];
 
   return {
     id: eventTicketClassId(),
@@ -160,13 +205,21 @@ function eventTicketClass(event: GoogleEventConfig) {
     issuerName: ORGANIZATION_NAME,
     localizedIssuerName: localized(ORGANIZATION_NAME),
     reviewStatus: "UNDER_REVIEW",
-    hexBackgroundColor: "#1f2430",
+    hexBackgroundColor: BACKGROUND_COLOR,
+    countryCode: "ES",
     ...(Object.keys(dateTime).length > 0 ? { dateTime } : {}),
-    ...(venueName
-      ? {
-          textModulesData: [{ id: "venue", header: "Venue", body: venueName }],
-        }
-      : {}),
+    // EventVenue is what the built-in Wallet template reads for the title and
+    // detail sections. The event settings currently store a venue name (not a
+    // postal address), so use that value as the required address fallback
+    // until a separate postal-address field is introduced.
+    ...(venueName ? { venue: { name: localized(venueName), address: localized(venueName) } } : {}),
+    ...(logo ? { logo } : {}),
+    ...(heroImage ? { heroImage } : {}),
+    ...(wideLogo ? { wideLogo } : {}),
+    classTemplateInfo: {
+      cardTemplateOverride: { cardRowTemplateInfos },
+      detailsTemplateOverride: { detailsItemInfos },
+    },
     // Google currently marks this legacy field as deprecated, but it remains
     // part of EventTicketClass and is the only location shape represented by
     // hackOS's existing venue model (name + coordinates).
@@ -192,7 +245,7 @@ function eventTicketObject(
     ticketHolderName: fullName,
     ticketNumber: pass.serial_number,
     ticketType: localized("Event ticket"),
-    hexBackgroundColor: "#1f2430",
+    hexBackgroundColor: BACKGROUND_COLOR,
     barcode: { type: "QR_CODE", value: barcodeValue },
     ...validTimeInterval(event),
   };

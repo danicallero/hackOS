@@ -760,6 +760,14 @@ describe("H28 Google Wallet", () => {
       start: "2026-09-06T19:00:00.000Z",
       end: "2026-09-07T18:00:00.000Z",
     });
+    expect(JSON.parse(patchCall![1]!.body as string).venue).toEqual({
+      name: { defaultValue: { language: "en-US", value: "Facultade de Informática" } },
+      address: { defaultValue: { language: "en-US", value: "Facultade de Informática" } },
+    });
+    expect(
+      JSON.parse(patchCall![1]!.body as string).classTemplateInfo.cardTemplateOverride
+        .cardRowTemplateInfos,
+    ).toHaveLength(2);
   });
 
   it("migrates a legacy generic ticket before issuing an Event Ticket", async () => {
