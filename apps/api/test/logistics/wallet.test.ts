@@ -104,6 +104,11 @@ function readStoredZipEntries(buf: Buffer): Record<string, Buffer> {
   return entries;
 }
 
+function pngDimensions(buf: Buffer) {
+  expect(buf.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+}
+
 /** Regression check for the empty-signature bug: verifies the DER signature cryptographically matches the manifest. */
 function assertValidDetachedSignature(manifest: Buffer, signature: Buffer) {
   expect(signature.length).toBeGreaterThan(0);
@@ -165,12 +170,16 @@ describe("H28 Apple Wallet PassKit", () => {
       "logo@2x.png",
       "strip.png",
       "strip@2x.png",
+      "strip@3x.png",
     ];
     for (const name of imageFiles) {
       expect(entries[name]).toBeDefined();
-      expect(entries[name]!.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+      pngDimensions(entries[name]!);
       expect(manifest[name]).toBe(createHash("sha1").update(entries[name]!).digest("hex"));
     }
+    expect(pngDimensions(entries["strip.png"]!)).toEqual({ width: 375, height: 98 });
+    expect(pngDimensions(entries["strip@2x.png"]!)).toEqual({ width: 750, height: 196 });
+    expect(pngDimensions(entries["strip@3x.png"]!)).toEqual({ width: 1125, height: 294 });
 
     const { pool } = await import("../../src/db/pool.js");
     const pass = await pool.query(
@@ -292,9 +301,10 @@ describe("H28 Apple Wallet PassKit", () => {
     // the env string) + deep-link launch URL from MOBILE_APP_SCHEME.
     expect(pass.associatedStoreIdentifiers).toEqual([1234567890]);
     expect(pass.appLaunchURL).toBe("hackos://");
-    expect(pass.foregroundColor).toBe("rgb(255,255,255)");
-    expect(pass.backgroundColor).toBe("rgb(40,40,40)");
-    expect(pass.labelColor).toBe("rgb(255,180,0)");
+    expect(pass.foregroundColor).toBe("rgb(3,8,70)");
+    expect(pass.backgroundColor).toBe("rgb(163,213,255)");
+    expect(pass.labelColor).toBe("rgb(3,8,70)");
+    expect(pass.suppressStripShine).toBe(true);
   });
 
   it("applies admin-overridden pass field labels, falling back to defaults for the rest (H28)", async () => {
