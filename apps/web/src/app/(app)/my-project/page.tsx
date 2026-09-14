@@ -11,7 +11,6 @@
 import { EVENTS } from "@hackos/shared/events";
 import { FolderGitIcon, MailIcon, TrophyIcon, UserPlusIcon, UsersIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
@@ -38,6 +37,7 @@ import {
   type PendingInvite,
 } from "@/lib/projects";
 import { useMe } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import { ProjectFormDialog } from "../projects/project-form-dialog";
 import {
   challengeTitleText,

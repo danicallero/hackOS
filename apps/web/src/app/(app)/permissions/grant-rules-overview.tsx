@@ -2,7 +2,6 @@
 
 import { SearchIcon, ZapIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { Spinner } from "@/components/common/spinner";
@@ -10,6 +9,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { Input } from "@/components/ui/input";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
 import type { RoleGrantRule } from "@/lib/types";
 import { ruleTriggerLabel } from "./helpers";
 

@@ -3,7 +3,6 @@
 // Queue admin surface for rooms and assignments (H46).
 
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -16,6 +15,7 @@ import {
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import type { RoomAssignments } from "@/lib/queue";
+import { toast } from "@/lib/toast";
 import type { EnterpriseSummary } from "@/lib/types";
 
 /**

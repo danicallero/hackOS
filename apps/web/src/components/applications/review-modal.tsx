@@ -32,7 +32,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { toast } from "sonner";
 import {
   type FormSection,
   fmtScore,
@@ -65,12 +64,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
-import { Toaster } from "@/components/ui/sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { LOCALE_CODES, pickText, type Translate, useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
 import { useCan, useMe } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import type { Intolerance, Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -237,8 +236,6 @@ type FileViewerSide = "left" | "right";
 const FILE_VIEWER_SIDE_STORAGE_KEY = "hackos.application-review.file-viewer-side";
 const FILE_VIEWER_DRAG_TYPE = "text/hackos-application-file-viewer";
 const FLOATING_REVIEW_POSITION_STORAGE_KEY = "hackos.application-review.floating-review-position";
-const REVIEW_TOASTER_ID = "application-review-modal";
-
 function fileNameFromValue(value: string): string {
   let path = value;
   if (/^https?:\/\//i.test(value)) {
@@ -1210,8 +1207,7 @@ export function ReviewModal({
   }
 
   function showApplicantAcceptedToast() {
-    toast.success(t("applicantAccepted"), {
-      toasterId: REVIEW_TOASTER_ID,
+    toast.action(t("applicantAccepted"), {
       duration: 8_000,
       action: {
         label: t("undo"),
@@ -1226,11 +1222,9 @@ export function ReviewModal({
     try {
       await api.post(`/api/responses/${response.id}/revert-decision`, { decision: "review" });
       if (mountedRef.current) updateModalStatus("review");
-      toast.success(t("acceptanceUndone"), { toasterId: REVIEW_TOASTER_ID });
+      toast.success(t("acceptanceUndone"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("actionFailed"), {
-        toasterId: REVIEW_TOASTER_ID,
-      });
+      toast.error(err instanceof ApiError ? err.message : t("actionFailed"));
     } finally {
       if (mountedRef.current) setBusy(false);
     }
@@ -1539,7 +1533,6 @@ export function ReviewModal({
             ).finally(() => setConfirmRevoke(false));
           }}
         />
-        <Toaster id={REVIEW_TOASTER_ID} position="bottom-right" />
       </section>
     </Modal>
   );

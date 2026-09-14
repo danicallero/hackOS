@@ -7,7 +7,6 @@ import { IdCardIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -21,6 +20,7 @@ import {
   accountRemovalRequest,
 } from "@/lib/privacy-removal";
 import { useCan, useMe } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import type { UserDetail } from "@/lib/types";
 import { fullName, initials, ROLE_TONE, roleDisplayName } from "./shared";
 

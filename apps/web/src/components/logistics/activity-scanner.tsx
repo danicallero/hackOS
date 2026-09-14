@@ -13,7 +13,6 @@ import {
   UsersIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
 import { EmptyState } from "@/components/common/empty-state";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { Modal } from "@/components/common/modal";
@@ -28,6 +27,7 @@ import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { type ActivityScanResult, logisticsApi, type PersonSearchResult } from "@/lib/logistics";
 import { useSessionContext } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import {
   isStaleOfflineScanError,
   loadOfflineQueue,

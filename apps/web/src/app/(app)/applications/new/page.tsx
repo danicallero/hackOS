@@ -11,7 +11,6 @@ import { ClipboardListIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
 import { z } from "zod";
 import { AccessDenied } from "@/components/common/access-denied";
 import { BackLink } from "@/components/common/back-link";
@@ -35,6 +34,7 @@ import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import type { RoleSummary } from "@/lib/types";
 import { type ApplicationForm, fromLocalInput } from "../lib";
 

@@ -9,7 +9,6 @@
 import { CheckIcon, ChevronsUpDownIcon, PlusIcon } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { useEffect, useId, useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -23,6 +22,7 @@ import { useDialogPortal } from "@/hooks/use-dialog-portal";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 interface University {

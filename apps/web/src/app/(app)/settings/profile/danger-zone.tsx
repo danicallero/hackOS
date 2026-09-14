@@ -7,7 +7,6 @@
 import { ChevronDownIcon, TriangleAlertIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
 import { SectionCard } from "@/components/common/section-card";
 import { clearOfflineQueue } from "@/components/logistics/offline-queue";
@@ -26,6 +25,7 @@ import {
   saveAccountRemovalProgress,
 } from "@/lib/privacy-removal";
 import { useMe } from "@/lib/session";
+import { toast } from "@/lib/toast";
 
 export function DangerZoneCard() {
   const { t } = useLocale();

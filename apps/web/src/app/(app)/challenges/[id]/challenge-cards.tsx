@@ -6,7 +6,6 @@ import { HistoryIcon, Trash2Icon, TrophyIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
 import { z } from "zod";
 import { AlertModal } from "@/components/common/alert-modal";
 import { DateTimeInput } from "@/components/common/datetime-input";
@@ -49,6 +48,7 @@ import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
 import { useUrlTab } from "@/lib/url-tab";
 import {
   asI18n,

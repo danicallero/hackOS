@@ -15,7 +15,6 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -31,6 +30,7 @@ import { type Translate, useLocale } from "@/lib/i18n";
 import type { Announcement, AnnouncementInput } from "@/lib/notifications";
 import { notificationsApi } from "@/lib/notifications";
 import { useCan } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import type { Tone } from "@/lib/tones";
 import {
   AnnouncementFormModal,

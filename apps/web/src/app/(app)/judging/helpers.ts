@@ -50,3 +50,27 @@ export function exportHref(path: string): string {
 export function errorMessage(err: unknown, fallback: string): string {
   return err instanceof ApiError ? err.message : fallback;
 }
+
+/**
+ * Keep queue errors scannable: a short context stays in Sileo's compact pill
+ * while the server's useful explanation becomes the expandable description.
+ * H30 gets a localized explanation because the API conflict message is a
+ * transport-level invariant, not user-facing copy.
+ */
+export function queueErrorToastContent(
+  err: unknown,
+  fallbackTitle: string,
+  busyTitle: string,
+  busyDescription: string,
+) {
+  const message = errorMessage(err, fallbackTitle);
+  const isBusyTeam = message.includes("(H30)") || /^Busy in /i.test(message);
+  const title = isBusyTeam ? busyTitle : fallbackTitle;
+  const description = isBusyTeam
+    ? busyDescription
+    : message === fallbackTitle
+      ? undefined
+      : message;
+
+  return { message, title, description, isBusyTeam };
+}

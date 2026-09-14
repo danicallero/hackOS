@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo } from "react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
 import { z } from "zod";
 import { PasswordInput } from "@/components/common/password-input";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -22,6 +21,7 @@ import {
 import { authClient } from "@/lib/auth-client";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { withReturnPath } from "@/lib/return-path";
+import { toast } from "@/lib/toast";
 
 type AuthError = { code?: string; status?: number; message?: string };
 

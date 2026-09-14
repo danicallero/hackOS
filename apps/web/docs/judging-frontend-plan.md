@@ -56,7 +56,7 @@ backend logic. Your job is the UI + realtime wiring.
 
 - Backend modules live in `apps/api/src/modules/{queue,projects,challenges}`.
 - The web app is Next.js 16 / React 19 / Tailwind 4 / radix-ui (shadcn-style),
-  recharts, sonner, react-hook-form + zod. Client components, `credentials:
+  recharts, Sileo, react-hook-form + zod. Client components, `credentials:
   include` cookie auth via `@/lib/api`.
 - **No frontend exists yet** for queue/judging/projects/TV. Nav has a `soon`
   placeholder for "Queue & judging" (`apps/web/src/lib/nav.ts`).
@@ -79,7 +79,7 @@ Model your code on `apps/web/src/app/(app)/challenges/page.tsx` and
 - **Client components** (`"use client"`). Fetch in `useEffect` / event handlers
   via `api` from `@/lib/api` (`api.get/post/patch/delete`). Errors are
   `ApiError` with `.code`/`.message`; surface `.message` verbatim in a
-  `toast.error(...)` (sonner).
+  `toast.error(...)` (Sileo adapter).
 - **Capability gating:** `useSessionContext()` (`@/lib/session`) exposes the
   user's capabilities; use `<CapabilityGate capability={...}>` from
   `@/components/common/capability-gate` and/or nav gating. Capability constants:
@@ -88,7 +88,7 @@ Model your code on `apps/web/src/app/(app)/challenges/page.tsx` and
   `@/components/common/{page-header,section-card,stat-card,status-badge,
   data-table,empty-state,modal,spinner,submit-button,duration-input}` and
   `@/components/ui/*` (button, card, select, tabs, table, dialog, sheet, badge,
-  progress, tooltip, scroll-area, separator, sonner…). Full list:
+  progress, tooltip, scroll-area, separator, Sileo…). Full list:
   `ls apps/web/src/components/{ui,common}`.
 - **Tones/colors:** `@/lib/tones.ts`. Datetime: `@/lib/datetime.ts`. i18n
   helper: `@/lib/i18n.ts` (challenge titles are `{es,en}` records — use the

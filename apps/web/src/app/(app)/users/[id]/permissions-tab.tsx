@@ -7,7 +7,6 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { Building2Icon, KeyRoundIcon, ShieldIcon, UsersIcon, XIcon } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
@@ -23,6 +22,7 @@ import {
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import type { EnterpriseSummary, RoleSummary, UserDetail } from "@/lib/types";
 
 export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChanged: () => void }) {

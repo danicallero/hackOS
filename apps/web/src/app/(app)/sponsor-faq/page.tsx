@@ -14,7 +14,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { CalendarClockIcon, PlusIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
@@ -44,6 +43,7 @@ import { ApiError, api } from "@/lib/api";
 import { type I18nText, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
 import { useCan, useMe } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import { EMPTY_I18N, textForDisplay } from "../challenges/shared";
 
 type FaqItemKind = "qa" | "text";

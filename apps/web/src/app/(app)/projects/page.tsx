@@ -8,7 +8,6 @@ import { EVENTS } from "@hackos/shared/events";
 import { FolderGitIcon, UploadIcon, UsersIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
@@ -19,6 +18,7 @@ import { ApiError } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { listRepos } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import { ProjectFormDialog } from "./project-form-dialog";
 import { type ProjectRepo, toProjectRepo } from "./shared";
 

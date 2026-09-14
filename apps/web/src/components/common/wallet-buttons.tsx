@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
 import { ApiError } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import { logisticsApi } from "@/lib/logistics";
+import { toast } from "@/lib/toast";
 
 /**
  * Apple only ships this badge for "es" and "en_US/en_GB" locales; "gl" falls

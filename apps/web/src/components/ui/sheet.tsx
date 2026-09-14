@@ -51,12 +51,21 @@ function SheetContent({
   children,
   side = "right",
   showCloseButton = true,
+  onInteractOutside,
+  onPointerDownOutside,
+  onFocusOutside,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
 }) {
   const { t } = useLocale()
+  function isToastTarget(target: EventTarget | null) {
+    return (
+      target instanceof Element &&
+      Boolean(target.closest("[data-sileo-viewport], [data-hackos-toast-close]"))
+    )
+  }
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -74,6 +83,18 @@ function SheetContent({
             "inset-x-0 bottom-0 h-auto border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
           className
         )}
+        onInteractOutside={(event) => {
+          if (isToastTarget(event.target)) event.preventDefault()
+          onInteractOutside?.(event)
+        }}
+        onPointerDownOutside={(event) => {
+          if (isToastTarget(event.target)) event.preventDefault()
+          onPointerDownOutside?.(event)
+        }}
+        onFocusOutside={(event) => {
+          if (isToastTarget(event.target)) event.preventDefault()
+          onFocusOutside?.(event)
+        }}
         {...props}
       >
         {children}

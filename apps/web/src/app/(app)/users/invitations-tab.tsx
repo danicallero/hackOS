@@ -11,7 +11,6 @@ import {
   TimerResetIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -38,6 +37,7 @@ import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { ApiError, api } from "@/lib/api";
 import { shortDateTimeFmt } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
 import type {
   EnterpriseInviteLink,
   EnterpriseSummary,

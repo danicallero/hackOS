@@ -14,7 +14,6 @@ import {
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
@@ -37,6 +36,7 @@ import {
   removeRepoPrize,
 } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import { ProjectFormDialog } from "../project-form-dialog";
 import {
   type ChallengeOption,

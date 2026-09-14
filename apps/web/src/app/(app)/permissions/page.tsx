@@ -13,7 +13,6 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
 import { z } from "zod";
 import { ActionGroup } from "@/components/common/action-group";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -48,6 +47,7 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError, api } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
 import type {
   PermissionState,
   RoleDetail,

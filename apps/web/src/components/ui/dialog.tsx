@@ -73,7 +73,14 @@ function DialogContent({
 }) {
   const { t } = useLocale()
   function isFloatingTarget(target: EventTarget | null) {
-    return target instanceof Element && Boolean(target.closest("[data-dialog-floating]"))
+    return (
+      target instanceof Element &&
+      Boolean(
+        target.closest(
+          "[data-dialog-floating], [data-sileo-viewport], [data-hackos-toast-close]",
+        ),
+      )
+    )
   }
 
   return (

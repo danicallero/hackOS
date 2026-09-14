@@ -295,7 +295,7 @@ anything else.
 | A short, self-contained dialog that passed the test above | `Modal` (controlled or `trigger`) | Hand-rolled Radix Dialog; anything the table above sends to a route |
 | A single-record editor opened from a list or workspace | `SidePanelEditor` | Recreating a right sheet's focus, close, header and footer behavior in a route component |
 | Report a failed load/submit in place | `ContextualError` (+ retry) | A toast alone |
-| Confirm a completed action | Toast (sonner) | A modal interrupting the flow |
+| Confirm a completed action | Toast (Sileo) | A modal interrupting the flow |
 | Communicate entity status | `StatusBadge` with a `tone` (queue states: `QueueStatusBadge`) | Coloured text, custom pills |
 | A metric | `StatCard` (delta/footer slots for meters/sparklines) | Bare big numbers in a `Surface` |
 | Comparative data, sorting, bulk selection | `DataTable<T>` | Custom table markup |

@@ -4,7 +4,6 @@
 
 import { ClipboardListIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
 import { ReviewModal } from "@/components/applications/review-modal";
 import { EmptyState } from "@/components/common/empty-state";
 import { SectionCard } from "@/components/common/section-card";
@@ -13,6 +12,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { ApiError, api } from "@/lib/api";
 import { LOCALE_CODES, useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
 import {
   type ApplicationForm,
   type FormSection,

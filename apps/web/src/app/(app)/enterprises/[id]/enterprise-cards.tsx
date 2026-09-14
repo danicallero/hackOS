@@ -11,7 +11,6 @@ import { Building2Icon, ImageIcon, TrophyIcon, UploadIcon } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
 import { z } from "zod";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { EmptyState } from "@/components/common/empty-state";
@@ -47,6 +46,7 @@ import { ApiError, api, apiUpload } from "@/lib/api";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import type { UserList } from "@/lib/types";
 import {
   type Challenge,
