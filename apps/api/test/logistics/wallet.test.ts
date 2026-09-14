@@ -301,7 +301,7 @@ describe("H28 Apple Wallet PassKit", () => {
     // the env string) + deep-link launch URL from MOBILE_APP_SCHEME.
     expect(pass.associatedStoreIdentifiers).toEqual([1234567890]);
     expect(pass.appLaunchURL).toBe("hackos://");
-    expect(pass.foregroundColor).toBe("rgb(3,8,70)");
+    expect(pass.foregroundColor).toBe("rgb(250,250,250)");
     expect(pass.backgroundColor).toBe("rgb(163,213,255)");
     expect(pass.labelColor).toBe("rgb(3,8,70)");
     expect(pass.suppressStripShine).toBe(true);

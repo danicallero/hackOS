@@ -302,10 +302,10 @@ async function passPayload(pass: PassRow) {
         messageEncoding: "iso-8859-1",
       },
     ],
-    // #030846 / #a3d5ff are the pass palette. Use the navy for values as
-    // well as labels: #fafafa on #a3d5ff is too low-contrast for the name,
-    // email, and other attendee data to remain readable in Wallet.
-    foregroundColor: "rgb(3,8,70)",
+    // #030846 is used for labels/headers and #fafafa for values such as the
+    // attendee name, email, role, and pass type, as specified by the pass
+    // design. #a3d5ff is the material background.
+    foregroundColor: "rgb(250,250,250)",
     backgroundColor: "rgb(163,213,255)",
     labelColor: "rgb(3,8,70)",
     suppressStripShine: true,
