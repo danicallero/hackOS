@@ -207,6 +207,25 @@ The three protected branches provide these supported routes:
 | `staging` | A direct feature→staging PR or an integration→staging promotion builds and publishes the images, then deploys the optional staging Dokploy Environment for verification. |
 | `main` | An integration→main promotion builds and publishes the production images once. A staging→main promotion matches the staging tree and promotes its immutable image digest without rebuilding. Both paths deploy production. |
 
+`main` and `staging` are independent release channels. A merge into `main`
+selects the `production` GitHub Actions Environment and never moves the
+`staging` branch. A merge into `staging` selects the `staging` Environment and
+deploys only the staging Dokploy services. This allows staging to carry
+experimental work while production advances.
+
+When staging needs the current production tree, synchronize it deliberately
+with a normal pull request from `main` into `staging`:
+
+```sh
+./deploy/scripts/sync-main-to-staging-pr.sh
+```
+
+The helper opens that PR without pushing either protected branch or discarding
+staging-only commits. Merge the PR only when staging is ready to verify the
+production tree; that merge is the event that starts the staging CD. If the
+branches have diverged, resolve the conflicts in the PR instead of forcing a
+branch ref.
+
 Use the fast `integration` → `main` route when there is no time or need for a
 staging deployment. Use `staging` → `main` when the release needs an
 environment check first. In both cases CI blocks a direct main PR and the main
@@ -235,33 +254,40 @@ publishes the image and marks only the optional deployment step as skipped; the
 release is not reported as failed. Production still requires its Tailscale and
 Dokploy configuration.
 
-Protect exactly `integration`, `staging`, and `main` with repository rulesets.
-The checked-in workflow cannot create or protect remote branches. Configure the
-rulesets once with:
+Protect exactly `integration`, `staging`, and `main` with the repository
+rulesets. The checked-in workflow cannot create or protect remote branches;
+create these three branches and apply the matching ruleset before using them in
+the promotion flow. Require pull requests on all three release branches and do
+not configure a bypass for direct `main` → `staging` ref updates.
+
+Configure the rulesets once with:
 
 ```sh
 ./deploy/scripts/configure-github-rulesets.sh
 ```
 
-The script keeps the existing required checks and PR requirement on `main`,
-while creating a `release-branches` ruleset for `integration` and `staging`.
-The authenticated repository administrator is the only bypass actor on those
-two lower branches. That narrow bypass exists for the explicit release
-synchronization below; ordinary feature changes still go through PRs and the
-same CI checks. `main` has no bypass actor.
+The helper keeps the existing required checks and configures the release
+branches without a direct-push bypass. Release-branch updates therefore remain
+reviewable pull requests.
 
-After a release has been merged into `main`, make the lower release branches
-point at exactly the same commit with the fast-forward-only helper:
+`main` and `staging` are independent release channels. A merge into `main`
+selects the `production` GitHub Actions Environment and never moves the
+`staging` branch. A merge into `staging` selects the `staging` Environment and
+deploys only the staging Dokploy services. This allows staging to carry
+experimental work while production advances.
+
+When staging needs the current production tree, synchronize it deliberately
+with a normal pull request from `main` into `staging`:
 
 ```sh
-./deploy/scripts/sync-main-to-release-branches.sh
+./deploy/scripts/sync-main-to-staging-pr.sh
 ```
 
-It refuses to overwrite divergent branch history. If either branch is not an
-ancestor of `main`, open a normal synchronization PR and resolve that
-divergence before retrying. This keeps branch promotion deterministic while
-avoiding the GitHub “Changes must be made through a pull request” block for an
-intentional administrator synchronization.
+The helper opens that PR without pushing either protected branch or discarding
+staging-only commits. Merge the PR only when staging is ready to verify the
+production tree; that merge is the event that starts the staging CD. If the
+branches have diverged, resolve the conflicts in the PR instead of forcing a
+branch ref.
 
 ---
 

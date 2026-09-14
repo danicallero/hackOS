@@ -260,6 +260,12 @@ Environment needs separate webhook targets and its own Dokploy
 service reads domains at runtime, so the same image digest is valid in either
 deployment.
 
+The release branches remain independent: a `main` merge selects the
+`production` Actions Environment and never updates `staging`; a `staging` merge
+selects the `staging` Environment. To intentionally bring production changes
+into staging, open and merge a normal `main` → `staging` pull request. Do not
+push one protected branch's ref over the other.
+
 ### Not using Dokploy? Nothing here changes the fallback path
 
 The `${{environment.VAR}}` / `${{project.VAR}}` syntax lives **only** inside
