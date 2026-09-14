@@ -18,11 +18,9 @@ if [[ -z "$main_ruleset_id" ]]; then
   exit 1
 fi
 
-actor_id="$(gh api user --jq .id)"
 main_ruleset="$(gh api "repos/${repo}/rulesets/${main_ruleset_id}")"
 
-# Keep main protected by PRs and required CI, but do not make it the ruleset
-# that also blocks the explicit main -> integration/staging synchronization.
+# Keep main protected by PRs and required CI.
 printf '%s' "$main_ruleset" \
   | jq '{name, target, enforcement, bypass_actors: [],
       conditions: {ref_name: {include: ["~DEFAULT_BRANCH"], exclude: []}}, rules}' \
@@ -42,15 +40,15 @@ else
 fi
 
 printf '%s' "$release_ruleset" \
-  | jq --argjson actor_id "$actor_id" '{
+  | jq '{
       name: "release-branches",
       target,
       enforcement: "active",
-      bypass_actors: [{actor_id: $actor_id, actor_type: "User", bypass_mode: "always"}],
+      bypass_actors: [],
       conditions: {ref_name: {include: ["refs/heads/integration", "refs/heads/staging"], exclude: []}},
       rules
     }' \
   | gh api --method "$method" "$endpoint" --input - >/dev/null
 
 echo "Configured main, integration, and staging rulesets for ${repo}."
-echo "The authenticated user may explicitly synchronize main into integration/staging."
+echo "All release-branch updates require pull requests."
