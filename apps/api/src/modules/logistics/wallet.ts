@@ -47,7 +47,9 @@ const ASSETS_DIR = join(process.cwd(), "assets", "apple-wallet");
 // the "Add to Wallet" system prompt only checks the response's MIME type,
 // so a bundle missing icon.png still returns 200 but nothing ever appears.
 // logo/strip are optional visuals (carried over from the reference pkpass
-// generator this replaces) but embedded the same way.
+// generator this replaces) but embedded the same way. Keep the three strip
+// resolutions in the bundle: Wallet chooses the matching asset per device
+// scale, and falls back to a lower-resolution file only when necessary.
 const PASS_IMAGE_FILES = [
   "icon.png",
   "icon@2x.png",
@@ -56,6 +58,7 @@ const PASS_IMAGE_FILES = [
   "logo@2x.png",
   "strip.png",
   "strip@2x.png",
+  "strip@3x.png",
 ];
 
 function appleAuthToken(header: string | undefined): string {
@@ -299,9 +302,13 @@ async function passPayload(pass: PassRow) {
         messageEncoding: "iso-8859-1",
       },
     ],
-    foregroundColor: "rgb(255,255,255)",
-    backgroundColor: "rgb(40,40,40)",
-    labelColor: "rgb(255,180,0)",
+    // #030846 / #a3d5ff are the pass palette. Use the navy for values as
+    // well as labels: #fafafa on #a3d5ff is too low-contrast for the name,
+    // email, and other attendee data to remain readable in Wallet.
+    foregroundColor: "rgb(3,8,70)",
+    backgroundColor: "rgb(163,213,255)",
+    labelColor: "rgb(3,8,70)",
+    suppressStripShine: true,
   };
 }
 

@@ -70,6 +70,16 @@ SSE/Wallet sync path is used when the last role is removed.
 
 ## 2. How the pass renders (apps/api/src/modules/logistics/wallet.ts)
 
+The Apple event-ticket bundle includes the HackUDC artwork from the supplied
+design asset. `strip.png`, `strip@2x.png`, and `strip@3x.png` are generated at
+event-ticket strip dimensions (375×98, 750×196, and 1125×294 pixels), keeping
+the source artwork sharp at each device scale. The pass also explicitly
+disables strip shine so Wallet does not alter the yellow and navy artwork.
+The pass palette uses `#030846` for labels and value text and `#a3d5ff` for
+the background. Although `#fafafa` was considered for values, it does not
+provide enough contrast against the light-blue background for attendee data
+such as name and email.
+
 `passPayload()` reads `event_config` fresh on every pass fetch — nothing about
 the event is baked into issued passes. Composition:
 
