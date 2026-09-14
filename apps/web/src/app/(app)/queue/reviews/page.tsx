@@ -7,7 +7,6 @@
 
 import { ClipboardListIcon, DownloadIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
 import { ReviewStatusBadge } from "@/components/common/review-status-badge";
@@ -22,6 +21,7 @@ import {
 import { ApiError, api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
 
 interface ReviewRow {
   entryId: number;

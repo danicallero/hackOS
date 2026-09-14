@@ -22,7 +22,7 @@ vi.mock("@/lib/api", () => ({
 }));
 vi.mock("@/lib/i18n", () => ({ useLocale: () => ({ t: (key: string) => key }) }));
 vi.mock("@/lib/session", () => ({ useSessionContext: () => ({ status: sessionStatus }) }));
-vi.mock("sonner", () => ({ toast: { error: toastError, success: vi.fn() } }));
+vi.mock("@/lib/toast", () => ({ toast: { error: toastError, success: vi.fn() } }));
 vi.mock("@/components/ui/button", () => ({
   Button: ({ children, ...props }: React.ComponentProps<"button">) => (
     <button {...props}>{children}</button>

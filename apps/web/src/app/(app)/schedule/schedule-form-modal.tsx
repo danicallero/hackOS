@@ -8,7 +8,6 @@
 import { ACTIVITY_KINDS, isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { CalendarDaysIcon, ChevronDownIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
@@ -38,6 +37,7 @@ import {
   type ScheduleOwner,
   type ScheduleTranslations,
 } from "@/lib/logistics";
+import { toast } from "@/lib/toast";
 import type { Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SCHEDULE_AUDIENCES, scheduleAudienceLabel, scheduleTypeLabel } from "./schedule-model";

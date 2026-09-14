@@ -6,7 +6,6 @@
 
 import { FolderPlusIcon, type LucideIcon, PencilIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { MultiSelect, type MultiSelectOption } from "@/components/common/multi-select";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -17,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { createMyProject, createRepo, updateMyProject, updateRepo } from "@/lib/projects";
+import { toast } from "@/lib/toast";
 import { type ChallengeOption, challengeTitleText, type ProjectRepo } from "./shared";
 
 export type ProjectFormMode =

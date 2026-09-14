@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { secondsLabel } from "./helpers";
+import { ApiError } from "@/lib/api";
+import { queueErrorToastContent, secondsLabel } from "./helpers";
 
 describe("judging helpers", () => {
   it("formats the presentation clock, including past the limit", () => {
@@ -18,5 +19,37 @@ describe("judging helpers", () => {
 
     expect(secondsLabel(null)).toBe("—");
     expect(secondsLabel(undefined)).toBe("—");
+  });
+
+  it("moves H30 details into an automatically expanded toast description", () => {
+    expect(
+      queueErrorToastContent(
+        new ApiError(409, "conflict", "Team has a member busy in another room (H30)"),
+        "Queue action failed.",
+        "Couldn't call team",
+        "This team cannot be called yet because one of its members is active in another room.",
+      ),
+    ).toEqual({
+      message: "Team has a member busy in another room (H30)",
+      title: "Couldn't call team",
+      description:
+        "This team cannot be called yet because one of its members is active in another room.",
+      isBusyTeam: true,
+    });
+  });
+
+  it("keeps useful non-H30 API errors as expandable details", () => {
+    expect(
+      queueErrorToastContent(
+        new ApiError(409, "conflict", "Room already has an active team"),
+        "Queue action failed.",
+        "Couldn't call team",
+        "This team cannot be called yet because one of its members is active in another room.",
+      ),
+    ).toMatchObject({
+      title: "Queue action failed.",
+      description: "Room already has an active team",
+      isBusyTeam: false,
+    });
   });
 });

@@ -18,7 +18,6 @@ import { ClipboardListIcon, ShieldAlertIcon } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
@@ -39,6 +38,7 @@ import { pickText, useLocale } from "@/lib/i18n";
 import { withReturnPath } from "@/lib/return-path";
 import type { SaveState } from "@/lib/save-state";
 import { useMe } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import type { Language } from "@/lib/types";
 import {
   type ActionError,
@@ -285,7 +285,7 @@ export default function MyApplicationDetailPage() {
 
   async function handleSubmit() {
     if (!checkRequired()) {
-      toast.error(t("fillRequiredFields"));
+      toast.warning(t("fillRequiredFields"));
       return;
     }
     setSubmitting(true);

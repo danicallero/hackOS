@@ -2,7 +2,6 @@
 
 import { CopyIcon, UserPlusIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { MultiSelect } from "@/components/common/multi-select";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
@@ -14,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
 import type { EnterpriseSummary, Invite, InviteKind, RoleSummary } from "@/lib/types";
 
 /**

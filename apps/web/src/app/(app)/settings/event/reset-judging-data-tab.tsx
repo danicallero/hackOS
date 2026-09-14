@@ -3,7 +3,6 @@
 import type { LucideIcon } from "lucide-react";
 import { TriangleAlertIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
-import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
 import { Modal } from "@/components/common/modal";
 import { SectionCard } from "@/components/common/section-card";
@@ -13,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
 
 const SERVER_CONFIRMATION_PHRASE = "WIPE_Q_DATA";
 type ResetStage = 0 | 1 | 2 | 3;

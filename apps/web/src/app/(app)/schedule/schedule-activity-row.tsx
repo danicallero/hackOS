@@ -9,7 +9,6 @@ import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { ACTIVITY_KINDS, isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { CopyIcon, GripVerticalIcon, PencilIcon, Trash2Icon } from "lucide-react";
 import { useCallback } from "react";
-import { toast } from "sonner";
 import { IconButton } from "@/components/common/icon-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TableCell, TableRow } from "@/components/ui/table";
@@ -17,6 +16,7 @@ import { ApiError } from "@/lib/api";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem, type ScheduleAudience } from "@/lib/logistics";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import {
   audienceSummary,

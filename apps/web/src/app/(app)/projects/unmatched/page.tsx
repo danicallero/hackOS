@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -46,6 +45,7 @@ import {
   sendClaimEmail,
 } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import type { UserList } from "@/lib/types";
 import { challengeTitleText, memberName, toUnmatchedRow, type UnmatchedRow } from "../shared";
 

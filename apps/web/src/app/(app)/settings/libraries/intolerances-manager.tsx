@@ -11,7 +11,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { MoreHorizontalIcon, PlusIcon, UtensilsCrossedIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
 import { z } from "zod";
 import { AlertModal } from "@/components/common/alert-modal";
 import type { Column } from "@/components/common/data-table";
@@ -37,6 +36,7 @@ import { Input } from "@/components/ui/input";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { pickText, useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
 import type { Intolerance } from "@/lib/types";
 
 const FORM_ID = "intolerance-form";

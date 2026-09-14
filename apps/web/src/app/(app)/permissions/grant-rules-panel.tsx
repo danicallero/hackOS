@@ -4,7 +4,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { PlusIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
 import { z } from "zod";
 import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
@@ -24,6 +23,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
 import type { EnterpriseSummary, RoleGrantRule, RoleSummary } from "@/lib/types";
 import { ALL_TRIGGER_EVENTS, ruleTriggerLabel, triggerEventLabel } from "./helpers";
 

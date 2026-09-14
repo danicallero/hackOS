@@ -12,7 +12,6 @@ import { Building2Icon, EyeIcon, EyeOffIcon, PlusIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
 import { z } from "zod";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -47,6 +46,7 @@ import { ApiError, api } from "@/lib/api";
 import { formatScheduledDateTime, fromDatetimeLocal } from "@/lib/datetime";
 import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import { type Enterprise, initials, isScheduled, visibilityTone } from "./shared";
 
 // Optional URL: allow blank, otherwise must be a valid URL.

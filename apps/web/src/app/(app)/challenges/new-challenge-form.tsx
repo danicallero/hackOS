@@ -5,7 +5,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeftIcon, ArrowRightIcon, TrophyIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
 import { z } from "zod";
 import { ContextualError } from "@/components/common/contextual-error";
 import { DevpostTagsField } from "@/components/common/devpost-tags-field";
@@ -37,6 +36,7 @@ import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { type DevpostPrize, listDevpostPrizes } from "@/lib/projects";
+import { toast } from "@/lib/toast";
 import { useUrlTab } from "@/lib/url-tab";
 import { type Challenge, EMPTY_I18N, i18nWithEnglishFallback, type Prize } from "./shared";
 

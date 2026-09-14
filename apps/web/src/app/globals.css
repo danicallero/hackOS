@@ -318,6 +318,145 @@ html[data-locale-ready="false"] body {
 }
 
 /*
+ * Sileo deliberately inverts its surface: a light app gets a dark toast and
+ * a dark app gets a light toast. Keep each state color legible on that actual
+ * surface instead of reusing the page tokens, which are tuned for the page
+ * canvas and can look washed out on the inverse toast.
+ */
+[data-sileo-viewport][data-position][data-theme="dark"] {
+  --sileo-state-success: oklch(0.48 0.14 155);
+  --sileo-state-loading: oklch(0.43 0.01 286);
+  --sileo-state-error: oklch(0.52 0.19 25);
+  --sileo-state-warning: oklch(0.55 0.14 70);
+  --sileo-state-info: oklch(0.51 0.14 240);
+  --sileo-state-action: oklch(0.5 0.16 260);
+}
+
+[data-sileo-viewport][data-position][data-theme="light"] {
+  --sileo-state-success: oklch(0.723 0.219 142.136);
+  --sileo-state-loading: oklch(0.72 0.01 286);
+  --sileo-state-error: oklch(0.637 0.237 25.331);
+  --sileo-state-warning: oklch(0.795 0.184 86.047);
+  --sileo-state-info: oklch(0.685 0.169 237.323);
+  --sileo-state-action: oklch(0.7 0.18 260);
+}
+
+[data-sileo-viewport][data-position] [data-sileo-title] {
+  font-family: inherit;
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-label);
+  text-transform: none;
+}
+
+[data-sileo-viewport][data-position] [data-sileo-button] {
+  align-self: flex-end;
+  min-height: var(--control-height-compact);
+  min-width: 4.5rem;
+  width: fit-content;
+  border-radius: var(--hackos-radius-control);
+  font-family: inherit;
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-label);
+}
+
+[data-sileo-viewport][data-position] [data-sileo-description] {
+  padding: 0.75rem 1rem 0.875rem;
+  font-size: var(--font-size-label);
+  line-height: var(--line-height-label);
+  text-wrap: pretty;
+}
+
+/* Keep Sileo's header at the same optical size and baseline while its body
+ * expands. The close control is part of this header, so it must not shrink or
+ * jump when the toast is hovered. */
+[data-hackos-toast-boundary] [data-sileo-header] {
+  /* Sileo owns the inline transform; this is the intentional override that
+   * keeps the header and its close control at a stable scale and baseline. */
+  /* biome-ignore lint/complexity/noImportantStyles: override Sileo's inline hover scale */
+  transform: translateY(0) scale(1) !important;
+}
+
+[data-sileo-viewport][data-position] [data-sileo-header] {
+  padding-inline-end: calc(0.5rem + var(--control-height-compact));
+}
+
+[data-sileo-viewport][data-position] {
+  --sileo-width: min(350px, calc(100vw - 2rem));
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  z-index: 100;
+}
+
+[data-hackos-toast-close][data-theme="dark"] {
+  --hackos-toast-close-color: oklch(0.42 0.01 286);
+  --hackos-toast-close-color-active: oklch(0.2 0.005 286);
+  --hackos-toast-close-background-active: oklch(0.141 0.005 285.823 / 12%);
+}
+
+[data-hackos-toast-close][data-theme="light"] {
+  --hackos-toast-close-color: oklch(0.78 0.01 286);
+  --hackos-toast-close-color-active: oklch(0.98 0 0);
+  --hackos-toast-close-background-active: oklch(1 0 0 / 14%);
+}
+
+[data-hackos-toast-close] {
+  position: absolute;
+  inset-block-start: 4px;
+  /* Match Sileo's 0.5rem header padding on the opposite side. The 32px
+   * hit area stays comfortably inside the pill instead of touching its edge. */
+  inset-inline-end: 0.5rem;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-height-compact);
+  height: var(--control-height-compact);
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--hackos-toast-close-color);
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: 1;
+  transition:
+    opacity 120ms ease,
+    background-color 120ms ease;
+}
+
+[data-sileo-viewport][data-position^="bottom"] [data-sileo-toast] [data-hackos-toast-close] {
+  inset-block-start: auto;
+  inset-block-end: 4px;
+}
+
+[data-hackos-toast-close] svg {
+  width: 1rem;
+  height: 1rem;
+  stroke-width: 2.25;
+}
+
+[data-hackos-toast-close]:hover {
+  color: var(--hackos-toast-close-color-active);
+  background: var(--hackos-toast-close-background-active);
+}
+
+[data-hackos-toast-close]:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-hackos-toast-close] {
+    transition-duration: 0.01ms;
+  }
+}
+
+@media (max-width: 24rem) {
+  [data-sileo-viewport][data-position] [data-sileo-svg] {
+    width: 100%;
+  }
+}
+
+/*
  * iOS Safari sizes date/time inputs from the intrinsic width of their value
  * text and refuses to shrink below it, so a picker inside a dialog or grid
  * column widens its container and leaves the whole modal horizontally

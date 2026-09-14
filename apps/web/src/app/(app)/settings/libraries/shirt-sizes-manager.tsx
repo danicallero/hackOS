@@ -11,7 +11,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { PlusIcon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
-import { toast } from "sonner";
 import { z } from "zod";
 import { ContextualError } from "@/components/common/contextual-error";
 import { SaveStatus } from "@/components/common/save-status";
@@ -21,6 +20,7 @@ import { Form, FormControl, FormField, FormItem, FormMessage } from "@/component
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
 import type { EventConfig } from "@/lib/types";
 import { useCategorySaveState } from "../event/use-category-save-state";
 

@@ -4,7 +4,6 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { SearchIcon, TicketIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -14,10 +13,10 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { type SseEnvelope, useLiveQuery } from "@/hooks/use-event-source";
-import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { enqueueAllChallengeQueues, getAllRoomViews, type RoomView } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
+import { showErrorToast, toast } from "@/lib/toast";
 import { useUrlTab } from "@/lib/url-tab";
 import { GenerateQueuesAction } from "./generate-queues-action";
 import { QueueOperatorConsole } from "./operator-console";
@@ -69,7 +68,10 @@ export default function QueueOperationsPage() {
         const data = event.data as Record<string, unknown>;
         const team = typeof data.teamName === "string" ? data.teamName : t("challengeFallback");
         const room = typeof data.roomName === "string" ? data.roomName : t("noLocation");
-        toast.info(t("teamShouldArrive", { team, room }), { duration: 10_000 });
+        toast.info(team, {
+          description: t("teamShouldArriveDescription", { room }),
+          duration: 5_000,
+        });
         return;
       }
       if (event.type !== EVENTS.QUEUE_NOTIFY_ENTER || !event.data || typeof event.data !== "object")
@@ -79,7 +81,7 @@ export default function QueueOperationsPage() {
       const room = typeof data.room_name === "string" ? data.room_name : null;
       toast.info(room ? `${team} · ${room}` : team, {
         description: t("teamAskedToEnter"),
-        duration: 10_000,
+        duration: 5_000,
       });
     },
     [t],
@@ -108,7 +110,7 @@ export default function QueueOperationsPage() {
       );
       roomViews.refetch();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotGenerateQueues"));
+      showErrorToast(err, t("couldNotGenerateQueues"));
     } finally {
       setBusy(false);
     }

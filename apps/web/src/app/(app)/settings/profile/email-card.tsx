@@ -2,7 +2,6 @@
 
 import { HelpCircleIcon, MailIcon } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -13,6 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
+import { toast } from "@/lib/toast";
 
 /**
  * Email addresses (H1 verification state, H6 secondary email). Shows the

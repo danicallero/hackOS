@@ -10,7 +10,6 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { ArrowLeftIcon, CheckCircle2Icon, FileTextIcon, UploadIcon, UsersIcon } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { Modal } from "@/components/common/modal";
@@ -21,10 +20,10 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { confirmImport, previewImport } from "@/lib/projects";
 import { useSessionContext } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import {
   type ConfirmResult,
   type ImportPlanView,
@@ -214,16 +213,20 @@ export default function ImportProjectsPage() {
 
   const runPreview = useCallback(async () => {
     if (!projectsCsv.trim() || !participantsCsv.trim()) {
-      toast.error(t("provideBothCsvExports"));
+      toast.warning(t("provideBothCsvExports"));
       return;
     }
     setPreviewing(true);
     try {
-      const p = await previewImport(projectsCsv, participantsCsv);
+      const p = await toast.promise(previewImport(projectsCsv, participantsCsv), {
+        loading: { title: t("previewImport") },
+        success: { title: t("reviewImport") },
+        error: { title: t("couldNotPreviewImport") },
+      });
       setPlan(toImportPlanView(p));
       idemKey.current = crypto.randomUUID();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotPreviewImport"));
+    } catch {
+      // The promise toast already reports the failure; keep the wizard editable.
     } finally {
       setPreviewing(false);
     }
@@ -234,11 +237,17 @@ export default function ImportProjectsPage() {
     if (!idemKey.current) idemKey.current = crypto.randomUUID();
     setConfirming(true);
     try {
-      const res = await confirmImport(projectsCsv, participantsCsv, idemKey.current);
+      const res = await toast.promise(
+        confirmImport(projectsCsv, participantsCsv, idemKey.current),
+        {
+          loading: { title: t("confirmImport") },
+          success: { title: t("importApplied") },
+          error: { title: t("couldNotApplyImport") },
+        },
+      );
       setResult(res as unknown as ConfirmResult);
-      toast.success(t("importApplied"));
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotApplyImport"));
+    } catch {
+      // The promise toast already reports the failure; keep the plan available.
     } finally {
       setConfirming(false);
     }

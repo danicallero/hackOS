@@ -6,7 +6,6 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { Building2Icon, PlusIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
 import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -44,6 +43,7 @@ import {
   updateRoom,
 } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import type { EnterpriseSummary } from "@/lib/types";
 import { useUrlTab } from "@/lib/url-tab";
 import { JudgingWindowTab } from "./judging-window-tab";

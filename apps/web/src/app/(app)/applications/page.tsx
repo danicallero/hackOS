@@ -9,7 +9,6 @@ import { EVENTS } from "@hackos/shared/events";
 import { ClipboardListIcon, PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -18,6 +17,7 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import { type ApplicationForm, fmtDateTime, grantedRoleNameLabel, windowState } from "./lib";
 
 export default function ApplicationsPage() {

@@ -4,7 +4,6 @@
 
 import { SendIcon } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 import { Modal } from "@/components/common/modal";
 import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
@@ -12,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
 
 export function SendDecisionsModal({
   id,

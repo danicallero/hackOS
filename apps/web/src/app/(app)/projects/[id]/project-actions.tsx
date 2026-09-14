@@ -1,7 +1,6 @@
 "use client";
 import { LinkIcon, Trash2Icon, UserPlusIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
 import { type UserOption, UserPicker } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
@@ -16,6 +15,7 @@ import {
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { linkSecondaryEmail, removeDevpostParticipant, removeRepoMember } from "@/lib/projects";
+import { toast } from "@/lib/toast";
 import { type ChallengeOption, challengeTitleText, type ProjectRepo } from "../shared";
 
 async function searchMemberCandidates(query: string): Promise<UserOption[]> {

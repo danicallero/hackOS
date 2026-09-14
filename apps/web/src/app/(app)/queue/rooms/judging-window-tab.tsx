@@ -14,7 +14,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { GavelIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
-import { toast } from "sonner";
 import { z } from "zod";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { SaveStatus } from "@/components/common/save-status";
@@ -34,6 +33,7 @@ import { fromLocalInputValue } from "@/lib/event-datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { getQueueSettings, type QueueSettings, updateQueueSettings } from "@/lib/queue";
 import type { SaveState } from "@/lib/save-state";
+import { toast } from "@/lib/toast";
 
 const schema = z.object({
   judgingStartsAt: z.string(),

@@ -18,7 +18,6 @@ import {
 } from "@hackos/shared/wallet-pass-labels";
 import { ChevronDownIcon, type LucideIcon, Trash2Icon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -29,6 +28,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
 import { type MessageKey, useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
 import type { EventConfig, PassBackField } from "@/lib/types";
 import { EventConfigLoadState, useEventConfig } from "./event-config-context";
 import { useCategorySaveState } from "./use-category-save-state";

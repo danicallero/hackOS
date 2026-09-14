@@ -1,7 +1,6 @@
 "use client";
 import { XIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { toast } from "sonner";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { StatusBadge } from "@/components/common/status-badge";
 import { type UserOption, UserPicker } from "@/components/common/user-picker";
@@ -28,6 +27,7 @@ import { ApiError } from "@/lib/api";
 import { formatScheduledDateTime, toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem, type ScheduleAudience } from "@/lib/logistics";
+import { toast } from "@/lib/toast";
 import { commitAndNavigate, handleScheduleGridKeyDown, refocusScheduleCell } from "./schedule-grid";
 import {
   editingNavigationDirection,

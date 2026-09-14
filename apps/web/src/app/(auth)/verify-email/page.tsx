@@ -6,7 +6,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
 import { z } from "zod";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -25,6 +24,7 @@ import { ApiError, api } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { safeReturnPath, withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
+import { toast } from "@/lib/toast";
 
 function verifyEmailSchema(t: Translate) {
   return z.object({ email: z.string().email(t("validEmail")) });

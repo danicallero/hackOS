@@ -47,7 +47,6 @@ import {
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
 import { dragOverlayDropAnimation } from "@/components/common/drag-handle";
 import { EmptyState } from "@/components/common/empty-state";
@@ -79,6 +78,7 @@ import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
 import { type MessageKey, type Translate, useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
+import { toast } from "@/lib/toast";
 import type { Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {

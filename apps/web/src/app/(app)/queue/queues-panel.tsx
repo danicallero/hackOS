@@ -26,7 +26,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
@@ -45,7 +44,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
-import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import {
   clearQueue,
@@ -59,6 +57,7 @@ import {
   updateQueueGroup,
 } from "@/lib/queue";
 import { queueSummaryValues } from "@/lib/queue-summary";
+import { showErrorToast, toast } from "@/lib/toast";
 
 type Stage = "idle" | "pick" | "review";
 
@@ -101,7 +100,7 @@ export function QueuesPanel() {
     try {
       setGroups(await listQueueGroups());
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadQueues"));
+      showErrorToast(err, t("couldNotLoadQueues"));
       setGroups([]);
     }
   }, [t]);
@@ -177,7 +176,7 @@ function EnterpriseQueuesCard({
       await action();
       await onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveQueue"));
+      showErrorToast(err, t("couldNotSaveQueue"));
     } finally {
       setBusy(false);
     }
@@ -213,7 +212,7 @@ function EnterpriseQueuesCard({
       await onChanged();
       toast.success(t("queueGenerated", { count: result.inserted + result.revived }));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotGenerateQueues"));
+      showErrorToast(err, t("couldNotGenerateQueues"));
     } finally {
       setQueueActionBusyId(null);
     }
@@ -229,7 +228,7 @@ function EnterpriseQueuesCard({
       await onChanged();
       toast.success(t("queueCleared"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotClearQueue"));
+      showErrorToast(err, t("couldNotClearQueue"));
     } finally {
       setQueueActionBusyId(null);
     }

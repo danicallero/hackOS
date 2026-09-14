@@ -6,7 +6,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { InfoIcon, SettingsIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
 import { z } from "zod";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { MultiSelect } from "@/components/common/multi-select";
@@ -30,6 +29,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
+import { toast } from "@/lib/toast";
 import type { RoleSummary } from "@/lib/types";
 import { type ApplicationForm, fromLocalInput, toLocalInput } from "../lib";
 

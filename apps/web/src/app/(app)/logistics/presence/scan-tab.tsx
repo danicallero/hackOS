@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
@@ -42,6 +41,7 @@ import {
   type PresenceLookup,
   personName,
 } from "@/lib/logistics";
+import { toast } from "@/lib/toast";
 import { hoursSince, TIME_FORMAT_OPTIONS } from "./shared";
 
 // ── Scan tab: unified accreditation + presence lookup ─────────────────────

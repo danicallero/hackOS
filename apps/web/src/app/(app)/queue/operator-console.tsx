@@ -2,7 +2,6 @@
 
 import { BellRingIcon, DoorOpenIcon, EllipsisIcon, ListEndIcon, UsersIcon } from "lucide-react";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 import { SectionCard } from "@/components/common/section-card";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,9 +12,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Surface } from "@/components/ui/surface";
-import { ApiError } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { entryAction, moveQueueEntryToPosition, type QueueEntry, type RoomView } from "@/lib/queue";
+import { showErrorToast, toast } from "@/lib/toast";
 import { textForDisplay } from "../challenges/shared";
 import { operatorRowsForRooms, sortOperatorRows } from "./operator-console-model";
 
@@ -112,7 +111,7 @@ export function QueueOperatorConsole({
       }
       onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("queueActionFailed"));
+      showErrorToast(err, t("queueActionFailed"));
     } finally {
       setBusy(null);
     }
