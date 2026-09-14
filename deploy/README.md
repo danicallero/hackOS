@@ -229,10 +229,33 @@ network, and `dokploy-network` proxy. If staging is enabled, its three
 webhooks use the same tailnet identity but point to the separate staging
 Dokploy services.
 
-Protect exactly `integration`, `staging`, and `main` with the repository
-ruleset. The checked-in workflow cannot create or protect remote branches;
-create these three branches and apply the matching ruleset before using them in
-the promotion flow.
+Protect exactly `integration`, `staging`, and `main` with repository rulesets.
+The checked-in workflow cannot create or protect remote branches. Configure the
+rulesets once with:
+
+```sh
+./deploy/scripts/configure-github-rulesets.sh
+```
+
+The script keeps the existing required checks and PR requirement on `main`,
+while creating a `release-branches` ruleset for `integration` and `staging`.
+The authenticated repository administrator is the only bypass actor on those
+two lower branches. That narrow bypass exists for the explicit release
+synchronization below; ordinary feature changes still go through PRs and the
+same CI checks. `main` has no bypass actor.
+
+After a release has been merged into `main`, make the lower release branches
+point at exactly the same commit with the fast-forward-only helper:
+
+```sh
+./deploy/scripts/sync-main-to-release-branches.sh
+```
+
+It refuses to overwrite divergent branch history. If either branch is not an
+ancestor of `main`, open a normal synchronization PR and resolve that
+divergence before retrying. This keeps branch promotion deterministic while
+avoiding the GitHub “Changes must be made through a pull request” block for an
+intentional administrator synchronization.
 
 ---
 
