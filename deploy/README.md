@@ -229,6 +229,12 @@ network, and `dokploy-network` proxy. If staging is enabled, its three
 webhooks use the same tailnet identity but point to the separate staging
 Dokploy services.
 
+Staging image builds remain available without a staging Dokploy environment.
+When one of the five staging deployment secrets is missing, the CD workflow
+publishes the image and marks only the optional deployment step as skipped; the
+release is not reported as failed. Production still requires its Tailscale and
+Dokploy configuration.
+
 Protect exactly `integration`, `staging`, and `main` with repository rulesets.
 The checked-in workflow cannot create or protect remote branches. Configure the
 rulesets once with:
