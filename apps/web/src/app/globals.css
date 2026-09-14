@@ -335,7 +335,7 @@ html[data-locale-ready="false"] body {
 [data-sileo-viewport][data-position][data-theme="light"] {
   --sileo-state-success: oklch(0.723 0.219 142.136);
   --sileo-state-loading: oklch(0.72 0.01 286);
-  --sileo-state-error: oklch(0.637 0.237 25.331);
+  --sileo-state-error: oklch(0.7 0.19 25.331);
   --sileo-state-warning: oklch(0.795 0.184 86.047);
   --sileo-state-info: oklch(0.685 0.169 237.323);
   --sileo-state-action: oklch(0.7 0.18 260);
@@ -343,8 +343,9 @@ html[data-locale-ready="false"] body {
 
 [data-sileo-viewport][data-position] [data-sileo-title] {
   font-family: inherit;
-  font-size: var(--font-size-label);
-  line-height: var(--line-height-label);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  font-weight: 600;
   text-transform: none;
 }
 
@@ -361,9 +362,21 @@ html[data-locale-ready="false"] body {
 
 [data-sileo-viewport][data-position] [data-sileo-description] {
   padding: 0.75rem 1rem 0.875rem;
-  font-size: var(--font-size-label);
-  line-height: var(--line-height-label);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  font-weight: 500;
+  white-space: pre-line;
   text-wrap: pretty;
+}
+
+/* Sileo's package defaults use 50% white/black for descriptions. That is too
+ * faint on the inverse surface, especially for multi-line validation errors. */
+[data-sileo-viewport][data-position][data-theme="dark"] [data-sileo-description] {
+  color: oklch(0.34 0 0);
+}
+
+[data-sileo-viewport][data-position][data-theme="light"] [data-sileo-description] {
+  color: oklch(0.86 0 0);
 }
 
 /* Keep Sileo's header at the same optical size and baseline while its body
