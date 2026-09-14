@@ -224,6 +224,12 @@ The release paths are:
 | `staging` | A direct feature→staging PR or an integration→staging promotion builds and publishes the images, then deploys the optional staging Dokploy Environment for verification. |
 | `main` | An integration→main promotion builds and publishes the production images once. A staging→main promotion reuses the matching immutable staging digest; both paths deploy production. |
 
+`main` and `staging` are independent. Merging into `main` deploys production and
+does not update `staging`; merging into `staging` deploys staging. To test the
+current production tree in staging, open an explicit pull request from `main`
+to `staging` and merge it only when staging is ready. That preserves any
+staging-only work until the synchronization is intentional.
+
 This supports both a fast `integration` → `main` promotion and a verified
 path through `staging`. A feature branch can also go directly to `staging`; the
 merge to `staging` is what builds the release artifact. The existing main
