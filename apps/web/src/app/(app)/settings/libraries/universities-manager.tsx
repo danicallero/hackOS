@@ -9,7 +9,7 @@
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { GraduationCapIcon, MoreHorizontalIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -52,6 +52,7 @@ export function UniversitiesManager() {
   const { t } = useLocale();
   const [entries, setEntries] = useState<University[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   // `undefined` => closed; `null` => create; a row => edit.
@@ -67,13 +68,14 @@ export function UniversitiesManager() {
   const { reset } = form;
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     setLoadError(null);
     try {
       const { universities } = await api.get<{ universities: University[] }>(
         "/api/public/universities",
         { query: { q: search.trim() || undefined } },
       );
+      hasLoadedRef.current = true;
       setEntries(universities);
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("couldNotLoadDirectory");
@@ -226,7 +228,7 @@ export function UniversitiesManager() {
         columns={columns}
         data={entries}
         getRowId={(row) => String(row.id)}
-        loading={loading}
+        loading={loading && !hasLoadedRef.current}
         error={loadError ? { message: loadError, onRetry: load } : undefined}
         filteredEmpty={{
           active: search.trim().length > 0,

@@ -67,6 +67,10 @@ describe("domain mutation routing", () => {
     expect(mutationDomainForPath("/api/unknown/write")).toBeNull();
   });
 
+  it("does not turn device-token registration into an identity invalidation loop", () => {
+    expect(mutationDomainForPath("/api/me/push-tokens")).toBeNull();
+  });
+
   it("keeps public-content mirrors narrower than the authenticated sponsor domain", () => {
     expect(publicContentMutationForPath("/api/enterprises/4")).toBe(true);
     expect(publicContentMutationForPath("/api/enterprises/visibility")).toBe(true);

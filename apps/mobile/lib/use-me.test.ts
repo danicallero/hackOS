@@ -116,6 +116,21 @@ describe("useMe foreground revalidation (H55)", () => {
     expect(result.current.me).toBeNull();
   });
 
+  it("keeps an unauthenticated auth stack mounted during a foreground revalidation", async () => {
+    mockApiFetch.mockRejectedValue(new ApiError("api error", 401));
+    const { result } = await renderHook(() => useMe(true));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.me).toBeNull();
+
+    await act(async () => emitAppState("inactive"));
+    await act(async () => emitAppState("active"));
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.me).toBeNull();
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(2));
+  });
+
   it("coalesces concurrent profile refreshes into one request", async () => {
     const profileFetch = deferred<{ id: number; capabilities: string[] }>();
     mockApiFetch.mockReturnValue(profileFetch.promise);
