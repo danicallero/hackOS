@@ -36,7 +36,7 @@ export async function ownsEnterprise(userId: number, enterpriseId: number): Prom
 /**
  * H43-H44: org admins (SPONSORS_MANAGE) manage every enterprise; linked sponsor
  * reps may edit the profile of the enterprise they belong to. The sponsor row
- * is the access grant; SPONSOR_PORTAL is not required for the rep themselves.
+ * is the access grant for the representative themselves.
  * Returns how access was granted so the caller can restrict which fields an
  * owner (vs. an admin) is allowed to change.
  */

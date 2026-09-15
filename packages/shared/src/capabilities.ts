@@ -48,8 +48,6 @@ export const CAPABILITIES = {
 
   // sponsors (H43-H46)
   SPONSORS_MANAGE: "sponsors:manage", // org-side: enterprises, tiers, invites
-  // Deprecated compatibility no-op: preserved/reported for repair, never an authorization grant.
-  SPONSOR_PORTAL: "sponsor:portal",
 
   // challenges (H43-H46, H8): split from SPONSORS_MANAGE so a role can create/
   // edit/publish sponsor challenges without full enterprise/tier/invite
@@ -119,7 +117,6 @@ export const CAPABILITY_DESCRIPTIONS: Record<Capability, string> = {
   "judge:panel": "Bring in, start, and evaluate judging sessions",
   "judging:export": "Export judging scores and results",
   "sponsors:manage": "Manage enterprises, tiers, and sponsor invites",
-  "sponsor:portal": "Deprecated compatibility no-op — grants nothing",
   "challenges:manage": "Create, edit, and publish sponsor challenges",
   "schedule:manage": "Manage the event schedule",
   "announcements:manage": "Create and send announcements",

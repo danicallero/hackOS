@@ -255,11 +255,6 @@ async function prepareFixture(options: Options): Promise<Fixture> {
       .filter((person) => person.badgeId)
       .map((person) => person.id);
     await client.query(
-      `INSERT INTO manual_attendee_roles (user_id, role)
-       SELECT id, 'participant' FROM users WHERE id = ANY($1::int[])`,
-      [participantIds],
-    );
-    await client.query(
       `INSERT INTO user_roles (user_id, role_id, source)
        SELECT id, r.id, 'event_day_load'
          FROM users

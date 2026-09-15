@@ -91,10 +91,10 @@ The same role record also carries the independent `event_access` entitlement
 bit. `hasEventAccess` is true for an active user when any assigned,
 non-deleted role has that bit enabled; it is an OR across roles and does not
 depend on role visibility, capability grants, application status, or sponsor/
-judge relationships. `mobileAccess` on `GET /api/me` remains the additive,
-backwards-compatible field name for this same result. Ticket QR/wallet
-exposure, scanner eligibility, and physical check-in use the same live query;
-role transitions reconcile wallet passes and retain the historical ticket row.
+judge relationships. `hasEventAccess` is the single access signal returned by
+`GET /api/me` and used by the mobile app. Ticket QR/wallet exposure, scanner
+eligibility, and physical check-in use the same live query; role transitions
+reconcile wallet passes and retain the historical ticket row.
 
 Primary-email verification is deliberately not required by Better Auth at sign
 in: H1 allows an unverified account to establish a session and use read-only

@@ -56,8 +56,8 @@ All four generated accounts hold an event-bearing role and receive a durable
 entrance ticket. This includes `staff-exit-operator`: its scan capabilities
 still restrict what it can do operationally, but it also retains the
 participant-facing app entry point and ticket flow used by the published mobile
-build. The review-fixture regression checks `/api/me.mobileAccess`,
-`hasEventAccess`, and `/api/me/ticket` for every account.
+build. The review-fixture regression checks `/api/me.hasEventAccess` and
+`/api/me/ticket` for every account.
 
 The queue fixture is deliberately marked on its challenge and repository. It
 is visible to the corresponding synthetic participant through the participant

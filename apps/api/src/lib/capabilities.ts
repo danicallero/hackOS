@@ -67,12 +67,6 @@ export function assertKnownCapabilities(
 }
 
 /**
- * Compatibility no-ops for mutation callers. PostgreSQL is the authorization
- * source on every request, so committed revocations need no cache invalidation.
- */
-export async function invalidateCapabilities(_userId: number): Promise<void> {}
-
-/**
  * Route guard. Requires an authenticated session (request.userId, set by the
  * auth plugin) holding `capability`.
  */

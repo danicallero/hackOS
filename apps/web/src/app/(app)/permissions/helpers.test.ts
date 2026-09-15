@@ -11,15 +11,11 @@ import {
 } from "./helpers";
 
 describe("permission helpers", () => {
-  it("does not offer the deprecated sponsor portal capability", () => {
-    expect(ALL_CAPABILITIES).toContain("sponsor:portal");
-    expect(selectableCapabilities()).not.toContain("sponsor:portal");
-  });
-
-  it("keeps the deprecated sponsor portal capability out of the visible catalogue", () => {
-    expect(capabilitiesByDomain().flatMap((group) => group.capabilities)).not.toContain(
-      "sponsor:portal",
-    );
+  it("exposes the complete current capability catalogue", () => {
+    expect(selectableCapabilities()).toEqual(ALL_CAPABILITIES);
+    const groupedCapabilities = capabilitiesByDomain().flatMap((group) => group.capabilities);
+    expect(groupedCapabilities).toHaveLength(ALL_CAPABILITIES.length);
+    expect(new Set(groupedCapabilities)).toEqual(new Set(ALL_CAPABILITIES));
   });
 
   it("uses the catalogue's label keys and recognizes wildcard authority", () => {

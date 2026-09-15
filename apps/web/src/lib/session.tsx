@@ -45,38 +45,49 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<Error | null>(null);
   const meRef = useRef<Me | null>(null);
   const requestId = useRef(0);
+  const inFlight = useRef<Promise<void> | null>(null);
 
   const refresh = useCallback(async () => {
-    const currentRequest = ++requestId.current;
-    try {
-      const data = await api.get<Me>("/api/me");
-      if (currentRequest !== requestId.current) return;
-      meRef.current = data;
-      setMe(data);
-      setStatus("authenticated");
-      setError(null);
-    } catch (err) {
-      if (currentRequest !== requestId.current) return;
-      if (err instanceof ApiError && err.status === 401) {
-        meRef.current = null;
+    if (inFlight.current) return inFlight.current;
+
+    const request = (async () => {
+      const currentRequest = ++requestId.current;
+      try {
+        const data = await api.get<Me>("/api/me");
+        if (currentRequest !== requestId.current) return;
+        meRef.current = data;
+        setMe(data);
+        setStatus("authenticated");
+        setError(null);
+      } catch (err) {
+        if (currentRequest !== requestId.current) return;
+        if (err instanceof ApiError && err.status === 401) {
+          meRef.current = null;
+          setMe(null);
+          setStatus("unauthenticated");
+          setError(null);
+          return;
+        }
+        // A pending-removal session must remain on the authoritative screen
+        // while /api/me has a transient network/5xx failure. Clearing `me`
+        // here would make AuthGuard redirect to login and hide the retry path.
+        setError(err instanceof Error ? err : new Error("Failed to refresh session"));
+        if (meRef.current) {
+          setStatus("authenticated");
+          return;
+        }
+        // Before the first successful profile fetch there is no safe identity
+        // to render, so preserve the existing unauthenticated gate behavior.
         setMe(null);
         setStatus("unauthenticated");
-        setError(null);
-        return;
       }
-      // A pending-removal session must remain on the authoritative screen
-      // while /api/me has a transient network/5xx failure. Clearing `me`
-      // here would make AuthGuard redirect to login and hide the retry path.
-      setError(err instanceof Error ? err : new Error("Failed to refresh session"));
-      if (meRef.current) {
-        setStatus("authenticated");
-        return;
-      }
-      // Before the first successful profile fetch there is no safe identity
-      // to render, so preserve the existing unauthenticated gate behavior.
-      setMe(null);
-      setStatus("unauthenticated");
-    }
+    })();
+    let tracked: Promise<void>;
+    tracked = request.finally(() => {
+      if (inFlight.current === tracked) inFlight.current = null;
+    });
+    inFlight.current = tracked;
+    return tracked;
   }, []);
 
   // Fetch current session from server on mount; setState is sync, but this is external-system fetch.
@@ -89,6 +100,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   // association facts as soon as that topic changes so the judging workspace
   // appears (or disappears) without a full-page reload.
   useEventSource("/api/events/stream?topic=sponsors", {
+    events: [EVENTS.DOMAIN_CHANGED],
+    onEvent: refresh,
+    enabled: status === "authenticated",
+  });
+  useEventSource("/api/events/stream?topic=identity", {
     events: [EVENTS.DOMAIN_CHANGED],
     onEvent: refresh,
     enabled: status === "authenticated",

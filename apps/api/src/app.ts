@@ -273,7 +273,14 @@ export async function buildApp(): Promise<App> {
   const admissionLeases = new WeakMap<FastifyRequest, RequestAdmissionLease>();
 
   app.addHook("onRequest", async (req) => {
-    if (req.userId != null) {
+    const requestPath = req.url.split("?", 1)[0] ?? req.url;
+    const isSessionProbe = requestPath === "/api/auth/get-session";
+    if (
+      req.userId != null &&
+      !isSessionProbe &&
+      config.REVIEW_FIXTURE_PASSWORD &&
+      config.REVIEW_FIXTURE_DELETION_PIN
+    ) {
       try {
         req.reviewFixtureContext = await findReviewFixtureByUserId(pool, req.userId);
       } catch {
@@ -289,14 +296,15 @@ export async function buildApp(): Promise<App> {
     // owned by sse.ts (#540).
     if (
       isSseRequest(req.url) ||
-      req.url.split("?", 1)[0] === "/healthz" ||
-      req.url.split("?", 1)[0] === "/readyz" ||
-      req.url.split("?", 1)[0] === "/metrics"
+      requestPath === "/healthz" ||
+      requestPath === "/readyz" ||
+      requestPath === "/metrics" ||
+      isSessionProbe
     ) {
       return;
     }
     let rolePosition: number | null = null;
-    if (req.userId != null) {
+    if (req.userId != null && !isSessionProbe) {
       try {
         rolePosition = await highestRolePosition(pool, req.userId);
       } catch (err) {

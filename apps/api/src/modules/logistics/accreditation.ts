@@ -180,8 +180,7 @@ export async function checkInUser(
     await assertFixtureSubjectScope(client, actorId, input.userId);
     if (input.attendeeRole) {
       const { rows: existingRole } = await client.query(
-        `SELECT 1 FROM manual_attendee_roles WHERE user_id = $1
-         UNION ALL SELECT 1 FROM user_roles WHERE user_id = $1
+        `SELECT 1 FROM user_roles WHERE user_id = $1
          UNION ALL SELECT 1 FROM application_responses WHERE user_id = $1 AND status <> 'draft'
          UNION ALL SELECT 1 FROM sponsors WHERE user_id = $1
          UNION ALL SELECT 1 FROM enterprise_judges WHERE user_id = $1
