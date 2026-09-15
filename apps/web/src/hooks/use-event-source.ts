@@ -8,7 +8,7 @@ import {
   type RealtimeRefetchTrigger,
   telemetryScopeForStream,
 } from "@/lib/realtime-telemetry";
-import { subscribeToSse } from "@/lib/sse-broker";
+import { type SseResyncContext, type SseResyncReason, subscribeToSse } from "@/lib/sse-broker";
 
 /**
  * SSE consumption for the queue/judging vertical (H38, H41-H42). The server
@@ -34,6 +34,10 @@ interface UseEventSourceOptions {
   onEvent?: (envelope: SseEnvelope) => void;
   /** Set false to not open the connection (e.g. before an id is known). */
   enabled?: boolean;
+  /** Stable identity owning this stream; changes force the old stream closed. */
+  identityKey?: string | number | null;
+  /** Called when the lossy stream needs an authoritative read-model refetch. */
+  onResync?: (context: SseResyncContext) => void;
 }
 
 /**
@@ -42,15 +46,21 @@ interface UseEventSourceOptions {
  */
 export function useEventSource(
   path: string,
-  { events, onEvent, enabled = true }: UseEventSourceOptions = {},
+  { events, onEvent, enabled = true, identityKey = null, onResync }: UseEventSourceOptions = {},
 ): { connected: boolean } {
   const [connected, setConnected] = useState(false);
   // Keep the latest callback without forcing a resubscribe every render.
   // Assigned in useEffect to comply with react-hooks/rules-of-hooks.
   const onEventRef = useRef(onEvent);
+  const onResyncRef = useRef(onResync);
+  const hasPreviousIdentityKey = useRef(false);
+  const previousIdentityKey = useRef<string | number | null>(null);
   useEffect(() => {
     onEventRef.current = onEvent;
   }, [onEvent]);
+  useEffect(() => {
+    onResyncRef.current = onResync;
+  }, [onResync]);
 
   const eventsKey = events ? events.join(",") : "";
 
@@ -65,13 +75,25 @@ export function useEventSource(
       events: names ?? undefined,
       onConnectionChange: setConnected,
       onEvent: (envelope) => onEventRef.current?.(envelope),
+      onResync: (context) => onResyncRef.current?.(context),
+      identityKey,
     });
+
+    if (hasPreviousIdentityKey.current && previousIdentityKey.current !== identityKey) {
+      onResyncRef.current?.({
+        reason: "identity-change" satisfies SseResyncReason,
+        topic: path,
+        lastEventId: null,
+      });
+    }
+    hasPreviousIdentityKey.current = true;
+    previousIdentityKey.current = identityKey;
 
     return () => {
       unsubscribe();
       setConnected(false);
     };
-  }, [path, enabled, eventsKey]);
+  }, [path, enabled, eventsKey, identityKey]);
 
   return { connected };
 }
@@ -95,13 +117,17 @@ export function useLiveQuery<T>(
     enabled = true,
     debounceMs = 150,
     queryKey = [],
+    identityKey = null,
     onEvent: onMatchingEvent,
+    onResync,
   }: {
     enabled?: boolean;
     debounceMs?: number;
     queryKey?: readonly unknown[];
+    identityKey?: string | number | null;
     /** Optional side effect for a matching event (for example an operational alert). */
     onEvent?: (event: SseEnvelope) => void;
+    onResync?: (context: SseResyncContext) => void;
   } = {},
 ): {
   data: T | null;
@@ -216,7 +242,21 @@ export function useLiveQuery<T>(
     [refetch, debounceMs],
   );
 
-  const { connected } = useEventSource(streamPath, { events: eventNames, onEvent, enabled });
+  const onResyncRef = useRef(onResync);
+  useEffect(() => {
+    onResyncRef.current = onResync;
+  }, [onResync]);
+
+  const { connected } = useEventSource(streamPath, {
+    events: eventNames,
+    onEvent,
+    enabled,
+    identityKey,
+    onResync: (context) => {
+      onResyncRef.current?.(context);
+      refetch("sse");
+    },
+  });
 
   // Browser backgrounding can suspend EventSource without delivering an
   // event. Revalidate once after a meaningful hidden interval, even if the

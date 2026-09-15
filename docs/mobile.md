@@ -808,12 +808,18 @@ physical iOS/Android and EAS verification remains a release-gate task in
   Wired once for the app's lifetime from `app/_layout.tsx`.
 - `lib/server-events.ts` — native authenticated SSE reader. It takes the
   restored cookie from Better Auth's Expo plugin, parses the RN fetch stream,
-  reconnects after interruption, and emits personal queue/wallet events. The
-  cache-backed readers in `lib/use-cached-api.ts` revalidate quietly when the
-  app returns after at least 60 seconds away; wallet and notification reads
-  also poll every 30 seconds while active as a safety net when their event
-  stream is unavailable. A successful response clears the stale-data state,
-  while an outage keeps the last rendered data in place until the next retry.
+  reconnects after interruption, and emits personal queue/wallet events. SSE
+  is intentionally lossy: reconnects, foreground returns, and numeric event-id
+  gaps emit a synthetic resync signal so mounted screens refetch their
+  authoritative read model; the `Last-Event-ID` header is telemetry for the
+  server boundary, not a replay contract. Streams are restarted when the
+  authenticated identity changes, so one account cannot consume another
+  account's personal events. The cache-backed readers in `lib/use-cached-api.ts`
+  revalidate quietly when the app returns after at least 60 seconds away; wallet
+  and notification reads also poll every 30 seconds while active as a safety
+  net when their event stream is unavailable. A successful response clears the
+  stale-data state, while an outage keeps the last rendered data in place until
+  the next retry.
 - `lib/notification-events.ts` — `subscribeToCategory`/`emitCategory`, unit
   tested in `lib/notification-events.test.ts`. Lets a mounted screen react to
   a push the moment it arrives instead of waiting out its poll interval.

@@ -126,6 +126,7 @@ export default function QueueScreen() {
       subscribeToServerEvent(EVENTS.USER_QUEUE_PRECALL, onPrecall),
       subscribeToServerEvent(EVENTS.USER_QUEUE_CALLED, onCalled),
       subscribeToServerEvent(EVENTS.USER_QUEUE_CHANGED, () => void load()),
+      subscribeToServerEvent(EVENTS.REALTIME_RESYNC, () => void load()),
     ]);
   }, [load]);
 

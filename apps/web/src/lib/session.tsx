@@ -97,11 +97,15 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   useEventSource("/api/events/stream?topic=sponsors", {
     events: [EVENTS.DOMAIN_CHANGED],
     onEvent: refresh,
+    onResync: refresh,
+    identityKey: me?.id ?? null,
     enabled: status === "authenticated",
   });
   useEventSource("/api/events/stream?topic=identity", {
     events: [EVENTS.DOMAIN_CHANGED],
     onEvent: refresh,
+    onResync: refresh,
+    identityKey: me?.id ?? null,
     enabled: status === "authenticated",
   });
 

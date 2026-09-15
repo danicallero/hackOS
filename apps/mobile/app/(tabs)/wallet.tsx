@@ -105,7 +105,15 @@ export default function WalletScreen() {
 
   useEffect(() => {
     void load();
-    return subscribeToServerEvent(EVENTS.LOGISTICS_WALLET_PASS_UPDATED, () => void load());
+    const unsubscribeWallet = subscribeToServerEvent(
+      EVENTS.LOGISTICS_WALLET_PASS_UPDATED,
+      () => void load(),
+    );
+    const unsubscribeResync = subscribeToServerEvent(EVENTS.REALTIME_RESYNC, () => void load());
+    return () => {
+      unsubscribeWallet();
+      unsubscribeResync();
+    };
   }, [load]);
 
   async function addToGoogleWallet(purpose: "ticket" | "badge") {

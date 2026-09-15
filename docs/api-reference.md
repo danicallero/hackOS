@@ -375,9 +375,11 @@ topic and the API deliberately has no cross-write read cache. Consumers refetch
 Postgres-backed read models after their own topic fires. Public/TV/content
 streams receive only a narrow, payload-free "something changed" mirror of the
 relevant domain event and refetch their own sanitized projection — they never
-see the operational payload. See `architecture.md` §5 for the fan-out diagram
-and `background-workers.md`'s "Queue and public-screen streams" section for
-exactly which stream sees what.
+see the operational payload. A reconnect, detected per-topic event-id gap, or
+account/foreground lifecycle change also triggers an authoritative refetch;
+SSE is a freshness hint rather than a replay store. See `architecture.md` §5
+for the fan-out diagram and `background-workers.md`'s "Queue and public-screen
+streams" section for exactly which stream sees what.
 
 ### Background work
 Background work uses two patterns. Repeatable BullMQ ticks drain durable
