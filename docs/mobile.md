@@ -85,7 +85,8 @@ through the rollout. `push_tokens` (already existed in
   inserted a templateless, push-only outbox row directly — the pre-alert had
   no rendered subject/body and never reached in_app/email).
 - The app also calls these existing endpoints:
-  `GET /api/me` (capabilities + language + badgeId + role-derived event access),
+  `GET /api/me` (capabilities + language + badgeId + canonical
+  `visibleRoleName` + role-derived event access),
   `GET /api/public/activities`
   (schedule), `GET /api/queue/me` (H38 status), `GET /api/me/ticket` (including
   the active account-specific Apple Wallet serial number for each purpose) +

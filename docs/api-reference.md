@@ -93,7 +93,10 @@ only for an active, non-anonymized user when any assigned, non-deleted role has
 that bit enabled; it is an OR across roles and does not depend on role
 visibility, capability grants, application status, or sponsor/
 judge relationships. `hasEventAccess` is the single access signal returned by
-`GET /api/me` and used by the mobile app. `/api/me` computes its identity,
+`GET /api/me` and used by the mobile app. Its illustrative highest-visible
+role label is exposed consistently as `visibleRoleName` to web and mobile;
+clients never derive an identity or authorization field from a local role
+alias. `/api/me` computes its identity,
 roles, capabilities, association flags, project/queue flags, and removal state
 from one repeatable-read database snapshot, so the bootstrap response cannot
 mix values from different authorization moments. Ticket QR/wallet exposure, scanner

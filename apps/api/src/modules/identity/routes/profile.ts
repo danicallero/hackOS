@@ -457,7 +457,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           "accounts (H55), whether they currently hold role-derived event access, whether they have a project/queue entry of their own " +
           "(drives hiding the My project/My queue nav items, issue #424), mobile " +
           "entry eligibility, and the caller's complete assigned-role set (H8) alongside " +
-          "the single highest-visible `role` shown elsewhere. All derived fields come from one repeatable-read database snapshot; event access is true only for an active, non-anonymized account with an assigned non-deleted event-bearing role.",
+          "the single highest-visible `visibleRoleName` shown elsewhere. All derived fields come from one repeatable-read database snapshot; event access is true only for an active, non-anonymized account with an assigned non-deleted event-bearing role.",
         summary: "Get my profile",
         response: {
           200: userResponseSchema.extend({
@@ -471,7 +471,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             // enforcement still happens on every guarded route server-side.
             capabilities: z.array(z.string()),
             // H8: the caller's FULL assigned-role set (highest position
-            // first), additive next to `role` (the single highest-visible
+            // first), additive next to `visibleRoleName` (the single highest-visible
             // one). Always the caller's own roles, so system:superadmin is
             // included when they actually hold it — nothing to hide from
             // yourself.

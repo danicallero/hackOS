@@ -128,6 +128,20 @@ describe("useMe foreground revalidation (H55)", () => {
     });
     expect(result.current.me?.id).toBe(1);
   });
+
+  it("preserves the canonical visibleRoleName field without a mobile role alias", async () => {
+    mockApiFetch.mockResolvedValue({
+      id: 1,
+      capabilities: [],
+      visibleRoleName: "Event staff",
+    });
+
+    const { result } = await renderHook(() => useMe(true));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.me?.visibleRoleName).toBe("Event staff");
+    expect(result.current.me).not.toHaveProperty("role");
+  });
 });
 
 describe("useMe offline fallback", () => {
