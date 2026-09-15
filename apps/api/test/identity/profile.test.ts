@@ -120,8 +120,8 @@ describe("GET /api/me (H7)", () => {
     const internal = await createUser();
     const invited = await createUser();
     const { rows: applications } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Participants', '[]'::jsonb) RETURNING id`,
     );
     const formVersionId = await ensureApplicationFormVersion(applications[0].id);
     await pool.query(
@@ -434,8 +434,8 @@ describe("self-service account removal (H54)", () => {
     const { pool } = await import("../../src/db/pool.js");
     const user = await createUser({ name: "Accepted Self Deletable", emailVerified: true });
     const { rows: applications } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Participants', '[]'::jsonb) RETURNING id`,
     );
     const formVersionId = await ensureApplicationFormVersion(applications[0].id);
     const { rows: tokens } = await pool.query(
@@ -510,8 +510,8 @@ describe("self-service account removal (H54)", () => {
     const user = await createUser({ name: "Self Deletable", emailVerified: false });
     await addCredentialPassword(user);
     const { rows: applications } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Participants', '[]'::jsonb) RETURNING id`,
     );
     const formVersionId = await ensureApplicationFormVersion(applications[0].id);
     await pool.query(
@@ -1330,8 +1330,8 @@ describe("self-service account removal (H54)", () => {
       },
     ];
     const { rows: applicationRows } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Demographic extraction', 'participant', $1::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Demographic extraction', $1::jsonb) RETURNING id`,
       [JSON.stringify(demographicTemplate)],
     );
     const formVersionId = await ensureApplicationFormVersion(applicationRows[0].id);
@@ -1527,8 +1527,8 @@ describe("self-service account removal (H54)", () => {
       },
     ];
     const { rows: applications } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Versioned retention form', 'participant', $1::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Versioned retention form', $1::jsonb) RETURNING id`,
       [JSON.stringify(templateV1)],
     );
     const applicationId = applications[0].id as number;
@@ -1557,8 +1557,8 @@ describe("self-service account removal (H54)", () => {
       },
     ];
     const { rows: draftApplications } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Draft retention form', 'participant', $1::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Draft retention form', $1::jsonb) RETURNING id`,
       [JSON.stringify(draftTemplate)],
     );
     const draftVersionId = await ensureApplicationFormVersion(draftApplications[0].id);
@@ -1651,13 +1651,13 @@ describe("self-service account removal (H54)", () => {
       },
     ];
     const { rows: formA } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Form A', 'participant', $1::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Form A', $1::jsonb) RETURNING id`,
       [JSON.stringify(templateA)],
     );
     const { rows: formB } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Form B', 'participant', $1::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Form B', $1::jsonb) RETURNING id`,
       [JSON.stringify(templateB)],
     );
     const versionA = await ensureApplicationFormVersion(formA[0].id);
@@ -2091,8 +2091,8 @@ describe("staff user routes (H7)", () => {
     const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
     const target = await createUser({ name: "Historically Referenced" });
     const { rows: applications } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Participants', '[]'::jsonb) RETURNING id`,
     );
     const formVersionId = await ensureApplicationFormVersion(applications[0].id);
     await pool.query(
@@ -2154,8 +2154,8 @@ describe("staff user routes (H7)", () => {
     const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
     const target = await createUser({ name: "Never Accepted" });
     const { rows: applications } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Participants', '[]'::jsonb) RETURNING id`,
     );
     const formVersionId = await ensureApplicationFormVersion(applications[0].id);
     const { rows: responseRows } = await pool.query(
@@ -2343,8 +2343,8 @@ describe("staff user routes (H7)", () => {
     const editor = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
 
     const { rows: appRows } = await pool.query(
-      `INSERT INTO applications (name, type, template, description, confirmation_window_hours)
-       VALUES ('F', 'participant', '[]'::jsonb, '', 168) RETURNING id`,
+      `INSERT INTO applications (name, template, description, confirmation_window_hours)
+       VALUES ('F', '[]'::jsonb, '', 168) RETURNING id`,
     );
     const appId = appRows[0].id;
     const formVersionId = await ensureApplicationFormVersion(appId);
@@ -2642,8 +2642,8 @@ describe("staff user routes (H7)", () => {
       { key: "year_founded", kind: "number", label: { en: "Year founded" } },
     ];
     const { rows: applicationRows } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Free-text minimization', 'participant', $1::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Free-text minimization', $1::jsonb) RETURNING id`,
       [JSON.stringify(freeTextTemplate)],
     );
     const formVersionId = await ensureApplicationFormVersion(applicationRows[0].id);

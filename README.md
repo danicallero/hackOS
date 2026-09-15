@@ -204,6 +204,7 @@ pnpm test:ui:native                   # Detox on a simulator/device
 
 pnpm migrate                          # apply pending SQL migrations
 pnpm schema:dump                      # regenerate the current-schema DBML ERD
+pnpm schema:check                     # compare a migrated DB with the checked-in ERD
 pnpm infra:down                       # stop local infrastructure
 ```
 

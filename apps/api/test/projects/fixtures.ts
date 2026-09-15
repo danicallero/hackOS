@@ -107,7 +107,7 @@ export async function createChallenge(title: string, devpostTags: string[]): Pro
  */
 export async function admitParticipant(userId: number): Promise<void> {
   const application = await pool.query(
-    `INSERT INTO applications (name, type, template) VALUES ($1, 'participant', '{}'::jsonb) RETURNING id`,
+    `INSERT INTO applications (name, template) VALUES ($1, '{}'::jsonb) RETURNING id`,
     [`Test application ${crypto.randomUUID()}`],
   );
   const formVersionId = await ensureApplicationFormVersion(application.rows[0].id);

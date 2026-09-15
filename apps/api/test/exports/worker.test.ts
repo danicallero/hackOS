@@ -102,8 +102,8 @@ describe("processDataSubjectRequest (H54)", () => {
       [subject],
     );
     const { rows: applications } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Pending response mutation guard', 'participant', '[]'::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Pending response mutation guard', '[]'::jsonb) RETURNING id`,
     );
     const formVersionId = await ensureApplicationFormVersion(applications[0].id);
     const { rows: responses } = await pool.query(

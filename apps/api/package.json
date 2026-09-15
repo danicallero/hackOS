@@ -11,6 +11,7 @@
     "start": "node dist/server.js",
     "migrate": "tsx scripts/migrate.ts",
     "schema:dump": "tsx scripts/schema-dbml.ts",
+    "schema:check": "tsx scripts/schema-dbml.ts --check",
     "seed": "tsx scripts/seed.ts",
     "seed:mock": "tsx scripts/seed-mock.ts",
     "event-day:load": "tsx scripts/event-day-load.ts",

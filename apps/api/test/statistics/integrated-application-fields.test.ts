@@ -50,8 +50,8 @@ describe("application fields integrated into Logistics", () => {
       },
     ];
     const application = await pool.query<{ id: number }>(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Participants', 'participant', $1::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Participants', $1::jsonb) RETURNING id`,
       [JSON.stringify(template)],
     );
     const applicationId = application.rows[0]?.id;

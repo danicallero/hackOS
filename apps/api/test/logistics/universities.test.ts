@@ -128,7 +128,7 @@ describe("university directory", () => {
     await pool.query(`UPDATE users SET university_id = $2 WHERE id = $1`, [applicant, source.id]);
     const template = [{ key: "university", kind: "university", label: { en: "University" } }];
     const { rows: applications } = await pool.query(
-      `INSERT INTO applications (name, type, template) VALUES ('Form', 'participant', $1::jsonb)
+      `INSERT INTO applications (name, template) VALUES ('Form', $1::jsonb)
        RETURNING id`,
       [JSON.stringify(template)],
     );
