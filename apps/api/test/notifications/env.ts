@@ -16,3 +16,6 @@
  * imported lazily inside the tests/helpers.
  */
 process.env.VALKEY_URL = process.env.TEST_VALKEY_URL ?? "redis://localhost:6379/10";
+delete process.env.LOG_EXPO_PUSH_TICKETS;
+delete process.env.LOG_EXPO_PUSH_TOKENS;
+delete process.env.LOG_EXPO_PUSH_UNSAFE_DEBUG;

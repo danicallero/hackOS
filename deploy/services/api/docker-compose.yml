@@ -18,6 +18,9 @@ x-app-env: &app-env
   MOBILE_APP_SCHEME: "${MOBILE_APP_SCHEME:-hackos}"
   TRUST_PROXY: "true"
   LOG_LEVEL: "${LOG_LEVEL:-info}"
+  LOG_EXPO_PUSH_TICKETS: "${LOG_EXPO_PUSH_TICKETS:-false}"
+  LOG_EXPO_PUSH_TOKENS: "${LOG_EXPO_PUSH_TOKENS:-false}"
+  LOG_EXPO_PUSH_UNSAFE_DEBUG: "${LOG_EXPO_PUSH_UNSAFE_DEBUG:-false}"
   # Postgres pool sizing/timeouts (H540) — see docs/env-vars.md.
   DB_POOL_MAX: "${DB_POOL_MAX:-20}"
   DB_IDLE_TIMEOUT_MS: "${DB_IDLE_TIMEOUT_MS:-30000}"
