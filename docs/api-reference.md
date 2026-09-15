@@ -288,6 +288,16 @@ relationships for display purposes only; it is never the permission source
 app's workspaces can change for a user the instant their capabilities change,
 with no reinstall or redeploy (H55).
 
+Every request receives one explicit authorization context after identity
+resolution (H8, #714). The context owns the caller id, the database handle,
+and one lazily started effective-capability snapshot, so stacked route guards
+and contextual checks share one read and never silently fall back to the pool.
+Authorization inside a mutation transaction creates a separate context with
+that transaction's `PoolClient`; this keeps the capability decision in the
+same database snapshot as the state transition. The snapshot query still
+requires an active, non-anonymized account, and the `user_effective_capabilities`
+view remains the source of the position-ordered ALLOW/DENY/INHERIT result.
+
 ### Route access policy
 Every application route declares a machine-readable `RouteAccessPolicy` in
 its `config` (`lib/route-policy.ts`), built with the shared

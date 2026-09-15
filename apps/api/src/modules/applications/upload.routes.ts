@@ -4,7 +4,11 @@ import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool, withTransaction } from "../../db/pool.js";
-import { requireAuth, userHasCapability } from "../../lib/capabilities.js";
+import {
+  getRequestAuthorizationContext,
+  requireAuth,
+  userHasCapability,
+} from "../../lib/capabilities.js";
 import {
   BadRequestError,
   ForbiddenError,
@@ -45,7 +49,7 @@ const requireApplicationUploadAccess: preHandlerHookHandler = async (req) => {
   await assertFixtureSubjectScope(pool, userId, ownerId);
   if (
     userId === ownerId ||
-    (await userHasCapability(userId, CAPABILITIES.APPLICATIONS_REVIEW, req))
+    (await userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.APPLICATIONS_REVIEW))
   ) {
     return;
   }

@@ -4,6 +4,54 @@ import { pool, type Queryable } from "../db/pool.js";
 import { BadRequestError, ForbiddenError, UnauthorizedError } from "./errors.js";
 
 /**
+ * The one authorization snapshot used by a request or transaction (H8, #714).
+ * `db` is explicit so transaction-local authorization cannot accidentally read
+ * through the pool, and the lazy promise avoids a capability query on public
+ * routes that never make a capability decision.
+ */
+export interface AuthorizationContext {
+  readonly userId: number | null;
+  readonly db: Queryable;
+  readonly effectiveCapabilities: Promise<ReadonlySet<string>>;
+}
+
+function resolveCapabilities(userId: number | null, db: Queryable): Promise<ReadonlySet<string>> {
+  if (userId == null) return Promise.resolve(new Set<string>());
+  return db
+    .query(
+      `SELECT uec.capability
+         FROM users u
+         JOIN user_effective_capabilities uec ON uec.user_id = u.id
+        WHERE u.id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
+      [userId],
+    )
+    .then((result) => new Set(result.rows.map((r: { capability: string }) => r.capability)));
+}
+
+/** Create an explicit request or transaction authorization context (H8, #714). */
+export function createAuthorizationContext(
+  userId: number | null,
+  db: Queryable = pool,
+): AuthorizationContext {
+  let effectiveCapabilities: Promise<ReadonlySet<string>> | undefined;
+  return {
+    userId,
+    db,
+    get effectiveCapabilities() {
+      effectiveCapabilities ??= resolveCapabilities(userId, db);
+      return effectiveCapabilities;
+    },
+  };
+}
+
+/** Return the context installed by auth-context.ts; never invent a pool-backed one mid-request. */
+export function getRequestAuthorizationContext(req: FastifyRequest): AuthorizationContext {
+  const context = req.authorizationContext;
+  if (!context) throw new Error("Request authorization context is not initialized");
+  return context;
+}
+
+/**
  * Capability resolution (H8). A hierarchical, position-ordered multi-role model replaces
  * capability groups as the authorization source: a user may hold several
  * roles; roles sit on one global reorderable hierarchy (`roles.position`,
@@ -17,40 +65,21 @@ import { BadRequestError, ForbiddenError, UnauthorizedError } from "./errors.js"
  * chain). An all-INHERIT chain, or no roles at all, denies (deny-by-default).
  * `*` still means "every capability" exactly as before.
  *
- * Authorization always reads PostgreSQL. A request-local promise prevents
- * repeated queries by stacked preHandlers without leaving a stale
- * cross-request window after revocation (H8, H53).
+ * Authorization always reads PostgreSQL. The context promise prevents
+ * repeated queries by stacked preHandlers without sharing a stale snapshot
+ * across requests (H8, H53, #714).
  */
 export async function getEffectiveCapabilities(
-  userId: number,
-  request?: FastifyRequest,
-  db: Queryable = pool,
-): Promise<Set<string>> {
-  if (request?.effectiveCapabilities) return request.effectiveCapabilities;
-  const resolve = async (): Promise<Set<string>> => {
-    // user_effective_capabilities (0800) already resolves the tri-state
-    // chain (first non-inherit state per capability, ordered by role
-    // position descending); this just adds the active-account filter.
-    const result = await db.query(
-      `SELECT uec.capability
-         FROM users u
-         JOIN user_effective_capabilities uec ON uec.user_id = u.id
-        WHERE u.id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
-      [userId],
-    );
-    return new Set(result.rows.map((r: { capability: string }) => r.capability));
-  };
-  const capabilities = resolve();
-  if (request) request.effectiveCapabilities = capabilities;
-  return capabilities;
+  context: AuthorizationContext,
+): Promise<ReadonlySet<string>> {
+  return context.effectiveCapabilities;
 }
 
 export async function userHasCapability(
-  userId: number,
+  context: AuthorizationContext,
   capability: Capability,
-  request?: FastifyRequest,
 ): Promise<boolean> {
-  const caps = await getEffectiveCapabilities(userId, request);
+  const caps = await getEffectiveCapabilities(context);
   return caps.has(capability) || caps.has(CAPABILITIES.ADMIN_ALL);
 }
 
@@ -73,7 +102,7 @@ export function assertKnownCapabilities(
 export function requireCapability(capability: Capability): preHandlerHookHandler {
   return async (req: FastifyRequest, _reply: FastifyReply) => {
     if (req.userId == null) throw new UnauthorizedError();
-    if (!(await userHasCapability(req.userId, capability, req))) {
+    if (!(await userHasCapability(getRequestAuthorizationContext(req), capability))) {
       throw new ForbiddenError(`Missing capability: ${capability}`, { capability });
     }
   };
@@ -87,8 +116,9 @@ export function requireCapability(capability: Capability): preHandlerHookHandler
 export function requireAnyCapability(...capabilities: Capability[]): preHandlerHookHandler {
   return async (req: FastifyRequest, _reply: FastifyReply) => {
     if (req.userId == null) throw new UnauthorizedError();
+    const context = getRequestAuthorizationContext(req);
     for (const cap of capabilities) {
-      if (await userHasCapability(req.userId, cap, req)) return;
+      if (await userHasCapability(context, cap)) return;
     }
     throw new ForbiddenError(`Missing one of capabilities: ${capabilities.join(", ")}`, {
       capabilities,

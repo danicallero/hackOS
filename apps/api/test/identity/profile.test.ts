@@ -6,6 +6,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import {
   asUser,
+  authorizationContextFor,
   buildTestApp,
   createUser,
   createUserWithCapabilities,
@@ -2508,8 +2509,12 @@ describe("staff user routes (H7)", () => {
     const { getEffectiveCapabilities, userHasCapability } = await import(
       "../../src/lib/capabilities.js"
     );
-    expect(await getEffectiveCapabilities(target)).toEqual(new Set());
-    expect(await userHasCapability(target, CAPABILITIES.USERS_READ)).toBe(false);
+    expect(await getEffectiveCapabilities(await authorizationContextFor(target))).toEqual(
+      new Set(),
+    );
+    expect(
+      await userHasCapability(await authorizationContextFor(target), CAPABILITIES.USERS_READ),
+    ).toBe(false);
 
     // The audit trail for the anonymize action must not retain the very PII
     // it was supposed to scrub.

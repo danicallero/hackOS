@@ -42,6 +42,12 @@ export async function createUser(
   return rows[0].id;
 }
 
+/** Build the explicit request-style capability context used by helper tests (H8, #714). */
+export async function authorizationContextFor(userId: number) {
+  const { createAuthorizationContext } = await import("../src/lib/capabilities.js");
+  return createAuthorizationContext(userId);
+}
+
 /**
  * A unique, collision-free role position. ALLOW-only test roles (as created
  * by createUserWithCapabilities/createRole below) never need a particular

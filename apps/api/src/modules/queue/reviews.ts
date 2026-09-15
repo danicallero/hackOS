@@ -2,7 +2,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { firstNumericQuestionKey, type Question } from "@hackos/shared/questions";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { userHasCapability } from "../../lib/capabilities.js";
+import { type AuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
 import { toCsv } from "../../lib/csv.js";
 import { ForbiddenError, NotFoundError, UnauthorizedError } from "../../lib/errors.js";
 import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
@@ -33,10 +33,11 @@ export interface ReviewScope {
   fixtureMarker: boolean;
 }
 
-export async function resolveReviewScope(userId: number | null): Promise<ReviewScope> {
+export async function resolveReviewScope(context: AuthorizationContext): Promise<ReviewScope> {
+  const userId = context.userId;
   if (userId == null) throw new UnauthorizedError();
   const fixtureMarker = await isSyntheticOperator(pool, userId);
-  if (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN)) {
+  if (await userHasCapability(context, CAPABILITIES.QUEUE_ADMIN)) {
     return { actorId: userId, isAdmin: true, ownChallengeIds: [], fixtureMarker };
   }
 

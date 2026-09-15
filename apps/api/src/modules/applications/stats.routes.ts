@@ -4,7 +4,12 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { requireAuth, requireCapability, userHasCapability } from "../../lib/capabilities.js";
+import {
+  getRequestAuthorizationContext,
+  requireAuth,
+  requireCapability,
+  userHasCapability,
+} from "../../lib/capabilities.js";
 import { ForbiddenError } from "../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { lockRoleGraph, requireRoleMutationAuthority } from "../identity/role-authority.js";
@@ -213,14 +218,12 @@ export function registerStatsRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const manages = await userHasCapability(
-        req.userId as number,
+        getRequestAuthorizationContext(req),
         CAPABILITIES.STATISTICS_MANAGE,
-        req,
       );
       const generalAccess = await userHasCapability(
-        req.userId as number,
+        getRequestAuthorizationContext(req),
         CAPABILITIES.LOGISTICS_STATS,
-        req,
       );
       const { rows } = await pool.query<{ id: number; name: string }>(
         `SELECT id, name FROM applications ORDER BY id`,
@@ -261,9 +264,10 @@ export function registerStatsRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const userId = req.userId as number;
-      const manages = await userHasCapability(userId, CAPABILITIES.STATISTICS_MANAGE, req);
+      const context = getRequestAuthorizationContext(req);
+      const manages = await userHasCapability(context, CAPABILITIES.STATISTICS_MANAGE);
       if (manages) return applicationStats(req.params.id, req.query.field);
-      const generalAccess = await userHasCapability(userId, CAPABILITIES.LOGISTICS_STATS, req);
+      const generalAccess = await userHasCapability(context, CAPABILITIES.LOGISTICS_STATS);
       const allowed = await allowedStatisticsPanels(req.params.id, userId, generalAccess);
       if (allowed.size === 0) throw new ForbiddenError("No statistics panels are shared with you");
       return applicationStats(req.params.id, req.query.field, allowed);

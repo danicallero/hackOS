@@ -7,7 +7,9 @@ import { audit } from "../../../lib/audit.js";
 import {
   assertActiveAuthenticatedUser,
   assertAuthenticatedProfileUser,
+  createAuthorizationContext,
   getEffectiveCapabilities,
+  getRequestAuthorizationContext,
   requireAuth,
   requireCapability,
   userHasCapability,
@@ -520,7 +522,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           roles,
           eventAccess,
         ] = await Promise.all([
-          getEffectiveCapabilities(userId, undefined, client),
+          getEffectiveCapabilities(createAuthorizationContext(userId, client)),
           computeMembershipFlags(client, userId),
           hasMyProject(userId, client),
           hasMyQueueItems(userId, client),
@@ -964,9 +966,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       const row = await fetchUser(pool, req.params.id);
       const [visibleRoleName, capabilities, allRoles, canSeeSuperadmin] = await Promise.all([
         getHighestVisibleRoleName(pool, req.params.id),
-        getEffectiveCapabilities(req.params.id),
+        getEffectiveCapabilities(createAuthorizationContext(req.params.id)),
         getAssignedRoles(pool, req.params.id),
-        userHasCapability(req.userId as number, CAPABILITIES.PERMISSIONS_MANAGE, req),
+        userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.PERMISSIONS_MANAGE),
       ]);
       // H8: system:superadmin is CLI-only and never advertised to a staff
       // viewer browsing someone else's profile unless they themselves manage

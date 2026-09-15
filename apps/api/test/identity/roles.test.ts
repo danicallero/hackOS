@@ -5,6 +5,7 @@ import type { App } from "../../src/app.js";
 import {
   assignRole,
   asUser,
+  authorizationContextFor,
   buildTestApp,
   createRole,
   createUser,
@@ -70,7 +71,9 @@ describe("H8 role resolution semantics", () => {
 
     // The higher-position role (denyRole, position 200) DENYs — it must
     // short-circuit before ever considering allowRole (position 100).
-    expect(await userHasCapability(userId, CAPABILITIES.USERS_READ)).toBe(false);
+    expect(
+      await userHasCapability(await authorizationContextFor(userId), CAPABILITIES.USERS_READ),
+    ).toBe(false);
   });
 
   it("DENY short-circuits regardless of a lower ALLOW", async () => {
@@ -87,7 +90,9 @@ describe("H8 role resolution semantics", () => {
     );
     await assignRole(userId, higher);
     await assignRole(userId, lower);
-    expect(await userHasCapability(userId, CAPABILITIES.USERS_READ)).toBe(false);
+    expect(
+      await userHasCapability(await authorizationContextFor(userId), CAPABILITIES.USERS_READ),
+    ).toBe(false);
   });
 
   it("INHERIT skips to the next-lower-position role the user ALSO holds, not the global next role", async () => {
@@ -110,7 +115,9 @@ describe("H8 role resolution semantics", () => {
     await assignRole(userId, bottom);
     // top is INHERIT (no row) -> skip straight to bottom (ALLOW), never
     // touching globalMiddleNotHeld's DENY since the user doesn't hold it.
-    expect(await userHasCapability(userId, CAPABILITIES.USERS_READ)).toBe(true);
+    expect(
+      await userHasCapability(await authorizationContextFor(userId), CAPABILITIES.USERS_READ),
+    ).toBe(true);
   });
 
   it("an all-INHERIT chain denies", async () => {
@@ -120,21 +127,25 @@ describe("H8 role resolution semantics", () => {
     const roleB = await createRole([]);
     await assignRole(userId, roleA);
     await assignRole(userId, roleB);
-    expect(await userHasCapability(userId, CAPABILITIES.USERS_READ)).toBe(false);
+    expect(
+      await userHasCapability(await authorizationContextFor(userId), CAPABILITIES.USERS_READ),
+    ).toBe(false);
   });
 
   it("a user with no roles is denied everything", async () => {
     const { userHasCapability } = await import("../../src/lib/capabilities.js");
     const userId = await createUser();
-    expect(await userHasCapability(userId, CAPABILITIES.USERS_READ)).toBe(false);
-    expect(await userHasCapability(userId, CAPABILITIES.ADMIN_ALL)).toBe(false);
+    const context = await authorizationContextFor(userId);
+    expect(await userHasCapability(context, CAPABILITIES.USERS_READ)).toBe(false);
+    expect(await userHasCapability(context, CAPABILITIES.ADMIN_ALL)).toBe(false);
   });
 
   it("'*' still grants every capability", async () => {
     const { userHasCapability } = await import("../../src/lib/capabilities.js");
     const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
-    expect(await userHasCapability(admin, CAPABILITIES.QUEUE_ADMIN)).toBe(true);
-    expect(await userHasCapability(admin, CAPABILITIES.AUDIT_READ)).toBe(true);
+    const context = await authorizationContextFor(admin);
+    expect(await userHasCapability(context, CAPABILITIES.QUEUE_ADMIN)).toBe(true);
+    expect(await userHasCapability(context, CAPABILITIES.AUDIT_READ)).toBe(true);
   });
 
   it("a user holding a non-visible role alongside a visible one resolves to the visible role everywhere (0813: mirrors real Event Director + Organizer): getEffectiveRole, getHighestVisibleRoleName, and the bulk user_effective_role_name view all agree", async () => {
@@ -397,7 +408,9 @@ describe("H8 roles CRUD and assignment API", () => {
     expect(assigned.json().memberIds).toContain(member);
 
     const { userHasCapability } = await import("../../src/lib/capabilities.js");
-    expect(await userHasCapability(member, CAPABILITIES.ACCREDIT_SCAN)).toBe(true);
+    expect(
+      await userHasCapability(await authorizationContextFor(member), CAPABILITIES.ACCREDIT_SCAN),
+    ).toBe(true);
 
     const removed = await a.inject({
       method: "DELETE",
@@ -405,7 +418,9 @@ describe("H8 roles CRUD and assignment API", () => {
       headers: asUser(actor),
     });
     expect(removed.statusCode).toBe(200);
-    expect(await userHasCapability(member, CAPABILITIES.ACCREDIT_SCAN)).toBe(false);
+    expect(
+      await userHasCapability(await authorizationContextFor(member), CAPABILITIES.ACCREDIT_SCAN),
+    ).toBe(false);
 
     const deleted = await a.inject({
       method: "DELETE",
@@ -969,7 +984,9 @@ describe("H8 role soft-delete and restore", () => {
     await assignRole(member, roleId);
 
     const { userHasCapability } = await import("../../src/lib/capabilities.js");
-    expect(await userHasCapability(member, CAPABILITIES.USERS_READ)).toBe(true);
+    expect(
+      await userHasCapability(await authorizationContextFor(member), CAPABILITIES.USERS_READ),
+    ).toBe(true);
 
     const del = await a.inject({
       method: "DELETE",
@@ -977,7 +994,9 @@ describe("H8 role soft-delete and restore", () => {
       headers: asUser(actor),
     });
     expect(del.statusCode).toBe(200);
-    expect(await userHasCapability(member, CAPABILITIES.USERS_READ)).toBe(false);
+    expect(
+      await userHasCapability(await authorizationContextFor(member), CAPABILITIES.USERS_READ),
+    ).toBe(false);
 
     // Hidden from the default listing, but still loadable by id and via
     // includeDeleted for a trash/restore panel.
@@ -997,7 +1016,9 @@ describe("H8 role soft-delete and restore", () => {
     });
     expect(restored.statusCode).toBe(200);
     expect(restored.json().deletedAt).toBeNull();
-    expect(await userHasCapability(member, CAPABILITIES.USERS_READ)).toBe(true);
+    expect(
+      await userHasCapability(await authorizationContextFor(member), CAPABILITIES.USERS_READ),
+    ).toBe(true);
   });
 
   it("restore 409s if another role has since taken the deleted role's exact position", async () => {
