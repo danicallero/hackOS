@@ -25,7 +25,7 @@ interface SyncState {
 // the online directory hostage, so only wait briefly for the best-effort
 // write. The write keeps its error handler attached and may finish later.
 const LOCAL_CACHE_TIMEOUT_MS = 1_500;
-let activeLocalSnapshotWrite: Promise<void> | null = null;
+const activeLocalSnapshotWrites = new Map<number, Promise<void>>();
 
 export interface ScannerSyncResult {
   /** The server response is authoritative, even when the local cache fails. */
@@ -79,14 +79,17 @@ export async function submitScannerMutation(
 }
 
 function startLocalSnapshotWrite(snapshot: ScannerSnapshot, ownerUserId: number): Promise<void> {
-  if (activeLocalSnapshotWrite) return activeLocalSnapshotWrite;
+  const activeWrite = activeLocalSnapshotWrites.get(ownerUserId);
+  if (activeWrite) return activeWrite;
   // Promise.resolve also keeps this helper tolerant of a no-op web adapter or
   // a test double that returns void; the native implementation is async.
   const write = Promise.resolve(applyScannerSnapshot(snapshot, ownerUserId));
   const tracked = write.finally(() => {
-    if (activeLocalSnapshotWrite === tracked) activeLocalSnapshotWrite = null;
+    if (activeLocalSnapshotWrites.get(ownerUserId) === tracked) {
+      activeLocalSnapshotWrites.delete(ownerUserId);
+    }
   });
-  activeLocalSnapshotWrite = tracked;
+  activeLocalSnapshotWrites.set(ownerUserId, tracked);
   return tracked;
 }
 

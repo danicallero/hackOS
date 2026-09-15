@@ -229,6 +229,32 @@ describe("synchronizeScanner", () => {
     ]);
   });
 
+  it("keeps concurrent roster writes partitioned by owner", async () => {
+    const ownerB = 7;
+    const snapshotA = { generatedAt: "a", people: [], activities: [], activityStates: [] };
+    const snapshotB = { generatedAt: "b", people: [], activities: [], activityStates: [] };
+    let releaseA!: () => void;
+    const writeAGate = new Promise<void>((resolve) => {
+      releaseA = resolve;
+    });
+    mockPendingScans.mockResolvedValue([]);
+    mockApiFetch.mockResolvedValueOnce(snapshotA).mockResolvedValueOnce(snapshotB);
+    mockApplySnapshot.mockImplementation(async (_snapshot: unknown, ownerUserId: number) => {
+      if (ownerUserId === OWNER_USER_ID) await writeAGate;
+    });
+
+    const syncA = synchronizeScanner(OWNER_USER_ID);
+    for (let index = 0; index < 5; index += 1) await Promise.resolve();
+    const syncB = synchronizeScanner(ownerB);
+    for (let index = 0; index < 5; index += 1) await Promise.resolve();
+
+    expect(mockApplySnapshot).toHaveBeenCalledWith(snapshotA, OWNER_USER_ID);
+    expect(mockApplySnapshot).toHaveBeenCalledWith(snapshotB, ownerB);
+    releaseA();
+    await Promise.all([syncA, syncB]);
+    expect(mockApplySnapshot).toHaveBeenCalledTimes(2);
+  });
+
   it("reruns for a caller who enqueues while a sync is already in flight", async () => {
     // First run sees no pending scans and resolves its /api/scanner/snapshot
     // fetch only once released, so we can enqueue a scan in the meantime

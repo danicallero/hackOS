@@ -86,6 +86,7 @@ export function QueueOperationsScreen() {
   const { data, loading, error, staleSince, load } = useCachedApi(
     `user:${me?.id ?? "unknown"}:queue-operations`,
     fetchRooms,
+    { enabled: me !== null },
   );
   const rooms = data ?? [];
 

@@ -24,6 +24,11 @@ export const CLOCK_SKEW_TOLERANCE_MS = 60_000;
 
 let clockSkewMs: number | null = null;
 
+/** Capture the current mobile session without making callers import Better Auth internals. */
+export function getCurrentSessionCookie(): string {
+  return authClient.getCookie();
+}
+
 export function getClockSkewMs(): number | null {
   return clockSkewMs;
 }
@@ -58,6 +63,7 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit): Promise<T>
   }
 
   const { sessionCookie, ...requestInit } = init ?? {};
+  const boundSessionCookie = sessionCookie ?? getCurrentSessionCookie();
 
   // Better Auth appends its own /api/auth base path to relative requests.
   // Our application endpoints live alongside that mount, so give $fetch an
@@ -68,17 +74,20 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit): Promise<T>
   const { data, error } = await authClient.$fetch<T>(url, {
     method: requestInit.method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | undefined,
     body: requestInit.body,
+    signal: requestInit.signal,
     headers: requestInit.headers as Record<string, string> | undefined,
     // The Expo plugin's init hook runs before Better Fetch's request hooks
     // and normally reads whichever cookie is in SecureStore at that moment.
     // Override it at the last point before transport so an in-flight scanner
     // replay cannot switch staff identity between account sessions.
-    onRequest:
-      sessionCookie === undefined
-        ? undefined
-        : ({ headers }) => {
-            headers.set("cookie", sessionCookie);
-          },
+    // Capture the cookie when the operation starts. Better Auth may otherwise
+    // read SecureStore again after a logout/login race and authenticate an
+    // in-flight response as the next account.
+    onRequest: boundSessionCookie
+      ? ({ headers }) => {
+          headers.set("cookie", boundSessionCookie);
+        }
+      : undefined,
     onResponse: (context) => recordServerDate(context.response),
     onError: (context) => recordServerDate(context.response),
     // Profile/session reads must resolve promptly: the caller can show a

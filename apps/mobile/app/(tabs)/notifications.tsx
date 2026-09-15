@@ -367,9 +367,11 @@ const MessagesView = memo(function MessagesView({
     [],
   );
   const all = useCachedApi(`user:${me?.id ?? "unknown"}:notifications:all`, fetchAll, {
+    enabled: me !== null,
     pollMs: 30_000,
   });
   const unread = useCachedApi(`user:${me?.id ?? "unknown"}:notifications:unread`, fetchUnread, {
+    enabled: me !== null,
     pollMs: 30_000,
   });
   const { data, loading, error, staleSince, load, setData } = unreadOnly ? unread : all;
@@ -1099,7 +1101,9 @@ const PreferencesView = memo(function PreferencesView({
     staleSince,
     load,
     setData,
-  } = useCachedApi(`user:${me?.id ?? "unknown"}:notification-preferences`, fetchPreferences);
+  } = useCachedApi(`user:${me?.id ?? "unknown"}:notification-preferences`, fetchPreferences, {
+    enabled: me !== null,
+  });
 
   useEffect(() => {
     void load();

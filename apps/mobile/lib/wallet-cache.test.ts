@@ -1,16 +1,21 @@
 jest.mock("./api", () => ({ apiFetch: jest.fn() }));
+jest.mock("./auth-client", () => ({
+  authClient: { getCookie: jest.fn(() => "session=staff-a") },
+}));
 jest.mock("./offline-cache", () => ({
   readCachedValue: jest.fn(),
   writeCachedValue: jest.fn(),
 }));
 
 import { apiFetch } from "./api";
+import { authClient } from "./auth-client";
 import { readCachedValue, writeCachedValue } from "./offline-cache";
 import { type WalletTicketPayload, walletCacheKey, warmWalletCache } from "./wallet-cache";
 
 const mockApiFetch = apiFetch as jest.MockedFunction<typeof apiFetch>;
 const mockReadCachedValue = readCachedValue as jest.MockedFunction<typeof readCachedValue>;
 const mockWriteCachedValue = writeCachedValue as jest.MockedFunction<typeof writeCachedValue>;
+const mockGetCookie = authClient.getCookie as jest.Mock;
 
 const payload: WalletTicketPayload = {
   userId: 42,
@@ -31,6 +36,7 @@ const payload: WalletTicketPayload = {
 describe("wallet cache", () => {
   beforeEach(() => {
     mockApiFetch.mockReset();
+    mockGetCookie.mockReset().mockReturnValue("session=staff-a");
     mockReadCachedValue.mockReset().mockResolvedValue(null);
     mockWriteCachedValue.mockReset().mockResolvedValue(undefined);
   });
@@ -45,7 +51,9 @@ describe("wallet cache", () => {
 
     await warmWalletCache(42);
 
-    expect(mockApiFetch).toHaveBeenCalledWith("/api/me/ticket");
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/me/ticket", {
+      sessionCookie: "session=staff-a",
+    });
     expect(mockWriteCachedValue).toHaveBeenCalledWith("user:42:wallet", payload);
   });
 
@@ -62,6 +70,20 @@ describe("wallet cache", () => {
     mockApiFetch.mockRejectedValue(new Error("offline"));
 
     await expect(warmWalletCache(42)).resolves.toBeUndefined();
+    expect(mockWriteCachedValue).not.toHaveBeenCalled();
+  });
+
+  it("does not persist a warmup response after the session changes", async () => {
+    const response = { ...payload, userId: 42 };
+    let resolve!: (value: WalletTicketPayload) => void;
+    mockApiFetch.mockReturnValue(new Promise<WalletTicketPayload>((res) => (resolve = res)));
+
+    const warmup = warmWalletCache(42);
+    await Promise.resolve();
+    mockGetCookie.mockReturnValue("session=staff-b");
+    resolve(response);
+    await warmup;
+
     expect(mockWriteCachedValue).not.toHaveBeenCalled();
   });
 });

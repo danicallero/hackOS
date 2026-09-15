@@ -347,10 +347,13 @@ distributed to other Expo Router apps without importing hackOS code.
   the OS cache directory (wallet passes, and for operators the attendance
   roster), plus a confirmed "Clear cache" action. Clearing never touches the
   offline scan queue — the only record of not-yet-synced scans — or the auth
-  session; see "Scanner cache encryption & isolation" below. `wallet.tsx`
+  session; see "Scanner cache encryption & isolation" below. Ordinary account
+  caches are namespaced by user/session and are cleared on logout; late writes
+  that began before cleanup are serialized behind the cleanup. `wallet.tsx`
   renders ticket/badge QR codes. After an eligible session is restored, a
   best-effort startup warmup stores the `/api/me/ticket` payload under an
-  account-scoped cache key; the screen still refreshes online and falls back to
+  account-scoped cache key and discards a response if the session changes; the
+  screen still refreshes online and falls back to
   that payload with a stale-data banner (`components/stale-data-banner.tsx`,
   reused across schedule, queue, wallet, notifications, sponsor announcement
   management, queue operations, and the scanner's sync-queue/activities/people

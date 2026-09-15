@@ -1,11 +1,24 @@
 import * as Network from "expo-network";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
-import { ApiError, apiFetch } from "./api";
-import { clearCachedValue, readCachedValue, writeCachedValue } from "./offline-cache";
+import { ApiError, apiFetch, getCurrentSessionCookie } from "./api";
+import {
+  clearCachedValue,
+  clearCachedValues,
+  readCachedValue,
+  writeCachedValue,
+} from "./offline-cache";
 import type { Me } from "./types";
 
-const ME_CACHE_KEY = "me";
+/** Stable, non-secret namespace for one Better Auth session cookie. */
+export function profileCacheKeyForSession(sessionCookie: string): string {
+  let hash = 2_166_136_261;
+  for (let index = 0; index < sessionCookie.length; index += 1) {
+    hash ^= sessionCookie.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return `me:session:${(hash >>> 0).toString(16)}:${sessionCookie.length}`;
+}
 
 /**
  * Loads GET /api/me and refetches on app foreground (H55: "al cambiar los
@@ -17,10 +30,12 @@ const ME_CACHE_KEY = "me";
  *
  * A device with no connectivity must not get stuck on "verifying session"
  * forever: a fetch failure that isn't a confirmed 401 (i.e. the server was
- * never actually reached to rule the session invalid) falls back to the last
- * profile persisted on this device, so a staff member can keep scanning
- * offline. Only a real 401 — the server reachable and saying the session is
- * gone — clears the cached profile and forces re-authentication.
+ * never actually reached to rule the session invalid) falls back only to the
+ * profile persisted for the exact current Better Auth session, so a staff
+ * member can keep scanning offline without restoring another account's data.
+ * If no session cookie is available, identity fallback is disabled. Only a
+ * real 401 — the server reachable and saying the session is gone — clears the
+ * matching cached profile and forces re-authentication.
  */
 export function useMe(enabled = true) {
   const [me, setMe] = useState<Me | null>(null);
@@ -32,6 +47,8 @@ export function useMe(enabled = true) {
   const requestId = useRef(0);
   const meRef = useRef<Me | null>(null);
   const inFlight = useRef<Promise<Me | null> | null>(null);
+  const activeController = useRef<AbortController | null>(null);
+  const cacheKeyRef = useRef<string | null>(null);
   const cacheGeneration = useRef(0);
   // Mirrors `me` synchronously so `refetch` can tell an initial load (no data
   // yet, show a loading state) apart from a background revalidation (data
@@ -44,8 +61,13 @@ export function useMe(enabled = true) {
     // Invalidate a request before clearing its profile. Otherwise a late
     // response can restore stale identity data after sign-out or revocation.
     requestId.current += 1;
+    activeController.current?.abort();
+    activeController.current = null;
     inFlight.current = null;
     cacheGeneration.current += 1;
+    const previousMe = meRef.current;
+    const previousCacheKey = cacheKeyRef.current;
+    cacheKeyRef.current = null;
     meRef.current = null;
     hasData.current = false;
     setMe(null);
@@ -53,7 +75,8 @@ export function useMe(enabled = true) {
     setLoading(false);
     setOffline(false);
     setStaleSince(null);
-    void clearCachedValue(ME_CACHE_KEY);
+    if (previousCacheKey) void clearCachedValue(previousCacheKey);
+    if (previousMe) void clearCachedValues(`user:${previousMe.id}:`);
   }, []);
 
   const refetch = useCallback((): Promise<Me | null> => {
@@ -62,6 +85,14 @@ export function useMe(enabled = true) {
 
     const request = (async (): Promise<Me | null> => {
       const currentRequest = ++requestId.current;
+      const sessionCookie = getCurrentSessionCookie();
+      const cacheKey = sessionCookie ? profileCacheKeyForSession(sessionCookie) : null;
+      if (cacheKeyRef.current !== cacheKey) {
+        cacheGeneration.current += 1;
+        cacheKeyRef.current = cacheKey;
+      }
+      const controller = new AbortController();
+      activeController.current = controller;
       // Only block on a loading state when there's nothing to show yet. A
       // foreground refresh (e.g. iOS Control Center briefly marking the app
       // inactive) must not flip this back to true once `me` is populated —
@@ -70,7 +101,10 @@ export function useMe(enabled = true) {
       if (!hasData.current) setLoading(true);
       try {
         setError(null);
-        const data = await apiFetch<Me>("/api/me");
+        const data = await apiFetch<Me>("/api/me", {
+          signal: controller.signal,
+          ...(sessionCookie ? { sessionCookie } : {}),
+        });
         if (currentRequest !== requestId.current) return null;
         hasData.current = true;
         meRef.current = data;
@@ -78,19 +112,22 @@ export function useMe(enabled = true) {
         setOffline(false);
         setStaleSince(null);
         const generationAtWrite = cacheGeneration.current;
-        void writeCachedValue(ME_CACHE_KEY, data).then(() => {
-          // A successful response may finish its async storage write after a
-          // sign-out/401 cleanup. Do not let that late write resurrect the
-          // previous identity on the next offline launch.
-          if (cacheGeneration.current !== generationAtWrite) {
-            void clearCachedValue(ME_CACHE_KEY);
-          }
-        });
+        if (cacheKey) {
+          void writeCachedValue(cacheKey, data).then(() => {
+            // A successful response may finish its async storage write after a
+            // sign-out/401 cleanup. Do not let that late write resurrect the
+            // previous identity on the next offline launch.
+            if (cacheGeneration.current !== generationAtWrite || cacheKeyRef.current !== cacheKey) {
+              void clearCachedValue(cacheKey);
+            }
+          });
+        }
         return data;
       } catch (err) {
         if (currentRequest !== requestId.current) return null;
         const sessionConfirmedInvalid = err instanceof ApiError && err.status === 401;
         if (sessionConfirmedInvalid) {
+          const invalidatedMe = meRef.current;
           cacheGeneration.current += 1;
           hasData.current = false;
           meRef.current = null;
@@ -98,13 +135,14 @@ export function useMe(enabled = true) {
           setError(null);
           setOffline(false);
           setStaleSince(null);
-          void clearCachedValue(ME_CACHE_KEY);
+          if (cacheKey) void clearCachedValue(cacheKey);
+          if (invalidatedMe) void clearCachedValues(`user:${invalidatedMe.id}:`);
           return null;
         } else if (!hasData.current) {
           // The server couldn't be confirmed as rejecting the session (network
           // failure, timeout, 5xx) — fall back to the last known profile
           // instead of leaving the app stuck behind a "verifying session" gate.
-          const cached = await readCachedValue<Me>(ME_CACHE_KEY);
+          const cached = cacheKey ? await readCachedValue<Me>(cacheKey) : null;
           if (currentRequest !== requestId.current) return null;
           if (cached) {
             hasData.current = true;
@@ -119,6 +157,7 @@ export function useMe(enabled = true) {
         setError(err instanceof Error ? err : new Error("Failed to load profile"));
         return meRef.current;
       } finally {
+        if (activeController.current === controller) activeController.current = null;
         if (currentRequest === requestId.current) setLoading(false);
       }
     })();
