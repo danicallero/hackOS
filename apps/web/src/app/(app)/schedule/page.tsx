@@ -2,13 +2,13 @@
 
 // Manage Schedule (H48/H59): the full run-of-show, grouped by day — status,
 // start, end, duration, location, item, who's responsible, observations —
-// for any account holding at least one capability (see
-// callerScheduleAudiences / listScheduleForAudiences), with inline edits,
-// bulk visibility/scheduling actions, and delete reserved for
-// SCHEDULE_MANAGE holders. Replaces the old DataTable-based /schedule editor
-// entirely — this table already covers everything that editor did. Column
-// visibility/order is user-configurable and persisted both in localStorage
-// (instant) and on the account (cross-device) via /api/me/ui-prefs.
+// for SCHEDULE_MANAGE holders, with inline edits, bulk
+// visibility/scheduling actions, and delete. Participant-facing schedule data
+// belongs only to /timetable and /api/public/activities; this route must not
+// fetch that feed as a fallback. Replaces the old DataTable-based /schedule
+// editor entirely — this table already covers everything that editor did.
+// Column visibility/order is user-configurable and persisted both in
+// localStorage (instant) and on the account (cross-device) via /api/me/ui-prefs.
 
 import {
   closestCenter,
@@ -45,7 +45,7 @@ import {
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem, type ScheduleAudience } from "@/lib/logistics";
-import { useCan, useMe } from "@/lib/session";
+import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { ActivityRow } from "./schedule-activity-row";
 import {
@@ -92,9 +92,7 @@ import {
 
 export default function SchedulePage() {
   const { t, language } = useLocale();
-  const me = useMe();
   const canEdit = useCan(CAPABILITIES.SCHEDULE_MANAGE);
-  const canView = Boolean(me && me.capabilities.length > 0);
 
   const [items, setItems] = useState<PublicScheduleItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -137,11 +135,10 @@ export default function SchedulePage() {
 
   const load = useCallback(() => {
     setError(null);
-    // SCHEDULE_MANAGE holders manage the whole run-of-show including hidden
-    // drafts, so they need the unfiltered /api/schedule listing; everyone
-    // else only ever sees the live, audience-filtered feed (H59).
-    const request = canEdit ? logisticsApi.schedule() : logisticsApi.publicSchedule();
-    request
+    // SCHEDULE_MANAGE is the only capability that may load this management
+    // listing. Participants use /timetable, which owns the public feed.
+    logisticsApi
+      .schedule()
       .then((r) => {
         setItems(r.items);
         setSelectedIds(new Set());
@@ -149,12 +146,12 @@ export default function SchedulePage() {
       .catch((err) => {
         setError(err instanceof ApiError ? err.message : t("couldNotLoadSchedule"));
       });
-  }, [t, canEdit]);
+  }, [t]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (canView) load(); // Data fetch when capability becomes available; load() callback is stable.
-  }, [canView, load]);
+    if (canEdit) load(); // Data fetch when capability becomes available; load() callback is stable.
+  }, [canEdit, load]);
 
   const updateItem = useCallback((id: number, patch: Partial<PublicScheduleItem>) => {
     setItems((prev) => prev?.map((it) => (it.id === id ? { ...it, ...patch } : it)) ?? prev);
@@ -348,7 +345,7 @@ export default function SchedulePage() {
     }
   }
 
-  if (!canView) return <AccessDenied ask={t("manageSchedule")} />;
+  if (!canEdit) return <AccessDenied ask={t("manageSchedule")} />;
 
   const allSelected = filtered.length > 0 && filtered.every((item) => selectedIds.has(item.id));
 

@@ -209,7 +209,15 @@ export function registerReadsRoutes(app: FastifyInstance): void {
 
   typed.get(
     "/api/queue/me",
-    { preHandler: requireAuth, config: { routeAccessPolicy: { kind: "authenticated" } } },
+    {
+      preHandler: requireAuth,
+      config: { routeAccessPolicy: { kind: "authenticated" } },
+      schema: {
+        summary: "Participant queue status",
+        description:
+          "Returns one current row per queue for each project the participant belongs to. Challenge entries in a shared queue are collapsed and named by the queue group.",
+      },
+    },
     async (req) => myQueueStatus(req.userId!),
   );
 

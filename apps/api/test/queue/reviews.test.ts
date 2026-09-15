@@ -10,6 +10,7 @@ import {
   createUserWithCapabilities,
   truncateAll,
 } from "../helpers.js";
+import { createEnterpriseChallenges, mergeChallengesIntoOneGroup } from "./fixtures.js";
 
 /**
  * Reviews overview (H46 gap-fill): admins see every challenge's evaluations;
@@ -121,6 +122,71 @@ describe("GET /api/queue/reviews (confidentiality)", () => {
     });
     expect(filtered.json().reviews).toHaveLength(1);
     expect(filtered.json().reviews[0].repoName).toBe("Team B1");
+  });
+
+  it("collapses a shared queue review and lists every challenge the project applied to", async () => {
+    const server = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.QUEUE_ADMIN]);
+    const { challengeIds } = await createEnterpriseChallenges(2, [SCALE_CRITERIA, SCALE_CRITERIA]);
+    const [challengeA, challengeB] = challengeIds as [number, number];
+    await pool.query(
+      `UPDATE challenges
+          SET title = CASE id WHEN $1 THEN 'Challenge A' WHEN $2 THEN 'Challenge B' END
+        WHERE id = ANY($3::int[])`,
+      [challengeA, challengeB, challengeIds],
+    );
+    const groupId = await mergeChallengesIntoOneGroup(challengeIds);
+    await pool.query(`UPDATE queue_groups SET display_name = 'Shared challenges' WHERE id = $1`, [
+      groupId,
+    ]);
+    const entryA = await createEntry(challengeA, null, "Shared project", "submitted", 8);
+    const { rows: repoRows } = await pool.query<{ repo_id: number }>(
+      `SELECT repo_id FROM queue_entries WHERE id = $1`,
+      [entryA],
+    );
+    await pool.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status) VALUES ($1, $2, 'completed')`,
+      [challengeB, repoRows[0]!.repo_id],
+    );
+
+    const listed = await server.inject({
+      method: "GET",
+      url: "/api/queue/reviews",
+      headers: asUser(admin),
+    });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json().reviews).toEqual([
+      expect.objectContaining({
+        entryId: entryA,
+        challengeTitle: "Shared challenges",
+        appliedChallenges: [
+          { id: challengeA, title: "Challenge A" },
+          { id: challengeB, title: "Challenge B" },
+        ],
+      }),
+    ]);
+
+    const filtered = await server.inject({
+      method: "GET",
+      url: `/api/queue/reviews?challengeId=${challengeB}`,
+      headers: asUser(admin),
+    });
+    expect(filtered.statusCode).toBe(200);
+    expect(filtered.json().reviews).toHaveLength(1);
+
+    const detail = await server.inject({
+      method: "GET",
+      url: `/api/queue/reviews/${entryA}`,
+      headers: asUser(admin),
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().challenge).toMatchObject({
+      title: "Shared challenges",
+      appliedChallenges: [
+        { id: challengeA, title: "Challenge A" },
+        { id: challengeB, title: "Challenge B" },
+      ],
+    });
   });
 
   it("keeps a synthetic QUEUE_ADMIN inside the synthetic review graph", async () => {

@@ -21,7 +21,13 @@ import { Separator } from "@/components/ui/separator";
 import { Surface } from "@/components/ui/surface";
 import { useLocale } from "@/lib/i18n";
 import { freezeTotalMinutes, presentationTimerState } from "@/lib/judging-workspace";
-import { getRepoChallenges, type QueueEntry, type RepoChallenge, type RoomPace } from "@/lib/queue";
+import {
+  collapseRepoQueueMemberships,
+  getRepoChallenges,
+  type QueueEntry,
+  type RepoChallenge,
+  type RoomPace,
+} from "@/lib/queue";
 import { cn } from "@/lib/utils";
 import type { Challenge } from "../challenges/shared";
 import { challengeName, entryLabel, secondsLabel } from "./helpers";
@@ -254,19 +260,20 @@ export function ProjectInfo({
         </div>
       )}
 
-      {/* A project can submit to more than one challenge — each has its own
-          queue standing, so list every one instead of just this room's. */}
+      {/* A project can be in more than one queue. Shared queue siblings collapse
+          to one row and are named by the queue group. */}
       {(repoChallenges.length > 0 || challenge) && (
         <div className="rounded-md border bg-background p-3">
-          <p className="mb-1 text-xs font-semibold uppercase">{t("challengesLabel")}</p>
+          <p className="mb-1 text-xs font-semibold uppercase">{t("queueName")}</p>
           <ul className="space-y-1.5">
             {(repoChallenges.length > 0
-              ? repoChallenges
+              ? collapseRepoQueueMemberships(repoChallenges)
               : challenge
                 ? [
                     {
                       id: entry.challenge_id,
                       title: challengeName(t, challenge, entry.challenge_id),
+                      queue_name: null,
                       status: entry.status,
                       room_id: null,
                       room_name: null,
@@ -275,7 +282,7 @@ export function ProjectInfo({
                 : []
             ).map((rc) => (
               <li key={rc.id} className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-sm font-medium">{rc.title}</span>
+                <span className="text-sm font-medium">{rc.queue_name ?? rc.title}</span>
                 <div className="flex items-center gap-2">
                   {rc.room_name && (
                     <span className="text-muted-foreground text-xs">{rc.room_name}</span>

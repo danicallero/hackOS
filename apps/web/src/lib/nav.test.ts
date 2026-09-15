@@ -29,7 +29,6 @@ function contextFor(
     canAny: (...cs: Capability[]) => cs.some(can),
     isEnterpriseJudge: associations.isEnterpriseJudge ?? false,
     isSponsorRep: associations.isSponsorRep ?? false,
-    hasAnyCapability: capabilities.length > 0,
     isPureApplicant: associations.isPureApplicant ?? false,
     hasProject: associations.hasProject ?? true,
     hasQueueItems: associations.hasQueueItems ?? true,
@@ -199,22 +198,28 @@ describe("admin wildcard (H8)", () => {
 });
 
 describe("capability-gated workspace, no association or wildcard", () => {
-  it("gives a decision-only account the Applications workspace without builder or reviewer capability, plus Programme's Manage schedule view (H59, any capability holder)", () => {
+  it("does not expose Manage schedule to an unrelated capability holder", () => {
     const ctx = contextFor([CAPABILITIES.APPLICATIONS_DECIDE]);
-    expect(visibleWorkspaceIds(ctx)).toEqual(["applications", "programme"]);
-    expect(visibleHrefs(ctx)).toEqual(["/applications", "/schedule"]);
+    expect(visibleWorkspaceIds(ctx)).toEqual(["applications"]);
+    expect(visibleHrefs(ctx)).toEqual(["/applications"]);
   });
 
-  it("a bare accreditation scanner sees Logistics plus Programme's Manage schedule view (H59)", () => {
+  it("does not expose Manage schedule to a logistics scanner", () => {
     const ctx = contextFor([CAPABILITIES.ACCREDIT_SCAN]);
-    expect(visibleWorkspaceIds(ctx)).toEqual(["logistics", "programme"]);
-    expect(visibleHrefs(ctx)).toEqual(["/logistics/presence", "/schedule"]);
+    expect(visibleWorkspaceIds(ctx)).toEqual(["logistics"]);
+    expect(visibleHrefs(ctx)).toEqual(["/logistics/presence"]);
   });
 
-  it("puts announcement management in Programme, alongside Manage schedule and TV control", () => {
+  it("exposes Manage schedule only with schedule-management capability", () => {
+    const ctx = contextFor([CAPABILITIES.SCHEDULE_MANAGE]);
+    expect(visibleWorkspaceIds(ctx)).toEqual(["programme"]);
+    expect(visibleHrefs(ctx)).toEqual(["/schedule"]);
+  });
+
+  it("keeps announcement management in Programme without adding Manage schedule", () => {
     const ctx = contextFor([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
     expect(visibleWorkspaceIds(ctx)).toEqual(["programme"]);
-    expect(visibleHrefs(ctx)).toEqual(["/schedule", "/announcements"]);
+    expect(visibleHrefs(ctx)).toEqual(["/announcements"]);
     expect(WORKSPACES.some((workspace) => workspace.id === "communications")).toBe(false);
   });
 

@@ -39,8 +39,6 @@ export interface NavItem {
   sponsorVisible?: boolean;
   /** Visible to users assigned as judges to at least one room (association-based, H55). */
   judgeVisible?: boolean;
-  /** Visible to any account holding at least one capability (H59 staff activities view). */
-  staffVisible?: boolean;
   /** Hidden from applicants with no role-derived event access and no operational role. */
   hideForPureApplicant?: boolean;
   /** Hidden until the caller actually has a project of their own (issue #424). */
@@ -111,8 +109,6 @@ export interface NavVisibilityContext {
   isSponsorRep: boolean;
   /** Assigned as a judge to at least one room (association-based, H55). */
   isEnterpriseJudge: boolean;
-  /** Holds at least one capability (H59 "staff" audience — see callerScheduleAudiences). */
-  hasAnyCapability: boolean;
   /** No role-derived event access and no operational role — see NavItem.hideForPureApplicant. */
   isPureApplicant: boolean;
   /** Has a project of their own, or is currently eligible to self-create one — see NavItem.hideIfNoProject (issue #424). */
@@ -134,10 +130,6 @@ export function isNavItemVisible(item: NavItem, ctx: NavVisibilityContext): bool
   if (item.sponsorVisible && ctx.isSponsorRep) return true;
   if (item.judgeVisible && ctx.isEnterpriseJudge) return true;
   if (item.statisticsVisible && ctx.hasStatisticsPanels) return true;
-  // Unlike sponsorVisible/judgeVisible (additional grants layered on top of a
-  // capability/anyCapability gate), staffVisible is the item's only gate —
-  // it must not fall through to the unconditional `return true` below.
-  if (item.staffVisible) return ctx.hasAnyCapability;
   if (item.capability) return ctx.can(item.capability);
   if (item.anyCapability) return ctx.canAny(...item.anyCapability);
   return true;
@@ -321,7 +313,7 @@ export const WORKSPACES: Workspace[] = [
         title: "manageSchedule",
         href: "/schedule",
         icon: ListOrderedIcon,
-        staffVisible: true,
+        capability: CAPABILITIES.SCHEDULE_MANAGE,
       },
       {
         title: "announcements",

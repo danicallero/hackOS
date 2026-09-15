@@ -177,6 +177,14 @@ entries once any of them is called, in a room, or completed within the same
 group. The filter can never match for a 1:1 group, so today's queue and
 candidate ordering are byte-identical.
 
+Every queue-facing read surface uses the queue group's `display_name` as the
+queue label. The participant `GET /api/queue/me` projection collapses a
+project to one current row per queue group: a shared queue is one row, never
+one row per member challenge, while separate queues remain separate rows.
+Reviews use the same one-row-per-queue rule and additionally return the
+complete list of member challenges that project applied to, so the queue name
+and application context are both visible without duplicating the review.
+
 ### Room assignment (0413)
 
 Two separate route pairs now cover what one used to:

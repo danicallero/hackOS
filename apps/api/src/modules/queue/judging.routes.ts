@@ -292,7 +292,7 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
         params: entryIdParam,
         summary: "Review detail",
         description:
-          "Project details, the challenge's judging panel questions with the answers recorded for this entry, and the evaluation's edit history. Global queue administrators reach any entry in their fixture boundary; a sponsor rep only entries of their own enterprise's challenges (403 otherwise).",
+          "Project details, the queue name, every challenge the project applied to in that queue, the judging panel questions with the answers recorded for this entry, and the evaluation's edit history. Global queue administrators reach any entry in their fixture boundary; a sponsor rep only entries of their own enterprise's challenges (403 otherwise).",
       },
     },
     async (req) => getReviewDetail(await resolveReviewScope(req.userId), req.params.entryId),
