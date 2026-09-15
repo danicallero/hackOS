@@ -190,28 +190,27 @@ event doesn't compromise another (see [Multiple instances](#multiple-instances))
 
 ## CI/CD release channels
 
-Use the protected branches as a promotion pipeline:
+Use the protected branches as the release flow:
 
-`feature PRs → integration → optional staging → main`
+`feature PRs → staging` or `feature PRs → main`
 
-Open every PR as a draft. Feature PRs may target `integration` or `staging`;
-they must never target `main` directly. Draft commits run change detection and
-lint, while Ready-for-review PRs run the selective typechecks and test suites.
-These individual PRs do not build container images.
+Open every PR as a draft. Feature PRs may target either protected branch;
+`staging` is the development environment and `main` is production. Draft
+commits run lint and typecheck, while Ready-for-review PRs run the complete
+test matrix. These individual PRs do not build container images.
 
-The three protected branches provide these supported routes:
+The two protected branches provide these supported routes:
 
 | Branch | CD behavior |
 |---|---|
-| `integration` | Aggregation only. Merge feature PRs here without building containers; promote the batch once to `staging` or `main` when it is ready. |
-| `staging` | A direct feature→staging PR or an integration→staging promotion builds and publishes the images, then deploys the optional staging Dokploy Environment for verification. |
-| `main` | An integration→main promotion builds and publishes the production images once. A staging→main promotion matches the staging tree and promotes its immutable image digest without rebuilding. Both paths deploy production. |
+| `staging` | Merge an approved development PR here. CD builds and publishes the images, then deploys the staging Dokploy Environment. |
+| `main` | Merge an approved PR from any branch. CD builds and publishes production images, then deploys production. |
 
 `main` and `staging` are independent release channels. A merge into `main`
 selects the `production` GitHub Actions Environment and never moves the
 `staging` branch. A merge into `staging` selects the `staging` Environment and
-deploys only the staging Dokploy services. This allows staging to carry
-experimental work while production advances.
+deploys the development services. This allows staging to carry work that is
+not yet ready for production.
 
 When staging needs the current production tree, synchronize it deliberately
 with a normal pull request from `main` into `staging`:
@@ -226,11 +225,9 @@ production tree; that merge is the event that starts the staging CD. If the
 branches have diverged, resolve the conflicts in the PR instead of forcing a
 branch ref.
 
-Use the fast `integration` → `main` route when there is no time or need for a
-staging deployment. Use `staging` → `main` when the release needs an
-environment check first. In both cases CI blocks a direct main PR and the main
-tree check prevents a feature branch from reaching production without first
-entering a protected release branch.
+There is no required promotion path between the branches. `main` accepts PRs
+from any branch; merge only after the full required CI matrix and review have
+passed. A merge to either protected branch is the event that starts its CD.
 
 The existing `main` release keeps its current repository-level webhook secrets
 and production Dokploy configuration, so no production migration is required.
@@ -254,11 +251,11 @@ publishes the image and marks only the optional deployment step as skipped; the
 release is not reported as failed. Production still requires its Tailscale and
 Dokploy configuration.
 
-Protect exactly `integration`, `staging`, and `main` with the repository
-rulesets. The checked-in workflow cannot create or protect remote branches;
-create these three branches and apply the matching ruleset before using them in
-the promotion flow. Require pull requests on all three release branches and do
-not configure a bypass for direct `main` → `staging` ref updates.
+Protect exactly `staging` and `main` with the repository rulesets. The
+checked-in workflow cannot create or protect remote branches; create these two
+branches and apply the matching ruleset before using them in the release flow.
+Require pull requests on both release branches; `main` intentionally accepts
+PRs from any source branch.
 
 Configure the rulesets once with:
 
@@ -358,11 +355,9 @@ Traefik cert); the compose files already carry the router labels.
 ### 3a. Use the published ARM64 images
 
 Merging into `staging` runs the CD workflow, which builds and publishes
-`linux/arm64` images to GHCR, the architecture of the Raspberry Pi host. A
-later `staging` → `main` promotion runs CD again and promotes the same image
-digest without rebuilding. Merging into `integration` does not run CD. A fast
-`integration` → `main` promotion runs CD on `main`, where the production images
-are built and published once. Add these non-secret values to the production
+`linux/arm64` images to GHCR, the architecture of the Raspberry Pi host.
+Merging into `main` builds and publishes the production images independently.
+Add these non-secret values to the production
 Dokploy **Environment**:
 
 ```dotenv
@@ -372,13 +367,10 @@ IMAGE_TAG=main
 ```
 
 If staging is enabled, use the same image repositories but set
-`IMAGE_TAG=staging` and use the staging domains. `staging` is a moving
-verification channel; every staging publish creates a `sha-<release-commit>`
-tag, and main adds its own immutable release tag when it promotes that digest.
-The direct integration→main path creates the main immutable tag during its
-build. Set `IMAGE_TAG` to one of those immutable tags for a deterministic
-rollback, then redeploy `api`, `worker`, and/or `web` as appropriate. The web
-image is environment-neutral:
+`IMAGE_TAG=staging` and use the staging domains. Both branches create an
+immutable `sha-<release-commit>` tag on every publish. Set `IMAGE_TAG` to one of
+those immutable tags for a deterministic rollback, then redeploy `api`,
+`worker`, and/or `web` as appropriate. The web image is environment-neutral:
 the running Next.js server serves `/runtime-config.js` from each environment's
 `API_DOMAIN` and `WEB_DOMAIN`. No `build:` key remains in the production
 compose files: Dokploy must pull rather than compile on the Raspberry Pi.
@@ -413,8 +405,7 @@ workload-identity flow; no Dokploy endpoint is exposed publicly.
 The API publish calls the API and worker endpoints because both run the same
 image; the web publish calls only the web endpoint. Dokploy then pulls the
 published deployment channel (`main`, or `staging` when that optional route is
-enabled) from GHCR and recreates the service. `integration` is intentionally
-build-free, so it has no deployment channel. Do not also configure a
+enabled) from GHCR and recreates the service. Do not also configure a
 source-push webhook for these same services, or every `staging`/`main` release
 push will deploy twice.
 

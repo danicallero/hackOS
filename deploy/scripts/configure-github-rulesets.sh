@@ -20,10 +20,15 @@ fi
 
 main_ruleset="$(gh api "repos/${repo}/rulesets/${main_ruleset_id}")"
 
+# CI no longer publishes these contexts. Remove them from existing rulesets so
+# a ruleset refresh cannot leave every new PR waiting for checks that can never
+# report a status.
+
 # Keep main protected by PRs and required CI.
 printf '%s' "$main_ruleset" \
   | jq '{name, target, enforcement, bypass_actors: [],
-      conditions: {ref_name: {include: ["~DEFAULT_BRANCH"], exclude: []}}, rules}' \
+      conditions: {ref_name: {include: ["~DEFAULT_BRANCH"], exclude: []}},
+      rules: (.rules | map(if .type == "required_status_checks" then .parameters.required_status_checks |= map(select(.context != "detect changed areas" and .context != "release source")) else . end))}' \
   | gh api --method PUT "repos/${repo}/rulesets/${main_ruleset_id}" --input - >/dev/null
 
 release_ruleset_id="$(gh api "repos/${repo}/rulesets?per_page=100" \
@@ -45,10 +50,10 @@ printf '%s' "$release_ruleset" \
       target,
       enforcement: "active",
       bypass_actors: [],
-      conditions: {ref_name: {include: ["refs/heads/integration", "refs/heads/staging"], exclude: []}},
-      rules
+      conditions: {ref_name: {include: ["refs/heads/staging"], exclude: []}},
+      rules: (.rules | map(if .type == "required_status_checks" then .parameters.required_status_checks |= map(select(.context != "detect changed areas" and .context != "release source")) else . end))
     }' \
   | gh api --method "$method" "$endpoint" --input - >/dev/null
 
-echo "Configured main, integration, and staging rulesets for ${repo}."
+echo "Configured main and staging rulesets for ${repo}."
 echo "All release-branch updates require pull requests."

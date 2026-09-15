@@ -121,7 +121,11 @@ describe("concurrent transitions: exactly one winner", () => {
   it("two simultaneous no_show on the same entry: single winner, single ladder bump", async () => {
     const { challengeId, roomId } = await setup(1);
     const { repoId } = await createRepoWithTeam();
+    const { repoId: refillRepoId } = await createRepoWithTeam();
     const entryId = await enqueueRepo(challengeId, repoId, 1);
+    // Keep the auto-refill from calling the no-show entry again before the
+    // losing request acquires its row lock.
+    await enqueueRepo(challengeId, refillRepoId, 2);
     await app.inject({
       method: "POST",
       url: `/api/queue/rooms/${roomId}/call-next`,

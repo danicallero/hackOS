@@ -119,8 +119,8 @@ is the source of truth for each.
 - **Public:** its **own** Traefik router `${STACK_NAME}-web` on `${WEB_DOMAIN}`,
   never served behind the API. The running Next.js server serves
   `/runtime-config.js` from its environment-specific `API_DOMAIN`/`WEB_DOMAIN`,
-  so a staging build and its later production deployment, or a direct
-  integration→main build, can use the same image digest.
+  so staging and production can use the same image code with environment-
+  specific runtime configuration.
 - **CORS coupling:** `https://${WEB_DOMAIN}` must be in the API's
   `CORS_ORIGINS` or the browser's credentialed calls are refused.
 

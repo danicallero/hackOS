@@ -211,32 +211,27 @@ API tests use real Postgres and Valkey. The test harness resets and migrates
 `hackos_test`, and the suite runs serially to keep state-dependent integration
 tests deterministic.
 
-Open every pull request as a draft. Feature PRs may target the protected
-`integration` or `staging` branch, but never `main`. Draft updates run only
-change detection and lint; marking one ready runs the selective typechecks and
-test suites. Container images are not built for these individual PRs.
+Open every pull request as a draft. Feature PRs may target protected `staging`
+or `main`; `staging` is the development branch and `main` is production. Draft
+updates run lint and typecheck; marking one ready runs the complete test matrix.
+Container images are not built for individual PRs.
 
 The release paths are:
 
 | Branch | CD behavior |
 | --- | --- |
-| `integration` | Aggregation only. Merge feature PRs here without building containers; promote the batch once to `staging` or `main` when it is ready. |
-| `staging` | A direct feature→staging PR or an integration→staging promotion builds and publishes the images, then deploys the optional staging Dokploy Environment for verification. |
-| `main` | An integration→main promotion builds and publishes the production images once. A staging→main promotion reuses the matching immutable staging digest; both paths deploy production. |
+| `staging` | Merge an approved development PR here. CD builds and publishes the images, then deploys the staging Dokploy Environment. |
+| `main` | Merge an approved PR from any branch. CD builds and publishes production images, then deploys production. |
 
-`main` and `staging` are independent. Merging into `main` deploys production and
-does not update `staging`; merging into `staging` deploys staging. To test the
-current production tree in staging, open an explicit pull request from `main`
-to `staging` and merge it only when staging is ready. That preserves any
-staging-only work until the synchronization is intentional.
+`main` and `staging` are independent environments. Merging into `main` deploys
+production and does not update `staging`; merging into `staging` deploys the
+development environment. To test the current production tree in staging, open
+an explicit pull request from `main` to `staging`.
 
-This supports both a fast `integration` → `main` promotion and a verified
-path through `staging`. A feature branch can also go directly to `staging`; the
-merge to `staging` is what builds the release artifact. The existing main
-webhook, production deployment variables, and production Dokploy setup remain
-valid. Protect exactly `integration`, `staging`, and `main`; CI blocks direct
-main PRs and CD rejects a main commit that did not come from one of the two
-release branches.
+The merge to either protected branch is what builds its release artifact. The
+existing main webhook, production deployment variables, and production
+Dokploy setup remain valid. Protect exactly `staging` and `main`; CI accepts
+PRs into either branch and CD only runs on their post-merge pushes.
 The API test job provides fresh Postgres, Valkey and Mailpit service containers
 plus health-checked MinIO, then provisions the test bucket; local API runs
 still use `pnpm infra:up` and the commands above.
