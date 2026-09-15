@@ -10,6 +10,7 @@ import {
   userHasCapability,
 } from "../../lib/capabilities.js";
 import { ForbiddenError } from "../../lib/errors.js";
+import { requireIdempotencyKey } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { lockRoleGraph, requireRoleMutationAuthority } from "../identity/role-authority.js";
 import { canonicalStatisticsPanelKey, ROLE_SCOPE_PANEL_KEYS } from "./catalog.js";
@@ -185,7 +186,7 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
   r.put(
     "/api/statistics/access",
     {
-      preHandler: requireAuth,
+      preHandler: [requireAuth, requireIdempotencyKey],
       config: routeAccess({ kind: "authenticated" }),
       schema: {
         summary: "Set a generic statistics scope panel override",
@@ -253,7 +254,7 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
   r.delete(
     "/api/statistics/access/:roleId",
     {
-      preHandler: requireAuth,
+      preHandler: [requireAuth, requireIdempotencyKey],
       config: routeAccess({ kind: "authenticated" }),
       schema: {
         summary: "Remove a role's generic statistics overrides",

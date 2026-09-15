@@ -13,6 +13,7 @@ import {
   ForbiddenError,
   NotFoundError,
 } from "../../../lib/errors.js";
+import { requireIdempotencyKey } from "../../../lib/idempotency.js";
 import { keyByIp, rateLimitGuard } from "../../../lib/rate-limit.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { reconcileTicketAccess } from "../../logistics/tickets.js";
@@ -169,7 +170,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
   api.post(
     "/api/invites",
     {
-      preHandler: manage,
+      preHandler: [manage, requireIdempotencyKey],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
         body: z.object({
@@ -312,7 +313,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
   api.post(
     "/api/invites/:id/regenerate",
     {
-      preHandler: manage,
+      preHandler: [manage, requireIdempotencyKey],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
@@ -393,7 +394,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
   api.post(
     "/api/invites/:id/expire",
     {
-      preHandler: manage,
+      preHandler: [manage, requireIdempotencyKey],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
@@ -429,7 +430,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
   api.post(
     "/api/invites/:id/renew",
     {
-      preHandler: manage,
+      preHandler: [manage, requireIdempotencyKey],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),
@@ -481,7 +482,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
   api.post(
     "/api/invites/:id/resend",
     {
-      preHandler: manage,
+      preHandler: [manage, requireIdempotencyKey],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
         params: z.object({ id: z.coerce.number().int() }),

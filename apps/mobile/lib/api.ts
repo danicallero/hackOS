@@ -71,11 +71,18 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit): Promise<T>
   // the restored session cookie and mobile-origin headers.
   const url = `${API_URL.replace(/\/+$/, "")}${path}`;
   const method = requestInit.method?.toUpperCase() ?? "GET";
+  const mutationHeaders = new Headers(requestInit.headers);
+  if (!["GET", "HEAD", "OPTIONS"].includes(method) && !mutationHeaders.has("Idempotency-Key")) {
+    mutationHeaders.set(
+      "Idempotency-Key",
+      globalThis.crypto?.randomUUID?.() ?? `mobile-${Date.now()}-${Math.random()}`,
+    );
+  }
   const { data, error } = await authClient.$fetch<T>(url, {
     method: requestInit.method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | undefined,
     body: requestInit.body,
     signal: requestInit.signal,
-    headers: requestInit.headers as Record<string, string> | undefined,
+    headers: mutationHeaders as unknown as Record<string, string>,
     // The Expo plugin's init hook runs before Better Fetch's request hooks
     // and normally reads whichever cookie is in SecureStore at that moment.
     // Override it at the last point before transport so an in-flight scanner
