@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { requireAnyCapability, requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError, ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
+import { requireIdempotencyKey } from "../../lib/idempotency.js";
 import { routeAccessOption as access } from "../../lib/route-policy.js";
 import { putObject } from "../../lib/storage.js";
 import {
@@ -99,7 +101,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/enterprises",
     {
       ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
-      preHandler: manage,
+      preHandler: [manage, requireIdempotencyKey],
       schema: {
         body: createEnterpriseBody,
         summary: "Create an enterprise",
@@ -118,7 +120,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/enterprises/visibility",
     {
       ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
-      preHandler: manage,
+      preHandler: [manage, requireIdempotencyKey],
       schema: {
         body: bulkVisibilityBody,
         summary: "Set enterprise visibility",
@@ -163,7 +165,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/enterprises/:id",
     {
       ...access({ kind: "contextual", policy: "enterprise-access", resource: enterpriseParam }),
-      preHandler: requireEnterpriseAccess(enterpriseParam),
+      preHandler: [requireEnterpriseAccess(enterpriseParam), requireIdempotencyKey],
       schema: {
         params: enterpriseIdParam,
         body: updateEnterpriseBody,
@@ -206,7 +208,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/enterprises/:id/members",
     {
       ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
-      preHandler: manage,
+      preHandler: [manage, requireIdempotencyKey],
       schema: {
         params: enterpriseIdParam,
         body: addMemberBody,
@@ -226,7 +228,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/enterprises/:id/members/:userId",
     {
       ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
-      preHandler: manage,
+      preHandler: [manage, requireIdempotencyKey],
       schema: {
         params: memberParams,
         summary: "Remove enterprise member",
@@ -283,7 +285,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/enterprises/:id/judges",
     {
       ...access(judgePolicy),
-      preHandler: requireEnterpriseJudgeManager(enterpriseParam),
+      preHandler: [requireEnterpriseJudgeManager(enterpriseParam), requireIdempotencyKey],
       schema: {
         params: enterpriseIdParam,
         body: addJudgeBody,
@@ -303,7 +305,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/enterprises/:id/judges/:userId",
     {
       ...access(judgePolicy),
-      preHandler: requireEnterpriseJudgeManager(enterpriseParam),
+      preHandler: [requireEnterpriseJudgeManager(enterpriseParam), requireIdempotencyKey],
       schema: {
         params: judgeParams,
         summary: "Remove enterprise judge",
@@ -342,7 +344,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/enterprises/:id/logo",
     {
       ...access({ kind: "contextual", policy: "enterprise-access", resource: enterpriseParam }),
-      preHandler: requireEnterpriseAccess(enterpriseParam),
+      preHandler: [requireEnterpriseAccess(enterpriseParam), requireIdempotencyKey],
       schema: {
         params: enterpriseIdParam,
         querystring: z.object({ variant: z.enum(["default", "negative"]).default("default") }),
@@ -361,7 +363,11 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
         );
       }
       const bytes = await file.toBuffer();
-      const key = `enterprises/${req.params.id}/logo-${req.query.variant}-${Date.now()}.${ext}`;
+      const operation = createHash("sha256")
+        .update(req.idempotency?.key ?? `${Date.now()}-${Math.random()}`)
+        .digest("hex")
+        .slice(0, 32);
+      const key = `enterprises/${req.params.id}/logo-${req.query.variant}-${operation}.${ext}`;
       const logoUrl = await putObject(key, bytes, file.mimetype);
       await setEnterpriseLogo(req.params.id, logoUrl, req.query.variant, req.userId);
       return { logoUrl, variant: req.query.variant };
@@ -389,7 +395,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     "/api/sponsor-faq",
     {
       ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
-      preHandler: manage,
+      preHandler: [manage, requireIdempotencyKey],
       schema: {
         body: sponsorFaqBody,
         summary: "Update sponsor FAQ",

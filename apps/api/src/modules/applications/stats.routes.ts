@@ -11,6 +11,7 @@ import {
   userHasCapability,
 } from "../../lib/capabilities.js";
 import { ForbiddenError } from "../../lib/errors.js";
+import { requireIdempotencyKey } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { lockRoleGraph, requireRoleMutationAuthority } from "../identity/role-authority.js";
 import { canonicalStatisticsPanelKey } from "../statistics/catalog.js";
@@ -103,7 +104,7 @@ export function registerStatsRoutes(app: FastifyInstance): void {
   r.put(
     "/api/applications/:id/stats/access",
     {
-      preHandler: requireCapability(CAPABILITIES.STATISTICS_MANAGE),
+      preHandler: [requireCapability(CAPABILITIES.STATISTICS_MANAGE), requireIdempotencyKey],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.STATISTICS_MANAGE }),
       schema: {
         summary: "Set statistics panel role access",
@@ -164,7 +165,7 @@ export function registerStatsRoutes(app: FastifyInstance): void {
   r.delete(
     "/api/applications/:id/stats/access/:roleId",
     {
-      preHandler: requireCapability(CAPABILITIES.STATISTICS_MANAGE),
+      preHandler: [requireCapability(CAPABILITIES.STATISTICS_MANAGE), requireIdempotencyKey],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.STATISTICS_MANAGE }),
       schema: {
         summary: "Remove a role's application statistics overrides",

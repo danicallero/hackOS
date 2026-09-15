@@ -110,6 +110,43 @@ describe("announcement CRUD (H50)", () => {
     expect(String(auditRows[0].entity_id)).toBe(String(announcement.id));
   });
 
+  it("replays a timeout retry without another announcement, audit, outbox, or broadcast", async () => {
+    const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
+    const key = "announcement-timeout-retry";
+    const request = {
+      method: "POST" as const,
+      url: "/api/announcements",
+      headers: { ...asUser(adminId), "idempotency-key": key },
+      payload: { title: "One delivery", body: "Only once", notifyUsers: true },
+    };
+    const broadcastsBefore = await broadcastCount("content");
+
+    const first = await app.inject(request);
+    expect(first.statusCode).toBe(201);
+    const replay = await app.inject(request);
+    expect(replay.statusCode).toBe(201);
+    expect(replay.headers["idempotency-replayed"]).toBe("true");
+    expect(replay.json()).toEqual(first.json());
+
+    const [announcements, audits, outbox] = await Promise.all([
+      pool.query(`SELECT id FROM announcements`),
+      pool.query(
+        `SELECT id FROM audit_log WHERE entity_type = 'announcement' AND action = 'create'`,
+      ),
+      pool.query(`SELECT id FROM notification_outbox WHERE category = 'announcements'`),
+    ]);
+    expect(announcements.rowCount).toBe(1);
+    expect(audits.rowCount).toBe(1);
+    expect(outbox.rowCount).toBe(3);
+    expect(await broadcastCount("content")).toBe(broadcastsBefore + 1);
+
+    const mismatched = await app.inject({
+      ...request,
+      payload: { title: "Different", body: "body" },
+    });
+    expect(mismatched.statusCode).toBe(409);
+  });
+
   it("notifies every account through inbox, email and push while respecting preferences (H51)", async () => {
     const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
     const quietId = await createUser();

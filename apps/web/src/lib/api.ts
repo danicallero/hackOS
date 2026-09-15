@@ -45,10 +45,15 @@ export async function apiFetch<T = unknown>(
   options: RequestOptions = {},
 ): Promise<T> {
   const { body, query, headers, ...rest } = options;
+  const method = rest.method?.toUpperCase() ?? "GET";
+  const isMutation = !["GET", "HEAD", "OPTIONS"].includes(method);
   const res = await fetch(buildUrl(path, query), {
     credentials: "include",
     headers: {
       ...(body !== undefined ? { "content-type": "application/json" } : {}),
+      ...(isMutation && !new Headers(headers).has("Idempotency-Key")
+        ? { "Idempotency-Key": crypto.randomUUID() }
+        : {}),
       ...headers,
     },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
@@ -98,6 +103,7 @@ export async function apiUpload<T = unknown>(path: string, body: FormData): Prom
   const res = await fetch(buildUrl(path), {
     method: "POST",
     credentials: "include",
+    headers: { "Idempotency-Key": crypto.randomUUID() },
     body,
   });
 

@@ -18,6 +18,7 @@ import {
   userHasCapability,
 } from "../../lib/capabilities.js";
 import { BadRequestError, ForbiddenError } from "../../lib/errors.js";
+import { requireIdempotencyKey } from "../../lib/idempotency.js";
 import {
   type RouteAccessPolicy,
   routeAccessOption as routeAccess,
@@ -353,7 +354,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
     "/api/event",
     {
       ...routeAccess(eventSettingsRead),
-      preHandler: requireAnyCapability(...EVENT_SETTINGS_ANY_CAPABILITY),
+      preHandler: [requireAnyCapability(...EVENT_SETTINGS_ANY_CAPABILITY), requireIdempotencyKey],
       schema: {
         summary: "Update event config",
         description:
