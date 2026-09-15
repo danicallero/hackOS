@@ -12,6 +12,8 @@ import {
 import { ForbiddenError } from "../../lib/errors.js";
 import { requireIdempotencyKey } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
+import { requireApplication } from "../applications/service.js";
+import { statisticsPanelKeys } from "../applications/stats.js";
 import { lockRoleGraph, requireRoleMutationAuthority } from "../identity/role-authority.js";
 import { canonicalStatisticsPanelKey, ROLE_SCOPE_PANEL_KEYS } from "./catalog.js";
 import {
@@ -54,7 +56,7 @@ const statisticsScopeAccessDeleteParams = z.object({
 });
 
 const statisticsScopeAccessDeleteQuery = z.object({
-  scope_key: z.string().regex(/^role:[0-9]+$/),
+  scope_key: z.string().regex(/^(application|role):[0-9]+$/),
 });
 
 function sendCsv(reply: FastifyReply, filename: string, csv: string) {
@@ -143,8 +145,7 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       config: routeAccess({ kind: "authenticated" }),
       schema: {
         summary: "List generic statistics scope access",
-        description:
-          "Lists role-scope panel overrides for statistics managers. Application-scope overrides remain available through the application statistics access resource.",
+        description: "Lists canonical scope/panel overrides for statistics managers.",
       },
     },
     async (req) => {
@@ -177,6 +178,25 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       );
       return {
         scopes: scopes.map(({ application: _application, ...scope }) => scope),
+        panel_labels: Object.fromEntries(
+          scopes.flatMap((scope) =>
+            scope.application
+              ? [
+                  [
+                    scope.key,
+                    Object.fromEntries(
+                      scope.application.template
+                        .filter((field) => field.statistics?.enabled === true)
+                        .map((field) => [
+                          `field:${field.key.toLowerCase()}`,
+                          field.statistics?.label ?? field.label,
+                        ]),
+                    ),
+                  ],
+                ]
+              : [],
+          ),
+        ),
         access,
         roles,
       };
@@ -204,19 +224,25 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       }
       const panelKey = canonicalStatisticsPanelKey(req.body.panel_key);
       const parsed = parseStatisticsScopeKey(req.body.scope_key);
-      if (
-        parsed?.kind !== "role" ||
-        !(ROLE_SCOPE_PANEL_KEYS as readonly string[]).includes(panelKey)
-      ) {
+      if (!parsed) {
         throw new ForbiddenError("Statistics scope or panel is not configurable");
       }
       return withTransaction(async (client) => {
         await lockRoleGraph(client);
-        const { rows: scopeRoles } = await client.query(
-          `SELECT id FROM roles WHERE id = $1 AND deleted_at IS NULL`,
-          [parsed.id],
-        );
-        if (!scopeRoles[0]) throw new ForbiddenError("Statistics scope is not available");
+        if (parsed.kind === "role") {
+          const { rows: scopeRoles } = await client.query(
+            `SELECT id FROM roles WHERE id = $1 AND deleted_at IS NULL`,
+            [parsed.id],
+          );
+          if (!scopeRoles[0] || !(ROLE_SCOPE_PANEL_KEYS as readonly string[]).includes(panelKey)) {
+            throw new ForbiddenError("Statistics scope or panel is not configurable");
+          }
+        } else {
+          const application = await requireApplication(client, parsed.id);
+          if (!statisticsPanelKeys(application.template).has(panelKey)) {
+            throw new ForbiddenError("Statistics scope or panel is not configurable");
+          }
+        }
         const { rows: roleRows } = await client.query(
           `SELECT position FROM roles WHERE id = $1 AND deleted_at IS NULL`,
           [req.body.role_id],
@@ -274,16 +300,20 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
         throw new ForbiddenError("Missing capability: statistics:manage");
       }
       const parsed = parseStatisticsScopeKey(req.query.scope_key);
-      if (parsed?.kind !== "role") {
+      if (!parsed) {
         throw new ForbiddenError("Statistics scope is not configurable");
       }
       return withTransaction(async (client) => {
         await lockRoleGraph(client);
-        const { rows: scopeRoles } = await client.query(
-          `SELECT id FROM roles WHERE id = $1 AND deleted_at IS NULL`,
-          [parsed.id],
-        );
-        if (!scopeRoles[0]) throw new ForbiddenError("Statistics scope is not available");
+        if (parsed.kind === "role") {
+          const { rows: scopeRoles } = await client.query(
+            `SELECT id FROM roles WHERE id = $1 AND deleted_at IS NULL`,
+            [parsed.id],
+          );
+          if (!scopeRoles[0]) throw new ForbiddenError("Statistics scope is not available");
+        } else {
+          await requireApplication(client, parsed.id);
+        }
         const { rows: roleRows } = await client.query(
           `SELECT position FROM roles WHERE id = $1 AND deleted_at IS NULL`,
           [req.params.roleId],

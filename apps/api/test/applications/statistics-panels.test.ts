@@ -12,7 +12,7 @@ describe("dynamic application statistics panels", () => {
       ...statisticsPanelKeys([
         { key: "gender", kind: "select" },
         { key: "bio", kind: "textarea" },
-        { key: "notes", kind: "text", reporting: true },
+        { key: "notes", kind: "text", statistics: { enabled: true } },
         { key: "Secret", kind: "select" },
         { key: "age", kind: "date", statistics: { enabled: true } },
       ]),

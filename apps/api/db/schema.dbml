@@ -235,19 +235,6 @@ Table application_responses {
   }
 }
 
-Table application_stats_panel_role_access {
-  application_id integer [not null]
-  panel_key text [not null]
-  role_id integer [not null]
-  state permission_state [not null, default: `'inherit'::permission_state`]
-
-  indexes {
-  (application_id, panel_key, role_id) [pk]
-  }
-
-  Note: 'H27: dynamic panel ACL resolved by role position; no effective allow denies by default.'
-}
-
 Table applications {
   ask_food_intolerances boolean [not null, default: `false`]
   ask_shirt_size boolean [not null, default: `false`]
@@ -1117,8 +1104,6 @@ Ref: application_responses.confirmation_token_id > email_verification_tokens.id
 Ref: application_responses.referrer_application_id > application_responses.id
 Ref: application_responses.referrer_user_id > users.id
 Ref: application_responses.user_id > users.id
-Ref: application_stats_panel_role_access.application_id > applications.id
-Ref: application_stats_panel_role_access.role_id > roles.id
 Ref: attempt_review.attempt_id > queue_entries.id
 Ref: attempt_review_versions.attempt_id > queue_entries.id
 Ref: attempt_review_versions.author_id > users.id

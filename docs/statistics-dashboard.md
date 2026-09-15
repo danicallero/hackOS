@@ -8,9 +8,8 @@ has three independent concepts:
 3. a catalog of panels rendered for the selected scopes.
 
 The web dashboard uses `GET /api/statistics/scopes` to populate the scope
-selector and `POST /api/statistics/query` to request the selected panel data.
-The legacy application routes remain for compatibility, but the dashboard's
-main data path is the generic endpoint.
+selector, `POST /api/statistics/query` to request the selected panel data, and
+`/api/statistics/access` for every scope/panel visibility override.
 
 ## Catalog and scopes
 
@@ -21,12 +20,11 @@ the confirmation lifecycle, and supporting application activity panels; the
 lifecycle is not a duplicate standalone panel. Application-only time series are
 separate from generic user dimensions such as shirt size and food intolerance.
 Form-question panels are generated only for fields explicitly published through
-`field.statistics` (with `reporting` retained as a legacy compatibility flag).
+`field.statistics.enabled`.
 The application builder presents that opt-in as integration into Logistics;
 the same configured field is included in the dashboard and its authorized CSV.
-The editor serializer preserves both the current `statistics` object and the
-legacy `reporting` alias when saving a form, so reloading the builder cannot
-silently disable an integration.
+The editor serializes that one statistics object, so a builder round trip
+cannot silently disable an integration.
 
 Scope keys are stable resource identifiers: `application:<id>` and
 `role:<id>`. The API validates every selected key against the caller's
@@ -61,9 +59,8 @@ distributions, and integrated application-question distributions.
 ## Permission resolution
 
 `logistics:stats` supplies the default allow for reportable panels. A
-`statistics:manage` user can inspect all scopes. Individual application panels
-use `application_stats_panel_role_access`; generic role scopes use
-`statistics_scope_panel_role_access`. Both use the existing role-position
+`statistics:manage` user can inspect all scopes. Every application and role
+scope uses `statistics_scope_panel_role_access`, with the existing role-position
 resolver and the same tri-state states:
 
 ```text
@@ -98,13 +95,13 @@ personal layout to current catalog defaults.
 
 ## Configuration and compatibility
 
-Migration `0818_statistics_configuration.sql` adds the generic role-scope ACL
-table and backfills the old implicit choice-question behavior into the explicit
-publication flag. It does not alter the immutable 0817 migration. Existing
-layout and field configurations remain readable; old time-series ACL/layout
-ids are canonicalized to the descriptive `applications-*` ids at read time.
-The retired standalone `funnel` id is likewise canonicalized to `overview` so
-existing access rules continue to apply to the composed panel.
+Migration `0818_statistics_configuration.sql` introduced the explicit
+publication flag and generic ACL table. Forward-only migration 0824 transforms
+current retained application templates exactly once, moving `reporting: true`
+to `statistics.enabled: true`, removing the old key, and moving application
+ACL rows into the generic scope table. Immutable submitted-form snapshots stay
+unchanged. Old time-series ACL/layout ids are canonicalized to the descriptive
+`applications-*` ids at read time; `funnel` is canonicalized to `overview`.
 
 Question publication and visualization metadata are stored with the application
 template, so deployment/event configuration remains the source of truth rather
