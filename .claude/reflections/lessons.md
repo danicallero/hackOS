@@ -139,3 +139,33 @@ keyboard activation and at a narrow width.
 ### Exceptions
 Navigation to a deliberately focused destination or a user-requested “jump to”
 action may intentionally change scroll position.
+
+## [R005] Use the requested Codex model for delegated work
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-09-15
+
+### Trigger
+When the user asks for delegated subagents with a named Codex model.
+
+### Mistake
+The task was delegated through the generic orchestration wrapper, which used
+the default model instead of the requested Luna CLI invocation.
+
+### Lesson
+Delegation is part of the requested workflow: use the named model and launch
+mode exactly, while keeping each delegated task narrowly scoped.
+
+### Action
+Launch delegated Luna work with `codex --yolo -m gpt-5.6-luna` and verify the
+session reports that model before relying on its result.
+
+### Validation
+Inspect the spawned session header or command output for the requested model,
+and ensure the agent has a disjoint task and does not overwrite unrelated work.
+
+### Exceptions
+If the requested model is unavailable, report that blocker rather than
+silently substituting the default model.
