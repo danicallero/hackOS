@@ -23,6 +23,8 @@ x-app-env: &app-env
   WEB_URL: "https://${WEB_DOMAIN}"
   BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET}"
   LOG_LEVEL: "${LOG_LEVEL:-info}"
+  LOG_EXPO_PUSH_TICKETS: "${LOG_EXPO_PUSH_TICKETS:-false}"
+  LOG_EXPO_PUSH_UNSAFE_DEBUG: "${LOG_EXPO_PUSH_UNSAFE_DEBUG:-false}"
   # Postgres pool sizing/timeouts (H540) — must match api's values; see
   # docs/env-vars.md's replica-budget math.
   DB_POOL_MAX: "${DB_POOL_MAX:-20}"

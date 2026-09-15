@@ -1,6 +1,7 @@
 import "./env.js";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { App } from "../../src/app.js";
+import { config } from "../../src/config.js";
 import { pool } from "../../src/db/pool.js";
 import { asUser, buildTestApp, createUser } from "../helpers.js";
 import { resetNotificationsState } from "./notif-helpers.js";
@@ -24,6 +25,12 @@ afterAll(async () => {
   await stopQueues();
   await closeValkey();
   await pool.end();
+});
+
+afterEach(() => {
+  config.logExpoPushTokens = false;
+  config.logExpoPushUnsafeDebug = false;
+  vi.restoreAllMocks();
 });
 
 describe("POST /api/me/push-tokens", () => {
@@ -52,6 +59,47 @@ describe("POST /api/me/push-tokens", () => {
       ["ExponentPushToken[a]"],
     );
     expect(rows).toEqual([{ user_id: userId, token: "ExponentPushToken[a]", platform: "ios" }]);
+  });
+
+  it("logs only a token hint when token logging is enabled", async () => {
+    const userId = await createUser();
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    config.logExpoPushTokens = true;
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/me/push-tokens",
+      headers: asUser(userId),
+      payload: { token: "ExponentPushToken[secret-token]", platform: "android" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(info).toHaveBeenCalledWith("Expo push token registered", {
+      userId,
+      platform: "android",
+      tokenHint: "…t-token]",
+    });
+    expect(JSON.stringify(info.mock.calls)).not.toContain("ExponentPushToken[secret-token]");
+  });
+
+  it("logs the complete token only in unsafe debug mode", async () => {
+    const userId = await createUser();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    config.logExpoPushUnsafeDebug = true;
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/me/push-tokens",
+      headers: asUser(userId),
+      payload: { token: "ExponentPushToken[full-debug-token]", platform: "android" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(warn).toHaveBeenCalledWith("Expo push token registered (unsafe debug)", {
+      userId,
+      platform: "android",
+      token: "ExponentPushToken[full-debug-token]",
+    });
   });
 
   it("re-registering the same token is idempotent, not a duplicate row", async () => {

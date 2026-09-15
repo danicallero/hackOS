@@ -151,6 +151,21 @@ const envSchema = z.object({
   MOBILE_APP_SCHEME: z.string().default("hackos"),
 
   LOG_LEVEL: z.string().default("info"),
+  /** Emit redacted Expo push ticket metadata, including receipt IDs, when debugging delivery. */
+  LOG_EXPO_PUSH_TICKETS: z
+    .string()
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === "true")),
+  /** Emit redacted mobile push-token registration metadata when debugging device setup. */
+  LOG_EXPO_PUSH_TOKENS: z
+    .string()
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === "true")),
+  /** Emit full Expo push request/response and token data for temporary debugging only. */
+  LOG_EXPO_PUSH_UNSAFE_DEBUG: z
+    .string()
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === "true")),
 
   /**
    * SSE connection budgets and slow-client backpressure (H540). Defaults are
@@ -313,6 +328,9 @@ export const config = {
   isTest: parsed.NODE_ENV === "test",
   isProd: parsed.NODE_ENV === "production",
   workersInline: parsed.WORKERS_INLINE ?? parsed.NODE_ENV !== "production",
+  logExpoPushTickets: parsed.LOG_EXPO_PUSH_TICKETS ?? false,
+  logExpoPushTokens: parsed.LOG_EXPO_PUSH_TOKENS ?? false,
+  logExpoPushUnsafeDebug: parsed.LOG_EXPO_PUSH_UNSAFE_DEBUG ?? false,
   dbPoolMax: parsed.DB_POOL_MAX ?? (parsed.NODE_ENV === "test" ? 5 : 20),
   trustProxy: parsed.TRUST_PROXY ?? parsed.NODE_ENV === "production",
   appleWalletConfigured: Boolean(

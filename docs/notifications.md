@@ -133,11 +133,31 @@ without creating another set of notification rows. Batch re-accept uses the
 same contract for the whole request.
 
 Push batches are sent to every current token for the user. A batch is marked
-`sent` when at least one Expo ticket succeeds; a failed ticket is logged by the
-worker with its platform and a masked token. This avoids retrying a push to a
-device that already received it, while still showing partial failures in the
-worker log. A `DeviceNotRegistered` ticket removes that token from
-`push_tokens`.
+`sent` when at least one Expo ticket succeeds. When ticket logging is enabled,
+every provider ticket is logged by the worker with its status, ticket ID when
+present, category, and platform. In this redacted mode, token values and
+notification content are never logged. This avoids retrying a push to a device
+that already received it,
+while still showing partial failures in the worker log. A
+`DeviceNotRegistered` ticket removes that token from `push_tokens`.
+
+Ticket logging is disabled by default. Set `LOG_EXPO_PUSH_TICKETS=true` on the
+API in inline-worker mode and on the worker in production when investigating
+delivery; restart the relevant process after changing it. The log includes only
+redacted provider metadata, so notification tokens and message content remain
+out of logs.
+
+Push-token registration logging is separately disabled by default. Set
+`LOG_EXPO_PUSH_TOKENS=true` on the API to log successful registrations with the
+user ID, platform, and a short token suffix hint. The full token is never
+logged.
+
+For a deliberately unsafe, full-debug trace, set
+`LOG_EXPO_PUSH_UNSAFE_DEBUG=true` on the API in inline-worker mode and on the
+worker in production. This logs the complete device token, message payload,
+Expo request/response, user ID, and ticket details. It is disabled by default
+and should be turned off immediately after debugging, followed by a process
+restart.
 
 ## Automatic translation (optional)
 
