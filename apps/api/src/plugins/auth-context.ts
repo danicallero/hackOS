@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import fp from "fastify-plugin";
 import { config } from "../config.js";
+import { type AuthorizationContext, createAuthorizationContext } from "../lib/capabilities.js";
 import type { ReviewFixtureLogContext } from "../lib/review-fixture-log.js";
 
 declare module "fastify" {
@@ -9,8 +10,8 @@ declare module "fastify" {
     userId: number | null;
     /** Authenticated Better Auth session token, when the request has one. */
     sessionToken: string | null;
-    /** Request-scoped PostgreSQL capability resolution (H8). */
-    effectiveCapabilities?: Promise<Set<string>>;
+    /** Request/transaction authorization snapshot (H8, #714). */
+    authorizationContext: AuthorizationContext | null;
     /** Current synthetic reviewer identity captured before the request runs. */
     reviewFixtureContext: ReviewFixtureLogContext | null;
   }
@@ -37,7 +38,7 @@ export function setUserIdResolver(resolver: UserIdResolver): void {
 export const authContextPlugin = fp(async (app: FastifyInstance) => {
   app.decorateRequest("userId", null);
   app.decorateRequest("sessionToken", null);
-  app.decorateRequest("effectiveCapabilities", undefined);
+  app.decorateRequest("authorizationContext", null);
   app.decorateRequest("reviewFixtureContext", null);
   app.addHook("onRequest", async (req) => {
     if (config.isTest) {
@@ -47,6 +48,7 @@ export const authContextPlugin = fp(async (app: FastifyInstance) => {
         if (Number.isInteger(parsed)) {
           req.userId = parsed;
         }
+        req.authorizationContext = createAuthorizationContext(req.userId);
         return;
       }
     }
@@ -55,8 +57,10 @@ export const authContextPlugin = fp(async (app: FastifyInstance) => {
     // two session reads; application routes still resolve through this hook.
     if (req.routeOptions.config?.routeAccessPolicyExemption === "better-auth-generated") {
       req.userId = null;
+      req.authorizationContext = createAuthorizationContext(null);
       return;
     }
     req.userId = await resolveUserId(req);
+    req.authorizationContext = createAuthorizationContext(req.userId);
   });
 });

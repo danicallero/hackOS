@@ -1,7 +1,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyRequest, preHandlerHookHandler } from "fastify";
 import { pool } from "../../db/pool.js";
-import { userHasCapability } from "../../lib/capabilities.js";
+import { getRequestAuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
 import { ForbiddenError, NotFoundError, UnauthorizedError } from "../../lib/errors.js";
 import type {
   ContextualPolicyResolver,
@@ -43,7 +43,9 @@ export async function resolveRepositoryAccessScope(
   );
   if (!activeRows[0]) throw new UnauthorizedError("This account is closed or being removed");
   const fixtureMarker = activeRows[0].is_test_account === true;
-  if (await userHasCapability(userId, CAPABILITIES.PROJECTS_READ, request)) {
+  if (
+    await userHasCapability(getRequestAuthorizationContext(request), CAPABILITIES.PROJECTS_READ)
+  ) {
     return { fullAccess: true, challengeIds: [], fixtureMarker };
   }
 

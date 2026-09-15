@@ -3,7 +3,7 @@ import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { getEffectiveCapabilities } from "../../lib/capabilities.js";
+import { type AuthorizationContext, getEffectiveCapabilities } from "../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { computeMembershipFlags, mentorOrParticipantType } from "../identity/role.js";
@@ -877,11 +877,12 @@ export interface CallerScheduleAudience {
  * the same universal participant slice (H59).
  */
 export async function callerScheduleAudiences(
-  userId: number | null,
+  context: AuthorizationContext,
 ): Promise<CallerScheduleAudience> {
+  const userId = context.userId;
   if (userId == null) return { isStaff: false, audiences: new Set(["participant"]) };
   const [capabilities, { isSponsorRep }, attendeeType] = await Promise.all([
-    getEffectiveCapabilities(userId),
+    getEffectiveCapabilities(context),
     computeMembershipFlags(pool, userId),
     mentorOrParticipantType(pool, userId),
   ]);

@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { App } from "../src/app.js";
 import {
   asUser,
+  authorizationContextFor,
   buildTestApp,
   createUser,
   createUserWithCapabilities,
@@ -108,16 +109,18 @@ describe("foundation", () => {
     await assignRole(userId, inheriting);
     await assignRole(userId, granting);
 
-    const caps = await getEffectiveCapabilities(userId);
+    const context = await authorizationContextFor(userId);
+    const caps = await getEffectiveCapabilities(context);
     expect(caps.has(CAPABILITIES.ACCREDIT_SCAN)).toBe(true);
-    expect(await userHasCapability(userId, CAPABILITIES.QUEUE_OPERATE)).toBe(false);
+    expect(await userHasCapability(context, CAPABILITIES.QUEUE_OPERATE)).toBe(false);
   });
 
   it("wildcard * grants every capability check (admin)", async () => {
     const { userHasCapability } = await import("../src/lib/capabilities.js");
     const adminId = await createUserWithCapabilities(["*"]);
-    expect(await userHasCapability(adminId, CAPABILITIES.QUEUE_ADMIN)).toBe(true);
-    expect(await userHasCapability(adminId, CAPABILITIES.AUDIT_READ)).toBe(true);
+    const context = await authorizationContextFor(adminId);
+    expect(await userHasCapability(context, CAPABILITIES.QUEUE_ADMIN)).toBe(true);
+    expect(await userHasCapability(context, CAPABILITIES.AUDIT_READ)).toBe(true);
   });
 
   it("capability guard returns 401 without session, 403 without capability", async () => {

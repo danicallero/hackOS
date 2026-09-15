@@ -2,7 +2,11 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
-import { requireAnyCapability, requireAuth } from "../../lib/capabilities.js";
+import {
+  getRequestAuthorizationContext,
+  requireAnyCapability,
+  requireAuth,
+} from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessOption as access } from "../../lib/route-policy.js";
 import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
@@ -71,7 +75,7 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const userId = req.userId as number;
-      const canListAll = await isChallengeAdmin(userId);
+      const canListAll = await isChallengeAdmin(getRequestAuthorizationContext(req));
       if (canListAll) {
         return {
           challenges: await listAllChallenges(await isSyntheticOperator(pool, userId)),

@@ -1,7 +1,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type pg from "pg";
 import type { Queryable } from "../../db/pool.js";
-import { getEffectiveCapabilities } from "../../lib/capabilities.js";
+import { createAuthorizationContext, getEffectiveCapabilities } from "../../lib/capabilities.js";
 import { ConflictError, ForbiddenError } from "../../lib/errors.js";
 
 export type RoleGraphClient = pg.PoolClient;
@@ -233,7 +233,7 @@ export async function userHasAnyCapability(
   client: RoleGraphClient,
   userId: number,
 ): Promise<boolean> {
-  const capabilities = await getEffectiveCapabilities(userId, undefined, client);
+  const capabilities = await getEffectiveCapabilities(createAuthorizationContext(userId, client));
   return capabilities.size > 0;
 }
 
@@ -254,7 +254,7 @@ export async function assertPossessesAll(
   message: string,
 ): Promise<void> {
   if (capabilities.length === 0) return;
-  const effective = await getEffectiveCapabilities(actorId, undefined, client);
+  const effective = await getEffectiveCapabilities(createAuthorizationContext(actorId, client));
   if (effective.has(CAPABILITIES.ADMIN_ALL)) return;
   for (const capability of capabilities) {
     if (!effective.has(capability)) {

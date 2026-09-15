@@ -1,6 +1,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { pool, type Queryable } from "../../db/pool.js";
-import { userHasCapability } from "../../lib/capabilities.js";
+import { type AuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
 import { ForbiddenError } from "../../lib/errors.js";
 import type { StatisticsConfig } from "../applications/schemas.js";
 import type { ApplicationRow } from "../applications/service.js";
@@ -97,10 +97,10 @@ export async function allowedRoleStatisticsPanels(
  */
 export async function accessibleStatisticsScopes(
   userId: number,
-  request?: Parameters<typeof userHasCapability>[2],
+  context: AuthorizationContext,
 ): Promise<InternalScope[]> {
-  const manages = await userHasCapability(userId, CAPABILITIES.STATISTICS_MANAGE, request);
-  const generalAccess = await userHasCapability(userId, CAPABILITIES.LOGISTICS_STATS, request);
+  const manages = await userHasCapability(context, CAPABILITIES.STATISTICS_MANAGE);
+  const generalAccess = await userHasCapability(context, CAPABILITIES.LOGISTICS_STATS);
 
   const applications = await pool.query<ApplicationRow>(`SELECT * FROM applications ORDER BY id`);
   const applicationScopes = await Promise.all(
@@ -423,10 +423,10 @@ function dynamicPanelDefinitions(
 export async function queryStatistics(
   userId: number,
   query: StatisticsQuery,
-  request?: Parameters<typeof userHasCapability>[2],
+  context: AuthorizationContext,
 ): Promise<Record<string, unknown>> {
   const requestedScopes = [...new Set(query.scopes)];
-  const allScopes = await accessibleStatisticsScopes(userId, request);
+  const allScopes = await accessibleStatisticsScopes(userId, context);
   const byKey = new Map(allScopes.map((scope) => [scope.key, scope]));
   const scopes = requestedScopes.map((key) => byKey.get(key));
   if (scopes.some((scope) => !scope)) throw new ForbiddenError("Statistics scope is not available");
@@ -542,9 +542,9 @@ export async function queryStatistics(
 export async function statisticsCsv(
   userId: number,
   query: StatisticsQuery,
-  request?: Parameters<typeof userHasCapability>[2],
+  context: AuthorizationContext,
 ): Promise<string> {
-  const result = await queryStatistics(userId, query, request);
+  const result = await queryStatistics(userId, query, context);
   const scopes = (result.selected_scopes as StatisticsScope[])
     .map((scope) => scope.name)
     .join(" + ");

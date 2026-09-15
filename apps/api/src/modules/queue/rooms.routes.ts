@@ -4,7 +4,11 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { requireCapability, userHasCapability } from "../../lib/capabilities.js";
+import {
+  getRequestAuthorizationContext,
+  requireCapability,
+  userHasCapability,
+} from "../../lib/capabilities.js";
 import { NotFoundError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import {
@@ -228,8 +232,11 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     async (req) => {
       const userId = actor(req.userId);
       const admin =
-        (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN, req)) ||
-        (await userHasCapability(userId, CAPABILITIES.SPONSORS_MANAGE, req));
+        (await userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.QUEUE_ADMIN)) ||
+        (await userHasCapability(
+          getRequestAuthorizationContext(req),
+          CAPABILITIES.SPONSORS_MANAGE,
+        ));
       return { groups: await listManageableQueueGroups(userId, admin) };
     },
   );

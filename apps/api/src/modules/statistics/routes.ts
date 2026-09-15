@@ -4,7 +4,11 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { requireAuth, userHasCapability } from "../../lib/capabilities.js";
+import {
+  getRequestAuthorizationContext,
+  requireAuth,
+  userHasCapability,
+} from "../../lib/capabilities.js";
 import { ForbiddenError } from "../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { lockRoleGraph, requireRoleMutationAuthority } from "../identity/role-authority.js";
@@ -71,7 +75,10 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       schema: { summary: "List statistics scopes available to the caller" },
     },
     async (req) => {
-      const scopes = await accessibleStatisticsScopes(req.userId as number, req);
+      const scopes = await accessibleStatisticsScopes(
+        req.userId as number,
+        getRequestAuthorizationContext(req),
+      );
       return {
         scopes: scopes.map(({ application: _application, ...scope }) => scope),
       };
@@ -90,7 +97,12 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
         body: statisticsQueryBody,
       },
     },
-    async (req) => queryStatistics(req.userId as number, req.body as StatisticsQuery, req),
+    async (req) =>
+      queryStatistics(
+        req.userId as number,
+        req.body as StatisticsQuery,
+        getRequestAuthorizationContext(req),
+      ),
   );
 
   r.get(
@@ -106,7 +118,9 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       },
     },
     async (req, reply) => {
-      if (!(await userHasCapability(req.userId as number, CAPABILITIES.EXPORTS_RUN, req))) {
+      if (
+        !(await userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.EXPORTS_RUN))
+      ) {
         throw new ForbiddenError("Missing capability: exports:run");
       }
       const query: StatisticsQuery = {
@@ -116,7 +130,7 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       return sendCsv(
         reply,
         "statistics.csv",
-        await statisticsCsv(req.userId as number, query, req),
+        await statisticsCsv(req.userId as number, query, getRequestAuthorizationContext(req)),
       );
     },
   );
@@ -133,10 +147,18 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      if (!(await userHasCapability(req.userId as number, CAPABILITIES.STATISTICS_MANAGE, req))) {
+      if (
+        !(await userHasCapability(
+          getRequestAuthorizationContext(req),
+          CAPABILITIES.STATISTICS_MANAGE,
+        ))
+      ) {
         throw new ForbiddenError("Missing capability: statistics:manage");
       }
-      const scopes = await accessibleStatisticsScopes(req.userId as number, req);
+      const scopes = await accessibleStatisticsScopes(
+        req.userId as number,
+        getRequestAuthorizationContext(req),
+      );
       const { rows: access } = await pool.query(
         `SELECT scope_key, panel_key, role_id, state
            FROM statistics_scope_panel_role_access
@@ -171,7 +193,12 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      if (!(await userHasCapability(req.userId as number, CAPABILITIES.STATISTICS_MANAGE, req))) {
+      if (
+        !(await userHasCapability(
+          getRequestAuthorizationContext(req),
+          CAPABILITIES.STATISTICS_MANAGE,
+        ))
+      ) {
         throw new ForbiddenError("Missing capability: statistics:manage");
       }
       const panelKey = canonicalStatisticsPanelKey(req.body.panel_key);
@@ -237,7 +264,12 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      if (!(await userHasCapability(req.userId as number, CAPABILITIES.STATISTICS_MANAGE, req))) {
+      if (
+        !(await userHasCapability(
+          getRequestAuthorizationContext(req),
+          CAPABILITIES.STATISTICS_MANAGE,
+        ))
+      ) {
         throw new ForbiddenError("Missing capability: statistics:manage");
       }
       const parsed = parseStatisticsScopeKey(req.query.scope_key);

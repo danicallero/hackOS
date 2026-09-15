@@ -2,7 +2,11 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool, withTransaction } from "../../../db/pool.js";
-import { requireAuth, userHasCapability } from "../../../lib/capabilities.js";
+import {
+  getRequestAuthorizationContext,
+  requireAuth,
+  userHasCapability,
+} from "../../../lib/capabilities.js";
 import { ForbiddenError } from "../../../lib/errors.js";
 import { routeAccessOption as routeAccess } from "../../../lib/route-policy.js";
 import { setPreferencesBodySchema } from "../schemas.js";
@@ -42,11 +46,11 @@ export function registerPreferenceRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       if (req.body.preferences.some((item) => item.category === QUEUE_STAFF_CATEGORY)) {
-        const userId = req.userId as number;
+        const context = getRequestAuthorizationContext(req);
         const allowed = await Promise.all([
-          userHasCapability(userId, CAPABILITIES.QUEUE_OPERATE),
-          userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN),
-          userHasCapability(userId, CAPABILITIES.JUDGE_PANEL),
+          userHasCapability(context, CAPABILITIES.QUEUE_OPERATE),
+          userHasCapability(context, CAPABILITIES.QUEUE_ADMIN),
+          userHasCapability(context, CAPABILITIES.JUDGE_PANEL),
         ]);
         if (!allowed.some(Boolean)) {
           throw new ForbiddenError("Queue staff notifications require queue or judging access");

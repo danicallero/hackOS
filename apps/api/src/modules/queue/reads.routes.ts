@@ -5,6 +5,8 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool } from "../../db/pool.js";
 import {
+  type AuthorizationContext,
+  getRequestAuthorizationContext,
   requireAnyCapability,
   requireAuth,
   requireCapability,
@@ -78,11 +80,11 @@ const logisticsRefreshCapabilities = [
 async function requireScopedRefreshAccess(
   userId: number | null,
   topic: z.infer<typeof scopedRefreshTopic>,
-  request: Parameters<typeof userHasCapability>[2],
+  context: AuthorizationContext,
 ): Promise<void> {
   if (userId == null) throw new UnauthorizedError();
   if (topic === SSE_TOPICS.AUDIT) {
-    if (!(await userHasCapability(userId, CAPABILITIES.AUDIT_READ, request))) {
+    if (!(await userHasCapability(context, CAPABILITIES.AUDIT_READ))) {
       throw new ForbiddenError(`Missing capability: ${CAPABILITIES.AUDIT_READ}`, {
         capability: CAPABILITIES.AUDIT_READ,
       });
@@ -90,7 +92,7 @@ async function requireScopedRefreshAccess(
     return;
   }
   if (topic === SSE_TOPICS.TV) {
-    if (!(await userHasCapability(userId, CAPABILITIES.TV_CONTROL, request))) {
+    if (!(await userHasCapability(context, CAPABILITIES.TV_CONTROL))) {
       throw new ForbiddenError(`Missing capability: ${CAPABILITIES.TV_CONTROL}`, {
         capability: CAPABILITIES.TV_CONTROL,
       });
@@ -99,7 +101,7 @@ async function requireScopedRefreshAccess(
   }
   if (topic !== SSE_TOPICS.LOGISTICS) return;
   for (const capability of logisticsRefreshCapabilities) {
-    if (await userHasCapability(userId, capability, request)) return;
+    if (await userHasCapability(context, capability)) return;
   }
   throw new ForbiddenError("Missing logistics read capability", {
     capabilities: logisticsRefreshCapabilities,
@@ -289,7 +291,12 @@ export function registerReadsRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/events/stream",
     {
-      preHandler: async (req) => requireScopedRefreshAccess(req.userId, req.query.topic, req),
+      preHandler: async (req) =>
+        requireScopedRefreshAccess(
+          req.userId,
+          req.query.topic,
+          getRequestAuthorizationContext(req),
+        ),
       config: { routeAccessPolicy: { kind: "authenticated" } },
       schema: {
         querystring: scopedRefreshQuery,

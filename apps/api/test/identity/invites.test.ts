@@ -4,6 +4,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import {
   asUser,
+  authorizationContextFor,
   buildTestApp,
   createUser,
   createUserWithCapabilities,
@@ -230,7 +231,12 @@ describe("H10 invite creation", () => {
     });
     expect(accepted.statusCode).toBe(201);
     const { userHasCapability } = await import("../../src/lib/capabilities.js");
-    expect(await userHasCapability(accepted.json().userId, CAPABILITIES.INVITES_MANAGE)).toBe(true);
+    expect(
+      await userHasCapability(
+        await authorizationContextFor(accepted.json().userId),
+        CAPABILITIES.INVITES_MANAGE,
+      ),
+    ).toBe(true);
   });
 
   it("refuses to pre-assign system:superadmin even to a wildcard-holding inviter (H8 CLI-only lockout)", async () => {
@@ -1256,7 +1262,12 @@ describe("H10 reusable user invite links", () => {
     expect(exhausted.statusCode).toBe(409);
 
     const { userHasCapability } = await import("../../src/lib/capabilities.js");
-    expect(await userHasCapability(first.json().userId, CAPABILITIES.QUEUE_OPERATE)).toBe(true);
+    expect(
+      await userHasCapability(
+        await authorizationContextFor(first.json().userId),
+        CAPABILITIES.QUEUE_OPERATE,
+      ),
+    ).toBe(true);
     const { rows: memberships } = await pool.query(
       `SELECT 1 FROM user_roles WHERE user_id = $1 AND role_id = $2`,
       [first.json().userId, groupId],
