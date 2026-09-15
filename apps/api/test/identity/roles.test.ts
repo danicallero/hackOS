@@ -1205,7 +1205,7 @@ describe("H8 default seeded role set (0805)", () => {
   it("seeds the composable default catalogue with real, exact capability grants per role", async () => {
     const pool = await seededRoles();
     const eventDirectorCaps = Object.values(CAPABILITIES).filter(
-      (cap) => cap !== CAPABILITIES.ADMIN_ALL && cap !== CAPABILITIES.SPONSOR_PORTAL,
+      (cap) => cap !== CAPABILITIES.ADMIN_ALL,
     );
     const expected: Record<string, string[]> = {
       "Event Director": eventDirectorCaps,
@@ -1405,12 +1405,9 @@ describe("H8 default seeded role set (0805)", () => {
     expect(oldDraftRows).toHaveLength(0);
 
     // Total default set on a fresh install: 0805's fifteen roles + 0801's
-    // always-created Sponsor role. 0815 also adds one hidden compatibility
-    // role so users of the already-approved mobile build keep access during
-    // rollout. system:superadmin is CLI-only, never created by migrations.
-    const { rows: allRoles } = await pool.query(
-      `SELECT name FROM roles WHERE name <> 'legacy:event-access' ORDER BY name`,
-    );
+    // always-created Sponsor role. system:superadmin is CLI-only, never
+    // created by migrations.
+    const { rows: allRoles } = await pool.query(`SELECT name FROM roles ORDER BY name`);
     expect(allRoles.map((r: { name: string }) => r.name).sort()).toEqual(
       [
         "Event Director",
@@ -1469,15 +1466,7 @@ describe("H8 default seeded role set (0805)", () => {
   it("marks every 0801/0805 seeded role is_seeded=true, and snapshots exactly its ALLOW set into role_seed_defaults", async () => {
     const pool = await seededRoles();
     const { rows: unseeded } = await pool.query(`SELECT name FROM roles WHERE NOT is_seeded`);
-    // The hidden compatibility role is deliberately not part of the seeded
-    // catalogue; it preserves pre-0815 mobile access while remaining a normal
-    // event-bearing role that staff can explicitly remove when needed.
-    expect(unseeded).toEqual([{ name: "legacy:event-access" }]);
-    const { rows: legacyRole } = await pool.query(
-      `SELECT is_visible, is_protected, event_access
-         FROM roles WHERE name = 'legacy:event-access'`,
-    );
-    expect(legacyRole).toEqual([{ is_visible: false, is_protected: false, event_access: true }]);
+    expect(unseeded).toEqual([]);
 
     const { rows: eventDirector } = await pool.query(
       `SELECT r.id, rsd.capabilities

@@ -1,3 +1,4 @@
+import { EVENTS } from "@hackos/shared/events";
 import { useFonts } from "expo-font";
 import { type Href, useRootNavigationState, useRouter } from "expo-router";
 import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router/react-navigation";
@@ -11,13 +12,17 @@ import "react-native-reanimated";
 import { PendingRemovalScreen } from "@/components/pending-removal-screen";
 import { SessionState } from "@/components/session-state";
 import { useColorScheme } from "@/components/useColorScheme";
-import { authClient, signOut } from "@/lib/auth-client";
+import { signOut } from "@/lib/auth-client";
 import { isSupportedLanguage, LocaleProvider, useLocale } from "@/lib/i18n";
 import { MeProvider, useMeContext } from "@/lib/me-context";
 import { canEnterMobileApp, isMobileAccessDenied } from "@/lib/mobile-access";
 import { setupNotificationListeners } from "@/lib/notifications-setup";
 import { registerForPushNotifications } from "@/lib/push";
-import { startPersonalEventStream } from "@/lib/server-events";
+import {
+  startIdentityEventStream,
+  startPersonalEventStream,
+  subscribeToServerEvent,
+} from "@/lib/server-events";
 import { isOperator } from "@/lib/tabs";
 import { warmWalletCache } from "@/lib/wallet-cache";
 import { colors } from "@/theme/colors";
@@ -59,26 +64,42 @@ export default function RootLayout() {
 }
 
 function RootLayoutSession() {
-  const { data: session, isPending } = authClient.useSession();
-  const initialSessionPending = useInitialSessionPending(isPending);
-
   return (
-    <MeProvider authenticated={Boolean(session)}>
-      <LanguageSync />
-      <PushRegistration authenticated={Boolean(session)} />
-      <WalletCacheWarmup authenticated={Boolean(session)} />
-      <NotificationListeners />
-      <MobileAccessGate authenticated={Boolean(session)} />
-      <PersonalEventStream authenticated={Boolean(session)} />
-      <RootLayoutNav authenticated={Boolean(session)} pending={initialSessionPending} />
+    <MeProvider>
+      <RootLayoutSessionContents />
     </MeProvider>
   );
 }
 
+function RootLayoutSessionContents() {
+  const { me, authenticated, loading, error } = useMeContext();
+  const initialSessionPending = useInitialSessionPending(loading);
+
+  return (
+    <>
+      <LanguageSync />
+      <PushRegistration authenticated={authenticated} />
+      <WalletCacheWarmup authenticated={authenticated} />
+      <NotificationListeners />
+      <IdentitySessionRefresh authenticated={authenticated} />
+      <MobileAccessGate authenticated={authenticated} />
+      <PersonalEventStream authenticated={authenticated} />
+      <RootLayoutNav
+        authenticated={authenticated}
+        pending={initialSessionPending}
+        me={me}
+        loading={loading}
+        error={error}
+      />
+    </>
+  );
+}
+
 /**
- * Hide routing only for the first Secure Store hydration. Password providers
- * temporarily background the app and can trigger a later session revalidation;
- * unmounting the auth stack then would discard the credentials iOS is filling.
+ * Hide routing only for the first authoritative profile hydration. Password
+ * providers temporarily background the app and can trigger a later profile
+ * revalidation; unmounting the auth stack then would discard the credentials
+ * iOS is filling.
  */
 function useInitialSessionPending(pending: boolean) {
   const hasResolved = useRef(!pending);
@@ -102,7 +123,7 @@ function useInitialSessionPending(pending: boolean) {
 /** Push-independent foreground updates for queue and wallet state (H28/H38). */
 function PersonalEventStream({ authenticated }: { authenticated: boolean }) {
   const { me } = useMeContext();
-  const enabled = authenticated && me?.mobileAccess === true;
+  const enabled = authenticated && me?.hasEventAccess === true;
   useEffect(() => {
     if (!enabled) return;
     return startPersonalEventStream();
@@ -120,11 +141,24 @@ function LanguageSync() {
   return null;
 }
 
+/** Revalidates the one session/access/profile snapshot after role changes. */
+function IdentitySessionRefresh({ authenticated }: { authenticated: boolean }) {
+  const { refetch } = useMeContext();
+  useEffect(() => {
+    if (!authenticated) return;
+    return subscribeToServerEvent(EVENTS.DOMAIN_CHANGED, () => {
+      void refetch();
+    });
+  }, [authenticated, refetch]);
+  useEffect(() => startIdentityEventStream(authenticated), [authenticated]);
+  return null;
+}
+
 /** Best-effort Expo push token registration once an eligible user signs in. */
 function PushRegistration({ authenticated }: { authenticated: boolean }) {
   const { me } = useMeContext();
   useEffect(() => {
-    if (authenticated && me?.mobileAccess) {
+    if (authenticated && me?.hasEventAccess) {
       registerForPushNotifications().catch(() => {
         // Permission denial and simulators without push must not block the app.
       });
@@ -138,9 +172,9 @@ function WalletCacheWarmup({ authenticated }: { authenticated: boolean }) {
   const { me } = useMeContext();
 
   useEffect(() => {
-    if (!authenticated || !me?.mobileAccess) return;
+    if (!authenticated || !me?.hasEventAccess) return;
     void warmWalletCache(me.id);
-  }, [authenticated, me?.id, me?.mobileAccess]);
+  }, [authenticated, me?.id, me?.hasEventAccess]);
 
   return null;
 }
@@ -187,7 +221,7 @@ function MobileAccessGate({ authenticated }: { authenticated: boolean }) {
       !authenticated ||
       loading ||
       !me ||
-      me.mobileAccess ||
+      me.hasEventAccess ||
       me.accountState === "removal_pending"
     )
       return;
@@ -202,12 +236,24 @@ function MobileAccessGate({ authenticated }: { authenticated: boolean }) {
   return null;
 }
 
-function RootLayoutNav({ authenticated, pending }: { authenticated: boolean; pending: boolean }) {
+function RootLayoutNav({
+  authenticated,
+  pending,
+  me,
+  loading,
+  error,
+}: {
+  authenticated: boolean;
+  pending: boolean;
+  me: ReturnType<typeof useMeContext>["me"];
+  loading: boolean;
+  error: Error | null;
+}) {
   const colorScheme = useColorScheme();
   const { t } = useLocale();
-  const { me, loading: meLoading, error: meError, refetch } = useMeContext();
-  const showRestoringSession = useDelayedVisibility(authenticated && !me && meLoading, 500);
-  const canEnterApp = canEnterMobileApp(authenticated, me?.mobileAccess);
+  const { refetch } = useMeContext();
+  const showRestoringSession = useDelayedVisibility(!me && loading, 500);
+  const canEnterApp = canEnterMobileApp(authenticated, me?.hasEventAccess);
 
   // Keep one navigator in charge of session transitions. Protected screens
   // are removed from navigation history when their guard changes, so signing
@@ -215,27 +261,34 @@ function RootLayoutNav({ authenticated, pending }: { authenticated: boolean; pen
   // route while a nested redirect is already running).
   if (pending) return null;
 
-  // Keep an authenticated H4 session recoverable when /api/me is temporarily
-  // unavailable or the server has revoked it, instead of leaving a blank tab
-  // navigator with no retry or sign-out path.
-  if (authenticated && !me) {
+  // Keep a profile restore recoverable when /api/me is temporarily unavailable
+  // instead of rendering an auth stack before the session has been disproved.
+  if (!me && (loading || error)) {
     // Most profile restores complete in a fraction of a second. Keep the
     // neutral app surface during that grace period instead of flashing a
     // transient status screen between the splash screen and the app.
-    if (meLoading && !showRestoringSession) {
+    if (loading && !showRestoringSession) {
       return <View style={{ backgroundColor: colors.background, flex: 1 }} />;
     }
-    return <SessionState loading={meLoading} onRetry={() => void refetch()} />;
+    return <SessionState loading={loading} onRetry={() => void refetch()} />;
   }
 
   if (me?.accountState === "removal_pending" && me.removal) {
-    return <PendingRemovalScreen removal={me.removal} onRefresh={refetch} refreshError={meError} />;
+    return (
+      <PendingRemovalScreen
+        removal={me.removal}
+        onRefresh={async () => {
+          await refetch();
+        }}
+        refreshError={error}
+      />
+    );
   }
 
   // Access is part of the navigation guard, not just an asynchronous sign-out
   // side effect. This prevents an ineligible account from mounting any event
   // screen during the frame(s) before MobileAccessGate revokes its session.
-  if (isMobileAccessDenied(authenticated, me?.mobileAccess)) {
+  if (isMobileAccessDenied(authenticated, me?.hasEventAccess)) {
     return <View style={{ backgroundColor: colors.background, flex: 1 }} />;
   }
 

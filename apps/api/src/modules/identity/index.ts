@@ -267,7 +267,11 @@ async function pendingAccountForRequest(
   const userIds = new Set<number>();
   if (request.userId != null && Number.isInteger(request.userId)) userIds.add(request.userId);
 
-  if (includeSignedCookie) {
+  // auth-context already resolved the same authoritative session for normal
+  // requests. Only fall back to the signed cookie when that resolver could
+  // not identify a user (Better Auth routes can still arrive here without a
+  // Fastify request user id).
+  if (includeSignedCookie && userIds.size === 0) {
     const sessionToken = await getBetterAuthSessionToken(requestHeaders(request));
     if (sessionToken) {
       const { rows } = await pool.query<{ user_id: number }>(
@@ -377,6 +381,11 @@ async function pendingAuthTarget(
 
 async function enforcePendingBetterAuthRoute(request: FastifyRequest): Promise<void> {
   const path = request.url.split("?", 1)[0] ?? "";
+  // Better Auth owns the authoritative session read for these two harmless
+  // lifecycle operations. Pending accounts are explicitly allowed through,
+  // so looking up the same cookie again only adds latency to a session probe
+  // or sign-out request.
+  if (PENDING_AUTH_SESSION_PATHS.has(path)) return;
   const current = await pendingAccountForRequest(request, true);
   const target = await pendingAuthTarget(request, path);
 

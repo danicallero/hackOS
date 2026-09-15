@@ -17,9 +17,11 @@ declare module "fastify" {
 }
 
 /**
- * Decorates every request with `userId`. The real resolution — Better Auth
- * session cookie/bearer → user id — is wired by the identity module (H1-H10),
- * which overrides `resolveUserId`. Until then (and always, in NODE_ENV=test)
+ * Decorates application requests with `userId`. The real resolution — Better
+ * Auth session cookie/bearer → user id — is wired by the identity module
+ * (H1-H10), which overrides `resolveUserId`; Better Auth's generated auth
+ * handler resolves its own session and is deliberately excluded here to
+ * avoid a duplicate session read. Until then (and always, in NODE_ENV=test)
  * the `x-test-user-id` header lets modules and tests exercise
  * capability-guarded routes without a full auth stack.
  */
@@ -47,6 +49,13 @@ export const authContextPlugin = fp(async (app: FastifyInstance) => {
         }
         return;
       }
+    }
+    // Better Auth's generated handler resolves its own session from the
+    // request. Running the same lookup here would make /api/auth/* pay for
+    // two session reads; application routes still resolve through this hook.
+    if (req.routeOptions.config?.routeAccessPolicyExemption === "better-auth-generated") {
+      req.userId = null;
+      return;
     }
     req.userId = await resolveUserId(req);
   });

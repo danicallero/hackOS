@@ -9,6 +9,7 @@ import { audit } from "../../../lib/audit.js";
 import { requireCapability } from "../../../lib/capabilities.js";
 import { ConflictError, ServiceUnavailableError } from "../../../lib/errors.js";
 import { idempotencyGuard } from "../../../lib/idempotency.js";
+import { invalidateReviewFixtureCache } from "../../../lib/review-fixture-log.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { reconcileTicketAccess } from "../../logistics/tickets.js";
 import { auth } from "../auth.js";
@@ -309,7 +310,7 @@ export function registerReviewFixtureRoutes(app: FastifyInstance): void {
       const password = requireFixturePassword();
       const createdUserIds: number[] = [];
       try {
-        return await withTransaction(async (client) => {
+        const result = await withTransaction(async (client) => {
           await client.query(
             `INSERT INTO review_fixture_accounts (fixture_key)
              SELECT fixture_key FROM unnest($1::text[]) AS values(fixture_key)
@@ -515,6 +516,8 @@ export function registerReviewFixtureRoutes(app: FastifyInstance): void {
             staticDeletionPinConfigured: true as const,
           };
         });
+        invalidateReviewFixtureCache();
+        return result;
       } catch (error) {
         await cleanupFailedFixtureUsers(createdUserIds);
         throw error;

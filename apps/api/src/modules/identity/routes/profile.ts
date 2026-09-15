@@ -8,7 +8,6 @@ import {
   assertActiveAuthenticatedUser,
   assertAuthenticatedProfileUser,
   getEffectiveCapabilities,
-  invalidateCapabilities,
   requireAuth,
   requireCapability,
   userHasCapability,
@@ -23,7 +22,6 @@ import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliati
 import { canCreateMyProject, hasMyProject, myProjects } from "../../projects/service.js";
 import { hasMyQueueItems } from "../../queue/reads.js";
 import { getBetterAuthSessionToken } from "../auth.js";
-import { hasMobileAccess } from "../mobile-access.js";
 import {
   cancelPendingAccountRemoval,
   getAccountRemovalEligibility,
@@ -38,7 +36,6 @@ import {
   computeMembershipFlags,
   getAssignedRoles,
   getHighestVisibleRoleName,
-  hasEventAccess,
 } from "../role.js";
 import { lockRoleGraph, SUPERADMIN_ROLE_NAME } from "../role-authority.js";
 
@@ -458,7 +455,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           "the isEnterpriseJudge/isSponsorRep association facts nav uses for multi-capability " +
           "accounts (H55), whether they currently hold role-derived event access, whether they have a project/queue entry of their own " +
           "(drives hiding the My project/My queue nav items, issue #424), mobile " +
-          "access eligibility, and the caller's complete assigned-role set (H8) alongside " +
+          "entry eligibility, and the caller's complete assigned-role set (H8) alongside " +
           "the single highest-visible `role` shown elsewhere.",
         summary: "Get my profile",
         response: {
@@ -468,7 +465,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             // separate category. Same field name/shape /api/users/:id
             // exposes for any other user.
             visibleRoleName: z.string().nullable(),
-            mobileAccess: z.boolean(),
             // Effective capabilities (H8) so the web/mobile UI can gate by
             // capability, never by the illustrative role (H55). Authoritative
             // enforcement still happens on every guarded route server-side.
@@ -485,7 +481,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             isEnterpriseJudge: z.boolean(),
             isSponsorRep: z.boolean(),
             // Any assigned, non-deleted role with eventAccess=true — drives
-            // ticket/wallet exposure and mobile-app access.
+            // ticket/wallet exposure and mobile-app entry.
             hasEventAccess: z.boolean(),
             // issue #424: My project/My queue nav items are hidden until the
             // caller actually has one — visible-but-empty misleads sponsors
@@ -511,7 +507,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       const [
         capabilities,
         membership,
-        eventAccess,
         hasProject,
         hasQueueItems,
         canCreateProject,
@@ -522,7 +517,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       ] = await Promise.all([
         getEffectiveCapabilities(userId, req),
         computeMembershipFlags(pool, userId),
-        hasEventAccess(pool, userId),
         hasMyProject(userId),
         hasMyQueueItems(userId),
         canCreateMyProject(userId),
@@ -554,14 +548,20 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             [userId],
           )
           .then((result) => Boolean(result.rows[0]?.exists)),
-        getPendingAccountRemovalStatus(pool, userId),
+        row.account_state === "active"
+          ? Promise.resolve<PendingAccountRemovalStatus>({ status: "active" })
+          : getPendingAccountRemovalStatus(pool, userId),
         getAssignedRoles(pool, userId),
       ]);
-      const mobileAccess = row.account_state === "active" && (await hasMobileAccess(pool, userId));
+      // getAssignedRoles already reads the same live role rows used by
+      // hasEventAccess. Derive the profile flag from that result instead of
+      // issuing a second entitlement query; the user row above supplies the
+      // active-account boundary required by the public contract.
+      const eventAccess =
+        row.account_state === "active" && roles.some((assignedRole) => assignedRole.eventAccess);
       return {
         ...serializeUser(row, removalStatus),
         visibleRoleName: roles.find((r) => r.isVisible)?.name ?? null,
-        mobileAccess,
         capabilities: [...capabilities],
         roles,
         ...membership,
@@ -741,7 +741,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           : undefined,
       });
       if (req.idempotency) req.idempotency.scope = "DELETE /api/me removal-complete";
-      await invalidateCapabilities(userId);
       if (result.status !== "completed") {
         reply.code(202);
         return result;
@@ -799,7 +798,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           : undefined,
       });
       if (req.idempotency) req.idempotency.scope = "POST /api/me/anonymize removal-complete";
-      await invalidateCapabilities(userId);
       if (result.status !== "completed") {
         reply.code(202);
         return result;
@@ -1116,7 +1114,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         source: "admin",
         requestedAction: "delete",
       });
-      await invalidateCapabilities(targetId);
       if (result.status !== "completed") {
         reply.code(202);
         return result;
@@ -1226,7 +1223,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         source: "admin",
         requestedAction: "anonymize",
       });
-      await invalidateCapabilities(targetId);
       if (result.status !== "completed") {
         reply.code(202);
         return result;

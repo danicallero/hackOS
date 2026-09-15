@@ -81,4 +81,34 @@ describe("web session refresh", () => {
     expect(container.querySelector('[data-testid="owner"]')?.textContent).toBe("7");
     expect(container.querySelector('[data-testid="error"]')?.textContent).toBe("temporary outage");
   });
+
+  it("coalesces concurrent refreshes into one profile request", async () => {
+    let resolveRequest!: (value: Me) => void;
+    vi.mocked(api.get).mockReturnValueOnce(
+      new Promise<Me>((resolve) => {
+        resolveRequest = resolve;
+      }),
+    );
+
+    await act(async () => {
+      root.render(
+        <SessionProvider>
+          <Probe />
+        </SessionProvider>,
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      (container.querySelector("button") as HTMLButtonElement).click();
+      await Promise.resolve();
+    });
+    expect(api.get).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveRequest(profile);
+      await Promise.resolve();
+    });
+    expect(container.querySelector('[data-testid="status"]')?.textContent).toBe("authenticated");
+  });
 });

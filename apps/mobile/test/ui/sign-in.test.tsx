@@ -5,6 +5,7 @@ import { Alert } from "react-native";
 const mockSearchParams: { accessDenied?: string } = {};
 const mockReplace = jest.fn();
 const mockSetParams = jest.fn();
+const mockRefetch = jest.fn();
 
 jest.mock("expo-router", () => ({
   useLocalSearchParams: () => mockSearchParams,
@@ -12,6 +13,9 @@ jest.mock("expo-router", () => ({
 }));
 
 jest.mock("@/lib/api", () => ({ apiFetch: jest.fn() }));
+jest.mock("@/lib/me-context", () => ({
+  useMeContext: () => ({ refetch: mockRefetch }),
+}));
 jest.mock("@/lib/auth-client", () => ({
   signIn: { email: jest.fn() },
   signOut: jest.fn(),
@@ -80,6 +84,7 @@ describe("native sign-in UI contract", () => {
     mockReplace.mockReset();
     mockSetParams.mockReset();
     mockApiFetch.mockReset().mockRejectedValue(new Error("offline"));
+    mockRefetch.mockReset().mockResolvedValue({ hasEventAccess: false, accountState: "active" });
     mockSignInEmail.mockReset().mockResolvedValue({ error: null });
     mockSignOut.mockReset().mockResolvedValue({ error: null });
   });
@@ -98,9 +103,7 @@ describe("native sign-in UI contract", () => {
   });
 
   it("signs out and routes an authenticated account without mobile access to the modal", async () => {
-    mockApiFetch
-      .mockResolvedValueOnce({ name: "HackUDC 2026" })
-      .mockResolvedValueOnce({ mobileAccess: false });
+    mockApiFetch.mockResolvedValueOnce({ name: "HackUDC 2026" });
     const user = userEvent.setup();
     await renderMobile(<SignInScreen />);
 

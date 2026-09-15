@@ -554,11 +554,8 @@ describe("migration history (H53)", () => {
         legacy_audit: "0",
       });
 
-      // 0815's compatibility pass keeps a user who was already admitted by
-      // the pre-role mobile-access rules inside the published app while the
-      // new role-derived source of truth rolls out. The bridge is a normal,
-      // removable event-bearing role; the durable ticket remains available to
-      // the old client through the unchanged /api/me/ticket contract.
+      // 0821 removes 0815's temporary compatibility role. A durable ticket is
+      // historical data, but it is no longer an entitlement by itself.
       const compatibility = await client.query<{
         role_name: string;
         event_access: boolean;
@@ -571,9 +568,7 @@ describe("migration history (H53)", () => {
           WHERE ur.user_id = $1 AND r.name = 'legacy:event-access'`,
         [activeUserId],
       );
-      expect(compatibility.rows).toEqual([
-        { role_name: "legacy:event-access", event_access: true, tickets: "1" },
-      ]);
+      expect(compatibility.rows).toEqual([]);
 
       const expectedBadgeDigest = createHmac("sha256", secret)
         .update("hackos:scanner-credential:v1:badge:legacy-badge-current")

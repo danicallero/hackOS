@@ -81,15 +81,17 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit): Promise<T>
           },
     onResponse: (context) => recordServerDate(context.response),
     onError: (context) => recordServerDate(context.response),
-    // Reads can safely ride through the short origin gap during a Dokploy
-    // replacement. Do not automatically retry non-idempotent writes.
+    // Profile/session reads must resolve promptly: the caller can show a
+    // recovery state or use its explicit offline cache instead of waiting
+    // through several seconds of deployment retries. Other idempotent
+    // reads keep a short retry for the brief origin gap during a deployment.
     retry:
-      method === "GET"
+      method === "GET" && path !== "/api/me"
         ? {
             type: "exponential",
-            attempts: 4,
-            baseDelay: 500,
-            maxDelay: 4_000,
+            attempts: 2,
+            baseDelay: 250,
+            maxDelay: 1_000,
             shouldRetry: (response) =>
               response === null || [502, 503, 504].includes(response.status),
           }

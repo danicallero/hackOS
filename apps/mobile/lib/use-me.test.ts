@@ -14,6 +14,7 @@ jest.mock("./api", () => ({
 
 const mockCacheStore = new Map<string, { data: unknown; updatedAt: string }>();
 jest.mock("./offline-cache", () => ({
+  clearCachedValue: jest.fn(() => Promise.resolve()),
   readCachedValue: jest.fn((key: string) => Promise.resolve(mockCacheStore.get(key) ?? null)),
   writeCachedValue: jest.fn(
     (key: string, data: unknown, updatedAt = "2026-01-01T00:00:00.000Z") => {
@@ -110,6 +111,23 @@ describe("useMe foreground revalidation (H55)", () => {
     expect(result.current.loading).toBe(true);
     expect(result.current.me).toBeNull();
   });
+
+  it("coalesces concurrent profile refreshes into one request", async () => {
+    const profileFetch = deferred<{ id: number; capabilities: string[] }>();
+    mockApiFetch.mockReturnValue(profileFetch.promise);
+    const { result } = await renderHook(() => useMe(true));
+
+    const first = result.current.refetch();
+    const second = result.current.refetch();
+    expect(second).toBe(first);
+    expect(mockApiFetch).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      profileFetch.resolve({ id: 1, capabilities: [] });
+      await first;
+    });
+    expect(result.current.me?.id).toBe(1);
+  });
 });
 
 describe("useMe offline fallback", () => {
@@ -166,5 +184,6 @@ describe("useMe offline fallback", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.me).toBeNull();
     expect(result.current.offline).toBe(false);
+    expect(result.current.error).toBeNull();
   });
 });
