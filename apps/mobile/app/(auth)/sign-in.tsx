@@ -1,7 +1,7 @@
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Linking, Pressable, Text, useWindowDimensions, View } from "react-native";
+import { Alert, Linking, Pressable, Text, View } from "react-native";
 
 import {
   AuthCredentialField,
@@ -26,7 +26,6 @@ export default function SignInScreen() {
   const { accessDenied } = useLocalSearchParams<{ accessDenied?: string }>();
   const { t } = useLocale();
   const { refetch } = useMeContext();
-  const { fontScale } = useWindowDimensions();
   const emailRef = useRef<AuthCredentialFieldHandle>(null);
   const passwordRef = useRef<AuthCredentialFieldHandle>(null);
   const [email, setEmail] = useState("");
@@ -125,7 +124,6 @@ export default function SignInScreen() {
 
   return (
     <AuthScreen
-      scrollable={fontScale > 1.3}
       footer={
         <View style={{ alignItems: "center", gap: 4 }}>
           <Text
