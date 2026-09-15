@@ -55,7 +55,7 @@ Two containers share this file: `minio` (the S3-compatible object server) and
 | `MINIO_BROWSER` | container (`minio`) | no | Toggles MinIO's own web console (`on`/`off`), default `off`. Leave it off — there's no Traefik route to it in this setup, so turning it on without also adding auth + a route just adds attack surface for no benefit. |
 | `S3_BUCKET` | container (`minio-init`) | no | Bucket name `minio-init` creates and sets ACLs on (default `hackos`). Must be identical to `api`/`worker`'s `S3_BUCKET`, or the API will 404/error against a bucket that doesn't exist. |
 | `MINIO_IMAGE` | compose-level | no | Image reference for the `minio` container. Defaults to `:latest`, which is fine for local dev but should be pinned to a concrete tag in production (see Security posture in `deploy/README.md`). |
-| `MINIO_MC_IMAGE` | compose-level | no | Same pinning concern, for the `mc` CLI image `minio-init` runs to create the bucket and set its access policy. |
+| `MINIO_MC_IMAGE` | compose-level | no | Same pinning concern, for the `mc` CLI image `minio-init` runs to create the bucket and set its access policy. Defaults to `quay.io/minio/mc:latest`; use a pinned `quay.io/minio/mc:RELEASE.…` tag in production. |
 | `MINIO_MEM_LIMIT` | compose-level | no | Memory cap, default `1g`. |
 | `INSTANCE_NETWORK` | compose-level | no | Same private network as postgres/valkey — `api`/`worker` reach it at `minio:9000`. |
 
