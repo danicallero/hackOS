@@ -253,10 +253,9 @@ distributed to other Expo Router apps without importing hackOS code.
   first field that needs attention instead of hiding validation behind a disabled
   submit button. The password field has a 52-point, screen-reader-labelled reveal
   action, and password recovery keeps a 44-point hit target. At standard text
-  sizes the composition does not scroll: the form stays vertically centred and
-  a concise account/application note stays at the safe-area bottom. At
-  accessibility text sizes the same screen permits scrolling rather than clip a
-  field or action. The note shows the configured
+  sizes and accessibility text sizes, the composition uses the same
+  keyboard-inset-adjusting scroll container so opening or closing the keyboard
+  does not remount credential fields. The note shows the configured
   `EXPO_PUBLIC_EVENT_WEBSITE_URL` as selectable text but deliberately does not
   link out to account creation (see `docs/mobile-release.md`). The
   uncontrolled native credential fields use the username/current-password
@@ -280,8 +279,9 @@ distributed to other Expo Router apps without importing hackOS code.
 - `app/(auth)/forgot-password.tsx` and `reset-password.tsx` share the same
   leading, task-first composition. Their primary actions remain discoverable,
   invalid values are explained beside the relevant field, and focus moves to
-  the first correction. They stay fixed at standard text sizes and become
-  scrollable only for accessibility text sizes. The request uses
+  the first correction. They use the same keyboard-inset-adjusting scroll
+  container at every text size, preserving field focus and entered values while
+  the keyboard opens or closes. The request uses
   `lib/password-reset.ts` to keep the platform boundary explicit: iOS keeps
   the `hackos://reset-password` native callback, while Android requests the
   event website's `/reset-password` callback so Better Auth appends the token

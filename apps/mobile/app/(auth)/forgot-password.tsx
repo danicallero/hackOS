@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useRef, useState } from "react";
-import { Pressable, Text, type TextInput, useWindowDimensions, View } from "react-native";
+import { Pressable, Text, type TextInput, View } from "react-native";
 
 import { AuthAlert, AuthButton, AuthField, AuthHeader, AuthScreen } from "@/components/auth-ui";
 import { authClient } from "@/lib/auth-client";
@@ -13,7 +13,6 @@ export default function ForgotPasswordScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ email?: string }>();
   const { t } = useLocale();
-  const { fontScale } = useWindowDimensions();
   const emailRef = useRef<TextInput>(null);
   const [email, setEmail] = useState(typeof params.email === "string" ? params.email : "");
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -46,7 +45,7 @@ export default function ForgotPasswordScreen() {
 
   if (sent) {
     return (
-      <AuthScreen scrollable={fontScale > 1.3}>
+      <AuthScreen>
         <AuthHeader
           align="leading"
           context="hackOS"
@@ -60,7 +59,6 @@ export default function ForgotPasswordScreen() {
 
   return (
     <AuthScreen
-      scrollable={fontScale > 1.3}
       footer={
         <Pressable
           accessibilityRole="link"
