@@ -84,7 +84,7 @@ describe("dynamic statistics visibility", () => {
   });
 });
 
-describe("pure applicant (no role-derived event access, no operational role)", () => {
+describe("accounts without current role-derived event access", () => {
   const ctx = contextFor([], { isPureApplicant: true });
 
   it("hides wallet, project, queue and inbox", () => {
@@ -102,13 +102,17 @@ describe("pure applicant (no role-derived event access, no operational role)", (
     expect(visible).toEqual(["/timetable", "/my-applications", "/settings/profile"]);
   });
 
-  it("a room judge or sponsor rep with the same empty capability set is not a pure applicant", () => {
-    const judge = contextFor([], { isEnterpriseJudge: true });
-    const sponsor = contextFor([], { isSponsorRep: true });
-    for (const item of PERSONAL_NAV) {
-      expect(isNavItemVisible(item, judge)).toBe(true);
-      expect(isNavItemVisible(item, sponsor)).toBe(true);
+  it("a room judge or sponsor rep still keeps operational workspaces, but not event-only personal nav", () => {
+    const judge = contextFor([], { isEnterpriseJudge: true, isPureApplicant: true });
+    const sponsor = contextFor([], { isSponsorRep: true, isPureApplicant: true });
+    for (const ctx of [judge, sponsor]) {
+      const visible = PERSONAL_NAV.filter((item) => isNavItemVisible(item, ctx)).map(
+        (item) => item.href,
+      );
+      expect(visible).toEqual(["/timetable", "/my-applications", "/settings/profile"]);
     }
+    expect(visibleWorkspaceIds(judge)).toContain("liveJudging");
+    expect(visibleWorkspaceIds(sponsor)).toContain("sponsors");
   });
 });
 

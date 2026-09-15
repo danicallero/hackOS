@@ -186,11 +186,8 @@ export async function computeMembershipFlags(
 export async function hasEventAccess(db: Queryable, userId: number): Promise<boolean> {
   const { rows } = await db.query(
     `SELECT 1
-       FROM users u
-       JOIN user_event_access uea ON uea.user_id = u.id
-      WHERE u.id = $1
-        AND u.account_state = 'active'
-        AND u.anonymized_at IS NULL
+       FROM user_event_access
+      WHERE user_id = $1
       LIMIT 1`,
     [userId],
   );
@@ -203,13 +200,11 @@ export async function hasEventAccess(db: Queryable, userId: number): Promise<boo
  * previously held from this same mechanism (a re-classification switches
  * type, it doesn't stack both). This is the write-side counterpart to
  * mentorOrParticipantType — used by PUT /api/users/:id/attendee-role and
- * accreditation's walk-in classification, the two call sites that used to
- * write `manual_attendee_roles` directly. That table is not written to by
- * either anymore (see 0808's migration comment); a genuinely explicit,
- * staff-driven classification is exactly what a real role grant is for,
- * unlike the retired applications.type guess. Caller must run this inside
- * their own transaction (client is expected to already hold a row lock on
- * the user, same as both call sites already do before this).
+ * accreditation's walk-in classification. A genuinely explicit,
+ * staff-driven classification is a real role grant, unlike the retired
+ * applications.type guess. Caller must run this inside their own transaction
+ * (client is expected to already hold a row lock on the user, same as both
+ * call sites already do before this).
  */
 export async function assignAttendeeRole(
   client: Queryable,

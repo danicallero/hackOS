@@ -49,7 +49,7 @@ export async function issueWalletAccessToken(
     [userId],
   );
   if (!active.rows[0]) throw new UnauthorizedError("Account is closed or being removed");
-  if (purpose === "ticket" && !(await hasEventAccess(client, userId))) {
+  if (!(await hasEventAccess(client, userId))) {
     throw new UnauthorizedError("This user has no role granting event access");
   }
   const token = randomBytes(32).toString("base64url");
@@ -88,7 +88,7 @@ export async function resolveWalletAccessToken(
     [token, purpose],
   );
   if (!rows[0]) throw new UnauthorizedError("Wallet link is invalid or has expired");
-  if (purpose === "ticket" && !(await hasEventAccess(pool, rows[0].user_id as number))) {
+  if (!(await hasEventAccess(pool, rows[0].user_id as number))) {
     throw new UnauthorizedError("Wallet link is invalid or has expired");
   }
   return { userId: rows[0].user_id as number };

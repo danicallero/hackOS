@@ -2,7 +2,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { pool, withTransaction } from "../../../db/pool.js";
+import { pool, type Queryable, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
 import {
   assertActiveAuthenticatedUser,
@@ -36,6 +36,7 @@ import {
   computeMembershipFlags,
   getAssignedRoles,
   getHighestVisibleRoleName,
+  hasEventAccess,
 } from "../role.js";
 import { lockRoleGraph, SUPERADMIN_ROLE_NAME } from "../role-authority.js";
 
@@ -272,8 +273,8 @@ function serializeUser(row: UserRow, removalStatus?: PendingAccountRemovalStatus
   };
 }
 
-async function fetchUser(userId: number, allowPending = false): Promise<UserRow> {
-  const { rows } = await pool.query(
+async function fetchUser(db: Queryable, userId: number, allowPending = false): Promise<UserRow> {
+  const { rows } = await db.query(
     `SELECT * FROM users
       WHERE id = $1
         AND ${allowPending ? "account_state IN ('active', 'removal_pending')" : "account_state = 'active'"}
@@ -306,8 +307,8 @@ async function sessionTokenFromRequest(req: FastifyRequest): Promise<string | nu
 // self-edit identity/logistics fields (name, shirt size, dietary info) —
 // they're on the badge/certificate and drive shirt orders/catering headcounts
 // already committed to. Staff can still fix these via PATCH /api/users/:id.
-async function hasAcceptedApplication(userId: number): Promise<boolean> {
-  const { rows } = await pool.query(
+async function hasAcceptedApplication(db: Queryable, userId: number): Promise<boolean> {
+  const { rows } = await db.query(
     `SELECT 1 FROM application_responses
        WHERE user_id = $1
          AND status IN ('accepted_internal', 'accepted', 'confirmed')
@@ -456,7 +457,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           "accounts (H55), whether they currently hold role-derived event access, whether they have a project/queue entry of their own " +
           "(drives hiding the My project/My queue nav items, issue #424), mobile " +
           "entry eligibility, and the caller's complete assigned-role set (H8) alongside " +
-          "the single highest-visible `role` shown elsewhere.",
+          "the single highest-visible `role` shown elsewhere. All derived fields come from one repeatable-read database snapshot; event access is true only for an active, non-anonymized account with an assigned non-deleted event-bearing role.",
         summary: "Get my profile",
         response: {
           200: userResponseSchema.extend({
@@ -480,8 +481,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             // the single-priority `role` above can't represent on its own.
             isEnterpriseJudge: z.boolean(),
             isSponsorRep: z.boolean(),
-            // Any assigned, non-deleted role with eventAccess=true — drives
-            // ticket/wallet exposure and mobile-app entry.
+            // An active, non-anonymized account with any assigned, non-deleted
+            // role whose eventAccess=true — drives ticket/wallet exposure and
+            // mobile-app entry.
             hasEventAccess: z.boolean(),
             // issue #424: My project/My queue nav items are hidden until the
             // caller actually has one — visible-but-empty misleads sponsors
@@ -503,27 +505,30 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const userId = req.userId as number;
-      const row = await fetchUser(userId, true);
-      const [
-        capabilities,
-        membership,
-        hasProject,
-        hasQueueItems,
-        canCreateProject,
-        profileLocked,
-        hasStatisticsPanels,
-        removalStatus,
-        roles,
-      ] = await Promise.all([
-        getEffectiveCapabilities(userId, req),
-        computeMembershipFlags(pool, userId),
-        hasMyProject(userId),
-        hasMyQueueItems(userId),
-        canCreateMyProject(userId),
-        hasAcceptedApplication(userId),
-        pool
-          .query(
-            `SELECT EXISTS (
+      const profile = await withTransaction(async (client) => {
+        await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY");
+        const row = await fetchUser(client, userId, true);
+        const [
+          capabilities,
+          membership,
+          hasProject,
+          hasQueueItems,
+          canCreateProject,
+          profileLocked,
+          hasStatisticsPanels,
+          removalStatus,
+          roles,
+          eventAccess,
+        ] = await Promise.all([
+          getEffectiveCapabilities(userId, undefined, client),
+          computeMembershipFlags(client, userId),
+          hasMyProject(userId, client),
+          hasMyQueueItems(userId, client),
+          canCreateMyProject(userId, client),
+          hasAcceptedApplication(client, userId),
+          client
+            .query(
+              `SELECT EXISTS (
              SELECT 1
              FROM (
                SELECT DISTINCT ON (resource_key, panel_key) state
@@ -545,33 +550,30 @@ export function registerProfileRoutes(app: FastifyInstance): void {
              ) AS effective
              WHERE effective.state = 'allow'
            ) AS "exists"`,
-            [userId],
-          )
-          .then((result) => Boolean(result.rows[0]?.exists)),
-        row.account_state === "active"
-          ? Promise.resolve<PendingAccountRemovalStatus>({ status: "active" })
-          : getPendingAccountRemovalStatus(pool, userId),
-        getAssignedRoles(pool, userId),
-      ]);
-      // getAssignedRoles already reads the same live role rows used by
-      // hasEventAccess. Derive the profile flag from that result instead of
-      // issuing a second entitlement query; the user row above supplies the
-      // active-account boundary required by the public contract.
-      const eventAccess =
-        row.account_state === "active" && roles.some((assignedRole) => assignedRole.eventAccess);
-      return {
-        ...serializeUser(row, removalStatus),
-        visibleRoleName: roles.find((r) => r.isVisible)?.name ?? null,
-        capabilities: [...capabilities],
-        roles,
-        ...membership,
-        hasEventAccess: eventAccess,
-        hasProject,
-        hasQueueItems,
-        canCreateProject,
-        profileLocked,
-        hasStatisticsPanels,
-      };
+              [userId],
+            )
+            .then((result) => Boolean(result.rows[0]?.exists)),
+          row.account_state === "active"
+            ? Promise.resolve<PendingAccountRemovalStatus>({ status: "active" })
+            : getPendingAccountRemovalStatus(client, userId),
+          getAssignedRoles(client, userId),
+          hasEventAccess(client, userId),
+        ]);
+        return {
+          ...serializeUser(row, removalStatus),
+          visibleRoleName: roles.find((r) => r.isVisible)?.name ?? null,
+          capabilities: [...capabilities],
+          roles,
+          ...membership,
+          hasEventAccess: eventAccess,
+          hasProject,
+          hasQueueItems,
+          canCreateProject,
+          profileLocked,
+          hasStatisticsPanels,
+        };
+      });
+      return profile;
     },
   );
 
@@ -626,7 +628,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           changingIntolerances ||
           changingNotes
         ) {
-          if (await hasAcceptedApplication(userId)) {
+          if (await hasAcceptedApplication(pool, userId)) {
             throw new ConflictError(
               "Your profile is locked because an application has been accepted — ask staff to change your name, shirt size, or dietary info.",
               { code: "profile_locked" },
@@ -959,7 +961,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       await assertProfileSubjectScope(req.userId as number, req.params.id);
-      const row = await fetchUser(req.params.id);
+      const row = await fetchUser(pool, req.params.id);
       const [visibleRoleName, capabilities, allRoles, canSeeSuperadmin] = await Promise.all([
         getHighestVisibleRoleName(pool, req.params.id),
         getEffectiveCapabilities(req.params.id),
@@ -994,7 +996,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       await assertProfileSubjectScope(req.userId as number, req.params.id);
-      await fetchUser(req.params.id);
+      await fetchUser(pool, req.params.id);
       return { projects: await myProjects(req.params.id) };
     },
   );
@@ -1084,7 +1086,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       if (targetId === req.userId) {
         throw new BadRequestError("You can't remove your own account");
       }
-      await fetchUser(targetId);
+      await fetchUser(pool, targetId);
       return getAccountRemovalEligibility(pool, targetId);
     },
   );
@@ -1278,7 +1280,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => {
       const id = req.params.id;
       await assertProfileSubjectScope(req.userId as number, id);
-      await fetchUser(id); // 404 if the user doesn't exist
+      await fetchUser(pool, id); // 404 if the user doesn't exist
       const [passes, checkIns, doorScans] = await Promise.all([
         pool
           .query(
@@ -1385,7 +1387,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       const userId = req.params.id;
       await assertProfileSubjectScope(req.userId as number, userId);
       // Verify user exists
-      await fetchUser(userId);
+      await fetchUser(pool, userId);
 
       const { rows: responseRows } = await pool.query(
         `SELECT r.*, a.name AS app_name,

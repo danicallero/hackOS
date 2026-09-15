@@ -39,7 +39,7 @@ export interface NavItem {
   sponsorVisible?: boolean;
   /** Visible to users assigned as judges to at least one room (association-based, H55). */
   judgeVisible?: boolean;
-  /** Hidden from applicants with no role-derived event access and no operational role. */
+  /** Hidden from accounts without current role-derived event access. */
   hideForPureApplicant?: boolean;
   /** Hidden until the caller actually has a project of their own (issue #424). */
   hideIfNoProject?: boolean;
@@ -109,7 +109,7 @@ export interface NavVisibilityContext {
   isSponsorRep: boolean;
   /** Assigned as a judge to at least one room (association-based, H55). */
   isEnterpriseJudge: boolean;
-  /** No role-derived event access and no operational role — see NavItem.hideForPureApplicant. */
+  /** No current role-derived event access — see NavItem.hideForPureApplicant. */
   isPureApplicant: boolean;
   /** Has a project of their own, or is currently eligible to self-create one — see NavItem.hideIfNoProject (issue #424). */
   hasProject: boolean;

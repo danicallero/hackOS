@@ -299,6 +299,48 @@ describe("H8 admin-hierarchy mutation authority", () => {
   });
 });
 
+describe("H8 canonical event-access projection", () => {
+  it("uses OR semantics across assigned non-deleted roles, independent of visibility", async () => {
+    const { hasEventAccess } = await import("../../src/modules/identity/role.js");
+    const { pool } = await import("../../src/db/pool.js");
+    const userId = await createUser();
+    const first = await createRole([], { eventAccess: true, isVisible: false });
+    const second = await createRole([], { eventAccess: true, isVisible: true });
+
+    expect(await hasEventAccess(pool, userId)).toBe(false);
+    await assignRole(userId, first);
+    expect(await hasEventAccess(pool, userId)).toBe(true);
+    await assignRole(userId, second);
+
+    await pool.query(`UPDATE roles SET deleted_at = now() WHERE id = $1`, [first]);
+    expect(await hasEventAccess(pool, userId)).toBe(true);
+    await pool.query(`UPDATE roles SET deleted_at = now() WHERE id = $1`, [second]);
+    expect(await hasEventAccess(pool, userId)).toBe(false);
+  });
+
+  it("requires an active, non-anonymized account and ignores non-event roles", async () => {
+    const { hasEventAccess } = await import("../../src/modules/identity/role.js");
+    const { pool } = await import("../../src/db/pool.js");
+    const userId = await createUser();
+    const roleId = await createRole([], { eventAccess: false });
+
+    await assignRole(userId, roleId);
+    expect(await hasEventAccess(pool, userId)).toBe(false);
+
+    const eventRoleId = await createRole([], { eventAccess: true });
+    await assignRole(userId, eventRoleId);
+    expect(await hasEventAccess(pool, userId)).toBe(true);
+
+    await pool.query(`UPDATE users SET account_state = 'removal_pending' WHERE id = $1`, [userId]);
+    expect(await hasEventAccess(pool, userId)).toBe(false);
+    await pool.query(
+      `UPDATE users SET account_state = 'active', anonymized_at = now() WHERE id = $1`,
+      [userId],
+    );
+    expect(await hasEventAccess(pool, userId)).toBe(false);
+  });
+});
+
 describe("H8 roles CRUD and assignment API", () => {
   it("creates, edits capabilities, reorders, and deletes a role with audit rows", async () => {
     const a = await getApp();

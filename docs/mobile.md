@@ -58,7 +58,8 @@ documented in full in its own section below.
 
 **Schema.** Migration `0815_role_event_access.sql` adds the independent
 `roles.event_access` flag, its `role_seed_defaults` snapshot, and the
-`user_event_access` read view. A user is entitled when at least one assigned,
+`user_event_access` canonical read projection. A user is entitled only when
+their account is active and non-anonymized and at least one assigned,
 non-deleted role has the flag enabled; visibility and capabilities do not
 change that result. The same migration backfills roles, legacy users, durable
 tickets, and wallet-pass state so an already-approved app build keeps working
@@ -263,8 +264,9 @@ distributed to other Expo Router apps without importing hackOS code.
   revalidation after Passwords/Face ID returns never unmounts the auth
   navigator, so the native fields that receive the selected values remain the
   same instances; iOS additionally associates the domain through
-  `webcredentials`. The mobile root uses one authoritative `GET /api/me` for
-  session validity, role-derived event access, profile and navigation facts;
+  `webcredentials`. The mobile root uses one authoritative, repeatable-read
+  `GET /api/me` snapshot for session validity, role-derived event access,
+  profile and navigation facts;
   Better Auth remains the cookie/sign-in/sign-out transport and does not run a
   second session probe on startup.
   If authentication succeeds but the account lacks role-derived `hasEventAccess`, the app

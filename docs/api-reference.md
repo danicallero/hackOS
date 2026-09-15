@@ -88,11 +88,15 @@ localStorage copy for an instant read, and this is what makes the preference
 follow the account across devices.
 
 The same role record also carries the independent `event_access` entitlement
-bit. `hasEventAccess` is true for an active user when any assigned,
-non-deleted role has that bit enabled; it is an OR across roles and does not
-depend on role visibility, capability grants, application status, or sponsor/
+bit. The canonical `user_event_access` projection makes `hasEventAccess` true
+only for an active, non-anonymized user when any assigned, non-deleted role has
+that bit enabled; it is an OR across roles and does not depend on role
+visibility, capability grants, application status, or sponsor/
 judge relationships. `hasEventAccess` is the single access signal returned by
-`GET /api/me` and used by the mobile app. Ticket QR/wallet exposure, scanner
+`GET /api/me` and used by the mobile app. `/api/me` computes its identity,
+roles, capabilities, association flags, project/queue flags, and removal state
+from one repeatable-read database snapshot, so the bootstrap response cannot
+mix values from different authorization moments. Ticket QR/wallet exposure, scanner
 eligibility, and physical check-in use the same live query; role transitions
 reconcile wallet passes and retain the historical ticket row.
 
