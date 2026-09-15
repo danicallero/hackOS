@@ -411,7 +411,7 @@ it with naive writable replicas.
 |---|---|
 | **Raw SQL, no ORM** | Full control over the concurrency primitives the domain needs (`FOR UPDATE`, `SKIP LOCKED`, advisory locks); the "exactly one winner per transition" invariant is explicit, not hidden behind an ORM. |
 | **Postgres-owned state, BullMQ for dispatch** | Keeps domain state authoritative while allowing explicit event-driven jobs alongside repeatable drains; Valkey remains disposable, and each processor documents how it retries or recovers after a broker loss. |
-| **No global read cache; scoped SSE refresh** (H41-H55, issue #533) | A versioned cache invalidated by every write collapses under event load and is not a correctness boundary. Postgres reads stay authoritative; domain topics wake only related screens, while public mirrors remain payload-free. |
+| **No server global read cache; scoped SSE refresh** (H41-H55, #533, #720) | Postgres remains authoritative and domain topics wake only related screens. The browser may deduplicate one identity-scoped resource at a time, but drops it on identity changes and invalidates exact keys after writes or matching SSE signals; public mirrors remain payload-free. |
 | **Permissions by capability, never role** (H8) | Routes guard on `requireCapability(CAPABILITIES.X)`; the mobile app derives its tabs the same way, so a permission change applies without a reinstall (H55). |
 | **One image, three commands** | One build, one version, zero enqueue/drain drift. |
 | **Datastores off all public networks** | The perimeter is a network boundary, not per-service firewalls — nothing routes to `postgres`/`valkey`/`minio` from outside. |

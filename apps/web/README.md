@@ -23,6 +23,17 @@ backend, one workstream at a time.
 - `@hackos/shared` for the capability catalogue and SSE event contract — the
   same single source the API uses.
 
+## Browser server state
+
+`lib/server-state.ts` is the small shared policy for authenticated read models,
+not a second session or reconnect system. `SessionProvider` sets its identity
+boundary; each resource key then has one in-flight request and a short-lived
+cached response. Callers pass `AbortSignal` through to API reads and invalidate
+the exact key after a successful mutation or matching SSE signal. An identity
+change aborts and drops every old entry, and `useLiveQuery` retains its bounded
+one-trailing-refetch behavior for SSE bursts. The cache is only a browser
+deduplication layer: API reads remain the authoritative Postgres projection.
+
 ## Toasts
 
 Use `@/lib/toast` rather than importing Sileo directly. Toasts live in the
