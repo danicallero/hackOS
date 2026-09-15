@@ -167,7 +167,7 @@ services:
 
   # ── one-shot: create the S3 bucket, then exit ──────────────────────────
   minio-init:
-    image: "${MINIO_MC_IMAGE:-minio/mc:latest}"
+    image: "${MINIO_MC_IMAGE:-quay.io/minio/mc:latest}"
     depends_on:
       minio:
         condition: service_healthy
