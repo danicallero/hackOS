@@ -345,13 +345,18 @@ describe("push channel", () => {
 
     vi.stubGlobal(
       "fetch",
-      vi.fn(
-        async () =>
-          new Response(JSON.stringify({ data: [{ status: "ok", id: "ticket-123" }] }), {
+      vi.fn(async (url: string) => {
+        if (url.endsWith("/getReceipts")) {
+          return new Response(JSON.stringify({ data: { "ticket-123": { status: "ok" } } }), {
             status: 200,
             headers: { "content-type": "application/json" },
-          }),
-      ),
+          });
+        }
+        return new Response(JSON.stringify({ data: [{ status: "ok", id: "ticket-123" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }),
     );
 
     await drainOutboxOnce();
@@ -375,34 +380,56 @@ describe("push channel", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     config.logExpoPushUnsafeDebug = true;
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () =>
-          new Response(JSON.stringify({ data: [{ status: "ok", id: "full-debug-ticket" }] }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith("/getReceipts")) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              "full-debug-ticket": {
+                status: "error",
+                message: "Failed to authenticate with the FCM server",
+                details: { error: "DeveloperError" },
+              },
+            },
           }),
-      ),
-    );
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify({ data: [{ status: "ok", id: "full-debug-ticket" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
 
     await drainOutboxOnce();
 
-    expect(warn).toHaveBeenCalledWith(
-      "Expo push request (unsafe debug)",
-      expect.objectContaining({ userId, category: "test" }),
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("https://exp.host/--/api/v2/push/getReceipts");
+    expect(warn).toHaveBeenCalledWith("Expo push request (unsafe debug)", expect.any(String));
+
+    const responseLog = warn.mock.calls.find(
+      ([label]) => label === "Expo push response (unsafe debug)",
     );
-    expect(warn.mock.calls).toEqual(
-      expect.arrayContaining([
-        [
-          "Expo push response (unsafe debug)",
-          expect.objectContaining({
-            userId,
-            response: { data: [{ status: "ok", id: "full-debug-ticket" }] },
-          }),
-        ],
-      ]),
+    expect(JSON.parse(String(responseLog?.[1]))).toMatchObject({
+      userId,
+      response: { data: [{ status: "ok", id: "full-debug-ticket" }] },
+    });
+
+    const receiptLog = warn.mock.calls.find(
+      ([label]) => label === "Expo push receipts (unsafe debug)",
     );
+    expect(JSON.parse(String(receiptLog?.[1]))).toMatchObject({
+      userId,
+      response: {
+        data: {
+          "full-debug-ticket": {
+            status: "error",
+            details: { error: "DeveloperError" },
+          },
+        },
+      },
+    });
     expect(JSON.stringify(warn.mock.calls)).toContain("ExponentPushToken[full-debug-token]");
   });
 });
