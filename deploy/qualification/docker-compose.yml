@@ -23,6 +23,9 @@ x-common-env: &common-env
   SMTP_HOST: "qualification.invalid"
   SMTP_PORT: "25"
   LOG_LEVEL: "info"
+  LOG_EXPO_PUSH_TICKETS: "false"
+  LOG_EXPO_PUSH_TOKENS: "false"
+  LOG_EXPO_PUSH_UNSAFE_DEBUG: "false"
   DB_POOL_MAX: "20"
   WORKERS_INLINE: "false"
 

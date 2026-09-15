@@ -1,5 +1,6 @@
 import "./env.js";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { config } from "../../src/config.js";
 import { pool } from "../../src/db/pool.js";
 import { drainOutboxOnce } from "../../src/modules/notifications/dispatcher.js";
 import { createUser } from "../helpers.js";
@@ -13,6 +14,8 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  config.logExpoPushTickets = false;
+  config.logExpoPushUnsafeDebug = false;
 });
 
 afterAll(async () => {
@@ -36,6 +39,7 @@ describe("push channel", () => {
       template: "queue.called",
       vars: { roomName: "Sala 1", teamName: "Rocket", challengeName: "General" },
     });
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
 
     const fetchMock = vi.fn(
       async () =>
@@ -65,6 +69,7 @@ describe("push channel", () => {
     expect(messages[0]!.body).toBe("Wait outside for General. Do not enter until we tell you to.");
     expect(messages[0]!.channelId).toBe("default");
     expect((await getOutboxRow(id)).status).toBe("sent");
+    expect(info).not.toHaveBeenCalled();
   });
 
   it("puts the enter-now action and room in the notification header", async () => {
@@ -297,6 +302,8 @@ describe("push channel", () => {
     ]);
     const id = await enqueueOutbox(userId, "push", { subject: "s", body: "b" });
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const previousLogging = config.logExpoPushTickets;
+    config.logExpoPushTickets = true;
 
     vi.stubGlobal(
       "fetch",
@@ -312,6 +319,7 @@ describe("push channel", () => {
     );
 
     await drainOutboxOnce();
+    config.logExpoPushTickets = previousLogging;
 
     expect((await getOutboxRow(id)).status).toBe("sent");
     expect(warn).toHaveBeenCalledWith("Expo push ticket failed", {
@@ -321,5 +329,80 @@ describe("push channel", () => {
     });
     expect(JSON.stringify(warn.mock.calls)).not.toContain(String(userId));
     expect(JSON.stringify(warn.mock.calls)).not.toContain("failing-token");
+  });
+
+  it("logs successful ticket IDs for receipt lookup", async () => {
+    const userId = await createUser();
+    await pool.query(`INSERT INTO push_tokens (user_id, token, platform) VALUES ($1, $2, $3)`, [
+      userId,
+      "ExponentPushToken[working-token]",
+      "android",
+    ]);
+    await enqueueOutbox(userId, "push", { subject: "s", body: "b" });
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const previousLogging = config.logExpoPushTickets;
+    config.logExpoPushTickets = true;
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ data: [{ status: "ok", id: "ticket-123" }] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+
+    await drainOutboxOnce();
+    config.logExpoPushTickets = previousLogging;
+
+    expect(info).toHaveBeenCalledWith("Expo push ticket", {
+      category: "test",
+      platform: "android",
+      status: "ok",
+      ticketId: "ticket-123",
+    });
+  });
+
+  it("logs the complete request and response only in unsafe debug mode", async () => {
+    const userId = await createUser();
+    await addPushToken(userId, "ExponentPushToken[full-debug-token]");
+    await enqueueOutbox(userId, "push", {
+      template: "queue.called",
+      vars: { roomName: "Sala 1", teamName: "Rocket", challengeName: "General" },
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    config.logExpoPushUnsafeDebug = true;
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ data: [{ status: "ok", id: "full-debug-ticket" }] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+
+    await drainOutboxOnce();
+
+    expect(warn).toHaveBeenCalledWith(
+      "Expo push request (unsafe debug)",
+      expect.objectContaining({ userId, category: "test" }),
+    );
+    expect(warn.mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          "Expo push response (unsafe debug)",
+          expect.objectContaining({
+            userId,
+            response: { data: [{ status: "ok", id: "full-debug-ticket" }] },
+          }),
+        ],
+      ]),
+    );
+    expect(JSON.stringify(warn.mock.calls)).toContain("ExponentPushToken[full-debug-token]");
   });
 });
