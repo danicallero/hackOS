@@ -542,8 +542,8 @@ describe("review fixture regeneration", () => {
     // response id must not bypass the synthetic visibility boundary even when
     // the caller has the broad admin capability.
     const { rows: applicationRows } = await pool.query<{ id: number }>(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Synthetic response form', 'participant', '[]'::jsonb)
+      `INSERT INTO applications (name, template)
+       VALUES ('Synthetic response form', '[]'::jsonb)
        RETURNING id`,
     );
     const applicationId = applicationRows[0]?.id;

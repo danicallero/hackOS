@@ -100,7 +100,7 @@ describe("scanner role stats", () => {
 
     const unconfirmed = await createUser();
     await pool.query(
-      `INSERT INTO applications (name, type, template) VALUES ('participant-app', 'participant', '{}'::jsonb)`,
+      `INSERT INTO applications (name, template) VALUES ('participant-app', '{}'::jsonb)`,
     );
     const app_ = await pool.query(`SELECT id FROM applications WHERE name = 'participant-app'`);
     const formVersionId = await ensureApplicationFormVersion(app_.rows[0].id);

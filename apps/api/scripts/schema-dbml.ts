@@ -5,13 +5,14 @@
  * read-only view for humans and deliberately omits _migrations, functions,
  * triggers, and implementation-only index details.
  */
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import pg from "pg";
 import { DEFAULT_DATABASE_URL } from "./default-database-url.js";
 
 type ColumnRow = {
   table_name: string;
+  relation_kind: "r" | "p" | "v";
   column_name: string;
   data_type: string;
   not_null: boolean;
@@ -58,9 +59,9 @@ function constraintIndex(constraint: ConstraintRow): string {
   return `  (${constraint.columns.join(", ")}) [${kind}]`;
 }
 
-async function generateSchemaDbml(): Promise<void> {
+export async function renderSchemaDbml(databaseUrl?: string): Promise<string> {
   const client = new pg.Client({
-    connectionString: process.env.DATABASE_URL ?? DEFAULT_DATABASE_URL,
+    connectionString: databaseUrl ?? process.env.DATABASE_URL ?? DEFAULT_DATABASE_URL,
   });
   await client.connect();
   try {
@@ -68,6 +69,7 @@ async function generateSchemaDbml(): Promise<void> {
       await client.query<ColumnRow>(`
         SELECT
           c.relname AS table_name,
+          c.relkind AS relation_kind,
           a.attname AS column_name,
           format_type(a.atttypid, a.atttypmod) AS data_type,
           a.attnotnull AS not_null,
@@ -80,11 +82,14 @@ async function generateSchemaDbml(): Promise<void> {
         JOIN pg_attribute a ON a.attrelid = c.oid
         LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum
         WHERE n.nspname = 'public'
-          AND c.relkind IN ('r', 'p')
+          AND c.relkind IN ('r', 'p', 'v')
           AND c.relname <> '_migrations'
           AND a.attnum > 0
           AND NOT a.attisdropped
-        ORDER BY c.relname, a.attnum
+        -- Physical attnum varies between a fresh bootstrap and a historical
+        -- upgrade (for example, when a later migration adds a column). The
+        -- artifact is a schema contract, so order its fields semantically.
+        ORDER BY c.relname, a.attname
       `)
     ).rows;
     if (columns.length === 0) {
@@ -184,7 +189,8 @@ async function generateSchemaDbml(): Promise<void> {
     for (const tableName of tableNames) {
       const tableColumns = columns.filter((column) => column.table_name === tableName);
       const tableConstraints = compositeConstraints.get(tableName) ?? [];
-      const tableDescription = tableColumns[0]?.table_description;
+      const firstColumn = tableColumns[0];
+      const tableDescription = firstColumn?.table_description;
       output.push(`Table ${tableName} {`);
       for (const column of tableColumns) {
         const attributes: string[] = [];
@@ -207,7 +213,9 @@ async function generateSchemaDbml(): Promise<void> {
         for (const constraint of tableConstraints) output.push(constraintIndex(constraint));
         output.push("  }");
       }
-      if (tableDescription) output.push("", `  Note: ${quoteNote(tableDescription)}`);
+      const note =
+        firstColumn?.relation_kind === "v" ? "Read-only database view." : tableDescription;
+      if (note) output.push("", `  Note: ${quoteNote(note)}`);
       output.push("}", "");
     }
 
@@ -217,14 +225,28 @@ async function generateSchemaDbml(): Promise<void> {
           `${foreignKey.foreign_table}.${foreignKey.foreign_column}`,
       );
     }
-    const destination = resolve(import.meta.dirname, "../db/schema.dbml");
-    await writeFile(destination, `${output.join("\n")}\n`);
-    console.log(
-      `Generated ${destination}: ${tableNames.length} tables, ${foreignKeys.length} foreign keys`,
-    );
+    return `${output.join("\n")}\n`;
   } finally {
     await client.end();
   }
 }
 
-await generateSchemaDbml();
+async function main(): Promise<void> {
+  const check = process.argv.includes("--check");
+  const destination = resolve(import.meta.dirname, "../db/schema.dbml");
+  const rendered = await renderSchemaDbml();
+  if (check) {
+    const committed = await readFile(destination, "utf8");
+    if (committed !== rendered) {
+      throw new Error(
+        "apps/api/db/schema.dbml is stale. Apply migrations to a clean database, then run pnpm schema:dump.",
+      );
+    }
+    console.log("schema.dbml matches the live schema");
+    return;
+  }
+  await writeFile(destination, rendered);
+  console.log(`Generated ${destination}`);
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) await main();

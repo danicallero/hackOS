@@ -7,10 +7,28 @@ human-facing ERD for the current public PostgreSQL schema. Paste it into
 The snapshot is not an executable migration and is not the schema source of
 truth. SQL migrations in [`apps/api/db/migrations/`](../apps/api/db/migrations/)
 remain authoritative because they preserve the forward history and data
-backfills. The ERD omits `_migrations`, functions, triggers, and implementation-
-only index details; those are still visible in the SQL migrations.
+backfills. The ERD includes tables, public views, enums, primary/unique
+constraints, and foreign-key relationships. It omits `_migrations`, functions,
+triggers, check constraints, and implementation-only index details; those are
+still visible in the SQL migrations.
 
-Refresh it against a clean local database after applying migrations:
+## Clean production bootstrap
+
+The production baseline is deliberately the immutable migration ledger, not a
+second hand-maintained SQL dump. On an empty PostgreSQL database, apply the
+ledger from `0001_initial.sql` through the newest migration with `pnpm migrate`.
+The H54 and H8 compatibility branches self-select from the ledger; a clean
+database never runs the historical-only `0747` normalizer. The final
+`0823_clean_production_schema.sql` removes the rollout-only
+`applications.type` and `manual_attendee_roles` objects. `applications.active`
+was already removed by `0207_remove_application_active.sql`.
+
+This preserves checksum-verifiable production history for deployed databases
+while giving every new production database one reproducible, final schema.
+Do not use a staging database as a bootstrap source.
+
+To refresh the human-facing artifact, use a disposable database created from
+that path:
 
 ```sh
 pnpm infra:up
@@ -18,9 +36,23 @@ pnpm migrate
 pnpm schema:dump
 ```
 
+`pnpm --filter @hackos/api test` creates an empty database, applies this exact
+path, and compares its generated DBML byte-for-byte with the checked-in file.
+`pnpm schema:check` performs the same comparison for the currently configured
+database. It is a release gate, not a migration command.
+
 Do not generate the snapshot from a production database when a clean migrated
 database is available. The schema dump contains no application data, but using
 a disposable database keeps the command safe and makes the result reproducible.
+
+### Disposable staging reset (human approval required)
+
+Staging data is not a production compatibility requirement. Resetting staging
+destroys all staging data, so the release/DB owner must approve the exact
+database target and confirm a backup before an operator drops and recreates it.
+After that approved reset, run `pnpm migrate` followed by `pnpm schema:check`.
+Never reset a production database to establish this baseline; production
+deployments advance through the immutable ledger.
 
 ## Migration identity
 

@@ -618,8 +618,8 @@ describe("H8 sponsor auto-grant rule and application-confirmation role grant", (
 
     const { rows: appRows } = await pool.query(
       `INSERT INTO applications
-         (name, type, template, sections, confirmation_window_hours, current_form_version)
-       VALUES ('Test form', 'participant', '[]'::jsonb, '[]'::jsonb, 168, 1)
+         (name, template, sections, confirmation_window_hours, current_form_version)
+       VALUES ('Test form', '[]'::jsonb, '[]'::jsonb, 168, 1)
        RETURNING id`,
     );
     const applicationId = appRows[0].id as number;

@@ -13,8 +13,8 @@ export async function createApplicationResponse(
   }> = {},
 ): Promise<{ responseId: number; applicationId: number }> {
   const app = await pool.query(
-    `INSERT INTO applications (name, type, template) VALUES ($1, $2, '{}'::jsonb) RETURNING id`,
-    [overrides.appName ?? `app-${crypto.randomUUID()}`, overrides.appType ?? "participant"],
+    `INSERT INTO applications (name, template) VALUES ($1, '{}'::jsonb) RETURNING id`,
+    [overrides.appName ?? `app-${crypto.randomUUID()}`],
   );
   const applicationId = app.rows[0].id;
   const formVersionId = await ensureApplicationFormVersion(applicationId);

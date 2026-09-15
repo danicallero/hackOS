@@ -28,6 +28,7 @@
     "check:retired-auth": "node scripts/check-retired-auth.mjs",
     "migrate": "pnpm --filter @hackos/api migrate",
     "schema:dump": "pnpm --filter @hackos/api schema:dump",
+    "schema:check": "pnpm --filter @hackos/api schema:check",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
     "prepare": "husky"
