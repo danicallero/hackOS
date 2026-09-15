@@ -374,6 +374,8 @@ the same `Idempotency-Key` + same body replays the stored response instead of
 re-executing; the same key with a *different* body is a 409; a concurrent
 in-flight duplicate is a 409 with a retry hint. This is what lets a mobile
 scanner replay its offline queue after reconnecting without double-scanning.
+The complete route classification and durable-side-effect boundary are in
+[`idempotency-matrix.md`](./idempotency-matrix.md).
 
 ### Realtime (SSE)
 `broadcast(topic, EVENT, data)` from `lib/sse.ts` publishes to

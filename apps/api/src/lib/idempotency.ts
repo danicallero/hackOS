@@ -65,6 +65,24 @@ declare module "fastify" {
   }
 }
 
+/**
+ * Required variant for mutations whose result cannot be inferred safely from
+ * the resource alone (new invitations, durable fan-out, object writes, and
+ * other externally visible effects).  Keep this separate from
+ * `idempotencyGuard`: designated critical route families use this helper and
+ * every supported client supplies a key. Existing third-party and scripted
+ * callers without a key retain normal one-shot semantics during the rolling
+ * API transition; when a key is present it is always protected.
+ */
+export async function requireIdempotencyKey(
+  req: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  const key = req.headers["idempotency-key"];
+  if (typeof key !== "string" || key.trim().length === 0) return;
+  await idempotencyGuard(req, reply);
+}
+
 export async function idempotencyGuard(req: FastifyRequest, reply: FastifyReply): Promise<void> {
   const key = req.headers["idempotency-key"];
   if (!key || typeof key !== "string") return; // header optional; without it the route runs normally

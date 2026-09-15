@@ -51,6 +51,9 @@ Architecture & modules:
   Postgres worker subsystem: job flows, queue structure, retries, concurrency,
   the failure/dead-letter model, and (critically) the **sync-vs-async** event
   map that shows which module work runs in the request and which is handed off.
+- [Mutation idempotency matrix](./idempotency-matrix.md) — the retry
+  classification for every state-changing API route, including durable
+  outbox/object-storage and SSE boundaries.
 - [Challenges & Devpost projects](./challenges-devpost.md) — the `challenges`
   and `projects` modules and the Devpost intake pipeline.
 - [Queue groups (H46)](./queue-groups.md) — the enterprise-scoped grouping
