@@ -6,6 +6,8 @@ import { normalizeLanguage, renderPushTemplate } from "../templates.js";
 import { assertOkResponse } from "./http.js";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+const EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts";
+const EXPO_RECEIPT_POLL_DELAYS_MS = [0, 1_000, 3_000] as const;
 
 interface ExpoTicket {
   status: "ok" | "error";
@@ -14,9 +16,135 @@ interface ExpoTicket {
   details?: { error?: string };
 }
 
+interface ExpoReceipt {
+  status: "ok" | "error";
+  message?: string;
+  details?: { error?: string; [key: string]: unknown };
+}
+
+interface ExpoReceiptsResponse {
+  data?: Record<string, ExpoReceipt>;
+  errors?: unknown;
+}
+
 interface PushTokenRow {
   token: string;
   platform: string | null;
+}
+
+function stringifyUnsafe(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+async function fetchExpoReceipts(
+  ticketIds: string[],
+  userId: number,
+  category?: string,
+): Promise<Record<string, ExpoReceipt>> {
+  const pending = new Set(ticketIds);
+  const receipts: Record<string, ExpoReceipt> = {};
+
+  for (const delayMs of EXPO_RECEIPT_POLL_DELAYS_MS) {
+    if (delayMs > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+    }
+    if (pending.size === 0) break;
+
+    const ids = [...pending];
+    if (config.logExpoPushUnsafeDebug) {
+      console.warn(
+        "Expo push receipt request (unsafe debug)",
+        stringifyUnsafe({ userId, category, ids }),
+      );
+    }
+
+    let res: Response;
+    try {
+      res = await fetch(EXPO_RECEIPTS_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+    } catch (err: unknown) {
+      if (config.logExpoPushUnsafeDebug) {
+        console.error(
+          "Expo push receipt request failed (unsafe debug)",
+          stringifyUnsafe({
+            userId,
+            category,
+            error:
+              err instanceof Error
+                ? { name: err.name, message: err.message, cause: err.cause }
+                : err,
+          }),
+        );
+      } else if (config.logExpoPushTickets) {
+        console.warn("Expo push receipt lookup failed", {
+          category,
+          errorCode: "request_failed",
+        });
+      }
+      return receipts;
+    }
+
+    if (!res.ok) {
+      const body = await res
+        .clone()
+        .text()
+        .catch(() => "<unreadable response body>");
+      if (config.logExpoPushUnsafeDebug) {
+        console.error(
+          "Expo push receipt HTTP response (unsafe debug)",
+          stringifyUnsafe({ userId, category, status: res.status, body }),
+        );
+      } else if (config.logExpoPushTickets) {
+        console.warn("Expo push receipt lookup failed", {
+          category,
+          status: res.status,
+          errorCode: "http_error",
+        });
+      }
+      return receipts;
+    }
+
+    const json = ((await res.json()) as ExpoReceiptsResponse | null) ?? {};
+    if (config.logExpoPushUnsafeDebug) {
+      console.warn(
+        "Expo push receipts (unsafe debug)",
+        stringifyUnsafe({ userId, category, response: json }),
+      );
+    }
+
+    if (!json.data || Array.isArray(json.data) || typeof json.data !== "object") {
+      return receipts;
+    }
+
+    for (const [ticketId, receipt] of Object.entries(json.data)) {
+      if (!receipt) continue;
+      receipts[ticketId] = receipt;
+      pending.delete(ticketId);
+    }
+  }
+
+  if (pending.size > 0) {
+    if (config.logExpoPushUnsafeDebug) {
+      console.warn(
+        "Expo push receipts pending (unsafe debug)",
+        stringifyUnsafe({ userId, category, ticketIds: [...pending] }),
+      );
+    } else if (config.logExpoPushTickets) {
+      console.info("Expo push receipts pending", {
+        category,
+        ticketIds: [...pending],
+      });
+    }
+  }
+
+  return receipts;
 }
 
 /**
@@ -82,12 +210,10 @@ export async function dispatchPush(
   }));
 
   if (config.logExpoPushUnsafeDebug) {
-    console.warn("Expo push request (unsafe debug)", {
-      userId,
-      category,
-      payload,
-      messages,
-    });
+    console.warn(
+      "Expo push request (unsafe debug)",
+      stringifyUnsafe({ userId, category, payload, messages }),
+    );
   }
 
   // undici surfaces network/DNS failures as a bare `TypeError: fetch failed`
@@ -100,12 +226,15 @@ export async function dispatchPush(
     body: JSON.stringify(messages),
   }).catch((err: unknown) => {
     if (config.logExpoPushUnsafeDebug) {
-      console.error("Expo push request failed (unsafe debug)", {
-        userId,
-        category,
-        error:
-          err instanceof Error ? { name: err.name, message: err.message, cause: err.cause } : err,
-      });
+      console.error(
+        "Expo push request failed (unsafe debug)",
+        stringifyUnsafe({
+          userId,
+          category,
+          error:
+            err instanceof Error ? { name: err.name, message: err.message, cause: err.cause } : err,
+        }),
+      );
     }
     // The error is persisted by the outbox dispatcher. Do not copy a provider
     // exception, token, URL, or request body into that durable history.
@@ -127,16 +256,16 @@ export async function dispatchPush(
 
   const json = (await res.json()) as { data?: ExpoTicket[] };
   if (config.logExpoPushUnsafeDebug) {
-    console.warn("Expo push response (unsafe debug)", {
-      userId,
-      category,
-      response: json,
-    });
+    console.warn(
+      "Expo push response (unsafe debug)",
+      stringifyUnsafe({ userId, category, response: json }),
+    );
   }
   const tickets = json.data ?? [];
 
   let firstError: string | undefined;
   let delivered = 0;
+  const ticketMetadata = new Map<string, { platform: string; token: string }>();
   for (let i = 0; i < tickets.length; i += 1) {
     const ticket = tickets[i];
     if (!ticket) {
@@ -147,6 +276,12 @@ export async function dispatchPush(
         });
       }
       continue;
+    }
+    if (ticket.id) {
+      ticketMetadata.set(ticket.id, {
+        platform: typedTokenRows[i]?.platform ?? "unknown",
+        token: tokens[i]!,
+      });
     }
     if (ticket.status === "ok") {
       if (config.logExpoPushTickets) {
@@ -174,6 +309,36 @@ export async function dispatchPush(
     }
     firstError ??= errorCode;
   }
+
+  if (ticketMetadata.size > 0 && (config.logExpoPushTickets || config.logExpoPushUnsafeDebug)) {
+    const receipts = await fetchExpoReceipts([...ticketMetadata.keys()], userId, category);
+    for (const [ticketId, receipt] of Object.entries(receipts)) {
+      const metadata = ticketMetadata.get(ticketId);
+      if (!metadata) continue;
+      if (receipt.status === "error") {
+        const errorCode = receipt.details?.error ?? "provider_error";
+        if (config.logExpoPushTickets) {
+          console.warn("Expo push receipt failed", {
+            category,
+            platform: metadata.platform,
+            ticketId,
+            errorCode,
+          });
+        }
+        if (errorCode === "DeviceNotRegistered") {
+          await db.query(`DELETE FROM push_tokens WHERE token = $1`, [metadata.token]);
+        }
+      } else if (config.logExpoPushTickets) {
+        console.info("Expo push receipt", {
+          category,
+          platform: metadata.platform,
+          status: receipt.status,
+          ticketId,
+        });
+      }
+    }
+  }
+
   // The outbox retries a failed row by resending to every current token
   // again (no per-token retry tracking), so a batch counts as delivered as
   // soon as ANY device got it — otherwise a single flaky/rate-limited ticket

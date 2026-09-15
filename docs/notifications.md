@@ -133,19 +133,23 @@ without creating another set of notification rows. Batch re-accept uses the
 same contract for the whole request.
 
 Push batches are sent to every current token for the user. A batch is marked
-`sent` when at least one Expo ticket succeeds. When ticket logging is enabled,
-every provider ticket is logged by the worker with its status, ticket ID when
-present, category, and platform. In this redacted mode, token values and
-notification content are never logged. This avoids retrying a push to a device
-that already received it,
-while still showing partial failures in the worker log. A
-`DeviceNotRegistered` ticket removes that token from `push_tokens`.
+`sent` when at least one Expo ticket succeeds; that only means Expo accepted
+the message, not that FCM/APNs delivered it to the device. When either
+diagnostic logging flag is enabled, the worker performs a short best-effort
+receipt poll and logs provider errors. A `DeviceNotRegistered` ticket or
+receipt removes that token from `push_tokens`.
+
+When ticket logging is enabled, every provider ticket and available receipt is
+logged by the worker with its status, ticket ID, category, and platform. In
+this redacted mode, token values and notification content are never logged.
+This avoids retrying a push to a device that already received it, while still
+showing partial failures in the worker log.
 
 Ticket logging is disabled by default. Set `LOG_EXPO_PUSH_TICKETS=true` on the
 API in inline-worker mode and on the worker in production when investigating
 delivery; restart the relevant process after changing it. The log includes only
 redacted provider metadata, so notification tokens and message content remain
-out of logs.
+out of logs. Receipt errors such as FCM credential failures are included.
 
 Push-token registration logging is separately disabled by default. Set
 `LOG_EXPO_PUSH_TOKENS=true` on the API to log successful registrations with the
@@ -155,9 +159,10 @@ logged.
 For a deliberately unsafe, full-debug trace, set
 `LOG_EXPO_PUSH_UNSAFE_DEBUG=true` on the API in inline-worker mode and on the
 worker in production. This logs the complete device token, message payload,
-Expo request/response, user ID, and ticket details. It is disabled by default
-and should be turned off immediately after debugging, followed by a process
-restart.
+Expo request/response, receipt response, user ID, and ticket details. It is
+disabled by default and should be turned off immediately after debugging,
+followed by a process restart. A receipt may still be pending when the short
+poll finishes; Expo can make receipts available later.
 
 ## Automatic translation (optional)
 
