@@ -165,12 +165,9 @@ to see the change without building it. Recipe and gotchas:
 
 - Open every PR as a draft (`gh pr create --draft` or the GitHub UI). Mark it
   ready for review only when it is ready for the full CI matrix.
-- Target feature PRs at protected `integration` or `staging` as appropriate;
-  never promote a feature branch directly to `main`. `integration` is the
-  aggregation branch and does not build on every feature merge. A main
-  promotion must match the tree of `integration` or `staging`; the direct
-  `integration` path builds on main, while the `staging` path promotes the
-  immutable image already tested there.
+- PRs may target protected `staging` or `main`; `staging` is the development
+  branch and `main` is production. Both branches build and deploy only after
+  their PR is merged.
 
 Use [`.github/PULL_REQUEST_TEMPLATE.md`](./.github/PULL_REQUEST_TEMPLATE.md)
 as the PR body — fill in every section (delete Screenshots/Migration only if

@@ -45,10 +45,10 @@ printf '%s' "$release_ruleset" \
       target,
       enforcement: "active",
       bypass_actors: [],
-      conditions: {ref_name: {include: ["refs/heads/integration", "refs/heads/staging"], exclude: []}},
+      conditions: {ref_name: {include: ["refs/heads/staging"], exclude: []}},
       rules
     }' \
   | gh api --method "$method" "$endpoint" --input - >/dev/null
 
-echo "Configured main, integration, and staging rulesets for ${repo}."
+echo "Configured main and staging rulesets for ${repo}."
 echo "All release-branch updates require pull requests."

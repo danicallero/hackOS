@@ -111,7 +111,7 @@ need them.
 | `STACK_NAME` | compose-level | no (default) | Namespaces this instance's Traefik router names (`${STACK_NAME}-api`) and public proxy-network DNS aliases, so multiple hackOS instances/Environments can share one Traefik network without collisions. |
 | `PROXY_NETWORK` | compose-level | no (default `dokploy-network`) | The Traefik-managed edge network `api` and `web` join to receive public traffic. The single-stack worker may also join it for outbound egress, but has no router. |
 | `CERT_RESOLVER` | compose-level | no (default `letsencrypt`) | Which Traefik ACME resolver issues the TLS certificates for the `API_DOMAIN` and `WEB_DOMAIN` routers. |
-| `IMAGE_REPO`, `IMAGE_TAG` | compose-level | yes for a deployed environment | API image and tag pulled by both `migrate`/`api` and `worker`. CI builds on `staging` for verification or directly on `main` for an `integration`→`main` promotion; a `staging`→`main` promotion reuses the matching immutable digest. Use `main` for production, `staging` for the optional staging deployment, or a SHA tag for a rollback. Never use `:latest`. |
+| `IMAGE_REPO`, `IMAGE_TAG` | compose-level | yes for a deployed environment | API image and tag pulled by both `migrate`/`api` and `worker`. CI builds after a merge to `staging` or `main`. Use `staging` for development, `main` for production, or a SHA tag for a rollback. Never use `:latest`. |
 | `API_MEM_LIMIT` | compose-level | no | Memory cap, default `512m`. |
 | `INSTANCE_NETWORK` | compose-level | no | Private network joined to reach postgres/valkey/minio by name. |
 
@@ -152,7 +152,7 @@ branch and its later deployment can use the same image digest.
 | `API_DOMAIN` | compose-level | yes | The API router's public host. The running web server exposes it through `/runtime-config.js` as the browser's API origin, so changing it does not require a new image build. |
 | `WEB_DOMAIN` | compose-level | yes | The `Host()` rule for this service's **own** Traefik router — deliberately separate from `API_DOMAIN`'s router. The running web server also uses it for canonical/social URLs through `/runtime-config.js`. |
 | `STACK_NAME`, `PROXY_NETWORK`, `CERT_RESOLVER` | compose-level | no (defaults) | Same Traefik-naming role as on `api`. |
-| `WEB_IMAGE_REPO`, `IMAGE_TAG` | compose-level | yes for a deployed environment | Web image/tag pulled from GHCR. CI builds on `staging` for verification or directly on `main` for an `integration`→`main` promotion; a `staging`→`main` promotion reuses the matching immutable digest. Use `main` for production, `staging` for the optional staging deployment, or a SHA tag for a rollback. Never use `:latest`. |
+| `WEB_IMAGE_REPO`, `IMAGE_TAG` | compose-level | yes for a deployed environment | Web image/tag pulled from GHCR. CI builds after a merge to `staging` or `main`. Use `staging` for development, `main` for production, or a SHA tag for a rollback. Never use `:latest`. |
 | `WEB_MEM_LIMIT` | compose-level | no | Memory cap, default `256m`. |
 
 Remember to add `https://${WEB_DOMAIN}` to the **api**'s `CORS_ORIGINS` —
@@ -236,13 +236,9 @@ service screens for every place the old value was pasted.
 
 `.github/workflows/cd.yml` uses the `production` GitHub Actions Environment for
 the main deploy and the optional `staging` Environment for a staging deploy.
-Merges into `integration` do not trigger CD, so a batch can be assembled there
-without spending build minutes. A push to `staging` builds and publishes its
-matching images and deploys the staging services; a later `staging` → `main`
-promotion copies that immutable GHCR digest to the production tags without
-rebuilding. A direct `integration` → `main` promotion works without staging:
-main recognizes the matching integration tree and builds the production images
-once. No staging Environment is required for that fast path.
+A merge into `staging` builds and publishes its images and deploys the staging
+services. A merge into `main` independently builds and publishes production
+images and deploys production. Neither branch builds images from a PR event.
 
 If the staging route is enabled, add these values to the GitHub Actions
 Environment named `staging`:
