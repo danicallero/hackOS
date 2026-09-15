@@ -35,7 +35,9 @@ services:
   # is publicly readable; uploads/ (application files, H12) stay private and are
   # served through the API's presigned-download route, gated by owner-or-staff.
   minio-init:
-    image: "${MINIO_MC_IMAGE:-minio/mc:latest}"
+    # Docker Hub no longer serves the MinIO Client image anonymously; use the
+    # upstream Quay registry so a fresh Dokploy host can pull it without login.
+    image: "${MINIO_MC_IMAGE:-quay.io/minio/mc:latest}"
     depends_on:
       minio:
         condition: service_healthy
