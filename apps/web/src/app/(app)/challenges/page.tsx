@@ -4,7 +4,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { EyeIcon, EyeOffIcon, PlusIcon, TrophyIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
@@ -93,6 +93,7 @@ export default function ChallengesPage() {
   const columns = useMemo(() => buildColumns(t, LOCALE_CODES[language]), [t, language]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -102,11 +103,12 @@ export default function ChallengesPage() {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     setLoadError(null);
     try {
       const path = canAdmin ? "/api/challenges" : "/api/challenges/mine";
       const res = await api.get<{ challenges: Challenge[] }>(path);
+      hasLoadedRef.current = true;
       setChallenges(res.challenges);
       setSelectedIds(new Set());
     } catch (err) {
@@ -186,7 +188,7 @@ export default function ChallengesPage() {
         }
         searchPlaceholder={t("searchChallengesPlaceholder")}
         pageSize={15}
-        loading={loading}
+        loading={loading && !hasLoadedRef.current}
         error={loadError ? { message: loadError, onRetry: load } : undefined}
         selectable={canAdmin}
         selectedIds={selectedIds}

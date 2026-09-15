@@ -43,6 +43,7 @@ export function AuthCredentialField({
       autoCorrect={false}
       importantForAutofill="yes"
       spellCheck={false}
+      textContentType={props.autoComplete === "username" ? "username" : "password"}
       onChangeText={handleChangeText}
       onEndEditing={handleEndEditing}
       onSubmitEditing={onSubmitEditing}

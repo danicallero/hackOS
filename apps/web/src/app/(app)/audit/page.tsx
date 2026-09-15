@@ -116,6 +116,7 @@ export default function AuditPage() {
   const [items, setItems] = useState<AuditRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
   const [vocabulary, setVocabulary] = useState<AuditVocabularyEntry[]>([]);
@@ -162,7 +163,7 @@ export default function AuditPage() {
       return;
     }
     let cancelled = false;
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     setLoadError(null);
     notificationsApi
       .queryAudit({
@@ -177,6 +178,7 @@ export default function AuditPage() {
       })
       .then((r) => {
         if (cancelled) return;
+        hasLoadedRef.current = true;
         setItems(r.items);
         setTotal(r.total);
       })
@@ -364,7 +366,7 @@ export default function AuditPage() {
         data={items}
         getRowId={(r) => String(r.id)}
         stateKey="audit-list"
-        loading={loading}
+        loading={loading && !hasLoadedRef.current}
         error={
           loadError
             ? { message: loadError, onRetry: () => setRetryNonce((value) => value + 1) }

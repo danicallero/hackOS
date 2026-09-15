@@ -13,7 +13,7 @@ import {
   UserPlusIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -62,6 +62,7 @@ export default function UnmatchedProjectsPage() {
   const [prizes, setPrizes] = useState<DevpostPrize[]>([]);
   const [challenges, setChallenges] = useState<PublicChallenge[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [selectedUsers, setSelectedUsers] = useState<Record<string, string>>({});
   const [selectedPrizeChallenges, setSelectedPrizeChallenges] = useState<Record<string, string>>(
@@ -77,13 +78,14 @@ export default function UnmatchedProjectsPage() {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     try {
       const [unmatched, devpostPrizes, publicChallenges] = await Promise.all([
         listUnmatched(),
         listDevpostPrizes(),
         api.get<{ items: PublicChallenge[] }>("/api/public/challenges"),
       ]);
+      hasLoadedRef.current = true;
       setRows(unmatched.participants.map(toUnmatchedRow));
       setPrizes(devpostPrizes.prizes);
       setChallenges(publicChallenges.items);
@@ -163,7 +165,7 @@ export default function UnmatchedProjectsPage() {
       )}
 
       <SectionCard title={t("unmatchedParticipantsTitle")} icon={UserPlusIcon}>
-        {loading ? (
+        {loading && !hasLoadedRef.current ? (
           <Spinner />
         ) : rows.length === 0 ? (
           <EmptyState
@@ -366,7 +368,7 @@ export default function UnmatchedProjectsPage() {
       </SectionCard>
 
       <SectionCard title={t("unmatchedParticipantsTitle")} icon={UserPlusIcon}>
-        {loading ? (
+        {loading && !hasLoadedRef.current ? (
           <Spinner />
         ) : rows.length === 0 ? (
           <EmptyState

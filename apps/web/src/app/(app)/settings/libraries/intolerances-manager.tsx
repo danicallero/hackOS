@@ -9,7 +9,7 @@
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { MoreHorizontalIcon, PlusIcon, UtensilsCrossedIcon } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -83,6 +83,7 @@ export function IntolerancesManager() {
   const { t } = useLocale();
   const [entries, setEntries] = useState<Intolerance[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   // `null` => closed; a partial with no id => create; with id => edit.
   const [editing, setEditing] = useState<Intolerance | null | undefined>(undefined);
@@ -93,12 +94,13 @@ export function IntolerancesManager() {
   const { reset } = form;
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     setLoadError(null);
     try {
       const { intolerances } = await api.get<{ intolerances: Intolerance[] }>(
         "/api/public/food-intolerances",
       );
+      hasLoadedRef.current = true;
       setEntries(intolerances);
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("couldNotLoadDictionary");
@@ -214,7 +216,7 @@ export function IntolerancesManager() {
         columns={columns}
         data={entries}
         getRowId={(row) => String(row.id)}
-        loading={loading}
+        loading={loading && !hasLoadedRef.current}
         error={loadError ? { message: loadError, onRetry: load } : undefined}
         searchable={(row) => `${pickText(row.label, "es")} ${row.label.en} ${row.label.gl}`}
         searchPlaceholder={t("searchIntolerances")}

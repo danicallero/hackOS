@@ -174,12 +174,12 @@ function IdentitySessionRefresh({ authenticated }: { authenticated: boolean }) {
 function PushRegistration({ authenticated }: { authenticated: boolean }) {
   const { me } = useMeContext();
   useEffect(() => {
-    if (authenticated && me?.hasEventAccess) {
-      registerForPushNotifications().catch(() => {
+    if (authenticated && me?.hasEventAccess && me.id) {
+      registerForPushNotifications(me.id).catch(() => {
         // Permission denial and simulators without push must not block the app.
       });
     }
-  }, [authenticated, me]);
+  }, [authenticated, me?.hasEventAccess, me?.id]);
   return null;
 }
 

@@ -80,6 +80,7 @@ export default function QueueRoomsPage() {
   const [assignments, setAssignments] = useState<Record<number, RoomAssignments | null>>({});
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
   const [roomDetailsError, setRoomDetailsError] = useState<string | null>(null);
@@ -100,10 +101,11 @@ export default function QueueRoomsPage() {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     setLoadError(null);
     try {
       const [roomRows, enterpriseRows] = await Promise.all([listRooms(), listEnterprises()]);
+      hasLoadedRef.current = true;
       setRooms(roomRows);
       setEnterprises(enterpriseRows);
       setCreateDraft((draft) => (draft.name ? draft : { ...emptyRoomEditor() }));
@@ -343,7 +345,7 @@ export default function QueueRoomsPage() {
               getRowId={(room) => String(room.id)}
               onRowClick={(room) => openManageModal(room.id)}
               getRowLabel={(room) => room.name}
-              loading={loading}
+              loading={loading && !hasLoadedRef.current}
               error={loadError ? { message: loadError, onRetry: load } : undefined}
               searchable={(room) => `${room.name} ${room.slug} ${room.location ?? ""}`}
               searchPlaceholder={t("filterRoomsPlaceholder")}
