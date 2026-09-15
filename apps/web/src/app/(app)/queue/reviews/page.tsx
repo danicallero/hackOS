@@ -27,6 +27,7 @@ interface ReviewRow {
   entryId: number;
   challengeId: number;
   challengeTitle: string;
+  appliedChallenges: Array<{ id: number; title: string }>;
   repoId: number;
   repoName: string;
   roomId: number | null;
@@ -96,7 +97,9 @@ export default function ReviewsOverviewPage() {
         setAllChallenges(
           Array.from(
             new Map(
-              data.map((r) => [r.challengeId, { id: r.challengeId, title: r.challengeTitle }]),
+              data
+                .flatMap((r) => r.appliedChallenges)
+                .map((challenge) => [challenge.id, challenge] as const),
             ).values(),
           ),
         );
@@ -111,9 +114,18 @@ export default function ReviewsOverviewPage() {
     () => [
       {
         id: "challenge",
-        header: t("colChallenge"),
+        header: t("queueName"),
         sortValue: (r) => r.challengeTitle.toLowerCase(),
-        cell: (r) => <span className="font-medium">{r.challengeTitle}</span>,
+        cell: (r) => (
+          <div className="min-w-0">
+            <p className="font-medium">{r.challengeTitle}</p>
+            {r.appliedChallenges.length > 0 && (
+              <p className="text-muted-foreground truncate text-xs">
+                {r.appliedChallenges.map((challenge) => challenge.title).join(" · ")}
+              </p>
+            )}
+          </div>
+        ),
       },
       {
         id: "room",
@@ -227,7 +239,9 @@ export default function ReviewsOverviewPage() {
         getRowHref={(r) => `/queue/reviews/${r.entryId}`}
         loading={loading}
         error={loadError ? { message: loadError, onRetry: load } : undefined}
-        searchable={(r) => `${r.challengeTitle} ${r.repoName} ${r.roomName ?? ""}`}
+        searchable={(r) =>
+          `${r.challengeTitle} ${r.appliedChallenges.map((challenge) => challenge.title).join(" ")} ${r.repoName} ${r.roomName ?? ""}`
+        }
         searchPlaceholder={t("searchReviewsPlaceholder")}
         pageSize={20}
         empty={{ icon: ClipboardListIcon, title: t("noReviewsYet") }}

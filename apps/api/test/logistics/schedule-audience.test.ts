@@ -272,6 +272,20 @@ describe("audience-aware schedule feed (H59)", () => {
     });
     expect(res.json().items.map((i: { id: number }) => i.id)).toEqual([participantId]);
   });
+
+  it("a participant cannot fetch the management listing", async () => {
+    const a = await getApp();
+    const participant = await makeAttendee("participant");
+    await createItem({ title: "Opening ceremony", audiences: ["participant"] });
+
+    const res = await a.inject({
+      method: "GET",
+      url: "/api/schedule",
+      headers: asUser(participant),
+    });
+
+    expect(res.statusCode).toBe(403);
+  });
 });
 
 describe("scan requires participant audience (H59)", () => {

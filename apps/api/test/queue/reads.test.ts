@@ -342,6 +342,48 @@ describe("participant view (H38)", () => {
     expect(anon.statusCode).toBe(401);
   });
 
+  it("collapses a shared queue to one project row for participants", async () => {
+    const me = await createUser();
+    const { challengeIds } = await createEnterpriseChallenges(2);
+    const roomId = await createRoom();
+    const groupId = await mergeChallengesIntoOneGroup(challengeIds);
+    await assignQueueGroupToRoom(roomId, groupId);
+    const { repoId } = await createRepoWithTeam([me], "Shared project");
+    await enqueueRepo(challengeIds[0]!, repoId, 1);
+    await enqueueRepo(challengeIds[1]!, repoId, 2);
+
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE queue_groups SET display_name = 'Shared queue' WHERE id = $1`, [
+      groupId,
+    ]);
+    const res = await app.inject({ method: "GET", url: "/api/queue/me", headers: asUser(me) });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([
+      expect.objectContaining({ repoId, challengeTitle: "Shared queue" }),
+    ]);
+    expect(res.json()).toHaveLength(1);
+  });
+
+  it("keeps one row for each separate queue", async () => {
+    const me = await createUser();
+    const challengeA = await createChallenge({ title: "Queue A" });
+    const challengeB = await createChallenge({ title: "Queue B" });
+    const roomA = await createRoom();
+    const roomB = await createRoom();
+    await assignChallengeToRoom(roomA, challengeA);
+    await assignChallengeToRoom(roomB, challengeB);
+    const { repoId } = await createRepoWithTeam([me], "Project in two queues");
+    await enqueueRepo(challengeA, repoId, 1);
+    await enqueueRepo(challengeB, repoId, 2);
+
+    const res = await app.inject({ method: "GET", url: "/api/queue/me", headers: asUser(me) });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toHaveLength(2);
+    expect(res.json().every((entry: { repoId: number }) => entry.repoId === repoId)).toBe(true);
+  });
+
   it("keeps queue and room reads available for a linked Devpost participant", async () => {
     const member = await createUser({ email: "secondary-linked@test.local" });
     const challengeId = await createChallenge();

@@ -64,7 +64,6 @@ function useVisible() {
       canAny,
       isEnterpriseJudge: me?.isEnterpriseJudge ?? false,
       isSponsorRep: me?.isSponsorRep ?? false,
-      hasAnyCapability: (me?.capabilities.length ?? 0) > 0,
       isPureApplicant,
       // Default true while `me` is still loading, matching isPureApplicant's
       // "show, then narrow down" pattern so the sidebar doesn't flash empty.

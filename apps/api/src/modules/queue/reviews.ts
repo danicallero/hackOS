@@ -86,7 +86,9 @@ function resolveChallengeFilter(
 export interface ReviewRow {
   entryId: number;
   challengeId: number;
+  /** The queue group's display name, not an individual challenge title. */
   challengeTitle: string;
+  appliedChallenges: Array<{ id: number; title: string }>;
   repoId: number;
   repoName: string;
   roomId: number | null;
@@ -95,6 +97,28 @@ export interface ReviewRow {
   nota: number | null;
   judges: string[];
   updatedAt: string | null;
+}
+
+/** All non-cancelled challenge applications in this project's queue group. */
+function appliedChallengesSql(fixtureMarkerParam: number): string {
+  return `COALESCE(
+    (SELECT jsonb_agg(
+              jsonb_build_object('id', applied.id, 'title', applied.title)
+              ORDER BY applied.title, applied.id
+            )
+       FROM (
+         SELECT DISTINCT applied_challenge.id, applied_challenge.title
+           FROM queue_entries applied_entry
+           JOIN queue_group_challenges applied_qgc
+             ON applied_qgc.challenge_id = applied_entry.challenge_id
+            AND applied_qgc.queue_group_id = qgc_label.queue_group_id
+           JOIN challenges applied_challenge
+             ON applied_challenge.id = applied_entry.challenge_id
+            AND applied_challenge.is_test_account = $${fixtureMarkerParam}
+          WHERE applied_entry.repo_id = qe.repo_id
+            AND applied_entry.status NOT IN ('cancelled', 'disqualified')
+       ) applied
+    ), '[]'::jsonb)`;
 }
 
 export async function listReviews(
@@ -108,7 +132,16 @@ export async function listReviews(
   const params: unknown[] = [scope.fixtureMarker];
   if (challengeIds !== null) {
     params.push(challengeIds);
-    conditions.push(`qe.challenge_id = ANY($${params.length}::int[])`);
+    conditions.push(`EXISTS (
+      SELECT 1
+        FROM queue_entries filter_entry
+        JOIN queue_group_challenges filter_qgc
+          ON filter_qgc.challenge_id = filter_entry.challenge_id
+         AND filter_qgc.queue_group_id = qgc_label.queue_group_id
+       WHERE filter_entry.repo_id = qe.repo_id
+         AND filter_entry.status NOT IN ('cancelled', 'disqualified')
+         AND filter_entry.challenge_id = ANY($${params.length}::int[])
+    )`);
   }
   if (filters.roomId != null) {
     params.push(filters.roomId);
@@ -123,28 +156,35 @@ export async function listReviews(
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
   const { rows } = await pool.query(
-    `SELECT qe.id AS entry_id, qe.challenge_id, ${QUEUE_GROUP_LABEL_SQL} AS challenge_title,
-            ${RESOLVED_PANEL_SQL} AS judging_panel_criteria,
-            qe.repo_id, r.name AS repo_name,
-            qe.assigned_room_id, room.name AS room_name,
-            ar.status, ar.scores, ar.updated_at,
-            COALESCE(judges.names, '{}') AS judges
-       FROM queue_entries qe
-       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $1
-       ${QUEUE_GROUP_LABEL_JOIN}
-       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $1
-       LEFT JOIN rooms room ON room.id = qe.assigned_room_id
-       LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
-       LEFT JOIN LATERAL (
-         SELECT array_agg(DISTINCT trim(concat(u.name, ' ', u.surname))) AS names
-           FROM attempt_review_versions v
-           JOIN users u ON u.id = v.author_id
-              AND u.account_state = 'active' AND u.anonymized_at IS NULL
-              AND u.is_test_account = $1
-          WHERE v.attempt_id = qe.id
-       ) judges ON true
-       ${where}
-       ORDER BY challenge_title, r.name`,
+    `SELECT * FROM (
+       SELECT DISTINCT ON (qe.repo_id, qgc_label.queue_group_id)
+              qe.id AS entry_id, qe.challenge_id, ${QUEUE_GROUP_LABEL_SQL} AS challenge_title,
+              ${appliedChallengesSql(1)} AS applied_challenges,
+              ${RESOLVED_PANEL_SQL} AS judging_panel_criteria,
+              qe.repo_id, r.name AS repo_name,
+              qe.assigned_room_id, room.name AS room_name,
+              ar.status, ar.scores, ar.updated_at,
+              COALESCE(judges.names, '{}') AS judges
+         FROM queue_entries qe
+         JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $1
+         ${QUEUE_GROUP_LABEL_JOIN}
+         JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $1
+         LEFT JOIN rooms room ON room.id = qe.assigned_room_id
+         LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
+         LEFT JOIN LATERAL (
+           SELECT array_agg(DISTINCT trim(concat(u.name, ' ', u.surname))) AS names
+             FROM attempt_review_versions v
+             JOIN users u ON u.id = v.author_id
+                AND u.account_state = 'active' AND u.anonymized_at IS NULL
+                AND u.is_test_account = $1
+            WHERE v.attempt_id = qe.id
+         ) judges ON true
+         ${where}
+        ORDER BY qe.repo_id, qgc_label.queue_group_id,
+                 CASE WHEN ar.status IS NULL THEN 1 ELSE 0 END,
+                 qe.id
+     ) listed
+      ORDER BY listed.challenge_title, listed.repo_name`,
     params,
   );
 
@@ -153,6 +193,7 @@ export async function listReviews(
       entry_id: number;
       challenge_id: number;
       challenge_title: string;
+      applied_challenges: Array<{ id: number; title: string }>;
       judging_panel_criteria: unknown;
       repo_id: number;
       repo_name: string;
@@ -172,6 +213,7 @@ export async function listReviews(
         entryId: row.entry_id,
         challengeId: row.challenge_id,
         challengeTitle: row.challenge_title,
+        appliedChallenges: row.applied_challenges ?? [],
         repoId: row.repo_id,
         repoName: row.repo_name,
         roomId: row.assigned_room_id,
@@ -222,7 +264,12 @@ export interface ReviewDetail {
   calledAt: string | null;
   presentationStartedAt: string | null;
   completedAt: string | null;
-  challenge: { id: number; title: string; criteria: Question[] };
+  challenge: {
+    id: number;
+    title: string;
+    appliedChallenges: Array<{ id: number; title: string }>;
+    criteria: Question[];
+  };
   room: { id: number; name: string; location: string | null } | null;
   project: {
     id: number;
@@ -254,6 +301,7 @@ export async function getReviewDetail(scope: ReviewScope, entryId: number): Prom
   const { rows } = await pool.query(
     `SELECT qe.id AS entry_id, qe.status, qe.called_at, qe.presentation_started_at, qe.completed_at,
             c.id AS challenge_id, ${QUEUE_GROUP_LABEL_SQL} AS challenge_title,
+            ${appliedChallengesSql(2)} AS applied_challenges,
             ${RESOLVED_PANEL_SQL} AS judging_panel_criteria,
             r.id AS repo_id, r.name AS repo_name, r.description, r.github_url, r.devpost_url, r.demo_url,
             room.id AS room_id, room.name AS room_name, room.location AS room_location,
@@ -312,7 +360,12 @@ export async function getReviewDetail(scope: ReviewScope, entryId: number): Prom
     calledAt: row.called_at?.toISOString() ?? null,
     presentationStartedAt: row.presentation_started_at?.toISOString() ?? null,
     completedAt: row.completed_at?.toISOString() ?? null,
-    challenge: { id: row.challenge_id, title: row.challenge_title, criteria },
+    challenge: {
+      id: row.challenge_id,
+      title: row.challenge_title,
+      appliedChallenges: row.applied_challenges ?? [],
+      criteria,
+    },
     room: row.room_id
       ? { id: row.room_id, name: row.room_name, location: row.room_location ?? null }
       : null,
@@ -396,11 +449,21 @@ export async function exportReviewsCsv(
   filters: ReviewFilters,
 ): Promise<string> {
   const rows = await listReviews(scope, filters);
-  const header = ["challenge", "room", "project", "status", "nota", "judges", "updated_at"];
+  const header = [
+    "queue",
+    "challenges",
+    "room",
+    "project",
+    "status",
+    "nota",
+    "judges",
+    "updated_at",
+  ];
   return toCsv(
     header,
     rows.map((r) => [
       r.challengeTitle,
+      r.appliedChallenges.map((challenge) => challenge.title).join("; "),
       r.roomName ?? "",
       r.repoName,
       r.status ?? "not_evaluated",
