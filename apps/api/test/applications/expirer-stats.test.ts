@@ -17,6 +17,7 @@ import {
   createResponse,
   getResponse,
   getUserSensitive,
+  sampleTemplate,
 } from "./fixtures.js";
 
 /** Expirer worker (plan/07 §5.2) + H27 pre-event stats. */
@@ -91,7 +92,21 @@ describe("pre-event stats (H27)", () => {
   it("counts by status + confirmed-only intolerances + field histogram", async () => {
     const a = await getApp();
     const statsUser = await createUserWithCapabilities([CAPABILITIES.STATISTICS_MANAGE]);
-    const appId = await createApplication({ capacity: 10 });
+    const appId = await createApplication({
+      capacity: 10,
+      template: sampleTemplate().map((field) =>
+        field.key === "credits"
+          ? {
+              ...field,
+              statistics: {
+                enabled: true,
+                aggregation: "count",
+                transformation: "none",
+              },
+            }
+          : field,
+      ),
+    });
 
     const nutFree = await createFoodIntolerance("nut-free", statsUser);
     const glutenFree = await createFoodIntolerance("gluten-free", statsUser);
@@ -129,9 +144,10 @@ describe("pre-event stats (H27)", () => {
     await createResponse(u4, appId, { status: "review", responses: { credits: "yes" } });
 
     const res = await a.inject({
-      method: "GET",
-      url: `/api/applications/${appId}/stats?field=credits`,
+      method: "POST",
+      url: "/api/statistics/query",
       headers: asUser(statsUser),
+      payload: { scopes: [`application:${appId}`], panel_keys: ["field:credits"] },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -166,7 +182,7 @@ describe("pre-event stats (H27)", () => {
 
     // field histogram across all responses (credits: yes x3, no x1)
     const histMap = Object.fromEntries(
-      body.field_histogram.buckets.map((r: { value: string; n: number }) => [r.value, r.n]),
+      body.field_distributions[0].buckets.map((r: { value: string; n: number }) => [r.value, r.n]),
     );
     expect(histMap.yes).toBe(3);
     expect(histMap.no).toBe(1);
@@ -181,9 +197,10 @@ describe("pre-event stats (H27)", () => {
     const appId = await createApplication();
     const pleb = await createUser();
     const res = await a.inject({
-      method: "GET",
-      url: `/api/applications/${appId}/stats`,
+      method: "POST",
+      url: "/api/statistics/query",
       headers: asUser(pleb),
+      payload: { scopes: [`application:${appId}`] },
     });
     expect(res.statusCode).toBe(403);
   });
@@ -285,9 +302,10 @@ describe("pre-event stats (H27)", () => {
     expect(anon.statusCode).toBe(200);
 
     const res = await a.inject({
-      method: "GET",
-      url: `/api/applications/${appId}/stats`,
+      method: "POST",
+      url: "/api/statistics/query",
       headers: asUser(statsUser),
+      payload: { scopes: [`application:${appId}`] },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
