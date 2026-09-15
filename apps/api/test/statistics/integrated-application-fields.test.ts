@@ -1,11 +1,15 @@
 import "../applications/env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
+import { accessibleStatisticsScopes } from "../../src/modules/statistics/service.js";
 import {
+  assignRole,
   asUser,
+  authorizationContextFor,
   buildTestApp,
+  createRole,
   createUser,
   createUserWithCapabilities,
   ensureApplicationFormVersion,
@@ -31,6 +35,43 @@ afterAll(async () => {
 });
 
 describe("application fields integrated into Logistics", () => {
+  it("resolves application and role scope ACLs with one bounded set query", async () => {
+    const reader = await createUser();
+    const readerRole = await createRole();
+    await assignRole(reader, readerRole);
+    const applicationIds: number[] = [];
+    const roleIds: number[] = [];
+    for (let index = 0; index < 24; index++) {
+      const { rows } = await pool.query<{ id: number }>(
+        `INSERT INTO applications (name, template) VALUES ($1, '[]'::jsonb) RETURNING id`,
+        [`Scope ${index}`],
+      );
+      applicationIds.push(rows[0]?.id as number);
+      roleIds.push(await createRole([], { name: `scope-role-${index}` }));
+    }
+    await pool.query(
+      `INSERT INTO statistics_scope_panel_role_access (scope_key, panel_key, role_id, state)
+       VALUES ($1, 'overview', $2, 'allow'), ($3, 'shirt-sizes', $2, 'allow')`,
+      [`application:${applicationIds[0]}`, readerRole, `role:${roleIds[0]}`],
+    );
+
+    const context = await authorizationContextFor(reader);
+    const querySpy = vi.spyOn(pool, "query");
+    const scopes = await accessibleStatisticsScopes(reader, context);
+    const aclQueries = querySpy.mock.calls.filter(([query]) => {
+      return String(query).includes("statistics_scope_panel_role_access");
+    });
+    querySpy.mockRestore();
+
+    expect(scopes.map((scope) => scope.key)).toEqual([
+      `application:${applicationIds[0]}`,
+      `role:${roleIds[0]}`,
+    ]);
+    expect(scopes[0]?.panelKeys).toEqual(["overview"]);
+    expect(scopes[1]?.panelKeys).toEqual(["shirt-sizes"]);
+    expect(aclQueries).toHaveLength(1);
+  });
+
   it("accepts only the canonical field publication and generic endpoints", async () => {
     const manager = await createUserWithCapabilities([
       CAPABILITIES.STATISTICS_MANAGE,

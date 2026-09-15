@@ -1392,42 +1392,47 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                    JOIN roles ro ON ro.id = agr.role_id AND ro.deleted_at IS NULL
                   WHERE agr.application_id = a.id
                   ORDER BY ro.position DESC
-                  LIMIT 1) AS app_granted_role_name
+                  LIMIT 1) AS app_granted_role_name,
+                COALESCE(
+                  jsonb_agg(
+                    jsonb_build_object(
+                      'authorId', ar.author_id,
+                      'score', ar.score,
+                      'notes', ar.notes
+                    ) ORDER BY ar.author_id
+                  ) FILTER (WHERE ar.response_id IS NOT NULL),
+                  '[]'::jsonb
+                ) AS reviews
          FROM application_responses r
          JOIN applications a ON a.id = r.application_id
+         LEFT JOIN applicant_reviews ar ON ar.response_id = r.id
          WHERE r.user_id = $1
+         GROUP BY r.id, a.id
          ORDER BY r.id DESC`,
         [userId],
       );
 
-      const responses = await Promise.all(
-        responseRows.map(async (row: Record<string, unknown>) => {
-          const { rows: reviews } = await pool.query(
-            `SELECT author_id, score, notes FROM applicant_reviews WHERE response_id = $1 ORDER BY author_id`,
-            [row.id],
-          );
-          return {
-            id: row.id as number,
-            applicationId: row.application_id as number,
-            applicationName: row.app_name as string,
-            applicationGrantedRoleName: (row.app_granted_role_name as string | null) ?? null,
-            status: row.status as string,
-            submittedAt: row.submitted_at ? (row.submitted_at as Date).toISOString() : null,
-            confirmedAt: row.confirmed_at ? (row.confirmed_at as Date).toISOString() : null,
-            declinedAt: row.declined_at ? (row.declined_at as Date).toISOString() : null,
-            responses: row.responses as Record<string, unknown>,
-            staffNotes: (row.staff_notes as string | null) ?? null,
-            reviews: reviews.map(
-              (r: { author_id: number; score: number | null; notes: string | null }) => ({
-                authorId: r.author_id,
-                score: r.score,
-                notes: r.notes,
-              }),
-            ),
-            availableActions: computeAvailableActions(row.status as string),
-          };
-        }),
-      );
+      const responses = responseRows.map((row: Record<string, unknown>) => {
+        const reviews = row.reviews as Array<{
+          authorId: number;
+          score: number | null;
+          notes: string | null;
+        }>;
+        return {
+          id: row.id as number,
+          applicationId: row.application_id as number,
+          applicationName: row.app_name as string,
+          applicationGrantedRoleName: (row.app_granted_role_name as string | null) ?? null,
+          status: row.status as string,
+          submittedAt: row.submitted_at ? (row.submitted_at as Date).toISOString() : null,
+          confirmedAt: row.confirmed_at ? (row.confirmed_at as Date).toISOString() : null,
+          declinedAt: row.declined_at ? (row.declined_at as Date).toISOString() : null,
+          responses: row.responses as Record<string, unknown>,
+          staffNotes: (row.staff_notes as string | null) ?? null,
+          reviews,
+          availableActions: computeAvailableActions(row.status as string),
+        };
+      });
 
       return { responses };
     },
