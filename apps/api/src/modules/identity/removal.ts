@@ -1497,9 +1497,6 @@ async function scrubRelationships(
   ]);
   await client.query(`UPDATE repos SET created_by = NULL WHERE created_by = $1`, [userId]);
   await client.query(`UPDATE submissions SET invited_by = NULL WHERE invited_by = $1`, [userId]);
-  await client.query(`UPDATE manual_attendee_roles SET assigned_by = NULL WHERE assigned_by = $1`, [
-    userId,
-  ]);
   await client.query(`UPDATE enterprise_judges SET added_by = NULL WHERE added_by = $1`, [userId]);
 
   await client.query(`DELETE FROM enterprise_judges WHERE user_id = $1`, [userId]);
@@ -1515,7 +1512,6 @@ async function scrubRelationships(
     [userId],
   );
   await client.query(`DELETE FROM sponsors WHERE user_id = $1`, [userId]);
-  await client.query(`DELETE FROM manual_attendee_roles WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM announcement_reads WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM announcement_recipients WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM notification_preferences WHERE user_id = $1`, [userId]);

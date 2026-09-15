@@ -220,7 +220,7 @@ export default function AccountScreen() {
               {fullName}
             </Text>
             <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15 }}>
-              {roleDisplayName(me.role, t)}
+              {roleDisplayName(me.visibleRoleName, t)}
             </Text>
             <StatusPill tone={me.badgeId ? "success" : "neutral"} style={{ alignSelf: "center" }}>
               {me.badgeId ? t("accountAccredited") : t("accountNotAccredited")}

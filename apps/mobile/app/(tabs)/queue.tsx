@@ -93,6 +93,7 @@ export default function QueueScreen() {
   const { data, loading, error, staleSince, load } = useCachedApi(
     `user:${me?.id ?? "unknown"}:queue`,
     fetchQueue,
+    { enabled: me !== null },
   );
   const entries = data ?? [];
 
@@ -126,6 +127,7 @@ export default function QueueScreen() {
       subscribeToServerEvent(EVENTS.USER_QUEUE_PRECALL, onPrecall),
       subscribeToServerEvent(EVENTS.USER_QUEUE_CALLED, onCalled),
       subscribeToServerEvent(EVENTS.USER_QUEUE_CHANGED, () => void load()),
+      subscribeToServerEvent(EVENTS.REALTIME_RESYNC, () => void load()),
     ]);
   }, [load]);
 

@@ -90,6 +90,7 @@ export default function WalletScreen() {
     staleSince,
     load,
   } = useCachedApi(me ? walletCacheKey(me.id) : "user:unknown:wallet", fetchTicket, {
+    enabled: me !== null,
     pollMs: 30_000,
   });
   const [refreshing, setRefreshing] = useState(false);
@@ -105,7 +106,15 @@ export default function WalletScreen() {
 
   useEffect(() => {
     void load();
-    return subscribeToServerEvent(EVENTS.LOGISTICS_WALLET_PASS_UPDATED, () => void load());
+    const unsubscribeWallet = subscribeToServerEvent(
+      EVENTS.LOGISTICS_WALLET_PASS_UPDATED,
+      () => void load(),
+    );
+    const unsubscribeResync = subscribeToServerEvent(EVENTS.REALTIME_RESYNC, () => void load());
+    return () => {
+      unsubscribeWallet();
+      unsubscribeResync();
+    };
   }, [load]);
 
   async function addToGoogleWallet(purpose: "ticket" | "badge") {
@@ -531,7 +540,7 @@ export default function WalletScreen() {
             <InfoRow
               icon="checkmark.seal"
               label={t("walletHolderRole")}
-              value={roleLabel(me.role, t)}
+              value={roleLabel(me.visibleRoleName, t)}
             />
           </Section>
         ) : null}
@@ -610,7 +619,7 @@ export default function WalletScreen() {
 }
 
 function roleLabel(
-  role: NonNullable<ReturnType<typeof useMeContext>["me"]>["role"],
+  role: NonNullable<ReturnType<typeof useMeContext>["me"]>["visibleRoleName"],
   t: ReturnType<typeof useLocale>["t"],
 ) {
   return role ?? t("roleUnassigned");

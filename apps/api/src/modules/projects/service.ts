@@ -989,8 +989,8 @@ export async function getRepoForScope(
  * H55/nav: cheap existence check backing the "My project" nav item — same
  * membership definition as {@link myProjects}, without the roster join.
  */
-export async function hasMyProject(userId: number): Promise<boolean> {
-  const { rows } = await pool.query(
+export async function hasMyProject(userId: number, db: Queryable = pool): Promise<boolean> {
+  const { rows } = await db.query(
     `SELECT EXISTS (
        SELECT 1 FROM submissions s
         JOIN repos r ON r.id = s.repo_id
@@ -1888,8 +1888,8 @@ export async function participantsCanCreateProjects(): Promise<boolean> {
  * must reflect exactly the same gate createMyProject enforces, not a
  * leftover "one project only" restriction.
  */
-export async function canCreateMyProject(userId: number): Promise<boolean> {
-  const { rows } = await pool.query<{ allowed: boolean }>(
+export async function canCreateMyProject(userId: number, db: Queryable = pool): Promise<boolean> {
+  const { rows } = await db.query<{ allowed: boolean }>(
     `SELECT (
        ec.participants_can_create_projects IS TRUE
        AND ec.hacking_starts_at IS NOT NULL
@@ -1900,8 +1900,6 @@ export async function canCreateMyProject(userId: number): Promise<boolean> {
            FROM users u
            JOIN user_event_access uea ON uea.user_id = u.id
           WHERE u.id = $1
-            AND u.account_state = 'active'
-            AND u.anonymized_at IS NULL
        )
      ) AS allowed
        FROM event_config ec

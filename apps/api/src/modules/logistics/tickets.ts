@@ -128,7 +128,7 @@ export async function ticketQrPayload(userId: number, actorId?: number) {
     // only gets served here while the person currently holds event access —
     // otherwise a declined/revoked spot would keep showing a live QR/ticket.
     ticketToken: eventAccess ? ((row.token as string | null) ?? null) : null,
-    badgeId: (row.badge_id as string | null) ?? null,
+    badgeId: eventAccess ? ((row.badge_id as string | null) ?? null) : null,
     applePassTypeIdentifier: PASS_TYPE_IDENTIFIER,
     // H28: the pass type identifier is shared by every attendee. The serial
     // number is the account-specific identity Wallet needs when more than one
@@ -138,9 +138,10 @@ export async function ticketQrPayload(userId: number, actorId?: number) {
         ? ((applePassRows.find((pass: { purpose: string }) => pass.purpose === "ticket")
             ?.serial_number as string | undefined) ?? null)
         : null,
-      badge:
-        (applePassRows.find((pass: { purpose: string }) => pass.purpose === "badge")
-          ?.serial_number as string | undefined) ?? null,
+      badge: eventAccess
+        ? ((applePassRows.find((pass: { purpose: string }) => pass.purpose === "badge")
+            ?.serial_number as string | undefined) ?? null)
+        : null,
     },
     acceptedSpots: acceptedRows.map((accepted) => ({
       responseId: accepted.response_id as number,

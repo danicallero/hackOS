@@ -11,6 +11,7 @@ import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
+import { useMeContext } from "@/lib/me-context";
 import { safeBack } from "@/lib/navigation";
 import { ROLE_FILTER_ALL_ICON } from "@/lib/role-filters";
 import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
@@ -45,6 +46,7 @@ export function GeneralScannerScreen() {
   const glassAvailable = isRealLiquidGlassAvailable();
   const [error, setError] = useState<string | null>(null);
   const sync = useScannerSync();
+  const { me } = useMeContext();
   const [people, setPeople] = useState<ScannerPerson[]>([]);
   const [groups, setGroups] = useState<ScannerGroup[]>([]);
   const [roleStats, setRoleStats] = useState<ScannerRoleStat[] | null>(null);
@@ -84,7 +86,14 @@ export function GeneralScannerScreen() {
   // Any device's accreditation/presence/activity scan pushes here, so the
   // tiles update within a second of another operator's scan instead of
   // waiting on this device's own next sync tick.
-  useEffect(() => startLogisticsEventStream(), []);
+  useEffect(
+    () =>
+      startLogisticsEventStream({
+        identityKey: me?.id,
+        onResync: loadRoleStats,
+      }),
+    [loadRoleStats, me?.id],
+  );
   useEffect(() => {
     const events = [
       EVENTS.LOGISTICS_ACCREDITED,
@@ -92,7 +101,10 @@ export function GeneralScannerScreen() {
       EVENTS.LOGISTICS_ACTIVITY_SCAN,
       EVENTS.LOGISTICS_MEAL_SCAN_BATCH,
     ];
-    const unsubscribes = events.map((event) => subscribeToServerEvent(event, loadRoleStats));
+    const unsubscribes = [
+      ...events.map((event) => subscribeToServerEvent(event, loadRoleStats)),
+      subscribeToServerEvent(EVENTS.REALTIME_RESYNC, loadRoleStats),
+    ];
     return () => {
       for (const unsubscribe of unsubscribes) unsubscribe();
     };

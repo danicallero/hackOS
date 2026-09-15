@@ -1017,6 +1017,7 @@ describe("self-service account removal (H54)", () => {
     const { pool } = await import("../../src/db/pool.js");
     const user = await createUser({ email: "cancel-pending@example.test", emailVerified: false });
     await addCredentialPassword(user);
+    await grantAttendeeRole(user, "participant");
     await pool.query(
       `UPDATE users
           SET badge_id = 'B-CANCEL-PENDING',

@@ -58,7 +58,8 @@ documented in full in its own section below.
 
 **Schema.** Migration `0815_role_event_access.sql` adds the independent
 `roles.event_access` flag, its `role_seed_defaults` snapshot, and the
-`user_event_access` read view. A user is entitled when at least one assigned,
+`user_event_access` canonical read projection. A user is entitled only when
+their account is active and non-anonymized and at least one assigned,
 non-deleted role has the flag enabled; visibility and capabilities do not
 change that result. The same migration backfills roles, legacy users, durable
 tickets, and wallet-pass state so an already-approved app build keeps working
@@ -84,7 +85,8 @@ through the rollout. `push_tokens` (already existed in
   inserted a templateless, push-only outbox row directly — the pre-alert had
   no rendered subject/body and never reached in_app/email).
 - The app also calls these existing endpoints:
-  `GET /api/me` (capabilities + language + badgeId + role-derived event access),
+  `GET /api/me` (capabilities + language + badgeId + canonical
+  `visibleRoleName` + role-derived event access),
   `GET /api/public/activities`
   (schedule), `GET /api/queue/me` (H38 status), `GET /api/me/ticket` (including
   the active account-specific Apple Wallet serial number for each purpose) +
@@ -263,8 +265,9 @@ distributed to other Expo Router apps without importing hackOS code.
   revalidation after Passwords/Face ID returns never unmounts the auth
   navigator, so the native fields that receive the selected values remain the
   same instances; iOS additionally associates the domain through
-  `webcredentials`. The mobile root uses one authoritative `GET /api/me` for
-  session validity, role-derived event access, profile and navigation facts;
+  `webcredentials`. The mobile root uses one authoritative, repeatable-read
+  `GET /api/me` snapshot for session validity, role-derived event access,
+  profile and navigation facts;
   Better Auth remains the cookie/sign-in/sign-out transport and does not run a
   second session probe on startup.
   If authentication succeeds but the account lacks role-derived `hasEventAccess`, the app
@@ -344,10 +347,13 @@ distributed to other Expo Router apps without importing hackOS code.
   the OS cache directory (wallet passes, and for operators the attendance
   roster), plus a confirmed "Clear cache" action. Clearing never touches the
   offline scan queue — the only record of not-yet-synced scans — or the auth
-  session; see "Scanner cache encryption & isolation" below. `wallet.tsx`
+  session; see "Scanner cache encryption & isolation" below. Ordinary account
+  caches are namespaced by user/session and are cleared on logout; late writes
+  that began before cleanup are serialized behind the cleanup. `wallet.tsx`
   renders ticket/badge QR codes. After an eligible session is restored, a
   best-effort startup warmup stores the `/api/me/ticket` payload under an
-  account-scoped cache key; the screen still refreshes online and falls back to
+  account-scoped cache key and discards a response if the session changes; the
+  screen still refreshes online and falls back to
   that payload with a stale-data banner (`components/stale-data-banner.tsx`,
   reused across schedule, queue, wallet, notifications, sponsor announcement
   management, queue operations, and the scanner's sync-queue/activities/people
@@ -806,12 +812,18 @@ physical iOS/Android and EAS verification remains a release-gate task in
   Wired once for the app's lifetime from `app/_layout.tsx`.
 - `lib/server-events.ts` — native authenticated SSE reader. It takes the
   restored cookie from Better Auth's Expo plugin, parses the RN fetch stream,
-  reconnects after interruption, and emits personal queue/wallet events. The
-  cache-backed readers in `lib/use-cached-api.ts` revalidate quietly when the
-  app returns after at least 60 seconds away; wallet and notification reads
-  also poll every 30 seconds while active as a safety net when their event
-  stream is unavailable. A successful response clears the stale-data state,
-  while an outage keeps the last rendered data in place until the next retry.
+  reconnects after interruption, and emits personal queue/wallet events. SSE
+  is intentionally lossy: reconnects, foreground returns, and numeric event-id
+  gaps emit a synthetic resync signal so mounted screens refetch their
+  authoritative read model; the `Last-Event-ID` header is telemetry for the
+  server boundary, not a replay contract. Streams are restarted when the
+  authenticated identity changes, so one account cannot consume another
+  account's personal events. The cache-backed readers in `lib/use-cached-api.ts`
+  revalidate quietly when the app returns after at least 60 seconds away; wallet
+  and notification reads also poll every 30 seconds while active as a safety
+  net when their event stream is unavailable. A successful response clears the
+  stale-data state, while an outage keeps the last rendered data in place until
+  the next retry.
 - `lib/notification-events.ts` — `subscribeToCategory`/`emitCategory`, unit
   tested in `lib/notification-events.test.ts`. Lets a mounted screen react to
   a push the moment it arrives instead of waiting out its poll interval.

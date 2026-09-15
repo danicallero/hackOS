@@ -28,7 +28,7 @@ const mockMeContext = {
     accountState: "active" as const,
     removal: null,
     createdAt: "2026-01-01T00:00:00.000Z",
-    role: "participant" as const,
+    visibleRoleName: "participant" as const,
     hasEventAccess: true,
     hasQueueItems: false,
     capabilities: [] as string[],

@@ -634,6 +634,8 @@ describe("H28 Apple Wallet PassKit", () => {
   it("issues a fresh active badge pass after badge rotation voids the old serial", async () => {
     const staff = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
     const uid = await createUser();
+    const { grantAttendeeRole } = await import("../helpers.js");
+    await grantAttendeeRole(uid, "participant");
     await assignBadge(uid, "BADGE-OLD");
 
     const first = await app.inject({

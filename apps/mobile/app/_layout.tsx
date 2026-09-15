@@ -122,12 +122,18 @@ function useInitialSessionPending(pending: boolean) {
 
 /** Push-independent foreground updates for queue and wallet state (H28/H38). */
 function PersonalEventStream({ authenticated }: { authenticated: boolean }) {
-  const { me } = useMeContext();
+  const { me, refetch } = useMeContext();
   const enabled = authenticated && me?.hasEventAccess === true;
   useEffect(() => {
     if (!enabled) return;
-    return startPersonalEventStream();
-  }, [enabled]);
+    return startPersonalEventStream({
+      enabled,
+      identityKey: me?.id,
+      onResync: () => {
+        void refetch();
+      },
+    });
+  }, [enabled, me?.id, refetch]);
   return null;
 }
 
@@ -143,14 +149,24 @@ function LanguageSync() {
 
 /** Revalidates the one session/access/profile snapshot after role changes. */
 function IdentitySessionRefresh({ authenticated }: { authenticated: boolean }) {
-  const { refetch } = useMeContext();
+  const { me, refetch } = useMeContext();
   useEffect(() => {
     if (!authenticated) return;
     return subscribeToServerEvent(EVENTS.DOMAIN_CHANGED, () => {
       void refetch();
     });
   }, [authenticated, refetch]);
-  useEffect(() => startIdentityEventStream(authenticated), [authenticated]);
+  useEffect(
+    () =>
+      startIdentityEventStream({
+        enabled: authenticated,
+        identityKey: me?.id,
+        onResync: () => {
+          void refetch();
+        },
+      }),
+    [authenticated, me?.id, refetch],
+  );
   return null;
 }
 

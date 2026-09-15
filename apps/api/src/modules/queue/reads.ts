@@ -1,4 +1,4 @@
-import { pool } from "../../db/pool.js";
+import { pool, type Queryable } from "../../db/pool.js";
 import { NotFoundError } from "../../lib/errors.js";
 import { queueFixtureMarker } from "./broadcast.js";
 import { assertQueueChallengeReadScope, assertQueueEntryScope } from "./fixture-scope.js";
@@ -777,8 +777,8 @@ WITH viewer AS (
  * H55/nav: cheap existence check backing the "My queue" nav item — same repo
  * resolution and status filter as {@link myQueueStatus}, without the join.
  */
-export async function hasMyQueueItems(userId: number): Promise<boolean> {
-  const { rows } = await pool.query(
+export async function hasMyQueueItems(userId: number, db: Queryable = pool): Promise<boolean> {
+  const { rows } = await db.query(
     `${PARTICIPANT_QUEUE_SCOPE_SQL}
      SELECT EXISTS (
        SELECT 1

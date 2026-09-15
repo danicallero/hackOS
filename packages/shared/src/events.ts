@@ -68,6 +68,8 @@ export const EVENTS = {
   DATA_CHANGED: "data.changed",
   /** Payload-free refresh signal on a domain-scoped authenticated topic. */
   DOMAIN_CHANGED: "domain.changed",
+  /** Client-only signal: a lossy stream requires an authoritative refetch. */
+  REALTIME_RESYNC: "realtime.resync",
   LOGISTICS_ACCREDITED: "logistics.accreditation.checked_in", // H22
   LOGISTICS_BADGE_ROTATED: "logistics.badge.rotated", // H23/H28
   LOGISTICS_PRESENCE_SCAN: "logistics.presence.scan", // H24

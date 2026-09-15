@@ -124,6 +124,8 @@ async function passPayload(pass: PassRow) {
     throw new NotFoundError("Ticket not issued");
   if (!revoked && pass.purpose === "ticket" && !(await hasEventAccess(pool, pass.user_id)))
     throw new NotFoundError("Ticket not issued");
+  if (!revoked && pass.purpose === "badge" && !(await hasEventAccess(pool, pass.user_id)))
+    throw new NotFoundError("Badge not issued");
   if (!revoked && pass.purpose === "badge" && !u.badge_id)
     throw new BadRequestError("Badge not assigned");
 

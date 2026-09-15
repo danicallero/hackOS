@@ -57,8 +57,6 @@ export function mutationDomainForPath(url: string): string | null {
     matches("/api/me") ||
     matches("/api/users") ||
     matches("/api/permissions") ||
-    matches("/api/permission-groups") ||
-    matches("/api/permission-group-templates") ||
     matches("/api/invites") ||
     matches("/api/profile")
   ) {

@@ -32,8 +32,12 @@ export interface Me {
       }
     | null;
   createdAt: string;
-  /** The user's actual highest-visible role name, or null when none (H8 — badge_category retired). */
-  role: string | null;
+  /**
+   * The user's actual highest-visible role name, or null when none (H8 —
+   * badge_category retired). This preserves the canonical GET /api/me field
+   * name rather than creating a mobile-only identity alias.
+   */
+  visibleRoleName: string | null;
   /** True when the account has at least one assigned role with event_access. */
   hasEventAccess: boolean;
   hasQueueItems: boolean;

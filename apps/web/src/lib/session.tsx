@@ -28,12 +28,7 @@ interface SessionContextValue {
   can: (capability: Capability) => boolean;
   /** True if the user holds ANY of the listed capabilities. */
   canAny: (...capabilities: Capability[]) => boolean;
-  /**
-   * Authenticated, but with no role-derived event access and no operational
-   * role (capability, room judge, sponsor rep) — an applicant with nothing to
-   * do in the app yet besides applying. Drives hiding participant-only nav
-   * (wallet/queue/project/inbox).
-   */
+  /** Authenticated without the current event-access role entitlement. */
   isPureApplicant: boolean;
 }
 
@@ -102,11 +97,15 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   useEventSource("/api/events/stream?topic=sponsors", {
     events: [EVENTS.DOMAIN_CHANGED],
     onEvent: refresh,
+    onResync: refresh,
+    identityKey: me?.id ?? null,
     enabled: status === "authenticated",
   });
   useEventSource("/api/events/stream?topic=identity", {
     events: [EVENTS.DOMAIN_CHANGED],
     onEvent: refresh,
+    onResync: refresh,
+    identityKey: me?.id ?? null,
     enabled: status === "authenticated",
   });
 
@@ -121,8 +120,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       refresh,
       can,
       canAny: (...capabilities: Capability[]) => capabilities.some(can),
-      isPureApplicant:
-        !!me && !me.hasEventAccess && !me.isEnterpriseJudge && !me.isSponsorRep && caps.size === 0,
+      isPureApplicant: !!me && !me.hasEventAccess,
     };
   }, [me, status, error, refresh]);
 

@@ -88,11 +88,18 @@ localStorage copy for an instant read, and this is what makes the preference
 follow the account across devices.
 
 The same role record also carries the independent `event_access` entitlement
-bit. `hasEventAccess` is true for an active user when any assigned,
-non-deleted role has that bit enabled; it is an OR across roles and does not
-depend on role visibility, capability grants, application status, or sponsor/
+bit. The canonical `user_event_access` projection makes `hasEventAccess` true
+only for an active, non-anonymized user when any assigned, non-deleted role has
+that bit enabled; it is an OR across roles and does not depend on role
+visibility, capability grants, application status, or sponsor/
 judge relationships. `hasEventAccess` is the single access signal returned by
-`GET /api/me` and used by the mobile app. Ticket QR/wallet exposure, scanner
+`GET /api/me` and used by the mobile app. Its illustrative highest-visible
+role label is exposed consistently as `visibleRoleName` to web and mobile;
+clients never derive an identity or authorization field from a local role
+alias. `/api/me` computes its identity,
+roles, capabilities, association flags, project/queue flags, and removal state
+from one repeatable-read database snapshot, so the bootstrap response cannot
+mix values from different authorization moments. Ticket QR/wallet exposure, scanner
 eligibility, and physical check-in use the same live query; role transitions
 reconcile wallet passes and retain the historical ticket row.
 
@@ -371,9 +378,11 @@ topic and the API deliberately has no cross-write read cache. Consumers refetch
 Postgres-backed read models after their own topic fires. Public/TV/content
 streams receive only a narrow, payload-free "something changed" mirror of the
 relevant domain event and refetch their own sanitized projection — they never
-see the operational payload. See `architecture.md` §5 for the fan-out diagram
-and `background-workers.md`'s "Queue and public-screen streams" section for
-exactly which stream sees what.
+see the operational payload. A reconnect, detected per-topic event-id gap, or
+account/foreground lifecycle change also triggers an authoritative refetch;
+SSE is a freshness hint rather than a replay store. See `architecture.md` §5
+for the fan-out diagram and `background-workers.md`'s "Queue and public-screen
+streams" section for exactly which stream sees what.
 
 ### Background work
 Background work uses two patterns. Repeatable BullMQ ticks drain durable

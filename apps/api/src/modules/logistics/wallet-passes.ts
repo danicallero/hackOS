@@ -60,6 +60,7 @@ async function assertEntitled(userId: number, purpose: Purpose): Promise<void> {
     const { rows } = await pool.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [userId]);
     if (!rows[0]) throw new NotFoundError("Ticket not issued");
   } else {
+    if (!(await hasEventAccess(pool, userId))) throw new NotFoundError("Badge not issued");
     const b = await pool.query(
       `SELECT badge_id FROM users
         WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
@@ -103,6 +104,7 @@ export async function ensurePassRecord(
       const ticket = await client.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [userId]);
       if (!ticket.rows[0]) throw new NotFoundError("Ticket not issued");
     } else {
+      if (!(await hasEventAccess(client, userId))) throw new NotFoundError("Badge not issued");
       const badge = await client.query(`SELECT badge_id FROM users WHERE id = $1`, [userId]);
       if (!badge.rows[0]?.badge_id) throw new BadRequestError("Badge not assigned");
     }
@@ -185,6 +187,7 @@ export async function ensureGooglePassRecord(
       const ticket = await client.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [userId]);
       if (!ticket.rows[0]) throw new NotFoundError("Ticket not issued");
     } else {
+      if (!(await hasEventAccess(client, userId))) throw new NotFoundError("Badge not issued");
       const badge = await client.query(`SELECT badge_id FROM users WHERE id = $1`, [userId]);
       if (!badge.rows[0]?.badge_id) throw new BadRequestError("Badge not assigned");
     }

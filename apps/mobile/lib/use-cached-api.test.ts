@@ -9,9 +9,20 @@ jest.mock("./use-retry-on-reconnect", () => ({
   useRetryOnReconnect: jest.fn(),
 }));
 
+import { writeCachedValue } from "./offline-cache";
 import { useCachedApi } from "./use-cached-api";
 
+const mockWriteCachedValue = writeCachedValue as jest.Mock;
+
 const listeners = new Set<(state: string) => void>();
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
 
 function emitAppState(nextState: string) {
   (AppState as { currentState: string }).currentState = nextState;
@@ -21,6 +32,7 @@ function emitAppState(nextState: string) {
 describe("useCachedApi background recovery (H38, H51, H55)", () => {
   beforeEach(() => {
     jest.useFakeTimers();
+    mockWriteCachedValue.mockClear();
     listeners.clear();
     jest.spyOn(AppState, "addEventListener").mockImplementation((_event, callback) => {
       const listener = callback as (state: string) => void;
@@ -85,5 +97,44 @@ describe("useCachedApi background recovery (H38, H51, H55)", () => {
     await act(async () => emitAppState("background"));
     await act(async () => jest.advanceTimersByTime(1_000));
     expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("hides the predecessor cache while an account-scoped read switches owners", async () => {
+    const first = deferred<{ version: number }>();
+    const second = deferred<{ version: number }>();
+    const signals: AbortSignal[] = [];
+    const fetcher = jest.fn((signal?: AbortSignal) => {
+      if (signal) signals.push(signal);
+      return signals.length === 1 ? first.promise : second.promise;
+    });
+    const { result, rerender } = await renderHook(
+      ({ cacheKey }: { cacheKey: string }) => useCachedApi(cacheKey, fetcher),
+      { initialProps: { cacheKey: "user:1:notifications" } },
+    );
+
+    const firstLoad = result.current.load();
+    await act(async () => rerender({ cacheKey: "user:2:notifications" }));
+    expect(result.current.data).toBeNull();
+    const secondLoad = result.current.load();
+    expect(signals[0].aborted).toBe(true);
+
+    await act(async () => {
+      first.resolve({ version: 1 });
+      await firstLoad;
+      second.resolve({ version: 2 });
+      await secondLoad;
+    });
+
+    expect(result.current.data).toEqual({ version: 2 });
+    expect(writeCachedValue).toHaveBeenCalledWith(
+      "user:2:notifications",
+      { version: 2 },
+      expect.any(String),
+    );
+    expect(writeCachedValue).not.toHaveBeenCalledWith(
+      "user:1:notifications",
+      expect.anything(),
+      expect.anything(),
+    );
   });
 });

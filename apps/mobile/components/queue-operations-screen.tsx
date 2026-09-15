@@ -86,6 +86,7 @@ export function QueueOperationsScreen() {
   const { data, loading, error, staleSince, load } = useCachedApi(
     `user:${me?.id ?? "unknown"}:queue-operations`,
     fetchRooms,
+    { enabled: me !== null },
   );
   const rooms = data ?? [];
 
@@ -202,7 +203,13 @@ export function QueueOperationsScreen() {
   useFocusEffect(
     useCallback(() => {
       if (!canOperate) return;
-      const stopStream = startQueueEventStream(canOperate);
+      const stopStream = startQueueEventStream({
+        enabled: canOperate,
+        identityKey: me?.id,
+        onResync: () => {
+          void load();
+        },
+      });
       const timers = new Map<number, ReturnType<typeof setTimeout>>();
       const markCalled = (entryId: number) => {
         setJustCalledEntryIds((current) => new Set(current).add(entryId));
@@ -229,14 +236,16 @@ export function QueueOperationsScreen() {
       const unsubscribeCalled = subscribeToServerEvent(EVENTS.QUEUE_TEAM_CALLED, onTeamCalled);
       const unsubscribeChanged = subscribeToServerEvent(EVENTS.QUEUE_ENTRY_CHANGED, onEntryChanged);
       const unsubscribeRoom = subscribeToServerEvent(EVENTS.QUEUE_ROOM_CHANGED, onEntryChanged);
+      const unsubscribeResync = subscribeToServerEvent(EVENTS.REALTIME_RESYNC, onEntryChanged);
       return () => {
         stopStream();
         unsubscribeCalled();
         unsubscribeChanged();
         unsubscribeRoom();
+        unsubscribeResync();
         for (const timer of timers.values()) clearTimeout(timer);
       };
-    }, [canOperate, load]),
+    }, [canOperate, load, me?.id]),
   );
 
   const refresh = useCallback(async () => {

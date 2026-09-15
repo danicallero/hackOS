@@ -1,5 +1,5 @@
 jest.mock("./auth-client", () => ({
-  authClient: { $fetch: jest.fn() },
+  authClient: { $fetch: jest.fn(), getCookie: jest.fn(() => "session=current") },
 }));
 
 jest.mock("./env", () => ({
@@ -54,6 +54,32 @@ describe("apiFetch", () => {
     options.onRequest({ headers });
 
     expect(headers.get("cookie")).toBe("session=staff-a");
+  });
+
+  it("captures the current cookie for an ordinary request", async () => {
+    mockFetch.mockResolvedValue({ data: { ok: true }, error: null });
+
+    await apiFetch("/api/me/ticket");
+
+    const options = mockFetch.mock.calls[0][1] as {
+      onRequest: (context: { headers: Headers }) => void;
+    };
+    const headers = new Headers({ cookie: "session=staff-b" });
+    options.onRequest({ headers });
+
+    expect(headers.get("cookie")).toBe("session=current");
+  });
+
+  it("forwards abort signals to the authenticated transport", async () => {
+    mockFetch.mockResolvedValue({ data: { ok: true }, error: null });
+    const controller = new AbortController();
+
+    await apiFetch("/api/me", { signal: controller.signal });
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://api.hackudc.com/api/me",
+      expect.objectContaining({ signal: controller.signal }),
+    );
   });
 
   it("rejects URLs that could send the restored session to another origin", async () => {
