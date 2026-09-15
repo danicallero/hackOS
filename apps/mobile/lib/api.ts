@@ -82,7 +82,7 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit): Promise<T>
     method: requestInit.method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | undefined,
     body: requestInit.body,
     signal: requestInit.signal,
-    headers: mutationHeaders as unknown as Record<string, string>,
+    headers: Object.fromEntries(mutationHeaders.entries()),
     // The Expo plugin's init hook runs before Better Fetch's request hooks
     // and normally reads whichever cookie is in SecureStore at that moment.
     // Override it at the last point before transport so an in-flight scanner

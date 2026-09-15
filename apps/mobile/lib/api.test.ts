@@ -38,7 +38,14 @@ describe("apiFetch", () => {
     await apiFetch("/api/me/notification-preferences", init);
     expect(mockFetch).toHaveBeenCalledWith(
       "https://api.hackudc.com/api/me/notification-preferences",
-      expect.objectContaining({ ...init, retry: undefined }),
+      expect.objectContaining({
+        ...init,
+        headers: expect.objectContaining({
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        }),
+        retry: undefined,
+      }),
     );
   });
 
