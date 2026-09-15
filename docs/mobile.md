@@ -266,7 +266,10 @@ distributed to other Expo Router apps without importing hackOS code.
   same instances; iOS additionally associates the domain through
   `webcredentials`. The mobile root uses one authoritative, repeatable-read
   `GET /api/me` snapshot for session validity, role-derived event access,
-  profile and navigation facts;
+  profile and navigation facts. A background revalidation retains the existing
+  snapshot reference when its JSON data is unchanged, avoiding context-wide
+  screen updates while still publishing changed labels, profile data, and
+  capabilities;
   Better Auth remains the cookie/sign-in/sign-out transport and does not run a
   second session probe on startup.
   If authentication succeeds but the account lacks role-derived `hasEventAccess`, the app
