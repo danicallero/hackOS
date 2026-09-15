@@ -10,7 +10,7 @@ import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Building2Icon, EyeIcon, EyeOffIcon, PlusIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { AccessDenied } from "@/components/common/access-denied";
@@ -164,6 +164,7 @@ export default function EnterprisesPage() {
   const me = useMe();
   const [enterprises, setEnterprises] = useState<Enterprise[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sponsorRetryNonce, setSponsorRetryNonce] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
@@ -173,10 +174,11 @@ export default function EnterprisesPage() {
   const columns = useMemo(() => buildColumns(t, LOCALE_CODES[language]), [t, language]);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     setLoadError(null);
     try {
       const r = await api.get<{ enterprises: Enterprise[] }>("/api/enterprises");
+      hasLoadedRef.current = true;
       setEnterprises(r.enterprises);
       setSelectedIds(new Set());
     } catch (err) {
@@ -318,7 +320,7 @@ export default function EnterprisesPage() {
         searchable={(e) => `${e.name} ${e.website ?? ""}`}
         searchPlaceholder={t("searchEnterprisesPlaceholder")}
         pageSize={15}
-        loading={loading}
+        loading={loading && !hasLoadedRef.current}
         error={loadError ? { message: loadError, onRetry: load } : undefined}
         selectable
         selectedIds={selectedIds}

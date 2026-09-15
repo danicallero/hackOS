@@ -135,7 +135,7 @@ export function ResponsesTab({
       // In particular, accepting a review moves it out of this workspace; the
       // reviewer should still be able to navigate the familiar set and use undo.
       if (!force && selectedId !== null) return;
-      setLoading(true);
+      if (!hasLoadedRef.current) setLoading(true);
       setLoadError(null);
       try {
         const { responses } = await api.get<{ responses: ResponseRow[] }>(

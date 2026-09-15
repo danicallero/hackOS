@@ -7,7 +7,6 @@ import {
   Text,
   TextInput,
   type TextInputProps,
-  useColorScheme,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -25,7 +24,6 @@ export function AuthScreen({
   footer?: ReactNode;
   scrollable?: boolean;
 }) {
-  useColorScheme();
   if (!scrollable) {
     return (
       <SafeAreaView style={{ backgroundColor: colors.background, flex: 1 }}>

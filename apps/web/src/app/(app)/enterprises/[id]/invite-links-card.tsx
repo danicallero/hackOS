@@ -2,7 +2,7 @@
 
 import { EVENTS } from "@hackos/shared/events";
 import { LinkIcon, PlusIcon, UserRoundIcon } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -36,6 +36,7 @@ export function InviteLinksCard({ enterpriseId }: { enterpriseId: number }) {
   const copyToClipboard = useCopyToClipboard();
   const [links, setLinks] = useState<EnterpriseInviteLink[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [maxRedeems, setMaxRedeems] = useState("");
@@ -47,12 +48,13 @@ export function InviteLinksCard({ enterpriseId }: { enterpriseId: number }) {
   const [withdrawPending, setWithdrawPending] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     setLoadError(null);
     try {
       const data = await api.get<EnterpriseInviteLink[]>("/api/invites/enterprise-links", {
         query: { enterpriseId },
       });
+      hasLoadedRef.current = true;
       setLinks(data);
     } catch (err) {
       const message =
@@ -228,7 +230,7 @@ export function InviteLinksCard({ enterpriseId }: { enterpriseId: number }) {
             {t("retry")}
           </Button>
         </div>
-      ) : loading ? (
+      ) : loading && !hasLoadedRef.current ? (
         <p className="text-muted-foreground text-sm">{t("loading")}</p>
       ) : links.length === 0 ? (
         <p className="text-muted-foreground text-sm">{t("noEnterpriseInviteLinks")}</p>

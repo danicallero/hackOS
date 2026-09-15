@@ -10,7 +10,7 @@ import {
   XIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CapabilityGate } from "@/components/common/capability-gate";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { IconButton } from "@/components/common/icon-button";
@@ -305,6 +305,7 @@ export default function UsersPage() {
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const hasLoadedUsers = useRef(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
   const [emailFilter, setEmailFilter] = usePersistedState("users-list:email", "all");
@@ -367,14 +368,17 @@ export default function UsersPage() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoading(true);
+    // Preserve populated rows during a live refresh. The initial load and an
+    // explicit retry still use the skeleton, but identity SSE must not make
+    // the roster disappear between two authoritative reads (#732).
+    if (!hasLoadedUsers.current) setLoading(true);
     setLoadError(null);
     const handle = setTimeout(() => {
       api
         .get<UserList>("/api/users", { query: { q: q.trim() || undefined, limit: 200 } })
         .then((r) => {
           if (cancelled) return;
+          hasLoadedUsers.current = true;
           setUsers(r.users);
           setTotal(r.total);
         })

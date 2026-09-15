@@ -800,8 +800,11 @@ physical iOS/Android and EAS verification remains a release-gate task in
 
 ## Realtime & notifications infrastructure
 
-- `lib/push.ts` — best-effort Expo push token registration, called once after
-  sign-in from `app/_layout.tsx`.
+- `lib/push.ts` — best-effort Expo push token registration, called once per
+  signed-in user and token from `app/_layout.tsx`; profile revalidations do
+  not repeat its POST, while token rotation still registers the new value.
+  Device-token registration is delivery plumbing, not an identity read-model
+  change, so the API deliberately does not publish an identity SSE refresh.
 - `lib/notifications-setup.ts` — the actual delivery handling: configures
   Expo's foreground notification handler (shown even while the app has
   focus — the default suppresses it), sets up the Android notification

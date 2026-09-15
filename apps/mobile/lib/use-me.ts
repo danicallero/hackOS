@@ -50,6 +50,10 @@ export function useMe(enabled = true) {
   const activeController = useRef<AbortController | null>(null);
   const cacheKeyRef = useRef<string | null>(null);
   const cacheGeneration = useRef(0);
+  // An unauthenticated foreground revalidation must not toggle the root
+  // navigator into its restoring-session screen. That would unmount the
+  // credential fields while iOS Password AutoFill has them focused (#732).
+  const hasResolved = useRef(!enabled);
   // Mirrors `me` synchronously so `refetch` can tell an initial load (no data
   // yet, show a loading state) apart from a background revalidation (data
   // already on screen, refresh quietly). React state alone can't do this
@@ -70,6 +74,7 @@ export function useMe(enabled = true) {
     cacheKeyRef.current = null;
     meRef.current = null;
     hasData.current = false;
+    hasResolved.current = !enabled;
     setMe(null);
     setError(null);
     setLoading(false);
@@ -77,7 +82,7 @@ export function useMe(enabled = true) {
     setStaleSince(null);
     if (previousCacheKey) void clearCachedValue(previousCacheKey);
     if (previousMe) void clearCachedValues(`user:${previousMe.id}:`);
-  }, []);
+  }, [enabled]);
 
   const refetch = useCallback((): Promise<Me | null> => {
     if (!enabled) return Promise.resolve(null);
@@ -98,7 +103,7 @@ export function useMe(enabled = true) {
       // inactive) must not flip this back to true once `me` is populated —
       // callers like the tab layout unmount their navigator while loading,
       // which would flash the app back to its default tab on every transition.
-      if (!hasData.current) setLoading(true);
+      if (!hasData.current && !hasResolved.current) setLoading(true);
       try {
         setError(null);
         const data = await apiFetch<Me>("/api/me", {
@@ -158,7 +163,10 @@ export function useMe(enabled = true) {
         return meRef.current;
       } finally {
         if (activeController.current === controller) activeController.current = null;
-        if (currentRequest === requestId.current) setLoading(false);
+        if (currentRequest === requestId.current) {
+          hasResolved.current = true;
+          setLoading(false);
+        }
       }
     })();
 
@@ -171,8 +179,10 @@ export function useMe(enabled = true) {
   }, [enabled]);
 
   useEffect(() => {
-    if (enabled) void refetch();
-    else clear();
+    if (enabled) {
+      hasResolved.current = false;
+      void refetch();
+    } else clear();
   }, [clear, enabled, refetch]);
 
   useEffect(() => {

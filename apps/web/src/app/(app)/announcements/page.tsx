@@ -14,7 +14,7 @@ import {
   PlusIcon,
   Trash2Icon,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -84,6 +84,7 @@ export default function AnnouncementsPage() {
   const canManage = useCan(CAPABILITIES.ANNOUNCEMENTS_MANAGE);
   const [items, setItems] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState<Announcement | null>(null);
@@ -92,10 +93,11 @@ export default function AnnouncementsPage() {
   const [editingItem, setEditingItem] = useState<Announcement | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     setLoadError(null);
     try {
       const result = await notificationsApi.listAnnouncements();
+      hasLoadedRef.current = true;
       setItems(result.items);
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements");
@@ -226,7 +228,7 @@ export default function AnnouncementsPage() {
         columns={columns}
         data={items}
         getRowId={(a) => String(a.id)}
-        loading={loading}
+        loading={loading && !hasLoadedRef.current}
         error={loadError ? { message: loadError, onRetry: load } : undefined}
         searchable={(a) => `${a.title} ${a.body}`}
         searchPlaceholder={t("searchAnnouncementsPlaceholder")}
