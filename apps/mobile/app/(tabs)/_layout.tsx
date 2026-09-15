@@ -66,7 +66,7 @@ export default function TabLayout() {
   // known would register a participant tab set and then change it underneath
   // the selected route when capabilities arrive.
   if (meLoading && !me) return null;
-  if (!me?.mobileAccess) return null;
+  if (!me?.hasEventAccess) return null;
 
   return (
     <View style={{ flex: 1 }}>

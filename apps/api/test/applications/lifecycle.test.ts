@@ -471,10 +471,9 @@ describe("confirm / decline (H15)", () => {
     expect(typeof body.wallet_token).toBe("string");
     expect(typeof body.wallet_token_expires_at).toBe("string");
 
-    // The old mobile build still reads this field; its value now comes from
-    // the same role entitlement as the ticket instead of a legacy fallback.
+    // The app entry signal comes from the same role entitlement as the ticket,
+    // with no application-status or legacy fallback involved.
     const me = await a.inject({ method: "GET", url: "/api/me", headers: asUser(userId) });
-    expect(me.json().mobileAccess).toBe(false);
     expect(me.json().hasEventAccess).toBe(false);
     expect(
       (await a.inject({ method: "GET", url: "/api/me/ticket", headers: asUser(userId) })).json()

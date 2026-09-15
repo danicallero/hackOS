@@ -12,18 +12,20 @@ import { apiFetch } from "@/lib/api";
 import { signIn, signOut } from "@/lib/auth-client";
 import { EVENT_WEBSITE_DISPLAY, EVENT_WEBSITE_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
+import { useMeContext } from "@/lib/me-context";
 import {
   type AccountRemovalProgress,
   clearAccountRemovalProgress,
   readAccountRemovalProgress,
 } from "@/lib/removal-progress";
-import type { Me, PublicEvent } from "@/lib/types";
+import type { PublicEvent } from "@/lib/types";
 import { colors } from "@/theme/colors";
 
 export default function SignInScreen() {
   const router = useRouter();
   const { accessDenied } = useLocalSearchParams<{ accessDenied?: string }>();
   const { t } = useLocale();
+  const { refetch } = useMeContext();
   const { fontScale } = useWindowDimensions();
   const emailRef = useRef<AuthCredentialFieldHandle>(null);
   const passwordRef = useRef<AuthCredentialFieldHandle>(null);
@@ -101,8 +103,12 @@ export default function SignInScreen() {
         setError(t("signInError"));
         return;
       }
-      const me = await apiFetch<Me>("/api/me");
-      if (!me.mobileAccess && me.accountState !== "removal_pending") {
+      const me = await refetch();
+      if (!me) {
+        setError(t("signInError"));
+        return;
+      }
+      if (!me.hasEventAccess && me.accountState !== "removal_pending") {
         await signOut();
         router.replace({ pathname: "/(auth)/sign-in", params: { accessDenied: "1" } });
         return;
@@ -110,10 +116,8 @@ export default function SignInScreen() {
       router.replace("/");
     } catch {
       setError(t("signInError"));
-      // If Better Auth has already restored the H4 session, its root session
-      // boundary will replace this form with a retry/sign-out state. Keeping
-      // the form here for a sign-in transport failure avoids navigating to a
-      // protected route before the session store has settled.
+      // Keep the form visible for a sign-in transport failure; /api/me remains
+      // the single authoritative session/access/profile read for the app.
     } finally {
       setSubmitting(false);
     }

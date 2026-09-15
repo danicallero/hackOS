@@ -29,7 +29,7 @@ const mockMeContext = {
     removal: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     role: "participant" as const,
-    mobileAccess: true,
+    hasEventAccess: true,
     hasQueueItems: false,
     capabilities: [] as string[],
   },

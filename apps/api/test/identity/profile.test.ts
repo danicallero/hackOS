@@ -107,7 +107,7 @@ describe("GET /api/me (H7)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().name).toBe("Grace");
     expect(res.json().visibleRoleName).toBeNull();
-    expect(res.json().mobileAccess).toBe(false);
+    expect(res.json().hasEventAccess).toBe(false);
     // H8/H55: /api/me carries the effective capabilities for UI gating.
     expect(res.json().capabilities).toEqual([]);
   });
@@ -144,7 +144,7 @@ describe("GET /api/me (H7)", () => {
 
     const accessOf = async (id: number) => {
       const res = await a.inject({ method: "GET", url: "/api/me", headers: asUser(id) });
-      return res.json().mobileAccess;
+      return res.json().hasEventAccess;
     };
     expect(await accessOf(staff)).toBe(true);
     expect(await accessOf(accepted)).toBe(true);
@@ -1062,7 +1062,7 @@ describe("self-service account removal (H54)", () => {
     expect(profile.statusCode).toBe(200);
     expect(profile.json()).toMatchObject({
       accountState: "removal_pending",
-      mobileAccess: false,
+      hasEventAccess: false,
       removal: { status: "pending_exit", action: "anonymize", canCancel: true },
     });
 

@@ -146,7 +146,6 @@ describe("review fixture regeneration", () => {
       });
       expect(profile.statusCode).toBe(200);
       expect(profile.json()).toMatchObject({
-        mobileAccess: true,
         hasEventAccess: true,
       });
       expect(profile.json().roles).toEqual(

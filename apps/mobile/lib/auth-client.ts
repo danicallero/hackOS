@@ -3,6 +3,7 @@ import { inferAdditionalFields } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import * as SecureStore from "expo-secure-store";
 import { API_URL } from "./env";
+import { notifySignOut } from "./sign-out-events";
 
 /**
  * Better Auth client for the Expo app (H4, H55). Points at the same Better
@@ -29,4 +30,11 @@ export const authClient = createAuthClient({
   ],
 });
 
-export const { signIn, signOut, useSession } = authClient;
+export const { signIn } = authClient;
+
+/** Lets the shared /api/me store clear immediately after any sign-out path. */
+export async function signOut() {
+  const result = await authClient.signOut();
+  if (!result.error) notifySignOut();
+  return result;
+}

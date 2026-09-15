@@ -189,7 +189,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List role-creation templates",
         description:
-          "Returns the stable H8 template catalogue used to prefill a new role's capabilities. Labels/descriptions are message keys for the client i18n catalogue; `sponsor:portal` is deliberately absent.",
+          "Returns the stable H8 template catalogue used to prefill a new role's capabilities. Labels/descriptions are message keys for the client i18n catalogue.",
         response: {
           200: z.array(
             z.object({

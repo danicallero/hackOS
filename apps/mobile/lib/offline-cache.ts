@@ -31,6 +31,15 @@ export async function writeCachedValue<T>(
   }
 }
 
+/** Remove one cache entry without touching offline scanner/wallet data. */
+export async function clearCachedValue(key: string): Promise<void> {
+  try {
+    await Storage.removeItem(`${PREFIX}${key}`);
+  } catch {
+    // Cache cleanup must never block sign-out or session recovery.
+  }
+}
+
 export async function getOfflineCacheBytes(): Promise<number> {
   try {
     const keys = (await Storage.getAllKeysAsync()).filter((key) => key.startsWith(PREFIX));

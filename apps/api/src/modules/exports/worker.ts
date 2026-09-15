@@ -1,6 +1,5 @@
 import type { Job } from "bullmq";
 import { withTransaction } from "../../db/pool.js";
-import { invalidateCapabilities } from "../../lib/capabilities.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { putObject } from "../../lib/storage.js";
 import { runAccountRemoval } from "../identity/removal.js";
@@ -81,7 +80,6 @@ export async function processDataSubjectRequest(
         // deleted; only an accredited participant is anonymized.
         reason: claimed.reason ?? undefined,
       });
-      await invalidateCapabilities(claimed.subject_user_id);
       if (result.status === "completed") {
         // finalizeAccountRemoval marks the linked deletion request complete in
         // the same transaction that removes/anonymizes the subject. A request

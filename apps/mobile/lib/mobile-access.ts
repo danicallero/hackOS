@@ -1,8 +1,8 @@
-/** A restored auth session alone is never enough to enter event-day routes. */
-export function canEnterMobileApp(authenticated: boolean, mobileAccess?: boolean) {
-  return authenticated && mobileAccess === true;
+/** A valid session alone is never enough to enter event-day routes. */
+export function canEnterMobileApp(authenticated: boolean, hasEventAccess?: boolean) {
+  return authenticated && hasEventAccess === true;
 }
 
-export function isMobileAccessDenied(authenticated: boolean, mobileAccess?: boolean) {
-  return authenticated && mobileAccess === false;
+export function isMobileAccessDenied(authenticated: boolean, hasEventAccess?: boolean) {
+  return authenticated && hasEventAccess === false;
 }

@@ -2,7 +2,7 @@ import * as Network from "expo-network";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import { ApiError, apiFetch } from "./api";
-import { readCachedValue, writeCachedValue } from "./offline-cache";
+import { clearCachedValue, readCachedValue, writeCachedValue } from "./offline-cache";
 import type { Me } from "./types";
 
 const ME_CACHE_KEY = "me";
@@ -26,7 +26,7 @@ type MeApiResponse = Omit<Me, "role"> & {
  * offline. Only a real 401 — the server reachable and saying the session is
  * gone — clears the cached profile and forces re-authentication.
  */
-export function useMe(enabled: boolean) {
+export function useMe(enabled = true) {
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<Error | null>(null);
@@ -34,6 +34,9 @@ export function useMe(enabled: boolean) {
   const [staleSince, setStaleSince] = useState<string | null>(null);
   const appState = useRef(AppState.currentState);
   const requestId = useRef(0);
+  const meRef = useRef<Me | null>(null);
+  const inFlight = useRef<Promise<Me | null> | null>(null);
+  const cacheGeneration = useRef(0);
   // Mirrors `me` synchronously so `refetch` can tell an initial load (no data
   // yet, show a loading state) apart from a background revalidation (data
   // already on screen, refresh quietly). React state alone can't do this
@@ -41,77 +44,110 @@ export function useMe(enabled: boolean) {
   // time, one tick behind the AppState listener firing mid-transition.
   const hasData = useRef(false);
 
-  const refetch = useCallback(async () => {
-    if (!enabled) return;
-    const currentRequest = ++requestId.current;
-    // Only block on a loading state when there's nothing to show yet. A
-    // foreground refresh (e.g. iOS Control Center briefly marking the app
-    // inactive) must not flip this back to true once `me` is populated —
-    // callers like the tab layout unmount their navigator while loading,
-    // which would flash the app back to its default tab on every transition.
-    if (!hasData.current) setLoading(true);
-    try {
-      setError(null);
-      // The API names this field `visibleRoleName` (matching the web client
-      // and its own `getEffectiveRole` SQL) — remap it to `role` here so it
-      // lines up with `ScannerPerson.role` (fed by a differently-named SQL
-      // view) and every mobile screen that reads `Me.role` gets the actual
-      // highest-visible role instead of silently seeing `undefined`.
-      const raw = await apiFetch<MeApiResponse>("/api/me");
-      const data: Me = {
-        ...raw,
-        role: raw.visibleRoleName,
-      };
-      if (currentRequest !== requestId.current) return;
-      hasData.current = true;
-      setMe(data);
-      setOffline(false);
-      setStaleSince(null);
-      void writeCachedValue(ME_CACHE_KEY, data);
-    } catch (err) {
-      if (currentRequest !== requestId.current) return;
-      const sessionConfirmedInvalid = err instanceof ApiError && err.status === 401;
-      if (sessionConfirmedInvalid) {
-        hasData.current = false;
-        setMe(null);
+  const clear = useCallback(() => {
+    // Invalidate a request before clearing its profile. Otherwise a late
+    // response can restore stale identity data after sign-out or revocation.
+    requestId.current += 1;
+    inFlight.current = null;
+    cacheGeneration.current += 1;
+    meRef.current = null;
+    hasData.current = false;
+    setMe(null);
+    setError(null);
+    setLoading(false);
+    setOffline(false);
+    setStaleSince(null);
+    void clearCachedValue(ME_CACHE_KEY);
+  }, []);
+
+  const refetch = useCallback((): Promise<Me | null> => {
+    if (!enabled) return Promise.resolve(null);
+    if (inFlight.current) return inFlight.current;
+
+    const request = (async (): Promise<Me | null> => {
+      const currentRequest = ++requestId.current;
+      // Only block on a loading state when there's nothing to show yet. A
+      // foreground refresh (e.g. iOS Control Center briefly marking the app
+      // inactive) must not flip this back to true once `me` is populated —
+      // callers like the tab layout unmount their navigator while loading,
+      // which would flash the app back to its default tab on every transition.
+      if (!hasData.current) setLoading(true);
+      try {
+        setError(null);
+        // The API names this field `visibleRoleName` (matching the web client
+        // and its own `getEffectiveRole` SQL) — remap it to `role` here so it
+        // lines up with `ScannerPerson.role` (fed by a differently-named SQL
+        // view) and every mobile screen that reads `Me.role` gets the actual
+        // highest-visible role instead of silently seeing `undefined`.
+        const raw = await apiFetch<MeApiResponse>("/api/me");
+        const data: Me = {
+          ...raw,
+          role: raw.visibleRoleName,
+        };
+        if (currentRequest !== requestId.current) return null;
+        hasData.current = true;
+        meRef.current = data;
+        setMe(data);
         setOffline(false);
         setStaleSince(null);
-      } else if (!hasData.current) {
-        // The server couldn't be confirmed as rejecting the session (network
-        // failure, timeout, 5xx) — fall back to the last known profile
-        // instead of leaving the app stuck behind a "verifying session" gate.
-        const cached = await readCachedValue<Me>(ME_CACHE_KEY);
-        if (currentRequest !== requestId.current) return;
-        if (cached) {
-          hasData.current = true;
-          setMe(cached.data);
+        const generationAtWrite = cacheGeneration.current;
+        void writeCachedValue(ME_CACHE_KEY, data).then(() => {
+          // A successful response may finish its async storage write after a
+          // sign-out/401 cleanup. Do not let that late write resurrect the
+          // previous identity on the next offline launch.
+          if (cacheGeneration.current !== generationAtWrite) {
+            void clearCachedValue(ME_CACHE_KEY);
+          }
+        });
+        return data;
+      } catch (err) {
+        if (currentRequest !== requestId.current) return null;
+        const sessionConfirmedInvalid = err instanceof ApiError && err.status === 401;
+        if (sessionConfirmedInvalid) {
+          cacheGeneration.current += 1;
+          hasData.current = false;
+          meRef.current = null;
+          setMe(null);
+          setError(null);
+          setOffline(false);
+          setStaleSince(null);
+          void clearCachedValue(ME_CACHE_KEY);
+          return null;
+        } else if (!hasData.current) {
+          // The server couldn't be confirmed as rejecting the session (network
+          // failure, timeout, 5xx) — fall back to the last known profile
+          // instead of leaving the app stuck behind a "verifying session" gate.
+          const cached = await readCachedValue<Me>(ME_CACHE_KEY);
+          if (currentRequest !== requestId.current) return null;
+          if (cached) {
+            hasData.current = true;
+            meRef.current = cached.data;
+            setMe(cached.data);
+            setOffline(true);
+            setStaleSince(cached.updatedAt);
+          }
+        } else {
           setOffline(true);
-          setStaleSince(cached.updatedAt);
         }
-      } else {
-        setOffline(true);
+        setError(err instanceof Error ? err : new Error("Failed to load profile"));
+        return meRef.current;
+      } finally {
+        if (currentRequest === requestId.current) setLoading(false);
       }
-      setError(err instanceof Error ? err : new Error("Failed to load profile"));
-    } finally {
-      if (currentRequest === requestId.current) setLoading(false);
-    }
+    })();
+
+    let tracked: Promise<Me | null>;
+    tracked = request.finally(() => {
+      if (inFlight.current === tracked) inFlight.current = null;
+    });
+    inFlight.current = tracked;
+    return tracked;
   }, [enabled]);
 
   useEffect(() => {
     if (enabled) void refetch();
-    else {
-      // Invalidate a request started for the previous authenticated session
-      // before clearing its profile. Otherwise a late response can restore
-      // stale identity data after sign-out or session revocation.
-      requestId.current += 1;
-      hasData.current = false;
-      setMe(null);
-      setError(null);
-      setLoading(false);
-      setOffline(false);
-      setStaleSince(null);
-    }
-  }, [enabled, refetch]);
+    else clear();
+  }, [clear, enabled, refetch]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (next: AppStateStatus) => {
@@ -138,7 +174,16 @@ export function useMe(enabled: boolean) {
   // of useMeContext() re-renders on each revalidation (e.g. iOS briefly
   // marking the app inactive), regardless of whether its own data changed.
   return useMemo(
-    () => ({ me, loading, error, offline, staleSince, refetch }),
-    [me, loading, error, offline, staleSince, refetch],
+    () => ({
+      me,
+      authenticated: me !== null,
+      loading,
+      error,
+      offline,
+      staleSince,
+      refetch,
+      clear,
+    }),
+    [me, loading, error, offline, staleSince, refetch, clear],
   );
 }

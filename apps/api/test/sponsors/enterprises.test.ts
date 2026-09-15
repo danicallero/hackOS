@@ -312,7 +312,7 @@ describe("enterprise membership (M4)", () => {
     const a = await getApp();
     const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
     const entId = await makeEnterprise(admin);
-    const member = await createUserWithCapabilities([CAPABILITIES.SPONSOR_PORTAL]);
+    const member = await createUserWithCapabilities([]);
 
     // add
     const add = await a.inject({
@@ -374,7 +374,7 @@ describe("enterprise membership (M4)", () => {
     const a = await getApp();
     const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
     const entId = await makeEnterprise(admin, "GuardCo");
-    const pleb = await createUserWithCapabilities([CAPABILITIES.SPONSOR_PORTAL]);
+    const pleb = await createUserWithCapabilities([]);
 
     expect(
       (

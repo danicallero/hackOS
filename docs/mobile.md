@@ -263,11 +263,14 @@ distributed to other Expo Router apps without importing hackOS code.
   revalidation after Passwords/Face ID returns never unmounts the auth
   navigator, so the native fields that receive the selected values remain the
   same instances; iOS additionally associates the domain through
-  `webcredentials`.
-  If authentication succeeds but the account lacks role-derived `mobileAccess`, the app
+  `webcredentials`. The mobile root uses one authoritative `GET /api/me` for
+  session validity, role-derived event access, profile and navigation facts;
+  Better Auth remains the cookie/sign-in/sign-out transport and does not run a
+  second session probe on startup.
+  If authentication succeeds but the account lacks role-derived `hasEventAccess`, the app
   revokes that device session and returns to sign-in with a native, modal
   access-denied alert. The route signal is consumed before presentation so
-  VoiceOver does not hear the same denial again after a remount. `mobileAccess`
+  VoiceOver does not hear the same denial again after a remount. `hasEventAccess`
   is also part of the synchronous protected-stack guard: an ineligible account
   never mounts an event screen while its asynchronous sign-out is running.
   (accounts come from the web onboarding/invite flows, H10/H12).
@@ -863,7 +866,7 @@ run them with the root `test:ui:native` commands described in
 screenshots from a running simulator — see
 [`docs/ui-testing.md`](./ui-testing.md) § Screenshots on UI PRs for the
 build/drive/capture recipe and the local-port and
-`mobileAccess` traps that eat time on the first attempt.
+`hasEventAccess` traps that eat time on the first attempt.
 
 ## Scanner state transitions
 

@@ -22,7 +22,7 @@ describe("apiFetch", () => {
       "https://api.hackudc.com/api/public/activities",
       expect.objectContaining({
         method: undefined,
-        retry: expect.objectContaining({ type: "exponential", attempts: 4 }),
+        retry: expect.objectContaining({ type: "exponential", attempts: 2 }),
       }),
     );
   });
@@ -75,6 +75,17 @@ describe("apiFetch", () => {
         code: "unavailable",
         message: "Try later",
       }),
+    );
+  });
+
+  it("does not delay the authoritative profile read with deployment retries", async () => {
+    mockFetch.mockResolvedValue({ data: { id: 1 }, error: null });
+
+    await apiFetch("/api/me");
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://api.hackudc.com/api/me",
+      expect.objectContaining({ retry: undefined }),
     );
   });
 });
