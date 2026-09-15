@@ -138,6 +138,7 @@ export const templateFieldSchema = z
     /** H27 configurable question-statistics definition. */
     statistics: statisticsConfigSchema.optional(),
   })
+  .strict()
   .refine(
     (f) => !(f.kind === "select" || f.kind === "multiselect") || (f.options?.length ?? 0) > 0,
     { message: "select/multiselect fields require a non-empty options array" },
