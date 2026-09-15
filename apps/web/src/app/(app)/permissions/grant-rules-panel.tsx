@@ -23,6 +23,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { readServerState } from "@/lib/server-state";
 import { toast } from "@/lib/toast";
 import type { EnterpriseSummary, RoleGrantRule, RoleSummary } from "@/lib/types";
 import { ALL_TRIGGER_EVENTS, ruleTriggerLabel, triggerEventLabel } from "./helpers";
@@ -138,7 +139,9 @@ export function GrantRulesPanel({
         query: scopedRole ? { roleId: scopedRole.id } : undefined,
       }),
       api.get<{ enterprises: EnterpriseSummary[] }>("/api/enterprises"),
-      api.get<RoleSummary[]>("/api/roles"),
+      readServerState(["permissions", "roles"], (signal) =>
+        api.get<RoleSummary[]>("/api/roles", { signal }),
+      ),
     ]);
     if (rulesResult.status === "fulfilled") setRules(rulesResult.value);
     else toast.error(t("couldNotLoadGrantRules"));

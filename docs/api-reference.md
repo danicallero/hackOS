@@ -396,6 +396,12 @@ SSE is a freshness hint rather than a replay store. See `architecture.md` §5
 for the fan-out diagram and `background-workers.md`'s "Queue and public-screen
 streams" section for exactly which stream sees what.
 
+The web client scopes its small, in-memory read deduplication cache by the
+existing session identity. It aborts and drops that browser-only state on an
+identity change; successful writes and matching SSE signals invalidate exact
+resource keys before the next authoritative API read. This never changes the
+API's Postgres-backed source of truth or creates a global SSE refresh topic.
+
 ### Background work
 Background work uses two patterns. Repeatable BullMQ ticks drain durable
 Postgres tables such as `notification_outbox`, due confirmations, scheduled

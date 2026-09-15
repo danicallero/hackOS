@@ -8,6 +8,7 @@ import {
   type RealtimeRefetchTrigger,
   telemetryScopeForStream,
 } from "@/lib/realtime-telemetry";
+import { invalidateServerState, readServerState, type ServerStateKey } from "@/lib/server-state";
 import { type SseResyncContext, type SseResyncReason, subscribeToSse } from "@/lib/sse-broker";
 
 /**
@@ -26,6 +27,15 @@ export type SseEnvelope<T = unknown> = { type: string; id: string; at: string; d
 /** Keep live views usable when a browser suspends the tab or loses SSE. */
 const FALLBACK_POLL_MS = 15_000;
 const BACKGROUND_REVALIDATION_MS = 60_000;
+const stableResourceKeys = new Map<string, ServerStateKey | undefined>();
+
+function stableResourceKey(value: string): ServerStateKey | undefined {
+  const cached = stableResourceKeys.get(value);
+  if (cached !== undefined || stableResourceKeys.has(value)) return cached;
+  const parsed = value === "null" ? undefined : (JSON.parse(value) as ServerStateKey);
+  stableResourceKeys.set(value, parsed);
+  return parsed;
+}
 
 interface UseEventSourceOptions {
   /** Event names to listen for; omit to catch every message via `onmessage`. */
@@ -110,13 +120,14 @@ export function useEventSource(
  *   );
  */
 export function useLiveQuery<T>(
-  fetcher: () => Promise<T>,
+  fetcher: (signal?: AbortSignal) => Promise<T>,
   streamPath: string,
   eventNames: readonly string[] = Object.values(EVENTS),
   {
     enabled = true,
     debounceMs = 150,
     queryKey = [],
+    resourceKey: requestedResourceKey,
     identityKey = null,
     onEvent: onMatchingEvent,
     onResync,
@@ -124,6 +135,8 @@ export function useLiveQuery<T>(
     enabled?: boolean;
     debounceMs?: number;
     queryKey?: readonly unknown[];
+    /** Identity-scoped shared read-model key. Omit for legacy local queries. */
+    resourceKey?: ServerStateKey;
     identityKey?: string | number | null;
     /** Optional side effect for a matching event (for example an operational alert). */
     onEvent?: (event: SseEnvelope) => void;
@@ -139,6 +152,9 @@ export function useLiveQuery<T>(
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
+  const resourceKeyValue = JSON.stringify(requestedResourceKey ?? null);
+  // The key is a value contract, so equal inline arrays must not restart a read.
+  const resourceKey = stableResourceKey(resourceKeyValue);
 
   const fetcherRef = useRef(fetcher);
   useEffect(() => {
@@ -158,6 +174,12 @@ export function useLiveQuery<T>(
   const refetch = useCallback(
     (trigger: RealtimeRefetchTrigger = "manual") => {
       const current = requestRef.current;
+      // Recovery reads must bypass the short-lived deduplication value: a
+      // disconnected stream or resumed tab has no event to invalidate it.
+      if (resourceKey && (trigger === "poll" || trigger === "visibility" || trigger === "retry")) {
+        invalidateServerState(resourceKey);
+        if (current) current.cancelled = true;
+      }
       if (current) {
         // Keep one trailing read for events that arrived while the previous
         // request was in flight; an event burst must not fan out into N reads.
@@ -173,8 +195,10 @@ export function useLiveQuery<T>(
       requestRef.current = request;
       observeRefetch(telemetryScope, trigger);
 
-      fetcherRef
-        .current()
+      (resourceKey
+        ? readServerState(resourceKey, (signal) => fetcherRef.current(signal))
+        : fetcherRef.current()
+      )
         .then((d) => {
           if (!request.cancelled) {
             dataRef.current = d;
@@ -209,7 +233,7 @@ export function useLiveQuery<T>(
         request.cancelled = true;
       };
     },
-    [telemetryScope],
+    [telemetryScope, resourceKey],
   );
 
   useEffect(() => {
@@ -236,10 +260,17 @@ export function useLiveQuery<T>(
   const onEvent = useCallback(
     (event: SseEnvelope) => {
       onMatchingEventRef.current?.(event);
+      if (resourceKey) {
+        invalidateServerState(resourceKey);
+        // A fetch implementation may resolve despite AbortSignal (tests and
+        // older wrappers sometimes do). Do not let that superseded payload
+        // paint while the debounced authoritative read is queued.
+        if (requestRef.current) requestRef.current.cancelled = true;
+      }
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => refetch("sse"), debounceMs);
     },
-    [refetch, debounceMs],
+    [refetch, debounceMs, resourceKey],
   );
 
   const onResyncRef = useRef(onResync);
@@ -254,6 +285,10 @@ export function useLiveQuery<T>(
     identityKey,
     onResync: (context) => {
       onResyncRef.current?.(context);
+      if (resourceKey) {
+        invalidateServerState(resourceKey);
+        if (requestRef.current) requestRef.current.cancelled = true;
+      }
       refetch("sse");
     },
   });

@@ -47,6 +47,7 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ApiError, api } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
+import { invalidateServerState, readServerState } from "@/lib/server-state";
 import { toast } from "@/lib/toast";
 import type {
   PermissionState,
@@ -99,6 +100,16 @@ const createSchema = (t: Translate) =>
   });
 
 type CreateValues = z.infer<ReturnType<typeof createSchema>>;
+
+const PERMISSIONS_RESOURCES = {
+  roles: ["permissions", "roles"],
+  templates: ["permissions", "role-templates"],
+  users: ["permissions", "users", 200],
+} as const;
+
+function invalidatePermissionsResources() {
+  for (const key of Object.values(PERMISSIONS_RESOURCES)) invalidateServerState(key);
+}
 
 export default function PermissionsPage() {
   const { t } = useLocale();
@@ -174,13 +185,20 @@ export default function PermissionsPage() {
   // though the mutation itself had already updated state optimistically.
   // `loading` now only gates the true first paint.
   const load = useCallback(
-    async (opts?: { silent?: boolean }) => {
+    async (opts?: { silent?: boolean; force?: boolean }) => {
       if (!opts?.silent) setLoading(true);
       setLoadError(null);
+      if (opts?.force) invalidatePermissionsResources();
       const [rolesResult, templatesResult, usersResult] = await Promise.allSettled([
-        api.get<RoleSummary[]>("/api/roles"),
-        api.get<RoleTemplate[]>("/api/role-templates"),
-        api.get<UserList>("/api/users", { query: { limit: 200 } }),
+        readServerState(PERMISSIONS_RESOURCES.roles, (signal) =>
+          api.get<RoleSummary[]>("/api/roles", { signal }),
+        ),
+        readServerState(PERMISSIONS_RESOURCES.templates, (signal) =>
+          api.get<RoleTemplate[]>("/api/role-templates", { signal }),
+        ),
+        readServerState(PERMISSIONS_RESOURCES.users, (signal) =>
+          api.get<UserList>("/api/users", { query: { limit: 200 }, signal }),
+        ),
       ]);
       if (rolesResult.status === "fulfilled") {
         setRoles(rolesResult.value);
@@ -220,6 +238,7 @@ export default function PermissionsPage() {
     setRestoringId(roleId);
     try {
       await api.post<RoleDetail>(`/api/roles/${roleId}/restore`, {});
+      invalidatePermissionsResources();
       toast.success(t("roleRestored"));
       setDeletedRoles((prev) => prev.filter((r) => r.id !== roleId));
       await load();
@@ -241,7 +260,7 @@ export default function PermissionsPage() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load({ silent: !isFirstLoad.current });
+    void load({ silent: !isFirstLoad.current, force: !isFirstLoad.current });
     isFirstLoad.current = false;
   }, [load, liveRefresh]);
 
@@ -259,6 +278,7 @@ export default function PermissionsPage() {
         eventAccess: values.eventAccess,
         templateKey: template?.key,
       });
+      invalidatePermissionsResources();
       toast.success(t("roleCreated"));
       setCreateOpen(false);
       form.reset({
@@ -282,6 +302,7 @@ export default function PermissionsPage() {
       const updated = await api.patch<RoleDetail>(`/api/roles/${roleId}/position`, {
         position: newPosition,
       });
+      invalidatePermissionsResources();
       applyRole(updated);
     } catch (err) {
       setRoles(before);
@@ -295,6 +316,7 @@ export default function PermissionsPage() {
   ) {
     try {
       const r = await api.patch<RoleDetail>(`/api/roles/${roleId}`, values);
+      invalidatePermissionsResources();
       applyRole(r);
       toast.success(t("roleUpdated"));
     } catch (err) {
@@ -308,6 +330,7 @@ export default function PermissionsPage() {
   ) {
     try {
       const r = await api.put<RoleDetail>(`/api/roles/${roleId}/capabilities`, { capabilities });
+      invalidatePermissionsResources();
       applyRole(r);
       toast.success(t("capabilitiesSaved"));
     } catch (err) {
@@ -318,6 +341,7 @@ export default function PermissionsPage() {
   async function onAddMember(roleId: number, userId: number, user?: UserListItem) {
     try {
       const r = await api.post<RoleDetail>(`/api/roles/${roleId}/users/${userId}`, {});
+      invalidatePermissionsResources();
       if (user) mergeUsers([user]);
       applyRole(r);
       toast.success(t("memberAdded"));
@@ -329,6 +353,7 @@ export default function PermissionsPage() {
   async function onRemoveMember(roleId: number, userId: number) {
     try {
       const r = await api.delete<RoleDetail>(`/api/roles/${roleId}/users/${userId}`);
+      invalidatePermissionsResources();
       applyRole(r);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveMemberRole"));
@@ -346,6 +371,7 @@ export default function PermissionsPage() {
     const results = await Promise.allSettled(
       userIds.map((userId) => api.delete<RoleDetail>(`/api/roles/${roleId}/users/${userId}`)),
     );
+    invalidatePermissionsResources();
     try {
       applyRole(await api.get<RoleDetail>(`/api/roles/${roleId}`));
     } catch {
@@ -372,6 +398,7 @@ export default function PermissionsPage() {
   async function onResetToDefault(roleId: number) {
     try {
       const r = await api.post<RoleDetail>(`/api/roles/${roleId}/reset-to-default`, {});
+      invalidatePermissionsResources();
       applyRole(r);
       toast.success(t("resetToDefaultDone"));
     } catch (err) {
@@ -382,6 +409,7 @@ export default function PermissionsPage() {
   async function onDelete(roleId: number) {
     try {
       await api.delete<{ deleted: true }>(`/api/roles/${roleId}`);
+      invalidatePermissionsResources();
       toast.success(t("roleDeleted"));
       setRoles((prev) => prev.filter((r) => r.id !== roleId));
       selectRole(null);
