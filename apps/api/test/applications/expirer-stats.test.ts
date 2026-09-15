@@ -202,10 +202,10 @@ describe("pre-event stats (H27)", () => {
     await pool.query(`UPDATE roles SET position = 1000 WHERE id = $1`, [targetRole]);
     await pool.query(`UPDATE roles SET position = 500 WHERE id = $1`, [scopeRole]);
     await pool.query(
-      `INSERT INTO application_stats_panel_role_access
-         (application_id, panel_key, role_id, state)
+      `INSERT INTO statistics_scope_panel_role_access
+         (scope_key, panel_key, role_id, state)
        VALUES ($1, 'overview', $2, 'allow'), ($1, 'shirt-sizes', $2, 'deny')`,
-      [appId, targetRole],
+      [`application:${appId}`, targetRole],
     );
     await pool.query(
       `INSERT INTO statistics_scope_panel_role_access (scope_key, panel_key, role_id, state)
@@ -215,7 +215,7 @@ describe("pre-event stats (H27)", () => {
 
     const applicationDelete = await a.inject({
       method: "DELETE",
-      url: `/api/applications/${appId}/stats/access/${targetRole}`,
+      url: `/api/statistics/access/${targetRole}?scope_key=application:${appId}`,
       headers: asUser(manager),
     });
     expect(applicationDelete.statusCode).toBe(200);
@@ -228,13 +228,13 @@ describe("pre-event stats (H27)", () => {
 
     const { rows } = await pool.query(
       `SELECT
-         (SELECT count(*)::int FROM application_stats_panel_role_access
-           WHERE application_id = $1 AND role_id = $2) AS application_rows,
+         (SELECT count(*)::int FROM statistics_scope_panel_role_access
+           WHERE scope_key = $1 AND role_id = $2) AS application_rows,
          (SELECT count(*)::int FROM statistics_scope_panel_role_access
            WHERE scope_key = $3 AND role_id = $2) AS role_rows,
          (SELECT count(*)::int FROM audit_log
            WHERE actor_id = $4 AND action = 'access_removed') AS audit_rows`,
-      [appId, targetRole, `role:${scopeRole}`, manager],
+      [`application:${appId}`, targetRole, `role:${scopeRole}`, manager],
     );
     expect(rows[0]).toEqual({ application_rows: 0, role_rows: 0, audit_rows: 2 });
   });

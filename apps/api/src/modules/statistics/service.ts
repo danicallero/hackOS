@@ -406,7 +406,7 @@ function dynamicPanelDefinitions(
   const fields = new Map<string, StatisticsConfig | undefined>();
   for (const scope of scopes) {
     for (const field of scope.application?.template ?? []) {
-      if (field.reporting === true || field.statistics?.enabled === true) {
+      if (field.statistics?.enabled === true) {
         fields.set(fieldPanelKey(field.key), field.statistics);
       }
     }

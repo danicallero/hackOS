@@ -249,10 +249,7 @@ export default function LogisticsStatsPage() {
             onRetry={loadBefore}
           />
           {canManageStatistics && selectedScopeKeys.length === 1 && (
-            <StatsVisibility
-              applicationId={selectedApplicationId}
-              scopeKey={selectedScopeKeys[0]}
-            />
+            <StatsVisibility scopeKey={selectedScopeKeys[0]} />
           )}
         </TabsContent>
         <TabsContent value="during" className="mt-4">

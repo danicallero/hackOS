@@ -135,11 +135,6 @@ export const templateFieldSchema = z
     retention_mode: retentionModeSchema.optional(),
     /** Optional stable reporting dimension; never controls retention by itself. */
     anonymous_audit_dimension: anonymousAuditDimensionSchema,
-    /**
-     * Legacy H27 switch.  Existing deployments are backfilled to preserve
-     * their old choice-field panels; new questions must opt in explicitly.
-     */
-    reporting: z.boolean().optional(),
     /** H27 configurable question-statistics definition. */
     statistics: statisticsConfigSchema.optional(),
   })
@@ -287,15 +282,6 @@ export const confirmByEmailResponseSchema = z.object({
 export const listResponsesQuerySchema = z.object({
   status: z.string().optional(),
   search: z.string().optional(),
-});
-
-export const statsQuerySchema = z.object({
-  field: z.string().optional(),
-});
-export const statsPanelAccessSchema = z.object({
-  panel_key: z.string().regex(/^[a-z0-9:_-]+$/),
-  role_id: z.number().int().positive(),
-  state: z.enum(["allow", "inherit", "deny"]),
 });
 
 // ── batch operations ─────────────────────────────────────────────────────────

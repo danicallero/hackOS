@@ -427,19 +427,16 @@ generic role dimensions; the winning per-panel `allow`/`inherit`/`deny`
 exception from the caller's assigned roles applies at query time. A direct
 panel `allow` can share a limited statistic with someone who has no general
 statistics capability, while `deny` overrides the general fallback. Statistics
-managers can manage application overrides through
-`GET`/`PUT /api/applications/:id/stats/access` and role-scope overrides through
+managers can manage every scope's overrides through
 `GET`/`PUT /api/statistics/access`, using the same role-position tri-state
-semantics as H8. The corresponding role-specific `DELETE` resources clear all
+semantics as H8. The corresponding role-specific `DELETE` resource clears all
 statistics overrides for that role and scope without changing its general
 Logistics capability.
 
-`GET /api/applications/stats/forms` and `GET /api/applications/:id/stats` remain
-compatible legacy resources. New application-question panels are opt-in via
-the field's `statistics` configuration (the legacy `reporting` flag remains a
-compatibility alias). Migration 0818 backfills existing choice fields so an
-existing deployment does not lose its prior panels; newly added questions do
-not become statistics automatically. Configured enum options are retained
+Application-question panels are opt-in via the field's `statistics.enabled`
+configuration. Migration 0824 transformed current retained form JSON and
+removed the former application-specific routes and `reporting` alias; newly
+added questions do not become statistics automatically. Configured enum options are retained
 when their response count is zero. Sensitive derived dimensions such as age
 and study level are calculated server-side against the event reference date;
 the raw source value is never included in a statistics response.

@@ -66,14 +66,13 @@ export function statisticsPanelKeys(
   template: Array<{
     key: string;
     kind: string;
-    reporting?: boolean;
     statistics?: Pick<StatisticsConfig, "enabled">;
   }>,
 ) {
   return new Set([
     ...BASE_STAT_PANEL_KEYS,
     ...template
-      .filter((field) => field.reporting === true || field.statistics?.enabled === true)
+      .filter((field) => field.statistics?.enabled === true)
       .map((field) => fieldPanelKey(field.key)),
   ]);
 }
@@ -87,12 +86,12 @@ export async function allowedStatisticsPanels(
   const application = await requireApplication(pool, applicationId);
   const { rows } = await pool.query(
     `SELECT a.panel_key, a.state, r.position
-       FROM application_stats_panel_role_access a
+       FROM statistics_scope_panel_role_access a
        JOIN user_roles ur ON ur.role_id = a.role_id AND ur.user_id = $2
        JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
-      WHERE a.application_id = $1 AND a.state <> 'inherit'
+      WHERE a.scope_key = $1 AND a.state <> 'inherit'
       ORDER BY a.panel_key, r.position DESC`,
-    [applicationId, userId],
+    [`application:${applicationId}`, userId],
   );
   const decisions = resolveStatisticsPanelDecisions(
     (rows as Array<{ panel_key: string; state: "allow" | "deny"; position: number }>).map(
@@ -348,8 +347,7 @@ async function fieldHistogram(
 
 /**
  * H27: the dashboard is driven by the form definition, not a hand-maintained
- * list of demographic fields. `reporting` remains a backwards-compatible
- * alias for deployments written before `statistics.enabled`.
+ * list of demographic fields.
  */
 async function reportableFieldDistributions(
   applicationId: number,
@@ -358,7 +356,7 @@ async function reportableFieldDistributions(
 ) {
   const fields = template.filter(
     (field) =>
-      (field.reporting === true || field.statistics?.enabled === true) &&
+      field.statistics?.enabled === true &&
       (!allowedPanels || allowedPanels.has(fieldPanelKey(field.key))),
   );
   return Promise.all(

@@ -31,6 +31,40 @@ afterAll(async () => {
 });
 
 describe("application fields integrated into Logistics", () => {
+  it("accepts only the canonical field publication and generic endpoints", async () => {
+    const manager = await createUserWithCapabilities([
+      CAPABILITIES.STATISTICS_MANAGE,
+      CAPABILITIES.APPLICATIONS_MANAGE,
+    ]);
+    const legacyField = {
+      key: "experience",
+      kind: "select",
+      label: { en: "Experience", es: "Experiencia", gl: "Experiencia" },
+      options: [{ value: "first", label: { en: "First", es: "Primera", gl: "Primeira" } }],
+      reporting: true,
+    };
+    const rejected = await app.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: { name: "Legacy form", template: [legacyField] },
+    });
+    expect(rejected.statusCode).toBe(400);
+
+    const removedForms = await app.inject({
+      method: "GET",
+      url: "/api/applications/stats/forms",
+      headers: asUser(manager),
+    });
+    const removedDetail = await app.inject({
+      method: "GET",
+      url: "/api/applications/1/stats",
+      headers: asUser(manager),
+    });
+    expect(removedForms.statusCode).toBe(404);
+    expect(removedDetail.statusCode).toBe(404);
+  });
+
   it("returns an integrated field in the dashboard and aggregate CSV", async () => {
     const viewer = await createUserWithCapabilities([
       CAPABILITIES.LOGISTICS_STATS,

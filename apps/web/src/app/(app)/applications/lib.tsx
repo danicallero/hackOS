@@ -76,8 +76,6 @@ export interface TemplateField {
   retention_mode?: "none" | "anonymous_audit";
   /** Optional open semantic slug for anonymous-audit reporting. */
   anonymous_audit_dimension?: string | null;
-  /** Legacy form of the explicit statistics publication switch. */
-  reporting?: boolean;
   /** Configuration for this question's aggregate statistics panel. */
   statistics?: StatisticsConfig;
 }

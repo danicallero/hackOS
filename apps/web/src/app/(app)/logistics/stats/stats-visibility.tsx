@@ -60,13 +60,7 @@ function panelLabel(
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-export function StatsVisibility({
-  applicationId,
-  scopeKey,
-}: {
-  applicationId: number | null;
-  scopeKey?: string;
-}) {
+export function StatsVisibility({ scopeKey }: { scopeKey: string }) {
   const { language, t } = useLocale();
   const [open, setOpen] = useState(false);
   const [access, setAccess] = useState<Access[]>([]);
@@ -81,33 +75,25 @@ export function StatsVisibility({
   const [roleToRemove, setRoleToRemove] = useState<Role | null>(null);
 
   useEffect(() => {
-    if (!open || (!applicationId && !scopeKey)) return;
+    if (!open) return;
     let active = true;
     setLoading(true);
     setError(null);
-    const roleScope = scopeKey?.startsWith("role:") === true;
-    const endpoint = roleScope
-      ? "/api/statistics/access"
-      : `/api/applications/${applicationId}/stats/access`;
     api
       .get<{
         access: Access[];
         roles: Role[];
         panel_keys?: string[];
-        panel_labels?: Record<string, I18nText>;
+        panel_labels?: Record<string, Record<string, I18nText>>;
         scopes?: Array<{ key: string; panelKeys: string[] }>;
-      }>(endpoint)
+      }>("/api/statistics/access")
       .then((data) => {
         if (!active) return;
-        setAccess(
-          roleScope ? data.access.filter((row) => row.scope_key === scopeKey) : data.access,
-        );
+        setAccess(data.access.filter((row) => row.scope_key === scopeKey));
         setRoles(data.roles);
         setIncludedRoleIds(new Set());
-        setPanels(
-          data.panel_keys ?? data.scopes?.find((scope) => scope.key === scopeKey)?.panelKeys ?? [],
-        );
-        setPanelLabels(data.panel_labels ?? {});
+        setPanels(data.scopes?.find((scope) => scope.key === scopeKey)?.panelKeys ?? []);
+        setPanelLabels(data.panel_labels?.[scopeKey] ?? {});
         setExpandedRoles(new Set());
       })
       .catch((err) => {
@@ -119,21 +105,19 @@ export function StatsVisibility({
     return () => {
       active = false;
     };
-  }, [applicationId, open, scopeKey, t]);
+  }, [open, scopeKey, t]);
 
   async function setPanelState(panelKey: string, roleId: number, state: State) {
-    if (!applicationId && !scopeKey) return;
-    const roleScope = scopeKey?.startsWith("role:") === true;
     const requestKey = `${roleId}:${panelKey}`;
     setPending(requestKey);
     setError(null);
     try {
-      await api.put(
-        roleScope ? "/api/statistics/access" : `/api/applications/${applicationId}/stats/access`,
-        roleScope
-          ? { scope_key: scopeKey, panel_key: panelKey, role_id: roleId, state }
-          : { panel_key: panelKey, role_id: roleId, state },
-      );
+      await api.put("/api/statistics/access", {
+        scope_key: scopeKey,
+        panel_key: panelKey,
+        role_id: roleId,
+        state,
+      });
       const role = roles.find((item) => item.id === roleId);
       setAccess((current) => [
         ...current.filter((row) => !(row.panel_key === panelKey && row.role_id === roleId)),
@@ -194,17 +178,10 @@ export function StatsVisibility({
       setRoleToRemove(null);
       return;
     }
-    if (!applicationId && !scopeKey) return;
-    const roleScope = scopeKey?.startsWith("role:") === true;
     setPending(`remove:${role.id}`);
     setError(null);
     try {
-      await api.delete(
-        roleScope
-          ? `/api/statistics/access/${role.id}`
-          : `/api/applications/${applicationId}/stats/access/${role.id}`,
-        roleScope ? { query: { scope_key: scopeKey } } : undefined,
-      );
+      await api.delete(`/api/statistics/access/${role.id}`, { query: { scope_key: scopeKey } });
       setAccess((current) => current.filter((row) => row.role_id !== role.id));
       setIncludedRoleIds((current) => {
         const next = new Set(current);

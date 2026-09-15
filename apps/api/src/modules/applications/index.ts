@@ -8,7 +8,6 @@ import { scheduleExpirer } from "./expirer.js";
 import { registerFilesExportRoutes } from "./files-export.routes.js";
 import { registerMeRoutes } from "./me.routes.js";
 import { registerReviewRoutes } from "./review.routes.js";
-import { registerStatsRoutes } from "./stats.routes.js";
 import { registerUploadRoutes } from "./upload.routes.js";
 
 /**
@@ -24,7 +23,6 @@ export async function registerApplicationsModule(app: FastifyInstance): Promise<
   registerConfirmRoutes(app);
   registerUploadRoutes(app);
   registerFilesExportRoutes(app);
-  registerStatsRoutes(app);
 
   await scheduleExpirer();
 }
