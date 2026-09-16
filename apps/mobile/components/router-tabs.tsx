@@ -23,6 +23,7 @@ import {
   Pressable,
   type StyleProp,
   Text,
+  useColorScheme,
   View,
   type ViewStyle,
 } from "react-native";
@@ -74,7 +75,10 @@ export interface RouterTabsSurfaceProps {
 /** Injectable material adapter for consumers that do not use Expo Glass. */
 export type RouterTabsSurfaceComponent = ComponentType<RouterTabsSurfaceProps>;
 
-/** True only when the current Expo runtime can render native Liquid Glass. */
+/**
+ * Checks the Expo runtime capability rather than an iOS version, so current
+ * and future iOS releases (including iOS 27+) use their native material.
+ */
 export function isRouterTabsLiquidGlassAvailable(): boolean {
   return (Platform.OS === "ios" || Platform.OS === "macos") && isLiquidGlassAvailable();
 }
@@ -349,19 +353,22 @@ function RouterTabsContent({
               cellWidth={directTabCellWidth}
               itemHeight={tabItemHeight}
               selectionInset={tabItemVerticalInset}
-              liquidGlass={liquidGlass}
               offset={selectionOffset}
-              reducedMotion={reducedMotion}
-              surfaceComponent={surfaceComponent}
               theme={theme}
               visible={selectedDirectTabIndex >= 0 || isScrubbing}
             />
-            {directTabs.map((tab) => (
+            {directTabs.map((tab, index) => (
               <TabTrigger key={tab.name} asChild name={tab.name}>
                 <RouterTabButton
                   icon={tab.icon}
                   label={tab.label}
-                  onTabPress={() => onTabPress?.(tab)}
+                  onTabPress={() => {
+                    const targetOffset = index * directTabCellWidth;
+                    selectionOffset.value = reducedMotion
+                      ? targetOffset
+                      : withSpring(targetOffset, TAB_SELECTION_SPRING);
+                    onTabPress?.(tab);
+                  }}
                   selectedIcon={tab.selectedIcon}
                   itemHeight={tabItemHeight}
                   testID={tab.testID ?? `${testID}-${tab.name}`}
@@ -498,23 +505,18 @@ function TabSelectionBlob({
   cellWidth,
   itemHeight,
   selectionInset,
-  liquidGlass,
   offset,
-  reducedMotion,
-  surfaceComponent,
   theme,
   visible,
 }: {
   cellWidth: number;
   itemHeight: number;
   selectionInset: number;
-  liquidGlass: boolean;
   offset: SharedValue<number>;
-  reducedMotion: boolean;
-  surfaceComponent: RouterTabsSurfaceComponent;
   theme: RouterTabsTheme;
   visible: boolean;
 }) {
+  const colorScheme = useColorScheme();
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: offset.value }],
   }));
@@ -537,13 +539,12 @@ function TabSelectionBlob({
         animatedStyle,
       ]}
     >
-      <SurfaceComponent
-        isInteractive={liquidGlass}
-        mode={liquidGlass ? "liquid-glass" : "opaque"}
-        reducedMotion={reducedMotion}
-        surfaceComponent={surfaceComponent}
+      <View
         style={{
-          backgroundColor: !liquidGlass ? theme.selectedSurface : undefined,
+          // Keep the travelling lens transform-only. A second glass hierarchy
+          // here makes UIKit refract and distort the tab content itself.
+          backgroundColor:
+            colorScheme === "dark" ? "rgba(255, 255, 255, 0.16)" : "rgba(0, 0, 0, 0.1)",
           borderCurve: "continuous",
           borderRadius: itemHeight / 2,
           boxShadow: theme.shadow,
@@ -630,7 +631,12 @@ function DefaultRouterTabsSurface({
 }: RouterTabsSurfaceProps) {
   if (mode === "liquid-glass") {
     return (
-      <ExpoGlassView isInteractive={isInteractive} style={style} testID={testID}>
+      <ExpoGlassView
+        glassEffectStyle="regular"
+        isInteractive={isInteractive}
+        style={style}
+        testID={testID}
+      >
         {children}
       </ExpoGlassView>
     );
