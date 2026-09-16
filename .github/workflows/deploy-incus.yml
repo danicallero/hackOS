@@ -1,10 +1,10 @@
-name: Deploy GPULux
+name: Deploy with Incus
 
 on:
   workflow_dispatch:
     inputs:
       environment:
-        description: GitHub Actions environment and GPULux stack to deploy
+        description: GitHub Actions environment and hackos stack to deploy
         required: true
         type: choice
         options:
@@ -19,12 +19,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: hackos-gpulux-${{ inputs.environment }}
+  group: hackos-incus-${{ inputs.environment }}
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: Deploy hackOS to GPULux
+    name: Deploy hackOS with Incus
     runs-on: self-hosted
     timeout-minutes: 30
     environment:
@@ -56,13 +56,13 @@ jobs:
 
           echo "Deployment inputs: environment=$DEPLOY_ENVIRONMENT tag=$IMAGE_TAG"
 
-      - name: Check GPULux Incus access
+      - name: Check Incus access
         shell: bash
         run: |
           set -euo pipefail
           command -v incus >/dev/null
           incus info hackos >/dev/null
-          echo "GPULux Incus instance hackos is reachable."
+          echo "Incus instance hackos is reachable."
 
       - name: Transfer deployment files to hackos LXC
         shell: bash
@@ -70,9 +70,10 @@ jobs:
           set -euo pipefail
           incus exec hackos -- mkdir -p /root/hackos
           incus file push deploy/docker-compose.yml hackos/root/hackos/docker-compose.yml
-          incus file push deploy/gpulux-deploy.sh hackos/root/hackos/deploy.sh
-          incus exec hackos -- chmod 700 /root/hackos/deploy.sh
-          echo "Compose and deployment script transferred."
+          incus file push deploy/incus-deploy.sh hackos/root/hackos/deploy.sh
+          incus file push deploy/scripts/check-env.sh hackos/root/hackos/check-env.sh
+          incus exec hackos -- chmod 700 /root/hackos/deploy.sh /root/hackos/check-env.sh
+          echo "Compose, validation and deployment scripts transferred."
 
       - name: Deploy inside hackos LXC
         env:

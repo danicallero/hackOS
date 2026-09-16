@@ -127,7 +127,7 @@ const envSchema = z.object({
 
   /**
    * Trust X-Forwarded-* headers. Enable when the API sits behind a reverse
-   * proxy (GPULux Caddy) so the real client IP reaches the audit trail
+   * proxy (Caddy) so the real client IP reaches the audit trail
    * (H53) instead of the proxy's address. Never enable when directly exposed.
    */
   TRUST_PROXY: z

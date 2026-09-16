@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy one immutable hackOS image set inside the GPULux hackos LXC.
+# Deploy one immutable hackOS image set inside the hackos LXC.
 set -Eeuo pipefail
 
 environment="${1:-}"
@@ -20,24 +20,34 @@ fi
 
 app_dir="${HACKOS_APP_DIR:-/root/hackos}"
 compose_file="${HACKOS_COMPOSE_FILE:-$app_dir/docker-compose.yml}"
-if [[ -n "${HACKOS_SECRETS_FILE:-}" ]]; then
-  secrets_file="$HACKOS_SECRETS_FILE"
-elif [[ -f "$app_dir/.env.$environment" ]]; then
-  secrets_file="$app_dir/.env.$environment"
-else
-  secrets_file="$app_dir/.env"
-fi
 project_name="hackos-$environment"
 lock_file="${HACKOS_LOCK_FILE:-$app_dir/.deploy.lock}"
+config_file="${HACKOS_CONFIG_FILE:-/etc/hackos/hackos.env}"
+secrets_file="${HACKOS_SECRETS_FILE:-/etc/hackos/hackos.secrets}"
+validator_file="${HACKOS_CHECK_ENV_FILE:-$app_dir/check-env.sh}"
 
 if [[ ! -f "$compose_file" ]]; then
   echo "ERROR: deployment Compose file is missing" >&2
   exit 1
 fi
-if [[ ! -f "$secrets_file" ]]; then
-  echo "ERROR: deployment secret file is missing from the LXC" >&2
+
+# Prefer the canonical two-file contract. Keep a compatibility path for an
+# existing single secret file in the LXC; Actions never supplies either file.
+compose_env_files=()
+if [[ -f "$config_file" && -f "$secrets_file" ]]; then
+  compose_env_files=(--env-file "$config_file" --env-file "$secrets_file")
+elif [[ -f "/etc/hackos/hackos.env" || -f "/etc/hackos/hackos.secrets" ]]; then
+  echo "ERROR: both Compose environment files are required" >&2
+  exit 1
+elif [[ -f "$app_dir/.env.$environment" ]]; then
+  compose_env_files=(--env-file "$app_dir/.env.$environment")
+elif [[ -f "$app_dir/.env" ]]; then
+  compose_env_files=(--env-file "$app_dir/.env")
+else
+  echo "ERROR: deployment environment and secret file are missing from the LXC" >&2
   exit 1
 fi
+
 if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
   echo "ERROR: Docker Compose is not available in the LXC" >&2
   exit 1
@@ -47,6 +57,7 @@ if ! command -v flock >/dev/null 2>&1; then
   exit 1
 fi
 
+mkdir -p "$app_dir"
 exec 9>"$lock_file"
 if ! flock -n 9; then
   echo "ERROR: another hackOS deployment is already running" >&2
@@ -58,7 +69,7 @@ export IMAGE_TAG="$image_tag"
 
 compose() {
   docker compose \
-    --env-file "$secrets_file" \
+    "${compose_env_files[@]}" \
     --file "$compose_file" \
     --project-name "$project_name" \
     "$@"
@@ -79,6 +90,17 @@ run_compose() {
   rm -f "$output_file"
   echo "OK: $description"
 }
+
+if [[ "${#compose_env_files[@]}" -eq 4 && -x "$validator_file" ]]; then
+  validator_output="$(mktemp)"
+  if ! "$validator_file" "$config_file" "$secrets_file" "$image_tag" >"$validator_output" 2>&1; then
+    rm -f "$validator_output"
+    echo "ERROR: deployment environment validation failed" >&2
+    exit 1
+  fi
+  rm -f "$validator_output"
+  echo "OK: deployment environment validated"
+fi
 
 wait_for_health() {
   local service="$1"
@@ -107,27 +129,6 @@ wait_for_health() {
   return 1
 }
 
-wait_for_running() {
-  local service="$1"
-  local container_id status attempt
-
-  echo "WAIT: process $service"
-  for attempt in {1..30}; do
-    container_id="$(compose ps --quiet "$service" 2>/dev/null || true)"
-    if [[ -n "$container_id" ]]; then
-      status="$(docker inspect --format '{{.State.Status}}' "$container_id" 2>/dev/null || true)"
-      if [[ "$status" == running ]]; then
-        echo "OK: process $service"
-        return 0
-      fi
-    fi
-    sleep 2
-  done
-
-  echo "ERROR: process $service did not start" >&2
-  return 1
-}
-
 echo "Deploying hackOS $environment ($image_tag)"
 run_compose "validate Compose" config --quiet
 run_compose "pull api worker web" pull api worker web
@@ -139,6 +140,6 @@ run_compose "initialize object storage" run --rm --no-deps minio-init
 run_compose "migrate database" run --rm --no-deps migrate
 run_compose "update api worker web" up --detach --no-deps --force-recreate api worker web
 wait_for_health api
+wait_for_health worker
 wait_for_health web
-wait_for_running worker
 echo "OK: hackOS $environment deployed"

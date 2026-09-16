@@ -221,18 +221,20 @@ The release paths are:
 
 | Branch | CD behavior |
 | --- | --- |
-| `staging` | Merge an approved development PR here. Build publishes the images; the protected GPULux deploy workflow deploys a selected SHA tag to staging. |
-| `main` | Merge an approved PR from any branch. Build publishes production images; the protected GPULux deploy workflow deploys a selected SHA tag to production. |
+| `staging` | Merge an approved development PR here. Build publishes immutable `linux/amd64` and `linux/arm64` images; the protected Incus workflow deploys a selected SHA tag to staging. |
+| `main` | Merge an approved PR from any branch. Build publishes immutable `linux/amd64` and `linux/arm64` images; the protected Incus workflow deploys a selected SHA tag to production. |
 
-`main` and `staging` are independent environments. A merge publishes the
-corresponding image tags but does not deploy by itself; an approved operator
-selects the SHA in the protected workflow for the target environment. To test
-the current production tree in staging, open an explicit pull request from
-`main` to `staging`.
+`main` and `staging` are independent environments. Merging into either branch
+publishes its release artifact but does not deploy a host. An approved operator
+selects the SHA in the protected Incus workflow; to test the current
+production tree in staging, open an explicit pull request from `main` to
+`staging`.
 
-The merge to either protected branch is what builds its release artifact. Protect
-exactly `staging` and `main`; CI accepts PRs into either branch, while deployment
-is an explicitly approved workflow dispatch on the GPULux self-hosted runner.
+The merge to either protected branch is what builds its release artifact. The
+staging and production stacks use the same multi-architecture image
+repositories and SHA tag format, with separate Compose environment and secret
+files. Protect exactly `staging` and `main`; CI accepts PRs into either branch,
+while deployment is an explicitly approved workflow dispatch.
 The API test job provides fresh Postgres, Valkey and Mailpit service containers
 plus health-checked MinIO, then provisions the test bucket; local API runs
 still use `pnpm infra:up` and the commands above.
@@ -247,7 +249,7 @@ packages/shared/      capability, event and cross-client test contracts
 e2e/                  Playwright and Detox flows
 plan/                 normative user stories and hard invariants
 docs/                 current architecture and implementation notes
-deploy/               canonical GPULux Compose, Incus deploy script and runbook
+deploy/               Canonical Docker Compose runtime and host runbook
 ```
 
 The backend is split by domain under `apps/api/src/modules`: identity,
@@ -296,19 +298,18 @@ Useful next reads:
 
 ## Deployment
 
-Production is designed as one isolated Compose stack per event/environment
-inside the GPULux `hackos` LXC. The API, worker and web use immutable GHCR SHA
-tags; Postgres, Valkey and MinIO stay on an internal network, while the GPULux
-proxy reaches only the published API and web HTTP ports. A one-shot migration
-command runs before the API starts and uses a Postgres advisory lock to make
-concurrent deploys safe. The API repeats this no-op-safe migration check
-immediately before listening so a reused one-shot container cannot leave the
-running image ahead of the database schema.
+Production and staging are isolated Compose projects in the `hackos` LXC.
+The API, worker and web run from pinned GHCR SHA images; Postgres, Valkey and
+MinIO stay on private networks, while the proxy reaches only the
+published API and web HTTP ports. A one-shot migration command runs before the
+API starts and uses a Postgres advisory lock to make concurrent deploys safe.
+The API repeats this no-op-safe migration check immediately before listening so
+a reused one-shot container cannot leave the running image ahead of the schema.
 
-[`deploy/README.md`](deploy/README.md) documents the GPULux runner prerequisite,
-Incus transfer, secret-file contract, health gates, rollback and backups. Use
-[`docs/env-vars.md`](docs/env-vars.md) as the canonical Compose environment
-variable checklist.
+[`deploy/README.md`](deploy/README.md) documents the canonical Compose runtime,
+the self-hosted runner, Incus transfer, secret-file contract, health
+gates and rollback. Use [`docs/env-vars.md`](docs/env-vars.md) as the
+per-service environment checklist.
 
 The mobile implementation and automated tests are in place. Offline recovery,
 APNs/FCM delivery, camera behaviour, encrypted SQLite and Wallet flows still

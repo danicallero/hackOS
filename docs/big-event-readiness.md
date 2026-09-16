@@ -9,11 +9,12 @@ is the concrete "what do I set / check before doors open" companion.
 
 ## What already scales without changes
 
-- **api is stateless and horizontally scalable.** SSE (queue/TV/judging
-  live updates) fans out through Valkey pub/sub
-  ([`architecture.md` §5](./architecture.md#5-realtime-sse-fanned-out-through-valkey)),
-  so any number of `api` replicas behind the GPULux proxy see every event — a client
-  connected to replica A gets updates published by replica B.
+- **api is stateless and ready for a future horizontal topology.** SSE
+  (queue/TV/judging live updates) fans out through Valkey pub/sub
+  ([`architecture.md` §5](./architecture.md#5-realtime-sse-fanned-out-through-valkey)).
+  The canonical multi-architecture runtime deliberately runs one API container
+  on both the staging Raspberry Pi and production; a future replica topology would
+  still receive every event through Valkey.
 - **worker is safe to scale by replica count.** Notification dispatch and
   state-machine ticks (queue pump, expirer) use
   `FOR UPDATE` / `FOR UPDATE SKIP LOCKED`, so N replicas split the work with
@@ -36,12 +37,12 @@ reflexively adding replicas everywhere.
 
 | Service | What scaling it relieves | What it does *not* relieve | How to scale | Recommended for ~600 CCU |
 |---|---|---|---|---|
-| **api** | Request-handling CPU/event-loop contention — auth checks, Zod validation, JSON serialization, and the number of concurrently-open HTTP/SSE connections a single Node process can service. | Postgres load — every extra `api` replica opens its own `DB_POOL_MAX`-sized pool, so scaling `api` *adds* to Postgres's connection budget, it doesn't reduce query load there. | Add replicas in the Compose project; stateless by design, SSE already fans out through Valkey (§ above) so no sticky sessions needed. Ensure the GPULux proxy and published ports are configured for the selected replica layout. | 1 replica on a 2+ vCPU box comfortably covers 600 CCU. Add a 2nd only if you observe sustained CPU saturation on the box, not preemptively. |
+| **api** | Request-handling CPU/event-loop contention — auth checks, Zod validation, JSON serialization, and the number of concurrently-open HTTP/SSE connections a single Node process can service. | Postgres load — every extra `api` replica opens its own `DB_POOL_MAX`-sized pool, so scaling `api` *adds* to Postgres's connection budget, it doesn't reduce query load there. | The canonical Compose runtime has one replica. A future multi-replica Compose project can add stateless API containers; Valkey already fans out SSE, so no sticky sessions are needed. | 1 replica on the production host is the default; keep one on the smaller staging Raspberry Pi. |
 | **worker** | `notification_outbox` drain latency (mass announcements, acceptance emails) and state-machine tick backlog (queue pump, confirmation expirer, wallet sync). The drain is a repeatable BullMQ job (`every: 5s`) that queues a new occurrence regardless of whether the previous one finished, so under real backlog multiple ticks queue up and `FOR UPDATE SKIP LOCKED` lets replicas split them safely. | Nothing HTTP-facing — the worker has no ingress, so it never helps with request latency or SSE capacity. Replicas also don't help an *empty* queue drain faster — see the mass-messaging section below for why batch size, not replica count, is the first lever. | Add replicas; no coordination needed beyond what's already in the query. | 1 replica for steady-state. See "Mass-messaging bursts" below for what to do specifically before a 600+-recipient, multi-channel send. |
-| **postgres** | The one thing that's genuinely shared: query latency and lock-wait time on `FOR UPDATE` transitions (queue calls, scan idempotency, badge rotation). This is the resource `api` and `worker` replicas both draw down, not build up. | Nothing about it "scales" by adding replicas — it's a single primary by design (§7 architecture.md), so more Postgres capacity means a *bigger* box, not more of them. | Vertical: raise `PG_MEM_LIMIT`, put `pgdata` on NVMe, give it dedicated CPU (see the host-splitting section below if it's contending with `api`/`worker`/`web` for CPU). | `PG_MEM_LIMIT=2g`+ if the host has it; this is the service most worth over-provisioning, since every other service's scaling ultimately funnels load into it. |
-| **valkey** | SSE pub/sub fan-out throughput and BullMQ job enqueue/dequeue throughput. | Nothing durable — it holds no source-of-truth data, so scaling it is about pub/sub message rate, not correctness. | Single-node by design; not a lever worth reaching for at this scale — Valkey handles orders of magnitude more throughput than 600 CCU produces. | Leave at defaults (`VALKEY_MEM_LIMIT=512m`); this is not where event-day stress shows up. |
-| **minio** | Object upload/download throughput — application file attachments, sponsor logo serving, export downloads, wallet-pass assets. | Nothing else — it's not on the query/lock-wait path at all. | Single-node; if you outgrow it, repoint `S3_ENDPOINT`/`S3_PUBLIC_URL` at managed S3/R2/Spaces (§7 architecture.md) rather than trying to cluster MinIO yourself. | Default (`MINIO_MEM_LIMIT=1g`) is fine for steady use; only worth bumping if you expect a simultaneous upload burst (e.g. a submission deadline with large project files). |
-| **web** | Next.js SSR/page-render load for the browser app and TV screens — each connected TV/participant browser holds a request the Node process has to render. | Nothing on the API/DB side — `web` calls the public API URL like any other client, it never touches Postgres directly. | Add replicas in the Compose project only after configuring distinct published ports and matching GPULux proxy routes; stateless, no session affinity needed (auth lives in the API, not in `web`). | 1 replica is normally enough for 600 CCU; bump `WEB_MEM_LIMIT` if you see OOM restarts under concurrent page loads rather than adding a replica first. |
+| **postgres** | The one thing that's genuinely shared: query latency and lock-wait time on `FOR UPDATE` transitions (queue calls, scan idempotency, badge rotation). This is the resource `api` and `worker` replicas both draw down, not build up. | Nothing about it "scales" by adding replicas — it's a single primary by design (§7 architecture.md), so more Postgres capacity means a *bigger* box, not more of them. | The canonical limit is fixed at `1g`; put the persistent volume on fast local storage and size the host appropriately. A larger host requires a reviewed Compose change, not an undocumented env override. | The production host should provide headroom around the fixed `1g` cap; the Raspberry Pi staging host is for integration validation, not event load. |
+| **valkey** | SSE pub/sub fan-out throughput and BullMQ job enqueue/dequeue throughput. | Nothing durable — it holds no source-of-truth data, so scaling it is about pub/sub message rate, not correctness. | Single-node by design; not a lever worth reaching for at this scale — Valkey handles orders of magnitude more throughput than 600 CCU produces. | Leave the fixed `512m` Compose limit; this is not where event-day stress shows up. |
+| **minio** | Object upload/download throughput — application file attachments, sponsor logo serving, export downloads, wallet-pass assets. | Nothing else — it's not on the query/lock-wait path at all. | Single-node; if you outgrow it, repoint `S3_ENDPOINT`/`S3_PUBLIC_URL` at managed S3/R2/Spaces (§7 architecture.md) rather than trying to cluster MinIO yourself. | The fixed `1g` Compose limit is fine for steady use; a simultaneous upload burst requires host sizing or a reviewed storage change. |
+| **web** | Next.js SSR/page-render load for the browser app and TV screens — each connected TV/participant browser holds a request the Node process has to render. | Nothing on the API/DB side — `web` calls the public API URL like any other client, it never touches Postgres directly. | The canonical Compose runtime has one web container behind the host ingress. A future multi-replica topology can add stateless web containers. | 1 replica is the default; keep one on both production and staging. The fixed memory limit is `256m`. |
 
 The practical takeaway: **`api` and `worker` replicas trade Postgres headroom for their own headroom** — they don't create capacity, they redistribute where the bottleneck shows up. If the monitoring queries below show Postgres itself under pressure (active connections near the ceiling, or long lock waits), scaling `api`/`worker` further makes it worse, not better — that's the signal to size Postgres up (or split it onto its own host) instead.
 
@@ -51,7 +52,7 @@ This is a different kind of stress from steady CCU — it's a single admin
 action that inserts hundreds or thousands of rows into `notification_outbox`
 at once (600 recipients × 3 channels = up to 1800 rows). Worth its own plan
 because the naive fix ("autoscale the worker on outbox depth") is more
-infrastructure than the problem needs — plain Compose has no
+infrastructure than the problem needs — the canonical Compose runtime has no
 built-in autoscaler watching a custom Postgres metric, and this load is
 **triggered deliberately by an admin at a known moment**, not an
 unpredictable spike.
@@ -86,11 +87,9 @@ not something to do by default.
 | Setting | Where | Default | Recommended for ~600 CCU |
 |---|---|---|---|
 | `DB_POOL_MAX` | `api` + `worker` env | `20` each | `20`–`30` each is plenty; see the Postgres budget below before going higher. |
-| `API_MEM_LIMIT` | `api` compose | `512m` | `1g` if running a single `api` replica; keep `512m` per replica if you scale out instead (see below). |
-| `WORKER_MEM_LIMIT` | `worker` compose | `512m` | Usually fine as-is — the worker is a light tick drainer, not request-serving. |
-| `PG_MEM_LIMIT` | `postgres` compose | `1g` | `2g`+ if the host has it to spare — Postgres benefits from memory more than any other service here. |
-| `api` replica count | Compose project | 1 | 1 is fine up to ~600 CCU on a reasonably sized box (2+ vCPU). Add a 2nd replica only if you see sustained CPU saturation — keep the GPULux proxy's health routing aligned with the selected published ports. |
-| `worker` replica count | Compose project | 1 | 1 is fine; bump to 2 only if `notification_outbox` depth (query below) climbs during the event instead of draining. |
+| `Compose memory limits` | `deploy/docker-compose.yml` | fixed | `postgres=1g`, `valkey=512m`, `minio=1g`, `api=512m`, `worker=512m`, `web=256m`; there are no service memory override variables. |
+| `api` replica count | canonical Compose | 1 | 1 is the supported runtime on production and the staging Raspberry Pi. A future multi-replica change must account for the Postgres connection budget below. |
+| `worker` replica count | canonical Compose | 1 | 1 is fine; a reviewed Compose topology can add a second worker only if `notification_outbox` depth (query below) climbs during the event instead of draining. |
 | `NOTIFICATION_OUTBOX_BATCH_SIZE` | `worker` env | `100` | Already sized for a mass-send — see "Mass-messaging bursts" above. No change needed by default. |
 
 **Postgres connection budget.** Every `api`/`worker` process holds its own
@@ -110,9 +109,9 @@ adding replicas, since each extra connection costs Postgres memory.
 
 ## Pre-event checklist
 
-1. **Set the env vars above** in the LXC secret file (or a local `.env`
-   file for a qualification Compose run) a few days before the event, not on
-   the day — so a boot-time zod validation failure surfaces early.
+1. **Set the two host env files** (`/etc/hackos/hackos.env` and
+   `/etc/hackos/hackos.secrets`) a few days before the event, not on the day —
+   so a boot-time zod validation failure surfaces early.
 2. **Load-test the hot paths**, not the whole API surface — the two places
    that take Postgres row locks and see real event-day bursts:
    - Badge scanning (`idempotencyGuard`-guarded scan routes) — simulate the
@@ -200,7 +199,7 @@ the scenario. Stop the API and run `pnpm infra:down` after the measurement.
 Run the full representative workload on the actual production host before
 participants use the event, but run it in the repository-owned disposable stack
 at [`deploy/qualification/docker-compose.yml`](../deploy/qualification/docker-compose.yml).
-The qualification stack has no public ingress, no host ports, one Docker network with
+The stack has no public ingress, no host ports, one Docker network with
 `internal: true`, a fresh Postgres volume, and a fresh Valkey instance. The API
 and runner use `NODE_ENV=test` only inside that stack; the runner's
 `x-test-user-id` headers can therefore never reach the attendee API. The
@@ -215,7 +214,7 @@ Valkey 1 CPU + 512 MiB. This is a qualification of the release image and host
 resources, not a change to #540 pool sizing, timeout, SSE backpressure, or
 connection-budget work.
 
-#### One command: plain Compose on the GPULux host
+#### One command: Compose on the production host
 
 Use a release digest, never `:latest` or an attendee deployment URL. Run from a
 checkout containing the release's compose file, with no production
@@ -240,14 +239,12 @@ docker compose -p hackos-event-day-qualification \
   -f deploy/qualification/docker-compose.yml down --volumes --remove-orphans
 ```
 
-Run the qualification as a separate, one-off Compose project on the GPULux
-host, pointing at the release checkout and
-`deploy/qualification/docker-compose.yml`; do not reuse any production service,
-network, volume, database, Valkey, secret, or env file. Set only
-`RELEASE_IMAGE` and `QUALIFICATION_ARTIFACT_DIR` in that qualification
-environment, then run the same `deploy/qualification/run.sh` from the host
-shell (or use the equivalent Compose commands above). The qualification stack
-must be stopped and removed after the artifact is retrieved; it is not a
+Run the qualification stack from the production host shell, pointing at the
+release checkout and `deploy/qualification/docker-compose.yml`; do not reuse
+any production service, network, volume, database, Valkey, secret, or env file.
+Set only `RELEASE_IMAGE` and `QUALIFICATION_ARTIFACT_DIR` in that qualification
+environment, then run the same `deploy/qualification/run.sh`. The qualification
+stack must be stopped and removed after the artifact is retrieved; it is not a
 long-running production service.
 
 The runner writes `result.json` even when a release budget fails and returns
@@ -477,7 +474,8 @@ for a much larger event than 600 CCU. They're documented in
 them; for a single hackathon at this scale, the checklist above is the
 complete story.
 
-If Postgres turns out to be the actual bottleneck in the hackos LXC (check with
-the monitoring queries above before assuming this), size the LXC or plan a
-separate stateful-service architecture change. The current GPULux runbook keeps
-Postgres private to the Compose project and does not perform that migration.
+If co-located Postgres turns out to be the actual bottleneck on the box
+you're using (check with the monitoring queries above before assuming this),
+[`deploy/README.md`'s "Splitting Postgres onto its own host"](../deploy/README.md#splitting-postgres-onto-its-own-host-optional-advanced)
+covers moving it to a second host behind a private network, while keeping the
+canonical runtime isolated from that optional host.
