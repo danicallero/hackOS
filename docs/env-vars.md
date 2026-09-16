@@ -29,10 +29,10 @@ configuración no secreta.
 | `COMPOSE_PROJECT_NAME` | Compose | no | Nombre del proyecto Compose; se recomienda `hackos`. |
 | `S3_BUCKET` | configuración | no | Bucket creado por `minio-init`, por defecto `hackos`. |
 | `S3_PUBLIC_URL` | configuración | no | URL HTTPS externa y accesible por navegador para logos públicos. MinIO no publica un puerto. |
-| `MAIL_PROVIDER` | configuración | no | `smtp`, `resend` o `postal`; por defecto `smtp`. |
+| `MAIL_PROVIDER` | configuración | no | `smtp`; el transporte se mantiene explícito para el despliegue. |
 | `MAIL_FROM_ADDRESS` | configuración | sí | Remitente de los correos. |
 | `MAIL_FROM_NAME` | configuración | no | Nombre del remitente, por defecto `hackOS`. |
-| `SMTP_HOST`, `SMTP_PORT` | configuración | si `smtp` | Host y puerto del relay SMTP. `SMTP_PORT` vale `587` por defecto. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | configuración/secreto | sí para SMTP | Host, puerto y credenciales opcionales del relay SMTP. `SMTP_PORT` vale `587` por defecto; Amazon SES se configura aquí mediante su interfaz SMTP. |
 | `MOBILE_APP_SCHEME` | configuración | no | Esquema de la app móvil, por defecto `hackos`. |
 
 El script [`deploy/scripts/check-env.sh`](../deploy/scripts/check-env.sh)
@@ -87,7 +87,7 @@ Además de las variables de las dependencias anteriores, `api` recibe:
 | Wallet | `APPLE_PASS_TYPE_IDENTIFIER`, `APPLE_TEAM_IDENTIFIER`, `APPLE_PASS_ORGANIZATION`, `APPLE_PASS_CERTIFICATE_PEM`, `APPLE_PASS_KEY_PEM`, `APPLE_PASS_KEY_PASSPHRASE`, `APPLE_WWDR_CERTIFICATE_PEM`, `APPLE_APNS_ENVIRONMENT`, `APPLE_PASS_APP_STORE_ID`, `GOOGLE_WALLET_ISSUER_ID`, `GOOGLE_WALLET_EVENT_TICKET_CLASS_ID`, `GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_WALLET_PRIVATE_KEY_PEM`, `GOOGLE_WALLET_LOGO_URL`, `GOOGLE_WALLET_HERO_IMAGE_URL`, `GOOGLE_WALLET_WIDE_LOGO_URL`, `GOOGLE_WALLET_BACKGROUND_COLOR` |
 | Fixtures | `REVIEW_FIXTURE_PASSWORD`, `REVIEW_FIXTURE_DELETION_PIN` |
 
-El API no recibe variables SMTP, Resend, Postal ni la cuenta root de MinIO.
+El API no recibe variables de correo ni la cuenta root de MinIO.
 
 ### Worker
 
@@ -97,7 +97,7 @@ El API no recibe variables SMTP, Resend, Postal ni la cuenta root de MinIO.
 |---|---|
 | Proceso | `NODE_ENV=production`, `WORKERS_INLINE=false`, `LOG_LEVEL`, `LOG_EXPO_PUSH_TICKETS`, `LOG_EXPO_PUSH_UNSAFE_DEBUG` |
 | Pool y outbox | `DB_POOL_MAX`, `DB_IDLE_TIMEOUT_MS`, `DB_CONNECTION_TIMEOUT_MS`, `DB_STATEMENT_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`, `NOTIFICATION_OUTBOX_BATCH_SIZE` |
-| Correo | `MAIL_PROVIDER`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`, `MAIL_FOOTER_TEXT`, `MAIL_LAYOUT_*`, `RESEND_API_KEY`, `POSTAL_URL`, `POSTAL_API_KEY`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` |
+| Correo | `MAIL_PROVIDER`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` |
 | Wallet | El mismo bloque de Wallet que usa API, porque el worker empuja sincronizaciones de pases. |
 
 El worker no recibe `CORS_ORIGINS`, límites SSE, rate limits de scanner,
@@ -113,12 +113,10 @@ compatibilidad. No recibe Valkey, S3, correo, Wallet ni configuración web.
 en `/runtime-config.js`. No recibe ninguna variable secreta ni dependencias de
 datos.
 
-## Secretos opcionales por proveedor
+## Secretos opcionales del relay SMTP
 
-- SMTP: `SMTP_HOST` es obligatorio para el provider SMTP; `SMTP_USER` y
+- `SMTP_HOST` es obligatorio para el transporte SMTP; `SMTP_USER` y
   `SMTP_PASS` sólo si el relay autentica.
-- Resend: `RESEND_API_KEY` es obligatorio.
-- Postal: `POSTAL_URL` y `POSTAL_API_KEY` son obligatorios.
 - Apple Wallet: `APPLE_PASS_CERTIFICATE_PEM`, `APPLE_PASS_KEY_PEM` y
   `APPLE_WWDR_CERTIFICATE_PEM` deben estar todos presentes o todos ausentes.
 - Google Wallet: `GOOGLE_WALLET_ISSUER_ID`,

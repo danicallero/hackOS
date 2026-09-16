@@ -27,10 +27,8 @@ MINIO_ROOT_PASSWORD=$(rand 24)
 S3_ACCESS_KEY=hackos-app
 S3_SECRET_KEY=$(rand 24)
 
-# Fill only the block selected by MAIL_PROVIDER in hackos.env.
-RESEND_API_KEY=
-POSTAL_URL=
-POSTAL_API_KEY=
+# SMTP credentials for the relay selected in hackos.env. Amazon SES SMTP
+# credentials are different from ordinary AWS access keys.
 SMTP_USER=
 SMTP_PASS=
 

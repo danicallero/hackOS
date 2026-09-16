@@ -56,7 +56,7 @@ flowchart TB
 
     subgraph ext[Providers]
         expo[Expo Push → APNs/FCM]
-        mail[Mail provider · SMTP/Resend/Postal]
+        mail[Mail transport · SMTP]
     end
 
     browser & phone --> caddy
@@ -156,8 +156,8 @@ explicit `migrate` process succeeds.
 
 ### mailpit — dev only
 - Local `pnpm infra:up` catches all outbound mail at `localhost:8025`. Not part
-  of any production deploy; production uses SMTP/Resend/Postal via
-  `MAIL_PROVIDER`.
+  of any production deploy; production uses SMTP (for example, Amazon SES's
+  SMTP endpoint) via `MAIL_PROVIDER`.
 
 ---
 
@@ -409,7 +409,7 @@ it with naive writable replicas.
 | **Permissions by capability, never role** (H8) | Routes guard on `requireCapability(CAPABILITIES.X)`; the mobile app derives its tabs the same way, so a permission change applies without a reinstall (H55). |
 | **One image, three commands** | One build, one version, zero enqueue/drain drift. |
 | **Datastores off all public networks** | The perimeter is a network boundary, not per-service firewalls — nothing routes to `postgres`/`valkey`/`minio` from outside. |
-| **Mail provider via env, not DB** (DELTA H52) | Switching SMTP/Resend/Postal is an ops action (redeploy), validated at boot by zod — no runtime toggle to get wrong. |
+| **Mail transport via env, not DB** (DELTA H52) | SMTP settings are an ops action (redeploy), validated at boot by zod — no runtime toggle to get wrong. Production may use Amazon SES through SMTP. |
 | **Wallet creds optional but never half-set** (H28) | Zod `superRefine` fails boot on a partially-configured platform; an unconfigured one returns a clean `503`, so a typo can't ship an invalid pass. |
 | **Deterministic container DNS** (H51) | `dns:` pinned so external resolution never depends on the host's transient `resolv.conf` — the root cause of a real push outage. |
 | **Web talks to API over the public URL** | The frontend is just another client; it receives only public runtime configuration and uses the egress network for its published HTTP service. |

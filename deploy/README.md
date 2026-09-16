@@ -88,8 +88,9 @@ S3_ACCESS_KEY
 S3_SECRET_KEY
 ```
 
-Para correo, `MAIL_PROVIDER=smtp` requiere `SMTP_HOST`; `resend` requiere
-`RESEND_API_KEY`; `postal` requiere `POSTAL_URL` y `POSTAL_API_KEY`. Las
+Para correo, `MAIL_PROVIDER=smtp` requiere `SMTP_HOST`. En producción se puede
+usar Amazon SES a través de su endpoint SMTP; `SMTP_USER` y `SMTP_PASS` se
+guardan en el fichero de secretos cuando el relay requiere autenticación. Las
 claves de firma de Apple/Google son opcionales, pero cada bloque configurado
 debe estar completo. `check-env.sh` no imprime valores secretos.
 

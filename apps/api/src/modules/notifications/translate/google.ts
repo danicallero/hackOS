@@ -3,7 +3,7 @@ import { assertOkResponse } from "../channels/http.js";
 /**
  * Google Cloud Translation v2 REST adapter. Exercised in tests via a
  * stubbed `global.fetch`, never a live network call — same convention as
- * the Resend email adapter (channels/email-adapters/resend.ts).
+ * the email adapter.
  */
 export async function translateViaGoogle(
   texts: string[],

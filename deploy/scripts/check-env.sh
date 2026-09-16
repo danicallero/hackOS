@@ -99,21 +99,8 @@ case ",${cors_origins}," in
 esac
 [[ "$mail_from" == *@*.* ]] || die 'MAIL_FROM_ADDRESS must be an email address'
 
-case "$mail_provider" in
-  smtp)
-    require_value SMTP_HOST >/dev/null
-    ;;
-  resend)
-    require_value RESEND_API_KEY >/dev/null
-    ;;
-  postal)
-    require_value POSTAL_URL >/dev/null
-    require_value POSTAL_API_KEY >/dev/null
-    ;;
-  *)
-    die 'MAIL_PROVIDER must be smtp, resend, or postal'
-    ;;
-esac
+[[ "$mail_provider" == smtp ]] || die 'MAIL_PROVIDER must be smtp'
+require_value SMTP_HOST >/dev/null
 
 for key in \
   POSTGRES_USER \

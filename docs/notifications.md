@@ -184,15 +184,14 @@ Google Cloud Translation v2 adapter (`translate/google.ts`,
 `GOOGLE_TRANSLATE_API_KEY`) or a self-hosted LibreTranslate adapter
 (`translate/libretranslate.ts`, `LIBRETRANSLATE_URL` +
 `LIBRETRANSLATE_API_KEY`, see `docs/env-vars.md`) — mirroring the
-`MAIL_PROVIDER` adapter split in `channels/email-adapters/`. `translateFields`
+the email adapter boundary in `channels/email-adapters/`. `translateFields`
 is field-shape-agnostic (announcements pass `{title, body}`, schedule passes
 `{title, description}`) so a third translatable entity needs no provider
 change. `GET /api/announcements/translate-availability`
 lets both frontends hide/disable the action when unset instead of offering
 one that will 503; every translation surface keeps working with manual-only
 entry regardless of whether a provider is configured. Exercised in tests via
-a stubbed `global.fetch`, never a live network call (same convention as the
-Resend email adapter).
+a stubbed `global.fetch`, never a live network call.
 
 ### Schedule item translation (H50 extension)
 

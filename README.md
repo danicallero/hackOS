@@ -72,8 +72,9 @@ migrations. There is no ORM.
 - **Background work and realtime:** BullMQ ticks and SSE fan-out use Valkey.
 Durable work, retries and dead-letter state remain in Postgres, so Valkey can
 be treated as ephemeral.
-- **Files and mail:** MinIO provides S3-compatible storage locally. Email can
-go through SMTP, Resend or Postal; local mail is caught by Mailpit.
+- **Files and mail:** MinIO provides S3-compatible storage locally. Email uses
+  SMTP (Amazon SES can provide the production relay); local mail is caught by
+  Mailpit.
 - **Shared contracts:** [`packages/shared`](packages/shared) owns capability
 names, realtime event names and cross-client UI test identifiers.
 
