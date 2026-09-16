@@ -1,46 +1,58 @@
-# ─────────────────────────────────────────────────────────────────────────
-# hackOS — production stack (one deployable instance per hackathon/tenant).
+# hackOS — canonical GPULux LXC runtime.
 #
-# Designed for Dokploy (Compose app) but works with plain `docker compose`.
-# Deploy ONE stack per instance; isolation comes from a unique project name
-# (COMPOSE_PROJECT_NAME / Dokploy app name), which scopes volumes, the private
-# network, and the Traefik router names. See deploy/README.md.
+# This file only consumes pre-built images. Run it with the LXC configuration
+# file first and the separate, chmod 600 secrets file second:
 #
-# Every value is supplied by environment interpolation (${VAR}); Dokploy fills
-# these from its Environment panel, the CLI from --env-file. Split your env
-# into a shared, non-secret file and a per-instance secret file
-# (.env.shared.example + .env.instance.example are the templates).
+#   docker compose --env-file /etc/hackos/hackos.env \
+#     --env-file /etc/hackos/hackos.secrets \
+#     -f deploy/docker-compose.yml up -d
 #
-# Networking model:
-#   private  (internal: true) — postgres, valkey, minio + app tier. No host
-#            ports; datastores are unreachable from outside the stack and have
-#            no internet egress.
-#   edge     (external, Dokploy's proxy net) — api (ingress via Traefik) and
-#            worker (egress for mail/push). Datastores never join it.
-# ─────────────────────────────────────────────────────────────────────────
+# The bridge network and named volumes are created by Compose. Caddy reaches
+# only the loopback ports published by api and web; the datastores have no
+# published ports at all.
 
-x-api-image: &api-image "${IMAGE_REPO:-hackos-api}:${IMAGE_TAG:-main}"
+x-api-image: &api-image "ghcr.io/danicallero/hackos-api:${IMAGE_TAG}"
+x-web-image: &web-image "ghcr.io/danicallero/hackos-web:${IMAGE_TAG}"
 
-# App-tier env shared by api / worker / migrate. Anchored so the three stay
-# in lockstep — change a secret once, all three pick it up.
-x-app-env: &app-env
-  NODE_ENV: production
+x-database-env: &database-env
   DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+
+x-valkey-env: &valkey-env
   VALKEY_URL: "redis://:${VALKEY_PASSWORD}@valkey:6379"
+
+x-auth-env: &auth-env
   BETTER_AUTH_URL: "https://${API_DOMAIN}"
   WEB_URL: "https://${WEB_DOMAIN}"
   BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET}"
-  CORS_ORIGINS: "${CORS_ORIGINS:-}"
   MOBILE_APP_SCHEME: "${MOBILE_APP_SCHEME:-hackos}"
-  TRUST_PROXY: "true"
-  LOG_LEVEL: "${LOG_LEVEL:-info}"
-  LOG_EXPO_PUSH_TICKETS: "${LOG_EXPO_PUSH_TICKETS:-false}"
-  LOG_EXPO_PUSH_TOKENS: "${LOG_EXPO_PUSH_TOKENS:-false}"
-  LOG_EXPO_PUSH_UNSAFE_DEBUG: "${LOG_EXPO_PUSH_UNSAFE_DEBUG:-false}"
+
+x-storage-env: &storage-env
   S3_ENDPOINT: "http://minio:9000"
   S3_ACCESS_KEY: "${S3_ACCESS_KEY}"
   S3_SECRET_KEY: "${S3_SECRET_KEY}"
   S3_BUCKET: "${S3_BUCKET:-hackos}"
+  S3_PUBLIC_URL: "${S3_PUBLIC_URL:-}"
+
+x-wallet-env: &wallet-env
+  APPLE_PASS_TYPE_IDENTIFIER: "${APPLE_PASS_TYPE_IDENTIFIER:-}"
+  APPLE_TEAM_IDENTIFIER: "${APPLE_TEAM_IDENTIFIER:-}"
+  APPLE_PASS_ORGANIZATION: "${APPLE_PASS_ORGANIZATION:-hackOS}"
+  APPLE_PASS_CERTIFICATE_PEM: "${APPLE_PASS_CERTIFICATE_PEM:-}"
+  APPLE_PASS_KEY_PEM: "${APPLE_PASS_KEY_PEM:-}"
+  APPLE_PASS_KEY_PASSPHRASE: "${APPLE_PASS_KEY_PASSPHRASE:-}"
+  APPLE_WWDR_CERTIFICATE_PEM: "${APPLE_WWDR_CERTIFICATE_PEM:-}"
+  APPLE_APNS_ENVIRONMENT: "${APPLE_APNS_ENVIRONMENT:-production}"
+  APPLE_PASS_APP_STORE_ID: "${APPLE_PASS_APP_STORE_ID:-}"
+  GOOGLE_WALLET_ISSUER_ID: "${GOOGLE_WALLET_ISSUER_ID:-}"
+  GOOGLE_WALLET_EVENT_TICKET_CLASS_ID: "${GOOGLE_WALLET_EVENT_TICKET_CLASS_ID:-}"
+  GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL: "${GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL:-}"
+  GOOGLE_WALLET_PRIVATE_KEY_PEM: "${GOOGLE_WALLET_PRIVATE_KEY_PEM:-}"
+  GOOGLE_WALLET_LOGO_URL: "${GOOGLE_WALLET_LOGO_URL:-}"
+  GOOGLE_WALLET_HERO_IMAGE_URL: "${GOOGLE_WALLET_HERO_IMAGE_URL:-}"
+  GOOGLE_WALLET_WIDE_LOGO_URL: "${GOOGLE_WALLET_WIDE_LOGO_URL:-}"
+  GOOGLE_WALLET_BACKGROUND_COLOR: "${GOOGLE_WALLET_BACKGROUND_COLOR:-#1f2430}"
+
+x-mail-env: &mail-env
   MAIL_PROVIDER: "${MAIL_PROVIDER:-smtp}"
   MAIL_FROM_ADDRESS: "${MAIL_FROM_ADDRESS}"
   MAIL_FROM_NAME: "${MAIL_FROM_NAME:-hackOS}"
@@ -65,53 +77,69 @@ x-app-env: &app-env
   SMTP_PORT: "${SMTP_PORT:-587}"
   SMTP_USER: "${SMTP_USER:-}"
   SMTP_PASS: "${SMTP_PASS:-}"
-  # Wallet passes (H28) — both optional, see deploy/README.md#wallet-passes-h28.
-  # worker needs these too: badge rotation pushes/syncs run there.
-  APPLE_PASS_TYPE_IDENTIFIER: "${APPLE_PASS_TYPE_IDENTIFIER:-}"
-  APPLE_TEAM_IDENTIFIER: "${APPLE_TEAM_IDENTIFIER:-}"
-  APPLE_PASS_ORGANIZATION: "${APPLE_PASS_ORGANIZATION:-hackOS}"
-  APPLE_PASS_CERTIFICATE_PEM: "${APPLE_PASS_CERTIFICATE_PEM:-}"
-  APPLE_PASS_KEY_PEM: "${APPLE_PASS_KEY_PEM:-}"
-  APPLE_PASS_KEY_PASSPHRASE: "${APPLE_PASS_KEY_PASSPHRASE:-}"
-  APPLE_WWDR_CERTIFICATE_PEM: "${APPLE_WWDR_CERTIFICATE_PEM:-}"
-  APPLE_APNS_ENVIRONMENT: "${APPLE_APNS_ENVIRONMENT:-production}"
-  GOOGLE_WALLET_ISSUER_ID: "${GOOGLE_WALLET_ISSUER_ID:-}"
-  GOOGLE_WALLET_EVENT_TICKET_CLASS_ID: "${GOOGLE_WALLET_EVENT_TICKET_CLASS_ID:-}"
-  GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL: "${GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL:-}"
-  GOOGLE_WALLET_PRIVATE_KEY_PEM: "${GOOGLE_WALLET_PRIVATE_KEY_PEM:-}"
-  GOOGLE_WALLET_LOGO_URL: "${GOOGLE_WALLET_LOGO_URL:-}"
-  GOOGLE_WALLET_HERO_IMAGE_URL: "${GOOGLE_WALLET_HERO_IMAGE_URL:-}"
-  GOOGLE_WALLET_WIDE_LOGO_URL: "${GOOGLE_WALLET_WIDE_LOGO_URL:-}"
-  GOOGLE_WALLET_BACKGROUND_COLOR: "${GOOGLE_WALLET_BACKGROUND_COLOR:-#1f2430}"
 
-# Synthetic fixture secrets are API-only. Do not pass them to migrate or
-# worker; the API uses them for the marked fixture workspace in this same
-# deployment/database.
-x-review-fixture-env: &review-fixture-env
+x-api-env: &api-env
+  <<: [*database-env, *valkey-env, *auth-env, *storage-env, *wallet-env]
+  NODE_ENV: production
+  WORKERS_INLINE: "false"
+  CORS_ORIGINS: "${CORS_ORIGINS}"
+  TRUST_PROXY: "true"
+  LOG_LEVEL: "${LOG_LEVEL:-info}"
+  LOG_EXPO_PUSH_TICKETS: "${LOG_EXPO_PUSH_TICKETS:-false}"
+  LOG_EXPO_PUSH_TOKENS: "${LOG_EXPO_PUSH_TOKENS:-false}"
+  LOG_EXPO_PUSH_UNSAFE_DEBUG: "${LOG_EXPO_PUSH_UNSAFE_DEBUG:-false}"
+  DB_POOL_MAX: "${DB_POOL_MAX:-20}"
+  DB_IDLE_TIMEOUT_MS: "${DB_IDLE_TIMEOUT_MS:-30000}"
+  DB_CONNECTION_TIMEOUT_MS: "${DB_CONNECTION_TIMEOUT_MS:-10000}"
+  DB_STATEMENT_TIMEOUT_MS: "${DB_STATEMENT_TIMEOUT_MS:-30000}"
+  DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: "${DB_IDLE_IN_TRANSACTION_TIMEOUT_MS:-30000}"
+  SSE_MAX_CONNECTIONS_GLOBAL: "${SSE_MAX_CONNECTIONS_GLOBAL:-2000}"
+  SSE_MAX_CONNECTIONS_PER_TOPIC: "${SSE_MAX_CONNECTIONS_PER_TOPIC:-500}"
+  SSE_MAX_CONNECTIONS_PER_CLIENT: "${SSE_MAX_CONNECTIONS_PER_CLIENT:-20}"
+  SSE_WRITE_TIMEOUT_MS: "${SSE_WRITE_TIMEOUT_MS:-5000}"
+  RATE_LIMIT_SCAN_MAX: "${RATE_LIMIT_SCAN_MAX:-120}"
+  RATE_LIMIT_SCAN_WINDOW_SECONDS: "${RATE_LIMIT_SCAN_WINDOW_SECONDS:-60}"
+  RATE_LIMIT_MEAL_BATCH_MAX: "${RATE_LIMIT_MEAL_BATCH_MAX:-60}"
+  RATE_LIMIT_MEAL_BATCH_WINDOW_SECONDS: "${RATE_LIMIT_MEAL_BATCH_WINDOW_SECONDS:-60}"
+  RATE_LIMIT_SNAPSHOT_MAX: "${RATE_LIMIT_SNAPSHOT_MAX:-20}"
+  RATE_LIMIT_SNAPSHOT_WINDOW_SECONDS: "${RATE_LIMIT_SNAPSHOT_WINDOW_SECONDS:-60}"
+  TRANSLATE_PROVIDER: "${TRANSLATE_PROVIDER:-google}"
+  GOOGLE_TRANSLATE_API_KEY: "${GOOGLE_TRANSLATE_API_KEY:-}"
+  LIBRETRANSLATE_URL: "${LIBRETRANSLATE_URL:-}"
+  LIBRETRANSLATE_API_KEY: "${LIBRETRANSLATE_API_KEY:-}"
   REVIEW_FIXTURE_PASSWORD: "${REVIEW_FIXTURE_PASSWORD:-}"
   REVIEW_FIXTURE_DELETION_PIN: "${REVIEW_FIXTURE_DELETION_PIN:-}"
 
-x-api-env: &api-env
-  <<: [*app-env, *review-fixture-env]
+x-worker-env: &worker-env
+  <<: [*database-env, *valkey-env, *auth-env, *storage-env, *wallet-env, *mail-env]
+  NODE_ENV: production
+  WORKERS_INLINE: "false"
+  LOG_LEVEL: "${LOG_LEVEL:-info}"
+  LOG_EXPO_PUSH_TICKETS: "${LOG_EXPO_PUSH_TICKETS:-false}"
+  LOG_EXPO_PUSH_UNSAFE_DEBUG: "${LOG_EXPO_PUSH_UNSAFE_DEBUG:-false}"
+  DB_POOL_MAX: "${DB_POOL_MAX:-20}"
+  DB_IDLE_TIMEOUT_MS: "${DB_IDLE_TIMEOUT_MS:-30000}"
+  DB_CONNECTION_TIMEOUT_MS: "${DB_CONNECTION_TIMEOUT_MS:-10000}"
+  DB_STATEMENT_TIMEOUT_MS: "${DB_STATEMENT_TIMEOUT_MS:-30000}"
+  DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: "${DB_IDLE_IN_TRANSACTION_TIMEOUT_MS:-30000}"
+  NOTIFICATION_OUTBOX_BATCH_SIZE: "${NOTIFICATION_OUTBOX_BATCH_SIZE:-100}"
 
-x-security: &hardening
+x-hardening: &hardening
   security_opt:
     - no-new-privileges:true
   restart: unless-stopped
 
 services:
-  # ── datastores (private network only, never published) ─────────────────
   postgres:
     <<: *hardening
-    image: "postgres:17-alpine"
+    image: postgres:17-alpine
     environment:
       POSTGRES_USER: "${POSTGRES_USER}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
       POSTGRES_DB: "${POSTGRES_DB}"
-      # Data checksums catch silent corruption; cheap insurance for event data.
       POSTGRES_INITDB_ARGS: "--data-checksums"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
     networks: [private]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
@@ -121,105 +149,129 @@ services:
     deploy:
       resources:
         limits:
-          memory: "${PG_MEM_LIMIT:-1g}"
+          memory: 1g
 
   valkey:
     <<: *hardening
-    image: "valkey/valkey:8-alpine"
-    # requirepass so a stray container on the same net can't read the cache.
-    command: ["valkey-server", "--requirepass", "${VALKEY_PASSWORD}", "--save", "", "--appendonly", "no"]
-    # Password in env too so the healthcheck (valkey-cli -a "$VALKEY_PASSWORD")
-    # can authenticate from inside the container.
+    image: valkey/valkey:8-alpine
+    command:
+      - valkey-server
+      - --requirepass
+      - "${VALKEY_PASSWORD}"
+      - --save
+      - ""
+      - --appendonly
+      - "no"
     environment:
       VALKEY_PASSWORD: "${VALKEY_PASSWORD}"
     networks: [private]
     healthcheck:
-      test: ["CMD-SHELL", "valkey-cli -a $${VALKEY_PASSWORD} ping | grep -q PONG"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$${VALKEY_PASSWORD} valkey-cli ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 10
     deploy:
       resources:
         limits:
-          memory: "${VALKEY_MEM_LIMIT:-512m}"
+          memory: 512m
 
   minio:
     <<: *hardening
-    image: "${MINIO_IMAGE:-minio/minio:latest}"
-    command: ["server", "/data", "--console-address", ":9001"]
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: ["server", "/data"]
     environment:
       MINIO_ROOT_USER: "${MINIO_ROOT_USER}"
       MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
-      # keep the console off the public internet unless explicitly proxied
-      MINIO_BROWSER: "${MINIO_BROWSER:-off}"
+      MINIO_BROWSER: "off"
     volumes:
-      - miniodata:/data
+      - minio-data:/data
     networks: [private]
     healthcheck:
       test: ["CMD-SHELL", "mc ready local || exit 1"]
       interval: 15s
       timeout: 5s
+      start_period: 20s
       retries: 5
     deploy:
       resources:
         limits:
-          memory: "${MINIO_MEM_LIMIT:-1g}"
+          memory: 1g
 
-  # ── one-shot: create the S3 bucket, then exit ──────────────────────────
+  # Idempotent storage bootstrap. It is deliberately separate from migrate:
+  # the API and worker receive S3 credentials, while this helper also receives
+  # the MinIO administration credentials needed to create the bucket and user.
   minio-init:
-    image: "${MINIO_MC_IMAGE:-quay.io/minio/mc:latest}"
+    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
     depends_on:
       minio:
         condition: service_healthy
     entrypoint: ["/bin/sh", "-c"]
     command:
-      - >
-        mc alias set s3 http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" &&
-        mc mb --ignore-existing "s3/$${S3_BUCKET}" &&
-        echo "bucket $${S3_BUCKET} ready"
+      - |
+        set -eu
+        mc alias set s3 http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
+        mc mb --ignore-existing "s3/$${S3_BUCKET}"
+        printf '%s\n' \
+          '{' \
+          '  "Version": "2012-10-17",' \
+          '  "Statement": [' \
+          '    {"Effect":"Allow","Action":["s3:GetBucketLocation","s3:ListBucket"],"Resource":["arn:aws:s3:::'"$${S3_BUCKET}"'"]},' \
+          '    {"Effect":"Allow","Action":["s3:AbortMultipartUpload","s3:DeleteObject","s3:GetObject","s3:ListMultipartUploadParts","s3:PutObject"],"Resource":["arn:aws:s3:::'"$${S3_BUCKET}"'/*"]}' \
+          '  ]' \
+          '}' > /tmp/hackos-s3-policy.json
+        mc admin policy create s3 hackos-app /tmp/hackos-s3-policy.json || true
+        mc admin user add s3 "$${S3_ACCESS_KEY}" "$${S3_SECRET_KEY}" ||
+          mc admin user info s3 "$${S3_ACCESS_KEY}" >/dev/null
+        mc admin policy attach s3 hackos-app --user "$${S3_ACCESS_KEY}"
+        mc anonymous set none "s3/$${S3_BUCKET}"
+        mc anonymous set download "s3/$${S3_BUCKET}/enterprises"
+        echo "bucket $${S3_BUCKET} and application user ready"
     environment:
       MINIO_ROOT_USER: "${MINIO_ROOT_USER}"
       MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
+      S3_ACCESS_KEY: "${S3_ACCESS_KEY}"
+      S3_SECRET_KEY: "${S3_SECRET_KEY}"
       S3_BUCKET: "${S3_BUCKET:-hackos}"
     networks: [private]
-    restart: "no"
 
-  # ── one-shot: apply DB migrations, then exit (advisory-locked) ──────────
+  # Explicit one-shot migration process. It needs only the database URL and
+  # auth secret used by the migration's H54 compatibility checks.
   migrate:
     image: *api-image
     pull_policy: always
     command: ["node", "dist/migrate.js"]
-    environment: *app-env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET}"
     depends_on:
       postgres:
         condition: service_healthy
     networks: [private]
     restart: "no"
 
-  # ── HTTP API (ingress via Traefik) ─────────────────────────────────────
   api:
     <<: *hardening
     image: *api-image
     pull_policy: always
-    # H10/H53: repeat the advisory-locked migration check here as a guard for
-    # redeploys that reuse an already-completed one-shot `migrate` container.
-    command: ["sh", "-c", "node dist/migrate.js && exec node dist/server.js"]
+    command: ["node", "dist/server.js"]
     environment: *api-env
-    # Deterministic external DNS — do not inherit a host resolver that may be
-    # transiently wrong during deploys; internal service names still use the
-    # Docker resolver on the attached networks.
     dns: ["1.1.1.1", "8.8.8.8"]
+    ports:
+      - "127.0.0.1:3000:3000"
     depends_on:
       migrate:
+        condition: service_completed_successfully
+      minio-init:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
       valkey:
         condition: service_healthy
-    networks:
-      private: {}
-      edge:
-        aliases: ["${STACK_NAME:-hackos-event2026}-api"]
+    networks: [private]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/healthz || exit 1"]
       interval: 15s
@@ -229,49 +281,46 @@ services:
     deploy:
       resources:
         limits:
-          memory: "${API_MEM_LIMIT:-512m}"
-    # List form (not map) so ${STACK_NAME} interpolates inside the label NAME —
-    # Compose only reliably interpolates label values, not map keys. Router,
-    # service and middleware names carry the stack prefix so multiple hackOS
-    # instances behind one Traefik never collide.
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=${PROXY_NETWORK:-dokploy-network}"
-      - "traefik.http.routers.${STACK_NAME}-api.rule=Host(`${API_DOMAIN}`)"
-      - "traefik.http.routers.${STACK_NAME}-api.entrypoints=websecure"
-      - "traefik.http.routers.${STACK_NAME}-api.tls=true"
-      - "traefik.http.routers.${STACK_NAME}-api.tls.certresolver=${CERT_RESOLVER:-letsencrypt}"
-      - "traefik.http.routers.${STACK_NAME}-api.middlewares=${STACK_NAME}-sec@docker"
-      - "traefik.http.services.${STACK_NAME}-api.loadbalancer.server.port=3000"
-      # Docker's healthcheck controls container health, but Traefik needs its
-      # own readiness check to keep a replica with unavailable Postgres out of ingress.
-      - "traefik.http.services.${STACK_NAME}-api.loadbalancer.healthcheck.path=/readyz"
-      - "traefik.http.services.${STACK_NAME}-api.loadbalancer.healthcheck.interval=5s"
-      - "traefik.http.services.${STACK_NAME}-api.loadbalancer.healthcheck.timeout=3s"
-      # SSE (TV/queue streams) must not be buffered by the proxy.
-      - "traefik.http.services.${STACK_NAME}-api.loadbalancer.responseforwarding.flushinterval=-1"
-      - "traefik.http.middlewares.${STACK_NAME}-sec.headers.stsSeconds=31536000"
-      - "traefik.http.middlewares.${STACK_NAME}-sec.headers.stsIncludeSubdomains=true"
-      - "traefik.http.middlewares.${STACK_NAME}-sec.headers.contentTypeNosniff=true"
-      - "traefik.http.middlewares.${STACK_NAME}-sec.headers.frameDeny=true"
-      - "traefik.http.middlewares.${STACK_NAME}-sec.headers.referrerPolicy=strict-origin-when-cross-origin"
+          memory: 512m
 
-  # ── web frontend (Next.js, ingress via Traefik on its OWN router) ──────
-  # Separate service, separate domain, separate Traefik router
-  # (${STACK_NAME}-web). It is NEVER served by or routed with the api; the
-  # browser reaches the api directly using the runtime config served by this
-  # container, so remember to add https://${WEB_DOMAIN} to the api's
-  # CORS_ORIGINS. Edge-only: the web tier never touches the private datastores.
+  worker:
+    <<: *hardening
+    image: *api-image
+    pull_policy: always
+    command: ["node", "dist/worker.js"]
+    environment: *worker-env
+    dns: ["1.1.1.1", "8.8.8.8"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    networks: [private]
+    healthcheck:
+      test: ["CMD-SHELL", "pidof node >/dev/null"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
   web:
     <<: *hardening
-    image: "${WEB_IMAGE_REPO:-hackos-web}:${IMAGE_TAG:-main}"
+    image: *web-image
     pull_policy: always
     environment:
       API_DOMAIN: "${API_DOMAIN}"
       WEB_DOMAIN: "${WEB_DOMAIN}"
-    networks:
-      edge:
-        aliases: ["${STACK_NAME:-hackos-event2026}-web"]
+    ports:
+      - "127.0.0.1:3001:3001"
+    networks: [private]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/ || exit 1"]
       interval: 15s
@@ -281,57 +330,12 @@ services:
     deploy:
       resources:
         limits:
-          memory: "${WEB_MEM_LIMIT:-256m}"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=${PROXY_NETWORK:-dokploy-network}"
-      - "traefik.http.routers.${STACK_NAME}-web.rule=Host(`${WEB_DOMAIN}`)"
-      - "traefik.http.routers.${STACK_NAME}-web.entrypoints=websecure"
-      - "traefik.http.routers.${STACK_NAME}-web.tls=true"
-      - "traefik.http.routers.${STACK_NAME}-web.tls.certresolver=${CERT_RESOLVER:-letsencrypt}"
-      - "traefik.http.routers.${STACK_NAME}-web.middlewares=${STACK_NAME}-sec@docker"
-      - "traefik.http.services.${STACK_NAME}-web.loadbalancer.server.port=3001"
-
-  # ── BullMQ worker (no ingress; edge only for mail/push egress) ─────────
-  worker:
-    <<: *hardening
-    image: *api-image
-    pull_policy: always
-    command: ["node", "dist/worker.js"]
-    environment:
-      <<: *app-env
-      WORKERS_INLINE: "false"
-    # Keep outbound mail/push resolution independent of the host resolver,
-    # matching the split-stack service definitions.
-    dns: ["1.1.1.1", "8.8.8.8"]
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-      postgres:
-        condition: service_healthy
-      valkey:
-        condition: service_healthy
-    networks: [private, edge]
-    # The image bakes an HTTP /healthz probe for the API; the worker serves no
-    # HTTP, so disable it. Liveness is process-based: on crash, restart kicks in.
-    healthcheck:
-      disable: true
-    deploy:
-      resources:
-        limits:
-          memory: "${WORKER_MEM_LIMIT:-512m}"
+          memory: 256m
 
 networks:
-  # Private: datastores + app tier. internal:true => no host route, no egress.
   private:
     driver: bridge
-    internal: true
-  # Edge: the reverse-proxy network Dokploy already manages. Declared external
-  # so this stack attaches to it rather than creating its own.
-  edge:
-    external: true
-    name: "${PROXY_NETWORK:-dokploy-network}"
 
 volumes:
-  pgdata:
-  miniodata:
+  postgres-data:
+  minio-data:

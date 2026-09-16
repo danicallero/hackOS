@@ -1,602 +1,224 @@
-# Deploying hackOS
+# Despliegue ARM64 de hackOS
 
-hackOS runs as a small set of containers built from the API image
-(`apps/api/Dockerfile`) and web image (`apps/web/Dockerfile`), plus three
-datastores. This directory gives you **two ways** to deploy, both tuned for
-[Dokploy](https://dokploy.com) but usable with plain `docker compose`:
+Este directorio contiene un único runtime de Docker Compose para staging en la
+Raspberry Pi de casa y producción en el LXC `hackos` de GPULux. Ambos hosts
+usan imágenes ARM64 ya construidas; sólo descargan imágenes y nunca compilan el
+repositorio durante el despliegue.
 
-| Mode | Files | You get | Use when |
-|---|---|---|---|
-| **A — per-service** (recommended for Dokploy) | `deploy/services/<svc>/docker-compose.yml` | Each service (postgres, valkey, minio, api, web, worker) is its **own** Dokploy service: deploy, roll back, scale, and read logs independently. | You want to manage/scale services separately — the normal Dokploy workflow. |
-| **B — single stack** | `deploy/docker-compose.yml` | All containers in **one** Compose project/service. | A quick single-unit deploy, a non-Dokploy host, or local prod smoke-testing. |
+La definición canónica es [`docker-compose.yml`](./docker-compose.yml). El
+stack tiene estos servicios de runtime:
 
-Both modes share the same application contract, env variables, and security
-posture. Pick one per instance — don't mix them for the same instance.
+- `postgres`: estado durable de hackOS.
+- `valkey`: BullMQ, SSE y contadores efímeros.
+- `minio`: almacenamiento S3-compatible durable.
+- `migrate`: proceso explícito one-shot de migraciones.
+- `api`: Fastify en el puerto interno `3000`.
+- `worker`: BullMQ en proceso separado, sin HTTP.
+- `web`: Next.js en el puerto interno `3001`.
 
-> **One instance = one hackathon/tenant.** Everything below is per-instance and
-> fully isolated (own network, own volumes, own secrets). Run the whole thing
-> again with a different `STACK_NAME` + `INSTANCE_NETWORK` to host a second
-> event on the same server with zero shared state. See [Multiple instances](#multiple-instances).
+`minio-init` es un helper one-shot del mismo Compose para crear el bucket, la
+cuenta de servicio y la política de logos. No es un servicio de aplicación y
+no recibe variables propias del API.
 
-## Contents
+## Red e ingress
 
-- [Architecture](#architecture)
-- [Environment variables: project (shared) vs service-only](#environment-variables-project-shared-vs-service-only)
-- [Wallet passes (H28)](#wallet-passes-h28)
-- [CI/CD release channels](#cicd-release-channels)
-- [Mode A — per-service on Dokploy (recommended)](#mode-a--per-service-on-dokploy-recommended)
-- [Mode B — single stack](#mode-b--single-stack)
-- [Splitting Postgres onto its own host (optional, advanced)](#splitting-postgres-onto-its-own-host-optional-advanced)
-- [Multiple instances](#multiple-instances)
-- [Security posture](#security-posture)
-- [Operations](#operations)
-- [Files here](#files-here)
+Compose crea una única red bridge privada del proyecto, `private`. Todos los
+servicios se resuelven por nombre dentro de ella (`postgres:5432`,
+`valkey:6379`, `minio:9000`). No se declara ninguna red ajena al proyecto.
 
----
+Sólo se publican dos puertos en loopback del host:
 
-## Architecture
+| Servicio | Puerto del contenedor | Publicación | Uso |
+|---|---:|---|---|
+| `api` | `3000` | `127.0.0.1:3000:3000` | Caddy → HTTP + SSE |
+| `web` | `3001` | `127.0.0.1:3001:3001` | Caddy → Next.js |
 
-```
-                        Internet
-                           │  443 (TLS)
-                    ┌──────▼───────┐
-                    │   Traefik    │  (Dokploy-managed reverse proxy)
-                    │ dokploy-network (edge)
-                    └──────┬───────┘
-                           │  HTTPS routes
-              ┌────────────▼───────────┐  ┌──────────────▼────────────┐
-              │ api (HTTP + SSE)       │  │ web (Next.js UI)           │
-              │ public API route       │  │ public UI route            │
-              └────────────┬───────────┘  └──────────────┬────────────┘
-                           │                             │
-                    ┌──────▼───────┐                     │
-                    │    worker    │  BullMQ jobs         │
-                    │   (no HTTP)  │  mail·pump·expirer   │
-                    └──────┬───────┘                     │
-   hackos-<instance>-net   │  (private, no host ports)   │
-        (instance) ────────┼─────────────────────────────┘
-                    ┌───────▼──┐   ┌────────▼─┐   ┌────────┐
-                    │ postgres │   │  valkey  │   │  minio │
-                    └──────────┘   └──────────┘   └────────┘
+PostgreSQL, Valkey y MinIO no tienen `ports:`. Su consola MinIO también queda
+apagada. Caddy termina TLS y puede usar, por ejemplo:
+
+```caddyfile
+api.example.org {
+    reverse_proxy 127.0.0.1:3000
+}
+
+example.org {
+    reverse_proxy 127.0.0.1:3001
+}
 ```
 
-- **Two networks.** The **instance** network (`hackos-<name>-net`, private) carries
-  all inter-service traffic; datastores publish **no host ports**, so they're
-  reachable only by services on that network — never from the host or the
-  internet. The **edge** network (`dokploy-network`) is Traefik's; **api and
-  web** join it and receive separate public API and UI routes. In the single-stack
-  compose, the worker also joins edge for outbound mail/push egress but has no
-  Traefik router; the per-service worker stays on its normal bridge network.
-- **Egress.** The app tier reaches the internet for mail, Expo push, and wallet
-  providers. Datastores don't need egress and have no public route.
-- **Hostnames.** Services find each other by name on the instance network:
-  `postgres:5432`, `valkey:6379`, `minio:9000`. Those names are baked into
-  `DATABASE_URL` / `VALKEY_URL` / `S3_ENDPOINT`.
-- **Migrations** run as a one-shot `migrate` container (bundled with the `api`
-  service) before the API starts, guarded by a Postgres advisory lock so
-  replicas/redeploys can't race. The API repeats the same no-op-safe check
-  immediately before listening, covering redeploys where the orchestrator
-  reuses an already-completed one-shot container.
+Los valores de `API_DOMAIN`, `WEB_DOMAIN` y `CORS_ORIGINS` deben corresponder
+con esos hosts. `API_DOMAIN` y `WEB_DOMAIN` son nombres sin `https://`.
 
----
+## Configuración y secretos
 
-## Environment variables: project (shared) vs service-only
+Cada host mantiene dos ficheros planos fuera del repositorio:
 
-Dokploy has **three scopes** for env vars — Project, Environment (a project can
-have several, e.g. production/verification), and each service's own — but **none of
-them auto-inject**: a service only picks up a Project/Environment value if its
-own Environment Variables box contains an explicit reference,
-`${{project.VAR}}` or `${{environment.VAR}}`. hackOS is designed so that
-**almost everything is stored once at the Environment level and referenced
-from every service that needs it** — because the same secret is read by
-several services and MUST match between them (e.g. the Postgres password is
-set on `postgres` *and* embedded in the `DATABASE_URL` that `api`/`worker`
-use). Storing the value once and wiring each service to it is what prevents
-drift; see
-[`docs/env-vars.md`](../docs/env-vars.md#centralizing-values-with-dokploys-projectenvironment-variables)
-for the exact per-service reference lines to paste in.
+- `/etc/hackos/hackos.env`: configuración no secreta, basada en
+  [`deploy/.env.example`](./.env.example).
+- `/etc/hackos/hackos.secrets`: credenciales y claves privadas, con permisos
+  `0600` y sin copiarlo al repositorio.
 
-**The split in one line:** shared secrets + anything two or more services
-touch → store once as an **Environment variable**, reference it from each
-service that needs it (`${{environment.VAR}}`); per-service memory limits and
-MinIO image/console toggles → a plain literal directly in that one service's
-own box (or leave them at defaults, see per-service tables below). The two
-`.env.*.example` files mirror the first group: `.env.shared.example` =
-non-secret shared, `.env.instance.example` = per-instance secrets. Assemble
-both into the Dokploy Environment's variables.
-
-For exactly which variable goes where, and what each one does, see
-[`docs/env-vars.md`](../docs/env-vars.md) — its per-service tables (`postgres`,
-`valkey`, `minio`, `api`, `worker`, `web`) are the single source; this file
-only explains the Dokploy scoping mechanic above. Secrets are marked 🔒 there
-— generate them with `deploy/scripts/gen-secrets.sh` and never reuse across
-instances.
-
----
-
-## Wallet passes (H28)
-
-Apple Wallet and Google Wallet are both **optional** — omitting either just
-makes that platform's `/api/me/wallet/...` endpoint return a clear `503
-service_unavailable` instead of blocking deploy or (worse) serving an
-invalid pass. Configuring one but not all of its required vars fails loudly
-at boot instead, so a half-finished setup can't ship by accident.
-
-All values below are **base64-encoded PEM/key content**, not file paths —
-like every other secret in this app, they're single-line values that live
-only in Dokploy's Environment (or Project) variables store (or your gitignored
-`.env.<instance>` file), never baked into the image or committed to the
-repo.
-
-| Variable | Notes |
-|---|---|
-| `APPLE_PASS_TYPE_IDENTIFIER` | Your Pass Type ID, e.g. `pass.org.example.hackos`. |
-| `APPLE_TEAM_IDENTIFIER` | Apple Developer Team ID. |
-| `APPLE_PASS_ORGANIZATION` | Display name on the pass. Defaults to `hackOS`. |
-| `APPLE_PASS_CERTIFICATE_PEM` 🔒 | base64 of the Pass Type ID certificate (PEM). |
-| `APPLE_PASS_KEY_PEM` 🔒 | base64 of that certificate's private key (PEM). |
-| `APPLE_PASS_KEY_PASSPHRASE` 🔒 | Only if the key is encrypted. |
-| `APPLE_WWDR_CERTIFICATE_PEM` 🔒 | base64 of Apple's WWDR intermediate certificate (PEM). |
-| `APPLE_APNS_ENVIRONMENT` | `production` (default) or `sandbox` — which APNs gateway pass-update pushes go to. |
-| `APPLE_PASS_APP_STORE_ID` | Numeric App Store ID of the hackOS mobile app (the digits in its App Store URL). Optional; when set, passes link to the app (back of the pass + lock-screen suggestion) and tapping it opens the app via `MOBILE_APP_SCHEME`. |
-| `GOOGLE_WALLET_ISSUER_ID` | Your Google Wallet issuer account ID. |
-| `GOOGLE_WALLET_EVENT_TICKET_CLASS_ID` | Exact approved Event Ticket class ID from Pay & Wallet Console (for this issuer: `3388000000023085754.pass.org.gpul.hackudc`). |
-| `GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL` | Service account email used to sign JWTs and call the REST API; authorize it as a **Developer** user in the Google Pay & Wallet Console for this issuer. |
-| `GOOGLE_WALLET_PRIVATE_KEY_PEM` 🔒 | base64 of that service account's private key (PEM), from its JSON key file. |
-
-**Getting the Apple values**: in Apple Developer → Certificates, Identifiers
-& Profiles, create a Pass Type ID and its certificate, download it, and
-export the certificate + private key as PEM (e.g. via Keychain Access →
-Export, or `openssl pkcs12 -in cert.p12 -nocerts -out key.pem -nodes` /
-`-clcerts -nokeys -out cert.pem`). Download the WWDR intermediate certificate
-from Apple's PKI page. Then for each file:
+Docker Compose acepta varios `--env-file`; el segundo tiene precedencia:
 
 ```sh
-base64 -i cert.pem | tr -d '\n'   # → APPLE_PASS_CERTIFICATE_PEM
+CONFIG=/etc/hackos/hackos.env
+SECRETS=/etc/hackos/hackos.secrets
+COMPOSE="docker compose --env-file $CONFIG --env-file $SECRETS -f deploy/docker-compose.yml"
+
+./deploy/scripts/check-env.sh "$CONFIG" "$SECRETS"
+$COMPOSE config >/dev/null
 ```
 
-**Getting the Google values**: in Google Cloud, enable the Google Wallet API,
-create a service account, and download its JSON key. Then:
-
-```sh
-jq -r .client_email key.json                                # → GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL
-jq -r .private_key key.json | base64 | tr -d '\n'            # → GOOGLE_WALLET_PRIVATE_KEY_PEM
-```
-
-Cloud IAM is only half of the authorization setup: in the Google Pay & Wallet
-Business Console, invite the same service-account email under **Users** with
-**Developer** access for the issuer. Verify `GOOGLE_WALLET_ISSUER_ID` against
-the issuer ID shown in that console; it is not automatically the service
-account's Cloud IAM unique ID.
-
-Google ticket passes use `EventTicketClass`/`EventTicketObject`; the issuer's
-event-ticket class is refreshed when event name, schedule, or venue settings
-change. The JWT `origins` claim is derived from `WEB_URL`, so set that to the
-browser origin where the Add to Google Wallet button is rendered. Google
-issuers start in Demo Mode and can only issue to configured test users until
-[publishing access](https://developers.google.com/wallet/tickets/events/test-and-go-live/request-publishing-access)
-is granted. Test the complete save flow on Android before launch, then verify
-the issuer's publishing access in the Google Pay & Wallet console.
-
-**Never commit these files or their base64 blobs.** If a key leaks, revoke
-it immediately at the source — in Apple Developer (revoke the certificate)
-or Google Cloud IAM (delete the service account key) — rotating
-`BETTER_AUTH_SECRET` does nothing for these, they're independent
-credentials. As with every other secret, give each instance its own wallet
-credentials where your Apple/Google accounts allow it, so a leak on one
-event doesn't compromise another (see [Multiple instances](#multiple-instances)).
-
----
-
-## CI/CD release channels
-
-Use the protected branches as the release flow:
-
-`feature PRs → staging` or `feature PRs → main`
-
-Open every PR as a draft. Feature PRs may target either protected branch;
-`staging` is the development environment and `main` is production. Draft
-commits run lint and typecheck, while Ready-for-review PRs run the complete
-test matrix. These individual PRs do not build container images.
-
-The two protected branches provide these supported routes:
-
-| Branch | CD behavior |
-|---|---|
-| `staging` | Merge an approved development PR here. CD builds and publishes the images, then deploys the staging Dokploy Environment. |
-| `main` | Merge an approved PR from any branch. CD builds and publishes production images, then deploys production. |
-
-`main` and `staging` are independent release channels. A merge into `main`
-selects the `production` GitHub Actions Environment and never moves the
-`staging` branch. A merge into `staging` selects the `staging` Environment and
-deploys the development services. This allows staging to carry work that is
-not yet ready for production.
-
-When staging needs the current production tree, synchronize it deliberately
-with a normal pull request from `main` into `staging`:
-
-```sh
-./deploy/scripts/sync-main-to-staging-pr.sh
-```
-
-The helper opens that PR without pushing either protected branch or discarding
-staging-only commits. Merge the PR only when staging is ready to verify the
-production tree; that merge is the event that starts the staging CD. If the
-branches have diverged, resolve the conflicts in the PR instead of forcing a
-branch ref.
-
-There is no required promotion path between the branches. `main` accepts PRs
-from any branch; merge only after the full required CI matrix and review have
-passed. A merge to either protected branch is the event that starts its CD.
-
-The existing `main` release keeps its current repository-level webhook secrets
-and production Dokploy configuration, so no production migration is required.
-Only the optional staging route needs a GitHub Actions Environment named
-`staging` with separate Dokploy secret names pointing to staging:
-
-| Release target | Branch | Variables | Secrets |
-|---|---|---|---|
-| Existing production configuration | `main` | Existing repository variables/configuration | Repository secrets `DOKPLOY_API_DEPLOY_WEBHOOK`, `DOKPLOY_WORKER_DEPLOY_WEBHOOK`, `DOKPLOY_WEB_DEPLOY_WEBHOOK` |
-| Optional staging configuration | `staging` | No build-time URL variables; domains are read by the web container at runtime | Environment secrets `DOKPLOY_STAGING_API_DEPLOY_WEBHOOK`, `DOKPLOY_STAGING_WORKER_DEPLOY_WEBHOOK`, `DOKPLOY_STAGING_WEB_DEPLOY_WEBHOOK` |
-
-Keep `TS_OAUTH_CLIENT_ID` and `TS_AUDIENCE` as repository Actions secrets. The
-production deploy uses the `tag:ci` identity, `danipi` tailnet route, Tailscale
-network, and `dokploy-network` proxy. If staging is enabled, its three
-webhooks use the same tailnet identity but point to the separate staging
-Dokploy services.
-
-Staging image builds remain available without a staging Dokploy environment.
-When one of the five staging deployment secrets is missing, the CD workflow
-publishes the image and marks only the optional deployment step as skipped; the
-release is not reported as failed. Production still requires its Tailscale and
-Dokploy configuration.
-
-Protect exactly `staging` and `main` with the repository rulesets. The
-checked-in workflow cannot create or protect remote branches; create these two
-branches and apply the matching ruleset before using them in the release flow.
-Require pull requests on both release branches; `main` intentionally accepts
-PRs from any source branch.
-
-Configure the rulesets once with:
-
-```sh
-./deploy/scripts/configure-github-rulesets.sh
-```
-
-The helper keeps the existing required checks and configures the release
-branches without a direct-push bypass. Release-branch updates therefore remain
-reviewable pull requests.
-
-`main` and `staging` are independent release channels. A merge into `main`
-selects the `production` GitHub Actions Environment and never moves the
-`staging` branch. A merge into `staging` selects the `staging` Environment and
-deploys only the staging Dokploy services. This allows staging to carry
-experimental work while production advances.
-
-When staging needs the current production tree, synchronize it deliberately
-with a normal pull request from `main` into `staging`:
-
-```sh
-./deploy/scripts/sync-main-to-staging-pr.sh
-```
-
-The helper opens that PR without pushing either protected branch or discarding
-staging-only commits. Merge the PR only when staging is ready to verify the
-production tree; that merge is the event that starts the staging CD. If the
-branches have diverged, resolve the conflicts in the PR instead of forcing a
-branch ref.
-
----
-
-## Mode A — per-service on Dokploy (recommended)
-
-### 1. Create the private network (once per Environment)
-
-Dokploy doesn't create arbitrary app networks for you, so make the instance
-network on the host first. For production:
-
-```sh
-docker network create hackos-event2026-net
-```
-
-If this project also has a staging deployment, create a second private network
-for it:
-
-```sh
-docker network create hackos-event2026-staging-net
-```
-
-Use the matching name as `INSTANCE_NETWORK` in each Dokploy Environment. The
-`dokploy-network` (edge) is shared by both Environments and already exists on
-any Dokploy host.
-
-### 2. Create a Dokploy **Project** and set its Environment variables
-
-Create a project (e.g. `hackos-event2026`) and, inside it, a `production`
-Environment (Dokploy usually gives you one by default). If you want the
-optional staging route, create a second Environment named `staging` in the same
-project. Paste the combined shared values into each Environment's variables
-tab — generate separate secrets first:
-
-```sh
-./deploy/scripts/gen-secrets.sh hackos-event2026 api.event2026.example.org > .env.event2026
-# then hand-fill CORS_ORIGINS, the mail block, and copy the non-secret
-# shared values from deploy/.env.shared.example
-```
-
-If staging is enabled, use a distinct `STACK_NAME`, `INSTANCE_NETWORK`,
-`API_DOMAIN`, `WEB_DOMAIN`, `CORS_ORIGINS`, and credentials. The two
-Environments must not share Postgres/Valkey/MinIO volumes or application
-secrets.
-
-### 3. Add six services per Environment, each pointing at its compose file
-
-For each of `postgres`, `valkey`, `minio`, `api`, `worker`, `web`, add a
-**Compose** service under each Environment that uses this repo and the
-corresponding file:
-
-- `deploy/services/postgres/docker-compose.yml`
-- `deploy/services/valkey/docker-compose.yml`
-- `deploy/services/minio/docker-compose.yml`
-- `deploy/services/api/docker-compose.yml`  ← pulls the published image + runs migrations
-- `deploy/services/worker/docker-compose.yml`  ← pulls that same API image
-- `deploy/services/web/docker-compose.yml`  ← pulls its own published image; its own Traefik router/domain, never behind the api's
-
-Nothing inherits automatically: in **each** service's own Environment
-Variables box, paste the matching `deploy/services/<service>/dokploy.env.example`
-file — it already lists a `${{environment.VAR}}` reference line for every
-variable that service needs, with the optional ones commented out (see
-[`docs/env-vars.md`](../docs/env-vars.md#centralizing-values-with-dokploys-projectenvironment-variables)
-for the full per-variable explanation). Uncomment/add service-only vars only
-if you want to override a default. Attach `API_DOMAIN`/`WEB_DOMAIN` as the
-domains on the **api**/**web** services respectively (Dokploy fills the
-Traefik cert); the compose files already carry the router labels.
-
-### 3a. Use the published ARM64 images
-
-Merging into `staging` runs the CD workflow, which builds and publishes
-`linux/arm64` images to GHCR, the architecture of the Raspberry Pi host.
-Merging into `main` builds and publishes the production images independently.
-Add these non-secret values to the production
-Dokploy **Environment**:
-
-```dotenv
-IMAGE_REPO=ghcr.io/danicallero/hackos-api
-WEB_IMAGE_REPO=ghcr.io/danicallero/hackos-web
-IMAGE_TAG=main
-```
-
-If staging is enabled, use the same image repositories but set
-`IMAGE_TAG=staging` and use the staging domains. Both branches create an
-immutable `sha-<release-commit>` tag on every publish. Set `IMAGE_TAG` to one of
-those immutable tags for a deterministic rollback, then redeploy `api`,
-`worker`, and/or `web` as appropriate. The web image is environment-neutral:
-the running Next.js server serves `/runtime-config.js` from each environment's
-`API_DOMAIN` and `WEB_DOMAIN`. No `build:` key remains in the production
-compose files: Dokploy must pull rather than compile on the Raspberry Pi.
-
-The CD workflow triggers the three Dokploy deployments only for a configured
-`staging` build or after the `main` image build/promotion succeeds. Store the
-generated Compose deploy URLs as GitHub **Actions secrets** (never as variables
-or committed text). Keep the existing repository-level secrets for `main`. If
-staging is enabled, add separate names to the `staging` GitHub Environment so
-an incomplete staging setup can never fall back to production webhooks:
+El fichero de secretos debe contener, como mínimo, estas claves:
 
 ```text
-DOKPLOY_API_DEPLOY_WEBHOOK
-DOKPLOY_WORKER_DEPLOY_WEBHOOK
-DOKPLOY_WEB_DEPLOY_WEBHOOK
-
-DOKPLOY_STAGING_API_DEPLOY_WEBHOOK
-DOKPLOY_STAGING_WORKER_DEPLOY_WEBHOOK
-DOKPLOY_STAGING_WEB_DEPLOY_WEBHOOK
+POSTGRES_USER
+POSTGRES_PASSWORD
+POSTGRES_DB
+VALKEY_PASSWORD
+MINIO_ROOT_USER
+MINIO_ROOT_PASSWORD
+BETTER_AUTH_SECRET
+S3_ACCESS_KEY
+S3_SECRET_KEY
 ```
 
-Because this Dokploy instance is reachable only through Tailscale, also create
-a Tailscale tag such as `tag:ci`, grant that tag access to `danipi`, and create
-a federated identity/OIDC client with the `auth_keys` scope. Store its client ID
-and audience as the GitHub Actions secrets `TS_OAUTH_CLIENT_ID` and
-`TS_AUDIENCE`. The CD workflow creates an ephemeral CI node, calls the three
-webhooks for the selected Environment over the tailnet, and removes that node
-when the job ends. This follows the [Tailscale GitHub
-Action](https://tailscale.com/docs/integrations/github/github-action)
-workload-identity flow; no Dokploy endpoint is exposed publicly.
+Para correo, `MAIL_PROVIDER=smtp` requiere `SMTP_HOST`; `resend` requiere
+`RESEND_API_KEY`; `postal` requiere `POSTAL_URL` y `POSTAL_API_KEY`. Las
+claves de firma de Apple/Google son opcionales, pero cada bloque configurado
+debe estar completo. `check-env.sh` no imprime valores secretos.
 
-The API publish calls the API and worker endpoints because both run the same
-image; the web publish calls only the web endpoint. Dokploy then pulls the
-published deployment channel (`main`, or `staging` when that optional route is
-enabled) from GHCR and recreates the service. Do not also configure a
-source-push webhook for these same services, or every `staging`/`main` release
-push will deploy twice.
+La pareja `MINIO_ROOT_*` sólo se entrega a `minio` y `minio-init`. El helper
+`minio-init` usa además `S3_ACCESS_KEY`/`S3_SECRET_KEY` para crear, de forma
+idempotente, la cuenta de aplicación y una política limitada al bucket. Esas
+credenciales S3 sólo se entregan después a `api` y `worker`; nunca son la
+cuenta root de MinIO ni llegan a `web` o `migrate`.
 
-Not using Dokploy? Skip the `dokploy.env.example` files — they're Dokploy's
-own template syntax, resolved before Docker ever sees it, and never appear
-inside the compose YAML itself. Run the same compose files with a literal
-`.env` instead (see [Mode B](#mode-b--single-stack) below, or
-`docker compose --env-file .env -f deploy/services/api/docker-compose.yml up -d`
-per service) — nothing about the compose files changes either way.
+## Variables por servicio
 
-### 4. Deploy in order
+La siguiente matriz es deliberada: no se pasa el entorno completo a cada
+contenedor.
 
-`postgres` → `valkey` → `minio` → `api` (runs migrations, then serves) →
-`worker` → `web`. Redeploying `api` re-runs migrations safely (advisory lock).
-The datastores keep their volumes across app redeploys.
+| Servicio | Variables que recibe |
+|---|---|
+| `postgres` | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` |
+| `valkey` | `VALKEY_PASSWORD` |
+| `minio` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `MINIO_BROWSER=off` |
+| `minio-init` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` |
+| `migrate` | `NODE_ENV`, `DATABASE_URL`, `BETTER_AUTH_SECRET` |
+| `api` | base de datos, Valkey, auth, URLs públicas, almacenamiento, Wallet, traducción, SSE, rate limits y fixtures API-only |
+| `worker` | base de datos, Valkey, auth/URLs necesarias para enlaces, almacenamiento, correo, Wallet y tuning del worker |
+| `web` | sólo `API_DOMAIN` y `WEB_DOMAIN` |
 
----
+En particular, `web` nunca recibe secretos; `api` no recibe credenciales de
+correo; y `migrate` no recibe Valkey, S3, correo ni Wallet.
 
-## Mode B — single stack
+## Imágenes y límites
 
-One env file, one command. Good for a non-Dokploy host or local prod testing.
+Las imágenes de aplicación son referencias fijas y completas de GHCR:
+
+```text
+ghcr.io/danicallero/hackos-api:${IMAGE_TAG}
+ghcr.io/danicallero/hackos-web:${IMAGE_TAG}
+```
+
+`IMAGE_TAG` es la única selección de versión y debe ser exactamente
+`sha-<40 caracteres hexadecimales en minúscula>`. No se acepta `latest`, un
+tag de rama ni una referencia de repositorio configurable. El workflow de CD
+publica esos tags SHA; el servidor sólo hace pull.
+
+Las imágenes de infraestructura también están fijadas a versiones concretas
+en el Compose. No se modifican en el servidor.
+
+Los límites de memoria actuales se mantienen como literales, sin variables de
+override:
+
+| Servicio | Límite |
+|---|---:|
+| `postgres` | `1g` |
+| `valkey` | `512m` |
+| `minio` | `1g` |
+| `api` | `512m` |
+| `worker` | `512m` |
+| `web` | `256m` |
+
+No existen `API_MEM_LIMIT` ni `WEB_MEM_LIMIT` en el contrato de despliegue.
+
+## Orden de despliegue
+
+Ejecutar desde la raíz del repositorio en el host correspondiente. En
+producción es el LXC de GPULux; en staging es la Raspberry Pi. El orden
+conserva el proyecto existente y no elimina volúmenes.
 
 ```sh
-# assemble env: shared defaults, then per-instance secrets (later wins)
-cat deploy/.env.shared.example > .env.prod
-./deploy/scripts/gen-secrets.sh hackos-event2026 api.event2026.example.org >> .env.prod
-# edit .env.prod: CORS_ORIGINS, mail block, INSTANCE_NETWORK is NOT needed here
+CONFIG=/etc/hackos/hackos.env
+SECRETS=/etc/hackos/hackos.secrets
+COMPOSE=(docker compose --env-file "$CONFIG" --env-file "$SECRETS" -f deploy/docker-compose.yml)
 
-docker network create dokploy-network 2>/dev/null || true   # if no Traefik yet
+./deploy/scripts/check-env.sh "$CONFIG" "$SECRETS"
+"${COMPOSE[@]}" config >/dev/null
 
-docker compose --env-file .env.prod \
-  -f deploy/docker-compose.yml \
-  -p hackos-event2026 up -d --build
+# 1. Descargar todas las imágenes; no hay build en ningún paso.
+"${COMPOSE[@]}" pull
+
+# 2. Arrancar dependencias y esperar sus healthchecks.
+"${COMPOSE[@]}" up -d --wait --wait-timeout 120 postgres valkey minio
+
+# 3. Asegurar el bucket S3. Es idempotente.
+"${COMPOSE[@]}" run --rm minio-init
+
+# 4. Ejecutar explícitamente la migración one-shot.
+"${COMPOSE[@]}" run --rm migrate
+
+# 5. Recrear sólo la aplicación con las imágenes descargadas.
+"${COMPOSE[@]}" up -d --no-build --force-recreate api worker web
+
+# 6. Esperar API, worker y web saludables.
+"${COMPOSE[@]}" up -d --wait --wait-timeout 120 api worker web
 ```
 
-In this mode the datastores + app tier sit on a Compose-managed **`private`
-network with `internal: true`** (no egress at all for datastores), while `api`,
-`web`, and `worker` also join the external `edge` (`dokploy-network`); only
-`api` and `web` have Traefik routers. On Dokploy this mode is a single Compose
-service containing every container.
+El entrypoint de `server.js` conserva además la comprobación de migraciones de
+seguridad propia de la aplicación; el servicio `migrate` sigue siendo el paso
+operativo explícito y bloquea el arranque mediante `depends_on` hasta terminar
+correctamente.
 
----
+Para revisar el estado y los logs:
 
-## Splitting Postgres onto its own host (optional, advanced)
-
-The default topology (§Architecture above) puts every service — including
-`postgres` — on one Docker host, reachable only through the private
-`instance` bridge network with **no host ports published at all**. That's
-the right default: simplest to run, and datastores are unreachable from
-anywhere but the app containers.
-
-For a big event on Hetzner where you'd rather isolate Postgres's CPU/I/O from
-the `api`/`worker`/`web` tier — so a request-handling burst can't starve the
-database, or vice versa — split it onto a second Hetzner Cloud server. This
-changes one invariant: `postgres` (and optionally `valkey`/`minio`) can no
-longer sit on a purely internal Docker bridge network, since a plain Docker
-bridge network doesn't span hosts. The replacement is Hetzner's **private
-Cloud Network**, which is not internet-routable on its own — it's a
-host-to-host boundary, not a public one.
-
-1. **Create a Hetzner Cloud Network** (Hetzner Console → Networks, or `hcloud
-   network create`) and attach both servers to it — the app server and the
-   new database server. Each gets a private IP in that network (e.g.
-   `10.0.0.2` app, `10.0.0.3` db) in addition to its public IP.
-2. **Lock it down with a Hetzner Cloud Firewall** on the db server: allow
-   `5432/tcp` (and `6379`/`9000` if you move Valkey/MinIO too) **only** from
-   the app server's private IP, deny everything else inbound on that
-   interface. This is the defense-in-depth replacement for "no host ports at
-   all" — the port is published, but only reachable from one specific private
-   IP, never from the public internet.
-3. **Register both servers in Dokploy** (Dokploy's *Servers* panel supports
-   more than one Docker host per project via SSH) and assign the `postgres`
-   compose service to the db server, keeping `api`/`worker`/`web`/`valkey`/
-   `minio` on the app server. Consult Dokploy's own docs for the exact
-   multi-server flow — the panel details change between versions.
-4. **Point `DATABASE_URL` at the db server's private IP** instead of the
-   `postgres` hostname (`postgres://user:pass@10.0.0.3:5432/db`) in the
-   `api`/`worker`/`migrate` environment — the Docker-internal-DNS hostname
-   resolution (`postgres:5432`) only works when both containers share a
-   Docker network, which is no longer true once they're on different hosts.
-5. **`postgres`'s own compose file** needs its `ports:` changed from "none"
-   to a host-bound publish on the private interface only —
-   `ports: ["10.0.0.3:5432:5432"]` — instead of relying on the Docker network
-   boundary for isolation.
-
-Only do this if you actually have headroom to spend on a second box and a
-concrete reason (co-located Postgres is measurably the bottleneck, or you
-want blast-radius isolation). For ~600 CCU, a single well-sized Hetzner box
-(see [`docs/big-event-readiness.md`](../docs/big-event-readiness.md)) is
-normally enough — this is the lever to reach for only if that's not true for
-your event.
-
----
-
-## Multiple instances
-
-Every instance is isolated by three unique values: **`STACK_NAME`**,
-**`INSTANCE_NETWORK`**, and the **Dokploy project / `-p` name** (which scopes
-volumes). Nothing is shared between instances — separate networks, separate
-`pgdata`/`miniodata` volumes, separate secrets, separate Traefik routers (the
-router names carry `STACK_NAME`, so no collision on one Traefik).
-
-```
-event2026:  STACK_NAME=hackos-event2026  INSTANCE_NETWORK=hackos-event2026-net  domain api.event2026…
-event2027:  STACK_NAME=hackos-event2027  INSTANCE_NETWORK=hackos-event2027-net  domain api.event2027…
+```sh
+"${COMPOSE[@]}" ps
+"${COMPOSE[@]}" logs --tail=200 api worker web migrate
 ```
 
-Give each instance its own generated secrets — a leak in one must never touch
-another.
+Para parar el runtime sin tocar datos:
 
----
-
-## Security posture
-
-- **Datastores are never exposed.** No `ports:` mappings; reachable only inside
-  the instance network. Postgres and Valkey are password-protected; Valkey uses
-  `requirepass`.
-- **`api` and `web` are public**, via separate Traefik routers on
-  `dokploy-network`; only `api` can reach the instance datastores. The API sets HSTS,
-  `X-Content-Type-Options`, `X-Frame-Options: DENY`, and a strict referrer
-  policy (Traefik middleware), and trusts `X-Forwarded-*` (`TRUST_PROXY=true`)
-  so the audit trail records real client IPs (H53).
-- **CORS is locked down in production** to `CORS_ORIGINS`; credentialed requests
-  from other origins are refused.
-- **Containers run unprivileged** (`USER node`, `no-new-privileges:true`) under
-  `tini` for correct signal handling and graceful shutdown.
-- **Pin your images.** Set `IMAGE_TAG` to a released version and `MINIO_IMAGE`/
-  `MINIO_MC_IMAGE` to concrete tags — never ship `:latest` to production.
-- **MinIO console is off** by default (`MINIO_BROWSER=off`). To expose it, put it
-  behind Traefik on its own subdomain with auth; don't publish `:9001`.
-- **Secrets live only in Dokploy's env store** (or your `.env.<instance>` file,
-  which is gitignored). Rotating `BETTER_AUTH_SECRET` invalidates sessions.
-
----
-
-## Operations
-
-- **Migrations**: automatic on `api` deploy. The H54 `0730` migration upgrades
-  the latest main schema in place (including populated rows) and uses the API's
-  `BETTER_AUTH_SECRET` to retire any legacy scanner credentials. The runner
-  recognizes the allow-listed pre-squash `0731`–`0746` ledger (and known old
-  `0730` checksums), skips the immutable squashed baseline, and applies the
-  transactional `0747` compatibility normalizer automatically. Before deploy,
-  take the normal database backup and follow the [migration identity gate](../docs/database-schema.md#migration-identity).
-  Unknown ledger names, malformed historical checksums, missing secrets for raw
-  credentials, and active-badge collisions stop the deploy. To run migrations
-  manually:
-  `docker compose -f deploy/services/api/docker-compose.yml -p <proj>-api run --rm migrate`.
-- **Grant superadmin to an existing account (H8)** from the API container shell:
-  `node scripts/grant-superadmin.mjs --email user@example.com`.
-  Add `--allow-existing-admin` if you intentionally want more than one superadmin.
-- **Backups**: snapshot the `pgdata` volume (or `pg_dump` on a schedule) and the
-  `miniodata` volume. These are the only stateful pieces; Valkey is ephemeral.
-- **Scaling**: run more `worker` replicas for notification/queue throughput
-  (dispatcher uses `FOR UPDATE SKIP LOCKED`, so replicas won't double-send).
-  Multiple `api` replicas are fine — SSE is stateless and fans out via Valkey.
-- **Logs/health**: every long-running HTTP service has a container healthcheck.
-  The API container probes dependency-free `/healthz` for process liveness;
-  Traefik probes `/readyz`, which returns 503 only when required PostgreSQL is
-  unavailable. Valkey is ephemeral, so its outage is a bounded 200
-  `status: degraded`: the replica keeps serving PostgreSQL-backed reads while
-  cache, rate limiting, and SSE fail open/reconnect. The `worker` check is
-  disabled (it serves no HTTP — liveness is process-based via `restart`).
-- **Zero-downtime deploys**: the health checks gate traffic, but a single
-  replacement still leaves a window with no backend. Enable Dokploy's
-  zero-downtime/Swarm rollout for the API service and use `/readyz` as its
-  readiness route before enabling API auto-deploys.
-
----
-
-## Files here
-
+```sh
+"${COMPOSE[@]}" down
 ```
-deploy/
-├── README.md                     ← this file
-├── docker-compose.yml            ← Mode B: single stack
-├── .env.shared.example           ← non-secret, shared across instances
-├── .env.instance.example         ← per-instance secrets (never commit filled)
-├── scripts/
-│   └── gen-secrets.sh            ← generate a per-instance secret env file
-├── qualification/                ← disposable pre-event #544 load stack
-│   ├── docker-compose.yml        ← internal-only exact-image qualification
-│   ├── validate-compose.mjs      ← checks the compose file before running it
-│   └── run.sh                    ← preflight, run, artifact and cleanup gate
-└── services/                     ← Mode A: one compose per Dokploy service
-    ├── postgres/
-    │   ├── docker-compose.yml
-    │   └── dokploy.env.example   ← paste into Dokploy's Environment Variables box
-    ├── valkey/    (docker-compose.yml + dokploy.env.example)
-    ├── minio/     (docker-compose.yml + dokploy.env.example)
-    ├── api/       (docker-compose.yml ← api + one-shot migrate; dokploy.env.example)
-    ├── worker/    (docker-compose.yml + dokploy.env.example)
-    └── web/       (docker-compose.yml + dokploy.env.example)
-```
+
+No usar `down --volumes` en una operación normal: elimina los volúmenes
+persistentes de PostgreSQL y MinIO.
+
+## Persistencia y copias
+
+Compose crea los volúmenes de proyecto `postgres-data` y `minio-data`.
+PostgreSQL contiene la fuente de verdad, auditoría, sesiones y outbox; MinIO
+contiene ficheros y logos. Valkey es deliberadamente efímero: BullMQ sólo
+marca el reloj y la señal realtime, mientras el estado durable permanece en
+PostgreSQL.
+
+Antes de un evento, verificar copias restaurables de ambos volúmenes y de un
+`pg_dump` de la base de datos. No borrar ni recrear volúmenes para actualizar
+imágenes.
+
+`S3_PUBLIC_URL`, si se configura, debe apuntar a un endpoint HTTPS accesible
+por el navegador y gestionado fuera de esta red. MinIO no publica ningún
+puerto en el LXC; los ficheros privados siguen pasando por el API.
+
+## Archivos canónicos
+
+- [`docker-compose.yml`](./docker-compose.yml): runtime único.
+- [`.env.example`](./.env.example): plantilla de configuración no secreta.
+- [`scripts/check-env.sh`](./scripts/check-env.sh): validación previa sin
+  revelar secretos.
+- [`../docs/env-vars.md`](../docs/env-vars.md): contrato de variables por
+  proceso.
