@@ -6,8 +6,8 @@ busy, and chooses which waiting request runs next. This is a resilience and
 latency policy (H8, H540, #544), not an authorization mechanism: capability
 guards still decide whether the request is allowed to perform the operation.
 
-The scheduler is local to one API process. An external load balancer may
-distribute requests across API replicas, but replicas do not share an
+The scheduler is local to one API process. Caddy sends traffic to the single
+API in the canonical runtime, and any future replicas would not share an
 admission queue.
 
 ## The decision order

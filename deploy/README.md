@@ -1,181 +1,265 @@
-# Deploying hackOS with Docker Compose
+# Despliegue multi-arquitectura de hackOS
 
-hackOS runs as six containers built from the API and web images, plus
-Postgres, Valkey and MinIO. The supported deployment contract is plain Docker
-Compose. The repository contains a single-stack file for the usual deployment
-and one file per service for hosts that need independent service lifecycles.
+Este directorio contiene un único runtime de Docker Compose para staging en la
+Raspberry Pi de casa y producción en el LXC `hackos`. El build publica
+`linux/amd64` (obligatorio para el host de producción) y conserva `linux/arm64`; los hosts sólo
+descargan imágenes y nunca compilan el repositorio durante el despliegue.
 
-## Architecture
+La definición canónica es [`docker-compose.yml`](./docker-compose.yml). El
+stack tiene estos servicios de runtime:
 
+- `postgres`: estado durable de hackOS.
+- `valkey`: BullMQ, SSE y contadores efímeros.
+- `minio`: almacenamiento S3-compatible durable.
+- `migrate`: proceso explícito one-shot de migraciones.
+- `api`: Fastify en el puerto interno `3000`.
+- `worker`: BullMQ en proceso separado, sin HTTP.
+- `web`: Next.js en el puerto interno `3001`.
+
+`minio-init` es un helper one-shot del mismo Compose para crear el bucket, la
+cuenta de servicio y la política de logos. No es un servicio de aplicación y
+no recibe variables propias del API.
+
+## Red e ingress
+
+Compose crea la red bridge interna `private` y una red de salida `egress`. Los
+servicios de estado sólo están en `private`; API y worker usan ambas redes para
+resolver (`postgres:5432`, `valkey:6379`, `minio:9000`) y acceder a proveedores
+externos. `web` sólo necesita `egress`. No se declara ninguna red ajena al
+proyecto.
+
+Sólo se publican dos puertos HTTP del host. En producción el proxy está en otro LXC,
+por lo que la configuración canónica usa `0.0.0.0`; si el proxy comparte host,
+se puede fijar `PUBLISH_BIND_ADDRESS=127.0.0.1`.
+
+| Servicio | Puerto del contenedor | Publicación | Uso |
+|---|---:|---|---|
+| `api` | `3000` | `${PUBLISH_BIND_ADDRESS}:${API_PUBLISH_PORT}:3000` | Proxy → HTTP + SSE |
+| `web` | `3001` | `${PUBLISH_BIND_ADDRESS}:${WEB_PUBLISH_PORT}:3001` | Proxy → Next.js |
+
+PostgreSQL, Valkey y MinIO no tienen `ports:`. Su consola MinIO también queda
+apagada. Caddy termina TLS y puede usar, por ejemplo, la IP Incus del LXC
+`hackos`:
+
+```caddyfile
+api.example.org {
+    reverse_proxy <ip-incus-del-lxc-hackos>:3000
+}
+
+example.org {
+    reverse_proxy <ip-incus-del-lxc-hackos>:3001
+}
 ```
-                         host / external load balancer
-                         :${API_PORT:-3000}  :${WEB_PORT:-3001}
-                                  │                 │
-                         ┌────────▼───────┐ ┌─────▼────────┐
-                         │ api (HTTP/SSE) │ │ web (Next.js)│
-                         └────────┬───────┘ └──────────────┘
-                                  │
-                 private network │ public network
-       ┌──────────────────────────┼──────────────────┐
-       │                          │                  │
-   postgres                    valkey              worker
-       │                          │                  │
-       └────────────────────── minio ───────────────┘
-```
 
-- The datastores have no published ports. Only `api` and `web` publish host
-  ports; the worker has no inbound HTTP surface.
-- The API and worker join both Compose networks so they can reach datastores
-  and external mail, push, Wallet and translation providers. Web joins only
-  the public network.
-- TLS, DNS, firewall policy and any external load balancing belong to the
-  host or infrastructure layer. Set `TRUST_PROXY=true` only when that layer is
-  a trusted reverse proxy.
-- `API_DOMAIN` and `WEB_DOMAIN` remain application origins: they configure
-  Better Auth, CORS and the web runtime config. They do not create routes in
-  Compose.
+Los valores de `API_DOMAIN`, `WEB_DOMAIN` y `CORS_ORIGINS` deben corresponder
+con esos hosts. `API_DOMAIN` y `WEB_DOMAIN` son nombres sin `https://`.
 
-## Environment files
+## Configuración y secretos
 
-Use the two checked-in templates as a starting point, then keep the filled
-instance file outside Git:
+Cada host mantiene dos ficheros planos fuera del repositorio:
+
+- `/etc/hackos/hackos.env`: configuración no secreta, basada en
+  [`deploy/.env.example`](./.env.example).
+- `/etc/hackos/hackos.secrets`: credenciales y claves privadas, con permisos
+  `0600` y sin copiarlo al repositorio.
+
+Docker Compose acepta varios `--env-file`; el segundo tiene precedencia:
 
 ```sh
-./deploy/scripts/gen-secrets.sh api.event2026.example.org > .env.event2026
-# Review domains, CORS_ORIGINS, provider credentials and optional Wallet blocks.
+CONFIG=/etc/hackos/hackos.env
+SECRETS=/etc/hackos/hackos.secrets
+COMPOSE="docker compose --env-file $CONFIG --env-file $SECRETS -f deploy/docker-compose.yml"
+
+./deploy/scripts/check-env.sh "$CONFIG" "$SECRETS"
+$COMPOSE config >/dev/null
 ```
 
-`deploy/.env.shared.example` contains image references, port defaults,
-resource limits and non-secret choices. The generated instance file contains
-database, storage, auth and mail values. When both files are passed to
-Compose, the later file wins.
+El fichero de secretos debe contener, como mínimo, estas claves:
 
-Never commit a filled environment file or private key. The examples contain
-placeholders only.
+```text
+POSTGRES_USER
+POSTGRES_PASSWORD
+POSTGRES_DB
+VALKEY_PASSWORD
+MINIO_ROOT_USER
+MINIO_ROOT_PASSWORD
+BETTER_AUTH_SECRET
+S3_ACCESS_KEY
+S3_SECRET_KEY
+```
 
-## Single stack (recommended)
+Para correo, `MAIL_PROVIDER=smtp` requiere `SMTP_HOST`. En producción se puede
+usar Amazon SES a través de su endpoint SMTP; `SMTP_USER` y `SMTP_PASS` se
+guardan en el fichero de secretos cuando el relay requiere autenticación. Las
+claves de firma de Apple/Google son opcionales, pero cada bloque configurado
+debe estar completo. `check-env.sh` no imprime valores secretos.
 
-The single stack creates its own private and public bridge networks and is the
-least error-prone option for one host:
+La pareja `MINIO_ROOT_*` sólo se entrega a `minio` y `minio-init`. El helper
+`minio-init` usa además `S3_ACCESS_KEY`/`S3_SECRET_KEY` para crear, de forma
+idempotente, la cuenta de aplicación y una política limitada al bucket. Esas
+credenciales S3 sólo se entregan después a `api` y `worker`; nunca son la
+cuenta root de MinIO ni llegan a `web` o `migrate`.
+
+## Variables por servicio
+
+La siguiente matriz es deliberada: no se pasa el entorno completo a cada
+contenedor.
+
+| Servicio | Variables que recibe |
+|---|---|
+| `postgres` | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` |
+| `valkey` | `VALKEY_PASSWORD` |
+| `minio` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `MINIO_BROWSER=off` |
+| `minio-init` | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` |
+| `migrate` | `NODE_ENV`, `DATABASE_URL`, `BETTER_AUTH_SECRET` |
+| `api` | base de datos, Valkey, auth, URLs públicas, almacenamiento, Wallet, traducción, SSE, rate limits y fixtures API-only |
+| `worker` | base de datos, Valkey, auth/URLs necesarias para enlaces, almacenamiento, correo, Wallet y tuning del worker |
+| `web` | sólo `API_DOMAIN` y `WEB_DOMAIN` |
+
+En particular, `web` nunca recibe secretos; `api` no recibe credenciales de
+correo; y `migrate` no recibe Valkey, S3, correo ni Wallet.
+
+## Imágenes y límites
+
+Las imágenes de aplicación son referencias fijas y completas de GHCR:
+
+```text
+ghcr.io/danicallero/hackos-api:${IMAGE_TAG}
+ghcr.io/danicallero/hackos-web:${IMAGE_TAG}
+```
+
+`IMAGE_TAG` es la única selección de versión y debe ser exactamente
+`sha-<40 caracteres hexadecimales en minúscula>`. No se acepta `latest`, un
+tag de rama ni una referencia de repositorio configurable. El workflow de CD
+publica esos tags SHA; el servidor sólo hace pull.
+
+Las imágenes de infraestructura también están fijadas a versiones concretas
+en el Compose. No se modifican en el servidor.
+
+Los límites de memoria actuales se mantienen como literales, sin variables de
+override:
+
+| Servicio | Límite |
+|---|---:|
+| `postgres` | `1g` |
+| `valkey` | `512m` |
+| `minio` | `1g` |
+| `api` | `512m` |
+| `worker` | `512m` |
+| `web` | `256m` |
+
+No existen `API_MEM_LIMIT` ni `WEB_MEM_LIMIT` en el contrato de despliegue.
+
+## CD con Incus
+
+`.github/workflows/build.yml` construye y publica `hackos-api` y `hackos-web`
+en GHCR para `linux/amd64` y `linux/arm64`. Cada ejecución genera el tag de
+rama y `sha-<commit>`; el CD sólo acepta el segundo formato y nunca usa
+`latest`.
+
+`.github/workflows/deploy-incus.yml` se ejecuta con `workflow_dispatch`, pide
+`production` o `staging` y un tag `sha-<40 hex>`, y usa el environment de GitHub
+correspondiente. La protección de esos environments debe estar configurada en
+GitHub (revisión/aprobación y, si procede, restricciones de rama); el workflow
+no contiene secretos de aplicación.
+
+El job necesita un runner self-hosted habilitado y con acceso local a Incus.
+Esta dependencia es explícita: el bloque `setup-gh-runner` del repositorio de
+infraestructura está actualmente comentado, así que habilitar y registrar el
+runner es una operación previa y no forma parte de este repositorio.
+
+El workflow comprueba el tag, transfiere Compose, `check-env.sh` y
+`incus-deploy.sh` con `incus file push`, y ejecuta el script con
+`incus exec hackos`. El script usa `/etc/hackos/hackos.env` y
+`/etc/hackos/hackos.secrets` ya presentes dentro del LXC, adquiere un lock con
+`flock`, valida la configuración sin imprimir valores, hace pull de API,
+worker y web, ejecuta `migrate`, recrea la aplicación y espera los
+healthchecks. La salida sólo contiene estados y errores genéricos; no descifra
+SOPS, no recibe secretos de Actions y no expone Docker Remote API.
+
+### Rollback
+
+Para volver a la versión anterior, lanzar de nuevo
+`deploy-incus.yml` con el mismo environment y el tag SHA anterior que figure
+en el historial de despliegues. El rollback sólo cambia imágenes: no revierte
+automáticamente migraciones de base de datos. Una migración incompatible exige
+un procedimiento de base de datos revisado por separado.
+
+## Orden de despliegue
+
+Ejecutar desde la raíz del repositorio en el host correspondiente. En
+producción es el LXC `hackos`; en staging es la Raspberry Pi. El orden
+conserva el proyecto existente y no elimina volúmenes.
 
 ```sh
-docker compose \
-  --env-file deploy/.env.shared.example \
-  --env-file .env.event2026 \
-  -p hackos-event2026 \
-  -f deploy/docker-compose.yml \
-  up -d
+CONFIG=/etc/hackos/hackos.env
+SECRETS=/etc/hackos/hackos.secrets
+COMPOSE=(docker compose --env-file "$CONFIG" --env-file "$SECRETS" -f deploy/docker-compose.yml)
+
+./deploy/scripts/check-env.sh "$CONFIG" "$SECRETS"
+"${COMPOSE[@]}" config >/dev/null
+
+# 1. Descargar todas las imágenes; no hay build en ningún paso.
+"${COMPOSE[@]}" pull
+
+# 2. Arrancar dependencias y esperar sus healthchecks.
+"${COMPOSE[@]}" up -d --wait --wait-timeout 120 postgres valkey minio
+
+# 3. Asegurar el bucket S3. Es idempotente.
+"${COMPOSE[@]}" run --rm minio-init
+
+# 4. Ejecutar explícitamente la migración one-shot.
+"${COMPOSE[@]}" run --rm migrate
+
+# 5. Recrear sólo la aplicación con las imágenes descargadas.
+"${COMPOSE[@]}" up -d --no-build --force-recreate api worker web
+
+# 6. Esperar API, worker y web saludables.
+"${COMPOSE[@]}" up -d --wait --wait-timeout 120 api worker web
 ```
 
-The API is available on `${API_PORT:-3000}` and the web app on
-`${WEB_PORT:-3001}`. If a host-level load balancer terminates TLS, point its
-API and web backends at those ports and set `TRUST_PROXY=true` for the API.
-Do not publish Postgres, Valkey or MinIO ports.
+El entrypoint de `server.js` conserva además la comprobación de migraciones de
+seguridad propia de la aplicación; el servicio `migrate` sigue siendo el paso
+operativo explícito y bloquea el arranque mediante `depends_on` hasta terminar
+correctamente.
 
-The API service runs the advisory-locked migration command before listening;
-the separate `migrate` service makes the startup order explicit. `minio-init`
-creates the configured bucket idempotently.
-
-## Separate service Compose files
-
-Use `deploy/services/<service>/docker-compose.yml` when Postgres, Valkey,
-MinIO, API, worker and web need separate restart or rollout controls. This
-mode uses one external private Docker network shared by the service projects:
+Para revisar el estado y los logs:
 
 ```sh
-docker network create hackos-event2026-net
+"${COMPOSE[@]}" ps
+"${COMPOSE[@]}" logs --tail=200 api worker web migrate
 ```
 
-Set `INSTANCE_NETWORK=hackos-event2026-net` in the instance environment and
-launch the services with distinct Compose project names. API and web publish
-`${API_PORT:-3000}` and `${WEB_PORT:-3001}` respectively. The service files
-use the same image tag and application secrets as the single stack.
+Para parar el runtime sin tocar datos:
 
-Launch order is `postgres`, `valkey`, `minio`, `api`, `worker`, then `web`.
-The API file includes the one-shot `migrate` service. A split deployment must
-keep all six services on the same `INSTANCE_NETWORK`; changing it isolates a
-service from the datastores.
-
-## Images and releases
-
-The CD workflow builds and publishes the API and web images for pushes to the
-protected release branches. It does not connect to a host or perform a
-deployment. Pull the published tag on the target host and restart the
-Compose project there. Use an immutable `sha-<commit>` tag for a rollback.
-
-The API and worker must use the same `IMAGE_REPO` and `IMAGE_TAG`; the web
-uses `WEB_IMAGE_REPO` and the same release tag. Pin `MINIO_IMAGE` and
-`MINIO_MC_IMAGE` to concrete versions for production.
-
-## Wallet passes (H28)
-
-Apple Wallet and Google Wallet are optional. Leaving an entire platform block
-unset makes its endpoint return `503 service_unavailable`; a partial signing
-block fails at boot. PEM values are base64-encoded content, not file paths.
-
-Apple requires `APPLE_PASS_TYPE_IDENTIFIER`, `APPLE_TEAM_IDENTIFIER`,
-`APPLE_PASS_CERTIFICATE_PEM`, `APPLE_PASS_KEY_PEM` and
-`APPLE_WWDR_CERTIFICATE_PEM`; `APPLE_PASS_ORGANIZATION`,
-`APPLE_APNS_ENVIRONMENT` and `APPLE_PASS_APP_STORE_ID` are optional.
-
-Google requires `GOOGLE_WALLET_ISSUER_ID`,
-`GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL` and
-`GOOGLE_WALLET_PRIVATE_KEY_PEM`. The event-ticket class and visual options
-are documented in [`docs/env-vars.md`](../docs/env-vars.md).
-
-Never commit these values. Revoke a leaked Apple certificate or Google key at
-its source; rotating the app auth secret does not rotate Wallet credentials.
-
-## Mail
-
-Production mail is Amazon SES through its SMTP interface. Set
-`MAIL_PROVIDER=smtp`, use the SES SMTP endpoint for the selected AWS region,
-port `587`, the SES SMTP credentials, and a verified `MAIL_FROM_ADDRESS`.
-SES SMTP credentials are distinct from ordinary AWS access keys. Local
-development uses SMTP against Mailpit, and the same `SMTP_HOST`, `SMTP_PORT`,
-`SMTP_USER` and `SMTP_PASS` settings remain configurable for another relay.
-
-Amazon SES also exposes an HTTPS API, but this repository intentionally uses
-its existing generic SMTP adapter; no AWS SDK credentials are required by the
-application. The provider choice and verified sender identity should still be
-recorded in the production runbook.
-
-Email layout branding is code-owned. The current hackOS name, logo URL,
-colors, dimensions and footer are internal constants in the template renderer
-and are no longer deployment variables.
-
-## Operations and security
-
-- Back up the Postgres and MinIO volumes before migrations or releases.
-- The API exposes `/healthz` for process liveness and `/readyz` for dependency
-  readiness. The worker is process-only and has no HTTP health endpoint.
-- Keep `MINIO_BROWSER=off` unless the console is placed behind a separate,
-  authenticated route. Never publish port `9001` directly.
-- Set distinct Compose project names, networks and secrets for separate
-  hackathons. Do not reuse database, auth, storage or signing credentials.
-- `DB_POOL_MAX` is per process and per replica. Keep the combined API and
-  worker pool below Postgres `max_connections`, with headroom for migrations
-  and administration; see [`docs/big-event-readiness.md`](../docs/big-event-readiness.md).
-
-## Files
-
-```
-deploy/
-├── README.md
-├── docker-compose.yml              # single stack
-├── .env.shared.example             # non-secret shared values
-├── .env.instance.example           # per-instance values/placeholders
-├── scripts/
-│   └── gen-secrets.sh
-├── qualification/                  # disposable event-day load stack
-└── services/                       # optional split Compose deployment
-    ├── postgres/docker-compose.yml
-    ├── valkey/docker-compose.yml
-    ├── minio/docker-compose.yml
-    ├── api/docker-compose.yml
-    ├── worker/docker-compose.yml
-    └── web/docker-compose.yml
+```sh
+"${COMPOSE[@]}" down
 ```
 
-The authoritative environment-variable inventory is
-[`docs/env-vars.md`](../docs/env-vars.md).
+No usar `down --volumes` en una operación normal: elimina los volúmenes
+persistentes de PostgreSQL y MinIO.
+
+## Persistencia y copias
+
+Compose crea los volúmenes de proyecto `postgres-data` y `minio-data`.
+PostgreSQL contiene la fuente de verdad, auditoría, sesiones y outbox; MinIO
+contiene ficheros y logos. Valkey es deliberadamente efímero: BullMQ sólo
+marca el reloj y la señal realtime, mientras el estado durable permanece en
+PostgreSQL.
+
+Antes de un evento, verificar copias restaurables de ambos volúmenes y de un
+`pg_dump` de la base de datos. No borrar ni recrear volúmenes para actualizar
+imágenes.
+
+`S3_PUBLIC_URL`, si se configura, debe apuntar a un endpoint HTTPS accesible
+por el navegador y gestionado fuera de esta red. MinIO no publica ningún
+puerto en el LXC; los ficheros privados siguen pasando por el API.
+
+## Archivos canónicos
+
+- [`docker-compose.yml`](./docker-compose.yml): runtime único.
+- [`.env.example`](./.env.example): plantilla de configuración no secreta.
+- [`scripts/check-env.sh`](./scripts/check-env.sh): validación previa sin
+  revelar secretos.
+- [`../docs/env-vars.md`](../docs/env-vars.md): contrato de variables por
+  proceso.

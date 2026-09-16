@@ -2,8 +2,8 @@
 #   docker build -f apps/web/Dockerfile -t hackos-web .
 #
 # The web frontend is a STANDALONE Next.js server. It is deployed as its own
-# service (deploy/services/web) — it is never served by, or routed together
-# with, the API.
+# service behind Caddy — it is never served by, or routed together with, the
+# API.
 #
 # The image is environment-neutral. Each running container serves
 # /runtime-config.js from API_DOMAIN/WEB_DOMAIN so staging and production can

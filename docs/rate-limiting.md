@@ -84,7 +84,7 @@ directly exposed. To close it, `betterAuthPassthrough`
 `x-forwarded-for` with Fastify's own `request.ip` before forwarding to Better
 Auth's handler — and `request.ip` is only trust-aware of proxy headers when
 `config.trustProxy` is set (`TRUST_PROXY=true`, hardcoded in
-`deploy/services/api/docker-compose.yml` and the root `deploy/docker-compose.yml`,
+the canonical `deploy/docker-compose.yml`,
 and the default whenever `NODE_ENV=production` even without it — see
 `config.ts`). In other words: rate limiting inherits the same trusted-proxy
 posture the rest of the app already requires — see `deploy/README.md`'s

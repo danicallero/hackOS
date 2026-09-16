@@ -73,12 +73,9 @@ const envSchema = z.object({
   S3_PUBLIC_URL: z.string().optional(),
 
   /**
-   * Mail provider (H52). DELTA(H52): the story says the provider is chosen
-   * "por base de datos"; per explicit user decision the provider is fixed at
-   * deploy time via env instead — SMTP relay settings are an ops change
-   * (redeploy/restart), not a runtime DB toggle. Defaults target the local
-   * Mailpit container (pnpm infra:up). Production can point the same adapter
-   * at the Amazon SES SMTP endpoint.
+   * Mail transport (H52). The provider is fixed to SMTP at deploy time;
+   * production can point the same adapter at Amazon SES's SMTP endpoint.
+   * Defaults target the local Mailpit container (pnpm infra:up).
    */
   MAIL_PROVIDER: z.literal("smtp").default("smtp"),
   MAIL_FROM_ADDRESS: z.string().default("noreply@hackos.local"),
@@ -98,9 +95,9 @@ const envSchema = z.object({
     .transform((v) => (v === undefined ? undefined : v === "true")),
 
   /**
-   * Trust X-Forwarded-* headers when the API sits behind a trusted reverse
-   * proxy so the real client IP reaches the audit trail (H53). Never enable
-   * when directly exposed.
+   * Trust X-Forwarded-* headers. Enable when the API sits behind a reverse
+   * proxy (Caddy) so the real client IP reaches the audit trail
+   * (H53) instead of the proxy's address. Never enable when directly exposed.
    */
   TRUST_PROXY: z
     .string()
@@ -254,8 +251,7 @@ const envSchema = z.object({
    * Optional automatic translation for announcement content (H50). Entirely
    * optional — every translation surface (API and both frontends) must keep
    * working with manual-only entry when neither provider is configured; see
-   * modules/notifications/translate/ for the isolated provider boundary,
-   * alongside the MAIL_PROVIDER SMTP boundary in notifications.
+   * modules/notifications/translate/ for the isolated provider boundary.
    */
   TRANSLATE_PROVIDER: z.enum(["google", "libretranslate"]).default("google"),
   GOOGLE_TRANSLATE_API_KEY: z.string().optional(),

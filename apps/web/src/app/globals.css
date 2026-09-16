@@ -4,7 +4,8 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * hackOS web theme. Dark-first, zinc-based:
+ * hackOS web theme. Dark-first, zinc-based — same visual family as the
+ * operator console:
  * near-black canvas, subtly lighter cards, hairline borders, compact radius.
  * Colors are the single source of truth for every component; never hardcode
  * hex/oklch in a component, reference these tokens (bg-background, border,
