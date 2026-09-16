@@ -266,7 +266,6 @@ function RootLayoutNav({
   error: Error | null;
 }) {
   const colorScheme = useColorScheme();
-  const { t } = useLocale();
   const { refetch } = useMeContext();
   const showRestoringSession = useDelayedVisibility(!me && loading, 500);
   const canEnterApp = canEnterMobileApp(authenticated, me?.hasEventAccess);
@@ -325,7 +324,6 @@ function RootLayoutNav({
               headerShown: process.env.EXPO_OS === "ios",
               headerTransparent: process.env.EXPO_OS === "ios",
               headerLargeTitle: process.env.EXPO_OS === "ios",
-              headerBackTitle: t("tabSchedule"),
             }}
           />
         </Stack.Protected>
