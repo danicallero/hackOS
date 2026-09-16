@@ -15,8 +15,8 @@ conflict, that file wins. Hard invariants live in `plan/07-datos-relevantes-ers.
 - `packages/shared` — `capabilities.ts` + `events.ts`. Add new names THERE, never inline.
 - `plan/` — normative docs. Read-only.
 - `docs/` — living implementation docs. Keep in sync with code.
-- `deploy/` — canonical Docker Compose runtime for the ARM64 staging Raspberry
-  Pi and the GPULux `hackos` LXC; `deploy/README.md` is normative.
+- `deploy/` — canonical Docker Compose runtime for the staging Raspberry Pi and
+  the `hackos` LXC; `deploy/README.md` is normative.
 
 ## Non-negotiable conventions
 
@@ -93,8 +93,8 @@ See root `README.md` for the full command reference. Key points for agents:
 ## Deployment (keep working)
 
 `apps/api/Dockerfile` builds from the repo root; local development's Compose
-profile must keep working. Release hosts consume pre-built ARM64 GHCR images:
-staging runs on the home Raspberry Pi and production runs in the GPULux
+profile must keep working. Release hosts consume pre-built multi-architecture
+GHCR images: staging runs on the home Raspberry Pi and production runs in the
 `hackos` LXC. Workers run inline in dev (`WORKERS_INLINE`), as a separate
 container (`node dist/worker.js`) in production. Don't hardcode `localhost` —
 everything configurable comes from `src/config.ts` (zod-validated env).

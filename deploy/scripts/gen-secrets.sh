@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Generate the secret env file for the ARM64 Compose runtime.
+# Generate the secret env file for the multi-architecture Compose runtime.
 #
 #   ./deploy/scripts/gen-secrets.sh > /etc/hackos/hackos.secrets
 #

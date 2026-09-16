@@ -1,9 +1,9 @@
-# Despliegue ARM64 de hackOS
+# Despliegue multi-arquitectura de hackOS
 
 Este directorio contiene un único runtime de Docker Compose para staging en la
-Raspberry Pi de casa y producción en el LXC `hackos` de GPULux. Ambos hosts
-usan imágenes ARM64 ya construidas; sólo descargan imágenes y nunca compilan el
-repositorio durante el despliegue.
+Raspberry Pi de casa y producción en el LXC `hackos`. El build publica
+`linux/amd64` (obligatorio para el host de producción) y conserva `linux/arm64`; los hosts sólo
+descargan imágenes y nunca compilan el repositorio durante el despliegue.
 
 La definición canónica es [`docker-compose.yml`](./docker-compose.yml). El
 stack tiene estos servicios de runtime:
@@ -22,27 +22,32 @@ no recibe variables propias del API.
 
 ## Red e ingress
 
-Compose crea una única red bridge privada del proyecto, `private`. Todos los
-servicios se resuelven por nombre dentro de ella (`postgres:5432`,
-`valkey:6379`, `minio:9000`). No se declara ninguna red ajena al proyecto.
+Compose crea la red bridge interna `private` y una red de salida `egress`. Los
+servicios de estado sólo están en `private`; API y worker usan ambas redes para
+resolver (`postgres:5432`, `valkey:6379`, `minio:9000`) y acceder a proveedores
+externos. `web` sólo necesita `egress`. No se declara ninguna red ajena al
+proyecto.
 
-Sólo se publican dos puertos en loopback del host:
+Sólo se publican dos puertos HTTP del host. En producción el proxy está en otro LXC,
+por lo que la configuración canónica usa `0.0.0.0`; si el proxy comparte host,
+se puede fijar `PUBLISH_BIND_ADDRESS=127.0.0.1`.
 
 | Servicio | Puerto del contenedor | Publicación | Uso |
 |---|---:|---|---|
-| `api` | `3000` | `127.0.0.1:3000:3000` | Caddy → HTTP + SSE |
-| `web` | `3001` | `127.0.0.1:3001:3001` | Caddy → Next.js |
+| `api` | `3000` | `${PUBLISH_BIND_ADDRESS}:${API_PUBLISH_PORT}:3000` | Proxy → HTTP + SSE |
+| `web` | `3001` | `${PUBLISH_BIND_ADDRESS}:${WEB_PUBLISH_PORT}:3001` | Proxy → Next.js |
 
 PostgreSQL, Valkey y MinIO no tienen `ports:`. Su consola MinIO también queda
-apagada. Caddy termina TLS y puede usar, por ejemplo:
+apagada. Caddy termina TLS y puede usar, por ejemplo, la IP Incus del LXC
+`hackos`:
 
 ```caddyfile
 api.example.org {
-    reverse_proxy 127.0.0.1:3000
+    reverse_proxy <ip-incus-del-lxc-hackos>:3000
 }
 
 example.org {
-    reverse_proxy 127.0.0.1:3001
+    reverse_proxy <ip-incus-del-lxc-hackos>:3001
 }
 ```
 
@@ -144,10 +149,45 @@ override:
 
 No existen `API_MEM_LIMIT` ni `WEB_MEM_LIMIT` en el contrato de despliegue.
 
+## CD con Incus
+
+`.github/workflows/build.yml` construye y publica `hackos-api` y `hackos-web`
+en GHCR para `linux/amd64` y `linux/arm64`. Cada ejecución genera el tag de
+rama y `sha-<commit>`; el CD sólo acepta el segundo formato y nunca usa
+`latest`.
+
+`.github/workflows/deploy-incus.yml` se ejecuta con `workflow_dispatch`, pide
+`production` o `staging` y un tag `sha-<40 hex>`, y usa el environment de GitHub
+correspondiente. La protección de esos environments debe estar configurada en
+GitHub (revisión/aprobación y, si procede, restricciones de rama); el workflow
+no contiene secretos de aplicación.
+
+El job necesita un runner self-hosted habilitado y con acceso local a Incus.
+Esta dependencia es explícita: el bloque `setup-gh-runner` del repositorio de
+infraestructura está actualmente comentado, así que habilitar y registrar el
+runner es una operación previa y no forma parte de este repositorio.
+
+El workflow comprueba el tag, transfiere Compose, `check-env.sh` y
+`incus-deploy.sh` con `incus file push`, y ejecuta el script con
+`incus exec hackos`. El script usa `/etc/hackos/hackos.env` y
+`/etc/hackos/hackos.secrets` ya presentes dentro del LXC, adquiere un lock con
+`flock`, valida la configuración sin imprimir valores, hace pull de API,
+worker y web, ejecuta `migrate`, recrea la aplicación y espera los
+healthchecks. La salida sólo contiene estados y errores genéricos; no descifra
+SOPS, no recibe secretos de Actions y no expone Docker Remote API.
+
+### Rollback
+
+Para volver a la versión anterior, lanzar de nuevo
+`deploy-incus.yml` con el mismo environment y el tag SHA anterior que figure
+en el historial de despliegues. El rollback sólo cambia imágenes: no revierte
+automáticamente migraciones de base de datos. Una migración incompatible exige
+un procedimiento de base de datos revisado por separado.
+
 ## Orden de despliegue
 
 Ejecutar desde la raíz del repositorio en el host correspondiente. En
-producción es el LXC de GPULux; en staging es la Raspberry Pi. El orden
+producción es el LXC `hackos`; en staging es la Raspberry Pi. El orden
 conserva el proyecto existente y no elimina volúmenes.
 
 ```sh

@@ -1,6 +1,6 @@
-# Variables de entorno del runtime ARM64
+# Variables de entorno del runtime multi-arquitectura
 
-Staging en la Raspberry Pi y producción en el LXC `hackos` de GPULux usan
+Staging en la Raspberry Pi y producción en el LXC `hackos` usan
 [`deploy/docker-compose.yml`](../deploy/docker-compose.yml) como una única
 aplicación Compose. Compose recibe primero un fichero de configuración y
 después uno de secretos:
@@ -24,7 +24,9 @@ configuración no secreta.
 | `API_DOMAIN` | configuración | sí | Hostname público del API, sin esquema. Se convierte en `https://...` para Better Auth y el runtime web. |
 | `WEB_DOMAIN` | configuración | sí | Hostname público del frontend, sin esquema. |
 | `CORS_ORIGINS` | configuración | sí | Lista separada por comas; debe incluir `https://${WEB_DOMAIN}`. |
-| `COMPOSE_PROJECT_NAME` | Compose | no | Nombre del proyecto Compose; en GPULux se recomienda `hackos`. |
+| `PUBLISH_BIND_ADDRESS` | configuración | no | Dirección de publicación HTTP; `0.0.0.0` para el proxy de otro LXC y `127.0.0.1` si comparte host. |
+| `API_PUBLISH_PORT`, `WEB_PUBLISH_PORT` | configuración | no | Puertos del host para API y web; por defecto `3000` y `3001`. |
+| `COMPOSE_PROJECT_NAME` | Compose | no | Nombre del proyecto Compose; se recomienda `hackos`. |
 | `S3_BUCKET` | configuración | no | Bucket creado por `minio-init`, por defecto `hackos`. |
 | `S3_PUBLIC_URL` | configuración | no | URL HTTPS externa y accesible por navegador para logos públicos. MinIO no publica un puerto. |
 | `MAIL_PROVIDER` | configuración | no | `smtp`, `resend` o `postal`; por defecto `smtp`. |
@@ -141,6 +143,27 @@ exponen variables de memoria. Los límites actuales están fijados en Compose:
 | `worker` | `512m` |
 | `web` | `256m` |
 
-La red `private`, sus alias de servicio y las rutas internas de Postgres,
-Valkey y MinIO también son parte fija del contrato. Sólo API y web publican
-loopback para Caddy.
+La red `private`, la red de salida `egress`, sus alias de servicio y las rutas
+internas de Postgres, Valkey y MinIO también son parte fija del contrato. Sólo
+API y web publican los puertos configurables para el proxy de ingress.
+
+## CD con Incus
+
+El workflow de build publica las dos imágenes en GHCR para `linux/amd64` y
+`linux/arm64`, con tags de rama y `sha-<commit>`. El workflow de deploy sólo
+acepta un tag SHA completo y lo inyecta como `IMAGE_TAG`; nunca usa `latest`.
+
+`deploy-incus.yml` corre mediante `workflow_dispatch` en los environments
+protegidos `production` y `staging`, sobre un runner self-hosted con
+Incus local. El runner no se habilita desde este repositorio: el bloque
+`setup-gh-runner` del repositorio de infraestructura está actualmente
+comentado y debe habilitarse/registrarse como dependencia previa; este cambio
+no modifica ese repositorio.
+
+Actions sólo transfiere el Compose y scripts con Incus. No recibe secretos de
+aplicación, no descifra SOPS y no usa Docker Remote API. El script dentro del
+LXC lee `/etc/hackos/hackos.env` y `/etc/hackos/hackos.secrets`, toma un lock,
+valida sin imprimir valores, hace pull, ejecuta migraciones y espera
+healthchecks. Para rollback se vuelve a lanzar el workflow con el tag SHA
+anterior; cambiar imágenes no revierte automáticamente las migraciones de la
+base de datos.

@@ -24,10 +24,10 @@ with one platform:
 | `apps/mobile` | Participant & operator phone app | Expo Router (EAS builds, native APNs/FCM) |
 | `packages/shared` | Cross-cutting `capabilities.ts` + `events.ts` | TypeScript, consumed by all |
 
-At runtime that becomes one ARM64 Compose project with seven
+At runtime that becomes one multi-architecture Compose project with seven
 application/runtime services plus the idempotent `minio-init` helper. The same
 pre-built SHA image is used by staging on the home Raspberry Pi and production
-inside GPULux's `hackos` LXC:
+inside the `hackos` LXC:
 
 ```mermaid
 flowchart TB
@@ -43,11 +43,14 @@ flowchart TB
         vk[(valkey · queues + pub/sub, ephemeral)]
         minio[(minio · S3 object store)]
         migrate[migrate · one-shot SQL]
-        web[web · Next.js :3001]
         init[minio-init · one-shot bucket setup]
     end
 
-    subgraph ingress[Caddy in the GPULux LXC]
+    subgraph egress[egress Compose network]
+        web[web · Next.js :3001]
+    end
+
+    subgraph ingress[Proxy LXC]
         caddy[Caddy · TLS + reverse proxy]
     end
 
@@ -57,8 +60,8 @@ flowchart TB
     end
 
     browser & phone --> caddy
-    caddy -->|127.0.0.1:3000| api
-    caddy -->|127.0.0.1:3001| web
+    caddy -->|hackos LXC :3000| api
+    caddy -->|hackos LXC :3001| web
     migrate --> pg
     init --> minio
     web -->|browser XHR to API_DOMAIN| api
@@ -68,8 +71,8 @@ flowchart TB
     phone -.push.-> expo
 ```
 
-The Compose network is private to the project. Host exposure is limited to the
-two loopback bindings used by Caddy; the datastores have no published ports.
+The Compose networks are private to the project. API and web publish only their
+HTTP ports to the external proxy; the datastores have no published ports.
 
 ---
 
@@ -85,8 +88,8 @@ explicit `migrate` process succeeds.
   parameterized SQL (no ORM), `ioredis` for Valkey.
 - **Image/command:** the shared GHCR image, `node dist/server.js`; the server
   entrypoint repeats the migration check as a process-level guard.
-- **Network:** the private Compose bridge, with host binding
-  `127.0.0.1:3000:3000` for Caddy.
+- **Network:** the private and egress Compose bridges, with a configurable host
+  binding (port `3000`) for the external proxy.
 - **Public:** Caddy terminates TLS and proxies the configured API hostname.
   `TRUST_PROXY=true` preserves the real client IP for the audit trail.
 - **State:** none. Fully horizontally scalable (§7).
@@ -97,8 +100,8 @@ explicit `migrate` process succeeds.
 
 ### worker — background processing
 - **Stack:** same image, `node dist/worker.js`. No HTTP listener at all.
-- **Network:** the private Compose bridge. It has no host port or HTTP ingress,
-  but its NAT egress reaches Expo Push, mail and APNs.
+- **Network:** the private and egress Compose bridges. It has no host port or
+  HTTP ingress, but its NAT egress reaches Expo Push, mail and APNs.
 - **What it does:** repeatable BullMQ ticks drain DB-backed tables, while
   event-driven jobs carry explicit payloads for request-started work such as
   account-removal cleanup, meal scans, wallet sync and queue invalidations —
@@ -112,8 +115,8 @@ explicit `migrate` process succeeds.
 
 ### web — frontend + TV screens
 - **Stack:** Next.js 16, standalone output, `apps/web/Dockerfile`.
-- **Network:** the private Compose bridge, with host binding
-  `127.0.0.1:3001:3001` for Caddy. It receives only public domain variables and
+- **Network:** the egress Compose bridge, with a configurable host binding (port
+  `3001`) for the external proxy. It receives only public domain variables and
   never receives a secret or datastore credential.
 - **Public:** Caddy proxies `${WEB_DOMAIN}` directly to it. The running Next.js
   server serves `/runtime-config.js` from its `API_DOMAIN`/`WEB_DOMAIN`, so the
@@ -160,21 +163,22 @@ explicit `migrate` process succeeds.
 
 ## 3. Network boundary and ingress
 
-Compose creates exactly one project-private bridge network:
+Compose creates two project-private bridge networks:
 
 | Purpose | Network | Host exposure |
 |---|---|---|
 | Inter-service traffic and datastore access | `private` | None by default |
-| Caddy ingress | LXC loopback | API `127.0.0.1:3000`, web `127.0.0.1:3001` |
+| Provider egress and web publishing | `egress` | API and web published ports |
 
-Every service joins `private`, and service discovery uses the fixed names
+Datastores, migration and storage bootstrap join `private`. API and worker join
+both networks; web joins `egress`. Service discovery uses the fixed names
 `postgres`, `valkey` and `minio`. PostgreSQL, Valkey and MinIO publish no host
-ports. API and web are reachable from the LXC only through loopback, where
-Caddy can terminate TLS and apply the external host policy.
+ports. API and web are reachable through their configured host ports, where the
+external proxy can terminate TLS and apply the host policy.
 
-The bridge is intentionally not marked `internal`: API and worker need NAT
-egress for mail, Expo Push and APNs. This does not create an ingress path to a
-container without a published port.
+The `private` bridge is marked `internal`; the separate `egress` bridge provides
+NAT for API, worker and web. This does not create an ingress path to a container
+without a published port.
 
 The `enterprises/` logo prefix is initialized for public reads, but
 `S3_PUBLIC_URL` must point to an HTTPS object endpoint that is reachable by the
@@ -184,7 +188,7 @@ prefix is served through the API.
 > **DNS gotcha (learned the hard way, H51).** Docker's embedded resolver
 > (`127.0.0.11`) snapshots the *host's* upstream DNS servers at
 > container-create time. If the host `resolv.conf` is transiently wrong during a
-> deploy (a reboot, or Tailscale/MagicDNS reconnecting), the container bakes in
+> deploy (a reboot, or the host network reconnecting), the container bakes in
 > dead upstreams: internal names still resolve, but every *external* lookup
 > times out and outbound `fetch` dies with an opaque `fetch failed` — silently
 > dropping push delivery while credentials are perfectly fine. The fix, now in
@@ -192,9 +196,9 @@ prefix is served through the API.
 > external resolution deterministic and independent of host state.
 
 **Names are the contract.** `DATABASE_URL`, `VALKEY_URL`, and `S3_ENDPOINT` hard-code
-`postgres:5432` / `valkey:6379` / `minio:9000`. Only Caddy loopback bindings
-use `localhost`-equivalent host addressing; application dependencies use the
-Compose service names and all configurable application values come from
+`postgres:5432` / `valkey:6379` / `minio:9000`. Only proxy bindings use host
+addressing; application dependencies use the Compose service names and all
+configurable application values come from
 `src/config.ts` (zod-validated env).
 
 ---
@@ -328,7 +332,7 @@ hackathon-scale load is bursty (registration opens, judging starts, meals) but
 not large. The design leans on that: scale the stateless tier, keep one
 Postgres.
 
-**api — stateless.** The GPULux runtime runs one API container behind Caddy.
+**api — stateless.** The runtime runs one API container behind Caddy.
 SSE remains backed by Valkey (§5), and `/readyz` is available for an ingress
 health policy. If a future host adds replicas, the shared Postgres/Valkey
 contract remains the same.
@@ -408,21 +412,22 @@ it with naive writable replicas.
 | **Mail provider via env, not DB** (DELTA H52) | Switching SMTP/Resend/Postal is an ops action (redeploy), validated at boot by zod — no runtime toggle to get wrong. |
 | **Wallet creds optional but never half-set** (H28) | Zod `superRefine` fails boot on a partially-configured platform; an unconfigured one returns a clean `503`, so a typo can't ship an invalid pass. |
 | **Deterministic container DNS** (H51) | `dns:` pinned so external resolution never depends on the host's transient `resolv.conf` — the root cause of a real push outage. |
-| **Web talks to API over the public URL** | The frontend is just another client; it receives only public runtime configuration even though its container shares the private Compose bridge for uniform service isolation. |
+| **Web talks to API over the public URL** | The frontend is just another client; it receives only public runtime configuration and uses the egress network for its published HTTP service. |
 
 ---
 
-## 9. ARM64 deployment profiles
+## 9. Incus deployment profile
 
 Staging runs the canonical Compose project on the home Raspberry Pi. Production
-runs the same project inside the `hackos` LXC on GPULux. Both hosts consume the
-same pre-built `linux/arm64` GHCR images, selected by an immutable
+runs the same project inside the `hackos` LXC. Both hosts consume the same
+pre-built `linux/amd64` and `linux/arm64` GHCR images, selected by an immutable
 `sha-<commit>` tag; neither host builds application images.
 
-In production, Caddy is a host-level concern: it terminates TLS and proxies the
-public API and web hostnames to `127.0.0.1:3000` and `127.0.0.1:3001`. The
-Compose project does not own TLS, DNS or the Caddy configuration. Staging can
-use the same loopback contract with its local ingress.
+In production, the proxy is an external host-level concern: it terminates TLS
+and proxies the public API and web hostnames to the published ports of the
+`hackos` LXC. `PUBLISH_BIND_ADDRESS`, `API_PUBLISH_PORT` and
+`WEB_PUBLISH_PORT` define that boundary. The Compose project does not own TLS,
+DNS or proxy configuration.
 
 The deploy operator supplies `/etc/hackos/hackos.env` and
 `/etc/hackos/hackos.secrets`, validates them with `deploy/scripts/check-env.sh`,
@@ -439,8 +444,8 @@ shared datastore between instances.
 
 The load-bearing points are:
 
-- Postgres, Valkey and MinIO have no published ports. API and web are bound to
-  LXC loopback only.
+- Postgres, Valkey and MinIO have no published ports. API and web publish only
+  the configured HTTP ports for the external proxy.
 - Containers run unprivileged (`USER node`, `no-new-privileges:true`) under
   `tini` where provided by the image.
 - CORS is locked to `CORS_ORIGINS` in production, and `TRUST_PROXY=true` lets

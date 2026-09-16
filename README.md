@@ -221,20 +221,20 @@ The release paths are:
 
 | Branch | CD behavior |
 | --- | --- |
-| `staging` | Merge an approved development PR here. CD builds and publishes the immutable ARM64 images; deploy the selected SHA manually to the home Raspberry Pi with Compose. |
-| `main` | Merge an approved PR from any branch. CD builds and publishes the immutable ARM64 images; deploy the selected SHA manually to GPULux with Compose. |
+| `staging` | Merge an approved development PR here. Build publishes immutable `linux/amd64` and `linux/arm64` images; the protected Incus workflow deploys a selected SHA tag to staging. |
+| `main` | Merge an approved PR from any branch. Build publishes immutable `linux/amd64` and `linux/arm64` images; the protected Incus workflow deploys a selected SHA tag to production. |
 
 `main` and `staging` are independent environments. Merging into either branch
-publishes its release artifact but does not connect to or deploy a host. The
-selected SHA is rolled out manually to its target; to test the current
-production tree on staging, open an explicit pull request from `main` to
+publishes its release artifact but does not deploy a host. An approved operator
+selects the SHA in the protected Incus workflow; to test the current
+production tree in staging, open an explicit pull request from `main` to
 `staging`.
 
 The merge to either protected branch is what builds its release artifact. The
-staging Raspberry Pi and production GPULux LXC use the same ARM64 image
-repositories and SHA tag format, with separate Compose env and secret files.
-Protect exactly `staging` and `main`; CI accepts PRs into either branch and CD
-only runs on their post-merge pushes.
+staging and production stacks use the same multi-architecture image
+repositories and SHA tag format, with separate Compose environment and secret
+files. Protect exactly `staging` and `main`; CI accepts PRs into either branch,
+while deployment is an explicitly approved workflow dispatch.
 The API test job provides fresh Postgres, Valkey and Mailpit service containers
 plus health-checked MinIO, then provisions the test bucket; local API runs
 still use `pnpm infra:up` and the commands above.
@@ -298,19 +298,18 @@ Useful next reads:
 
 ## Deployment
 
-Production is designed as one isolated Compose stack per event. The API,
-worker and web run from pinned ARM64 GHCR images; Postgres, Valkey and MinIO
-stay on the Compose-created private network, while Caddy exposes only the API
-and web loopback ports. A one-shot migration command runs before the API starts
-and uses a Postgres advisory lock to make concurrent deploys safe. The API
-repeats this no-op-safe migration check immediately before listening so a reused
-one-shot container cannot leave the running image ahead of the database schema.
+Production and staging are isolated Compose projects in the `hackos` LXC.
+The API, worker and web run from pinned GHCR SHA images; Postgres, Valkey and
+MinIO stay on private networks, while the proxy reaches only the
+published API and web HTTP ports. A one-shot migration command runs before the
+API starts and uses a Postgres advisory lock to make concurrent deploys safe.
+The API repeats this no-op-safe migration check immediately before listening so
+a reused one-shot container cannot leave the running image ahead of the schema.
 
-[`deploy/README.md`](deploy/README.md) documents the canonical Compose runtime
-for the staging Raspberry Pi and the production GPULux LXC, including secrets,
-domains, mail providers, Wallet credentials, backups and multi-event hosting.
-Use [`docs/env-vars.md`](docs/env-vars.md) as the per-service environment
-variable checklist.
+[`deploy/README.md`](deploy/README.md) documents the canonical Compose runtime,
+the self-hosted runner, Incus transfer, secret-file contract, health
+gates and rollback. Use [`docs/env-vars.md`](docs/env-vars.md) as the
+per-service environment checklist.
 
 The mobile implementation and automated tests are in place. Offline recovery,
 APNs/FCM delivery, camera behaviour, encrypted SQLite and Wallet flows still

@@ -36,7 +36,7 @@ Architecture & modules:
   `/documentation` (Swagger UI, generated from route schemas) is the
   route-by-route reference this page deliberately doesn't duplicate.
 - [Architecture & infrastructure](./architecture.md) — the system view: the
-  services and their stacks, the one-network security boundary, state ownership
+  services and their private/egress network boundary, state ownership
   (Postgres truth vs. ephemeral Valkey), realtime SSE fan-out, the one-image
   model, scalability (more workers, the Postgres ceiling, multi-instance
   tenancy), the reasoning behind the big decisions, and the small-vs-real
@@ -136,6 +136,8 @@ Deployment:
 
 - [Environment variables per service](./env-vars.md) — the two host env files
   and the exact least-privilege variables delivered to each Compose service.
+- [Deployment runbook](../deploy/README.md) — GHCR build tags, protected
+  workflow dispatch, Incus transfer/exec, health gates and rollback limits.
 - [Big-event readiness](./big-event-readiness.md) — the concrete pre-event
   checklist for ~600 concurrent users: pool sizing, the fixed Compose memory
   limits, load testing the hot paths, and the monitoring queries to watch.

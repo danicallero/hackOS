@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Validate the two flat env files used by the ARM64 Compose runtime.
+# Validate the two flat env files used by the multi-architecture Compose runtime.
 #
 # Usage:
-#   ./deploy/scripts/check-env.sh [config-file] [secrets-file]
+#   ./deploy/scripts/check-env.sh [config-file] [secrets-file] [image-tag]
 
 set -euo pipefail
 
 CONFIG_FILE="${1:-/etc/hackos/hackos.env}"
 SECRETS_FILE="${2:-/etc/hackos/hackos.secrets}"
+IMAGE_TAG_OVERRIDE="${3:-}"
 
 die() {
   printf 'check-env: %s\n' "$1" >&2
@@ -56,6 +57,10 @@ value_in_file() {
 value() {
   local key="$1"
   local result=""
+  if [[ "$key" == IMAGE_TAG && -n "$IMAGE_TAG_OVERRIDE" ]]; then
+    printf '%s' "$IMAGE_TAG_OVERRIDE"
+    return 0
+  fi
   if has_key "$key" "$SECRETS_FILE"; then
     result="$(value_in_file "$key" "$SECRETS_FILE")"
   elif has_key "$key" "$CONFIG_FILE"; then

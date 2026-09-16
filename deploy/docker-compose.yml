@@ -1,4 +1,4 @@
-# hackOS — canonical GPULux LXC runtime.
+# hackOS — canonical `hackos` LXC runtime.
 #
 # This file only consumes pre-built images. Run it with the LXC configuration
 # file first and the separate, chmod 600 secrets file second:
@@ -7,12 +7,13 @@
 #     --env-file /etc/hackos/hackos.secrets \
 #     -f deploy/docker-compose.yml up -d
 #
-# The bridge network and named volumes are created by Compose. Caddy reaches
-# only the loopback ports published by api and web; the datastores have no
-# published ports at all.
+# The bridge networks and named volumes are created by Compose. The external
+# proxy reaches only the HTTP ports published by api and web; the datastores
+# have no published ports at all. Set PUBLISH_BIND_ADDRESS=127.0.0.1 when the
+# proxy runs on the same host; the proxy LXC normally needs 0.0.0.0.
 
-x-api-image: &api-image "ghcr.io/danicallero/hackos-api:${IMAGE_TAG}"
-x-web-image: &web-image "ghcr.io/danicallero/hackos-web:${IMAGE_TAG}"
+x-api-image: &api-image "ghcr.io/danicallero/hackos-api:${IMAGE_TAG:?IMAGE_TAG is required}"
+x-web-image: &web-image "ghcr.io/danicallero/hackos-web:${IMAGE_TAG:?IMAGE_TAG is required}"
 
 x-database-env: &database-env
   DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
@@ -257,11 +258,12 @@ services:
     <<: *hardening
     image: *api-image
     pull_policy: always
-    command: ["node", "dist/server.js"]
+    # Keep a no-op-safe migration guard for direct/reused container starts.
+    command: ["sh", "-c", "node dist/migrate.js && exec node dist/server.js"]
     environment: *api-env
     dns: ["1.1.1.1", "8.8.8.8"]
     ports:
-      - "127.0.0.1:3000:3000"
+      - "${PUBLISH_BIND_ADDRESS:-0.0.0.0}:${API_PUBLISH_PORT:-3000}:3000"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -271,7 +273,9 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
-    networks: [private]
+    networks:
+      private: {}
+      egress: {}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/healthz || exit 1"]
       interval: 15s
@@ -299,7 +303,9 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
-    networks: [private]
+    networks:
+      private: {}
+      egress: {}
     healthcheck:
       test: ["CMD-SHELL", "pidof node >/dev/null"]
       interval: 15s
@@ -319,8 +325,8 @@ services:
       API_DOMAIN: "${API_DOMAIN}"
       WEB_DOMAIN: "${WEB_DOMAIN}"
     ports:
-      - "127.0.0.1:3001:3001"
-    networks: [private]
+      - "${PUBLISH_BIND_ADDRESS:-0.0.0.0}:${WEB_PUBLISH_PORT:-3001}:3001"
+    networks: [egress]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/ || exit 1"]
       interval: 15s
@@ -334,6 +340,9 @@ services:
 
 networks:
   private:
+    driver: bridge
+    internal: true
+  egress:
     driver: bridge
 
 volumes:
