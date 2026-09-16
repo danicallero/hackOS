@@ -359,6 +359,11 @@ This repository uses Expo Continuous Native Generation (CNG): `ios/` and
 `android/` are generated and ignored. Native configuration belongs in
 `app.json`, package versions, or config plugins.
 
+The app opts into Expo's SDK 57 scene lifecycle support through
+`expo-build-properties`. This is required for archives built with Xcode 27 to
+launch on iOS 27; keep the plugin enabled until the app moves to SDK 58, where
+scene support is the default.
+
 Generate both projects from a clean configuration:
 
 ```sh
@@ -658,6 +663,7 @@ This reproduces EAS build steps while using local native tools:
 cd apps/mobile
 GOOGLE_SERVICES_JSON="$(pwd)/google-services.json" \
   pnpm dlx eas-cli@latest build --platform android --profile production --local
+pnpm exec expo prebuild --clean --platform ios --pnpm
 pnpm dlx eas-cli@latest build --platform ios --profile production --local
 ```
 
@@ -771,4 +777,3 @@ pnpm dlx eas-cli@latest build:list --limit 10
 Run production builds only from a committed, clean tree. Record the Git commit,
 EAS build URLs/IDs, app version/build numbers, API environment, and tester who
 approved the candidate.
-
