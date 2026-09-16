@@ -253,9 +253,9 @@ distributed to other Expo Router apps without importing hackOS code.
   first field that needs attention instead of hiding validation behind a disabled
   submit button. The password field has a 52-point, screen-reader-labelled reveal
   action, and password recovery keeps a 44-point hit target. At standard text
-  sizes, the composition stays fixed: the credential fields do not shift when
-  the keyboard opens or closes, and the account/application note is anchored
-  at the safe-area bottom. The note shows the configured
+  sizes, the composition is centered. Opening the keyboard shifts only the
+  form upward with a compositor transform; its layout and the account/application
+  note anchored at the safe-area bottom do not move. The note shows the configured
   `EXPO_PUBLIC_EVENT_WEBSITE_URL` as selectable text but deliberately does not
   link out to account creation (see `docs/mobile-release.md`). The
   uncontrolled native credential fields use the username/current-password
@@ -263,7 +263,9 @@ distributed to other Expo Router apps without importing hackOS code.
   provider sheet temporarily moves focus away from the app. Session
   revalidation after Passwords/Face ID returns never unmounts the auth
   navigator, so the native fields that receive the selected values remain the
-  same instances; iOS additionally associates the domain through
+  same instances. The app restores the field that opened the provider sheet
+  once iOS settles its return transition, preventing a late AutoFill event
+  from moving password focus back to email; iOS additionally associates the domain through
   `webcredentials`. The mobile root uses one authoritative, repeatable-read
   `GET /api/me` snapshot for session validity, role-derived event access,
   profile and navigation facts. A background revalidation retains the existing
