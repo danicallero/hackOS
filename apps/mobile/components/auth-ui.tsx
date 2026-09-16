@@ -7,6 +7,7 @@ import {
   Text,
   TextInput,
   type TextInputProps,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -27,33 +28,33 @@ export function AuthScreen({
   if (!scrollable) {
     return (
       <SafeAreaView style={{ backgroundColor: colors.background, flex: 1 }}>
-        <View
-          onResponderRelease={Keyboard.dismiss}
-          onStartShouldSetResponder={(event) => event.target === event.currentTarget}
-          style={{
-            alignSelf: "center",
-            flex: 1,
-            maxWidth: 440,
-            paddingBottom: 16,
-            paddingHorizontal: 24,
-            paddingTop: 56,
-            width: "100%",
-          }}
-        >
-          <View style={{ gap: 24 }}>{children}</View>
-          {footer ? (
-            <View
-              style={{
-                borderTopColor: colors.separator,
-                borderTopWidth: 1,
-                marginTop: "auto",
-                paddingTop: 14,
-              }}
-            >
-              {footer}
-            </View>
-          ) : null}
-        </View>
+        <TouchableWithoutFeedback accessible={false} onPress={Keyboard.dismiss}>
+          <View
+            style={{
+              alignSelf: "center",
+              flex: 1,
+              maxWidth: 440,
+              paddingBottom: 16,
+              paddingHorizontal: 24,
+              paddingTop: 56,
+              width: "100%",
+            }}
+          >
+            <View style={{ gap: 24 }}>{children}</View>
+            {footer ? (
+              <View
+                style={{
+                  borderTopColor: colors.separator,
+                  borderTopWidth: 1,
+                  marginTop: "auto",
+                  paddingTop: 14,
+                }}
+              >
+                {footer}
+              </View>
+            ) : null}
+          </View>
+        </TouchableWithoutFeedback>
       </SafeAreaView>
     );
   }
