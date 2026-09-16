@@ -109,6 +109,41 @@ describe("useMe foreground revalidation (H55)", () => {
     await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(2));
   });
 
+  it("keeps the profile snapshot stable when a foreground refresh has no changes", async () => {
+    const profile = { id: 1, capabilities: [], email: "person@example.com" };
+    mockApiFetch.mockResolvedValue(profile);
+    const { result } = await renderHook(() => useMe(true));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const firstSnapshot = result.current.me;
+
+    await act(async () => emitAppState("inactive"));
+    await act(async () => emitAppState("active"));
+
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(2));
+    expect(result.current.me).toBe(firstSnapshot);
+  });
+
+  it("publishes a new profile snapshot when a foreground refresh changes data", async () => {
+    mockApiFetch
+      .mockResolvedValueOnce({ id: 1, capabilities: [], email: "person@example.com" })
+      .mockResolvedValueOnce({
+        id: 1,
+        capabilities: ["queue:status"],
+        email: "person@example.com",
+      });
+    const { result } = await renderHook(() => useMe(true));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const firstSnapshot = result.current.me;
+
+    await act(async () => emitAppState("inactive"));
+    await act(async () => emitAppState("active"));
+
+    await waitFor(() => expect(result.current.me?.capabilities).toEqual(["queue:status"]));
+    expect(result.current.me).not.toBe(firstSnapshot);
+  });
+
   it("still shows a loading state for the very first fetch", async () => {
     mockApiFetch.mockReturnValue(new Promise(() => {}));
     const { result } = await renderHook(() => useMe(true));

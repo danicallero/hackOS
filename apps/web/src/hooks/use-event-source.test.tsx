@@ -1,6 +1,7 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetServerStateForTests } from "@/lib/server-state";
 import { useLiveQuery } from "./use-event-source";
 
 class FakeEventSource extends EventTarget {
@@ -14,12 +15,18 @@ class FakeEventSource extends EventTarget {
     super();
     FakeEventSource.instances.push(this);
   }
+
+  emit(name: string, data: unknown) {
+    this.dispatchEvent(new MessageEvent(name, { data: JSON.stringify(data) }));
+  }
 }
 
 const fetcher = vi.fn<() => Promise<{ version: number }>>();
 
 function Harness() {
-  useLiveQuery(fetcher, "/api/queue/stream", ["queue.changed"]);
+  useLiveQuery(fetcher, "/api/queue/stream", ["queue.changed"], {
+    resourceKey: ["test", "queue"],
+  });
   return null;
 }
 
@@ -35,6 +42,7 @@ describe("useLiveQuery recovery (H38, H41-H42)", () => {
   let container: HTMLDivElement | undefined;
 
   beforeEach(() => {
+    resetServerStateForTests();
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-14T10:00:00.000Z"));
     FakeEventSource.instances = [];
@@ -52,6 +60,7 @@ describe("useLiveQuery recovery (H38, H41-H42)", () => {
     root = undefined;
     container = undefined;
     vi.unstubAllGlobals();
+    resetServerStateForTests();
     vi.useRealTimers();
   });
 
@@ -90,6 +99,21 @@ describe("useLiveQuery recovery (H38, H41-H42)", () => {
 
     await act(async () => {
       vi.advanceTimersByTime(15_000);
+      await Promise.resolve();
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("turns an SSE burst into one invalidation and one trailing read", async () => {
+    mount();
+    await flush();
+    const source = FakeEventSource.instances[0];
+    source.emit("queue.changed", { type: "queue.changed", id: "1", at: "now", data: {} });
+    source.emit("queue.changed", { type: "queue.changed", id: "2", at: "now", data: {} });
+    source.emit("queue.changed", { type: "queue.changed", id: "3", at: "now", data: {} });
+
+    await act(async () => {
+      vi.advanceTimersByTime(150);
       await Promise.resolve();
     });
     expect(fetcher).toHaveBeenCalledTimes(2);

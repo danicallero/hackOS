@@ -58,6 +58,7 @@ import {
   resumeRoom,
   searchTeams,
 } from "@/lib/queue";
+import { invalidateServerState } from "@/lib/server-state";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type { Challenge } from "../challenges/shared";
@@ -111,17 +112,27 @@ export default function QueuePage() {
   const activeRoomId = roomId ?? rooms[0]?.id ?? null;
 
   const roomView = useLiveQuery<RoomView>(
-    () => (activeRoomId ? getRoomView(activeRoomId) : Promise.resolve(null as never)),
+    (signal) => (activeRoomId ? getRoomView(activeRoomId, signal) : Promise.resolve(null as never)),
     "/api/queue/stream",
     [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED, EVENTS.QUEUE_NOTIFY_ENTER],
-    { enabled: canUse && activeRoomId != null, queryKey: [activeRoomId] },
+    {
+      enabled: canUse && activeRoomId != null,
+      queryKey: [activeRoomId],
+      resourceKey: ["judging", "room-view", activeRoomId],
+      identityKey: me?.id ?? null,
+    },
   );
 
   const pace = useLiveQuery<RoomPace>(
-    () => (activeRoomId ? getRoomPace(activeRoomId) : Promise.resolve(null as never)),
+    (signal) => (activeRoomId ? getRoomPace(activeRoomId, signal) : Promise.resolve(null as never)),
     "/api/queue/stream",
     [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED],
-    { enabled: canUse && activeRoomId != null, queryKey: [activeRoomId] },
+    {
+      enabled: canUse && activeRoomId != null,
+      queryKey: [activeRoomId],
+      resourceKey: ["judging", "room-pace", activeRoomId],
+      identityKey: me?.id ?? null,
+    },
   );
 
   // The room judges a single challenge (read-only label in the panel); fall
@@ -135,13 +146,18 @@ export default function QueuePage() {
     null;
 
   const progress = useLiveQuery<ChallengeProgress>(
-    () =>
+    (signal) =>
       effectiveChallengeId
-        ? getChallengeProgress(effectiveChallengeId)
+        ? getChallengeProgress(effectiveChallengeId, signal)
         : Promise.resolve(null as never),
     "/api/queue/stream",
     [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED],
-    { enabled: canUse && effectiveChallengeId != null, queryKey: [effectiveChallengeId] },
+    {
+      enabled: canUse && effectiveChallengeId != null,
+      queryKey: [effectiveChallengeId],
+      resourceKey: ["judging", "challenge-progress", effectiveChallengeId],
+      identityKey: me?.id ?? null,
+    },
   );
 
   const activeChallenge = useMemo(
@@ -178,8 +194,14 @@ export default function QueuePage() {
   }, [loadRooms]);
 
   const refreshLive = useCallback(async () => {
+    if (activeRoomId) {
+      invalidateServerState(["judging", "room-view", activeRoomId]);
+      invalidateServerState(["judging", "room-pace", activeRoomId]);
+    }
+    if (effectiveChallengeId)
+      invalidateServerState(["judging", "challenge-progress", effectiveChallengeId]);
     await Promise.all([roomView.refetch(), pace.refetch(), progress.refetch()]);
-  }, [roomView, pace, progress]);
+  }, [activeRoomId, effectiveChallengeId, roomView, pace, progress]);
 
   const mutate = useCallback(
     async (key: string, action: () => Promise<unknown>, success: string) => {

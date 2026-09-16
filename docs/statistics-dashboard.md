@@ -75,6 +75,11 @@ CSV all resolve the same effective permissions. Limited-access roles can also
 be removed from a scope, which deletes their panel overrides while leaving the
 role and its general capabilities unchanged.
 
+Scope discovery loads applications and active roles, then resolves all of the
+caller's applicable scope-panel overrides in one set query. Its database round
+trips are therefore bounded by the scope-discovery operation rather than by
+the number of forms or roles.
+
 ## Layout and customization
 
 The dashboard stores presentation preferences in the existing

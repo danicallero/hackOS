@@ -10,6 +10,11 @@ import {
 } from "./offline-cache";
 import type { Me } from "./types";
 
+/** GET /api/me is JSON data, so a value comparison can retain a stable context snapshot. */
+function sameProfile(current: Me | null, next: Me): boolean {
+  return current !== null && JSON.stringify(current) === JSON.stringify(next);
+}
+
 /** Stable, non-secret namespace for one Better Auth session cookie. */
 export function profileCacheKeyForSession(sessionCookie: string): string {
   let hash = 2_166_136_261;
@@ -112,8 +117,15 @@ export function useMe(enabled = true) {
         });
         if (currentRequest !== requestId.current) return null;
         hasData.current = true;
-        meRef.current = data;
-        setMe(data);
+        // A foreground or event-driven revalidation frequently returns the
+        // same profile. Preserve the snapshot reference in that case so every
+        // context consumer — including live native fields — does not re-render
+        // for data that did not actually change. Changed labels, capabilities,
+        // and account state still publish the new authoritative snapshot.
+        if (!sameProfile(meRef.current, data)) {
+          meRef.current = data;
+          setMe(data);
+        }
         setOffline(false);
         setStaleSince(null);
         const generationAtWrite = cacheGeneration.current;
