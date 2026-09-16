@@ -212,9 +212,20 @@ export default function ScheduleDetailScreen() {
         <Stack.Screen
           options={{
             // Let UIKit own the large-to-compact title transition. It keeps
-            // the activity name alongside the native back and reminder items
+            // the activity name alongside the explicit back and reminder items
             // and applies its own single-line tail ellipsis when collapsed.
             title: item?.title ?? t("scheduleDetails"),
+            // The iOS native back item can become an empty glass control on
+            // this root-level detail route (H59). Keep the action explicit so
+            // it remains visible and also works when the route was deep-linked.
+            headerBackVisible: false,
+            headerLeft: () => (
+              <LegacyHeaderIconButton
+                accessibilityLabel={t("back")}
+                icon="chevron.left"
+                onPress={() => safeBack(router, "/(tabs)/schedule")}
+              />
+            ),
             headerRight:
               item && reminderOn !== null
                 ? () => (

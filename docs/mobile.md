@@ -548,8 +548,9 @@ distributed to other Expo Router apps without importing hackOS code.
   Staff details follow the schedule rules: staff-only items omit
   scan/visibility/publish fields, and already-visible items omit the spent
   publish date. On iOS, the reminder bell is a proper `headerRight` item and
-  back reads "Horario" via `headerBackTitle`; on Android those actions live
-  in the custom header. Admins get a floating glass pencil (bottom-right,
+  back is an explicit localized chevron with a safe fallback for direct links;
+  on Android those actions live in the custom header. Admins get a floating
+  glass pencil (bottom-right,
   clear of the home indicator) that opens the same `ScheduleFormModal` as the
   list's swipe-to-edit. List cards visibly mark staff-only, sponsor-only, and
   mentor-only activities when their audience is restricted to exactly that

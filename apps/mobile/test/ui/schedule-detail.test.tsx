@@ -5,6 +5,11 @@ const mockLoad = jest.fn();
 const mockNotificationLoad = jest.fn();
 const mockFetchAdminSchedule = jest.fn();
 const mockStackScreen = jest.fn();
+const mockRouter = {
+  back: jest.fn(),
+  canGoBack: jest.fn(() => true),
+  replace: jest.fn(),
+};
 
 type MockScheduleItem = ScheduleItem & { requiresScan?: boolean };
 
@@ -26,7 +31,7 @@ let mockSchedule: MockScheduleItem[] = [mockActivity];
 
 jest.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ id: "1" }),
-  useRouter: () => ({ back: jest.fn(), canGoBack: () => true, replace: jest.fn() }),
+  useRouter: () => mockRouter,
 }));
 jest.mock("expo-router/stack", () => ({
   __esModule: true,
@@ -143,6 +148,36 @@ describe("schedule detail staff fields (H59)", () => {
         options: expect.objectContaining({ title: mockActivity.title }),
       }),
     );
+  });
+
+  it("uses a visible safe back action in the native header", async () => {
+    await renderMobile(<ScheduleDetailScreen />);
+
+    const screenOptions = mockStackScreen.mock.calls.at(-1)?.[0] as {
+      options: {
+        headerBackVisible?: boolean;
+        headerLeft?: () => unknown;
+      };
+    };
+
+    expect(screenOptions.options.headerBackVisible).toBe(false);
+    expect(screenOptions.options.headerLeft).toEqual(expect.any(Function));
+
+    const backButton = screenOptions.options.headerLeft?.() as unknown as {
+      props: {
+        accessibilityLabel: string;
+        icon: string;
+        onPress: () => void;
+      };
+    };
+    expect(backButton.props).toEqual(
+      expect.objectContaining({ accessibilityLabel: "back", icon: "chevron.left" }),
+    );
+
+    backButton.props.onPress();
+
+    expect(mockRouter.back).toHaveBeenCalledTimes(1);
+    expect(mockRouter.replace).not.toHaveBeenCalled();
   });
 
   it("hides scan, visibility, and publish fields for staff-only items", async () => {
