@@ -366,12 +366,14 @@ export interface MyQueueEntry {
 }
 
 // ── reads ────────────────────────────────────────────────────────────────
-export const getRoomView = (roomId: number) => api.get<RoomView>(`/api/queue/rooms/${roomId}/view`);
+export const getRoomView = (roomId: number, signal?: AbortSignal) =>
+  api.get<RoomView>(`/api/queue/rooms/${roomId}/view`, { signal });
 export const getAllRoomViews = () => api.get<RoomView[]>("/api/tv/rooms");
 // TV display state, the timetable and the live-screen config live in lib/tv.ts.
-export const getChallengeProgress = (challengeId: number) =>
-  api.get<ChallengeProgress>(`/api/queue/challenges/${challengeId}/progress`);
-export const getRoomPace = (roomId: number) => api.get<RoomPace>(`/api/queue/rooms/${roomId}/pace`);
+export const getChallengeProgress = (challengeId: number, signal?: AbortSignal) =>
+  api.get<ChallengeProgress>(`/api/queue/challenges/${challengeId}/progress`, { signal });
+export const getRoomPace = (roomId: number, signal?: AbortSignal) =>
+  api.get<RoomPace>(`/api/queue/rooms/${roomId}/pace`, { signal });
 export const getRoomAssignments = (roomId: number) =>
   api.get<RoomAssignments>(`/api/queue/rooms/${roomId}/assignments`);
 /** GET /api/queue/repos/:id/challenges — every challenge queue a repo belongs to (H40). */

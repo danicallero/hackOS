@@ -13,6 +13,7 @@ import {
 } from "react";
 import { useEventSource } from "../hooks/use-event-source";
 import { ApiError, api } from "./api";
+import { setServerStateIdentity } from "./server-state";
 import type { Me } from "./types";
 
 type SessionStatus = "loading" | "authenticated" | "unauthenticated";
@@ -50,6 +51,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       try {
         const data = await api.get<Me>("/api/me");
         if (currentRequest !== requestId.current) return;
+        setServerStateIdentity(data.id);
         meRef.current = data;
         setMe(data);
         setStatus("authenticated");
@@ -57,6 +59,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       } catch (err) {
         if (currentRequest !== requestId.current) return;
         if (err instanceof ApiError && err.status === 401) {
+          setServerStateIdentity(null);
           meRef.current = null;
           setMe(null);
           setStatus("unauthenticated");
