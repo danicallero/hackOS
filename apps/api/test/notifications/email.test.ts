@@ -1,14 +1,8 @@
 import "./env.js";
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { pool } from "../../src/db/pool.js";
-import type { MailConfig } from "../../src/modules/notifications/channels/email.js";
-import { sendEmail } from "../../src/modules/notifications/channels/email.js";
 import { drainOutboxOnce } from "../../src/modules/notifications/dispatcher.js";
 import { notify } from "../../src/modules/notifications/service.js";
-import {
-  emailLayoutSettingsFromConfig,
-  renderEmailTemplate,
-} from "../../src/modules/notifications/templates.js";
 import { createUser } from "../helpers.js";
 import { clearMailpit, getMailpitMessage, listMailpitMessages } from "./mailpit-helpers.js";
 import {
@@ -20,17 +14,12 @@ import {
 
 /**
  * Email channel (H52): real SMTP delivery asserted through Mailpit's REST
- * API, i18n template selection from users.language, generic fallback, and
- * the Resend/Postal HTTP adapters via stubbed fetch.
+ * API, i18n template selection from users.language, and generic fallback.
  */
 
 beforeEach(async () => {
   await resetNotificationsState();
   await clearMailpit();
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
 });
 
 afterAll(async () => {
@@ -143,124 +132,5 @@ describe("SMTP via Mailpit (default dev provider)", () => {
     expect(messages[0]!.Subject).toBe("Verifica tu correo de hackOS"); // es, not en
     const detail = await getMailpitMessage(messages[0]!.ID);
     expect(detail.Text).toContain("http://verify");
-  });
-});
-
-describe("template renderer layout settings", () => {
-  it("supports build-time-style footer customization from settings (H52)", () => {
-    const customLayout = {
-      ...emailLayoutSettingsFromConfig(),
-      footerText:
-        "You are receiving this automated email because your account has notifications enabled.\nYou may request your data removal at privacy@hackos.example.",
-    };
-    const rendered = renderEmailTemplate(
-      { template: "generic", subject: "Subject", body: "Body text" },
-      "en",
-      customLayout,
-    );
-
-    expect(rendered.html).toContain(
-      "You are receiving this automated email because your account has notifications enabled.",
-    );
-    expect(rendered.html).toContain("You may request your data removal at privacy@hackos.example.");
-  });
-});
-
-describe("HTTP provider adapters (stubbed fetch)", () => {
-  const baseMail: MailConfig = {
-    provider: "smtp",
-    fromAddress: "noreply@hackos.local",
-    fromName: "hackOS",
-    smtpHost: "localhost",
-    smtpPort: 1025,
-  };
-
-  it("resend adapter posts to the Resend API with the configured key", async () => {
-    const userId = await createUser({ email: "resend@test.local" });
-    const fetchMock = vi.fn(
-      async () => new Response(JSON.stringify({ id: "re_1" }), { status: 200 }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    await sendEmail(
-      pool,
-      userId,
-      { template: "auth.verify", vars: { verifyUrl: "http://x" } },
-      {
-        ...baseMail,
-        provider: "resend",
-        resendApiKey: "re-key-123",
-      },
-    );
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [
-      string,
-      { headers: Record<string, string>; body: string },
-    ];
-    expect(url).toBe("https://api.resend.com/emails");
-    expect(init.headers.Authorization).toBe("Bearer re-key-123");
-    const body = JSON.parse(init.body);
-    expect(body.to).toEqual(["resend@test.local"]);
-    expect(body.subject).toBe("Verify your hackOS email");
-    expect(body.html).toContain("http://x");
-  });
-
-  it("postal adapter posts to the configured self-hosted server", async () => {
-    const userId = await createUser({ email: "postal@test.local" });
-    const fetchMock = vi.fn(
-      async () => new Response(JSON.stringify({ status: "success" }), { status: 200 }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    await sendEmail(
-      pool,
-      userId,
-      { template: "auth.invite", vars: { claimUrl: "http://claim" } },
-      {
-        ...baseMail,
-        provider: "postal",
-        postalUrl: "https://postal.example.org/",
-        postalApiKey: "postal-key",
-      },
-    );
-
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [
-      string,
-      { headers: Record<string, string>; body: string },
-    ];
-    expect(url).toBe("https://postal.example.org/api/v1/send/message");
-    expect(init.headers["X-Server-API-Key"]).toBe("postal-key");
-    const body = JSON.parse(init.body);
-    expect(body.to).toEqual(["postal@test.local"]);
-    expect(body.plain_body).toContain("http://claim");
-  });
-
-  it("provider misconfiguration surfaces as a retryable error, not a silent drop", async () => {
-    const userId = await createUser();
-    await expect(
-      sendEmail(pool, userId, { subject: "s", body: "b" }, { ...baseMail, provider: "resend" }),
-    ).rejects.toThrow(/RESEND_API_KEY/);
-
-    const fetchMock = vi.fn(
-      async () => new Response("recipient primary@test.local request=private", { status: 401 }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-    await expect(
-      sendEmail(
-        pool,
-        userId,
-        { subject: "s", body: "b" },
-        { ...baseMail, provider: "resend", resendApiKey: "bad" },
-      ),
-    ).rejects.toThrow(/401/);
-    await expect(
-      sendEmail(
-        pool,
-        userId,
-        { subject: "s", body: "b" },
-        { ...baseMail, provider: "resend", resendApiKey: "bad" },
-      ),
-    ).rejects.not.toThrow(/primary@test.local|recipient|email/i);
   });
 });

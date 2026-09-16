@@ -1,11 +1,11 @@
-# hackOS · api — one standalone Dokploy service (HTTP API + its migrations).
-# Joins the per-instance private network (to reach postgres/valkey/minio) AND
-# the proxy network (Traefik ingress). This is the ONLY hackOS service exposed
-# to the internet. A one-shot `migrate` runs first, guarded by an advisory lock
-# so redeploys/replicas are safe.
+# hackOS · api — one standalone Compose service (HTTP API + migrations).
+# Joins the per-instance private network to reach postgres/valkey/minio and
+# publishes its HTTP port for an external load balancer or direct access.
+# A one-shot `migrate` runs first, guarded by an advisory lock so
+# redeploys/replicas are safe.
 #
-# Image: GitHub Actions publishes this image. Dokploy only pulls it; API and
-# worker use the same IMAGE_REPO/IMAGE_TAG so they cannot drift.
+# Image: GitHub Actions publishes this image. API and worker use the same
+# IMAGE_REPO/IMAGE_TAG so they cannot drift.
 
 x-app-env: &app-env
   NODE_ENV: production
@@ -16,7 +16,7 @@ x-app-env: &app-env
   BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET}"
   CORS_ORIGINS: "${CORS_ORIGINS:-}"
   MOBILE_APP_SCHEME: "${MOBILE_APP_SCHEME:-hackos}"
-  TRUST_PROXY: "true"
+  TRUST_PROXY: "${TRUST_PROXY:-false}"
   LOG_LEVEL: "${LOG_LEVEL:-info}"
   LOG_EXPO_PUSH_TICKETS: "${LOG_EXPO_PUSH_TICKETS:-false}"
   LOG_EXPO_PUSH_TOKENS: "${LOG_EXPO_PUSH_TOKENS:-false}"
@@ -52,23 +52,6 @@ x-app-env: &app-env
   MAIL_PROVIDER: "${MAIL_PROVIDER:-smtp}"
   MAIL_FROM_ADDRESS: "${MAIL_FROM_ADDRESS}"
   MAIL_FROM_NAME: "${MAIL_FROM_NAME:-hackOS}"
-  MAIL_FOOTER_TEXT: "${MAIL_FOOTER_TEXT:-hackOS — this is an automated message.}"
-  MAIL_LAYOUT_BRAND_NAME: "${MAIL_LAYOUT_BRAND_NAME:-hackOS}"
-  MAIL_LAYOUT_HEADER_TEXT: "${MAIL_LAYOUT_HEADER_TEXT:-hackOS}"
-  MAIL_LAYOUT_HEADER_SUBTEXT: "${MAIL_LAYOUT_HEADER_SUBTEXT:-}"
-  MAIL_LAYOUT_LOGO_URL: "${MAIL_LAYOUT_LOGO_URL-https://${WEB_DOMAIN}/email/brand-mark.png}"
-  MAIL_LAYOUT_ACCENT_COLOR: "${MAIL_LAYOUT_ACCENT_COLOR:-#18181b}"
-  MAIL_LAYOUT_BG_COLOR: "${MAIL_LAYOUT_BG_COLOR:-#f4f4f5}"
-  MAIL_LAYOUT_CARD_COLOR: "${MAIL_LAYOUT_CARD_COLOR:-#ffffff}"
-  MAIL_LAYOUT_CARD_BORDER_COLOR: "${MAIL_LAYOUT_CARD_BORDER_COLOR:-#e4e4e7}"
-  MAIL_LAYOUT_TEXT_COLOR: "${MAIL_LAYOUT_TEXT_COLOR:-#18181b}"
-  MAIL_LAYOUT_MUTED_TEXT_COLOR: "${MAIL_LAYOUT_MUTED_TEXT_COLOR:-#71717a}"
-  MAIL_LAYOUT_FOOTER_BG_COLOR: "${MAIL_LAYOUT_FOOTER_BG_COLOR:-#fafafa}"
-  MAIL_LAYOUT_CARD_RADIUS: "${MAIL_LAYOUT_CARD_RADIUS:-8}"
-  MAIL_LAYOUT_MAX_WIDTH: "${MAIL_LAYOUT_MAX_WIDTH:-560}"
-  RESEND_API_KEY: "${RESEND_API_KEY:-}"
-  POSTAL_URL: "${POSTAL_URL:-}"
-  POSTAL_API_KEY: "${POSTAL_API_KEY:-}"
   SMTP_HOST: "${SMTP_HOST:-}"
   SMTP_PORT: "${SMTP_PORT:-587}"
   SMTP_USER: "${SMTP_USER:-}"
@@ -126,6 +109,8 @@ services:
       - no-new-privileges:true
     restart: unless-stopped
     environment: *api-env
+    ports:
+      - "${API_PORT:-3000}:3000"
     # Deterministic external DNS — don't inherit the host's resolv.conf, which
     # can be transiently wrong at deploy time and poison outbound fetches (mail,
     # APNs, Google Wallet). Internal names still resolve via 127.0.0.11.
@@ -133,10 +118,7 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-    networks:
-      instance: {}
-      edge:
-        aliases: ["${STACK_NAME:-hackos-event2026}-api"]
+    networks: [instance]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/healthz || exit 1"]
       interval: 15s
@@ -147,32 +129,8 @@ services:
       resources:
         limits:
           memory: "${API_MEM_LIMIT:-512m}"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=${PROXY_NETWORK:-dokploy-network}"
-      - "traefik.http.routers.${STACK_NAME}-api.rule=Host(`${API_DOMAIN}`)"
-      - "traefik.http.routers.${STACK_NAME}-api.entrypoints=websecure"
-      - "traefik.http.routers.${STACK_NAME}-api.tls=true"
-      - "traefik.http.routers.${STACK_NAME}-api.tls.certresolver=${CERT_RESOLVER:-letsencrypt}"
-      - "traefik.http.routers.${STACK_NAME}-api.middlewares=${STACK_NAME}-sec@docker"
-      - "traefik.http.services.${STACK_NAME}-api.loadbalancer.server.port=3000"
-      # Docker's healthcheck controls container health, but Traefik needs its
-      # own readiness check to keep a replica with unavailable Postgres out of ingress.
-      - "traefik.http.services.${STACK_NAME}-api.loadbalancer.healthcheck.path=/readyz"
-      - "traefik.http.services.${STACK_NAME}-api.loadbalancer.healthcheck.interval=5s"
-      - "traefik.http.services.${STACK_NAME}-api.loadbalancer.healthcheck.timeout=3s"
-      # SSE (TV/queue streams) must not be buffered by the proxy.
-      - "traefik.http.services.${STACK_NAME}-api.loadbalancer.responseforwarding.flushinterval=-1"
-      - "traefik.http.middlewares.${STACK_NAME}-sec.headers.stsSeconds=31536000"
-      - "traefik.http.middlewares.${STACK_NAME}-sec.headers.stsIncludeSubdomains=true"
-      - "traefik.http.middlewares.${STACK_NAME}-sec.headers.contentTypeNosniff=true"
-      - "traefik.http.middlewares.${STACK_NAME}-sec.headers.frameDeny=true"
-      - "traefik.http.middlewares.${STACK_NAME}-sec.headers.referrerPolicy=strict-origin-when-cross-origin"
 
 networks:
   instance:
     external: true
     name: "${INSTANCE_NETWORK:-hackos-event2026-net}"
-  edge:
-    external: true
-    name: "${PROXY_NETWORK:-dokploy-network}"

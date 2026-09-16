@@ -46,8 +46,8 @@ whether the route is Better Auth's own or this app's.
 
 **Auth limits are fixed in code, not env-configurable.** A change to the
 security posture of login/registration/reset throttling should go through
-code review, the same way `MAIL_PROVIDER` is a deploy-time choice rather than
-a runtime toggle (`config.ts`) — not something an ops env var can loosen
+code review, the same way `MAIL_PROVIDER` is a deploy-time mail setting rather
+than a runtime toggle (`config.ts`) — not something an ops env var can loosen
 casually.
 
 **Operational (scan/meal-batch/snapshot) limits are env-configurable**

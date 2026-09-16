@@ -4,7 +4,7 @@ import { assertOkResponse } from "../channels/http.js";
  * Self-hosted LibreTranslate adapter (H50 alternative to Google Translate).
  * LibreTranslate accepts `q` as an array for batch translation. Exercised in
  * tests via a stubbed `global.fetch`, never a live network call — same
- * convention as the Resend email adapter (channels/email-adapters/resend.ts).
+ * convention as the email adapter.
  */
 export async function translateViaLibreTranslate(
   texts: string[],

@@ -75,46 +75,18 @@ const envSchema = z.object({
   /**
    * Mail provider (H52). DELTA(H52): the story says the provider is chosen
    * "por base de datos"; per explicit user decision the provider is fixed at
-   * deploy time via env instead — switching Resend/SMTP/Postal is an ops
-   * change (redeploy/restart), not a runtime DB toggle. Defaults target the
-   * local Mailpit container (pnpm infra:up).
+   * deploy time via env instead — SMTP relay settings are an ops change
+   * (redeploy/restart), not a runtime DB toggle. Defaults target the local
+   * Mailpit container (pnpm infra:up). Production can point the same adapter
+   * at the Amazon SES SMTP endpoint.
    */
-  MAIL_PROVIDER: z.enum(["smtp", "resend", "postal"]).default("smtp"),
+  MAIL_PROVIDER: z.literal("smtp").default("smtp"),
   MAIL_FROM_ADDRESS: z.string().default("noreply@hackos.local"),
   MAIL_FROM_NAME: z.string().default("hackOS"),
-  RESEND_API_KEY: z.string().optional(),
-  POSTAL_URL: z.string().optional(),
-  POSTAL_API_KEY: z.string().optional(),
   SMTP_HOST: z.string().default("localhost"),
   SMTP_PORT: z.coerce.number().default(1025),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
-  /**
-   * Email layout theming (H52): build/deploy-time customization for the
-   * branded wrapper without changing templates in code.
-   */
-  MAIL_LAYOUT_BRAND_NAME: z.string().min(1).default("hackOS"),
-  MAIL_LAYOUT_HEADER_TEXT: z.string().min(1).default("hackOS"),
-  MAIL_LAYOUT_HEADER_SUBTEXT: z.string().default(""),
-  /**
-   * Browser-reachable PNG/JPEG logo shown in the header instead of
-   * MAIL_LAYOUT_HEADER_TEXT (SVG is unsafe in most email clients). Unset
-   * defaults to the hackOS brand mark served from WEB_URL; set to "" to
-   * fall back to the plain-text header instead.
-   */
-  MAIL_LAYOUT_LOGO_URL: z.string().optional(),
-  // Defaults mirror apps/web's shadcn "zinc" tokens (apps/web/src/app/globals.css) so
-  // transactional email reads as the same product, not a differently-branded surface.
-  MAIL_LAYOUT_ACCENT_COLOR: z.string().regex(hexColor).default("#18181b"),
-  MAIL_LAYOUT_BG_COLOR: z.string().regex(hexColor).default("#f4f4f5"),
-  MAIL_LAYOUT_CARD_COLOR: z.string().regex(hexColor).default("#ffffff"),
-  MAIL_LAYOUT_CARD_BORDER_COLOR: z.string().regex(hexColor).default("#e4e4e7"),
-  MAIL_LAYOUT_TEXT_COLOR: z.string().regex(hexColor).default("#18181b"),
-  MAIL_LAYOUT_MUTED_TEXT_COLOR: z.string().regex(hexColor).default("#71717a"),
-  MAIL_LAYOUT_FOOTER_BG_COLOR: z.string().regex(hexColor).default("#fafafa"),
-  MAIL_LAYOUT_CARD_RADIUS: z.coerce.number().int().min(0).max(32).default(8),
-  MAIL_LAYOUT_MAX_WIDTH: z.coerce.number().int().min(360).max(720).default(560),
-  MAIL_FOOTER_TEXT: z.string().min(1).default("hackOS — this is an automated message."),
 
   /**
    * Run BullMQ workers inside the API process. Default on for dev/test;
@@ -126,9 +98,9 @@ const envSchema = z.object({
     .transform((v) => (v === undefined ? undefined : v === "true")),
 
   /**
-   * Trust X-Forwarded-* headers. Enable when the API sits behind a reverse
-   * proxy (Traefik/Dokploy) so the real client IP reaches the audit trail
-   * (H53) instead of the proxy's address. Never enable when directly exposed.
+   * Trust X-Forwarded-* headers when the API sits behind a trusted reverse
+   * proxy so the real client IP reaches the audit trail (H53). Never enable
+   * when directly exposed.
    */
   TRUST_PROXY: z
     .string()
@@ -283,7 +255,7 @@ const envSchema = z.object({
    * optional — every translation surface (API and both frontends) must keep
    * working with manual-only entry when neither provider is configured; see
    * modules/notifications/translate/ for the isolated provider boundary,
-   * mirroring the MAIL_PROVIDER adapter split in email-adapters/.
+   * alongside the MAIL_PROVIDER SMTP boundary in notifications.
    */
   TRANSLATE_PROVIDER: z.enum(["google", "libretranslate"]).default("google"),
   GOOGLE_TRANSLATE_API_KEY: z.string().optional(),

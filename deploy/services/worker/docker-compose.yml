@@ -1,4 +1,4 @@
-# hackOS · worker — one standalone Dokploy service (BullMQ background jobs:
+# hackOS · worker — one standalone Compose service (BullMQ background jobs:
 # notification dispatch, queue pump, confirmation expirer, scheduled publish).
 # No HTTP, no ingress. Joins ONLY the per-instance private network — that
 # network is a normal bridge, so the worker still has internet egress for mail
@@ -9,7 +9,7 @@
 # (127.0.0.11); only EXTERNAL lookups (Expo exp.host, mail, APNs) use these.
 # Without pinning, Docker snapshots the host's /etc/resolv.conf upstreams at
 # container-create time — if the host DNS is transiently wrong then (e.g. a
-# reboot or Tailscale reconnect mid-deploy), the worker inherits dead upstreams
+# reboot or a host network change), the worker inherits dead upstreams
 # and every outbound fetch dies with "fetch failed" until it's recreated (H51).
 
 x-app-env: &app-env
@@ -41,23 +41,6 @@ x-app-env: &app-env
   MAIL_PROVIDER: "${MAIL_PROVIDER:-smtp}"
   MAIL_FROM_ADDRESS: "${MAIL_FROM_ADDRESS}"
   MAIL_FROM_NAME: "${MAIL_FROM_NAME:-hackOS}"
-  MAIL_FOOTER_TEXT: "${MAIL_FOOTER_TEXT:-hackOS — this is an automated message.}"
-  MAIL_LAYOUT_BRAND_NAME: "${MAIL_LAYOUT_BRAND_NAME:-hackOS}"
-  MAIL_LAYOUT_HEADER_TEXT: "${MAIL_LAYOUT_HEADER_TEXT:-hackOS}"
-  MAIL_LAYOUT_HEADER_SUBTEXT: "${MAIL_LAYOUT_HEADER_SUBTEXT:-}"
-  MAIL_LAYOUT_LOGO_URL: "${MAIL_LAYOUT_LOGO_URL-https://${WEB_DOMAIN}/email/brand-mark.png}"
-  MAIL_LAYOUT_ACCENT_COLOR: "${MAIL_LAYOUT_ACCENT_COLOR:-#18181b}"
-  MAIL_LAYOUT_BG_COLOR: "${MAIL_LAYOUT_BG_COLOR:-#f4f4f5}"
-  MAIL_LAYOUT_CARD_COLOR: "${MAIL_LAYOUT_CARD_COLOR:-#ffffff}"
-  MAIL_LAYOUT_CARD_BORDER_COLOR: "${MAIL_LAYOUT_CARD_BORDER_COLOR:-#e4e4e7}"
-  MAIL_LAYOUT_TEXT_COLOR: "${MAIL_LAYOUT_TEXT_COLOR:-#18181b}"
-  MAIL_LAYOUT_MUTED_TEXT_COLOR: "${MAIL_LAYOUT_MUTED_TEXT_COLOR:-#71717a}"
-  MAIL_LAYOUT_FOOTER_BG_COLOR: "${MAIL_LAYOUT_FOOTER_BG_COLOR:-#fafafa}"
-  MAIL_LAYOUT_CARD_RADIUS: "${MAIL_LAYOUT_CARD_RADIUS:-8}"
-  MAIL_LAYOUT_MAX_WIDTH: "${MAIL_LAYOUT_MAX_WIDTH:-560}"
-  RESEND_API_KEY: "${RESEND_API_KEY:-}"
-  POSTAL_URL: "${POSTAL_URL:-}"
-  POSTAL_API_KEY: "${POSTAL_API_KEY:-}"
   SMTP_HOST: "${SMTP_HOST:-}"
   SMTP_PORT: "${SMTP_PORT:-587}"
   SMTP_USER: "${SMTP_USER:-}"

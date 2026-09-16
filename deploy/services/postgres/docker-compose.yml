@@ -1,10 +1,10 @@
-# hackOS · postgres — one standalone Dokploy service.
-# Create as its own Compose service in Dokploy (or `docker compose -p
+# hackOS · postgres — one standalone Compose service.
+# Create as its own Compose service (or `docker compose -p
 # <instance>-postgres up -d`). Joins ONLY the per-instance private network and
 # publishes NO host ports, so it is reachable at hostname `postgres` by the
 # api/worker/migrate services on the same network and by nothing else.
 #
-# Env comes from the Dokploy project's Shared Environment (see deploy/README.md).
+# Env comes from the shared `.env` files (see deploy/README.md).
 
 services:
   postgres:

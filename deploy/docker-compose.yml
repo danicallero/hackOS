@@ -1,22 +1,19 @@
 # ─────────────────────────────────────────────────────────────────────────
 # hackOS — production stack (one deployable instance per hackathon/tenant).
 #
-# Designed for Dokploy (Compose app) but works with plain `docker compose`.
-# Deploy ONE stack per instance; isolation comes from a unique project name
-# (COMPOSE_PROJECT_NAME / Dokploy app name), which scopes volumes, the private
-# network, and the Traefik router names. See deploy/README.md.
+# Deploy ONE stack per instance with plain `docker compose`; isolation comes
+# from the Compose project name, which scopes volumes and networks.
 #
-# Every value is supplied by environment interpolation (${VAR}); Dokploy fills
-# these from its Environment panel, the CLI from --env-file. Split your env
-# into a shared, non-secret file and a per-instance secret file
+# Every value is supplied by environment interpolation (${VAR}) from the CLI
+# `--env-file` inputs. Split your env into a shared, non-secret file and a
+# per-instance secret file
 # (.env.shared.example + .env.instance.example are the templates).
 #
 # Networking model:
-#   private  (internal: true) — postgres, valkey, minio + app tier. No host
-#            ports; datastores are unreachable from outside the stack and have
-#            no internet egress.
-#   edge     (external, Dokploy's proxy net) — api (ingress via Traefik) and
-#            worker (egress for mail/push). Datastores never join it.
+#   private — postgres, valkey, minio, api, worker and migrations. Datastores
+#             have no host ports and web never joins this network.
+#   public  — api, worker and web. Only api/web publish host ports; worker has
+#             no ingress and uses this network for outbound provider traffic.
 # ─────────────────────────────────────────────────────────────────────────
 
 x-api-image: &api-image "${IMAGE_REPO:-hackos-api}:${IMAGE_TAG:-main}"
@@ -32,7 +29,7 @@ x-app-env: &app-env
   BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET}"
   CORS_ORIGINS: "${CORS_ORIGINS:-}"
   MOBILE_APP_SCHEME: "${MOBILE_APP_SCHEME:-hackos}"
-  TRUST_PROXY: "true"
+  TRUST_PROXY: "${TRUST_PROXY:-false}"
   LOG_LEVEL: "${LOG_LEVEL:-info}"
   LOG_EXPO_PUSH_TICKETS: "${LOG_EXPO_PUSH_TICKETS:-false}"
   LOG_EXPO_PUSH_TOKENS: "${LOG_EXPO_PUSH_TOKENS:-false}"
@@ -44,23 +41,6 @@ x-app-env: &app-env
   MAIL_PROVIDER: "${MAIL_PROVIDER:-smtp}"
   MAIL_FROM_ADDRESS: "${MAIL_FROM_ADDRESS}"
   MAIL_FROM_NAME: "${MAIL_FROM_NAME:-hackOS}"
-  MAIL_FOOTER_TEXT: "${MAIL_FOOTER_TEXT:-hackOS — this is an automated message.}"
-  MAIL_LAYOUT_BRAND_NAME: "${MAIL_LAYOUT_BRAND_NAME:-hackOS}"
-  MAIL_LAYOUT_HEADER_TEXT: "${MAIL_LAYOUT_HEADER_TEXT:-hackOS}"
-  MAIL_LAYOUT_HEADER_SUBTEXT: "${MAIL_LAYOUT_HEADER_SUBTEXT:-}"
-  MAIL_LAYOUT_LOGO_URL: "${MAIL_LAYOUT_LOGO_URL-https://${WEB_DOMAIN}/email/brand-mark.png}"
-  MAIL_LAYOUT_ACCENT_COLOR: "${MAIL_LAYOUT_ACCENT_COLOR:-#18181b}"
-  MAIL_LAYOUT_BG_COLOR: "${MAIL_LAYOUT_BG_COLOR:-#f4f4f5}"
-  MAIL_LAYOUT_CARD_COLOR: "${MAIL_LAYOUT_CARD_COLOR:-#ffffff}"
-  MAIL_LAYOUT_CARD_BORDER_COLOR: "${MAIL_LAYOUT_CARD_BORDER_COLOR:-#e4e4e7}"
-  MAIL_LAYOUT_TEXT_COLOR: "${MAIL_LAYOUT_TEXT_COLOR:-#18181b}"
-  MAIL_LAYOUT_MUTED_TEXT_COLOR: "${MAIL_LAYOUT_MUTED_TEXT_COLOR:-#71717a}"
-  MAIL_LAYOUT_FOOTER_BG_COLOR: "${MAIL_LAYOUT_FOOTER_BG_COLOR:-#fafafa}"
-  MAIL_LAYOUT_CARD_RADIUS: "${MAIL_LAYOUT_CARD_RADIUS:-8}"
-  MAIL_LAYOUT_MAX_WIDTH: "${MAIL_LAYOUT_MAX_WIDTH:-560}"
-  RESEND_API_KEY: "${RESEND_API_KEY:-}"
-  POSTAL_URL: "${POSTAL_URL:-}"
-  POSTAL_API_KEY: "${POSTAL_API_KEY:-}"
   SMTP_HOST: "${SMTP_HOST:-}"
   SMTP_PORT: "${SMTP_PORT:-587}"
   SMTP_USER: "${SMTP_USER:-}"
@@ -196,7 +176,7 @@ services:
     networks: [private]
     restart: "no"
 
-  # ── HTTP API (ingress via Traefik) ─────────────────────────────────────
+  # ── HTTP API ────────────────────────────────────────────────────────────
   api:
     <<: *hardening
     image: *api-image
@@ -216,10 +196,9 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
-    networks:
-      private: {}
-      edge:
-        aliases: ["${STACK_NAME:-hackos-event2026}-api"]
+    ports:
+      - "${API_PORT:-3000}:3000"
+    networks: [private, public]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/healthz || exit 1"]
       interval: 15s
@@ -230,38 +209,12 @@ services:
       resources:
         limits:
           memory: "${API_MEM_LIMIT:-512m}"
-    # List form (not map) so ${STACK_NAME} interpolates inside the label NAME —
-    # Compose only reliably interpolates label values, not map keys. Router,
-    # service and middleware names carry the stack prefix so multiple hackOS
-    # instances behind one Traefik never collide.
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=${PROXY_NETWORK:-dokploy-network}"
-      - "traefik.http.routers.${STACK_NAME}-api.rule=Host(`${API_DOMAIN}`)"
-      - "traefik.http.routers.${STACK_NAME}-api.entrypoints=websecure"
-      - "traefik.http.routers.${STACK_NAME}-api.tls=true"
-      - "traefik.http.routers.${STACK_NAME}-api.tls.certresolver=${CERT_RESOLVER:-letsencrypt}"
-      - "traefik.http.routers.${STACK_NAME}-api.middlewares=${STACK_NAME}-sec@docker"
-      - "traefik.http.services.${STACK_NAME}-api.loadbalancer.server.port=3000"
-      # Docker's healthcheck controls container health, but Traefik needs its
-      # own readiness check to keep a replica with unavailable Postgres out of ingress.
-      - "traefik.http.services.${STACK_NAME}-api.loadbalancer.healthcheck.path=/readyz"
-      - "traefik.http.services.${STACK_NAME}-api.loadbalancer.healthcheck.interval=5s"
-      - "traefik.http.services.${STACK_NAME}-api.loadbalancer.healthcheck.timeout=3s"
-      # SSE (TV/queue streams) must not be buffered by the proxy.
-      - "traefik.http.services.${STACK_NAME}-api.loadbalancer.responseforwarding.flushinterval=-1"
-      - "traefik.http.middlewares.${STACK_NAME}-sec.headers.stsSeconds=31536000"
-      - "traefik.http.middlewares.${STACK_NAME}-sec.headers.stsIncludeSubdomains=true"
-      - "traefik.http.middlewares.${STACK_NAME}-sec.headers.contentTypeNosniff=true"
-      - "traefik.http.middlewares.${STACK_NAME}-sec.headers.frameDeny=true"
-      - "traefik.http.middlewares.${STACK_NAME}-sec.headers.referrerPolicy=strict-origin-when-cross-origin"
 
-  # ── web frontend (Next.js, ingress via Traefik on its OWN router) ──────
-  # Separate service, separate domain, separate Traefik router
-  # (${STACK_NAME}-web). It is NEVER served by or routed with the api; the
+  # ── web frontend (Next.js) ──────────────────────────────────────────────
+  # Separate service and host port. It is never served by or routed with the api;
   # browser reaches the api directly using the runtime config served by this
   # container, so remember to add https://${WEB_DOMAIN} to the api's
-  # CORS_ORIGINS. Edge-only: the web tier never touches the private datastores.
+  # CORS_ORIGINS. Public-only: the web tier never touches the private datastores.
   web:
     <<: *hardening
     image: "${WEB_IMAGE_REPO:-hackos-web}:${IMAGE_TAG:-main}"
@@ -269,9 +222,9 @@ services:
     environment:
       API_DOMAIN: "${API_DOMAIN}"
       WEB_DOMAIN: "${WEB_DOMAIN}"
-    networks:
-      edge:
-        aliases: ["${STACK_NAME:-hackos-event2026}-web"]
+    ports:
+      - "${WEB_PORT:-3001}:3001"
+    networks: [public]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/ || exit 1"]
       interval: 15s
@@ -282,17 +235,8 @@ services:
       resources:
         limits:
           memory: "${WEB_MEM_LIMIT:-256m}"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=${PROXY_NETWORK:-dokploy-network}"
-      - "traefik.http.routers.${STACK_NAME}-web.rule=Host(`${WEB_DOMAIN}`)"
-      - "traefik.http.routers.${STACK_NAME}-web.entrypoints=websecure"
-      - "traefik.http.routers.${STACK_NAME}-web.tls=true"
-      - "traefik.http.routers.${STACK_NAME}-web.tls.certresolver=${CERT_RESOLVER:-letsencrypt}"
-      - "traefik.http.routers.${STACK_NAME}-web.middlewares=${STACK_NAME}-sec@docker"
-      - "traefik.http.services.${STACK_NAME}-web.loadbalancer.server.port=3001"
 
-  # ── BullMQ worker (no ingress; edge only for mail/push egress) ─────────
+  # ── BullMQ worker (no ingress; public network only for egress) ──────────
   worker:
     <<: *hardening
     image: *api-image
@@ -311,7 +255,7 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
-    networks: [private, edge]
+    networks: [private, public]
     # The image bakes an HTTP /healthz probe for the API; the worker serves no
     # HTTP, so disable it. Liveness is process-based: on crash, restart kicks in.
     healthcheck:
@@ -322,15 +266,12 @@ services:
           memory: "${WORKER_MEM_LIMIT:-512m}"
 
 networks:
-  # Private: datastores + app tier. internal:true => no host route, no egress.
+  # Private: datastores + app tier. Datastores have no ports and web is not a
+  # member, while api/worker also use public for outbound provider traffic.
   private:
     driver: bridge
-    internal: true
-  # Edge: the reverse-proxy network Dokploy already manages. Declared external
-  # so this stack attaches to it rather than creating its own.
-  edge:
-    external: true
-    name: "${PROXY_NETWORK:-dokploy-network}"
+  public:
+    driver: bridge
 
 volumes:
   pgdata:

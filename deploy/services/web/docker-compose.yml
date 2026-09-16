@@ -1,15 +1,12 @@
-# hackOS · web — one standalone Dokploy service (Next.js frontend).
+# hackOS · web — one standalone Compose service (Next.js frontend).
 #
-# The web frontend has its OWN Traefik router (${STACK_NAME}-web) and its OWN
-# domain (${WEB_DOMAIN}). It is NEVER served by, or routed together with, the
-# api service — deploy it separately.
+# The web frontend has its own host port and domain (${WEB_DOMAIN}). It is
+# never served by, or routed together with, the api service — deploy it
+# separately.
 #
-# Reachability: it joins the proxy network (edge / dokploy-network), the same
-# network Traefik AND a Cloudflare Tunnel sidecar sit on. So:
-#   - Traefik routes ${WEB_DOMAIN} to it, and
-#   - a cloudflared tunnel can address it directly on the edge network.
-# The web tier never touches the datastores, so it does NOT join the private
-# instance network.
+# Reachability: it publishes port 3001 for an external load balancer or direct
+# access. The web tier never touches the datastores, so it does NOT join the
+# private instance network.
 #
 # Add https://${WEB_DOMAIN} to the api's CORS_ORIGINS so credentialed requests
 # from the browser are allowed.
@@ -25,12 +22,12 @@ services:
     environment:
       API_DOMAIN: "${API_DOMAIN}"
       WEB_DOMAIN: "${WEB_DOMAIN}"
+    ports:
+      - "${WEB_PORT:-3001}:3001"
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
-    networks:
-      edge:
-        aliases: ["${STACK_NAME:-hackos-event2026}-web"]
+    networks: [public]
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/ || exit 1"]
       interval: 15s
@@ -41,21 +38,7 @@ services:
       resources:
         limits:
           memory: "${WEB_MEM_LIMIT:-256m}"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=${PROXY_NETWORK:-dokploy-network}"
-      - "traefik.http.routers.${STACK_NAME}-web.rule=Host(`${WEB_DOMAIN}`)"
-      - "traefik.http.routers.${STACK_NAME}-web.entrypoints=websecure"
-      - "traefik.http.routers.${STACK_NAME}-web.tls=true"
-      - "traefik.http.routers.${STACK_NAME}-web.tls.certresolver=${CERT_RESOLVER:-letsencrypt}"
-      - "traefik.http.routers.${STACK_NAME}-web.middlewares=${STACK_NAME}-web-sec@docker"
-      - "traefik.http.services.${STACK_NAME}-web.loadbalancer.server.port=3001"
-      - "traefik.http.middlewares.${STACK_NAME}-web-sec.headers.stsSeconds=31536000"
-      - "traefik.http.middlewares.${STACK_NAME}-web-sec.headers.stsIncludeSubdomains=true"
-      - "traefik.http.middlewares.${STACK_NAME}-web-sec.headers.contentTypeNosniff=true"
-      - "traefik.http.middlewares.${STACK_NAME}-web-sec.headers.referrerPolicy=strict-origin-when-cross-origin"
 
 networks:
-  edge:
-    external: true
-    name: "${PROXY_NETWORK:-dokploy-network}"
+  public:
+    driver: bridge

@@ -72,8 +72,8 @@ migrations. There is no ORM.
 - **Background work and realtime:** BullMQ ticks and SSE fan-out use Valkey.
 Durable work, retries and dead-letter state remain in Postgres, so Valkey can
 be treated as ephemeral.
-- **Files and mail:** MinIO provides S3-compatible storage locally. Email can
-go through SMTP, Resend or Postal; local mail is caught by Mailpit.
+- **Files and mail:** MinIO provides S3-compatible storage locally. Email uses
+  configurable SMTP (Amazon SES in production, Mailpit locally).
 - **Shared contracts:** [`packages/shared`](packages/shared) owns capability
 names, realtime event names and cross-client UI test identifiers.
 
@@ -221,17 +221,17 @@ The release paths are:
 
 | Branch | CD behavior |
 | --- | --- |
-| `staging` | Merge an approved development PR here. CD builds and publishes the images, then deploys the staging Dokploy Environment. |
-| `main` | Merge an approved PR from any branch. CD builds and publishes production images, then deploys production. |
+| `staging` | Merge an approved development PR here. CD builds and publishes the staging images. |
+| `main` | Merge an approved PR from any branch. CD builds and publishes production images. |
 
 `main` and `staging` are independent environments. Merging into `main` deploys
 production and does not update `staging`; merging into `staging` deploys the
 development environment. To test the current production tree in staging, open
 an explicit pull request from `main` to `staging`.
 
-The merge to either protected branch is what builds its release artifact. The
-existing main webhook, production deployment variables, and production
-Dokploy setup remain valid. Protect exactly `staging` and `main`; CI accepts
+The merge to either protected branch is what builds its release artifact.
+Deployment from the published images is performed separately on the target
+host. Protect exactly `staging` and `main`; CI accepts
 PRs into either branch and CD only runs on their post-merge pushes.
 The API test job provides fresh Postgres, Valkey and Mailpit service containers
 plus health-checked MinIO, then provisions the test bucket; local API runs
@@ -247,7 +247,7 @@ packages/shared/      capability, event and cross-client test contracts
 e2e/                  Playwright and Detox flows
 plan/                 normative user stories and hard invariants
 docs/                 current architecture and implementation notes
-deploy/               Docker Compose and Dokploy deployment files
+deploy/               Docker Compose deployment files
 ```
 
 The backend is split by domain under `apps/api/src/modules`: identity,
@@ -298,14 +298,14 @@ Useful next reads:
 
 Production is designed as one isolated stack per event. The API, worker and web
 services can be deployed independently; Postgres, Valkey and MinIO stay on a
-private network, while Traefik exposes only the API and web routes. A one-shot
+private network, while the host publishes only the API and web ports. A one-shot
 migration command runs before the API starts and uses a Postgres advisory lock
 to make concurrent deploys safe. The API repeats this no-op-safe migration
 check immediately before listening so a reused one-shot container cannot leave
 the running image ahead of the database schema.
 
-[`deploy/README.md`](deploy/README.md) documents both the recommended
-per-service Dokploy setup and a single Compose stack, including secrets,
+[`deploy/README.md`](deploy/README.md) documents both the optional
+per-service Compose setup and a single Compose stack, including secrets,
 domains, mail providers, Wallet credentials, backups and multi-event hosting.
 Use [`docs/env-vars.md`](docs/env-vars.md) as the per-service environment
 variable checklist.

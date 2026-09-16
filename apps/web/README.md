@@ -1,12 +1,12 @@
 # @hackos/web
 
-The hackOS web frontend — Next.js (App Router) + shadcn/ui, styled in the same
-dark-first family as **Dokploy**. It consumes the Fastify API (Better Auth
+The hackOS web frontend — Next.js (App Router) + shadcn/ui, styled in a
+dark-first zinc-based visual system. It consumes the Fastify API (Better Auth
 included) and follows the same user stories (`plan/historias-hackos.md`) as the
 backend, one workstream at a time.
 
-> **The web app is its own deployable service behind its own Traefik router.**
-> It is never served by, or routed together with, the API. See
+> **The web app is its own deployable service.** It is never served by, or
+> routed together with, the API. See
 > `deploy/services/web` and the `web` service in `deploy/docker-compose.yml`.
 
 ## Stack

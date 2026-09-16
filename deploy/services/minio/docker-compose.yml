@@ -1,8 +1,8 @@
-# hackOS · minio (S3 object storage) — one standalone Dokploy service.
+# hackOS · minio (S3 object storage) — one standalone Compose service.
 # Private network only, no host ports; reachable at hostname `minio` (S3 API on
 # :9000). A one-shot sidecar creates the bucket on first boot. The web console
-# is disabled by default (MINIO_BROWSER=off); to expose it, add Traefik labels
-# for a separate subdomain and set MINIO_BROWSER=on — never publish it raw.
+# is disabled by default (MINIO_BROWSER=off); to expose it, add an authenticated
+# external route and set MINIO_BROWSER=on — never publish it raw.
 
 services:
   minio:
@@ -36,7 +36,7 @@ services:
   # served through the API's presigned-download route, gated by owner-or-staff.
   minio-init:
     # Docker Hub no longer serves the MinIO Client image anonymously; use the
-    # upstream Quay registry so a fresh Dokploy host can pull it without login.
+    # upstream Quay registry so a fresh host can pull it without login.
     image: "${MINIO_MC_IMAGE:-quay.io/minio/mc:latest}"
     depends_on:
       minio:

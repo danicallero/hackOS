@@ -1,4 +1,4 @@
-# hackOS · valkey — one standalone Dokploy service.
+# hackOS · valkey — one standalone Compose service.
 # Private network only, no host ports; reachable at hostname `valkey`.
 # Password-protected (requirepass) so nothing else on the network can read the
 # cache/queues. Persistence is off — Valkey holds only ephemeral queue/realtime

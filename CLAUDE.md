@@ -15,7 +15,7 @@ conflict, that file wins. Hard invariants live in `plan/07-datos-relevantes-ers.
 - `packages/shared` — `capabilities.ts` + `events.ts`. Add new names THERE, never inline.
 - `plan/` — normative docs. Read-only.
 - `docs/` — living implementation docs. Keep in sync with code.
-- `deploy/` — Dokploy / docker-compose; `deploy/README.md` is normative.
+- `deploy/` — Docker Compose deployment; `deploy/README.md` is normative.
 
 ## Non-negotiable conventions
 
@@ -139,7 +139,7 @@ Concrete triggers — if your change does X, update Y:
 | A new module, or a module's schema/state machine | The relevant file in `docs/` (add a new one if the module has none yet; follow the format in `docs/api-reference.md` or `docs/challenges-devpost.md`) |
 | A new `docs/*.md` file | Its link in `docs/README.md`'s index |
 | `packages/shared/src/capabilities.ts` or `events.ts` | Any doc that enumerates capabilities/events by name (grep before assuming there are none) |
-| A `deploy/services/*/docker-compose.yml` env var (added/renamed/removed) | The matching row in `docs/env-vars.md`, `deploy/README.md`'s shared/service-only tables, **and** that service's `dokploy.env.example` (add/rename/remove the `${{environment.VAR}}` line to match) |
+| A `deploy/services/*/docker-compose.yml` env var (added/renamed/removed) | The matching row in `docs/env-vars.md` and the deployment instructions in `deploy/README.md` |
 | Root-level dev workflow (`pnpm` scripts, ports, infra services) | `README.md` |
 | `apps/web` conventions or component library | `apps/web/README.md` |
 | Design tokens, container/action hierarchy, accessibility or copy rules (any UI surface) | `docs/DESIGN.md` — the consolidated design/UX rulebook |
