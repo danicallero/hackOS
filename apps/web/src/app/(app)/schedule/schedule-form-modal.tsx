@@ -416,14 +416,12 @@ export function ScheduleFormModal({
         )}
 
         {/*
-          Each field now renders a native date input plus a native time
-          input (see DateTimeInput) — three columns need more room than the
-          `sm` breakpoint (640px) guarantees inside this modal, or the two
-          controls collapse into unreadable clipped boxes without actually
-          overflowing the modal (H59 follow-up, #490). `lg` lines up with
-          where the xl modal is reliably at its full 896px cap.
+          Each field renders a native date + time input (see DateTimeInput).
+          The side panel is ≤32rem (512px), so three columns can't fit
+          without clipping — use `sm:grid-cols-3` so the fields stack when
+          the panel is narrower than 640px (H59 follow-up, #490).
         */}
-        <div className="grid gap-3 lg:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-3">
           <Field id="schedule-starts" label={t("colStarts")} className="min-w-0">
             <DateTimeInput
               id="schedule-starts"
