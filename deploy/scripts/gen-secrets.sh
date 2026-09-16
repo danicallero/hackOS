@@ -16,21 +16,22 @@ cat <<EOF
 # Generated $(date -u +%Y-%m-%dT%H:%M:%SZ) — unique to this instance.
 BETTER_AUTH_SECRET=$(openssl rand -base64 32 | tr -d '\n')
 
-POSTGRES_USER=hackos
 POSTGRES_PASSWORD=$(rand 24)
-POSTGRES_DB=hackos
 
 VALKEY_PASSWORD=$(rand 24)
 
-MINIO_ROOT_USER=hackos
 MINIO_ROOT_PASSWORD=$(rand 24)
-S3_ACCESS_KEY=hackos-app
 S3_SECRET_KEY=$(rand 24)
 
 # SMTP credentials for the relay selected in hackos.env. Amazon SES SMTP
 # credentials are different from ordinary AWS access keys.
 SMTP_USER=
 SMTP_PASS=
+
+# Cloudflare R2 S3 credentials for the optional backup helper. Keep R2_BACKUPS_ENABLED
+# and the endpoint/bucket/prefix in hackos.env; create a scoped R2 token manually.
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
 
 # Optional Wallet signing values. Leave each platform entirely unset or fill
 # its complete block; check-env.sh enforces that boundary.

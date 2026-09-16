@@ -49,7 +49,6 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE_NAMESPACE }}/hackos-api:${{ github.ref_name }}
             ${{ env.IMAGE_NAMESPACE }}/hackos-api:${{ env.IMAGE_TAG }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
@@ -86,7 +85,6 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE_NAMESPACE }}/hackos-web:${{ github.ref_name }}
             ${{ env.IMAGE_NAMESPACE }}/hackos-web:${{ env.IMAGE_TAG }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
