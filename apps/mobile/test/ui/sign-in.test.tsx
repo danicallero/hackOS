@@ -14,7 +14,7 @@ jest.mock("expo-router", () => ({
 
 jest.mock("@/lib/api", () => ({ apiFetch: jest.fn() }));
 jest.mock("@/lib/me-context", () => ({
-  useMeContext: () => ({ refetch: mockRefetch }),
+  useMeActions: () => ({ refetch: mockRefetch }),
 }));
 jest.mock("@/lib/auth-client", () => ({
   signIn: { email: jest.fn() },

@@ -13,6 +13,7 @@ export type AuthCredentialFieldProps = {
   keyboardType?: "default" | "email-address";
   label: string;
   onChangeText: (value: string) => void;
+  onFocus?: () => void;
   onSubmitEditing: () => void;
   placeholder?: string;
   returnKeyType: "next" | "go";

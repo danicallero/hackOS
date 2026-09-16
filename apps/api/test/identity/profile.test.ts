@@ -2,7 +2,7 @@ import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { SSE_TOPICS } from "@hackos/shared/events";
 import { hashPassword } from "better-auth/crypto";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { App } from "../../src/app.js";
 import {
   asUser,
@@ -293,6 +293,65 @@ describe("GET /api/me (H7)", () => {
     const withQueueToo = await a.inject({ method: "GET", url: "/api/me", headers: asUser(member) });
     expect(withQueueToo.json().hasProject).toBe(true);
     expect(withQueueToo.json().hasQueueItems).toBe(true);
+  });
+});
+
+describe("GET /api/users/:id/responses (H7)", () => {
+  it("loads a representative response history and its ordered reviews in one set-based query", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const staff = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
+    const subject = await createUser();
+    const reviewer = await createUser();
+
+    for (let index = 0; index < 24; index++) {
+      const { rows: applications } = await pool.query<{ id: number }>(
+        `INSERT INTO applications (name, template) VALUES ($1, '[]'::jsonb) RETURNING id`,
+        [`History ${index}`],
+      );
+      const applicationId = applications[0]?.id;
+      if (!applicationId) throw new Error("Application fixture was not created");
+      const formVersionId = await ensureApplicationFormVersion(applicationId);
+      const { rows: responses } = await pool.query<{ id: number }>(
+        `INSERT INTO application_responses
+           (user_id, application_id, application_form_version_id, status, responses)
+         VALUES ($1, $2, $3, 'review', $4::jsonb) RETURNING id`,
+        [subject, applicationId, formVersionId, JSON.stringify({ index })],
+      );
+      if (index % 2 === 0) {
+        await pool.query(
+          `INSERT INTO applicant_reviews (response_id, author_id, score, notes)
+           VALUES ($1, $2, $3, $4)`,
+          [responses[0]?.id, reviewer, 1, `review ${index}`],
+        );
+      }
+    }
+
+    const querySpy = vi.spyOn(pool, "query");
+    const response = await a.inject({
+      method: "GET",
+      url: `/api/users/${subject}/responses`,
+      headers: asUser(staff),
+    });
+    const responseAndReviewsQueries = querySpy.mock.calls.filter(
+      ([query]) =>
+        typeof query === "string" &&
+        query.includes("application_responses r") &&
+        query.includes("applicant_reviews"),
+    );
+    querySpy.mockRestore();
+
+    expect(response.statusCode).toBe(200);
+    const history = response.json().responses;
+    expect(history).toHaveLength(24);
+    expect(history[0]).toEqual(expect.objectContaining({ responses: { index: 23 }, reviews: [] }));
+    expect(history[1]).toEqual(
+      expect.objectContaining({
+        responses: { index: 22 },
+        reviews: [{ authorId: reviewer, score: 1, notes: "review 22" }],
+      }),
+    );
+    expect(responseAndReviewsQueries).toHaveLength(1);
   });
 });
 
