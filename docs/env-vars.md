@@ -1,302 +1,148 @@
-# Environment variables per service (isolated containers)
+# Environment variables for the canonical Compose stack
 
-This is the per-service breakdown for **Mode A** in
-[`deploy/README.md`](../deploy/README.md): each of the six service definitions
-below runs separately (the `api` definition also contains its one-shot
-`migrate` container). `postgres`, `valkey`, `minio`, `api`/`migrate`, and
-`worker` use the shared private `instance` network
-(`hackos-<name>-net`); `web` is edge-only, while `api` also joins the Traefik
-`edge` network. Datastores publish no host ports.
+This document describes [`deploy/docker-compose.yml`](../deploy/docker-compose.yml),
+which runs inside the GPULux `hackos` LXC. The LXC keeps the filled env file at
+`/root/hackos/.env` with mode `0600`. GitHub Actions never reads, decrypts or
+prints that file.
 
-Two different kinds of variable show up:
+Two kinds of variables appear below:
 
-- **Container env** — lands in the process's environment inside the
-  container (`printenv` would show it). This is what the app actually reads.
-- **Compose-level** — only used to render the `docker-compose.yml` file
-  itself (image tags, network names, Traefik labels, build args). The
-  container never sees these directly, but the deploy breaks without them.
+- **Container env** reaches a process inside a container.
+- **Compose-level** renders the stack, image references, ports or resource
+  limits. It is not automatically passed to the application process.
 
-This is generated from the actual compose files
-(`deploy/services/<service>/docker-compose.yml`) — if you add or rename a
-variable there, update the matching table here in the same change (see the
-documentation rule in `CLAUDE.md`).
-
-If you're deploying on Dokploy, read
-[**Centralizing values with Dokploy's Project/Environment variables**](#centralizing-values-with-dokploys-projectenvironment-variables)
-at the bottom before copying secrets into six separate service screens.
+The environment file(s) are assembled out of band from
+[`.env.shared.example`](../deploy/.env.shared.example) and
+[`.env.instance.example`](../deploy/.env.instance.example). Use separate
+`.env.production` and `.env.staging` files when both environments share the
+LXC; otherwise the deploy script can use the existing common `.env`. Production
+and staging must use separate database, cache, object-storage and auth secrets.
 
 ## postgres
 
 | Variable | Kind | Required | What it does |
 |---|---|---|---|
-| `POSTGRES_USER` | container | yes | The Postgres role Postgres itself creates on first boot, and the same value `api`/`worker`/`migrate` put in the user portion of `DATABASE_URL`. If these don't match, the API can't authenticate — there's no fallback or retry. |
-| `POSTGRES_PASSWORD` | container | yes 🔒 | Password for that role. Same "must match `DATABASE_URL`" constraint as above; this is the single most consequential secret to keep in sync across services. |
-| `POSTGRES_DB` | container | yes | The database Postgres creates on first boot and the API connects to. Only takes effect the *first* time the `pgdata` volume is initialized — changing it later doesn't rename an existing database. |
-| `PG_MEM_LIMIT` | compose-level | no | Hard memory cap Docker enforces on the container (`deploy.resources.limits.memory`), default `1g`. Postgres gets OOM-killed and restarted if it exceeds this, not gracefully throttled — size it to your expected connection count and working set. |
-| `INSTANCE_NETWORK` | compose-level | no | Name of the private bridge network this container joins, default `hackos-event2026-net`. Must be created on the host (`docker network create ...`) before this service can start — Dokploy doesn't create it for you. |
+| `POSTGRES_USER` | container | yes | Database role created on first boot and used by the application URL. |
+| `POSTGRES_PASSWORD` | container | yes | Password for `POSTGRES_USER`; it must match the value interpolated into `DATABASE_URL`. |
+| `POSTGRES_DB` | container | yes | Database created on first boot and used by the application. |
+| `PG_MEM_LIMIT` | Compose-level | no | Memory limit, default `1g`. |
+
+Postgres has no host port. Its data is in the Compose `pgdata` volume on the
+LXC and it is reachable only over the internal `private` network.
 
 ## valkey
 
 | Variable | Kind | Required | What it does |
 |---|---|---|---|
-| `VALKEY_PASSWORD` | container | yes 🔒 | Passed to `valkey-server --requirepass`, so any client — including the healthcheck itself — must authenticate. Also embedded in `api`/`worker`'s `VALKEY_URL` (`redis://:<password>@valkey:6379`); a mismatch means BullMQ jobs and SSE fan-out silently stop working. |
-| `VALKEY_MEM_LIMIT` | compose-level | no | Memory cap, default `512m`. Valkey here holds only ephemeral queue/SSE state (persistence is off — `--save ""` `--appendonly no`), so an OOM restart loses in-flight jobs but never durable data; Postgres is the source of truth. |
-| `INSTANCE_NETWORK` | compose-level | no | Same private network as postgres — this is how `api`/`worker` reach `valkey:6379` by name. |
+| `VALKEY_PASSWORD` | container | yes | Password for `valkey-server --requirepass` and the API/worker `VALKEY_URL`. |
+| `VALKEY_MEM_LIMIT` | Compose-level | no | Memory limit, default `512m`. |
+
+Valkey is intentionally ephemeral (`--save "" --appendonly no`) and has no
+host port.
 
 ## minio
 
-Two containers share this file: `minio` (the S3-compatible object server) and
-`minio-init` (a one-shot sidecar that provisions the bucket, then exits).
+| Variable | Kind | Required | What it does |
+|---|---|---|---|
+| `MINIO_ROOT_USER` | container | yes | MinIO administrator used by `minio-init`. |
+| `MINIO_ROOT_PASSWORD` | container | yes | Password for the MinIO administrator. |
+| `MINIO_BROWSER` | container | no | MinIO console switch, default `off`; do not expose it without an authenticated proxy route. |
+| `S3_BUCKET` | container | no | Bucket provisioned by `minio-init`, default `hackos`. |
+| `MINIO_IMAGE` | Compose-level | no | MinIO image reference; the Compose default is a concrete release tag. Keep it pinned. |
+| `MINIO_MC_IMAGE` | Compose-level | no | MinIO Client image reference; the Compose default is a concrete release tag. Keep it pinned. |
+| `MINIO_MEM_LIMIT` | Compose-level | no | Memory limit, default `1g`. |
+
+MinIO and its one-shot initializer have no host ports and use the internal
+`private` network only.
+
+## api, migrate and worker
+
+`migrate`, `api` and `worker` use the same GHCR API image. `migrate` runs
+`node dist/migrate.js`, `api` runs the migration guard and HTTP server, and
+`worker` runs `node dist/worker.js` with `WORKERS_INLINE=false`.
 
 | Variable | Kind | Required | What it does |
 |---|---|---|---|
-| `MINIO_ROOT_USER` | container (both) | yes | The MinIO admin account `minio-init` uses to create the bucket, and the value you'd hand the API as `S3_ACCESS_KEY` if you're using the root account directly instead of a scoped service account. |
-| `MINIO_ROOT_PASSWORD` | container (both) | yes 🔒 | Password for that account; becomes `S3_SECRET_KEY` on `api`/`worker` under the same "use root or scope it down" choice. |
-| `MINIO_BROWSER` | container (`minio`) | no | Toggles MinIO's own web console (`on`/`off`), default `off`. Leave it off — there's no Traefik route to it in this setup, so turning it on without also adding auth + a route just adds attack surface for no benefit. |
-| `S3_BUCKET` | container (`minio-init`) | no | Bucket name `minio-init` creates and sets ACLs on (default `hackos`). Must be identical to `api`/`worker`'s `S3_BUCKET`, or the API will 404/error against a bucket that doesn't exist. |
-| `MINIO_IMAGE` | compose-level | no | Image reference for the `minio` container. Defaults to `:latest`, which is fine for local dev but should be pinned to a concrete tag in production (see Security posture in `deploy/README.md`). |
-| `MINIO_MC_IMAGE` | compose-level | no | Same pinning concern, for the `mc` CLI image `minio-init` runs to create the bucket and set its access policy. Defaults to `quay.io/minio/mc:latest`; use a pinned `quay.io/minio/mc:RELEASE.…` tag in production. |
-| `MINIO_MEM_LIMIT` | compose-level | no | Memory cap, default `1g`. |
-| `INSTANCE_NETWORK` | compose-level | no | Same private network as postgres/valkey — `api`/`worker` reach it at `minio:9000`. |
+| `IMAGE_REPO` | Compose-level | yes | GHCR repository for the API image, for example `ghcr.io/danicallero/hackos-api`. |
+| `IMAGE_TAG` | Compose-level | yes | The image tag. Deployments accept only `sha-<40 lowercase hex characters>`; the in-LXC script overrides this with the workflow input. |
+| `API_DOMAIN` | Compose-level | yes | Public API host. It becomes `BETTER_AUTH_URL`; GPULux's proxy routes it to `API_PUBLISH_PORT`. |
+| `WEB_DOMAIN` | Compose-level | yes | Public web origin used for `WEB_URL`, auth redirects and email links. |
+| `API_PUBLISH_PORT` | Compose-level | no | LXC host port mapped to API port `3000`, default `3000`. |
+| `BETTER_AUTH_SECRET` | Container | yes | Session and token signing secret. Rotating it logs out existing sessions. |
+| `CORS_ORIGINS` | Container | yes in production | Comma-separated credentialed browser origins; include `https://${WEB_DOMAIN}`. |
+| `MOBILE_APP_SCHEME` | Container | no | Mobile callback scheme, default `hackos`. |
+| `LOG_LEVEL` | Container | no | Pino log level, default `info`. |
+| `LOG_EXPO_PUSH_TICKETS` | Container | no | Redacted Expo delivery logging switch, default `false`. |
+| `LOG_EXPO_PUSH_TOKENS` | Container | no | Redacted push-token logging switch for API debugging, default `false`. |
+| `LOG_EXPO_PUSH_UNSAFE_DEBUG` | Container | no | Explicitly unsafe full push debugging, default `false`; keep disabled in production. |
+| `DB_POOL_MAX`, `DB_*_TIMEOUT_MS` | Container | no | Per-process Postgres pool and timeout controls; keep the API/worker connection budget below Postgres `max_connections`. |
+| `SSE_*` | Container | no | API SSE connection and slow-client limits. |
+| `RATE_LIMIT_*` | Container | no | Operational scanner and snapshot rate limits backed by Valkey. |
+| `NOTIFICATION_OUTBOX_BATCH_SIZE` | Container | no | Worker rows claimed per five-second tick, default `100`. |
+| `S3_ACCESS_KEY` / `S3_SECRET_KEY` | Container | yes | S3 credentials used by API and worker. Prefer a scoped MinIO account over root credentials. |
+| `S3_BUCKET` | Container | no | Bucket used by API and worker, default `hackos`; it must match `minio-init`. |
+| `S3_PUBLIC_URL` | Container | no | Public HTTPS base for sponsor logo objects; private uploads remain API-proxied. |
+| `MAIL_PROVIDER` | Container | no | `smtp`, `resend` or `postal`, default `smtp`. |
+| `MAIL_FROM_ADDRESS` | Container | yes | Sender address for transactional mail. |
+| `MAIL_FROM_NAME` | Container | no | Sender display name, default `hackOS`. |
+| `RESEND_API_KEY` | Container | only for Resend | Resend credential. |
+| `POSTAL_URL` / `POSTAL_API_KEY` | Container | only for Postal | Postal endpoint and credential. |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | Container | only for SMTP | SMTP connection settings. |
+| `MAIL_FOOTER_TEXT`, `MAIL_LAYOUT_*` | Container | no | Transactional email branding and layout. |
+| `APPLE_*` | Container | no, all-or-nothing | Optional Apple Wallet signing and APNs settings. |
+| `GOOGLE_WALLET_*` | Container | no, signing block all-or-nothing | Optional Google Wallet signing and branding settings. |
+| `TRANSLATE_PROVIDER`, `GOOGLE_TRANSLATE_API_KEY`, `LIBRETRANSLATE_URL`, `LIBRETRANSLATE_API_KEY` | Container | no | Optional automatic translation provider and credentials. |
+| `REVIEW_FIXTURE_PASSWORD` / `REVIEW_FIXTURE_DELETION_PIN` | API only | no | Optional synthetic reviewer fixture credentials; not passed to `migrate` or `worker`. |
+| `API_MEM_LIMIT` | Compose-level | no | API memory limit, default `512m`. |
+| `WORKER_MEM_LIMIT` | Compose-level | no | Worker memory limit, default `512m`. |
 
-## api
-
-Runs two containers from the same image: a one-shot `migrate` (must complete
-successfully before `api` starts — see the `depends_on: service_completed_successfully`
-gate in the compose file) and the long-running `api` server. They share the
-application/database configuration because both `apps/api/scripts/migrate.ts`
-and the API config load dotenv before reading `process.env`. The optional
-`REVIEW_FIXTURE_*` secrets are the
-deliberate exception: Compose passes them to `api` only because migrations never
-need them.
-
-| Variable | Kind | Required | What it does |
-|---|---|---|---|
-| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | compose-level | yes | Interpolated into `DATABASE_URL` (`postgres://user:pass@postgres:5432/db`) before the container ever starts. Must be the exact values given to the `postgres` service — this repo has no runtime reconciliation between them. |
-| `VALKEY_PASSWORD` | compose-level | yes 🔒 | Interpolated into `VALKEY_URL` the same way, for BullMQ and the SSE/sequence-counter layer. |
-| `API_DOMAIN` | compose-level | yes | The public hostname this API answers on. Becomes both `BETTER_AUTH_URL` (so Better Auth issues cookies/links for the right origin) and the Traefik router's `Host()` rule. |
-| `WEB_DOMAIN` | compose-level | yes | Becomes `WEB_URL` — the browser-facing origin auth emails (verification, password reset) link back to after the API finishes its part. Without it, those links point at the API itself instead of a real page. |
-| `BETTER_AUTH_SECRET` | container | yes 🔒 | Signs and encrypts Better Auth sessions/tokens. Rotating it invalidates every existing session — everyone gets logged out — so treat it as a "break glass" secret, not something to rotate casually. |
-| `CORS_ORIGINS` | container | no | Comma-separated browser origins allowed to make credentialed requests. In production this is the *only* CORS allowlist (no wildcard fallback, since credentials are always on); it must include `https://${WEB_DOMAIN}` or the web app's authenticated calls get blocked by the browser before they reach the API. |
-| `MOBILE_APP_SCHEME` | container | no | Custom URL scheme of the Expo mobile app (default `hackos`), added to Better Auth's `trustedOrigins` for the `expo()` plugin (H4, H55). Only worth changing if `apps/mobile`'s `app.json` `scheme` is renamed from the default. |
-| `REVIEW_FIXTURE_PASSWORD` | container (api only) | no; same-deployment fixture workspace | Password assigned to the marked synthetic accounts returned by the admin fixture-regeneration route. Leave unset when the fixture workspace is not needed. It is intentionally not passed to `migrate` or `worker`, and must be supplied to reviewers out-of-band rather than returned by the API. |
-| `REVIEW_FIXTURE_DELETION_PIN` | container (api only) | no; same-deployment fixture workspace | Six-digit static deletion PIN accepted only for `users.is_test_account = true` synthetic fixtures. It is not a universal PIN for real participants, is not returned by the API, and enabling it on a live event requires explicit release/security approval because fixture regeneration is destructive to prior synthetic rows. |
-| `LOG_LEVEL` | container | no | Pino log level (`info` by default). Turning it to `debug` in production is noisy but harmless; reviewer fixture request traces are emitted at the INFO transport level with `kind: "DEBUG"` even in production, and sensitive-mutation auditing (H53) happens in Postgres regardless of this setting. |
-| `LOG_EXPO_PUSH_TICKETS` | container | no (default `false`) | **api and worker**. When `true`, logs redacted Expo push-ticket and available receipt status, ticket IDs, category, platform, and provider error codes for delivery debugging. Tokens and notification content are never logged. Enable only while investigating push delivery. |
-| `LOG_EXPO_PUSH_TOKENS` | container | no (default `false`) | **api**. When `true`, logs push-token registration user/platform and a non-secret suffix hint. The full Expo token is never logged. Enable only while investigating device registration. |
-| `LOG_EXPO_PUSH_UNSAFE_DEBUG` | container | no (default `false`) | **api and worker**. Explicitly unsafe full-debug mode: logs complete push tokens, message payloads, user IDs, Expo requests/responses, receipts, and ticket details. Disabled by default; enable only briefly during local debugging and disable/restart immediately afterward. |
-| `DB_POOL_MAX` | container | no (default 20, 5 in tests) | Max size of this process's `pg` pool (H540). Per-process — api and worker each hold their own, and every replica of each multiplies it: `(api replicas × DB_POOL_MAX) + (worker replicas × DB_POOL_MAX)` must stay under Postgres's own `max_connections` (default 100), with headroom for `migrate`'s one-shot connections and admin/superuser use. Raise it for big-event load — see `docs/architecture.md` and `docs/big-event-readiness.md`. |
-| `DB_IDLE_TIMEOUT_MS` | container | no (default 30000) | How long an idle pooled connection is kept before being closed. |
-| `DB_CONNECTION_TIMEOUT_MS` | container | no (default 10000) | How long `pool.connect()` waits for a free connection before rejecting — bounds request latency under pool saturation instead of hanging. |
-| `DB_STATEMENT_TIMEOUT_MS` | container | no (default 30000) | Postgres `statement_timeout`: aborts a runaway query instead of holding a connection (and a lock) forever. |
-| `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` | container | no (default 30000) | Postgres `idle_in_transaction_session_timeout`: reclaims a connection stuck mid-transaction (a crashed handler between `BEGIN` and `COMMIT`/`ROLLBACK`). |
-| `SSE_MAX_CONNECTIONS_GLOBAL` | container | no (default 2000) | **api only** (worker has no SSE). Total concurrent SSE connections this process accepts before rejecting new `subscribe()` calls with `429`. A generous safety net against a runaway reconnect loop, not a tight production cap. |
-| `SSE_MAX_CONNECTIONS_PER_TOPIC` | container | no (default 500) | **api only**. Same budget, scoped to one topic (e.g. `queue`, `public-tv`). |
-| `SSE_MAX_CONNECTIONS_PER_CLIENT` | container | no (default 20) | **api only**. Same budget, scoped to one client (`user:<id>` when authenticated, else caller IP). |
-| `SSE_WRITE_TIMEOUT_MS` | container | no (default 5000) | **api only**. How long a backpressured SSE client (its socket buffer full, `write()` returned `false`) has to drain before it's disconnected — bounds memory growth from a slow/stalled client instead of buffering indefinitely. |
-| `RATE_LIMIT_SCAN_MAX`, `RATE_LIMIT_SCAN_WINDOW_SECONDS` | container | no (default 120/60s) | Shared per-staff-user rate limit (#538) across check-in, check-in-user, rotate, remove and presence-scan. Tune upward for a big event's expected scan-throughput; see `docs/rate-limiting.md`. |
-| `RATE_LIMIT_MEAL_BATCH_MAX`, `RATE_LIMIT_MEAL_BATCH_WINDOW_SECONDS` | container | no (default 60/60s) | Per-staff-user rate limit (#538) on `POST /api/activities/:id/meal-scans/batch`, counted per request (each batch carries up to 100 scans) so it doesn't break offline-device replay bursts. |
-| `RATE_LIMIT_SNAPSHOT_MAX`, `RATE_LIMIT_SNAPSHOT_WINDOW_SECONDS` | container | no (default 20/60s) | Per-staff-user rate limit (#538) on `GET /api/scanner/snapshot`, the full-roster poll offline scanners use to refresh. |
-| `S3_ACCESS_KEY`, `S3_SECRET_KEY` | container | yes | Credentials the API signs S3 requests with (uploads, presigned downloads, sponsor logos). Either the MinIO root pair or a scoped service account with the same permissions. |
-| `S3_BUCKET` | container | no | Bucket the API reads/writes (default `hackos`). Must match what `minio-init` provisioned. |
-| `S3_PUBLIC_URL` | container | no | The **browser-reachable** base URL objects are served from. Without it, stored file/logo URLs default to the internal `http://minio:9000` host, which the browser can't resolve — logos silently fail to load even though the upload itself succeeded. Only the `enterprises/` prefix (sponsor logos) is ever public; application uploads stay private behind the API's presigned-download route. |
-| `MAIL_PROVIDER` | container | no | Which outbound mail adapter to use: `smtp` \| `resend` \| `postal` (default `smtp`). This is a deploy-time choice, not a runtime DB setting — DELTA(H52) in `src/config.ts` explains why. Switching providers means changing this var and redeploying. |
-| `MAIL_FROM_ADDRESS` | container | yes | The `From:` address on every outbound email (verification, reset, notifications). Most providers reject sends if this isn't a domain you've verified with them. |
-| `MAIL_FROM_NAME` | container | no | Display name alongside the from-address (default `hackOS`). |
-| `RESEND_API_KEY` / `POSTAL_URL` + `POSTAL_API_KEY` / `SMTP_HOST` + `SMTP_PORT` + `SMTP_USER` + `SMTP_PASS` | container | depends on `MAIL_PROVIDER` | Fill only the block matching your chosen provider; the others are ignored. Local dev's default (`smtp` against Mailpit) needs no credentials at all. |
-| `MAIL_FOOTER_TEXT`, `MAIL_LAYOUT_*` (brand name, header text/subtext, logo URL, accent/bg/card/text/border colors, card radius, max width) | container | no | Cosmetic theming for the HTML email wrapper — lets you re-skin transactional emails per event without touching template code. Defaults mirror the web app's own zinc/neutral tokens (`apps/web/src/app/globals.css`) so email reads as the same product out of the box. `MAIL_LAYOUT_LOGO_URL` defaults to the hackOS brand mark served statically from `apps/web/public/email/brand-mark.png` at `WEB_URL` — override with your own browser-reachable PNG/JPEG (SVG isn't reliably supported by mail clients), or set it to `""` to fall back to the plain-text header. Every email also carries a hidden preheader (derived from the body) so inbox previews show something useful instead of boilerplate. |
-| `APPLE_PASS_TYPE_IDENTIFIER`, `APPLE_TEAM_IDENTIFIER`, `APPLE_PASS_ORGANIZATION`, `APPLE_PASS_CERTIFICATE_PEM`, `APPLE_PASS_KEY_PEM`, `APPLE_PASS_KEY_PASSPHRASE`, `APPLE_WWDR_CERTIFICATE_PEM`, `APPLE_APNS_ENVIRONMENT`, `APPLE_PASS_APP_STORE_ID` | container | no, but all-or-nothing | Apple Wallet badge passes (H28). Leaving the whole block unset is fine — `/api/me/wallet/apple` just returns a clear `503`. Setting *some but not all* of the required ones fails loudly at boot instead of silently serving a broken `.pkpass`. See `deploy/README.md#wallet-passes-h28` for how to obtain each value. |
-| `GOOGLE_WALLET_ISSUER_ID`, `GOOGLE_WALLET_EVENT_TICKET_CLASS_ID`, `GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_WALLET_PRIVATE_KEY_PEM` | container | no, but the signing block is all-or-nothing | Google Wallet issuer ID plus the exact approved Event Ticket class ID from Pay & Wallet Console. Event-ticket JWTs use the `WEB_URL` origin for their required `origins` claim; the service account signs RS256 JWTs and patches event-ticket classes/objects for updates and expiry. |
-| `GOOGLE_WALLET_LOGO_URL`, `GOOGLE_WALLET_HERO_IMAGE_URL`, `GOOGLE_WALLET_WIDE_LOGO_URL`, `GOOGLE_WALLET_BACKGROUND_COLOR` | container | no | Optional Event Ticket branding. The image URLs must be public HTTPS URLs. Use a square PNG of at least 660×660 for the logo, a roughly 1032×812 PNG for the hero image, and a transparent 16:5 PNG for the wide logo. The background is a non-vibrant `#rrggbb` color and is sent by the backend on every class refresh. |
-| `TRANSLATE_PROVIDER` | container | no (default `google`) | Which H50 auto-translate backend to use: `google` (Google Cloud Translation v2, needs `GOOGLE_TRANSLATE_API_KEY`) or `libretranslate` (self-hosted, needs `LIBRETRANSLATE_URL`). Whichever provider is missing its credentials reports unavailable — every translation surface (API and both frontends) keeps working with manual-only entry; the `/api/announcements/translate*` routes report unavailable / 503 instead of failing loudly. See `modules/notifications/translate/` for the isolated provider boundary. |
-| `GOOGLE_TRANSLATE_API_KEY` | container | only if `TRANSLATE_PROVIDER=google` | Google Cloud Translation v2 API key. |
-| `LIBRETRANSLATE_URL` / `LIBRETRANSLATE_API_KEY` | container | URL required if `TRANSLATE_PROVIDER=libretranslate`, key optional | Base URL of a self-hosted LibreTranslate instance (e.g. `https://translate.example.org`) and its API key, if the instance requires one. |
-| `STACK_NAME` | compose-level | no (default) | Namespaces this instance's Traefik router names (`${STACK_NAME}-api`) and public proxy-network DNS aliases, so multiple hackOS instances/Environments can share one Traefik network without collisions. |
-| `PROXY_NETWORK` | compose-level | no (default `dokploy-network`) | The Traefik-managed edge network `api` and `web` join to receive public traffic. The single-stack worker may also join it for outbound egress, but has no router. |
-| `CERT_RESOLVER` | compose-level | no (default `letsencrypt`) | Which Traefik ACME resolver issues the TLS certificates for the `API_DOMAIN` and `WEB_DOMAIN` routers. |
-| `IMAGE_REPO`, `IMAGE_TAG` | compose-level | yes for a deployed environment | API image and tag pulled by both `migrate`/`api` and `worker`. CI builds after a merge to `staging` or `main`. Use `staging` for development, `main` for production, or a SHA tag for a rollback. Never use `:latest`. |
-| `API_MEM_LIMIT` | compose-level | no | Memory cap, default `512m`. |
-| `INSTANCE_NETWORK` | compose-level | no | Private network joined to reach postgres/valkey/minio by name. |
-
-## worker
-
-Same image as `api`, running `node dist/worker.js` instead of `dist/server.js`
-— no HTTP listener or Traefik router. In the per-service deployment it stays on
-the instance bridge; in the single-stack deployment it also joins the edge
-network so outbound mail/push traffic has a route. `WEB_URL` is generated from
-the compose-level `WEB_DOMAIN`: the worker renders transactional email HTML,
-including the browser-reachable brand mark, before sending it. It does not serve
-a browser or generate browser links itself. The per-service worker compose
-passes the shared database, storage, mail, wallet, and pool settings; API-only
-SSE and scanner-rate-limit settings are not needed. The single-stack compose
-reuses the shared app anchor, so harmless API-only values may be present there.
-
-| Variable | Kind | Required | What it does |
-|---|---|---|---|
-| `WORKERS_INLINE` | container | fixed `false` | Baked into the compose file, not user-configurable here. In dev this flag runs BullMQ workers inside the API process; in this deployment it's forced off because the worker container *is* the dedicated process — see `docs/background-workers.md`. |
-| `LOG_EXPO_PUSH_TICKETS` | container | no (default `false`) | **worker**. Same redacted Expo ticket logging switch as the API; this is the process that sends pushes in production. Enable only while investigating delivery. |
-| `LOG_EXPO_PUSH_UNSAFE_DEBUG` | container | no (default `false`) | **worker**. Same explicitly unsafe full-debug switch as the API; logs complete push tokens, payloads, requests/responses, receipts, user IDs, and ticket details. Enable only briefly while investigating delivery, then disable and restart. |
-| `WORKER_MEM_LIMIT` | compose-level | no | Memory cap, default `512m`. Bump this if you scale worker replicas for notification/queue throughput (dispatcher uses `SELECT ... FOR UPDATE SKIP LOCKED`, so replicas don't double-send). |
-| `NOTIFICATION_OUTBOX_BATCH_SIZE` | container | no | Rows the outbox dispatcher claims per 5s tick, default `100` — each row dispatched and committed in its own transaction, so raising this doesn't grow the duplicate-send risk of a mid-batch crash. Only the `worker` container's value matters in production (it's the one running the dispatcher). See `docs/big-event-readiness.md`. |
-
-The worker must use the same `DATABASE_URL`/`VALKEY_URL` inputs,
-`BETTER_AUTH_SECRET`, S3 block, mail block, wallet blocks, and `DB_*`
-pool/timeout values as `api`: it sends the emails and wallet-pass updates that
-`api` only queues, and it holds its own `pg` pool sized by the same
-`DB_POOL_MAX` math. The `SSE_*` vars are not applicable to the worker because it
-has no HTTP listener.
+The API and worker join `private` for database/cache/storage traffic and
+`egress` for external providers. The API publishes port `3000` through
+`API_PUBLISH_PORT`; the worker has no host port. `migrate` is one-shot and has
+no host port.
 
 ## web
 
-The web service receives its public domains at runtime and serves them through
-`/runtime-config.js`. This keeps the image environment-neutral, so a release
-branch and its later deployment can use the same image digest.
+The web image is environment-neutral. It reads `API_DOMAIN` and `WEB_DOMAIN`
+at runtime and serves `/runtime-config.js`.
 
 | Variable | Kind | Required | What it does |
 |---|---|---|---|
-| `API_DOMAIN` | compose-level | yes | The API router's public host. The running web server exposes it through `/runtime-config.js` as the browser's API origin, so changing it does not require a new image build. |
-| `WEB_DOMAIN` | compose-level | yes | The `Host()` rule for this service's **own** Traefik router — deliberately separate from `API_DOMAIN`'s router. The running web server also uses it for canonical/social URLs through `/runtime-config.js`. |
-| `STACK_NAME`, `PROXY_NETWORK`, `CERT_RESOLVER` | compose-level | no (defaults) | Same Traefik-naming role as on `api`. |
-| `WEB_IMAGE_REPO`, `IMAGE_TAG` | compose-level | yes for a deployed environment | Web image/tag pulled from GHCR. CI builds after a merge to `staging` or `main`. Use `staging` for development, `main` for production, or a SHA tag for a rollback. Never use `:latest`. |
-| `WEB_MEM_LIMIT` | compose-level | no | Memory cap, default `256m`. |
+| `WEB_IMAGE_REPO` | Compose-level | yes | GHCR repository for the web image, for example `ghcr.io/danicallero/hackos-web`. |
+| `IMAGE_TAG` | Compose-level | yes | The same immutable SHA tag used by API and worker. |
+| `API_DOMAIN` | Container | yes | Browser API origin exposed by `/runtime-config.js`. |
+| `WEB_DOMAIN` | Container | yes | Canonical web origin exposed by `/runtime-config.js`. |
+| `WEB_PUBLISH_PORT` | Compose-level | no | LXC host port mapped to web port `3001`, default `3001`; GPULux's proxy routes `WEB_DOMAIN` here. |
+| `WEB_MEM_LIMIT` | Compose-level | no | Web memory limit, default `256m`. |
 
-Remember to add `https://${WEB_DOMAIN}` to the **api**'s `CORS_ORIGINS` —
-`web` has no server-side config that wires this for you; it's a one-way
-dependency the api side has to know about.
+The web service has no private datastore access. It publishes only its HTTP
+port; it does not expose Docker's Remote API.
 
-## Centralizing values with Dokploy's Project/Environment variables
+## GitHub Actions and GPULux
 
-Dokploy has three nested scopes for variables, and it's worth using the
-built-in ones instead of pasting the same secret into six separate service
-screens:
+`.github/workflows/build.yml` publishes branch and immutable SHA tags for both
+images. It builds `linux/amd64` and `linux/arm64` and never publishes
+`latest`.
 
-```
-Project  (one hackOS instance, e.g. "hackos-event2026")
-└── Environment  (e.g. "production", plus optional isolated environments)
-    └── Service  (postgres, valkey, minio, api, worker, web)
-```
+`.github/workflows/deploy-gpulux.yml` is manual and accepts only
+`production`/`staging` plus a `sha-<40 lowercase hex characters>` tag. The
+matching GitHub Actions Environment supplies approval protection, not
+application secrets. The workflow runs only on the GPULux self-hosted runner,
+transfers the Compose/script with Incus and executes the rollout in `hackos`.
 
-- **Project variables** — set once on the Project, referenced from any
-  service anywhere inside it with `${{project.VARIABLE_NAME}}`.
-- **Environment variables** — set once on an Environment (a project can have
-  several, e.g. production and an optional verification environment),
-  referenced with
-  `${{environment.VARIABLE_NAME}}`.
-- **Service variables** — a service's own box, referenced with
-  `${{VARIABLE_NAME}}` (no prefix), and able to override anything from the
-  scopes above.
+The `setup-gh-runner` block in `gpul-org/infra` is currently commented out, so
+the runner must be provisioned and registered before deployments can start.
+The workflow does not fall back to a hosted runner.
 
-**The important caveat: none of this is automatic.** Setting a value on the
-Project or Environment tab does *not* inject it into every service's
-container — Dokploy only resolves the `${{project....}}`/`${{environment....}}`
-template if a service's own Environment Variables box actually contains that
-reference. Each service still needs one line per variable it uses; what
-changes is whether that line is a literal secret (duplicated N times, drifts
-silently when rotated) or a thin reference to one real value (rotate once,
-every service picks it up on next deploy).
+See [`deploy/README.md`](../deploy/README.md) for the secret-file contract,
+lock and health gates, GHCR authentication on the LXC, rollback and the rule
+that image rollback does not automatically revert database migrations.
 
-Since hackOS already treats **one Dokploy project = one hackathon instance**
-(see [Multiple instances](../deploy/README.md#multiple-instances)),
-**Environment variables are the natural home** for everything in the "read by
-two or more services" tables above. A production Environment and any optional
-verification Environment can live in the same project while keeping their
-domains, secrets, volumes, and private networks separate. Project-level works
-too for values that are intentionally identical across environments; be
-explicit about which values are shared and which are environment-specific.
+## Cross-checking against the Compose file
 
-**Recipe:**
-
-1. Generate separate secrets for each Dokploy Environment
-   (`deploy/scripts/gen-secrets.sh`) and paste the resulting `KEY=value` pairs
-   into that Environment's variables tab, plus the non-secret shared values
-   from `deploy/.env.shared.example`. Do not reuse database, auth, storage, or
-   signing secrets between separately deployed hackOS environments.
-2. For each service, copy the matching file straight into that service's own
-   Environment Variables box in Dokploy — these are checked into the repo so
-   there's nothing to write by hand or keep in sync manually:
-
-   - [`deploy/services/postgres/dokploy.env.example`](../deploy/services/postgres/dokploy.env.example)
-   - [`deploy/services/valkey/dokploy.env.example`](../deploy/services/valkey/dokploy.env.example)
-   - [`deploy/services/minio/dokploy.env.example`](../deploy/services/minio/dokploy.env.example)
-   - [`deploy/services/api/dokploy.env.example`](../deploy/services/api/dokploy.env.example)
-   - [`deploy/services/worker/dokploy.env.example`](../deploy/services/worker/dokploy.env.example)
-   - [`deploy/services/web/dokploy.env.example`](../deploy/services/web/dokploy.env.example)
-
-   Each already lists exactly the variables that service's table above marks
-   `compose-level` / `container`, as `${{environment.VAR}}` references; the
-   optional/service-only ones are included commented-out so you can uncomment
-   only what you actually need instead of hunting through this doc.
-3. Leave the genuinely **service-only** vars (`PG_MEM_LIMIT`,
-   `MINIO_BROWSER`, `API_MEM_LIMIT`, etc. — the commented-out lines in each
-   file) as plain literals directly in that one service's box if you want to
-   override a default. Routing a value nobody else reads through
-   Project/Environment buys nothing.
-
-This doesn't remove the "add a line per service" step — Dokploy has no
-project-wide auto-injection — but it does mean rotating `POSTGRES_PASSWORD` or
-`BETTER_AUTH_SECRET` is one edit in one place instead of hunting through six
-service screens for every place the old value was pasted.
-
-### GitHub Actions release environments
-
-`.github/workflows/cd.yml` uses the `production` GitHub Actions Environment for
-the main deploy and the optional `staging` Environment for a staging deploy.
-A merge into `staging` builds and publishes its images and deploys the staging
-services. A merge into `main` independently builds and publishes production
-images and deploys production. Neither branch builds images from a PR event.
-
-If the staging route is enabled, add these values to the GitHub Actions
-Environment named `staging`:
-
-- `DOKPLOY_STAGING_API_DEPLOY_WEBHOOK`,
-  `DOKPLOY_STAGING_WORKER_DEPLOY_WEBHOOK`, and
-  `DOKPLOY_STAGING_WEB_DEPLOY_WEBHOOK` — the three matching staging Dokploy
-  Environment webhooks. They are deliberately distinct from the production
-  names so missing staging configuration cannot use production webhooks.
-
-Keep `TS_OAUTH_CLIENT_ID` and `TS_AUDIENCE` as repository Actions secrets. The
-production webhook secrets remain repository-level. The optional staging
-Environment needs separate webhook targets and its own Dokploy
-`API_DOMAIN`, `WEB_DOMAIN`, `STACK_NAME`, `INSTANCE_NETWORK`, secrets, and
-`IMAGE_TAG=staging`; the production service uses `IMAGE_TAG=main`. The web
-service reads domains at runtime, so the same image digest is valid in either
-deployment.
-
-The release branches remain independent: a `main` merge selects the
-`production` Actions Environment and never updates `staging`; a `staging` merge
-selects the `staging` Environment. To intentionally bring production changes
-into staging, open and merge a normal `main` → `staging` pull request. Do not
-push one protected branch's ref over the other.
-
-### Not using Dokploy? Nothing here changes the fallback path
-
-The `${{environment.VAR}}` / `${{project.VAR}}` syntax lives **only** inside
-Dokploy's own "Environment Variables" text box per service — it is Dokploy's
-own template language, resolved by Dokploy's deploy runner before it ever
-touches Docker. It never appears in `docker-compose.yml` itself, which reads
-plain shell-style `${VAR}` exactly as it always has. That means:
-
-- **On Dokploy**: paste a `dokploy.env.example` file into each service's box;
-  Dokploy resolves the `${{environment.X}}` references into real values and
-  writes a plain `KEY=value` `.env` for `docker compose` to substitute from.
-- **Not on Dokploy** (plain `docker compose`, Mode B, or a non-Dokploy host):
-  ignore the `dokploy.env.example` files entirely. Use a literal `.env` —
-  `deploy/.env.shared.example` + `deploy/.env.instance.example` (Mode B), or a
-  plain `.env` file per service for Mode A run by hand
-  (`docker compose --env-file .env -f deploy/services/api/docker-compose.yml up -d`).
-  The compose files themselves never branch on "is this Dokploy or not" —
-  there's exactly one `${VAR}` substitution mechanism, and both paths just
-  feed it a flat list of real values by different means.
-
-In short: the fallback isn't something to build, it already exists, because
-the two mechanisms were never coupled in the first place — only the *source*
-of the values changes.
-
-## Cross-checking against the compose files
-
-If any of this drifts from reality, the compose files are the ground truth —
-diff this doc against:
+If this document drifts from reality, the canonical Compose file is the ground
+truth:
 
 ```sh
-grep -n '\${' deploy/services/*/docker-compose.yml
+grep -n '\${' deploy/docker-compose.yml
 ```

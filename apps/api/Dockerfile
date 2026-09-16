@@ -19,7 +19,7 @@ COPY patches ./patches
 COPY packages ./packages
 COPY apps/api/package.json ./apps/api/
 # Cache pnpm store across builds — avoids re-downloading all packages each time.
-# Dokploy runs on a single-architecture host (arm64), so a plain cache ID is fine.
+# The release workflow publishes this image for GPULux's amd64 host and arm64.
 ENV PNPM_HOME=/root/.local/share/pnpm
 RUN --mount=type=cache,id=pnpm-store,target=${PNPM_HOME}/store/v10 \
     pnpm install --frozen-lockfile --filter @hackos/api...
@@ -55,8 +55,8 @@ USER node
 
 EXPOSE 3000
 
-# Liveness: the API's own /healthz pings Postgres + Valkey. Orchestrators
-# (Dokploy/Traefik) use this to gate traffic and restarts.
+# Liveness: the API's own /healthz pings Postgres + Valkey. The GPULux proxy
+# and Compose health gate use this to check liveness.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
   CMD wget -qO- http://127.0.0.1:3000/healthz || exit 1
 

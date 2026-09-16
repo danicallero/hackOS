@@ -134,9 +134,9 @@ Frontend (web & mobile):
 
 Deployment:
 
-- [Environment variables per service](./env-vars.md) — for each container in
-  an isolated deploy (`deploy/services/*`), exactly which env vars it needs and
-  whether they're read at container start or baked in at build time.
+- [Environment variables per service](./env-vars.md) — the variables consumed by
+  the canonical GPULux Compose project, including which values are read at
+  container start or baked into an image at build time.
 - [Big-event readiness](./big-event-readiness.md) — the concrete pre-event
   checklist for ~600 concurrent users: what to set (`DB_POOL_MAX`, memory
   limits, replica counts), the Postgres connection budget arithmetic, load
@@ -153,5 +153,5 @@ See also the root [`README.md`](../README.md) for local dev setup, the API's
 own `/documentation` (Swagger UI, generated from route schemas — not a file in
 this folder), [`apps/web/README.md`](../apps/web/README.md) for web frontend
 conventions and the component library, and
-[`deploy/README.md`](../deploy/README.md) for the full deployment story
-(networking, secrets, Dokploy modes).
+[`deploy/README.md`](../deploy/README.md) for the full GPULux deployment story
+(networking, secrets, Incus runner and rollback).

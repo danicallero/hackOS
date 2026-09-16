@@ -6,7 +6,7 @@ busy, and chooses which waiting request runs next. This is a resilience and
 latency policy (H8, H540, #544), not an authorization mechanism: capability
 guards still decide whether the request is allowed to perform the operation.
 
-The scheduler is local to one API process. Traefik may distribute requests
+The scheduler is local to one API process. The GPULux proxy may distribute requests
 across API replicas, but replicas do not share an admission queue.
 
 ## The decision order
