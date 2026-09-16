@@ -12,7 +12,7 @@ import { apiFetch } from "@/lib/api";
 import { signIn, signOut } from "@/lib/auth-client";
 import { EVENT_WEBSITE_DISPLAY, EVENT_WEBSITE_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
-import { useMeContext } from "@/lib/me-context";
+import { useMeActions } from "@/lib/me-context";
 import {
   type AccountRemovalProgress,
   clearAccountRemovalProgress,
@@ -25,7 +25,7 @@ export default function SignInScreen() {
   const router = useRouter();
   const { accessDenied } = useLocalSearchParams<{ accessDenied?: string }>();
   const { t } = useLocale();
-  const { refetch } = useMeContext();
+  const { refetch } = useMeActions();
   const emailRef = useRef<AuthCredentialFieldHandle>(null);
   const passwordRef = useRef<AuthCredentialFieldHandle>(null);
   const [email, setEmail] = useState("");
@@ -124,6 +124,7 @@ export default function SignInScreen() {
 
   return (
     <AuthScreen
+      scrollable={false}
       footer={
         <View style={{ alignItems: "center", gap: 4 }}>
           <Text

@@ -51,7 +51,7 @@ export default function ResetPasswordScreen() {
 
   if (updated) {
     return (
-      <AuthScreen>
+      <AuthScreen scrollable={false}>
         <AuthHeader
           align="leading"
           context="hackOS"
@@ -65,6 +65,7 @@ export default function ResetPasswordScreen() {
 
   return (
     <AuthScreen
+      scrollable={false}
       footer={
         <Pressable
           accessibilityRole="link"

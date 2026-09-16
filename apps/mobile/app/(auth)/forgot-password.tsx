@@ -45,7 +45,7 @@ export default function ForgotPasswordScreen() {
 
   if (sent) {
     return (
-      <AuthScreen>
+      <AuthScreen scrollable={false}>
         <AuthHeader
           align="leading"
           context="hackOS"
@@ -59,6 +59,7 @@ export default function ForgotPasswordScreen() {
 
   return (
     <AuthScreen
+      scrollable={false}
       footer={
         <Pressable
           accessibilityRole="link"

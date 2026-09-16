@@ -1,7 +1,7 @@
 import { type ReactNode, type RefObject, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
+  Keyboard,
   Pressable,
   ScrollView,
   Text,
@@ -27,39 +27,33 @@ export function AuthScreen({
   if (!scrollable) {
     return (
       <SafeAreaView style={{ backgroundColor: colors.background, flex: 1 }}>
-        <KeyboardAvoidingView
-          behavior={process.env.EXPO_OS === "ios" ? "padding" : undefined}
-          style={{ flex: 1 }}
+        <View
+          onResponderRelease={Keyboard.dismiss}
+          onStartShouldSetResponder={(event) => event.target === event.currentTarget}
+          style={{
+            alignSelf: "center",
+            flex: 1,
+            maxWidth: 440,
+            paddingBottom: 16,
+            paddingHorizontal: 24,
+            paddingTop: 56,
+            width: "100%",
+          }}
         >
-          <View
-            style={{
-              alignSelf: "center",
-              flex: 1,
-              gap: 28,
-              justifyContent: "center",
-              maxWidth: 440,
-              paddingHorizontal: 24,
-              paddingVertical: 24,
-              width: "100%",
-            }}
-          >
-            {children}
-          </View>
-        </KeyboardAvoidingView>
-        {footer ? (
-          <View
-            style={{
-              alignSelf: "center",
-              maxWidth: 440,
-              paddingBottom: 16,
-              paddingHorizontal: 24,
-              paddingTop: 8,
-              width: "100%",
-            }}
-          >
-            {footer}
-          </View>
-        ) : null}
+          <View style={{ gap: 24 }}>{children}</View>
+          {footer ? (
+            <View
+              style={{
+                borderTopColor: colors.separator,
+                borderTopWidth: 1,
+                marginTop: "auto",
+                paddingTop: 14,
+              }}
+            >
+              {footer}
+            </View>
+          ) : null}
+        </View>
       </SafeAreaView>
     );
   }
