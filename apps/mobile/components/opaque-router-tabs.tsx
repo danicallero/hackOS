@@ -153,7 +153,7 @@ export function OpaqueRouterTabs({
     : systemColorScheme === "dark"
       ? "dark"
       : "light";
-  const tabIconColor = fallbackColorScheme === "dark" ? "#98989e" : "#6c6c70";
+  const tabIconColor = fallbackColorScheme === "dark" ? "#ffffff" : "#6c6c70";
   const tabSelectedColor = fallbackColorScheme === "dark" ? "#0a84ff" : "#007aff";
   const personalTabContext = { hasQueueItems };
   const primaryTabKeys = primaryTabs(capabilities, personalTabContext);
@@ -201,7 +201,7 @@ export function OpaqueRouterTabs({
   const fallbackTheme: Partial<RouterTabsTheme> =
     fallbackColorScheme === "dark"
       ? {
-          label: "#98989e",
+          label: "#ffffff",
           selectedLabel: "#0a84ff",
           selectedSurface: "#2c2c2e",
           surface: "#1c1c1e",
@@ -234,7 +234,7 @@ export function OpaqueRouterTabs({
       tabs={tabs}
       testID="opaque-router-tabs"
       theme={{
-        label: colors.secondaryLabel,
+        label: fallbackColorScheme === "dark" ? "#ffffff" : colors.secondaryLabel,
         selectedLabel: colors.accent,
         selectedSurface: colors.accentSurface,
         shadow: colors.controlShadow,
