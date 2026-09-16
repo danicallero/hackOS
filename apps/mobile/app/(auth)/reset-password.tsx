@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useRef, useState } from "react";
-import { Pressable, Text, type TextInput, useWindowDimensions, View } from "react-native";
+import { Pressable, Text, type TextInput, View } from "react-native";
 
 import { AuthAlert, AuthButton, AuthField, AuthHeader, AuthScreen } from "@/components/auth-ui";
 import { authClient } from "@/lib/auth-client";
@@ -11,7 +11,6 @@ export default function ResetPasswordScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ token?: string; error?: string }>();
   const { t } = useLocale();
-  const { fontScale } = useWindowDimensions();
   const passwordRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
   const token = typeof params.token === "string" ? params.token : null;
@@ -52,7 +51,7 @@ export default function ResetPasswordScreen() {
 
   if (updated) {
     return (
-      <AuthScreen scrollable={fontScale > 1.3}>
+      <AuthScreen scrollable={false}>
         <AuthHeader
           align="leading"
           context="hackOS"
@@ -66,7 +65,7 @@ export default function ResetPasswordScreen() {
 
   return (
     <AuthScreen
-      scrollable={fontScale > 1.3}
+      scrollable={false}
       footer={
         <Pressable
           accessibilityRole="link"

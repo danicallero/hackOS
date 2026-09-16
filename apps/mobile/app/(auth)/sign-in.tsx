@@ -1,7 +1,7 @@
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Linking, Pressable, Text, useWindowDimensions, View } from "react-native";
+import { Alert, AppState, Linking, Pressable, Text, View } from "react-native";
 
 import {
   AuthCredentialField,
@@ -12,7 +12,7 @@ import { apiFetch } from "@/lib/api";
 import { signIn, signOut } from "@/lib/auth-client";
 import { EVENT_WEBSITE_DISPLAY, EVENT_WEBSITE_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
-import { useMeContext } from "@/lib/me-context";
+import { useMeActions } from "@/lib/me-context";
 import {
   type AccountRemovalProgress,
   clearAccountRemovalProgress,
@@ -25,10 +25,10 @@ export default function SignInScreen() {
   const router = useRouter();
   const { accessDenied } = useLocalSearchParams<{ accessDenied?: string }>();
   const { t } = useLocale();
-  const { refetch } = useMeContext();
-  const { fontScale } = useWindowDimensions();
+  const { refetch } = useMeActions();
   const emailRef = useRef<AuthCredentialFieldHandle>(null);
   const passwordRef = useRef<AuthCredentialFieldHandle>(null);
+  const focusedFieldRef = useRef<"email" | "password" | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -45,6 +45,32 @@ export default function SignInScreen() {
     });
     return () => {
       active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let appState = AppState.currentState;
+    let restoreField: "email" | "password" | null = null;
+    let restoreTimeout: ReturnType<typeof setTimeout> | null = null;
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (appState === "active" && nextState.match(/inactive|background/)) {
+        restoreField = focusedFieldRef.current;
+      }
+      if (appState.match(/inactive|background/) && nextState === "active" && restoreField) {
+        const field = restoreField;
+        // Passwords/Face ID returns focus before its native transition has
+        // completely settled. Reassert the field the user initiated from so a
+        // late AutoFill event cannot leave focus on the email input.
+        restoreTimeout = setTimeout(() => {
+          if (field === "email") emailRef.current?.focus();
+          else passwordRef.current?.focus();
+        }, 250);
+      }
+      appState = nextState;
+    });
+    return () => {
+      subscription.remove();
+      if (restoreTimeout) clearTimeout(restoreTimeout);
     };
   }, []);
 
@@ -125,7 +151,7 @@ export default function SignInScreen() {
 
   return (
     <AuthScreen
-      scrollable={fontScale > 1.3}
+      scrollable={false}
       footer={
         <View style={{ alignItems: "center", gap: 4 }}>
           <Text
@@ -237,6 +263,9 @@ export default function SignInScreen() {
             label={t("emailLabel")}
             error={emailError}
             keyboardType="email-address"
+            onFocus={() => {
+              focusedFieldRef.current = "email";
+            }}
             returnKeyType="next"
             onChangeText={(value) => {
               setEmail(value);
@@ -254,6 +283,9 @@ export default function SignInScreen() {
             hidePasswordLabel={t("hidePassword")}
             returnKeyType="go"
             secureTextEntry
+            onFocus={() => {
+              focusedFieldRef.current = "password";
+            }}
             onChangeText={(value) => {
               setPassword(value);
               if (passwordError) setPasswordError(null);
