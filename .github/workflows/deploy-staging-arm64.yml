@@ -12,10 +12,10 @@ on:
         required: true
       TS_AUDIENCE:
         required: true
-      STAGING_SSH_PRIVATE_KEY:
-        required: false
-      STAGING_SSH_KNOWN_HOSTS:
-        required: false
+      STAGING_CD_SSH_PRIVATE_KEY:
+        required: true
+      STAGING_CD_SSH_KNOWN_HOSTS:
+        required: true
   workflow_dispatch:
     inputs:
       tag:
@@ -83,13 +83,13 @@ jobs:
 
       - name: Configure SSH trust
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
+          SSH_PRIVATE_KEY: ${{ secrets.STAGING_CD_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.STAGING_CD_SSH_KNOWN_HOSTS }}
         shell: bash
         run: |
           set -euo pipefail
-          [[ -n "$SSH_PRIVATE_KEY" ]] || { echo "STAGING_SSH_PRIVATE_KEY is missing." >&2; exit 1; }
-          [[ -n "$SSH_KNOWN_HOSTS" ]] || { echo "STAGING_SSH_KNOWN_HOSTS is missing." >&2; exit 1; }
+          [[ -n "$SSH_PRIVATE_KEY" ]] || { echo "The staging CD SSH private key is missing." >&2; exit 1; }
+          [[ -n "$SSH_KNOWN_HOSTS" ]] || { echo "The staging CD SSH known-hosts entry is missing." >&2; exit 1; }
 
           key_file="$RUNNER_TEMP/hackos-staging-ssh-key"
           known_hosts_file="$RUNNER_TEMP/hackos-staging-known-hosts"
