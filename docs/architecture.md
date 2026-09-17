@@ -26,8 +26,8 @@ with one platform:
 
 At runtime that becomes one multi-architecture Compose project with seven
 application/runtime services plus the idempotent `minio-init` helper. The same
-pre-built SHA image is used by staging on the home Raspberry Pi and production
-inside the `hackos` LXC:
+pre-built SHA image is used by ARM64 staging and Linux/x86_64 production inside
+an isolated LXC:
 
 ```mermaid
 flowchart TB
@@ -147,10 +147,12 @@ explicit `migrate` process succeeds.
   bucket idempotently and sets prefix policy: **`enterprises/` is anonymously
   readable** (sponsor logos, H44), **`uploads/` is private** (application files,
   H12, served only through the API's owner-or-staff proxied-download route).
-- **Network:** private Compose network, no host ports, `minio:9000`. Console off by
-  default (`MINIO_BROWSER=off`).
+- **Network:** private Compose network, no host ports, `minio:9000`. When the
+  optional shared ingress network is enabled for a host-level tunnel, MinIO
+  joins that network as well so the S3 hostname can resolve `minio:9000`; the
+  console remains off (`MINIO_BROWSER=off`).
 - **Public read path:** production sets
-  `S3_PUBLIC_URL=https://s3.hackudc.com/hackos/`. An external ingress must route
+  `S3_PUBLIC_URL=https://s3.example.org/hackos/`. An external ingress must route
   that hostname to MinIO's S3 API, never to the console. MinIO has no host port
   in this Compose project; private uploads remain behind the API and the
   `enterprises/` prefix is initialized for public logo reads by the storage
@@ -186,7 +188,7 @@ NAT for API, worker and web. This does not create an ingress path to a container
 without a published port.
 
 The `enterprises/` logo prefix is initialized for public reads, and production
-uses `https://s3.hackudc.com/hackos/` as `S3_PUBLIC_URL`. The external ingress
+uses `https://s3.example.org/hackos/` as `S3_PUBLIC_URL`. The external ingress
 must provide the route to MinIO's S3 API; the private `uploads/` prefix is
 served through the API.
 
@@ -426,8 +428,8 @@ it with naive writable replicas.
 
 ## 9. Incus deployment profile
 
-Staging runs the canonical Compose project on the home Raspberry Pi. Production
-runs the same project inside the `hackos` LXC. Both hosts consume the same
+Staging runs the canonical Compose project on an ARM64 host. Production runs
+the same project inside an isolated Linux/x86_64 LXC. Both hosts consume the same
 pre-built `linux/amd64` and `linux/arm64` GHCR images, selected by an immutable
 `sha-<commit>` tag; neither host builds application images.
 
@@ -436,6 +438,12 @@ and proxies the public API and web hostnames to the published ports of the
 `hackos` LXC. `PUBLISH_BIND_ADDRESS`, `API_PUBLISH_PORT` and
 `WEB_PUBLISH_PORT` define that boundary. The Compose project does not own TLS,
 DNS or proxy configuration.
+
+For a host-level tunnel that resolves Docker service names, the optional
+`EDGE_NETWORK_NAME`/`EDGE_NETWORK_EXTERNAL` profile connects `api`, `web`, and
+`minio` to an existing ingress network using their stable service aliases. The
+database and queue store remain private. The default production profile leaves
+this network Compose-owned and uses published ports instead.
 
 The deploy operator supplies `/etc/hackos/hackos.env` and
 `/etc/hackos/hackos.secrets` (or the explicitly supported single chmod-600

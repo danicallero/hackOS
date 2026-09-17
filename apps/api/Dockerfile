@@ -19,8 +19,8 @@ COPY patches ./patches
 COPY packages ./packages
 COPY apps/api/package.json ./apps/api/
 # Cache pnpm store across builds — avoids re-downloading all packages each time.
-# The staging Raspberry Pi is arm64 while production also supports amd64, so a
-# plain cache ID is fine.
+# Staging is arm64 while production also supports amd64, so a plain cache ID is
+# fine.
 ENV PNPM_HOME=/root/.local/share/pnpm
 RUN --mount=type=cache,id=pnpm-store,target=${PNPM_HOME}/store/v10 \
     pnpm install --frozen-lockfile --filter @hackos/api...

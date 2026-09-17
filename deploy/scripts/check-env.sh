@@ -5,7 +5,7 @@
 #   ./deploy/scripts/check-env.sh [config-file] [secrets-file] [image-tag]
 #
 # A single chmod-600 combined file is accepted for compatibility with the
-# current GPULux host. The canonical contract remains two files.
+# current production host. The canonical contract remains two files.
 
 set -euo pipefail
 

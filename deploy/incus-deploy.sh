@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Deploy one immutable hackOS image set inside the hackos LXC.
+# Deploy one immutable hackOS image set on a Docker host. The same script is
+# used by the production Linux/x86_64 LXC and the ARM64 staging host.
 set -Eeuo pipefail
 
 environment="${1:-}"
-image_tag="${2:-}"
+image_tag="${2:-current}"
 
 case "$environment" in
   production|staging) ;;
@@ -12,11 +13,6 @@ case "$environment" in
     exit 2
     ;;
 esac
-
-if [[ ! "$image_tag" =~ ^sha-[0-9a-f]{40}$ ]]; then
-  echo "ERROR: image tag must match sha-<40 lowercase hex characters>" >&2
-  exit 2
-fi
 
 app_dir="${HACKOS_APP_DIR:-/opt/hackos}"
 compose_file="${HACKOS_COMPOSE_FILE:-$app_dir/docker-compose.yml}"
@@ -28,12 +24,25 @@ validator_file="${HACKOS_CHECK_ENV_FILE:-$app_dir/check-env.sh}"
 backup_file="${HACKOS_BACKUP_FILE:-$app_dir/backup-r2.sh}"
 release_root="${HACKOS_RELEASE_DIR:-$app_dir/releases}"
 
+if [[ "$image_tag" == current ]]; then
+  if [[ ! -r "$config_file" ]]; then
+    echo "ERROR: cannot resolve current image tag; configuration file is missing" >&2
+    exit 1
+  fi
+  image_tag="$(awk -F= '$1 == "IMAGE_TAG" { value = $2 } END { print value }' "$config_file")"
+fi
+
+if [[ ! "$image_tag" =~ ^sha-[0-9a-f]{40}$ ]]; then
+  echo "ERROR: image tag must match sha-<40 lowercase hex characters> (or use current)" >&2
+  exit 2
+fi
+
 if [[ ! -f "$compose_file" ]]; then
   echo "ERROR: deployment Compose file is missing" >&2
   exit 1
 fi
 
-# Prefer the canonical two-file contract. The existing GPULux host currently
+# Prefer the canonical two-file contract. The existing production host currently
 # provides one chmod-600 combined file, so accept that shape explicitly until
 # the host-side integration is published. Do not silently accept a lone
 # plaintext configuration file.
@@ -52,7 +61,7 @@ elif [[ -f "$secrets_file" ]]; then
   echo "ERROR: configuration file is missing; a secrets file cannot be used alone" >&2
   exit 1
 else
-  echo "ERROR: /etc/hackos environment files are missing from the LXC" >&2
+  echo "ERROR: /etc/hackos environment files are missing from the deployment host" >&2
   exit 1
 fi
 
@@ -78,11 +87,11 @@ else
 fi
 
 if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
-  echo "ERROR: Docker Compose is not available in the LXC" >&2
+  echo "ERROR: Docker Compose is not available on the deployment host" >&2
   exit 1
 fi
 if ! command -v flock >/dev/null 2>&1; then
-  echo "ERROR: flock is not available in the LXC" >&2
+  echo "ERROR: flock is not available on the deployment host" >&2
   exit 1
 fi
 

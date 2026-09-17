@@ -1,0 +1,148 @@
+name: Deploy staging to ARM64 host
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Immutable GHCR tag, for example sha-<40 lowercase hex characters>
+        required: true
+        type: string
+    secrets:
+      TS_OAUTH_CLIENT_ID:
+        required: true
+      TS_AUDIENCE:
+        required: true
+      STAGING_SSH_PRIVATE_KEY:
+        required: false
+      STAGING_SSH_KNOWN_HOSTS:
+        required: false
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Immutable GHCR tag, for example sha-<40 lowercase hex characters>
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: hackos-staging-arm64
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy hackOS staging to ARM64 host
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: staging
+    env:
+      IMAGE_TAG: ${{ inputs.tag }}
+      SSH_HOST: ${{ vars.STAGING_TAILSCALE_HOST }}
+      SSH_USER: ${{ vars.STAGING_SSH_USER }}
+      SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Validate deployment inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$IMAGE_TAG" =~ ^sha-[0-9a-f]{40}$ ]]; then
+            echo "The deployment tag must match sha-<40 lowercase hex characters>." >&2
+            exit 1
+          fi
+          [[ -n "$SSH_HOST" ]] || { echo "STAGING_TAILSCALE_HOST is missing." >&2; exit 1; }
+          [[ -n "$SSH_USER" ]] || { echo "STAGING_SSH_USER is missing." >&2; exit 1; }
+          echo "Deployment inputs: environment=staging tag=$IMAGE_TAG"
+
+      - name: Select release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_commit="${IMAGE_TAG#sha-}"
+          git fetch --no-tags --depth=1 origin "$release_commit"
+          git checkout --detach "$release_commit"
+          test "$(git rev-parse HEAD)" = "$release_commit"
+          echo "Release source selected: $release_commit"
+
+      - name: Join staging Tailnet
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ secrets.TS_AUDIENCE }}
+          tags: tag:ci
+          ping: ${{ vars.STAGING_TAILSCALE_HOST }}
+
+      - name: Configure SSH trust
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$SSH_PRIVATE_KEY" ]] || { echo "STAGING_SSH_PRIVATE_KEY is missing." >&2; exit 1; }
+          [[ -n "$SSH_KNOWN_HOSTS" ]] || { echo "STAGING_SSH_KNOWN_HOSTS is missing." >&2; exit 1; }
+
+          key_file="$RUNNER_TEMP/hackos-staging-ssh-key"
+          known_hosts_file="$RUNNER_TEMP/hackos-staging-known-hosts"
+          umask 077
+          printf '%s\n' "$SSH_PRIVATE_KEY" >"$key_file"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" >"$known_hosts_file"
+          chmod 600 "$key_file"
+          chmod 644 "$known_hosts_file"
+          {
+            printf 'HACKOS_SSH_KEY_FILE=%s\n' "$key_file"
+            printf 'HACKOS_SSH_KNOWN_HOSTS_FILE=%s\n' "$known_hosts_file"
+          } >>"$GITHUB_ENV"
+
+      - name: Transfer deployment files
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh_port="${SSH_PORT:-22}"
+          archive_name="hackos-release-${GITHUB_RUN_ID}.tar.gz"
+          archive_file="$RUNNER_TEMP/$archive_name"
+          tar -czf "$archive_file" \
+            -C "$GITHUB_WORKSPACE/deploy" \
+            docker-compose.yml incus-deploy.sh \
+            -C "$GITHUB_WORKSPACE/deploy/scripts" \
+            check-env.sh backup-r2.sh
+
+          scp \
+            -i "$HACKOS_SSH_KEY_FILE" \
+            -P "$ssh_port" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HACKOS_SSH_KNOWN_HOSTS_FILE" \
+            "$archive_file" "$SSH_USER@$SSH_HOST:/tmp/$archive_name"
+
+          ssh \
+            -i "$HACKOS_SSH_KEY_FILE" \
+            -p "$ssh_port" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HACKOS_SSH_KNOWN_HOSTS_FILE" \
+            "$SSH_USER@$SSH_HOST" \
+            "set -eu; command -v docker >/dev/null; docker compose version >/dev/null; test \"\$(docker ps --filter name=cloudflared --format '{{.Names}}' | head -n 1)\"; install -d -m 700 /opt/hackos; tar --no-same-owner -xzf /tmp/$archive_name -C /opt/hackos; rm -f /tmp/$archive_name; chmod 700 /opt/hackos/incus-deploy.sh /opt/hackos/check-env.sh /opt/hackos/backup-r2.sh; cp /opt/hackos/incus-deploy.sh /opt/hackos/deploy.sh; chmod 700 /opt/hackos/deploy.sh"
+
+      - name: Deploy on staging host
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh_port="${SSH_PORT:-22}"
+          ssh \
+            -i "$HACKOS_SSH_KEY_FILE" \
+            -p "$ssh_port" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HACKOS_SSH_KNOWN_HOSTS_FILE" \
+            "$SSH_USER@$SSH_HOST" \
+            "env HACKOS_APP_DIR=/opt/hackos /opt/hackos/deploy.sh staging '$IMAGE_TAG'"
