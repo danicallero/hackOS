@@ -19,6 +19,14 @@ configuración no secreta. Por compatibilidad con el LXC preparado localmente,
 permisos `0600`; no es una segunda plantilla ni sustituye al contrato canónico.
 El despliegue no busca `.env` ni `.env.<environment>` dentro de `/opt/hackos`.
 
+La plantilla no secreta está en
+[`deploy/.env.example`](../deploy/.env.example) y la plantilla de nombres de
+secretos en [`deploy/.env.secrets.example`](../deploy/.env.secrets.example).
+Los valores reales se generan y cargan fuera del repositorio. El fichero raíz
+[`.env.example`](../.env.example) es sólo para overrides del API local y
+[`apps/mobile/.env.example`](../apps/mobile/.env.example) contiene únicamente
+valores públicos compilados en la app móvil.
+
 ## Reglas del contrato
 
 | Variable | Ubicación | Obligatoria | Uso |
@@ -33,7 +41,8 @@ El despliegue no busca `.env` ni `.env.<environment>` dentro de `/opt/hackos`.
 | `POSTGRES_USER`, `POSTGRES_DB` | configuración | sí | Identidad y base inicial de PostgreSQL; no son secretos. |
 | `MINIO_ROOT_USER`, `S3_ACCESS_KEY` | configuración | sí | Identificador administrativo de MinIO y nombre de la cuenta de aplicación; sus contraseñas pertenecen al fichero de secretos. |
 | `S3_BUCKET` | configuración | no | Bucket creado por `minio-init`, por defecto `hackos`. |
-| `S3_PUBLIC_URL` | configuración | no | URL HTTPS externa y accesible por navegador para logos públicos. MinIO no publica un puerto. |
+| `S3_REGION` | configuración | no | Región S3 para el cliente SDK; por defecto `us-east-1`. |
+| `S3_PUBLIC_URL` | configuración | sí en producción | URL HTTPS pública de objetos; en producción es `https://s3.hackudc.com/hackos/`. El endpoint lo sirve el ingress S3 externo; Compose no publica MinIO. |
 | `R2_BACKUPS_ENABLED` | configuración | no | `false` por defecto; con `true`, el despliegue ejecuta `backup-r2.sh` antes de `migrate`. |
 | `R2_ENDPOINT`, `R2_BUCKET`, `R2_PREFIX` | configuración | si R2 está activo | Endpoint S3-compatible HTTPS, bucket privado y prefijo para las copias. |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | secreto | si R2 está activo | Credenciales del token R2 limitado al bucket; nunca se pasan a `api`, `worker` ni `web`. |
@@ -47,6 +56,28 @@ El despliegue no busca `.env` ni `.env.<environment>` dentro de `/opt/hackos`.
 El script [`deploy/scripts/check-env.sh`](../deploy/scripts/check-env.sh)
 valida estos valores, evita tags mutables y comprueba los bloques de correo y
 Wallet sin imprimir secretos.
+
+### Variables derivadas o fijadas por Compose
+
+Estas variables pertenecen al esquema del API, pero no se escriben en los
+ficheros de producción porque Compose las fija o las construye desde el
+contrato anterior:
+
+| Variable | Valor en producción | Motivo |
+|---|---|---|
+| `NODE_ENV` | `production` | Fijado en `api`, `worker` y `migrate`. |
+| `WORKERS_INLINE` | `false` | El worker corre en su propio contenedor. |
+| `TRUST_PROXY` | `true` | Caddy termina TLS y reenvía la IP del cliente. |
+| `DATABASE_URL` | `postgres://...@postgres:5432/...` | Construida por Compose; no se duplica en los ficheros. |
+| `VALKEY_URL` | `redis://...@valkey:6379` | Construida por Compose; contiene el secreto de Valkey. |
+| `BETTER_AUTH_URL` | `https://${API_DOMAIN}` | Derivada del hostname público del API. |
+| `WEB_URL` | `https://${WEB_DOMAIN}` | Derivada del hostname público del frontend. |
+| `S3_ENDPOINT` | `http://minio:9000` | Ruta privada del servicio S3 dentro de Compose. |
+| `HOST` | `0.0.0.0` | Default interno del API; no modifica el puerto publicado. |
+| `PORT` | `3000` | Puerto interno fijo del contenedor API. |
+
+`HOST` y `PORT` siguen documentadas aquí porque forman parte del esquema de
+configuración del API, aunque no son variables del contrato operativo del LXC.
 
 ## Variables por proceso
 
@@ -77,10 +108,44 @@ en ningún contenedor de aplicación.
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | `postgres`; Compose para `api`, `worker`, `migrate` | Identidad, contraseña y destino de la base; el usuario y la base están en configuración, la contraseña en secretos, y se convierten en `DATABASE_URL`. |
 | `VALKEY_PASSWORD` | `valkey`; Compose para `api`, `worker` | Se usa en `VALKEY_URL=redis://:<password>@valkey:6379`. Valkey no persiste datos. |
 | `S3_ACCESS_KEY`, `S3_SECRET_KEY` | `minio-init`, `api`, `worker` | El identificador está en configuración y la clave en secretos; `minio-init` crea la cuenta de servicio y la limita al bucket. No es la cuenta root de MinIO. |
-| `S3_ENDPOINT` | `api`, `worker` | Fijo en `http://minio:9000`. |
+| `S3_ENDPOINT` | `api`, `worker` | Fijo en `http://minio:9000`; no debe cambiarse por `s3.hackudc.com`. |
+| `S3_REGION` | `api`, `worker` | Región lógica del cliente S3; `us-east-1` funciona con MinIO. |
 | `S3_BUCKET` | `api`, `worker`, `minio-init` | Debe ser el mismo bucket en los tres procesos; por defecto `hackos`. |
-| `S3_PUBLIC_URL` | `api`, `worker` | Opcional; sólo afecta a URLs públicas de logos. |
+| `S3_PUBLIC_URL` | `api`, `worker` | `https://s3.hackudc.com/hackos/`; sólo se usa para URLs de logos públicos. |
 | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` | `minio`, `minio-init` | Administración de MinIO; no se entrega a API, worker ni web. |
+
+### Bucket público de MinIO y `s3.hackudc.com`
+
+En producción, el API guarda los objetos en el MinIO privado mediante
+`S3_ENDPOINT=http://minio:9000` y devuelve URLs públicas con
+`S3_PUBLIC_URL=https://s3.hackudc.com/hackos/`. Por tanto, un logo con clave
+`enterprises/42/logo-default.png` se sirve en:
+
+```text
+https://s3.hackudc.com/hackos/enterprises/42/logo-default.png
+```
+
+`minio-init` permite lectura anónima sólo bajo `enterprises/`, que contiene
+logos públicos. `uploads/` permanece privado y sólo se descarga mediante el
+API autorizado. No se debe convertir todo el bucket en anónimo porque eso
+expondría ficheros de solicitudes.
+
+El ingress externo debe publicar únicamente la API S3 de MinIO para
+`s3.hackudc.com`; la consola de MinIO no se publica. Conceptualmente, Caddy
+debe hacer:
+
+```caddyfile
+s3.hackudc.com {
+    reverse_proxy <endpoint-de-la-api-s3-de-minio-alcanzable-desde-caddy>:9000
+}
+```
+
+El Compose actual mantiene MinIO sin `ports:`. `S3_PUBLIC_URL` no crea por sí
+solo esa ruta: si Caddy está en otro LXC, la integración de infraestructura
+debe proporcionar un camino privado/revisado hasta la API S3 de MinIO. Hasta
+que exista ese routeo y DNS, las URLs de logos serán correctas pero no
+alcanzables desde el navegador. Esta habilitación queda fuera de este
+repositorio para respetar la regla de no modificar `gpul/infra`.
 
 ### API
 

@@ -49,7 +49,19 @@ api.example.org {
 example.org {
     reverse_proxy <ip-incus-del-lxc-hackos>:3001
 }
+
+# S3_PUBLIC_URL=https://s3.hackudc.com/hackos/
+s3.hackudc.com {
+    reverse_proxy <endpoint-de-la-api-s3-de-minio-alcanzable-desde-caddy>:9000
+}
 ```
+
+La tercera ruta sólo puede apuntar a la API S3 de MinIO, nunca a la consola
+(9001). El Compose mantiene MinIO sin puerto de host; por ello, si Caddy vive
+en otro LXC, infraestructura debe habilitar el camino privado/revisado hasta
+`minio:9000` antes del primer despliegue. `S3_PUBLIC_URL` no abre ese camino.
+El acceso anónimo se limita al prefijo `enterprises/`; las subidas bajo
+`uploads/` siguen siendo privadas y pasan por el API.
 
 Los valores de `API_DOMAIN`, `WEB_DOMAIN` y `CORS_ORIGINS` deben corresponder
 con esos hosts. `API_DOMAIN` y `WEB_DOMAIN` son nombres sin `https://`.
@@ -62,6 +74,8 @@ Cada host mantiene dos ficheros planos fuera del repositorio:
   [`deploy/.env.example`](./.env.example).
 - `/etc/hackos/hackos.secrets`: credenciales y claves privadas, con permisos
   `0600` y sin copiarlo al repositorio.
+- [`deploy/.env.secrets.example`](./.env.secrets.example): plantilla con los
+  nombres de secretos y valores vacíos; nunca se usa como fichero real.
 
 El contrato canónico es siempre esta pareja. El despliegue acepta además, de
 forma explícita y temporal, un único `/etc/hackos/hackos.env` con permisos
@@ -374,9 +388,11 @@ activado, `backup-r2.sh` guarda un dump custom de PostgreSQL, el bucket MinIO y
 un manifiesto bajo `R2_PREFIX/<environment>/<timestamp>/`. No borrar ni
 recrear `/mnt/data` para actualizar imágenes.
 
-`S3_PUBLIC_URL`, si se configura, debe apuntar a un endpoint HTTPS accesible
-por el navegador y gestionado fuera de esta red. MinIO no publica ningún
-puerto en el LXC; los ficheros privados siguen pasando por el API.
+`S3_PUBLIC_URL` debe ser `https://s3.hackudc.com/hackos/` en producción y
+apuntar a un endpoint HTTPS accesible por el navegador y gestionado fuera de
+esta red. MinIO no publica ningún puerto en el LXC; el ingress S3 debe
+proporcionar el camino hasta su API sin publicar la consola. Los ficheros
+privados siguen pasando por el API.
 
 ## Backups en Cloudflare R2
 

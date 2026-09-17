@@ -149,10 +149,12 @@ explicit `migrate` process succeeds.
   H12, served only through the API's owner-or-staff proxied-download route).
 - **Network:** private Compose network, no host ports, `minio:9000`. Console off by
   default (`MINIO_BROWSER=off`).
-- **Public read path:** if configured, `S3_PUBLIC_URL` must be an HTTPS endpoint
-  managed outside this Compose project. MinIO has no host port; private uploads
-  remain behind the API and the `enterprises/` prefix is initialized for public
-  logo reads by the storage helper.
+- **Public read path:** production sets
+  `S3_PUBLIC_URL=https://s3.hackudc.com/hackos/`. An external ingress must route
+  that hostname to MinIO's S3 API, never to the console. MinIO has no host port
+  in this Compose project; private uploads remain behind the API and the
+  `enterprises/` prefix is initialized for public logo reads by the storage
+  helper.
 - **State:** the `HACKOS_DATA_DIR/minio` bind mount (normally `/mnt/data/minio`) —
   the second stateful piece. Swappable for a
   managed S3/R2 by repointing `S3_ENDPOINT` + `S3_PUBLIC_URL` (§7).
@@ -183,10 +185,10 @@ The `private` bridge is marked `internal`; the separate `egress` bridge provides
 NAT for API, worker and web. This does not create an ingress path to a container
 without a published port.
 
-The `enterprises/` logo prefix is initialized for public reads, but
-`S3_PUBLIC_URL` must point to an HTTPS object endpoint that is reachable by the
-browser and managed outside this Compose network. The private `uploads/`
-prefix is served through the API.
+The `enterprises/` logo prefix is initialized for public reads, and production
+uses `https://s3.hackudc.com/hackos/` as `S3_PUBLIC_URL`. The external ingress
+must provide the route to MinIO's S3 API; the private `uploads/` prefix is
+served through the API.
 
 > **DNS gotcha (learned the hard way, H51).** Docker's embedded resolver
 > (`127.0.0.11`) snapshots the *host's* upstream DNS servers at
