@@ -13,6 +13,13 @@
 # published by api and web; the datastores have no published ports at all.
 # Set PUBLISH_BIND_ADDRESS=127.0.0.1 when the proxy runs on the same host; the
 # proxy LXC normally needs 0.0.0.0.
+#
+# Event-day sizing (H22-H42, H46, H540, #544): postgres 2 GiB + valkey 1 GiB +
+# minio 1 GiB + api 1 GiB + worker 1 GiB + web 512 MiB = 6.5 GiB of declared
+# container limits. This is sized for the production host budget with margin
+# for the OS and Docker overhead. Qualification mirrors the four shared
+# services and adds only its disposable 1 GiB runner and 512 MiB migrate
+# helper, keeping that stack at the same 6.5 GiB declared budget.
 
 x-api-image: &api-image "ghcr.io/danicallero/hackos-api:${IMAGE_TAG:?IMAGE_TAG is required}"
 x-web-image: &web-image "ghcr.io/danicallero/hackos-web:${IMAGE_TAG:?IMAGE_TAG is required}"
@@ -31,6 +38,7 @@ x-auth-env: &auth-env
 
 x-storage-env: &storage-env
   S3_ENDPOINT: "http://minio:9000"
+  S3_REGION: "${S3_REGION:-us-east-1}"
   S3_ACCESS_KEY: "${S3_ACCESS_KEY}"
   S3_SECRET_KEY: "${S3_SECRET_KEY}"
   S3_BUCKET: "${S3_BUCKET:-hackos}"
@@ -74,7 +82,7 @@ x-api-env: &api-env
   LOG_EXPO_PUSH_TICKETS: "${LOG_EXPO_PUSH_TICKETS:-false}"
   LOG_EXPO_PUSH_TOKENS: "${LOG_EXPO_PUSH_TOKENS:-false}"
   LOG_EXPO_PUSH_UNSAFE_DEBUG: "${LOG_EXPO_PUSH_UNSAFE_DEBUG:-false}"
-  DB_POOL_MAX: "${DB_POOL_MAX:-20}"
+  DB_POOL_MAX: "${DB_POOL_MAX:-24}"
   DB_IDLE_TIMEOUT_MS: "${DB_IDLE_TIMEOUT_MS:-30000}"
   DB_CONNECTION_TIMEOUT_MS: "${DB_CONNECTION_TIMEOUT_MS:-10000}"
   DB_STATEMENT_TIMEOUT_MS: "${DB_STATEMENT_TIMEOUT_MS:-30000}"
@@ -103,7 +111,7 @@ x-worker-env: &worker-env
   LOG_LEVEL: "${LOG_LEVEL:-info}"
   LOG_EXPO_PUSH_TICKETS: "${LOG_EXPO_PUSH_TICKETS:-false}"
   LOG_EXPO_PUSH_UNSAFE_DEBUG: "${LOG_EXPO_PUSH_UNSAFE_DEBUG:-false}"
-  DB_POOL_MAX: "${DB_POOL_MAX:-20}"
+  DB_POOL_MAX: "${DB_POOL_MAX:-24}"
   DB_IDLE_TIMEOUT_MS: "${DB_IDLE_TIMEOUT_MS:-30000}"
   DB_CONNECTION_TIMEOUT_MS: "${DB_CONNECTION_TIMEOUT_MS:-10000}"
   DB_STATEMENT_TIMEOUT_MS: "${DB_STATEMENT_TIMEOUT_MS:-30000}"
@@ -137,7 +145,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1g
+          memory: 2g
 
   valkey:
     <<: *hardening
@@ -161,7 +169,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512m
+          memory: 1g
 
   minio:
     <<: *hardening
@@ -274,7 +282,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512m
+          memory: 1g
 
   worker:
     <<: *hardening
@@ -304,7 +312,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512m
+          memory: 1g
 
   web:
     <<: *hardening
@@ -325,7 +333,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256m
+          memory: 512m
 
 networks:
   private:

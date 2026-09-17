@@ -149,10 +149,12 @@ explicit `migrate` process succeeds.
   H12, served only through the API's owner-or-staff proxied-download route).
 - **Network:** private Compose network, no host ports, `minio:9000`. Console off by
   default (`MINIO_BROWSER=off`).
-- **Public read path:** if configured, `S3_PUBLIC_URL` must be an HTTPS endpoint
-  managed outside this Compose project. MinIO has no host port; private uploads
-  remain behind the API and the `enterprises/` prefix is initialized for public
-  logo reads by the storage helper.
+- **Public read path:** production sets
+  `S3_PUBLIC_URL=https://s3.hackudc.com/hackos/`. An external ingress must route
+  that hostname to MinIO's S3 API, never to the console. MinIO has no host port
+  in this Compose project; private uploads remain behind the API and the
+  `enterprises/` prefix is initialized for public logo reads by the storage
+  helper.
 - **State:** the `HACKOS_DATA_DIR/minio` bind mount (normally `/mnt/data/minio`) —
   the second stateful piece. Swappable for a
   managed S3/R2 by repointing `S3_ENDPOINT` + `S3_PUBLIC_URL` (§7).
@@ -183,10 +185,10 @@ The `private` bridge is marked `internal`; the separate `egress` bridge provides
 NAT for API, worker and web. This does not create an ingress path to a container
 without a published port.
 
-The `enterprises/` logo prefix is initialized for public reads, but
-`S3_PUBLIC_URL` must point to an HTTPS object endpoint that is reachable by the
-browser and managed outside this Compose network. The private `uploads/`
-prefix is served through the API.
+The `enterprises/` logo prefix is initialized for public reads, and production
+uses `https://s3.hackudc.com/hackos/` as `S3_PUBLIC_URL`. The external ingress
+must provide the route to MinIO's S3 API; the private `uploads/` prefix is
+served through the API.
 
 > **DNS gotcha (learned the hard way, H51).** Docker's embedded resolver
 > (`127.0.0.11`) snapshots the *host's* upstream DNS servers at
@@ -269,15 +271,16 @@ hijacked. All of it is scraped at `/metrics` (`hackos_sse_local_connections`,
 **Event-day priority lanes (#544).** Non-streaming HTTP requests pass through
 an in-process admission scheduler derived from the existing per-process
 `DB_POOL_MAX` value; it does not resize or reconfigure the #540 pool. The
-request user's highest-position assigned role is the primary priority: a
-higher `roles.position` is admitted before a lower one, while anonymous
-requests are below every assigned role. P0 is queue operators, judges and
-accreditation/presence staff; P1 is sponsor/judge collaboration; P2 is public
-TV/content; P3 is participant and other best-effort traffic. The lane remains
-the tie-breaker for requests at the same role priority. Reserved capacity keeps
-role-less P2/P3 traffic from consuming the operational share, while
-role-bearing requests participate in the role ordering. The bounded
-best-effort wait queue may shed P2/P3 with `429`.
+scheduler classifies the request by lane before the route handler:
+P0 is queue operators, judges and accreditation/presence staff; P1 is
+sponsor/judge collaboration; P2 is public
+TV/content; P3 is participant and other best-effort traffic. Six slots at the
+event-day baseline are reserved from all P2/P3 admission, so participant and
+sponsor roles cannot consume the operational share. Queued requests are
+selected by lane rank and arrival order. The bounded best-effort wait queue may
+shed P2/P3 with `429`. The scheduler's direct API can also order callers that
+already provide a trusted role-position snapshot, but the HTTP hook does not
+query PostgreSQL before admission.
 The complete route/topic classification, capacity formula, role examples, and
 edge cases live in [`request-admission.md`](./request-admission.md).
 Long-lived SSE requests bypass this scheduler so they continue to be governed
@@ -359,11 +362,13 @@ env-configurable per process (`DB_POOL_MAX`, `DB_*_TIMEOUT_MS`; H540 — see
 the budget to respect before scaling replicas is:
 
 ```
-(api replicas × DB_POOL_MAX) + (worker replicas × DB_POOL_MAX) < Postgres max_connections
+(api replicas × DB_POOL_MAX) + (worker replicas × DB_POOL_MAX) + operational allowance < Postgres max_connections
 ```
 
-with headroom left for `migrate`'s one-shot connections and admin/superuser
-use (Postgres defaults `max_connections` to 100). `/metrics` exposes pool
+The event-day baseline is one API and one worker with `DB_POOL_MAX=24` each:
+`24 + 24 + 12 operational connections = 60`, below the stock
+`max_connections=100`. The allowance covers `migrate`, health/maintenance,
+admin and superuser use. `/metrics` exposes pool
 saturation (`hackos_db_pool_total/idle/waiting`), acquire-wait latency
 (`hackos_db_pool_wait_seconds`), and aborted queries
 (`hackos_db_query_timeouts_total`) to watch before that budget is exceeded.

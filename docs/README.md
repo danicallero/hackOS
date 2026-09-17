@@ -43,7 +43,7 @@ Architecture & modules:
   deployment profiles. Start here for the whole-system picture;
   `deploy/README.md` is the operational runbook.
 - [API request admission and priorities](./request-admission.md) — the exact
-  role-position ordering, P0–P3 lane definitions, route/topic classification,
+  lane ordering, P0–P3 lane definitions, route/topic classification,
   reserved capacity, best-effort shedding, and multi-replica limitations.
 - [Database schema](./database-schema.md) — the generated DBML ERD for the
   current post-migration schema, plus the migration identity/checksum rules.
@@ -139,8 +139,9 @@ Deployment:
 - [Deployment runbook](../deploy/README.md) — GHCR build tags, protected
   workflow dispatch, Incus transfer/exec, health gates and rollback limits.
 - [Big-event readiness](./big-event-readiness.md) — the concrete pre-event
-  checklist for ~600 concurrent users: pool sizing, the fixed Compose memory
-  limits, load testing the hot paths, and the monitoring queries to watch.
+  checklist for ~600 concurrent event identities: pool sizing, the fixed
+  Compose memory limits, load testing the hot paths, and the monitoring queries
+  to watch.
 
 Historical (not required reading — see [`audits/README.md`](./audits/README.md)):
 

@@ -9,6 +9,7 @@ artifacts/
 # keep templates tracked; ignore any filled-in env files
 !.env.example
 !deploy/.env.example
+!deploy/.env.secrets.example
 deploy/.secrets*
 deploy/*.secrets
 .DS_Store

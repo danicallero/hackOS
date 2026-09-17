@@ -49,7 +49,19 @@ api.example.org {
 example.org {
     reverse_proxy <ip-incus-del-lxc-hackos>:3001
 }
+
+# S3_PUBLIC_URL=https://s3.hackudc.com/hackos/
+s3.hackudc.com {
+    reverse_proxy <endpoint-de-la-api-s3-de-minio-alcanzable-desde-caddy>:9000
+}
 ```
+
+La tercera ruta sólo puede apuntar a la API S3 de MinIO, nunca a la consola
+(9001). El Compose mantiene MinIO sin puerto de host; por ello, si Caddy vive
+en otro LXC, infraestructura debe habilitar el camino privado/revisado hasta
+`minio:9000` antes del primer despliegue. `S3_PUBLIC_URL` no abre ese camino.
+El acceso anónimo se limita al prefijo `enterprises/`; las subidas bajo
+`uploads/` siguen siendo privadas y pasan por el API.
 
 Los valores de `API_DOMAIN`, `WEB_DOMAIN` y `CORS_ORIGINS` deben corresponder
 con esos hosts. `API_DOMAIN` y `WEB_DOMAIN` son nombres sin `https://`.
@@ -62,6 +74,8 @@ Cada host mantiene dos ficheros planos fuera del repositorio:
   [`deploy/.env.example`](./.env.example).
 - `/etc/hackos/hackos.secrets`: credenciales y claves privadas, con permisos
   `0600` y sin copiarlo al repositorio.
+- [`deploy/.env.secrets.example`](./.env.secrets.example): plantilla con los
+  nombres de secretos y valores vacíos; nunca se usa como fichero real.
 
 El contrato canónico es siempre esta pareja. El despliegue acepta además, de
 forma explícita y temporal, un único `/etc/hackos/hackos.env` con permisos
@@ -157,19 +171,106 @@ quay.io/minio/mc@sha256:aead63c77f9db9107f1696fb08ecb0faeda23729cde94b0f663edf4f
 Las imágenes de aplicación son las de GHCR; las de infraestructura conservan
 sus registros oficiales, pero todas quedan inmutables por digest.
 
-Los límites de memoria actuales se mantienen como literales, sin variables de
-override:
+Los límites de memoria del evento se mantienen como literales, sin variables de
+override. La suma de los seis servicios persistentes/de larga duración es
+`2 + 1 + 1 + 1 + 1 + 0.5 = 6.5 GiB` declarados: PostgreSQL recibe la mayor
+parte por la contención de 12 salas y 7 colas, Valkey tiene margen para la
+fan-in de 3 colas compartidas y API/worker comparten el presupuesto restante
+para 24 conexiones por proceso. Queda margen dentro del presupuesto de
+memoria de producción para el sistema operativo y Docker:
 
 | Servicio | Límite |
 |---|---:|
-| `postgres` | `1g` |
-| `valkey` | `512m` |
+| `postgres` | `2g` |
+| `valkey` | `1g` |
 | `minio` | `1g` |
-| `api` | `512m` |
-| `worker` | `512m` |
-| `web` | `256m` |
+| `api` | `1g` |
+| `worker` | `1g` |
+| `web` | `512m` |
 
 No existen `API_MEM_LIMIT` ni `WEB_MEM_LIMIT` en el contrato de despliegue.
+
+## Qualification pre-evento
+
+La qualification es un stack desechable de prueba de carga antes del evento,
+con una base de datos y una instancia Valkey aisladas, cuentas sintéticas y
+ningún puerto público. Se levanta sólo para validar una imagen inmutable y se
+destruye después de recuperar el artefacto; nunca comparte estado, volumen,
+red, secretos o servicios con producción.
+
+Sus límites reflejan exactamente los servicios equivalentes de producción:
+`postgres=2g`, `valkey=1g`, `api=1g` y `worker=1g`. El helper `migrate` usa
+`512m` y el runner desechable usa `1g`; juntos, los seis servicios de la
+qualification declaran 6.5 GiB y siguen bajo el presupuesto de memoria de
+producción durante la prueba. `deploy/qualification/validate-compose.mjs`
+falla antes del arranque si cambia una cifra o si la suma deja de estar bajo el
+presupuesto. Como las cotas coinciden, pasar la qualification es una señal
+útil de que la imagen puede operar bajo las cotas de producción, no un ensayo
+con más memoria.
+
+La carga por defecto redondea el evento a 600 participantes, 35 personas de
+staff, 30 representantes de sponsors, 12 salas y 7 colas, 3 de ellas
+compartidas. El procedimiento completo, incluido `validation.releaseBudgetPassed`,
+está en [`docs/big-event-readiness.md`](../docs/big-event-readiness.md).
+
+## Pool y admission durante el evento
+
+El baseline de producción es `DB_POOL_MAX=24` por proceso: una API y un worker
+usan 48 conexiones de pool. Con 12 conexiones operativas reservadas para
+migración, mantenimiento, administración y superusuario, el cálculo es
+`(1 × 24) + (1 × 24) + 12 = 60 < max_connections=100`. Mantén el valor stock
+de `max_connections` y repite el cálculo antes de añadir réplicas o subir el
+pool. El scheduler deriva 6 slots reservados para trabajo P0/P1 y limita la
+cola pendiente P2/P3 a `max(16, 24 × 8) = 192`; son slots de peticiones finitas,
+no conexiones SSE ni un slot por miembro del staff.
+
+### Árbol de decisión de `DB_POOL_MAX`
+
+Observa `hackos_http_request_admission_queue_size`, la tasa de `429` de P2/P3,
+`pg_stat_activity`/la cuenta de conexiones, `hackos_db_pool_waiting` y el
+estado OOM de los contenedores:
+
+1. Si suben los `429` o la cola P2/P3, pero conexiones, latencia P0/P1 y
+   memoria están sanas, conserva 24 si el trabajo es best-effort; para más
+   throughput finito, recalcula conexiones y vuelve a ejecutar qualification.
+2. Si las conexiones se acercan a 88, aumentan los lock waits o el pool espera,
+   no subas `DB_POOL_MAX`: reduce el burst, corrige la consulta/bloqueo o haz
+   un cambio de topología revisado.
+3. Si Postgres entra en OOM, reduce pool/concurrencia y conserva el límite de
+   `max_connections` hasta rehacer el presupuesto de memoria y pasar
+   qualification.
+4. Si P0/P1 espera mientras P2/P3 es rechazado, conserva 24 y revisa la ruta
+   operativa; los 6 slots reservados protegen trabajo prioritario de todo
+   tráfico P2/P3, incluso usuarios autenticados, pero no preemptan una
+   petición ya ejecutándose.
+
+### Cambiar un límite de memoria
+
+Edita el límite del servicio en Compose, recrea sólo ese servicio y verifica su
+salud. Si el servicio equivalente existe en qualification, cambia ambas cotas
+en el mismo cambio y vuelve a ejecutar el validador:
+
+```sh
+# editar deploy/docker-compose.yml (y qualification si corresponde)
+docker compose --env-file /etc/hackos/hackos.env \
+  --env-file /etc/hackos/hackos.secrets \
+  -f deploy/docker-compose.yml up -d --force-recreate <service>
+docker compose --env-file /etc/hackos/hackos.env \
+  --env-file /etc/hackos/hackos.secrets \
+  -f deploy/docker-compose.yml ps <service>
+```
+
+La salida `healthy` es necesaria pero no sustituye la qualification completa.
+
+## Splitting Postgres onto its own host (optional, advanced)
+
+Si las métricas muestran que PostgreSQL es el cuello de botella, separar el
+primario requiere una variante de Compose revisada: red privada entre los
+hosts, `DATABASE_URL` apuntando al nombre privado del primario, reglas de
+firewall mínimas, backups y una prueba de restauración. No se cambia la URL de
+un contenedor en ejecución mediante un override ad-hoc. Recalcula el pool y el
+presupuesto de memoria del servicio separado, ejecuta qualification contra la
+misma topología prevista y documenta el rollback antes del evento.
 
 ## CD con Incus
 
@@ -287,9 +388,11 @@ activado, `backup-r2.sh` guarda un dump custom de PostgreSQL, el bucket MinIO y
 un manifiesto bajo `R2_PREFIX/<environment>/<timestamp>/`. No borrar ni
 recrear `/mnt/data` para actualizar imágenes.
 
-`S3_PUBLIC_URL`, si se configura, debe apuntar a un endpoint HTTPS accesible
-por el navegador y gestionado fuera de esta red. MinIO no publica ningún
-puerto en el LXC; los ficheros privados siguen pasando por el API.
+`S3_PUBLIC_URL` debe ser `https://s3.hackudc.com/hackos/` en producción y
+apuntar a un endpoint HTTPS accesible por el navegador y gestionado fuera de
+esta red. MinIO no publica ningún puerto en el LXC; el ingress S3 debe
+proporcionar el camino hasta su API sin publicar la consola. Los ficheros
+privados siguen pasando por el API.
 
 ## Backups en Cloudflare R2
 

@@ -10,13 +10,15 @@ const envSchema = z.object({
 
   DATABASE_URL: z.string().default("postgres://hackos:hackos@localhost:5433/hackos"),
   /**
-   * Postgres pool tuning (H540). `DB_POOL_MAX` is per-process — api and
+   * Postgres pool tuning (H540, #544). `DB_POOL_MAX` is per-process — api and
    * worker each hold their own pool, and every replica of each multiplies
    * it — so (api replicas × DB_POOL_MAX) + (worker replicas × DB_POOL_MAX)
-   * must stay under Postgres's own `max_connections`, with headroom for
-   * `migrate`'s one-shot connections and admin/superuser use. Raise it for
+   * + an operational allowance must stay under Postgres's own
+   * `max_connections`, with headroom for `migrate`'s one-shot connections and
+   * admin/superuser use. Raise it for
    * big-event load — see docs/big-event-readiness.md, docs/env-vars.md and
-   * docs/architecture.md.
+   * docs/architecture.md. The production baseline is 24 per process; the
+   * Compose runtime supplies it explicitly for the event-day pool budget.
    */
   DB_POOL_MAX: z.coerce.number().int().min(1).max(200).optional(),
   /** How long an idle pooled connection is kept before being closed. */
@@ -299,7 +301,9 @@ export const config = {
   logExpoPushTickets: parsed.LOG_EXPO_PUSH_TICKETS ?? false,
   logExpoPushTokens: parsed.LOG_EXPO_PUSH_TOKENS ?? false,
   logExpoPushUnsafeDebug: parsed.LOG_EXPO_PUSH_UNSAFE_DEBUG ?? false,
-  dbPoolMax: parsed.DB_POOL_MAX ?? (parsed.NODE_ENV === "test" ? 5 : 20),
+  dbPoolMax:
+    parsed.DB_POOL_MAX ??
+    (parsed.NODE_ENV === "test" ? 5 : parsed.NODE_ENV === "production" ? 24 : 20),
   trustProxy: parsed.TRUST_PROXY ?? parsed.NODE_ENV === "production",
   appleWalletConfigured: Boolean(
     parsed.APPLE_PASS_CERTIFICATE_PEM &&
