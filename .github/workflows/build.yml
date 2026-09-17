@@ -9,6 +9,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 concurrency:
   group: hackos-images-${{ github.ref_name }}
@@ -91,3 +92,16 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=hackos-web
           cache-to: type=gha,mode=max,scope=hackos-web
+
+  deploy-staging:
+    name: Deploy staging after both images publish
+    needs:
+      - api
+      - web
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    uses: ./.github/workflows/deploy-staging-arm64.yml
+    with:
+      tag: sha-${{ github.sha }}
+    secrets:
+      TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+      TS_AUDIENCE: ${{ secrets.TS_AUDIENCE }}

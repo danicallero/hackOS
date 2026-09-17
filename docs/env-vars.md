@@ -1,9 +1,9 @@
 # Variables de entorno del runtime multi-arquitectura
 
-Staging en la Raspberry Pi y producción en el LXC `hackos` usan
-[`deploy/docker-compose.yml`](../deploy/docker-compose.yml) como una única
-aplicación Compose. El contrato canónico recibe primero un fichero de
-configuración y después uno de secretos:
+Staging on an ARM64 host and production in a Linux/x86_64 LXC use
+[`deploy/docker-compose.yml`](../deploy/docker-compose.yml) as one Compose
+application. The canonical contract receives a configuration file first and a
+secrets file second:
 
 ```sh
 docker compose \
@@ -37,12 +37,14 @@ valores públicos compilados en la app móvil.
 | `CORS_ORIGINS` | configuración | sí | Lista separada por comas; debe incluir `https://${WEB_DOMAIN}`. |
 | `PUBLISH_BIND_ADDRESS` | configuración | no | Dirección de publicación HTTP; `0.0.0.0` para el proxy de otro LXC y `127.0.0.1` si comparte host. |
 | `API_PUBLISH_PORT`, `WEB_PUBLISH_PORT` | configuración | no | Puertos del host para API y web; por defecto `3000` y `3001`. |
+| `EDGE_NETWORK_NAME` | configuration | no | Existing Docker network used by a host-level tunnel/proxy when the optional shared ingress profile is enabled; defaults to the Compose-owned `hackos-edge`. |
+| `EDGE_NETWORK_EXTERNAL` | configuration | no | Set to `true` only when `EDGE_NETWORK_NAME` already exists. `api`, `web`, and `minio` join it using their stable service aliases; PostgreSQL and Valkey remain private. |
 | `HACKOS_DATA_DIR` | configuración | no | Ruta absoluta al volumen persistente; por defecto `/mnt/data`, con `postgres/` y `minio/` debajo. |
 | `POSTGRES_USER`, `POSTGRES_DB` | configuración | sí | Identidad y base inicial de PostgreSQL; no son secretos. |
 | `MINIO_ROOT_USER`, `S3_ACCESS_KEY` | configuración | sí | Identificador administrativo de MinIO y nombre de la cuenta de aplicación; sus contraseñas pertenecen al fichero de secretos. |
 | `S3_BUCKET` | configuración | no | Bucket creado por `minio-init`, por defecto `hackos`. |
 | `S3_REGION` | configuración | no | Región S3 para el cliente SDK; por defecto `us-east-1`. |
-| `S3_PUBLIC_URL` | configuración | sí en producción | URL HTTPS pública de objetos; en producción es `https://s3.hackudc.com/hackos/`. El endpoint lo sirve el ingress S3 externo; Compose no publica MinIO. |
+| `S3_PUBLIC_URL` | configuration | required in production | Public HTTPS object URL served by the environment's object-storage ingress; Compose does not publish MinIO. |
 | `R2_BACKUPS_ENABLED` | configuración | no | `false` por defecto; con `true`, el despliegue ejecuta `backup-r2.sh` antes de `migrate`. |
 | `R2_ENDPOINT`, `R2_BUCKET`, `R2_PREFIX` | configuración | si R2 está activo | Endpoint S3-compatible HTTPS, bucket privado y prefijo para las copias. |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | secreto | si R2 está activo | Credenciales del token R2 limitado al bucket; nunca se pasan a `api`, `worker` ni `web`. |
@@ -108,21 +110,21 @@ en ningún contenedor de aplicación.
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | `postgres`; Compose para `api`, `worker`, `migrate` | Identidad, contraseña y destino de la base; el usuario y la base están en configuración, la contraseña en secretos, y se convierten en `DATABASE_URL`. |
 | `VALKEY_PASSWORD` | `valkey`; Compose para `api`, `worker` | Se usa en `VALKEY_URL=redis://:<password>@valkey:6379`. Valkey no persiste datos. |
 | `S3_ACCESS_KEY`, `S3_SECRET_KEY` | `minio-init`, `api`, `worker` | El identificador está en configuración y la clave en secretos; `minio-init` crea la cuenta de servicio y la limita al bucket. No es la cuenta root de MinIO. |
-| `S3_ENDPOINT` | `api`, `worker` | Fijo en `http://minio:9000`; no debe cambiarse por `s3.hackudc.com`. |
+| `S3_ENDPOINT` | `api`, `worker` | Fixed at `http://minio:9000`; do not replace it with the public object URL. |
 | `S3_REGION` | `api`, `worker` | Región lógica del cliente S3; `us-east-1` funciona con MinIO. |
 | `S3_BUCKET` | `api`, `worker`, `minio-init` | Debe ser el mismo bucket en los tres procesos; por defecto `hackos`. |
-| `S3_PUBLIC_URL` | `api`, `worker` | `https://s3.hackudc.com/hackos/`; sólo se usa para URLs de logos públicos. |
+| `S3_PUBLIC_URL` | `api`, `worker` | The environment's HTTPS object URL; only used for public logo URLs. |
 | `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` | `minio`, `minio-init` | Administración de MinIO; no se entrega a API, worker ni web. |
 
-### Bucket público de MinIO y `s3.hackudc.com`
+### Public MinIO bucket and the object-storage ingress
 
 En producción, el API guarda los objetos en el MinIO privado mediante
 `S3_ENDPOINT=http://minio:9000` y devuelve URLs públicas con
-`S3_PUBLIC_URL=https://s3.hackudc.com/hackos/`. Por tanto, un logo con clave
+`S3_PUBLIC_URL=https://s3.example.org/hackos/`. Therefore, a logo with key
 `enterprises/42/logo-default.png` se sirve en:
 
 ```text
-https://s3.hackudc.com/hackos/enterprises/42/logo-default.png
+https://s3.example.org/hackos/enterprises/42/logo-default.png
 ```
 
 `minio-init` permite lectura anónima sólo bajo `enterprises/`, que contiene
@@ -131,21 +133,21 @@ API autorizado. No se debe convertir todo el bucket en anónimo porque eso
 expondría ficheros de solicitudes.
 
 El ingress externo debe publicar únicamente la API S3 de MinIO para
-`s3.hackudc.com`; la consola de MinIO no se publica. Conceptualmente, Caddy
+`s3.example.org`; the MinIO console is never published. Conceptually, Caddy
 debe hacer:
 
 ```caddyfile
-s3.hackudc.com {
+s3.example.org {
     reverse_proxy <endpoint-de-la-api-s3-de-minio-alcanzable-desde-caddy>:9000
 }
 ```
 
-El Compose actual mantiene MinIO sin `ports:`. `S3_PUBLIC_URL` no crea por sí
-solo esa ruta: si Caddy está en otro LXC, la integración de infraestructura
-debe proporcionar un camino privado/revisado hasta la API S3 de MinIO. Hasta
-que exista ese routeo y DNS, las URLs de logos serán correctas pero no
-alcanzables desde el navegador. Esta habilitación queda fuera de este
-repositorio para respetar la regla de no modificar `gpul/infra`.
+The Compose runtime keeps MinIO without `ports:`. `S3_PUBLIC_URL` does not
+create the route by itself: a reviewed tunnel/proxy must route that hostname to
+the `minio:9000` S3 API, never to the console. Until that route and DNS exist,
+logo URLs are well-formed but not browser-reachable. `EDGE_NETWORK_NAME` and
+`EDGE_NETWORK_EXTERNAL` provide the optional Docker-network connection for a
+host-level tunnel; infrastructure still owns its hostname routes.
 
 ### API
 
@@ -290,26 +292,33 @@ API y web publican los puertos configurables para el proxy de ingress.
 PostgreSQL y MinIO usan bind mounts bajo `HACKOS_DATA_DIR`; Valkey no tiene
 persistencia deliberada.
 
-## CD con Incus
+## CI/CD deployment paths
 
 El workflow de build publica las dos imágenes en GHCR para `linux/amd64` y
 `linux/arm64`, únicamente con `sha-<commit>`. El workflow de deploy sólo
 acepta un tag SHA completo y lo inyecta como `IMAGE_TAG`; nunca usa `latest` ni
 tags de rama mutables.
 
-`deploy-incus.yml` corre mediante `workflow_dispatch` en los environments
-protegidos `production` y `staging`, sobre un runner self-hosted con
-Incus local. El runner no se habilita desde este repositorio: el bloque
-`setup-gh-runner` del repositorio de infraestructura está actualmente
-comentado y debe habilitarse/registrarse como dependencia previa; este cambio
-no modifica ese repositorio.
+`build.yml` calls the reusable `deploy-staging-arm64.yml` job only after both
+the API and web images have published successfully for a push to `staging`.
+A merge into `staging` creates that push, so the deploy uses the exact
+`sha-${{ github.sha }}` image tag that was just built; it never races image
+publication and never uses `latest`. The job uses the configured private-overlay
+action to create an ephemeral CI node, reaches the ARM64 host over its private
+address, and then uses SSH. The protected `staging` environment must contain
+the private-network identity values, staging host address, dedicated SSH key,
+and pinned host key. Public ingress is a separate always-on service and is not
+the administration path. The staging workflow remains manually dispatchable
+for an explicit SHA rollback or verification run.
 
-Actions sólo transfiere el Compose y scripts a `/opt/hackos` con Incus. No
-recibe secretos de aplicación, no descifra SOPS y no usa Docker Remote API. El
-script dentro del LXC lee la pareja canónica o el fichero combinado compatible,
-toma un lock, valida sin imprimir valores, hace pull de imágenes fijadas,
-ejecuta el backup R2 opt-in, ejecuta migraciones y espera healthchecks. Para
-rollback se vuelve a lanzar el workflow con el tag SHA anterior; el workflow
-selecciona también el commit asociado al tag y conserva una copia de scripts y
-Compose por release. Cambiar imágenes no revierte automáticamente las
-migraciones de la base de datos.
+`deploy-incus.yml` runs after a successful `main` image build on the protected
+`production` environment, or manually for rollback. It needs a self-hosted
+runner with local Incus access. Registering that runner is an infrastructure
+prerequisite outside this repository.
+
+Both paths transfer only Compose and deployment scripts. They do not receive
+application secrets, decrypt SOPS, or use Docker Remote API. The host script
+reads the canonical environment files, takes a lock, validates without
+printing values, pulls pinned images, optionally runs the R2 backup, applies
+migrations, and waits for healthchecks. Rollback selects an earlier SHA and
+does not automatically reverse database migrations.

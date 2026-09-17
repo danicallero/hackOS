@@ -1,15 +1,15 @@
 name: Deploy with Incus
 
 on:
+  workflow_run:
+    workflows:
+      - Build images
+    types:
+      - completed
+    branches:
+      - main
   workflow_dispatch:
     inputs:
-      environment:
-        description: GitHub Actions environment and hackos stack to deploy
-        required: true
-        type: choice
-        options:
-          - production
-          - staging
       tag:
         description: Immutable GHCR tag, for example sha-<40 lowercase hex characters>
         required: true
@@ -19,16 +19,22 @@ permissions:
   contents: read
 
 concurrency:
-  group: hackos-incus-${{ inputs.environment }}
+  group: hackos-incus-production
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: Deploy hackOS with Incus
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    name: Deploy hackOS production with Incus
     runs-on: self-hosted
     timeout-minutes: 30
     environment:
-      name: ${{ inputs.environment }}
+      name: production
+    env:
+      DEPLOY_ENVIRONMENT: production
+      IMAGE_TAG: ${{ github.event_name == 'workflow_run' && format('sha-{0}', github.event.workflow_run.head_sha) || inputs.tag }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
@@ -40,14 +46,14 @@ jobs:
 
       - name: Validate deployment inputs
         env:
-          DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
-          IMAGE_TAG: ${{ inputs.tag }}
+          DEPLOY_ENVIRONMENT: ${{ env.DEPLOY_ENVIRONMENT }}
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
         shell: bash
         run: |
           set -euo pipefail
 
           case "$DEPLOY_ENVIRONMENT" in
-            production|staging) ;;
+            production) ;;
             *)
               echo "Invalid deployment environment." >&2
               exit 1
@@ -63,7 +69,7 @@ jobs:
 
       - name: Select release source
         env:
-          IMAGE_TAG: ${{ inputs.tag }}
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
         shell: bash
         run: |
           set -euo pipefail
@@ -95,8 +101,8 @@ jobs:
 
       - name: Deploy inside hackos LXC
         env:
-          DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
-          IMAGE_TAG: ${{ inputs.tag }}
+          DEPLOY_ENVIRONMENT: ${{ env.DEPLOY_ENVIRONMENT }}
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
         shell: bash
         run: |
           set -euo pipefail

@@ -137,7 +137,7 @@ Deployment:
 - [Environment variables per service](./env-vars.md) — the two host env files
   and the exact least-privilege variables delivered to each Compose service.
 - [Deployment runbook](../deploy/README.md) — GHCR build tags, protected
-  workflow dispatch, Incus transfer/exec, health gates and rollback limits.
+  workflows, host transfer/exec, health gates and rollback limits.
 - [Big-event readiness](./big-event-readiness.md) — the concrete pre-event
   checklist for ~600 concurrent event identities: pool sizing, the fixed
   Compose memory limits, load testing the hot paths, and the monitoring queries

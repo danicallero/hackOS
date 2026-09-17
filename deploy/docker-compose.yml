@@ -1,16 +1,17 @@
-# hackOS — canonical `hackos` LXC runtime.
+# hackOS — canonical multi-architecture Compose runtime.
 #
-# This file only consumes pre-built images. Run it with the LXC configuration
+# This file only consumes pre-built images. Run it with the host configuration
 # file first and the separate, chmod 600 secrets file second:
 #
 #   docker compose --env-file /etc/hackos/hackos.env \
 #     --env-file /etc/hackos/hackos.secrets \
 #     -f deploy/docker-compose.yml up -d
 #
-# The bridge networks are created by Compose. PostgreSQL and MinIO bind their
-# state below HACKOS_DATA_DIR (the GPULux LXC mounts its persistent Incus
-# volume at /mnt/data). The external proxy reaches only the HTTP ports
-# published by api and web; the datastores have no published ports at all.
+# The private and egress bridge networks are created by Compose. PostgreSQL
+# and MinIO bind their state below HACKOS_DATA_DIR (the production LXC mounts
+# its persistent volume at /mnt/data). The external proxy reaches only the HTTP ports
+# published by api and web; MinIO has no published port and uses the optional
+# edge network only when a reviewed object-storage ingress needs it.
 # Set PUBLISH_BIND_ADDRESS=127.0.0.1 when the proxy runs on the same host; the
 # proxy LXC normally needs 0.0.0.0.
 #
@@ -136,7 +137,8 @@ services:
       - type: bind
         source: "${HACKOS_DATA_DIR:-/mnt/data}/postgres"
         target: /var/lib/postgresql/data
-    networks: [private]
+    networks:
+      private: {}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
@@ -183,7 +185,12 @@ services:
       - type: bind
         source: "${HACKOS_DATA_DIR:-/mnt/data}/minio"
         target: /data
-    networks: [private]
+    networks:
+      private: {}
+      # A host-level tunnel may route S3_PUBLIC_URL to minio:9000 through the
+      # same reviewed ingress network used by api and web. The console remains
+      # disabled and is never routed.
+      edge: {}
     healthcheck:
       test: ["CMD-SHELL", "mc ready local || exit 1"]
       interval: 15s
@@ -273,6 +280,10 @@ services:
     networks:
       private: {}
       egress: {}
+      # Optional host-level tunnel/proxy network. Staging can point
+      # EDGE_NETWORK_NAME at an existing ingress network when a tunnel
+      # resolves the stable `api`, `web`, and (if needed) `minio` names.
+      edge: {}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/healthz || exit 1"]
       interval: 15s
@@ -323,7 +334,11 @@ services:
       WEB_DOMAIN: "${WEB_DOMAIN}"
     ports:
       - "${PUBLISH_BIND_ADDRESS:-0.0.0.0}:${WEB_PUBLISH_PORT:-3001}:3001"
-    networks: [egress]
+    networks:
+      egress: {}
+      # See api.edge above. This is disabled as an external network by
+      # default, so the normal production profile remains isolated.
+      edge: {}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/ || exit 1"]
       interval: 15s
@@ -341,3 +356,6 @@ networks:
     internal: true
   egress:
     driver: bridge
+  edge:
+    name: "${EDGE_NETWORK_NAME:-hackos-edge}"
+    external: ${EDGE_NETWORK_EXTERNAL:-false}

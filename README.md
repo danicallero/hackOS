@@ -222,20 +222,21 @@ The release paths are:
 
 | Branch | CD behavior |
 | --- | --- |
-| `staging` | Merge an approved development PR here. Build publishes immutable `linux/amd64` and `linux/arm64` images; the protected Incus workflow deploys a selected SHA tag to staging. |
-| `main` | Merge an approved PR from any branch. Build publishes immutable `linux/amd64` and `linux/arm64` images; the protected Incus workflow deploys a selected SHA tag to production. |
+| `staging` | Merge an approved development PR here. Build publishes immutable `linux/amd64` and `linux/arm64` images; the protected private-network SSH workflow deploys the selected SHA to the ARM64 staging host. |
+| `main` | Merge an approved PR from any branch. Build publishes immutable `linux/amd64` and `linux/arm64` images; the protected Incus workflow deploys the selected SHA to production. |
 
 `main` and `staging` are independent environments. Merging into either branch
-publishes its release artifact but does not deploy a host. An approved operator
-selects the SHA in the protected Incus workflow; to test the current
-production tree in staging, open an explicit pull request from `main` to
-`staging`.
+publishes its release artifact and starts the corresponding protected
+deployment workflow after the image build succeeds. Staging reaches its host
+through a private network before using SSH; production uses a self-hosted
+Incus runner. To test the current production tree in staging, open an explicit
+pull request from `main` to `staging`.
 
-The merge to either protected branch is what builds its release artifact. The
-staging and production stacks use the same multi-architecture image
-repositories and SHA tag format, with separate Compose environment and secret
+The merge to either protected branch builds its release artifact. The staging
+and production stacks use the same multi-architecture image repositories,
+Compose file, and SHA tag format, with separate host configuration and secret
 files. Protect exactly `staging` and `main`; CI accepts PRs into either branch,
-while deployment is an explicitly approved workflow dispatch.
+while the protected environments control deployment approval.
 The API test job provides fresh Postgres, Valkey and Mailpit service containers
 plus health-checked MinIO, then provisions the test bucket; local API runs
 still use `pnpm infra:up` and the commands above.
@@ -299,18 +300,18 @@ Useful next reads:
 
 ## Deployment
 
-Production and staging are isolated Compose projects in the `hackos` LXC.
-The API, worker and web run from pinned GHCR SHA images; Postgres, Valkey and
-MinIO stay on private networks, while the proxy reaches only the
-published API and web HTTP ports. A one-shot migration command runs before the
-API starts and uses a Postgres advisory lock to make concurrent deploys safe.
+Production and staging are isolated Compose projects: production runs in a
+Linux/x86_64 LXC and staging runs on an ARM64 host. The API, worker and web run
+from pinned GHCR SHA images; Postgres, Valkey and MinIO stay on private
+networks, while the environment's external proxy reaches only the published
+API and web HTTP ports. A one-shot migration command runs before the API starts
+and uses a Postgres advisory lock to make concurrent deploys safe.
 The API repeats this no-op-safe migration check immediately before listening so
 a reused one-shot container cannot leave the running image ahead of the schema.
 
 [`deploy/README.md`](deploy/README.md) documents the canonical Compose runtime,
-the self-hosted runner, Incus transfer, secret-file contract, health
-gates and rollback. Use [`docs/env-vars.md`](docs/env-vars.md) as the
-per-service environment checklist.
+private-network deployment paths, secrets, health gates, and rollback. Use
+[`docs/env-vars.md`](docs/env-vars.md) as the per-service environment checklist.
 
 The mobile implementation and automated tests are in place. Offline recovery,
 APNs/FCM delivery, camera behaviour, encrypted SQLite and Wallet flows still

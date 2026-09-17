@@ -1,8 +1,8 @@
 # Despliegue multi-arquitectura de hackOS
 
-Este directorio contiene un único runtime de Docker Compose para staging en la
-Raspberry Pi de casa y producción en el LXC `hackos`. El build publica
-`linux/amd64` (obligatorio para el host de producción) y conserva `linux/arm64`; los hosts sólo
+Este directorio contiene un único runtime de Docker Compose para un host ARM64
+de staging y un host Linux/x86_64 de producción. El build publica
+`linux/amd64` y `linux/arm64`; los hosts sólo
 descargan imágenes y nunca compilan el repositorio durante el despliegue.
 
 La definición canónica es [`docker-compose.yml`](./docker-compose.yml). El
@@ -23,10 +23,12 @@ no recibe variables propias del API.
 ## Red e ingress
 
 Compose crea la red bridge interna `private` y una red de salida `egress`. Los
-servicios de estado sólo están en `private`; API y worker usan ambas redes para
-resolver (`postgres:5432`, `valkey:6379`, `minio:9000`) y acceder a proveedores
-externos. `web` sólo necesita `egress`. No se declara ninguna red ajena al
-proyecto.
+servicios de estado PostgreSQL y Valkey sólo están en `private`; MinIO usa
+`private` y puede unirse al ingress opcional para servir la API S3. API y worker
+usan las redes necesarias para resolver (`postgres:5432`, `valkey:6379`,
+`minio:9000`) y acceder a proveedores externos. `web` sólo necesita `egress`.
+Por defecto todas las redes son del proyecto; el perfil opcional de ingress
+compartido se describe más abajo.
 
 Sólo se publican dos puertos HTTP del host. En producción el proxy está en otro LXC,
 por lo que la configuración canónica usa `0.0.0.0`; si el proxy comparte host,
@@ -50,8 +52,8 @@ example.org {
     reverse_proxy <ip-incus-del-lxc-hackos>:3001
 }
 
-# S3_PUBLIC_URL=https://s3.hackudc.com/hackos/
-s3.hackudc.com {
+# S3_PUBLIC_URL=https://s3.example.org/hackos/
+s3.example.org {
     reverse_proxy <endpoint-de-la-api-s3-de-minio-alcanzable-desde-caddy>:9000
 }
 ```
@@ -65,6 +67,23 @@ El acceso anónimo se limita al prefijo `enterprises/`; las subidas bajo
 
 Los valores de `API_DOMAIN`, `WEB_DOMAIN` y `CORS_ORIGINS` deben corresponder
 con esos hosts. `API_DOMAIN` y `WEB_DOMAIN` son nombres sin `https://`.
+
+### Optional shared ingress network
+
+The normal profile uses a Compose-owned `edge` network and the external proxy
+reaches the published HTTP ports. A staging host that already has a host-level
+tunnel or proxy can instead set `EDGE_NETWORK_NAME` to its existing Docker
+network and `EDGE_NETWORK_EXTERNAL=true`. `api` and `web` join that network
+with the stable aliases `api` and `web`; MinIO also joins it so an explicitly
+configured `s3` hostname can route to the S3 API at `minio:9000`. PostgreSQL
+and Valkey remain private. This lets a tunnel whose origins are Docker service
+names survive an application cutover while keeping the database and queue
+store off the ingress network.
+
+Do not enable this option against an unreviewed shared network. Before the
+cutover, stop the previous API and web containers so the aliases cannot resolve
+to two releases at once. Keep the tunnel/proxy service running while the new
+containers are recreated.
 
 ## Configuración y secretos
 
@@ -272,50 +291,70 @@ un contenedor en ejecución mediante un override ad-hoc. Recalcula el pool y el
 presupuesto de memoria del servicio separado, ejecuta qualification contra la
 misma topología prevista y documenta el rollback antes del evento.
 
-## CD con Incus
+## CI/CD paths
 
 `.github/workflows/build.yml` construye y publica `hackos-api` y `hackos-web`
 en GHCR para `linux/amd64` y `linux/arm64`. Cada ejecución publica únicamente
 el tag `sha-<commit>`; el CD sólo acepta ese formato y nunca usa `latest` ni
 tags mutables de rama.
 
-`.github/workflows/deploy-incus.yml` se ejecuta con `workflow_dispatch`, pide
-`production` o `staging` y un tag `sha-<40 hex>`, y usa el environment de GitHub
-correspondiente. La protección de esos environments debe estar configurada en
-GitHub (revisión/aprobación y, si procede, restricciones de rama); el workflow
-no contiene secretos de aplicación.
+`.github/workflows/build.yml` calls the reusable
+`.github/workflows/deploy-staging-arm64.yml` job after both application image
+jobs succeed on a push to `staging`. A merge into `staging` therefore deploys
+the exact `sha-<40 hex>` image tag just published; it does not use `latest` or
+race the GHCR publication. The staging job can also be dispatched manually for
+an explicit SHA rollback or verification run. It joins the configured private
+overlay network with an ephemeral GitHub Actions node, verifies the ARM64 host,
+and uses SSH to transfer the Compose file and scripts. It does not expose SSH
+through the public ingress.
 
-El job necesita un runner self-hosted habilitado y con acceso local a Incus.
-Esta dependencia es explícita: el bloque `setup-gh-runner` del repositorio de
-infraestructura está actualmente comentado, así que habilitar y registrar el
-runner es una operación previa y no forma parte de este repositorio.
+`.github/workflows/deploy-incus.yml` runs after a successful image build on
+`main` and can also be dispatched with a previous SHA for rollback. It uses the
+protected `production` environment. The protection of both environments must
+be configured in GitHub (approval and, where appropriate, branch restrictions);
+the workflows do not contain application secrets.
 
-El workflow comprueba el tag, selecciona el commit codificado en
-`sha-<commit>`, transfiere Compose, validación, backup y despliegue a
-`/opt/hackos` mediante `incus file push`, y ejecuta el script con
-`incus exec hackos`. El script usa los ficheros de entorno ya presentes dentro
-del LXC, adquiere un lock con `flock`, valida la configuración sin imprimir
-valores, prepara `/mnt/data/postgres` y `/mnt/data/minio`, hace pull de todas
-las imágenes fijadas, ejecuta el backup R2 opt-in antes de `migrate`, ejecuta
-`migrate`, recrea la aplicación y espera los healthchecks. La salida sólo
-contiene estados y errores genéricos; no descifra SOPS, no recibe secretos de
-Actions y no expone Docker Remote API.
+The production job needs an enabled self-hosted runner with local Incus
+access. This dependency is explicit: the infrastructure repository currently
+does not provide that runner, so enabling and registering it is a prerequisite
+outside this repository. The staging job uses a GitHub-hosted runner plus a
+private overlay network instead.
+
+Both workflows check the tag and select the exact commit encoded in
+`sha-<commit>`. The production workflow transfers files with `incus file push`
+and executes the deployment with `incus exec`; the staging workflow uses the
+equivalent SSH transfer on the ARM64 host. The host-local environment files
+are validated without printing values, a `flock` lock prevents concurrent
+deployments, pinned images are pulled, the optional R2 backup runs before
+`migrate`, and healthchecks gate the application handoff. Neither workflow
+decrypts SOPS, receives application secrets from Actions, or exposes Docker
+Remote API. Any staging tunnel or proxy remains a separate ingress service and
+must be routed to the new published ports when replacing an existing platform.
+
+For a configuration-only redeploy, the host script can resolve the exact
+currently configured immutable tag itself:
+
+```sh
+HACKOS_APP_DIR=/opt/hackos /opt/hackos/incus-deploy.sh staging
+```
+
+This is a convenience for operators; it still reads and validates a
+`sha-<commit>` value from `IMAGE_TAG`. It never falls back to `latest` or a
+mutable branch tag.
 
 ### Rollback
 
-Para volver a la versión anterior, lanzar de nuevo
-`deploy-incus.yml` con el mismo environment y el tag SHA anterior que figure
-en el historial de despliegues. El workflow vuelve a seleccionar el commit
-exacto asociado al tag, por lo que Compose y los scripts también corresponden a
-esa versión; cada despliegue conserva además una copia sin secretos en
-`/opt/hackos/releases/<tag>`. El rollback no revierte automáticamente
-migraciones de base de datos: una migración incompatible exige un procedimiento
-revisado por separado.
+To return to the previous version, dispatch the relevant workflow with the
+previous SHA tag from the deployment history. The workflow selects the exact
+commit associated with the tag, so Compose and the scripts match that release;
+each deployment also keeps a secret-free copy under
+`/opt/hackos/releases/<tag>`. Rollback does not automatically reverse database
+migrations: an incompatible migration needs a separately reviewed procedure.
 
 ## Orden de despliegue
 
 Ejecutar desde la raíz del repositorio en el host correspondiente. En
-producción es el LXC `hackos`; en staging es la Raspberry Pi. El orden
+producción es el LXC de producción; en staging es el host ARM64. El orden
 conserva el proyecto existente y no elimina volúmenes.
 
 ```sh
@@ -388,9 +427,9 @@ activado, `backup-r2.sh` guarda un dump custom de PostgreSQL, el bucket MinIO y
 un manifiesto bajo `R2_PREFIX/<environment>/<timestamp>/`. No borrar ni
 recrear `/mnt/data` para actualizar imágenes.
 
-`S3_PUBLIC_URL` debe ser `https://s3.hackudc.com/hackos/` en producción y
-apuntar a un endpoint HTTPS accesible por el navegador y gestionado fuera de
-esta red. MinIO no publica ningún puerto en el LXC; el ingress S3 debe
+`S3_PUBLIC_URL` debe ser una URL HTTPS de un ingress de objetos accesible por
+el navegador y gestionado fuera de esta red. MinIO no publica ningún puerto en
+el host; el ingress S3 debe
 proporcionar el camino hasta su API sin publicar la consola. Los ficheros
 privados siguen pasando por el API.
 
