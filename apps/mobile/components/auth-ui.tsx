@@ -1,15 +1,16 @@
 import { type ReactNode, type RefObject, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
+  Keyboard,
   Pressable,
   ScrollView,
   Text,
   TextInput,
   type TextInputProps,
-  useColorScheme,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
+import Animated, { useAnimatedKeyboard, useAnimatedStyle } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 
@@ -25,45 +26,8 @@ export function AuthScreen({
   footer?: ReactNode;
   scrollable?: boolean;
 }) {
-  useColorScheme();
   if (!scrollable) {
-    return (
-      <SafeAreaView style={{ backgroundColor: colors.background, flex: 1 }}>
-        <KeyboardAvoidingView
-          behavior={process.env.EXPO_OS === "ios" ? "padding" : undefined}
-          style={{ flex: 1 }}
-        >
-          <View
-            style={{
-              alignSelf: "center",
-              flex: 1,
-              gap: 28,
-              justifyContent: "center",
-              maxWidth: 440,
-              paddingHorizontal: 24,
-              paddingVertical: 24,
-              width: "100%",
-            }}
-          >
-            {children}
-          </View>
-        </KeyboardAvoidingView>
-        {footer ? (
-          <View
-            style={{
-              alignSelf: "center",
-              maxWidth: 440,
-              paddingBottom: 16,
-              paddingHorizontal: 24,
-              paddingTop: 8,
-              width: "100%",
-            }}
-          >
-            {footer}
-          </View>
-        ) : null}
-      </SafeAreaView>
-    );
+    return <FixedAuthScreen footer={footer}>{children}</FixedAuthScreen>;
   }
   return (
     <ScrollView
@@ -94,6 +58,47 @@ export function AuthScreen({
         ) : null}
       </View>
     </ScrollView>
+  );
+}
+
+/** Moves the centered form on the compositor while keeping the footer fixed. */
+function FixedAuthScreen({ children, footer }: { children: ReactNode; footer?: ReactNode }) {
+  const keyboard = useAnimatedKeyboard();
+  const formStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -Math.min(keyboard.height.value * 0.38, 160) }],
+  }));
+
+  return (
+    <SafeAreaView style={{ backgroundColor: colors.background, flex: 1 }}>
+      <TouchableWithoutFeedback accessible={false} onPress={Keyboard.dismiss}>
+        <View
+          style={{
+            alignSelf: "center",
+            flex: 1,
+            maxWidth: 440,
+            paddingBottom: 16,
+            paddingHorizontal: 24,
+            paddingTop: 24,
+            width: "100%",
+          }}
+        >
+          <Animated.View style={[{ flex: 1, justifyContent: "center" }, formStyle]}>
+            <View style={{ gap: 24 }}>{children}</View>
+          </Animated.View>
+          {footer ? (
+            <View
+              style={{
+                borderTopColor: colors.separator,
+                borderTopWidth: 1,
+                paddingTop: 14,
+              }}
+            >
+              {footer}
+            </View>
+          ) : null}
+        </View>
+      </TouchableWithoutFeedback>
+    </SafeAreaView>
   );
 }
 

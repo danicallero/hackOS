@@ -5,6 +5,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../../lib/capabilities.js";
+import { requireIdempotencyKey } from "../../../lib/idempotency.js";
 import {
   type RouteAccessPolicy,
   routeAccessOption as routeAccess,
@@ -168,7 +169,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
     "/api/announcements",
     {
       ...routeAccess(manage),
-      preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE),
+      preHandler: [requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE), requireIdempotencyKey],
       schema: {
         summary: "Create announcement",
         description:
@@ -211,7 +212,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
     "/api/announcements/:id",
     {
       ...routeAccess(manage),
-      preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE),
+      preHandler: [requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE), requireIdempotencyKey],
       schema: {
         summary: "Update announcement",
         description:
@@ -261,7 +262,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
     "/api/announcements/:id",
     {
       ...routeAccess(manage),
-      preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE),
+      preHandler: [requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE), requireIdempotencyKey],
       schema: {
         summary: "Delete announcement",
         description:

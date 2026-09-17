@@ -52,7 +52,11 @@ import { SaveStatus } from "@/components/common/save-status";
 import { ScaleButtons } from "@/components/common/scale-buttons";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
-import { type FieldValue, TemplateFieldControl } from "@/components/common/template-field-control";
+import {
+  type FieldValue,
+  TemplateFieldControl,
+  templateFieldId,
+} from "@/components/common/template-field-control";
 import { Button } from "@/components/ui/button";
 import { dialogIconButtonClass } from "@/components/ui/dialog";
 import {
@@ -66,10 +70,11 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, api } from "@/lib/api";
+import { fieldErrorsFromApi, validationErrorSummary } from "@/lib/application-validation";
 import { LOCALE_CODES, pickText, type Translate, useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
 import { useCan, useMe } from "@/lib/session";
-import { toast } from "@/lib/toast";
+import { showErrorToast, toast } from "@/lib/toast";
 import type { Intolerance, Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -804,6 +809,7 @@ export function ReviewModal({
   // existing key, not just the ones the template shows.
   const [editing, setEditing] = useState(false);
   const [editValues, setEditValues] = useState<Record<string, unknown>>(response.responses);
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [savingEdit, setSavingEdit] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
@@ -930,6 +936,7 @@ export function ReviewModal({
     setModalStatus(response.status);
     setStaffNotes(response.staff_notes ?? "");
     setEditValues({ ...response.responses });
+    setEditErrors({});
     setEditing(false);
     setActiveFileIndex(0);
     setReviewPage("application");
@@ -1068,7 +1075,18 @@ export function ReviewModal({
 
   function startEdit() {
     setEditValues({ ...response.responses });
+    setEditErrors({});
     setEditing(true);
+  }
+
+  function handleEditFieldChange(key: string, value: FieldValue) {
+    setEditValues((prev) => ({ ...prev, [key]: value }));
+    setEditErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   }
 
   async function saveEdit() {
@@ -1080,7 +1098,26 @@ export function ReviewModal({
       setEditing(false);
       toast.success(t("answersUpdated"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveAnswers"));
+      const nextErrors = fieldErrorsFromApi(err, t, answerFields, lang);
+      setEditErrors(nextErrors);
+      const firstInvalid = answerFields.find((field) => nextErrors[field.key]);
+      if (firstInvalid) {
+        requestAnimationFrame(() => {
+          document.getElementById(templateFieldId(firstInvalid.key, applicationId))?.focus();
+        });
+      }
+      const summary = validationErrorSummary(nextErrors, answerFields, lang);
+      const serverMessage = err instanceof ApiError ? err.message : "";
+      showErrorToast(
+        err,
+        t("couldNotSaveAnswers"),
+        summary || serverMessage
+          ? {
+              description: [serverMessage, summary].filter(Boolean).join("\n"),
+              ...(summary ? { duration: 12_000, autopilot: { expand: 0, collapse: 0 } } : {}),
+            }
+          : undefined,
+      );
     } finally {
       setSavingEdit(false);
     }
@@ -1452,6 +1489,8 @@ export function ReviewModal({
                     setEditing={setEditing}
                     editValues={editValues}
                     setEditValues={setEditValues}
+                    editErrors={editErrors}
+                    onEditFieldChange={handleEditFieldChange}
                     savingEdit={savingEdit}
                     saveEdit={saveEdit}
                     answerFields={answerFields}
@@ -1473,6 +1512,8 @@ export function ReviewModal({
                   setEditing={setEditing}
                   editValues={editValues}
                   setEditValues={setEditValues}
+                  editErrors={editErrors}
+                  onEditFieldChange={handleEditFieldChange}
                   savingEdit={savingEdit}
                   saveEdit={saveEdit}
                   answerFields={answerFields}
@@ -1490,6 +1531,8 @@ export function ReviewModal({
                 setEditing={setEditing}
                 editValues={editValues}
                 setEditValues={setEditValues}
+                editErrors={editErrors}
+                onEditFieldChange={handleEditFieldChange}
                 savingEdit={savingEdit}
                 saveEdit={saveEdit}
                 answerFields={answerFields}
@@ -1547,6 +1590,8 @@ function AnswersSection({
   setEditing,
   editValues,
   setEditValues,
+  editErrors,
+  onEditFieldChange,
   savingEdit,
   saveEdit,
   answerFields,
@@ -1561,6 +1606,8 @@ function AnswersSection({
   setEditing: (v: boolean) => void;
   editValues: Record<string, unknown>;
   setEditValues: (fn: (prev: Record<string, unknown>) => Record<string, unknown>) => void;
+  editErrors: Record<string, string>;
+  onEditFieldChange: (key: string, value: FieldValue) => void;
   savingEdit: boolean;
   saveEdit: () => Promise<void>;
   answerFields: TemplateField[];
@@ -1604,7 +1651,8 @@ function AnswersSection({
                       applicationId={fieldEditing ? applicationId : undefined}
                       value={value}
                       disabled={!fieldEditing}
-                      onChange={(v) => setEditValues((prev) => ({ ...prev, [f.key]: v }))}
+                      error={fieldEditing ? editErrors[f.key] : undefined}
+                      onChange={(v) => onEditFieldChange(f.key, v)}
                       sharedWithSponsors={
                         (fieldEditing ? editValues : response.responses)[sponsorShareKey(f.key)] ===
                         true

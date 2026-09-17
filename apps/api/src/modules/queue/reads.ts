@@ -1,4 +1,4 @@
-import { pool } from "../../db/pool.js";
+import { pool, type Queryable } from "../../db/pool.js";
 import { NotFoundError } from "../../lib/errors.js";
 import { queueFixtureMarker } from "./broadcast.js";
 import { assertQueueChallengeReadScope, assertQueueEntryScope } from "./fixture-scope.js";
@@ -170,7 +170,7 @@ async function waitingQueueView(challengeIds: number[]) {
  *
  * Deduped per repo exactly as the callable queue is: a team queued for
  * several of a shared queue's challenges is ONE line, at its best position,
- * naming every challenge it is in.
+ * named by the queue group rather than by an individual challenge.
  */
 export async function queueGroupQueue(queueGroupId: number, fixtureMarker = false) {
   const group = (
@@ -215,7 +215,7 @@ export async function queueGroupQueue(queueGroupId: number, fixtureMarker = fals
               qe.called_at, qe.assigned_room_id,
               r.name AS repo_name,
               rm.name AS room_name,
-              c.title AS challenge_title,
+              qg.display_name AS queue_name,
               (SELECT COALESCE(jsonb_agg(DISTINCT o.challenge_id), '[]'::jsonb)
                  FROM queue_entries o
                 WHERE o.repo_id = qe.repo_id AND o.challenge_id = ANY($1)) AS queued_challenge_ids,
@@ -224,6 +224,10 @@ export async function queueGroupQueue(queueGroupId: number, fixtureMarker = fals
          FROM queue_entries qe
          JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $2
          JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
+         JOIN queue_group_challenges qgc
+           ON qgc.challenge_id = qe.challenge_id
+          AND qgc.queue_group_id = $3
+         JOIN queue_groups qg ON qg.id = qgc.queue_group_id
          LEFT JOIN rooms rm ON rm.id = qe.assigned_room_id
          LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
         WHERE qe.challenge_id = ANY($1)
@@ -238,7 +242,7 @@ export async function queueGroupQueue(queueGroupId: number, fixtureMarker = fals
                  WHEN 'presenting' THEN 0 WHEN 'in_room' THEN 1 WHEN 'called' THEN 2
                  WHEN 'waiting' THEN 3 ELSE 4 END,
                merged.position ASC NULLS LAST, merged.id ASC`,
-    [challengeIds, fixtureMarker],
+    [challengeIds, fixtureMarker, queueGroupId],
   );
 
   // Same "teams ahead of entering the waiting room" rank as everywhere else:
@@ -773,8 +777,8 @@ WITH viewer AS (
  * H55/nav: cheap existence check backing the "My queue" nav item — same repo
  * resolution and status filter as {@link myQueueStatus}, without the join.
  */
-export async function hasMyQueueItems(userId: number): Promise<boolean> {
-  const { rows } = await pool.query(
+export async function hasMyQueueItems(userId: number, db: Queryable = pool): Promise<boolean> {
+  const { rows } = await db.query(
     `${PARTICIPANT_QUEUE_SCOPE_SQL}
      SELECT EXISTS (
        SELECT 1
@@ -794,7 +798,7 @@ export async function hasMyQueueItems(userId: number): Promise<boolean> {
   return rows[0].exists as boolean;
 }
 
-/** H38: for each repo the user is in, their status/position/ETA in that challenge's queue. */
+/** H38: one current status/position/ETA row per queue for each repo. */
 export async function myQueueStatus(userId: number) {
   // H38: participants need to know WHERE to go. `called_room` is the concrete
   // room the entry was actually assigned to (post call_next/manual_call).
@@ -806,10 +810,13 @@ export async function myQueueStatus(userId: number) {
   // set for every 1:1 group. Once called, the frontend shows `called_room`.
   // #544: rank and pace every relevant entry in one bounded, set-based read.
   // `repo_occurrence` lets the window count each team once across a shared
-  // queue while preserving the historical rank of sibling entries.
+  // queue while preserving the historical rank of sibling entries. The
+  // participant projection collapses sibling challenge entries to one
+  // canonical entry per queue group; separate queues remain separate rows.
   const { rows: entries } = await pool.query(
     `${PARTICIPANT_QUEUE_SCOPE_SQL}, my_entries AS (
-       SELECT qe.id, qe.challenge_id,
+       SELECT DISTINCT ON (qe.repo_id, qgc.queue_group_id)
+              qe.id, qe.challenge_id,
               qgc.queue_group_id AS queue_key
          FROM queue_entries qe
          JOIN my_repos mr ON mr.repo_id = qe.repo_id
@@ -821,6 +828,11 @@ export async function myQueueStatus(userId: number) {
         WHERE qe.status NOT IN ('cancelled', 'disqualified')
           AND repo.is_test_account = v.is_test_account
           AND challenge.is_test_account = v.is_test_account
+        ORDER BY qe.repo_id, qgc.queue_group_id,
+                 CASE qe.status
+                   WHEN 'presenting' THEN 0 WHEN 'in_room' THEN 1 WHEN 'called' THEN 2
+                   WHEN 'waiting' THEN 3 WHEN 'completed' THEN 4 ELSE 5 END,
+                 qe.position ASC NULLS LAST, qe.id ASC
      ), waiting_order AS (
        SELECT qe.id, qe.repo_id, qe.position,
               qgc.queue_group_id AS queue_key,

@@ -55,7 +55,7 @@ services:
   # and are served via the API's presigned-download route. Idempotent — safe to
   # re-run on every `up`, so a fresh deploy self-provisions with no manual `mc`.
   minio-init:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:latest
     depends_on:
       minio:
         condition: service_healthy

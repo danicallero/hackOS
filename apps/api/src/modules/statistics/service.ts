@@ -1,11 +1,10 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { pool, type Queryable } from "../../db/pool.js";
-import { userHasCapability } from "../../lib/capabilities.js";
+import { type AuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
 import { ForbiddenError } from "../../lib/errors.js";
 import type { StatisticsConfig } from "../applications/schemas.js";
 import type { ApplicationRow } from "../applications/service.js";
 import {
-  allowedStatisticsPanels,
   applicationStats,
   fieldPanelKey,
   resolveStatisticsPanelDecisions,
@@ -55,38 +54,45 @@ export function statisticsScopeKey(kind: StatisticsScopeKind, id: number): strin
   return `${kind}:${id}`;
 }
 
-/** Role-scoped panel ACL, using the same position-ordered tri-state resolver
- * as application panel ACL. Missing rows are INHERIT and general Logistics
- * access supplies the fallback ALLOW. */
-export async function allowedRoleStatisticsPanels(
-  roleId: number,
+/** Resolve all visible scope ACLs in one position-ordered query. */
+async function statisticsPanelDecisionsByScope(
+  scopeKeys: string[],
   userId: number,
-  generalAccess = false,
   db: Queryable = pool,
-): Promise<Set<string>> {
+): Promise<Map<string, Map<string, "allow" | "deny">>> {
+  if (scopeKeys.length === 0) return new Map();
   const { rows } = await db.query(
-    `SELECT a.panel_key, a.state, r.position
+    `SELECT a.scope_key, a.panel_key, a.state, r.position
        FROM statistics_scope_panel_role_access a
        JOIN user_roles ur ON ur.role_id = a.role_id AND ur.user_id = $2
        JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
-      WHERE a.scope_key = $1 AND a.state <> 'inherit'
-      ORDER BY a.panel_key, r.position DESC`,
-    [statisticsScopeKey("role", roleId), userId],
+      WHERE a.scope_key = ANY($1::text[]) AND a.state <> 'inherit'
+      ORDER BY a.scope_key, a.panel_key, r.position DESC`,
+    [scopeKeys, userId],
   );
-  const decisions = resolveStatisticsPanelDecisions(
-    (rows as Array<{ panel_key: string; state: "allow" | "deny"; position: number }>).map(
-      (row) => ({
-        panelKey: row.panel_key,
-        rolePosition: Number(row.position),
-        state: row.state,
-      }),
-    ),
-  );
-  return new Set(
-    ROLE_SCOPE_PANEL_KEYS.filter((panelKey) => {
-      const explicit = decisions.get(panelKey);
-      return explicit ? explicit === "allow" : generalAccess;
-    }),
+  const byScope = new Map<
+    string,
+    Array<{ panelKey: string; rolePosition: number; state: "allow" | "deny" }>
+  >();
+  for (const row of rows as Array<{
+    scope_key: string;
+    panel_key: string;
+    state: "allow" | "deny";
+    position: number;
+  }>) {
+    const decisions = byScope.get(row.scope_key) ?? [];
+    decisions.push({
+      panelKey: row.panel_key,
+      rolePosition: Number(row.position),
+      state: row.state,
+    });
+    byScope.set(row.scope_key, decisions);
+  }
+  return new Map(
+    [...byScope.entries()].map(([scopeKey, decisions]) => [
+      scopeKey,
+      resolveStatisticsPanelDecisions(decisions),
+    ]),
   );
 }
 
@@ -97,51 +103,66 @@ export async function allowedRoleStatisticsPanels(
  */
 export async function accessibleStatisticsScopes(
   userId: number,
-  request?: Parameters<typeof userHasCapability>[2],
+  context: AuthorizationContext,
 ): Promise<InternalScope[]> {
-  const manages = await userHasCapability(userId, CAPABILITIES.STATISTICS_MANAGE, request);
-  const generalAccess = await userHasCapability(userId, CAPABILITIES.LOGISTICS_STATS, request);
+  const manages = await userHasCapability(context, CAPABILITIES.STATISTICS_MANAGE);
+  const generalAccess = await userHasCapability(context, CAPABILITIES.LOGISTICS_STATS);
 
-  const applications = await pool.query<ApplicationRow>(`SELECT * FROM applications ORDER BY id`);
-  const applicationScopes = await Promise.all(
-    applications.rows.map(async (application) => {
-      const availablePanelKeys = statisticsPanelKeys(application.template);
-      const panelKeys = manages
-        ? availablePanelKeys
-        : await allowedStatisticsPanels(application.id, userId, generalAccess);
-      if (!manages && panelKeys.size === 0) return null;
-      return {
-        key: statisticsScopeKey("application", application.id),
-        kind: "application" as const,
-        id: application.id,
-        name: application.name,
-        panelKeys: [...panelKeys],
-        application,
-      } satisfies InternalScope;
-    }),
-  );
-
-  const roles = await pool.query<{ id: number; name: string }>(
-    `SELECT id, name FROM roles
+  const [applications, roles] = await Promise.all([
+    pool.query<ApplicationRow>(`SELECT * FROM applications ORDER BY id`),
+    pool.query<{ id: number; name: string }>(
+      `SELECT id, name FROM roles
       WHERE deleted_at IS NULL
       ORDER BY position DESC, id`,
-  );
-  const roleScopes = await Promise.all(
-    roles.rows.map(async (role) => {
-      const availablePanelKeys = new Set<string>(ROLE_SCOPE_PANEL_KEYS);
-      const panelKeys = manages
-        ? availablePanelKeys
-        : await allowedRoleStatisticsPanels(role.id, userId, generalAccess);
-      if (!manages && panelKeys.size === 0) return null;
-      return {
-        key: statisticsScopeKey("role", role.id),
-        kind: "role" as const,
-        id: role.id,
-        name: role.name,
-        panelKeys: [...panelKeys],
-      } satisfies InternalScope;
-    }),
-  );
+    ),
+  ]);
+  const decisionsByScope = manages
+    ? new Map<string, Map<string, "allow" | "deny">>()
+    : await statisticsPanelDecisionsByScope(
+        [
+          ...applications.rows.map((application) =>
+            statisticsScopeKey("application", application.id),
+          ),
+          ...roles.rows.map((role) => statisticsScopeKey("role", role.id)),
+        ],
+        userId,
+      );
+  const panelKeysFor = (scopeKey: string, available: Set<string>) =>
+    new Set(
+      [...available].filter((panelKey) => {
+        const explicit = decisionsByScope.get(scopeKey)?.get(canonicalStatisticsPanelKey(panelKey));
+        return explicit ? explicit === "allow" : generalAccess;
+      }),
+    );
+  const applicationScopes = applications.rows.map((application) => {
+    const availablePanelKeys = statisticsPanelKeys(application.template);
+    const panelKeys = manages
+      ? availablePanelKeys
+      : panelKeysFor(statisticsScopeKey("application", application.id), availablePanelKeys);
+    if (!manages && panelKeys.size === 0) return null;
+    return {
+      key: statisticsScopeKey("application", application.id),
+      kind: "application" as const,
+      id: application.id,
+      name: application.name,
+      panelKeys: [...panelKeys],
+      application,
+    } satisfies InternalScope;
+  });
+  const roleScopes = roles.rows.map((role) => {
+    const availablePanelKeys = new Set<string>(ROLE_SCOPE_PANEL_KEYS);
+    const panelKeys = manages
+      ? availablePanelKeys
+      : panelKeysFor(statisticsScopeKey("role", role.id), availablePanelKeys);
+    if (!manages && panelKeys.size === 0) return null;
+    return {
+      key: statisticsScopeKey("role", role.id),
+      kind: "role" as const,
+      id: role.id,
+      name: role.name,
+      panelKeys: [...panelKeys],
+    } satisfies InternalScope;
+  });
 
   return [...applicationScopes, ...roleScopes].filter((scope) => scope !== null) as InternalScope[];
 }
@@ -406,7 +427,7 @@ function dynamicPanelDefinitions(
   const fields = new Map<string, StatisticsConfig | undefined>();
   for (const scope of scopes) {
     for (const field of scope.application?.template ?? []) {
-      if (field.reporting === true || field.statistics?.enabled === true) {
+      if (field.statistics?.enabled === true) {
         fields.set(fieldPanelKey(field.key), field.statistics);
       }
     }
@@ -423,10 +444,10 @@ function dynamicPanelDefinitions(
 export async function queryStatistics(
   userId: number,
   query: StatisticsQuery,
-  request?: Parameters<typeof userHasCapability>[2],
+  context: AuthorizationContext,
 ): Promise<Record<string, unknown>> {
   const requestedScopes = [...new Set(query.scopes)];
-  const allScopes = await accessibleStatisticsScopes(userId, request);
+  const allScopes = await accessibleStatisticsScopes(userId, context);
   const byKey = new Map(allScopes.map((scope) => [scope.key, scope]));
   const scopes = requestedScopes.map((key) => byKey.get(key));
   if (scopes.some((scope) => !scope)) throw new ForbiddenError("Statistics scope is not available");
@@ -542,9 +563,9 @@ export async function queryStatistics(
 export async function statisticsCsv(
   userId: number,
   query: StatisticsQuery,
-  request?: Parameters<typeof userHasCapability>[2],
+  context: AuthorizationContext,
 ): Promise<string> {
-  const result = await queryStatistics(userId, query, request);
+  const result = await queryStatistics(userId, query, context);
   const scopes = (result.selected_scopes as StatisticsScope[])
     .map((scope) => scope.name)
     .join(" + ");

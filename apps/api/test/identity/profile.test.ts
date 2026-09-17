@@ -2,10 +2,11 @@ import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { SSE_TOPICS } from "@hackos/shared/events";
 import { hashPassword } from "better-auth/crypto";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { App } from "../../src/app.js";
 import {
   asUser,
+  authorizationContextFor,
   buildTestApp,
   createUser,
   createUserWithCapabilities,
@@ -107,7 +108,7 @@ describe("GET /api/me (H7)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().name).toBe("Grace");
     expect(res.json().visibleRoleName).toBeNull();
-    expect(res.json().mobileAccess).toBe(false);
+    expect(res.json().hasEventAccess).toBe(false);
     // H8/H55: /api/me carries the effective capabilities for UI gating.
     expect(res.json().capabilities).toEqual([]);
   });
@@ -120,8 +121,8 @@ describe("GET /api/me (H7)", () => {
     const internal = await createUser();
     const invited = await createUser();
     const { rows: applications } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Participants', '[]'::jsonb) RETURNING id`,
     );
     const formVersionId = await ensureApplicationFormVersion(applications[0].id);
     await pool.query(
@@ -144,7 +145,7 @@ describe("GET /api/me (H7)", () => {
 
     const accessOf = async (id: number) => {
       const res = await a.inject({ method: "GET", url: "/api/me", headers: asUser(id) });
-      return res.json().mobileAccess;
+      return res.json().hasEventAccess;
     };
     expect(await accessOf(staff)).toBe(true);
     expect(await accessOf(accepted)).toBe(true);
@@ -295,6 +296,65 @@ describe("GET /api/me (H7)", () => {
   });
 });
 
+describe("GET /api/users/:id/responses (H7)", () => {
+  it("loads a representative response history and its ordered reviews in one set-based query", async () => {
+    const a = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const staff = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
+    const subject = await createUser();
+    const reviewer = await createUser();
+
+    for (let index = 0; index < 24; index++) {
+      const { rows: applications } = await pool.query<{ id: number }>(
+        `INSERT INTO applications (name, template) VALUES ($1, '[]'::jsonb) RETURNING id`,
+        [`History ${index}`],
+      );
+      const applicationId = applications[0]?.id;
+      if (!applicationId) throw new Error("Application fixture was not created");
+      const formVersionId = await ensureApplicationFormVersion(applicationId);
+      const { rows: responses } = await pool.query<{ id: number }>(
+        `INSERT INTO application_responses
+           (user_id, application_id, application_form_version_id, status, responses)
+         VALUES ($1, $2, $3, 'review', $4::jsonb) RETURNING id`,
+        [subject, applicationId, formVersionId, JSON.stringify({ index })],
+      );
+      if (index % 2 === 0) {
+        await pool.query(
+          `INSERT INTO applicant_reviews (response_id, author_id, score, notes)
+           VALUES ($1, $2, $3, $4)`,
+          [responses[0]?.id, reviewer, 1, `review ${index}`],
+        );
+      }
+    }
+
+    const querySpy = vi.spyOn(pool, "query");
+    const response = await a.inject({
+      method: "GET",
+      url: `/api/users/${subject}/responses`,
+      headers: asUser(staff),
+    });
+    const responseAndReviewsQueries = querySpy.mock.calls.filter(
+      ([query]) =>
+        typeof query === "string" &&
+        query.includes("application_responses r") &&
+        query.includes("applicant_reviews"),
+    );
+    querySpy.mockRestore();
+
+    expect(response.statusCode).toBe(200);
+    const history = response.json().responses;
+    expect(history).toHaveLength(24);
+    expect(history[0]).toEqual(expect.objectContaining({ responses: { index: 23 }, reviews: [] }));
+    expect(history[1]).toEqual(
+      expect.objectContaining({
+        responses: { index: 22 },
+        reviews: [{ authorId: reviewer, score: 1, notes: "review 22" }],
+      }),
+    );
+    expect(responseAndReviewsQueries).toHaveLength(1);
+  });
+});
+
 describe("self-service account removal (H54)", () => {
   it("requires and consumes a one-time PIN for verified-primary-email self-removal", async () => {
     const a = await getApp();
@@ -434,8 +494,8 @@ describe("self-service account removal (H54)", () => {
     const { pool } = await import("../../src/db/pool.js");
     const user = await createUser({ name: "Accepted Self Deletable", emailVerified: true });
     const { rows: applications } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Participants', '[]'::jsonb) RETURNING id`,
     );
     const formVersionId = await ensureApplicationFormVersion(applications[0].id);
     const { rows: tokens } = await pool.query(
@@ -510,8 +570,8 @@ describe("self-service account removal (H54)", () => {
     const user = await createUser({ name: "Self Deletable", emailVerified: false });
     await addCredentialPassword(user);
     const { rows: applications } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Participants', '[]'::jsonb) RETURNING id`,
     );
     const formVersionId = await ensureApplicationFormVersion(applications[0].id);
     await pool.query(
@@ -1017,6 +1077,7 @@ describe("self-service account removal (H54)", () => {
     const { pool } = await import("../../src/db/pool.js");
     const user = await createUser({ email: "cancel-pending@example.test", emailVerified: false });
     await addCredentialPassword(user);
+    await grantAttendeeRole(user, "participant");
     await pool.query(
       `UPDATE users
           SET badge_id = 'B-CANCEL-PENDING',
@@ -1062,7 +1123,7 @@ describe("self-service account removal (H54)", () => {
     expect(profile.statusCode).toBe(200);
     expect(profile.json()).toMatchObject({
       accountState: "removal_pending",
-      mobileAccess: false,
+      hasEventAccess: false,
       removal: { status: "pending_exit", action: "anonymize", canCancel: true },
     });
 
@@ -1329,8 +1390,8 @@ describe("self-service account removal (H54)", () => {
       },
     ];
     const { rows: applicationRows } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Demographic extraction', 'participant', $1::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Demographic extraction', $1::jsonb) RETURNING id`,
       [JSON.stringify(demographicTemplate)],
     );
     const formVersionId = await ensureApplicationFormVersion(applicationRows[0].id);
@@ -1526,8 +1587,8 @@ describe("self-service account removal (H54)", () => {
       },
     ];
     const { rows: applications } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Versioned retention form', 'participant', $1::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Versioned retention form', $1::jsonb) RETURNING id`,
       [JSON.stringify(templateV1)],
     );
     const applicationId = applications[0].id as number;
@@ -1556,8 +1617,8 @@ describe("self-service account removal (H54)", () => {
       },
     ];
     const { rows: draftApplications } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Draft retention form', 'participant', $1::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Draft retention form', $1::jsonb) RETURNING id`,
       [JSON.stringify(draftTemplate)],
     );
     const draftVersionId = await ensureApplicationFormVersion(draftApplications[0].id);
@@ -1650,13 +1711,13 @@ describe("self-service account removal (H54)", () => {
       },
     ];
     const { rows: formA } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Form A', 'participant', $1::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Form A', $1::jsonb) RETURNING id`,
       [JSON.stringify(templateA)],
     );
     const { rows: formB } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Form B', 'participant', $1::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Form B', $1::jsonb) RETURNING id`,
       [JSON.stringify(templateB)],
     );
     const versionA = await ensureApplicationFormVersion(formA[0].id);
@@ -2090,8 +2151,8 @@ describe("staff user routes (H7)", () => {
     const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
     const target = await createUser({ name: "Historically Referenced" });
     const { rows: applications } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Participants', '[]'::jsonb) RETURNING id`,
     );
     const formVersionId = await ensureApplicationFormVersion(applications[0].id);
     await pool.query(
@@ -2153,8 +2214,8 @@ describe("staff user routes (H7)", () => {
     const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
     const target = await createUser({ name: "Never Accepted" });
     const { rows: applications } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Participants', 'participant', '[]'::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Participants', '[]'::jsonb) RETURNING id`,
     );
     const formVersionId = await ensureApplicationFormVersion(applications[0].id);
     const { rows: responseRows } = await pool.query(
@@ -2342,8 +2403,8 @@ describe("staff user routes (H7)", () => {
     const editor = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
 
     const { rows: appRows } = await pool.query(
-      `INSERT INTO applications (name, type, template, description, confirmation_window_hours)
-       VALUES ('F', 'participant', '[]'::jsonb, '', 168) RETURNING id`,
+      `INSERT INTO applications (name, template, description, confirmation_window_hours)
+       VALUES ('F', '[]'::jsonb, '', 168) RETURNING id`,
     );
     const appId = appRows[0].id;
     const formVersionId = await ensureApplicationFormVersion(appId);
@@ -2507,8 +2568,12 @@ describe("staff user routes (H7)", () => {
     const { getEffectiveCapabilities, userHasCapability } = await import(
       "../../src/lib/capabilities.js"
     );
-    expect(await getEffectiveCapabilities(target)).toEqual(new Set());
-    expect(await userHasCapability(target, CAPABILITIES.USERS_READ)).toBe(false);
+    expect(await getEffectiveCapabilities(await authorizationContextFor(target))).toEqual(
+      new Set(),
+    );
+    expect(
+      await userHasCapability(await authorizationContextFor(target), CAPABILITIES.USERS_READ),
+    ).toBe(false);
 
     // The audit trail for the anonymize action must not retain the very PII
     // it was supposed to scrub.
@@ -2641,8 +2706,8 @@ describe("staff user routes (H7)", () => {
       { key: "year_founded", kind: "number", label: { en: "Year founded" } },
     ];
     const { rows: applicationRows } = await pool.query(
-      `INSERT INTO applications (name, type, template)
-       VALUES ('Free-text minimization', 'participant', $1::jsonb) RETURNING id`,
+      `INSERT INTO applications (name, template)
+       VALUES ('Free-text minimization', $1::jsonb) RETURNING id`,
       [JSON.stringify(freeTextTemplate)],
     );
     const formVersionId = await ensureApplicationFormVersion(applicationRows[0].id);

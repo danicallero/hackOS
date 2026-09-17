@@ -64,7 +64,6 @@ function useVisible() {
       canAny,
       isEnterpriseJudge: me?.isEnterpriseJudge ?? false,
       isSponsorRep: me?.isSponsorRep ?? false,
-      hasAnyCapability: (me?.capabilities.length ?? 0) > 0,
       isPureApplicant,
       // Default true while `me` is still loading, matching isPureApplicant's
       // "show, then narrow down" pattern so the sidebar doesn't flash empty.
@@ -230,7 +229,7 @@ function WorkspaceGroup({
 }
 
 /**
- * Dokploy-style left navigation. A stable personal area (`PERSONAL_NAV`)
+ * Operator-console-style left navigation. A stable personal area (`PERSONAL_NAV`)
  * plus additive, capability-gated workspaces (`WORKSPACES`) from
  * `lib/nav.ts` (H55: "al cambiar los permisos, sus pestañas cambian").
  * Collapses to an icon rail (`collapsible="icon"`); each item keeps its

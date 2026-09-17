@@ -16,6 +16,7 @@ import {
 } from "@/lib/announcements-admin";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
+import { useMeContext } from "@/lib/me-context";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { colors } from "@/theme/colors";
 
@@ -70,13 +71,15 @@ export function ManageAnnouncementsView({
   onFormOpenChange: (next: "create" | number | null) => void;
 }) {
   const { t, language } = useLocale();
+  const { me } = useMeContext();
   const [refreshing, setRefreshing] = useState(false);
   const [editTarget, setEditTarget] = useState<AdminAnnouncement | null>(null);
   const [editLoading, setEditLoading] = useState(false);
 
   const { data, loading, error, staleSince, load } = useCachedApi(
-    "admin-announcements",
+    `user:${me?.id ?? "unknown"}:admin-announcements`,
     fetchAdminAnnouncements,
+    { enabled: me !== null },
   );
   const items = data ?? [];
 

@@ -1,16 +1,22 @@
+import { createHash } from "node:crypto";
 import type { Readable } from "node:stream";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool, withTransaction } from "../../db/pool.js";
-import { requireAuth, userHasCapability } from "../../lib/capabilities.js";
+import {
+  getRequestAuthorizationContext,
+  requireAuth,
+  userHasCapability,
+} from "../../lib/capabilities.js";
 import {
   BadRequestError,
   ForbiddenError,
   NotFoundError,
   UnauthorizedError,
 } from "../../lib/errors.js";
+import { requireIdempotencyKey } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { getObject, putObject } from "../../lib/storage.js";
 import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
@@ -45,7 +51,7 @@ const requireApplicationUploadAccess: preHandlerHookHandler = async (req) => {
   await assertFixtureSubjectScope(pool, userId, ownerId);
   if (
     userId === ownerId ||
-    (await userHasCapability(userId, CAPABILITIES.APPLICATIONS_REVIEW, req))
+    (await userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.APPLICATIONS_REVIEW))
   ) {
     return;
   }
@@ -74,7 +80,7 @@ export function registerUploadRoutes(app: FastifyInstance): void {
   r.post(
     "/api/applications/:applicationId/upload/:fieldKey",
     {
-      preHandler: requireAuth,
+      preHandler: [requireAuth, requireIdempotencyKey],
       config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
       schema: {
         summary: "Upload a file for an application field",
@@ -94,10 +100,15 @@ export function registerUploadRoutes(app: FastifyInstance): void {
       const ext = `.${(name.split(".").pop() ?? "").toLowerCase()}`;
       const bytes = await file.toBuffer();
 
-      // Key: uploads/<appId>/<userId>/<fieldKey>/<ts>/<original-name>. The unique
-      // timestamp is a hidden path segment so the LAST segment is the clean
-      // original filename (shown in the UI); the userId segment drives authz.
-      const key = `uploads/${applicationId}/${userId}/${fieldKey}/${Date.now()}/${safeFilename(name)}`;
+      // A retry must address the same object, including after a connection
+      // drops after MinIO accepted the bytes but before the HTTP response is
+      // persisted. The required request key is secret enough to derive an
+      // opaque stable segment; the filename remains the final display segment.
+      const operation = createHash("sha256")
+        .update(req.idempotency?.key ?? `${Date.now()}-${Math.random()}`)
+        .digest("hex")
+        .slice(0, 32);
+      const key = `uploads/${applicationId}/${userId}/${fieldKey}/${operation}/${safeFilename(name)}`;
       await withTransaction(async (client) => {
         // H54: lock the active user while validating and storing the object.
         // Removal takes the same user's row lock, so it cannot delete the

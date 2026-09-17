@@ -269,7 +269,8 @@ export interface QueueGroupQueue {
     repo_id: number;
     repo_name: string;
     challenge_id: number;
-    challenge_title: string;
+    /** The queue group's name; never an individual challenge title. */
+    queue_name: string;
     status: QueueStatus;
     position: number | null;
     called_at: string | null;
@@ -348,6 +349,7 @@ export interface MyQueueRoom {
 }
 
 export interface MyQueueEntry {
+  /** The participant projection is one row per project queue. */
   entryId: number;
   challengeId: number;
   challengeTitle: string;
@@ -364,12 +366,14 @@ export interface MyQueueEntry {
 }
 
 // ── reads ────────────────────────────────────────────────────────────────
-export const getRoomView = (roomId: number) => api.get<RoomView>(`/api/queue/rooms/${roomId}/view`);
+export const getRoomView = (roomId: number, signal?: AbortSignal) =>
+  api.get<RoomView>(`/api/queue/rooms/${roomId}/view`, { signal });
 export const getAllRoomViews = () => api.get<RoomView[]>("/api/tv/rooms");
 // TV display state, the timetable and the live-screen config live in lib/tv.ts.
-export const getChallengeProgress = (challengeId: number) =>
-  api.get<ChallengeProgress>(`/api/queue/challenges/${challengeId}/progress`);
-export const getRoomPace = (roomId: number) => api.get<RoomPace>(`/api/queue/rooms/${roomId}/pace`);
+export const getChallengeProgress = (challengeId: number, signal?: AbortSignal) =>
+  api.get<ChallengeProgress>(`/api/queue/challenges/${challengeId}/progress`, { signal });
+export const getRoomPace = (roomId: number, signal?: AbortSignal) =>
+  api.get<RoomPace>(`/api/queue/rooms/${roomId}/pace`, { signal });
 export const getRoomAssignments = (roomId: number) =>
   api.get<RoomAssignments>(`/api/queue/rooms/${roomId}/assignments`);
 /** GET /api/queue/repos/:id/challenges — every challenge queue a repo belongs to (H40). */
@@ -388,6 +392,43 @@ export interface RepoChallenge {
   room_name: string | null;
   judging_rooms: Array<{ id: number; name: string }>;
 }
+
+const queueStatusPriority: Record<string, number> = {
+  presenting: 0,
+  in_room: 1,
+  called: 2,
+  waiting: 3,
+  completed: 4,
+  disqualified: 5,
+};
+
+/** Collapse one project's challenge entries to one row per queue group. */
+export function collapseRepoQueueMemberships(entries: RepoChallenge[]): RepoChallenge[] {
+  const byQueue = new Map<string, RepoChallenge>();
+  for (const entry of entries) {
+    const key = `queue:${entry.queue_group_id ?? entry.id}`;
+    const current = byQueue.get(key);
+    if (!current) {
+      byQueue.set(key, entry);
+      continue;
+    }
+    const currentPriority = queueStatusPriority[current.status] ?? 99;
+    const entryPriority = queueStatusPriority[entry.status] ?? 99;
+    if (
+      entryPriority < currentPriority ||
+      (entryPriority === currentPriority &&
+        (entry.position ?? Number.MAX_SAFE_INTEGER) < (current.position ?? Number.MAX_SAFE_INTEGER))
+    ) {
+      byQueue.set(key, entry);
+    }
+  }
+  return [...byQueue.values()].sort(
+    (a, b) =>
+      (a.position ?? Number.MAX_SAFE_INTEGER) - (b.position ?? Number.MAX_SAFE_INTEGER) ||
+      (a.queue_name ?? a.title).localeCompare(b.queue_name ?? b.title),
+  );
+}
+
 export const getRepoChallenges = (repoId: number) =>
   api.get<RepoChallenge[]>(`/api/queue/repos/${repoId}/challenges`);
 export const getMyQueue = () => api.get<MyQueueEntry[]>("/api/queue/me");
@@ -578,7 +619,12 @@ export interface ReviewDetail {
   calledAt: string | null;
   presentationStartedAt: string | null;
   completedAt: string | null;
-  challenge: { id: number; title: TranslatedText; criteria: Question[] };
+  challenge: {
+    id: number;
+    title: TranslatedText;
+    appliedChallenges: Array<{ id: number; title: string }>;
+    criteria: Question[];
+  };
   room: { id: number; name: string; location: string | null } | null;
   project: {
     id: number;

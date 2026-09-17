@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import fp from "fastify-plugin";
 import { config } from "../config.js";
+import { type AuthorizationContext, createAuthorizationContext } from "../lib/capabilities.js";
 import type { ReviewFixtureLogContext } from "../lib/review-fixture-log.js";
 
 declare module "fastify" {
@@ -9,17 +10,19 @@ declare module "fastify" {
     userId: number | null;
     /** Authenticated Better Auth session token, when the request has one. */
     sessionToken: string | null;
-    /** Request-scoped PostgreSQL capability resolution (H8). */
-    effectiveCapabilities?: Promise<Set<string>>;
+    /** Request/transaction authorization snapshot (H8, #714). */
+    authorizationContext: AuthorizationContext | null;
     /** Current synthetic reviewer identity captured before the request runs. */
     reviewFixtureContext: ReviewFixtureLogContext | null;
   }
 }
 
 /**
- * Decorates every request with `userId`. The real resolution — Better Auth
- * session cookie/bearer → user id — is wired by the identity module (H1-H10),
- * which overrides `resolveUserId`. Until then (and always, in NODE_ENV=test)
+ * Decorates application requests with `userId`. The real resolution — Better
+ * Auth session cookie/bearer → user id — is wired by the identity module
+ * (H1-H10), which overrides `resolveUserId`; Better Auth's generated auth
+ * handler resolves its own session and is deliberately excluded here to
+ * avoid a duplicate session read. Until then (and always, in NODE_ENV=test)
  * the `x-test-user-id` header lets modules and tests exercise
  * capability-guarded routes without a full auth stack.
  */
@@ -35,7 +38,7 @@ export function setUserIdResolver(resolver: UserIdResolver): void {
 export const authContextPlugin = fp(async (app: FastifyInstance) => {
   app.decorateRequest("userId", null);
   app.decorateRequest("sessionToken", null);
-  app.decorateRequest("effectiveCapabilities", undefined);
+  app.decorateRequest("authorizationContext", null);
   app.decorateRequest("reviewFixtureContext", null);
   app.addHook("onRequest", async (req) => {
     if (config.isTest) {
@@ -45,9 +48,19 @@ export const authContextPlugin = fp(async (app: FastifyInstance) => {
         if (Number.isInteger(parsed)) {
           req.userId = parsed;
         }
+        req.authorizationContext = createAuthorizationContext(req.userId);
         return;
       }
     }
+    // Better Auth's generated handler resolves its own session from the
+    // request. Running the same lookup here would make /api/auth/* pay for
+    // two session reads; application routes still resolve through this hook.
+    if (req.routeOptions.config?.routeAccessPolicyExemption === "better-auth-generated") {
+      req.userId = null;
+      req.authorizationContext = createAuthorizationContext(null);
+      return;
+    }
     req.userId = await resolveUserId(req);
+    req.authorizationContext = createAuthorizationContext(req.userId);
   });
 });

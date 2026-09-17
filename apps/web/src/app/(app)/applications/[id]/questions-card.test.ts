@@ -10,7 +10,6 @@ describe("application question serialization", () => {
         kind: "select",
         required: false,
         options: [{ value: "first", label: { en: "First", es: "Primera", gl: "Primeira" } }],
-        reporting: true,
         statistics: {
           enabled: true,
           visualization: "pie",
@@ -20,7 +19,6 @@ describe("application question serialization", () => {
       }),
     ).toMatchObject({
       key: "experience",
-      reporting: true,
       statistics: {
         enabled: true,
         visualization: "pie",

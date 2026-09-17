@@ -29,7 +29,7 @@ export default function ApplicationsPage() {
   const hasLoadedRef = useRef(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     setLoadError(null);
     try {
       // The API admits manage, review, and decide holders. It never infers

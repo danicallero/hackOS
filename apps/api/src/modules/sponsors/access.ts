@@ -1,7 +1,11 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyRequest, preHandlerHookHandler } from "fastify";
 import { pool } from "../../db/pool.js";
-import { userHasCapability } from "../../lib/capabilities.js";
+import {
+  type AuthorizationContext,
+  getRequestAuthorizationContext,
+  userHasCapability,
+} from "../../lib/capabilities.js";
 import { ForbiddenError, NotFoundError, UnauthorizedError } from "../../lib/errors.js";
 import type {
   ContextualPolicyResolver,
@@ -36,14 +40,15 @@ export async function ownsEnterprise(userId: number, enterpriseId: number): Prom
 /**
  * H43-H44: org admins (SPONSORS_MANAGE) manage every enterprise; linked sponsor
  * reps may edit the profile of the enterprise they belong to. The sponsor row
- * is the access grant; SPONSOR_PORTAL is not required for the rep themselves.
+ * is the access grant for the representative themselves.
  * Returns how access was granted so the caller can restrict which fields an
  * owner (vs. an admin) is allowed to change.
  */
 export async function assertCanEditEnterprise(
-  userId: number | null,
+  context: AuthorizationContext,
   enterpriseId: number,
 ): Promise<EnterpriseAccess> {
+  const userId = context.userId;
   if (userId == null) throw new UnauthorizedError();
   const { rowCount: activeCount } = await pool.query(
     `SELECT 1 FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
@@ -54,7 +59,7 @@ export async function assertCanEditEnterprise(
   if (rowCount === 0) throw new NotFoundError("Enterprise not found", { enterpriseId });
   await assertFixtureEnterpriseScope(pool, userId, enterpriseId);
 
-  if (await userHasCapability(userId, CAPABILITIES.SPONSORS_MANAGE)) return "admin";
+  if (await userHasCapability(context, CAPABILITIES.SPONSORS_MANAGE)) return "admin";
   if (await ownsEnterprise(userId, enterpriseId)) return "owner";
   throw new ForbiddenError("Not allowed to edit this enterprise", { enterpriseId });
 }
@@ -95,8 +100,9 @@ export async function assertCanManageEnterpriseJudging(
     [request.userId],
   );
   if (!activeCount) throw new UnauthorizedError("This account is closed or being removed");
-  if (await userHasCapability(request.userId, CAPABILITIES.QUEUE_ADMIN, request)) return;
-  if (await userHasCapability(request.userId, CAPABILITIES.SPONSORS_MANAGE, request)) return;
+  const context = getRequestAuthorizationContext(request);
+  if (await userHasCapability(context, CAPABILITIES.QUEUE_ADMIN)) return;
+  if (await userHasCapability(context, CAPABILITIES.SPONSORS_MANAGE)) return;
   if (await ownsEnterprise(request.userId, enterpriseId)) return;
   throw new ForbiddenError("Not allowed to manage this enterprise's judging", { enterpriseId });
 }
@@ -111,7 +117,7 @@ export const enterpriseAccessPolicy: ContextualPolicyResolver<EnterpriseResource
     return { id: Number(rows[0].id) };
   },
   async authorize(request, enterprise) {
-    await assertCanEditEnterprise(request.userId, enterprise.id);
+    await assertCanEditEnterprise(getRequestAuthorizationContext(request), enterprise.id);
   },
 };
 
@@ -119,7 +125,10 @@ export const enterpriseAccessPolicy: ContextualPolicyResolver<EnterpriseResource
 export function requireEnterpriseAccess(locator: ContextualResourceLocator): preHandlerHookHandler {
   return async (request) => {
     const enterprise = await enterpriseAccessPolicy.resolve(request, locator);
-    enterpriseAccesses.set(request, await assertCanEditEnterprise(request.userId, enterprise.id));
+    enterpriseAccesses.set(
+      request,
+      await assertCanEditEnterprise(getRequestAuthorizationContext(request), enterprise.id),
+    );
   };
 }
 
@@ -144,7 +153,10 @@ export const requireSponsorPortalAccess: preHandlerHookHandler = async (request)
     [request.userId],
   );
   if (!activeCount) throw new UnauthorizedError("This account is closed or being removed");
-  if (await userHasCapability(request.userId, CAPABILITIES.SPONSORS_MANAGE)) return;
+  if (
+    await userHasCapability(getRequestAuthorizationContext(request), CAPABILITIES.SPONSORS_MANAGE)
+  )
+    return;
   const { rowCount } = await pool.query(`SELECT 1 FROM sponsors WHERE user_id = $1 LIMIT 1`, [
     request.userId,
   ]);

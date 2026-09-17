@@ -120,7 +120,7 @@ export default function QueueDetailPage() {
     const needle = search.trim().toLocaleLowerCase();
     if (!needle) return entries;
     return entries.filter((entry) =>
-      [entry.repo_name, entry.challenge_title, String(entry.repo_id)].some((value) =>
+      [entry.repo_name, entry.queue_name, String(entry.repo_id)].some((value) =>
         value.toLocaleLowerCase().includes(needle),
       ),
     );
@@ -432,11 +432,6 @@ export default function QueueDetailPage() {
                       >
                         {entry.repo_name}
                       </Link>
-                      {shared && (
-                        <p className="text-muted-foreground truncate text-xs">
-                          {entry.challenge_title}
-                        </p>
-                      )}
                     </div>
                     {entry.room_name && (
                       <span className="text-muted-foreground shrink-0 text-xs">

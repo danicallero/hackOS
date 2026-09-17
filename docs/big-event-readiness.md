@@ -1,19 +1,20 @@
-# Big-event readiness (~600 concurrent users)
+# Big-event readiness (~600 concurrent identities)
 
 A practical checklist for sizing and validating a deployment before an event
-with several hundred concurrent participants (registration rush, badge
-scanning at doors, live queue/judging screens). The architectural reasoning
+with 500+ participants, 30+ staff, 20–30 sponsor representatives, 12 rooms,
+and 7 queues (3 shared across rooms/challenges). The architectural reasoning
 behind *why* this topology scales lives in
 [`architecture.md` §7 Scalability](./architecture.md#7-scalability); this doc
 is the concrete "what do I set / check before doors open" companion.
 
 ## What already scales without changes
 
-- **api is stateless and horizontally scalable.** SSE (queue/TV/judging
-  live updates) fans out through Valkey pub/sub
-  ([`architecture.md` §5](./architecture.md#5-realtime-sse-fanned-out-through-valkey)),
-  so any number of `api` replicas behind Traefik see every event — a client
-  connected to replica A gets updates published by replica B.
+- **api is stateless and ready for a future horizontal topology.** SSE
+  (queue/TV/judging live updates) fans out through Valkey pub/sub
+  ([`architecture.md` §5](./architecture.md#5-realtime-sse-fanned-out-through-valkey)).
+  The canonical multi-architecture runtime deliberately runs one API container
+  on both the staging Raspberry Pi and production; a future replica topology would
+  still receive every event through Valkey.
 - **worker is safe to scale by replica count.** Notification dispatch and
   state-machine ticks (queue pump, expirer) use
   `FOR UPDATE` / `FOR UPDATE SKIP LOCKED`, so N replicas split the work with
@@ -22,10 +23,11 @@ is the concrete "what do I set / check before doors open" companion.
   and queue transitions (`idempotencyGuard`, `SELECT … FOR UPDATE`) — a
   scanning burst at doors can't double-check someone in.
 
-600 CCU for a hackathon is bursty, not sustained — the load spikes are
-registration opening, doors/badge scanning, and queue/judging transitions,
-not 600 people hammering the API every second. The checklist below is about
-having headroom for those bursts, not steady-state capacity.
+The event's roughly 550–560 concurrent identities are mostly held as SSE
+connections. HTTP work is bursty rather than one request per identity every
+second: the load spikes are registration opening, doors/badge scanning, and
+queue/judging transitions. The checklist below is about having headroom for
+those bursts, not treating every open SSE connection as a database worker.
 
 ## Scaling each service: what it actually relieves
 
@@ -34,14 +36,14 @@ different kind of stress. Knowing which one is under pressure (via the
 monitoring queries below) tells you which service to scale, rather than
 reflexively adding replicas everywhere.
 
-| Service | What scaling it relieves | What it does *not* relieve | How to scale | Recommended for ~600 CCU |
+| Service | What scaling it relieves | What it does *not* relieve | How to scale | Recommended for this event shape |
 |---|---|---|---|---|
-| **api** | Request-handling CPU/event-loop contention — auth checks, Zod validation, JSON serialization, and the number of concurrently-open HTTP/SSE connections a single Node process can service. | Postgres load — every extra `api` replica opens its own `DB_POOL_MAX`-sized pool, so scaling `api` *adds* to Postgres's connection budget, it doesn't reduce query load there. | Add replicas in Dokploy/compose; stateless by design, SSE already fans out through Valkey (§ above) so no sticky sessions needed. | 1 replica on a 2+ vCPU box comfortably covers 600 CCU. Add a 2nd only if you observe sustained CPU saturation on the box, not preemptively. |
+| **api** | Request-handling CPU/event-loop contention — auth checks, Zod validation, JSON serialization, and the number of concurrently-open HTTP/SSE connections a single Node process can service. | Postgres load — every extra `api` replica opens its own `DB_POOL_MAX`-sized pool, so scaling `api` *adds* to Postgres's connection budget, it doesn't reduce query load there. | The canonical Compose runtime has one replica. A future multi-replica Compose project can add stateless API containers; Valkey already fans out SSE, so no sticky sessions are needed. | 1 replica on the production host is the default; keep one on the smaller staging Raspberry Pi. |
 | **worker** | `notification_outbox` drain latency (mass announcements, acceptance emails) and state-machine tick backlog (queue pump, confirmation expirer, wallet sync). The drain is a repeatable BullMQ job (`every: 5s`) that queues a new occurrence regardless of whether the previous one finished, so under real backlog multiple ticks queue up and `FOR UPDATE SKIP LOCKED` lets replicas split them safely. | Nothing HTTP-facing — the worker has no ingress, so it never helps with request latency or SSE capacity. Replicas also don't help an *empty* queue drain faster — see the mass-messaging section below for why batch size, not replica count, is the first lever. | Add replicas; no coordination needed beyond what's already in the query. | 1 replica for steady-state. See "Mass-messaging bursts" below for what to do specifically before a 600+-recipient, multi-channel send. |
-| **postgres** | The one thing that's genuinely shared: query latency and lock-wait time on `FOR UPDATE` transitions (queue calls, scan idempotency, badge rotation). This is the resource `api` and `worker` replicas both draw down, not build up. | Nothing about it "scales" by adding replicas — it's a single primary by design (§7 architecture.md), so more Postgres capacity means a *bigger* box, not more of them. | Vertical: raise `PG_MEM_LIMIT`, put `pgdata` on NVMe, give it dedicated CPU (see the host-splitting section below if it's contending with `api`/`worker`/`web` for CPU). | `PG_MEM_LIMIT=2g`+ if the host has it; this is the service most worth over-provisioning, since every other service's scaling ultimately funnels load into it. |
-| **valkey** | SSE pub/sub fan-out throughput and BullMQ job enqueue/dequeue throughput. | Nothing durable — it holds no source-of-truth data, so scaling it is about pub/sub message rate, not correctness. | Single-node by design; not a lever worth reaching for at this scale — Valkey handles orders of magnitude more throughput than 600 CCU produces. | Leave at defaults (`VALKEY_MEM_LIMIT=512m`); this is not where event-day stress shows up. |
-| **minio** | Object upload/download throughput — application file attachments, sponsor logo serving, export downloads, wallet-pass assets. | Nothing else — it's not on the query/lock-wait path at all. | Single-node; if you outgrow it, repoint `S3_ENDPOINT`/`S3_PUBLIC_URL` at managed S3/R2/Spaces (§7 architecture.md) rather than trying to cluster MinIO yourself. | Default (`MINIO_MEM_LIMIT=1g`) is fine for steady use; only worth bumping if you expect a simultaneous upload burst (e.g. a submission deadline with large project files). |
-| **web** | Next.js SSR/page-render load for the browser app and TV screens — each connected TV/participant browser holds a request the Node process has to render. | Nothing on the API/DB side — `web` calls the public API URL like any other client, it never touches Postgres directly. | Add replicas behind Traefik; stateless, no session affinity needed (auth lives in the API, not in `web`). | 1 replica is normally enough for 600 CCU; bump `WEB_MEM_LIMIT` if you see OOM restarts under concurrent page loads rather than adding a replica first. |
+| **postgres** | The one thing that's genuinely shared: query latency and lock-wait time on `FOR UPDATE` transitions (queue calls, scan idempotency, badge rotation). This is the resource `api` and `worker` replicas both draw down, not build up. | Nothing about it "scales" by adding replicas — it's a single primary by design (§7 architecture.md), so more Postgres capacity means a *bigger* box, not more of them. | The canonical limit is fixed at `2g`; put the persistent volume on fast local storage and size the host appropriately. A larger host requires a reviewed Compose change, not an undocumented env override. | The production host budget reserves the larger database share for 12-room queue-transition contention and the 24-connection per-process baseline. |
+| **valkey** | SSE pub/sub fan-out throughput and BullMQ job enqueue/dequeue throughput. | Nothing durable — it holds no source-of-truth data, so scaling it is about pub/sub message rate, not correctness. | Single-node by design; not a lever worth reaching for at this scale — Valkey handles orders of magnitude more throughput than this event's SSE population produces. | Leave the fixed `1g` Compose limit; it gives queue fan-in and connection state room without crowding Postgres. |
+| **minio** | Object upload/download throughput — application file attachments, sponsor logo serving, export downloads, wallet-pass assets. | Nothing else — it's not on the query/lock-wait path at all. | Single-node; if you outgrow it, repoint `S3_ENDPOINT`/`S3_PUBLIC_URL` at managed S3/R2/Spaces (§7 architecture.md) rather than trying to cluster MinIO yourself. | The fixed `1g` Compose limit is fine for steady use; a simultaneous upload burst requires host sizing or a reviewed storage change. |
+| **web** | Next.js SSR/page-render load for the browser app and TV screens — each connected TV/participant browser holds a request the Node process has to render. | Nothing on the API/DB side — `web` calls the public API URL like any other client, it never touches Postgres directly. | The canonical Compose runtime has one web container behind the host ingress. A future multi-replica topology can add stateless web containers. | 1 replica is the default; keep one on both production and staging. The fixed memory limit is `512m`. |
 
 The practical takeaway: **`api` and `worker` replicas trade Postgres headroom for their own headroom** — they don't create capacity, they redistribute where the bottleneck shows up. If the monitoring queries below show Postgres itself under pressure (active connections near the ceiling, or long lock waits), scaling `api`/`worker` further makes it worse, not better — that's the signal to size Postgres up (or split it onto its own host) instead.
 
@@ -51,7 +53,7 @@ This is a different kind of stress from steady CCU — it's a single admin
 action that inserts hundreds or thousands of rows into `notification_outbox`
 at once (600 recipients × 3 channels = up to 1800 rows). Worth its own plan
 because the naive fix ("autoscale the worker on outbox depth") is more
-infrastructure than the problem needs — Dokploy/plain Compose has no
+infrastructure than the problem needs — the canonical Compose runtime has no
 built-in autoscaler watching a custom Postgres metric, and this load is
 **triggered deliberately by an admin at a known moment**, not an
 unpredictable spike.
@@ -83,36 +85,95 @@ not something to do by default.
 
 ## What to configure for the event
 
-| Setting | Where | Default | Recommended for ~600 CCU |
+| Setting | Where | Default | Event-day baseline |
 |---|---|---|---|
-| `DB_POOL_MAX` | `api` + `worker` env | `20` each | `20`–`30` each is plenty; see the Postgres budget below before going higher. |
-| `API_MEM_LIMIT` | `api` compose | `512m` | `1g` if running a single `api` replica; keep `512m` per replica if you scale out instead (see below). |
-| `WORKER_MEM_LIMIT` | `worker` compose | `512m` | Usually fine as-is — the worker is a light tick drainer, not request-serving. |
-| `PG_MEM_LIMIT` | `postgres` compose | `1g` | `2g`+ if the host has it to spare — Postgres benefits from memory more than any other service here. |
-| `api` replica count | Dokploy / compose | 1 | 1 is fine up to ~600 CCU on a reasonably sized box (2+ vCPU). Add a 2nd replica only if you see sustained CPU saturation — Traefik's `loadbalancer.healthcheck` already keeps a not-yet-ready replica out of rotation. |
-| `worker` replica count | Dokploy / compose | 1 | 1 is fine; bump to 2 only if `notification_outbox` depth (query below) climbs during the event instead of draining. |
+| `DB_POOL_MAX` | `api` + `worker` env | `24` in production Compose | `24` per process: 48 pooled connections across one API and one worker, plus an explicit operational allowance below. |
+| `Compose memory limits` | `deploy/docker-compose.yml` | fixed | `postgres=2g`, `valkey=1g`, `minio=1g`, `api=1g`, `worker=1g`, `web=512m`; the declared production sum is 6.5 GiB. |
+| `api` replica count | canonical Compose | 1 | 1 is the supported runtime on production and the staging Raspberry Pi. A future multi-replica change must account for the Postgres connection budget below. |
+| `worker` replica count | canonical Compose | 1 | 1 is fine; a reviewed Compose topology can add a second worker only if `notification_outbox` depth (query below) climbs during the event instead of draining. |
 | `NOTIFICATION_OUTBOX_BATCH_SIZE` | `worker` env | `100` | Already sized for a mass-send — see "Mass-messaging bursts" above. No change needed by default. |
+
+The fixed production memory sum is `2 + 1 + 1 + 1 + 1 + 0.5 = 6.5 GiB` of
+declared container limits. It leaves 1.5 GiB below the `<8 GiB` production host
+budget for the OS, Docker overhead, and short-lived operational pressure. The
+limits are intentionally literals in Compose; they are not environment
+overrides.
 
 **Postgres connection budget.** Every `api`/`worker` process holds its own
 pool sized by `DB_POOL_MAX`. Before raising it, check the arithmetic against
-Postgres's `max_connections` (default `100` on the stock `postgres:17-alpine`
-image used here):
+Postgres's stock `max_connections=100`:
 
 ```
-(api replicas × DB_POOL_MAX) + (worker replicas × DB_POOL_MAX) + a few (migrate, ops) < max_connections
+(1 api × 24) + (1 worker × 24) + 12 operational connections = 60 < 100
 ```
 
-At the defaults (1 api + 1 worker, `DB_POOL_MAX=20`) that's ~40 connections
-— well under 100, with room to raise `DB_POOL_MAX` to 30–40 per process
-without touching Postgres config. Only raise Postgres's own
-`max_connections` (via a custom `command:`/config mount) if you're also
-adding replicas, since each extra connection costs Postgres memory.
+The allowance of 12 covers migration, health/maintenance, admin, and
+superuser headroom. Keep the stock `max_connections` baseline; the 2 GiB
+Postgres limit is reserved for the database working set and connection
+overhead, not for an unbounded pool. The qualification check also confirms the
+stock `shared_buffers=128MB` setting; keep that and `max_connections=100` until
+a reviewed database-memory calculation supports a change. Add replicas only
+after recomputing the same expression, and do not raise Postgres's own
+`max_connections` without that review.
+
+**Admission baseline.** With `DB_POOL_MAX=24`, the scheduler reserves
+`min(23, ceil(24 / 4)) = 6` concurrent slots from all P2/P3 traffic and allows
+`max(16, 24 × 8) = 192` queued P2/P3 requests. Those are request slots, not
+one slot per identity: SSE connections bypass admission, and P0/P1 staff
+requests can use all 24 slots and win queued work by lane rank. The six-slot
+reservation protects operational work from participant, sponsor, anonymous,
+and public bursts; it is lane-based even when a best-effort user has a
+persisted role.
+
+### DB_POOL_MAX decision tree
+
+Use the event-day baseline of 24 per API/worker process and check these signals
+before changing it:
+
+1. **P2/P3 `429` rate or wait-queue depth rises while Postgres connections and
+   memory are healthy:** first confirm the traffic is best-effort work. If
+   P0/P1 latency is healthy, retain 24; if the event genuinely needs more
+   finite-request throughput, raise `DB_POOL_MAX` only after recomputing the
+   connection expression above and rerun qualification.
+2. **Postgres connection count approaches 88, waiters rise, or lock waits
+   grow:** do not raise the pool. Reduce burst concurrency, inspect the slow
+   query/lock holder, or add capacity through a reviewed topology change.
+3. **The Postgres container reports OOM or memory pressure:** lower the pool or
+   reduce concurrent workers first; do not raise `max_connections` until the
+   database memory budget has been re-sized and qualification passes.
+4. **P0/P1 wait-queue depth or latency rises while P2/P3 is being shed:** keep
+   the 24 baseline, investigate the P0/P1 query/lock path, and verify that the
+   six reserved slots are available. Do not solve an operational bottleneck
+   by allowing an unbounded P2/P3 queue.
+
+After any change, rerun the disposable qualification stack and verify
+`validation.releaseBudgetPassed` before changing the production Compose file.
+
+### Changing a memory limit
+
+Memory limits are changed in Compose so production and qualification remain
+auditable. Edit the service limit in the relevant Compose file, then recreate
+that service and verify its health:
+
+```sh
+# edit deploy/docker-compose.yml (and qualification if the mirroring value changes)
+docker compose --env-file /etc/hackos/hackos.env \
+  --env-file /etc/hackos/hackos.secrets \
+  -f deploy/docker-compose.yml up -d --force-recreate <service>
+docker compose --env-file /etc/hackos/hackos.env \
+  --env-file /etc/hackos/hackos.secrets \
+  -f deploy/docker-compose.yml ps <service>
+```
+
+For a qualification-only run, use its `--env-file`/Compose project and verify
+the container health before starting the runner. Rerun the Compose validator
+after every limit edit.
 
 ## Pre-event checklist
 
-1. **Set the env vars above** in the Dokploy service screens (or `.env`
-   files for a manual compose deploy) a few days before the event, not on
-   the day — so a boot-time zod validation failure surfaces early.
+1. **Set the two host env files** (`/etc/hackos/hackos.env` and
+   `/etc/hackos/hackos.secrets`) a few days before the event, not on the day —
+   so a boot-time zod validation failure surfaces early.
 2. **Load-test the hot paths**, not the whole API surface — the two places
    that take Postgres row locks and see real event-day bursts:
    - Badge scanning (`idempotencyGuard`-guarded scan routes) — simulate the
@@ -138,11 +199,14 @@ adding replicas, since each extra connection costs Postgres memory.
 The repository-owned harness is `apps/api/scripts/event-day-load.ts`. It drives
 the real HTTP and SSE routes against a clean local database and reports one
 sample per request, grouped by the existing P0/P1/P2/P3 lane classifier. The
-fixture is intentionally separate from the normal dev database: it creates
-600 participants, 20 operators, 20 judges, four rooms, four TV clients, a
-600-entry queue, one meal activity, and a single enterprise judge roster.
-The role-position ordering layered onto those lanes, the route/topic mapping,
-and the reserved-capacity rules are documented in
+fixture is intentionally separate from the normal dev database: by default it
+creates 600 participants, 20 operators plus 15 judges (35 staff), 30 sponsor
+representatives, 12 rooms, 7 queue groups with 3 shared groups, four TV
+clients, one queue entry per participant, one meal activity, and an enterprise
+judge roster. The participant/staff/sponsor counts round up the event shape so
+a passing run has margin above the expected attendance.
+The lane ordering layered onto the route/topic mapping and reserved-capacity
+rules is documented in
 [`request-admission.md`](./request-admission.md).
 
 The run overlaps participant `GET /api/queue/me` refetches and personal SSE
@@ -172,14 +236,14 @@ pnpm --filter @hackos/api event-day:load -- \
   --database-url postgres://hackos:hackos@localhost:5433/hackos_event_day_qualification \
   --fixture /private/tmp/hackos-event-day-fixture.json
 
-# second terminal, after prepare reports 600 participants / 20 operators / 20 judges
-NODE_ENV=test QUALIFICATION_STACK=1 WORKERS_INLINE=true DB_POOL_MAX=20 \
+# second terminal, after prepare reports 600 participants / 35 staff / 30 sponsors / 12 rooms / 7 queues (3 shared)
+NODE_ENV=test QUALIFICATION_STACK=1 WORKERS_INLINE=true DB_POOL_MAX=24 \
 DATABASE_URL=postgres://hackos:hackos@localhost:5433/hackos_event_day_qualification \
 VALKEY_URL=redis://localhost:6379/15 PORT=3000 \
 pnpm --filter @hackos/api dev
 
 # third terminal, while the API above is healthy
-NODE_ENV=test QUALIFICATION_STACK=1 WORKERS_INLINE=true DB_POOL_MAX=20 \
+NODE_ENV=test QUALIFICATION_STACK=1 WORKERS_INLINE=true DB_POOL_MAX=24 \
 DATABASE_URL=postgres://hackos:hackos@localhost:5433/hackos_event_day_qualification \
 VALKEY_URL=redis://localhost:6379/15 \
 pnpm --filter @hackos/api event-day:load -- \
@@ -200,7 +264,7 @@ the scenario. Stop the API and run `pnpm infra:down` after the measurement.
 Run the full representative workload on the actual production host before
 participants use the event, but run it in the repository-owned disposable stack
 at [`deploy/qualification/docker-compose.yml`](../deploy/qualification/docker-compose.yml).
-The stack has no Traefik/public ingress, no host ports, one Docker network with
+The stack has no public ingress, no host ports, one Docker network with
 `internal: true`, a fresh Postgres volume, and a fresh Valkey instance. The API
 and runner use `NODE_ENV=test` only inside that stack; the runner's
 `x-test-user-id` headers can therefore never reach the attendee API. The
@@ -208,14 +272,22 @@ fixture contains synthetic `@load.test` accounts and the fixed destructive-safe
 database `hackos_event_day_qualification`; `prepare` refuses every other
 database name or host, including production/staging databases.
 
-The stack runs the exact immutable release image in all API, worker, migration
-and runner containers. Resource limits are fixed and validated before startup:
-API/runner 2 CPU + 1 GiB, worker 2 CPU + 512 MiB, Postgres 2 CPU + 2 GiB, and
-Valkey 1 CPU + 512 MiB. This is a qualification of the release image and host
-resources, not a change to #540 pool sizing, timeout, SSE backpressure, or
-connection-budget work.
+Qualification is a disposable pre-event load-test stack: it has an isolated
+database and Valkey instance, uses synthetic accounts, and is torn down after
+the artifact is retrieved. It is not a long-running service and never reuses
+production state. The stack runs the exact immutable release image in all API,
+worker, migration and runner containers. Resource limits are fixed, validated
+before startup, and mirror production for the shared services: API/runner 2
+CPU + 1 GiB, worker 2 CPU + 1 GiB, Postgres 2 CPU + 2 GiB, Valkey 1 CPU + 1 GiB,
+and the disposable migration helper 1 CPU + 512 MiB. The declared qualification
+sum is 6.5 GiB, so the runner and helper fit under the same `<8 GiB`
+production host budget while they run. Matching limits make a pass meaningful:
+the test exercises the release image under the production service ceilings,
+not a more generously provisioned rehearsal. This is still a qualification of
+the release image and resources, not a change to SSE connection budgets or
+production state.
 
-#### One command: plain Compose or Dokploy host
+#### One command: Compose on the production host
 
 Use a release digest, never `:latest` or an attendee deployment URL. Run from a
 checkout containing the release's compose file, with no production
@@ -240,16 +312,13 @@ docker compose -p hackos-event-day-qualification \
   -f deploy/qualification/docker-compose.yml down --volumes --remove-orphans
 ```
 
-For Dokploy, create a separate one-off Compose application/project on the
-production host, pointing at the release checkout and
-`deploy/qualification/docker-compose.yml`; do not attach it to
-`dokploy-network`, configure `API_DOMAIN`, or reuse any production service,
-network, volume, database, Valkey, secret, or env file. Set only
-`RELEASE_IMAGE` and `QUALIFICATION_ARTIFACT_DIR` in that qualification
-environment, then run the same `deploy/qualification/run.sh` from the host
-shell (or use the equivalent Compose commands above). The qualification stack
-must be stopped and removed after the artifact is retrieved; it is not a
-long-running Dokploy service.
+Run the qualification stack from the production host shell, pointing at the
+release checkout and `deploy/qualification/docker-compose.yml`; do not reuse
+any production service, network, volume, database, Valkey, secret, or env file.
+Set only `RELEASE_IMAGE` and `QUALIFICATION_ARTIFACT_DIR` in that qualification
+environment, then run the same `deploy/qualification/run.sh`. The qualification
+stack must be stopped and removed after the artifact is retrieved; it is not a
+long-running production service.
 
 The runner writes `result.json` even when a release budget fails and returns
 nonzero in that case. Inspect the artifact before cleanup or retrieve it from
@@ -276,7 +345,7 @@ $compose ps
 $compose exec api wget -qO- http://127.0.0.1:3000/metrics | \
   rg 'hackos_(http_requests|http_request_admission|sse_local_connections|sse_rejections|queue_participant_invalidations|browser_refetch)'
 $compose exec postgres psql -U hackos_qualification -d hackos_event_day_qualification \
-  -c "select count(*) as active, current_setting('max_connections') as max from pg_stat_activity;"
+  -c "select count(*) as active, current_setting('max_connections') as max_connections, current_setting('shared_buffers') as shared_buffers from pg_stat_activity;"
 $compose exec postgres psql -U hackos_qualification -d hackos_event_day_qualification \
   -c "select pid, now() - query_start as duration, state, query from pg_stat_activity where state <> 'idle' order by duration desc limit 5;"
 docker stats --no-stream \
@@ -436,13 +505,13 @@ dropped 0, degraded 0; the browser observation recorded one bounded report for
 600 refetches. These counts verify the intended queue transition coalescing and
 SSE/refetch measurement path, not a production capacity guarantee.
 
-This command does not change #540-owned pool sizing, statement/idle timeouts,
-SSE backpressure, or connection budgets. `DB_POOL_MAX=20`, test mode, and
-Valkey database 15 are explicit run-environment choices so the result is
-repeatable; production sizing remains governed by #540 and the deployment
-tables above. The result is single-process, local Docker infrastructure on an
-Apple Silicon host, so repeat it on event-like hardware before setting a
-production capacity claim.
+The checked-in artifact above is historical: it used the older fixture and
+`DB_POOL_MAX=20` in test mode. It remains a measured local baseline, not the
+event-day qualification result. New runs use `DB_POOL_MAX=24`, the event-shape
+fixture above, and the deployment tables' memory limits; they still do not
+change #540-owned statement/idle timeouts, SSE backpressure, or connection
+budgets. The result is single-process, local Docker infrastructure, so repeat
+it on event-like hardware before setting a production capacity claim.
 
 ## Monitoring queries
 
@@ -451,7 +520,9 @@ container> psql -U $POSTGRES_USER -d $POSTGRES_DB`):
 
 ```sql
 -- Active connections vs. the ceiling
-select count(*) as active, current_setting('max_connections') as max
+select count(*) as active,
+       current_setting('max_connections') as max_connections,
+       current_setting('shared_buffers') as shared_buffers
 from pg_stat_activity;
 
 -- Outbox backlog — should stay near zero; a climbing number means the
@@ -481,5 +552,5 @@ complete story.
 If co-located Postgres turns out to be the actual bottleneck on the box
 you're using (check with the monitoring queries above before assuming this),
 [`deploy/README.md`'s "Splitting Postgres onto its own host"](../deploy/README.md#splitting-postgres-onto-its-own-host-optional-advanced)
-covers moving it to a second Hetzner server behind a private Cloud Network,
-while still managing both from Dokploy.
+covers moving it to a second host behind a private network, while keeping the
+canonical runtime isolated from that optional host.

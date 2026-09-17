@@ -1,7 +1,7 @@
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Linking, Pressable, Text, useWindowDimensions, View } from "react-native";
+import { Alert, AppState, Linking, Pressable, Text, View } from "react-native";
 
 import {
   AuthCredentialField,
@@ -12,21 +12,23 @@ import { apiFetch } from "@/lib/api";
 import { signIn, signOut } from "@/lib/auth-client";
 import { EVENT_WEBSITE_DISPLAY, EVENT_WEBSITE_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
+import { useMeActions } from "@/lib/me-context";
 import {
   type AccountRemovalProgress,
   clearAccountRemovalProgress,
   readAccountRemovalProgress,
 } from "@/lib/removal-progress";
-import type { Me, PublicEvent } from "@/lib/types";
+import type { PublicEvent } from "@/lib/types";
 import { colors } from "@/theme/colors";
 
 export default function SignInScreen() {
   const router = useRouter();
   const { accessDenied } = useLocalSearchParams<{ accessDenied?: string }>();
   const { t } = useLocale();
-  const { fontScale } = useWindowDimensions();
+  const { refetch } = useMeActions();
   const emailRef = useRef<AuthCredentialFieldHandle>(null);
   const passwordRef = useRef<AuthCredentialFieldHandle>(null);
+  const focusedFieldRef = useRef<"email" | "password" | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -43,6 +45,32 @@ export default function SignInScreen() {
     });
     return () => {
       active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let appState = AppState.currentState;
+    let restoreField: "email" | "password" | null = null;
+    let restoreTimeout: ReturnType<typeof setTimeout> | null = null;
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (appState === "active" && nextState.match(/inactive|background/)) {
+        restoreField = focusedFieldRef.current;
+      }
+      if (appState.match(/inactive|background/) && nextState === "active" && restoreField) {
+        const field = restoreField;
+        // Passwords/Face ID returns focus before its native transition has
+        // completely settled. Reassert the field the user initiated from so a
+        // late AutoFill event cannot leave focus on the email input.
+        restoreTimeout = setTimeout(() => {
+          if (field === "email") emailRef.current?.focus();
+          else passwordRef.current?.focus();
+        }, 250);
+      }
+      appState = nextState;
+    });
+    return () => {
+      subscription.remove();
+      if (restoreTimeout) clearTimeout(restoreTimeout);
     };
   }, []);
 
@@ -101,8 +129,12 @@ export default function SignInScreen() {
         setError(t("signInError"));
         return;
       }
-      const me = await apiFetch<Me>("/api/me");
-      if (!me.mobileAccess && me.accountState !== "removal_pending") {
+      const me = await refetch();
+      if (!me) {
+        setError(t("signInError"));
+        return;
+      }
+      if (!me.hasEventAccess && me.accountState !== "removal_pending") {
         await signOut();
         router.replace({ pathname: "/(auth)/sign-in", params: { accessDenied: "1" } });
         return;
@@ -110,10 +142,8 @@ export default function SignInScreen() {
       router.replace("/");
     } catch {
       setError(t("signInError"));
-      // If Better Auth has already restored the H4 session, its root session
-      // boundary will replace this form with a retry/sign-out state. Keeping
-      // the form here for a sign-in transport failure avoids navigating to a
-      // protected route before the session store has settled.
+      // Keep the form visible for a sign-in transport failure; /api/me remains
+      // the single authoritative session/access/profile read for the app.
     } finally {
       setSubmitting(false);
     }
@@ -121,7 +151,7 @@ export default function SignInScreen() {
 
   return (
     <AuthScreen
-      scrollable={fontScale > 1.3}
+      scrollable={false}
       footer={
         <View style={{ alignItems: "center", gap: 4 }}>
           <Text
@@ -233,6 +263,9 @@ export default function SignInScreen() {
             label={t("emailLabel")}
             error={emailError}
             keyboardType="email-address"
+            onFocus={() => {
+              focusedFieldRef.current = "email";
+            }}
             returnKeyType="next"
             onChangeText={(value) => {
               setEmail(value);
@@ -250,6 +283,9 @@ export default function SignInScreen() {
             hidePasswordLabel={t("hidePassword")}
             returnKeyType="go"
             secureTextEntry
+            onFocus={() => {
+              focusedFieldRef.current = "password";
+            }}
             onChangeText={(value) => {
               setPassword(value);
               if (passwordError) setPasswordError(null);

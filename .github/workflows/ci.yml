@@ -17,59 +17,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  release-source:
-    name: release source
-    runs-on: ubuntu-latest
-    steps:
-      - name: Require a protected release branch
-        env:
-          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
-          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
-          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          if [[ "$BASE_BRANCH" != "main" ]]; then
-            echo "Release-source validation applies only to promotions into main."
-            exit 0
-          fi
-          case "$HEAD_BRANCH" in
-            integration|staging)
-              if [[ "$HEAD_REPOSITORY" != "$REPOSITORY" ]]; then
-                echo "Main promotions must come from a release branch in $REPOSITORY." >&2
-                exit 1
-              fi
-              ;;
-            *)
-              echo "Main promotions must come from integration or staging; got $HEAD_BRANCH." >&2
-              exit 1
-              ;;
-          esac
-
-  changes:
-    name: detect changed areas
-    runs-on: ubuntu-latest
-    outputs:
-      api: ${{ steps.filter.outputs.api }}
-      web: ${{ steps.filter.outputs.web }}
-      mobile: ${{ steps.filter.outputs.mobile }}
-      browser: ${{ steps.filter.outputs.browser }}
-      typecheck: ${{ steps.filter.outputs.typecheck }}
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Classify changed paths
-        id: filter
-        uses: ./.github/actions/detect-changes
-        with:
-          event_name: ${{ github.event_name }}
-          before_sha: ${{ github.event.before }}
-          base_sha: ${{ github.event.pull_request.base.sha }}
-          sha: ${{ github.sha }}
-
   lint:
     name: lint
     runs-on: ubuntu-latest
@@ -85,10 +32,6 @@ jobs:
 
   typecheck:
     name: typecheck
-    needs: changes
-    if: >-
-      github.event.pull_request.draft != true &&
-      needs.changes.outputs.typecheck == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -97,24 +40,12 @@ jobs:
       - name: Set up workspace
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Type-check API
-        if: needs.changes.outputs.api == 'true'
-        run: pnpm --filter @hackos/api typecheck
-
-      - name: Type-check web
-        if: needs.changes.outputs.web == 'true'
-        run: pnpm --filter @hackos/web typecheck
-
-      - name: Type-check mobile
-        if: needs.changes.outputs.mobile == 'true'
-        run: pnpm --filter @hackos/mobile typecheck
+      - name: Type-check every workspace
+        run: pnpm --parallel --filter @hackos/api --filter @hackos/web --filter @hackos/mobile typecheck
 
   api-test:
     name: API integration tests
-    needs: changes
-    if: >-
-      github.event.pull_request.draft != true &&
-      needs.changes.outputs.api == 'true'
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     env:
       CI: true
@@ -219,10 +150,7 @@ jobs:
 
   web-test:
     name: web unit tests
-    needs: changes
-    if: >-
-      github.event.pull_request.draft != true &&
-      needs.changes.outputs.web == 'true'
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     env:
       CI: true
@@ -238,10 +166,7 @@ jobs:
 
   browser-smoke:
     name: browser critical-flow smoke
-    needs: changes
-    if: >-
-      github.event.pull_request.draft != true &&
-      needs.changes.outputs.browser == 'true'
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     env:
       CI: true
@@ -260,10 +185,7 @@ jobs:
 
   mobile-test:
     name: mobile unit tests
-    needs: changes
-    if: >-
-      github.event.pull_request.draft != true &&
-      needs.changes.outputs.mobile == 'true'
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     env:
       CI: true

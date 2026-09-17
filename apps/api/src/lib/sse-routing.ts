@@ -51,14 +51,18 @@ export function mutationDomainForPath(url: string): string | null {
     return SSE_TOPICS.LOGISTICS;
   }
 
+  // Device-token registration changes delivery plumbing only. It does not
+  // change any identity read model, so invalidating `identity` here makes a
+  // mobile profile refresh register the same token again and forms a request
+  // loop (#732). Keep the generic audit broadcast, but never wake clients.
+  if (matches("/api/me/push-tokens")) return null;
+
   // Identity mutations affect users, invitations, and the capability graph
   // (H7-H10). Application-specific /api/me paths were handled above.
   if (
     matches("/api/me") ||
     matches("/api/users") ||
     matches("/api/permissions") ||
-    matches("/api/permission-groups") ||
-    matches("/api/permission-group-templates") ||
     matches("/api/invites") ||
     matches("/api/profile")
   ) {

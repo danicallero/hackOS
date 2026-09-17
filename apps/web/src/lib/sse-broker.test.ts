@@ -108,4 +108,47 @@ describe("SSE broker", () => {
     unsubscribeQueue();
     unsubscribeRoom();
   });
+
+  it("requests an authoritative resync after reconnect and an event-id gap", () => {
+    const onResync = vi.fn();
+    const unsubscribe = subscribeToSse("/api/queue/stream", {
+      onConnectionChange: vi.fn(),
+      onResync,
+    });
+    const source = FakeEventSource.instances[0];
+
+    source.onopen?.();
+    source.emit("message", { type: "queue.changed", id: "10", at: "now", data: {} });
+    source.onerror?.();
+    source.onopen?.();
+    source.emit("message", { type: "queue.changed", id: "12", at: "now", data: {} });
+    source.emit("message", { type: "queue.changed", id: "14", at: "now", data: {} });
+
+    expect(onResync).toHaveBeenNthCalledWith(1, {
+      reason: "reconnect",
+      topic: "/api/queue/stream",
+      lastEventId: "10",
+    });
+    expect(onResync).toHaveBeenNthCalledWith(2, {
+      reason: "gap",
+      topic: "/api/queue/stream",
+      lastEventId: "12",
+    });
+    unsubscribe();
+  });
+
+  it("does not share a stream across identity keys", () => {
+    const first = subscribeToSse("/api/queue/me/stream", {
+      identityKey: 101,
+      onConnectionChange: vi.fn(),
+    });
+    const second = subscribeToSse("/api/queue/me/stream", {
+      identityKey: 202,
+      onConnectionChange: vi.fn(),
+    });
+
+    expect(FakeEventSource.instances).toHaveLength(2);
+    first();
+    second();
+  });
 });

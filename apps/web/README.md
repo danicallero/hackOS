@@ -1,13 +1,13 @@
 # @hackos/web
 
 The hackOS web frontend — Next.js (App Router) + shadcn/ui, styled in the same
-dark-first family as **Dokploy**. It consumes the Fastify API (Better Auth
+dark-first family as the rest of hackOS. It consumes the Fastify API (Better Auth
 included) and follows the same user stories (`plan/historias-hackos.md`) as the
 backend, one workstream at a time.
 
-> **The web app is its own deployable service behind its own Traefik router.**
-> It is never served by, or routed together with, the API. See
-> `deploy/services/web` and the `web` service in `deploy/docker-compose.yml`.
+> **The web app is its own deployable service behind Caddy.** It is never
+> served by, or routed together with, the API. See the `web` service in
+> `deploy/docker-compose.yml`.
 
 ## Stack
 
@@ -22,6 +22,17 @@ backend, one workstream at a time.
   travel to a third-party image service.
 - `@hackos/shared` for the capability catalogue and SSE event contract — the
   same single source the API uses.
+
+## Browser server state
+
+`lib/server-state.ts` is the small shared policy for authenticated read models,
+not a second session or reconnect system. `SessionProvider` sets its identity
+boundary; each resource key then has one in-flight request and a short-lived
+cached response. Callers pass `AbortSignal` through to API reads and invalidate
+the exact key after a successful mutation or matching SSE signal. An identity
+change aborts and drops every old entry, and `useLiveQuery` retains its bounded
+one-trailing-refetch behavior for SSE bursts. The cache is only a browser
+deduplication layer: API reads remain the authoritative Postgres projection.
 
 ## Toasts
 

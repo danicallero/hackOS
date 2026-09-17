@@ -1,5 +1,5 @@
 jest.mock("./auth-client", () => ({
-  authClient: { $fetch: jest.fn() },
+  authClient: { $fetch: jest.fn(), getCookie: jest.fn(() => "session=current") },
 }));
 
 jest.mock("./env", () => ({
@@ -22,7 +22,7 @@ describe("apiFetch", () => {
       "https://api.hackudc.com/api/public/activities",
       expect.objectContaining({
         method: undefined,
-        retry: expect.objectContaining({ type: "exponential", attempts: 4 }),
+        retry: expect.objectContaining({ type: "exponential", attempts: 2 }),
       }),
     );
   });
@@ -38,7 +38,14 @@ describe("apiFetch", () => {
     await apiFetch("/api/me/notification-preferences", init);
     expect(mockFetch).toHaveBeenCalledWith(
       "https://api.hackudc.com/api/me/notification-preferences",
-      expect.objectContaining({ ...init, retry: undefined }),
+      expect.objectContaining({
+        ...init,
+        headers: expect.objectContaining({
+          "content-type": "application/json",
+          "idempotency-key": expect.any(String),
+        }),
+        retry: undefined,
+      }),
     );
   });
 
@@ -54,6 +61,32 @@ describe("apiFetch", () => {
     options.onRequest({ headers });
 
     expect(headers.get("cookie")).toBe("session=staff-a");
+  });
+
+  it("captures the current cookie for an ordinary request", async () => {
+    mockFetch.mockResolvedValue({ data: { ok: true }, error: null });
+
+    await apiFetch("/api/me/ticket");
+
+    const options = mockFetch.mock.calls[0][1] as {
+      onRequest: (context: { headers: Headers }) => void;
+    };
+    const headers = new Headers({ cookie: "session=staff-b" });
+    options.onRequest({ headers });
+
+    expect(headers.get("cookie")).toBe("session=current");
+  });
+
+  it("forwards abort signals to the authenticated transport", async () => {
+    mockFetch.mockResolvedValue({ data: { ok: true }, error: null });
+    const controller = new AbortController();
+
+    await apiFetch("/api/me", { signal: controller.signal });
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://api.hackudc.com/api/me",
+      expect.objectContaining({ signal: controller.signal }),
+    );
   });
 
   it("rejects URLs that could send the restored session to another origin", async () => {
@@ -75,6 +108,17 @@ describe("apiFetch", () => {
         code: "unavailable",
         message: "Try later",
       }),
+    );
+  });
+
+  it("does not delay the authoritative profile read with deployment retries", async () => {
+    mockFetch.mockResolvedValue({ data: { id: 1 }, error: null });
+
+    await apiFetch("/api/me");
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://api.hackudc.com/api/me",
+      expect.objectContaining({ retry: undefined }),
     );
   });
 });

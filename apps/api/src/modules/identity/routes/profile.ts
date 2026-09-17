@@ -2,13 +2,14 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { pool, withTransaction } from "../../../db/pool.js";
+import { pool, type Queryable, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
 import {
   assertActiveAuthenticatedUser,
   assertAuthenticatedProfileUser,
+  createAuthorizationContext,
   getEffectiveCapabilities,
-  invalidateCapabilities,
+  getRequestAuthorizationContext,
   requireAuth,
   requireCapability,
   userHasCapability,
@@ -23,7 +24,6 @@ import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliati
 import { canCreateMyProject, hasMyProject, myProjects } from "../../projects/service.js";
 import { hasMyQueueItems } from "../../queue/reads.js";
 import { getBetterAuthSessionToken } from "../auth.js";
-import { hasMobileAccess } from "../mobile-access.js";
 import {
   cancelPendingAccountRemoval,
   getAccountRemovalEligibility,
@@ -275,8 +275,8 @@ function serializeUser(row: UserRow, removalStatus?: PendingAccountRemovalStatus
   };
 }
 
-async function fetchUser(userId: number, allowPending = false): Promise<UserRow> {
-  const { rows } = await pool.query(
+async function fetchUser(db: Queryable, userId: number, allowPending = false): Promise<UserRow> {
+  const { rows } = await db.query(
     `SELECT * FROM users
       WHERE id = $1
         AND ${allowPending ? "account_state IN ('active', 'removal_pending')" : "account_state = 'active'"}
@@ -309,8 +309,8 @@ async function sessionTokenFromRequest(req: FastifyRequest): Promise<string | nu
 // self-edit identity/logistics fields (name, shirt size, dietary info) —
 // they're on the badge/certificate and drive shirt orders/catering headcounts
 // already committed to. Staff can still fix these via PATCH /api/users/:id.
-async function hasAcceptedApplication(userId: number): Promise<boolean> {
-  const { rows } = await pool.query(
+async function hasAcceptedApplication(db: Queryable, userId: number): Promise<boolean> {
+  const { rows } = await db.query(
     `SELECT 1 FROM application_responses
        WHERE user_id = $1
          AND status IN ('accepted_internal', 'accepted', 'confirmed')
@@ -458,8 +458,8 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           "the isEnterpriseJudge/isSponsorRep association facts nav uses for multi-capability " +
           "accounts (H55), whether they currently hold role-derived event access, whether they have a project/queue entry of their own " +
           "(drives hiding the My project/My queue nav items, issue #424), mobile " +
-          "access eligibility, and the caller's complete assigned-role set (H8) alongside " +
-          "the single highest-visible `role` shown elsewhere.",
+          "entry eligibility, and the caller's complete assigned-role set (H8) alongside " +
+          "the single highest-visible `visibleRoleName` shown elsewhere. All derived fields come from one repeatable-read database snapshot; event access is true only for an active, non-anonymized account with an assigned non-deleted event-bearing role.",
         summary: "Get my profile",
         response: {
           200: userResponseSchema.extend({
@@ -468,13 +468,12 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             // separate category. Same field name/shape /api/users/:id
             // exposes for any other user.
             visibleRoleName: z.string().nullable(),
-            mobileAccess: z.boolean(),
             // Effective capabilities (H8) so the web/mobile UI can gate by
             // capability, never by the illustrative role (H55). Authoritative
             // enforcement still happens on every guarded route server-side.
             capabilities: z.array(z.string()),
             // H8: the caller's FULL assigned-role set (highest position
-            // first), additive next to `role` (the single highest-visible
+            // first), additive next to `visibleRoleName` (the single highest-visible
             // one). Always the caller's own roles, so system:superadmin is
             // included when they actually hold it — nothing to hide from
             // yourself.
@@ -484,8 +483,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             // the single-priority `role` above can't represent on its own.
             isEnterpriseJudge: z.boolean(),
             isSponsorRep: z.boolean(),
-            // Any assigned, non-deleted role with eventAccess=true — drives
-            // ticket/wallet exposure and mobile-app access.
+            // An active, non-anonymized account with any assigned, non-deleted
+            // role whose eventAccess=true — drives ticket/wallet exposure and
+            // mobile-app entry.
             hasEventAccess: z.boolean(),
             // issue #424: My project/My queue nav items are hidden until the
             // caller actually has one — visible-but-empty misleads sponsors
@@ -507,71 +507,69 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const userId = req.userId as number;
-      const row = await fetchUser(userId, true);
-      const [
-        capabilities,
-        membership,
-        eventAccess,
-        hasProject,
-        hasQueueItems,
-        canCreateProject,
-        profileLocked,
-        hasStatisticsPanels,
-        removalStatus,
-        roles,
-      ] = await Promise.all([
-        getEffectiveCapabilities(userId, req),
-        computeMembershipFlags(pool, userId),
-        hasEventAccess(pool, userId),
-        hasMyProject(userId),
-        hasMyQueueItems(userId),
-        canCreateMyProject(userId),
-        hasAcceptedApplication(userId),
-        pool
-          .query(
-            `SELECT EXISTS (
+      const profile = await withTransaction(async (client) => {
+        await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY");
+        const row = await fetchUser(client, userId, true);
+        const [
+          capabilities,
+          membership,
+          hasProject,
+          hasQueueItems,
+          canCreateProject,
+          profileLocked,
+          hasStatisticsPanels,
+          removalStatus,
+          roles,
+          eventAccess,
+        ] = await Promise.all([
+          getEffectiveCapabilities(createAuthorizationContext(userId, client)),
+          computeMembershipFlags(client, userId),
+          hasMyProject(userId, client),
+          hasMyQueueItems(userId, client),
+          canCreateMyProject(userId, client),
+          hasAcceptedApplication(client, userId),
+          client
+            .query(
+              `SELECT EXISTS (
              SELECT 1
              FROM (
-               SELECT DISTINCT ON (resource_key, panel_key) state
+               SELECT DISTINCT ON (scope_key, panel_key) state
                FROM (
-                 SELECT 'application:' || pa.application_id::text AS resource_key,
-                        pa.panel_key, pa.state, r.position
-                   FROM application_stats_panel_role_access pa
-                   JOIN user_roles ur ON ur.role_id = pa.role_id AND ur.user_id = $1
-                   JOIN roles r ON r.id = pa.role_id AND r.deleted_at IS NULL
-                  WHERE pa.state <> 'inherit'
-                 UNION ALL
-                 SELECT sa.scope_key AS resource_key, sa.panel_key, sa.state, r.position
+                 SELECT sa.scope_key, sa.panel_key, sa.state, r.position
                    FROM statistics_scope_panel_role_access sa
                    JOIN user_roles ur ON ur.role_id = sa.role_id AND ur.user_id = $1
                    JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
                   WHERE sa.state <> 'inherit'
                ) decisions
-               ORDER BY resource_key, panel_key, position DESC
+               ORDER BY scope_key, panel_key, position DESC,
+                 CASE state WHEN 'deny' THEN 2 WHEN 'allow' THEN 1 ELSE 0 END DESC
              ) AS effective
              WHERE effective.state = 'allow'
            ) AS "exists"`,
-            [userId],
-          )
-          .then((result) => Boolean(result.rows[0]?.exists)),
-        getPendingAccountRemovalStatus(pool, userId),
-        getAssignedRoles(pool, userId),
-      ]);
-      const mobileAccess = row.account_state === "active" && (await hasMobileAccess(pool, userId));
-      return {
-        ...serializeUser(row, removalStatus),
-        visibleRoleName: roles.find((r) => r.isVisible)?.name ?? null,
-        mobileAccess,
-        capabilities: [...capabilities],
-        roles,
-        ...membership,
-        hasEventAccess: eventAccess,
-        hasProject,
-        hasQueueItems,
-        canCreateProject,
-        profileLocked,
-        hasStatisticsPanels,
-      };
+              [userId],
+            )
+            .then((result) => Boolean(result.rows[0]?.exists)),
+          row.account_state === "active"
+            ? Promise.resolve<PendingAccountRemovalStatus>({ status: "active" })
+            : getPendingAccountRemovalStatus(client, userId),
+          getAssignedRoles(client, userId),
+          hasEventAccess(client, userId),
+        ]);
+        return {
+          ...serializeUser(row, removalStatus),
+          visibleRoleName: roles.find((r) => r.isVisible)?.name ?? null,
+          capabilities: [...capabilities],
+          roles,
+          ...membership,
+          hasEventAccess: eventAccess,
+          hasProject,
+          hasQueueItems,
+          canCreateProject,
+          profileLocked,
+          hasStatisticsPanels,
+        };
+      });
+      return profile;
     },
   );
 
@@ -626,7 +624,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           changingIntolerances ||
           changingNotes
         ) {
-          if (await hasAcceptedApplication(userId)) {
+          if (await hasAcceptedApplication(pool, userId)) {
             throw new ConflictError(
               "Your profile is locked because an application has been accepted — ask staff to change your name, shirt size, or dietary info.",
               { code: "profile_locked" },
@@ -741,7 +739,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           : undefined,
       });
       if (req.idempotency) req.idempotency.scope = "DELETE /api/me removal-complete";
-      await invalidateCapabilities(userId);
       if (result.status !== "completed") {
         reply.code(202);
         return result;
@@ -799,7 +796,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           : undefined,
       });
       if (req.idempotency) req.idempotency.scope = "POST /api/me/anonymize removal-complete";
-      await invalidateCapabilities(userId);
       if (result.status !== "completed") {
         reply.code(202);
         return result;
@@ -961,12 +957,12 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       await assertProfileSubjectScope(req.userId as number, req.params.id);
-      const row = await fetchUser(req.params.id);
+      const row = await fetchUser(pool, req.params.id);
       const [visibleRoleName, capabilities, allRoles, canSeeSuperadmin] = await Promise.all([
         getHighestVisibleRoleName(pool, req.params.id),
-        getEffectiveCapabilities(req.params.id),
+        getEffectiveCapabilities(createAuthorizationContext(req.params.id)),
         getAssignedRoles(pool, req.params.id),
-        userHasCapability(req.userId as number, CAPABILITIES.PERMISSIONS_MANAGE, req),
+        userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.PERMISSIONS_MANAGE),
       ]);
       // H8: system:superadmin is CLI-only and never advertised to a staff
       // viewer browsing someone else's profile unless they themselves manage
@@ -996,7 +992,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       await assertProfileSubjectScope(req.userId as number, req.params.id);
-      await fetchUser(req.params.id);
+      await fetchUser(pool, req.params.id);
       return { projects: await myProjects(req.params.id) };
     },
   );
@@ -1086,7 +1082,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       if (targetId === req.userId) {
         throw new BadRequestError("You can't remove your own account");
       }
-      await fetchUser(targetId);
+      await fetchUser(pool, targetId);
       return getAccountRemovalEligibility(pool, targetId);
     },
   );
@@ -1116,7 +1112,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         source: "admin",
         requestedAction: "delete",
       });
-      await invalidateCapabilities(targetId);
       if (result.status !== "completed") {
         reply.code(202);
         return result;
@@ -1226,7 +1221,6 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         source: "admin",
         requestedAction: "anonymize",
       });
-      await invalidateCapabilities(targetId);
       if (result.status !== "completed") {
         reply.code(202);
         return result;
@@ -1282,7 +1276,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => {
       const id = req.params.id;
       await assertProfileSubjectScope(req.userId as number, id);
-      await fetchUser(id); // 404 if the user doesn't exist
+      await fetchUser(pool, id); // 404 if the user doesn't exist
       const [passes, checkIns, doorScans] = await Promise.all([
         pool
           .query(
@@ -1389,7 +1383,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       const userId = req.params.id;
       await assertProfileSubjectScope(req.userId as number, userId);
       // Verify user exists
-      await fetchUser(userId);
+      await fetchUser(pool, userId);
 
       const { rows: responseRows } = await pool.query(
         `SELECT r.*, a.name AS app_name,
@@ -1398,42 +1392,47 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                    JOIN roles ro ON ro.id = agr.role_id AND ro.deleted_at IS NULL
                   WHERE agr.application_id = a.id
                   ORDER BY ro.position DESC
-                  LIMIT 1) AS app_granted_role_name
+                  LIMIT 1) AS app_granted_role_name,
+                COALESCE(
+                  jsonb_agg(
+                    jsonb_build_object(
+                      'authorId', ar.author_id,
+                      'score', ar.score,
+                      'notes', ar.notes
+                    ) ORDER BY ar.author_id
+                  ) FILTER (WHERE ar.response_id IS NOT NULL),
+                  '[]'::jsonb
+                ) AS reviews
          FROM application_responses r
          JOIN applications a ON a.id = r.application_id
+         LEFT JOIN applicant_reviews ar ON ar.response_id = r.id
          WHERE r.user_id = $1
+         GROUP BY r.id, a.id
          ORDER BY r.id DESC`,
         [userId],
       );
 
-      const responses = await Promise.all(
-        responseRows.map(async (row: Record<string, unknown>) => {
-          const { rows: reviews } = await pool.query(
-            `SELECT author_id, score, notes FROM applicant_reviews WHERE response_id = $1 ORDER BY author_id`,
-            [row.id],
-          );
-          return {
-            id: row.id as number,
-            applicationId: row.application_id as number,
-            applicationName: row.app_name as string,
-            applicationGrantedRoleName: (row.app_granted_role_name as string | null) ?? null,
-            status: row.status as string,
-            submittedAt: row.submitted_at ? (row.submitted_at as Date).toISOString() : null,
-            confirmedAt: row.confirmed_at ? (row.confirmed_at as Date).toISOString() : null,
-            declinedAt: row.declined_at ? (row.declined_at as Date).toISOString() : null,
-            responses: row.responses as Record<string, unknown>,
-            staffNotes: (row.staff_notes as string | null) ?? null,
-            reviews: reviews.map(
-              (r: { author_id: number; score: number | null; notes: string | null }) => ({
-                authorId: r.author_id,
-                score: r.score,
-                notes: r.notes,
-              }),
-            ),
-            availableActions: computeAvailableActions(row.status as string),
-          };
-        }),
-      );
+      const responses = responseRows.map((row: Record<string, unknown>) => {
+        const reviews = row.reviews as Array<{
+          authorId: number;
+          score: number | null;
+          notes: string | null;
+        }>;
+        return {
+          id: row.id as number,
+          applicationId: row.application_id as number,
+          applicationName: row.app_name as string,
+          applicationGrantedRoleName: (row.app_granted_role_name as string | null) ?? null,
+          status: row.status as string,
+          submittedAt: row.submitted_at ? (row.submitted_at as Date).toISOString() : null,
+          confirmedAt: row.confirmed_at ? (row.confirmed_at as Date).toISOString() : null,
+          declinedAt: row.declined_at ? (row.declined_at as Date).toISOString() : null,
+          responses: row.responses as Record<string, unknown>,
+          staffNotes: (row.staff_notes as string | null) ?? null,
+          reviews,
+          availableActions: computeAvailableActions(row.status as string),
+        };
+      });
 
       return { responses };
     },

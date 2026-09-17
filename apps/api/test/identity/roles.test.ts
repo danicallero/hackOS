@@ -5,6 +5,7 @@ import type { App } from "../../src/app.js";
 import {
   assignRole,
   asUser,
+  authorizationContextFor,
   buildTestApp,
   createRole,
   createUser,
@@ -70,7 +71,9 @@ describe("H8 role resolution semantics", () => {
 
     // The higher-position role (denyRole, position 200) DENYs — it must
     // short-circuit before ever considering allowRole (position 100).
-    expect(await userHasCapability(userId, CAPABILITIES.USERS_READ)).toBe(false);
+    expect(
+      await userHasCapability(await authorizationContextFor(userId), CAPABILITIES.USERS_READ),
+    ).toBe(false);
   });
 
   it("DENY short-circuits regardless of a lower ALLOW", async () => {
@@ -87,7 +90,9 @@ describe("H8 role resolution semantics", () => {
     );
     await assignRole(userId, higher);
     await assignRole(userId, lower);
-    expect(await userHasCapability(userId, CAPABILITIES.USERS_READ)).toBe(false);
+    expect(
+      await userHasCapability(await authorizationContextFor(userId), CAPABILITIES.USERS_READ),
+    ).toBe(false);
   });
 
   it("INHERIT skips to the next-lower-position role the user ALSO holds, not the global next role", async () => {
@@ -110,7 +115,9 @@ describe("H8 role resolution semantics", () => {
     await assignRole(userId, bottom);
     // top is INHERIT (no row) -> skip straight to bottom (ALLOW), never
     // touching globalMiddleNotHeld's DENY since the user doesn't hold it.
-    expect(await userHasCapability(userId, CAPABILITIES.USERS_READ)).toBe(true);
+    expect(
+      await userHasCapability(await authorizationContextFor(userId), CAPABILITIES.USERS_READ),
+    ).toBe(true);
   });
 
   it("an all-INHERIT chain denies", async () => {
@@ -120,21 +127,25 @@ describe("H8 role resolution semantics", () => {
     const roleB = await createRole([]);
     await assignRole(userId, roleA);
     await assignRole(userId, roleB);
-    expect(await userHasCapability(userId, CAPABILITIES.USERS_READ)).toBe(false);
+    expect(
+      await userHasCapability(await authorizationContextFor(userId), CAPABILITIES.USERS_READ),
+    ).toBe(false);
   });
 
   it("a user with no roles is denied everything", async () => {
     const { userHasCapability } = await import("../../src/lib/capabilities.js");
     const userId = await createUser();
-    expect(await userHasCapability(userId, CAPABILITIES.USERS_READ)).toBe(false);
-    expect(await userHasCapability(userId, CAPABILITIES.ADMIN_ALL)).toBe(false);
+    const context = await authorizationContextFor(userId);
+    expect(await userHasCapability(context, CAPABILITIES.USERS_READ)).toBe(false);
+    expect(await userHasCapability(context, CAPABILITIES.ADMIN_ALL)).toBe(false);
   });
 
   it("'*' still grants every capability", async () => {
     const { userHasCapability } = await import("../../src/lib/capabilities.js");
     const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
-    expect(await userHasCapability(admin, CAPABILITIES.QUEUE_ADMIN)).toBe(true);
-    expect(await userHasCapability(admin, CAPABILITIES.AUDIT_READ)).toBe(true);
+    const context = await authorizationContextFor(admin);
+    expect(await userHasCapability(context, CAPABILITIES.QUEUE_ADMIN)).toBe(true);
+    expect(await userHasCapability(context, CAPABILITIES.AUDIT_READ)).toBe(true);
   });
 
   it("a user holding a non-visible role alongside a visible one resolves to the visible role everywhere (0813: mirrors real Event Director + Organizer): getEffectiveRole, getHighestVisibleRoleName, and the bulk user_effective_role_name view all agree", async () => {
@@ -299,6 +310,48 @@ describe("H8 admin-hierarchy mutation authority", () => {
   });
 });
 
+describe("H8 canonical event-access projection", () => {
+  it("uses OR semantics across assigned non-deleted roles, independent of visibility", async () => {
+    const { hasEventAccess } = await import("../../src/modules/identity/role.js");
+    const { pool } = await import("../../src/db/pool.js");
+    const userId = await createUser();
+    const first = await createRole([], { eventAccess: true, isVisible: false });
+    const second = await createRole([], { eventAccess: true, isVisible: true });
+
+    expect(await hasEventAccess(pool, userId)).toBe(false);
+    await assignRole(userId, first);
+    expect(await hasEventAccess(pool, userId)).toBe(true);
+    await assignRole(userId, second);
+
+    await pool.query(`UPDATE roles SET deleted_at = now() WHERE id = $1`, [first]);
+    expect(await hasEventAccess(pool, userId)).toBe(true);
+    await pool.query(`UPDATE roles SET deleted_at = now() WHERE id = $1`, [second]);
+    expect(await hasEventAccess(pool, userId)).toBe(false);
+  });
+
+  it("requires an active, non-anonymized account and ignores non-event roles", async () => {
+    const { hasEventAccess } = await import("../../src/modules/identity/role.js");
+    const { pool } = await import("../../src/db/pool.js");
+    const userId = await createUser();
+    const roleId = await createRole([], { eventAccess: false });
+
+    await assignRole(userId, roleId);
+    expect(await hasEventAccess(pool, userId)).toBe(false);
+
+    const eventRoleId = await createRole([], { eventAccess: true });
+    await assignRole(userId, eventRoleId);
+    expect(await hasEventAccess(pool, userId)).toBe(true);
+
+    await pool.query(`UPDATE users SET account_state = 'removal_pending' WHERE id = $1`, [userId]);
+    expect(await hasEventAccess(pool, userId)).toBe(false);
+    await pool.query(
+      `UPDATE users SET account_state = 'active', anonymized_at = now() WHERE id = $1`,
+      [userId],
+    );
+    expect(await hasEventAccess(pool, userId)).toBe(false);
+  });
+});
+
 describe("H8 roles CRUD and assignment API", () => {
   it("creates, edits capabilities, reorders, and deletes a role with audit rows", async () => {
     const a = await getApp();
@@ -355,7 +408,9 @@ describe("H8 roles CRUD and assignment API", () => {
     expect(assigned.json().memberIds).toContain(member);
 
     const { userHasCapability } = await import("../../src/lib/capabilities.js");
-    expect(await userHasCapability(member, CAPABILITIES.ACCREDIT_SCAN)).toBe(true);
+    expect(
+      await userHasCapability(await authorizationContextFor(member), CAPABILITIES.ACCREDIT_SCAN),
+    ).toBe(true);
 
     const removed = await a.inject({
       method: "DELETE",
@@ -363,7 +418,9 @@ describe("H8 roles CRUD and assignment API", () => {
       headers: asUser(actor),
     });
     expect(removed.statusCode).toBe(200);
-    expect(await userHasCapability(member, CAPABILITIES.ACCREDIT_SCAN)).toBe(false);
+    expect(
+      await userHasCapability(await authorizationContextFor(member), CAPABILITIES.ACCREDIT_SCAN),
+    ).toBe(false);
 
     const deleted = await a.inject({
       method: "DELETE",
@@ -576,8 +633,8 @@ describe("H8 sponsor auto-grant rule and application-confirmation role grant", (
 
     const { rows: appRows } = await pool.query(
       `INSERT INTO applications
-         (name, type, template, sections, confirmation_window_hours, current_form_version)
-       VALUES ('Test form', 'participant', '[]'::jsonb, '[]'::jsonb, 168, 1)
+         (name, template, sections, confirmation_window_hours, current_form_version)
+       VALUES ('Test form', '[]'::jsonb, '[]'::jsonb, 168, 1)
        RETURNING id`,
     );
     const applicationId = appRows[0].id as number;
@@ -927,7 +984,9 @@ describe("H8 role soft-delete and restore", () => {
     await assignRole(member, roleId);
 
     const { userHasCapability } = await import("../../src/lib/capabilities.js");
-    expect(await userHasCapability(member, CAPABILITIES.USERS_READ)).toBe(true);
+    expect(
+      await userHasCapability(await authorizationContextFor(member), CAPABILITIES.USERS_READ),
+    ).toBe(true);
 
     const del = await a.inject({
       method: "DELETE",
@@ -935,7 +994,9 @@ describe("H8 role soft-delete and restore", () => {
       headers: asUser(actor),
     });
     expect(del.statusCode).toBe(200);
-    expect(await userHasCapability(member, CAPABILITIES.USERS_READ)).toBe(false);
+    expect(
+      await userHasCapability(await authorizationContextFor(member), CAPABILITIES.USERS_READ),
+    ).toBe(false);
 
     // Hidden from the default listing, but still loadable by id and via
     // includeDeleted for a trash/restore panel.
@@ -955,7 +1016,9 @@ describe("H8 role soft-delete and restore", () => {
     });
     expect(restored.statusCode).toBe(200);
     expect(restored.json().deletedAt).toBeNull();
-    expect(await userHasCapability(member, CAPABILITIES.USERS_READ)).toBe(true);
+    expect(
+      await userHasCapability(await authorizationContextFor(member), CAPABILITIES.USERS_READ),
+    ).toBe(true);
   });
 
   it("restore 409s if another role has since taken the deleted role's exact position", async () => {
@@ -1205,7 +1268,7 @@ describe("H8 default seeded role set (0805)", () => {
   it("seeds the composable default catalogue with real, exact capability grants per role", async () => {
     const pool = await seededRoles();
     const eventDirectorCaps = Object.values(CAPABILITIES).filter(
-      (cap) => cap !== CAPABILITIES.ADMIN_ALL && cap !== CAPABILITIES.SPONSOR_PORTAL,
+      (cap) => cap !== CAPABILITIES.ADMIN_ALL,
     );
     const expected: Record<string, string[]> = {
       "Event Director": eventDirectorCaps,
@@ -1405,12 +1468,9 @@ describe("H8 default seeded role set (0805)", () => {
     expect(oldDraftRows).toHaveLength(0);
 
     // Total default set on a fresh install: 0805's fifteen roles + 0801's
-    // always-created Sponsor role. 0815 also adds one hidden compatibility
-    // role so users of the already-approved mobile build keep access during
-    // rollout. system:superadmin is CLI-only, never created by migrations.
-    const { rows: allRoles } = await pool.query(
-      `SELECT name FROM roles WHERE name <> 'legacy:event-access' ORDER BY name`,
-    );
+    // always-created Sponsor role. system:superadmin is CLI-only, never
+    // created by migrations.
+    const { rows: allRoles } = await pool.query(`SELECT name FROM roles ORDER BY name`);
     expect(allRoles.map((r: { name: string }) => r.name).sort()).toEqual(
       [
         "Event Director",
@@ -1469,15 +1529,7 @@ describe("H8 default seeded role set (0805)", () => {
   it("marks every 0801/0805 seeded role is_seeded=true, and snapshots exactly its ALLOW set into role_seed_defaults", async () => {
     const pool = await seededRoles();
     const { rows: unseeded } = await pool.query(`SELECT name FROM roles WHERE NOT is_seeded`);
-    // The hidden compatibility role is deliberately not part of the seeded
-    // catalogue; it preserves pre-0815 mobile access while remaining a normal
-    // event-bearing role that staff can explicitly remove when needed.
-    expect(unseeded).toEqual([{ name: "legacy:event-access" }]);
-    const { rows: legacyRole } = await pool.query(
-      `SELECT is_visible, is_protected, event_access
-         FROM roles WHERE name = 'legacy:event-access'`,
-    );
-    expect(legacyRole).toEqual([{ is_visible: false, is_protected: false, event_access: true }]);
+    expect(unseeded).toEqual([]);
 
     const { rows: eventDirector } = await pool.query(
       `SELECT r.id, rsd.capabilities

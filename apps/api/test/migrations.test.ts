@@ -11,6 +11,7 @@ import {
   migrationChecksum,
   validateMigrationFilenames,
 } from "../scripts/migrate.js";
+import { renderSchemaDbml } from "../scripts/schema-dbml.js";
 import { TEST_DATABASE_URL } from "./test-env.js";
 
 const databaseName = `hackos_migrations_${process.pid}_${randomUUID().replaceAll("-", "")}`;
@@ -291,6 +292,35 @@ describe("migration history (H53)", () => {
     expect(checksums.rows.every(({ checksum }) => /^[0-9a-f]{64}$/.test(checksum))).toBe(true);
   });
 
+  it("makes a clean production bootstrap match the checked-in ERD", async () => {
+    const [dbml, committed, contract] = await Promise.all([
+      renderSchemaDbml(databaseUrl.toString()),
+      readFile(join(dirname(fileURLToPath(import.meta.url)), "..", "db", "schema.dbml"), "utf8"),
+      withMigrationClient(async (client) => {
+        const objects = await client.query<{ object_name: string | null }>(
+          `SELECT to_regclass(name) AS object_name
+             FROM unnest($1::text[]) AS names(name)`,
+          [["public.manual_attendee_roles", "public.user_event_access"]],
+        );
+        const columns = await client.query<{ column_name: string }>(
+          `SELECT column_name
+             FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'applications'
+              AND column_name IN ('active', 'type')
+            ORDER BY column_name`,
+        );
+        return { objects: objects.rows, columns: columns.rows };
+      }),
+    ]);
+
+    expect(dbml).toBe(committed);
+    expect(dbml).toContain("Table user_event_access {");
+    expect(contract).toEqual({
+      objects: [{ object_name: null }, { object_name: "user_event_access" }],
+      columns: [],
+    });
+  });
+
   it("installs the squashed H54 schema and guards its final invariants", async () => {
     const migrationNames = (
       await readdir(join(dirname(fileURLToPath(import.meta.url)), "..", "db", "migrations"))
@@ -554,11 +584,8 @@ describe("migration history (H53)", () => {
         legacy_audit: "0",
       });
 
-      // 0815's compatibility pass keeps a user who was already admitted by
-      // the pre-role mobile-access rules inside the published app while the
-      // new role-derived source of truth rolls out. The bridge is a normal,
-      // removable event-bearing role; the durable ticket remains available to
-      // the old client through the unchanged /api/me/ticket contract.
+      // 0821 removes 0815's temporary compatibility role. A durable ticket is
+      // historical data, but it is no longer an entitlement by itself.
       const compatibility = await client.query<{
         role_name: string;
         event_access: boolean;
@@ -571,9 +598,7 @@ describe("migration history (H53)", () => {
           WHERE ur.user_id = $1 AND r.name = 'legacy:event-access'`,
         [activeUserId],
       );
-      expect(compatibility.rows).toEqual([
-        { role_name: "legacy:event-access", event_access: true, tickets: "1" },
-      ]);
+      expect(compatibility.rows).toEqual([]);
 
       const expectedBadgeDigest = createHmac("sha256", secret)
         .update("hackos:scanner-credential:v1:badge:legacy-badge-current")
@@ -808,9 +833,9 @@ describe("migration history (H53)", () => {
       if (userId == null) throw new Error("Expected invariant test user");
 
       const { rows: applications } = await client.query<{ id: number }>(
-        `INSERT INTO applications (name, type, template)
-         VALUES ($1, 'participant', '[]'::jsonb),
-                ($2, 'participant', '[]'::jsonb)
+        `INSERT INTO applications (name, template)
+         VALUES ($1, '[]'::jsonb),
+                ($2, '[]'::jsonb)
          RETURNING id`,
         [`form-version-a-${randomUUID()}`, `form-version-b-${randomUUID()}`],
       );

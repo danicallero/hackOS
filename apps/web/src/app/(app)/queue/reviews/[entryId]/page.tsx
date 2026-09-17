@@ -209,6 +209,14 @@ export default function ReviewDetailPage() {
             </div>
           </dl>
           <div>
+            <p className="text-muted-foreground text-sm">{t("challengesLabel")}</p>
+            <p className="text-sm">
+              {challenge.appliedChallenges.length === 0
+                ? "—"
+                : challenge.appliedChallenges.map((item) => item.title).join(" · ")}
+            </p>
+          </div>
+          <div>
             <p className="flex items-center gap-2 text-sm font-medium">
               <UsersIcon className="text-muted-foreground size-4" />
               {t("teamMembersLabel")}

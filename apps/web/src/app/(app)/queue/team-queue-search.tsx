@@ -22,6 +22,7 @@ import { Surface } from "@/components/ui/surface";
 import { ApiError } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
 import {
+  collapseRepoQueueMemberships,
   entryAction,
   getRepoChallenges,
   moveQueueEntryToPosition,
@@ -37,44 +38,9 @@ function foldAccents(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
-const statusPriority: Record<string, number> = {
-  presenting: 0,
-  in_room: 1,
-  called: 2,
-  waiting: 3,
-  completed: 4,
-  disqualified: 5,
-};
-
 function entriesForRoom(room: RoomView): QueueEntry[] {
   return [room.active, ...room.called, ...room.next].filter(
     (entry): entry is QueueEntry => entry !== null,
-  );
-}
-
-function queueMemberships(entries: RepoChallenge[]): RepoChallenge[] {
-  const byQueue = new Map<string, RepoChallenge>();
-  for (const entry of entries) {
-    const key = `queue:${entry.queue_group_id ?? entry.id}`;
-    const current = byQueue.get(key);
-    if (!current) {
-      byQueue.set(key, entry);
-      continue;
-    }
-    const currentPriority = statusPriority[current.status] ?? 99;
-    const entryPriority = statusPriority[entry.status] ?? 99;
-    if (
-      entryPriority < currentPriority ||
-      (entryPriority === currentPriority &&
-        (entry.position ?? Number.MAX_SAFE_INTEGER) < (current.position ?? Number.MAX_SAFE_INTEGER))
-    ) {
-      byQueue.set(key, entry);
-    }
-  }
-  return [...byQueue.values()].sort(
-    (a, b) =>
-      (a.position ?? Number.MAX_SAFE_INTEGER) - (b.position ?? Number.MAX_SAFE_INTEGER) ||
-      (a.queue_name ?? a.title).localeCompare(b.queue_name ?? b.title),
   );
 }
 
@@ -152,7 +118,7 @@ export function TeamQueueSearch({
       setLoading(true);
       setError(null);
       try {
-        setMemberships(queueMemberships(await getRepoChallenges(repoId)));
+        setMemberships(collapseRepoQueueMemberships(await getRepoChallenges(repoId)));
       } catch (err) {
         setMemberships([]);
         setError(err instanceof ApiError ? err.message : t("queueTeamSearchFailed"));
@@ -349,9 +315,6 @@ export function TeamQueueSearch({
                       >
                         {entry.queue_name ?? entry.title}
                       </p>
-                      {entry.queue_name && entry.queue_name !== entry.title && (
-                        <p className="text-muted-foreground truncate text-xs">{entry.title}</p>
-                      )}
                       <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
                         {entry.position != null && (
                           <span>{t("queueTeamPosition", { position: entry.position })}</span>

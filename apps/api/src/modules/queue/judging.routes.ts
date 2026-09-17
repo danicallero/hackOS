@@ -3,7 +3,7 @@ import { SSE_TOPICS } from "@hackos/shared/events";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
-import { requireCapability } from "../../lib/capabilities.js";
+import { getRequestAuthorizationContext, requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { subscribe } from "../../lib/sse.js";
 import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
@@ -269,7 +269,7 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
       schema: { querystring: reviewsQuery },
     },
     async (req) => {
-      const scope = await resolveReviewScope(req.userId);
+      const scope = await resolveReviewScope(getRequestAuthorizationContext(req));
       return { reviews: await listReviews(scope, req.query) };
     },
   );
@@ -292,10 +292,14 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
         params: entryIdParam,
         summary: "Review detail",
         description:
-          "Project details, the challenge's judging panel questions with the answers recorded for this entry, and the evaluation's edit history. Global queue administrators reach any entry in their fixture boundary; a sponsor rep only entries of their own enterprise's challenges (403 otherwise).",
+          "Project details, the queue name, every challenge the project applied to in that queue, the judging panel questions with the answers recorded for this entry, and the evaluation's edit history. Global queue administrators reach any entry in their fixture boundary; a sponsor rep only entries of their own enterprise's challenges (403 otherwise).",
       },
     },
-    async (req) => getReviewDetail(await resolveReviewScope(req.userId), req.params.entryId),
+    async (req) =>
+      getReviewDetail(
+        await resolveReviewScope(getRequestAuthorizationContext(req)),
+        req.params.entryId,
+      ),
   );
 
   // Correcting an evaluation from the overview: same validation and versioning
@@ -321,7 +325,7 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      const scope = await resolveReviewScope(req.userId);
+      const scope = await resolveReviewScope(getRequestAuthorizationContext(req));
       await assertEntryInScope(scope, req.params.entryId);
       return upsertAttemptReview(req.params.entryId, actor(req.userId), req.body, { audit: true });
     },
@@ -353,7 +357,7 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      const scope = await resolveReviewScope(req.userId);
+      const scope = await resolveReviewScope(getRequestAuthorizationContext(req));
       return sendReviewMessage(scope, req.params.entryId, actor(req.userId), req.body.message);
     },
   );
@@ -372,7 +376,7 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
       schema: { querystring: reviewsQuery },
     },
     async (req, reply) => {
-      const scope = await resolveReviewScope(req.userId);
+      const scope = await resolveReviewScope(getRequestAuthorizationContext(req));
       reply.header("content-type", "text/csv; charset=utf-8");
       reply.header("content-disposition", `attachment; filename="reviews.csv"`);
       return exportReviewsCsv(scope, req.query);

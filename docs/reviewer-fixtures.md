@@ -56,8 +56,8 @@ All four generated accounts hold an event-bearing role and receive a durable
 entrance ticket. This includes `staff-exit-operator`: its scan capabilities
 still restrict what it can do operationally, but it also retains the
 participant-facing app entry point and ticket flow used by the published mobile
-build. The review-fixture regression checks `/api/me.mobileAccess`,
-`hasEventAccess`, and `/api/me/ticket` for every account.
+build. The review-fixture regression checks `/api/me.hasEventAccess` and
+`/api/me/ticket` for every account.
 
 The queue fixture is deliberately marked on its challenge and repository. It
 is visible to the corresponding synthetic participant through the participant
@@ -148,6 +148,10 @@ These are implementation assumptions, not legal conclusions:
   already recorded the pre-squash H54 chain is detected by the runner and
   normalized transactionally by `0747`. Once deployed, migration checksums are
   immutable and later corrections use a new migration.
+- Fresh fixture databases use the clean production bootstrap (`pnpm migrate`)
+  through `0823_clean_production_schema.sql`; reviewer access is represented
+  only by `user_roles` and `roles.event_access`, never by legacy application
+  type or manual-attendee compatibility state.
 - The current credential-retirement implementation stores a stable keyed HMAC
   digest in an unlinked global denylist. It does not retain the raw badge or
   ticket value; legitimate physical badge reuse is bounded by the server-side

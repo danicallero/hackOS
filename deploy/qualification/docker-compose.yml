@@ -4,6 +4,11 @@
 # internal network and no ports, labels, proxy network, or production env
 # interpolation. RELEASE_IMAGE must be an immutable image digest supplied by
 # the operator; every hackOS container uses that exact image.
+#
+# The four production-mirroring services use the event-day limits from
+# deploy/docker-compose.yml: postgres 2 GiB + valkey 1 GiB + api 1 GiB + worker
+# 1 GiB. The disposable runner adds 1 GiB and migrate adds 512 MiB, for a 6.5
+# GiB declared qualification sum under the production host budget.
 
 x-api-image: &api-image "${RELEASE_IMAGE:?Set RELEASE_IMAGE to the exact release image digest}"
 
@@ -23,7 +28,10 @@ x-common-env: &common-env
   SMTP_HOST: "qualification.invalid"
   SMTP_PORT: "25"
   LOG_LEVEL: "info"
-  DB_POOL_MAX: "20"
+  LOG_EXPO_PUSH_TICKETS: "false"
+  LOG_EXPO_PUSH_TOKENS: "false"
+  LOG_EXPO_PUSH_UNSAFE_DEBUG: "false"
+  DB_POOL_MAX: "24"
   WORKERS_INLINE: "false"
 
 x-hardening: &hardening
@@ -68,7 +76,7 @@ services:
       resources:
         limits:
           cpus: "1.0"
-          memory: "512m"
+          memory: "1g"
 
   migrate:
     <<: *hardening
@@ -139,7 +147,7 @@ services:
       resources:
         limits:
           cpus: "2.0"
-          memory: "512m"
+          memory: "1g"
 
   runner:
     <<: *hardening

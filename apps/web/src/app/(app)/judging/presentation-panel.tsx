@@ -21,7 +21,13 @@ import { Separator } from "@/components/ui/separator";
 import { Surface } from "@/components/ui/surface";
 import { useLocale } from "@/lib/i18n";
 import { freezeTotalMinutes, presentationTimerState } from "@/lib/judging-workspace";
-import { getRepoChallenges, type QueueEntry, type RepoChallenge, type RoomPace } from "@/lib/queue";
+import {
+  collapseRepoQueueMemberships,
+  getRepoChallenges,
+  type QueueEntry,
+  type RepoChallenge,
+  type RoomPace,
+} from "@/lib/queue";
 import { cn } from "@/lib/utils";
 import type { Challenge } from "../challenges/shared";
 import { challengeName, entryLabel, secondsLabel } from "./helpers";
@@ -32,20 +38,16 @@ export function PresentationPanel({
   challenge,
   pace,
   waitingRoomCount,
-  nextWaitingEntry,
   firstCalledEntry,
   canJudge,
   canOperate,
   busy,
   onEntryAction,
-  onManualCall,
 }: {
   entry: QueueEntry | null;
   challenge: Challenge | null;
   pace: RoomPace | null;
   waitingRoomCount: number;
-  /** Front of the challenge queue (status `waiting`) — powers the "call next" shortcut. */
-  nextWaitingEntry: QueueEntry | null;
   /** Front of the waiting room (status `called`) — powers the "bring in next" shortcut. */
   firstCalledEntry: QueueEntry | null;
   canJudge: boolean;
@@ -53,11 +55,10 @@ export function PresentationPanel({
   busy: string | null;
   onEntryAction: (
     entry: QueueEntry,
-    action: "start" | "complete" | "send-back" | "bring-in",
+    action: "start" | "complete" | "send-back" | "bring-in" | "notify-enter",
     body: Record<string, unknown> | undefined,
     label: string,
   ) => void;
-  onManualCall: (entry: QueueEntry, targetStatus: "called" | "in_room") => void;
 }) {
   const { t } = useLocale();
   const isPresenting = entry?.status === "presenting";
@@ -102,12 +103,19 @@ export function PresentationPanel({
             description={waitingRoomCount > 0 ? t("teamsWaitingDoor") : t("callNextTeamPrompt")}
             action={
               <>
-                {nextWaitingEntry && (
+                {firstCalledEntry && (
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={!canOperate || busy != null}
-                    onClick={() => onManualCall(nextWaitingEntry, "called")}
+                    disabled={(!canOperate && !canJudge) || busy != null}
+                    onClick={() =>
+                      onEntryAction(
+                        firstCalledEntry,
+                        "notify-enter",
+                        undefined,
+                        t("entranceNoticeSent"),
+                      )
+                    }
                   >
                     <SendIcon className="size-4" />
                     {t("callNextTeam")}
@@ -252,19 +260,20 @@ export function ProjectInfo({
         </div>
       )}
 
-      {/* A project can submit to more than one challenge — each has its own
-          queue standing, so list every one instead of just this room's. */}
+      {/* A project can be in more than one queue. Shared queue siblings collapse
+          to one row and are named by the queue group. */}
       {(repoChallenges.length > 0 || challenge) && (
         <div className="rounded-md border bg-background p-3">
-          <p className="mb-1 text-xs font-semibold uppercase">{t("challengesLabel")}</p>
+          <p className="mb-1 text-xs font-semibold uppercase">{t("queueName")}</p>
           <ul className="space-y-1.5">
             {(repoChallenges.length > 0
-              ? repoChallenges
+              ? collapseRepoQueueMemberships(repoChallenges)
               : challenge
                 ? [
                     {
                       id: entry.challenge_id,
                       title: challengeName(t, challenge, entry.challenge_id),
+                      queue_name: null,
                       status: entry.status,
                       room_id: null,
                       room_name: null,
@@ -273,7 +282,7 @@ export function ProjectInfo({
                 : []
             ).map((rc) => (
               <li key={rc.id} className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-sm font-medium">{rc.title}</span>
+                <span className="text-sm font-medium">{rc.queue_name ?? rc.title}</span>
                 <div className="flex items-center gap-2">
                   {rc.room_name && (
                     <span className="text-muted-foreground text-xs">{rc.room_name}</span>

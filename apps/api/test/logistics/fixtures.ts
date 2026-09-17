@@ -86,7 +86,7 @@ export async function createBadgePass(
 export async function makeConfirmed(userId: number): Promise<void> {
   appSeq += 1;
   const app = await pool.query(
-    `INSERT INTO applications (name, type, template) VALUES ($1, 'participant', '{}'::jsonb) RETURNING id`,
+    `INSERT INTO applications (name, template) VALUES ($1, '{}'::jsonb) RETURNING id`,
     [`app-${appSeq}-${crypto.randomUUID()}`],
   );
   const formVersionId = await ensureApplicationFormVersion(app.rows[0].id);

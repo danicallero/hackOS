@@ -34,11 +34,12 @@ import { Section } from "@/components/ui/surface";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
+import { validationErrorSummary } from "@/lib/application-validation";
 import { pickText, useLocale } from "@/lib/i18n";
 import { withReturnPath } from "@/lib/return-path";
 import type { SaveState } from "@/lib/save-state";
 import { useMe } from "@/lib/session";
-import { toast } from "@/lib/toast";
+import { showErrorToast, toast } from "@/lib/toast";
 import type { Language } from "@/lib/types";
 import {
   type ActionError,
@@ -337,9 +338,20 @@ export default function MyApplicationDetailPage() {
             document.getElementById(templateFieldId(firstInvalid.key, id))?.focus();
           });
         }
-        toast.error(err.message);
+        const summary = validationErrorSummary(nextErrors, template, lang);
+        showErrorToast(
+          err,
+          t("couldNotSubmitApplication"),
+          summary
+            ? {
+                description: `${err.message}\n${summary}`,
+                duration: 12_000,
+                autopilot: { expand: 0, collapse: 0 },
+              }
+            : undefined,
+        );
       } else {
-        toast.error(t("couldNotSubmitApplication"));
+        showErrorToast(err, t("couldNotSubmitApplication"));
       }
     } finally {
       setSubmitting(false);

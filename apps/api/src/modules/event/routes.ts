@@ -11,8 +11,14 @@ import { z } from "zod";
 import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { requireAnyCapability, userHasCapability } from "../../lib/capabilities.js";
+import {
+  type AuthorizationContext,
+  getRequestAuthorizationContext,
+  requireAnyCapability,
+  userHasCapability,
+} from "../../lib/capabilities.js";
 import { BadRequestError, ForbiddenError } from "../../lib/errors.js";
+import { requireIdempotencyKey } from "../../lib/idempotency.js";
 import {
   type RouteAccessPolicy,
   routeAccessOption as routeAccess,
@@ -76,14 +82,14 @@ const EVENT_SETTINGS_ANY_CAPABILITY = [
  * if the same request also carries `venueName`.
  */
 async function assertFieldCapabilities(
-  userId: number,
+  context: AuthorizationContext,
   body: Record<string, unknown>,
 ): Promise<void> {
   const missing: { field: string; capability: Capability }[] = [];
   for (const field of Object.keys(body)) {
     const capability = EVENT_SETTINGS_CAPABILITIES[field];
     if (!capability) continue; // unknown keys are already rejected by .strict()
-    if (!(await userHasCapability(userId, capability))) {
+    if (!(await userHasCapability(context, capability))) {
       missing.push({ field, capability });
     }
   }
@@ -348,7 +354,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
     "/api/event",
     {
       ...routeAccess(eventSettingsRead),
-      preHandler: requireAnyCapability(...EVENT_SETTINGS_ANY_CAPABILITY),
+      preHandler: [requireAnyCapability(...EVENT_SETTINGS_ANY_CAPABILITY), requireIdempotencyKey],
       schema: {
         summary: "Update event config",
         description:
@@ -358,7 +364,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const b = req.body;
-      await assertFieldCapabilities(req.userId as number, b);
+      await assertFieldCapabilities(getRequestAuthorizationContext(req), b);
       const current = await readConfig();
       const next = {
         name: b.name === undefined ? current.name : b.name,

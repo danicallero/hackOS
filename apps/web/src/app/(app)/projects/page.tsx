@@ -7,7 +7,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { FolderGitIcon, UploadIcon, UsersIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
@@ -118,6 +118,7 @@ export default function ProjectsPage() {
     Boolean(me?.isSponsorRep);
   const [repos, setRepos] = useState<ProjectRepo[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -125,10 +126,11 @@ export default function ProjectsPage() {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     setLoadError(null);
     try {
       const res = await listRepos();
+      hasLoadedRef.current = true;
       setRepos(res.repos.map(toProjectRepo));
     } catch (err) {
       setRepos([]);
@@ -186,7 +188,7 @@ export default function ProjectsPage() {
         columns={columns}
         data={repos}
         getRowId={(r) => String(r.id)}
-        loading={loading}
+        loading={loading && !hasLoadedRef.current}
         error={loadError ? { message: loadError, onRetry: load } : undefined}
         getRowHref={(r) => `/projects/${r.id}`}
         getRowLabel={(r) => r.name}

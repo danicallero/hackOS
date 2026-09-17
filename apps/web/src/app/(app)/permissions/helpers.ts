@@ -135,9 +135,9 @@ export function capabilitiesByDomain(): { domain: string; capabilities: string[]
   return groups;
 }
 
-/** Deprecated compatibility capability: never offer it for a new assignment (AC-3T2). */
+/** All capabilities are current catalogue entries and may be assigned. */
 export function selectableCapabilities(): string[] {
-  return ALL_CAPABILITIES.filter((cap) => cap !== "sponsor:portal");
+  return ALL_CAPABILITIES;
 }
 
 /**

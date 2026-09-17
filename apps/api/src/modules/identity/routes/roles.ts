@@ -8,6 +8,7 @@ import { pool, withTransaction } from "../../../db/pool.js";
 import { audit } from "../../../lib/audit.js";
 import {
   assertKnownCapabilities,
+  getRequestAuthorizationContext,
   requireAnyCapability,
   requireCapability,
   userHasCapability,
@@ -189,7 +190,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List role-creation templates",
         description:
-          "Returns the stable H8 template catalogue used to prefill a new role's capabilities. Labels/descriptions are message keys for the client i18n catalogue; `sponsor:portal` is deliberately absent.",
+          "Returns the stable H8 template catalogue used to prefill a new role's capabilities. Labels/descriptions are message keys for the client i18n catalogue.",
         response: {
           200: z.array(
             z.object({
@@ -228,7 +229,10 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     async (req) => {
       const includeDeleted =
         req.query.includeDeleted &&
-        (await userHasCapability(req.userId as number, CAPABILITIES.PERMISSIONS_MANAGE, req));
+        (await userHasCapability(
+          getRequestAuthorizationContext(req),
+          CAPABILITIES.PERMISSIONS_MANAGE,
+        ));
       const { rows } = await pool.query(
         `SELECT id FROM roles
           WHERE deleted_at IS NULL OR ($1 AND is_seeded)

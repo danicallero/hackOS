@@ -10,10 +10,13 @@ jest.mock("./api", () => ({
     }
   },
   apiFetch: jest.fn(),
+  getCurrentSessionCookie: jest.fn(() => "session=staff-a"),
 }));
 
 const mockCacheStore = new Map<string, { data: unknown; updatedAt: string }>();
 jest.mock("./offline-cache", () => ({
+  clearCachedValue: jest.fn(() => Promise.resolve()),
+  clearCachedValues: jest.fn(() => Promise.resolve()),
   readCachedValue: jest.fn((key: string) => Promise.resolve(mockCacheStore.get(key) ?? null)),
   writeCachedValue: jest.fn(
     (key: string, data: unknown, updatedAt = "2026-01-01T00:00:00.000Z") => {
@@ -27,10 +30,11 @@ jest.mock("expo-network", () => ({
   addNetworkStateListener: jest.fn(() => ({ remove: () => {} })),
 }));
 
-import { ApiError, apiFetch } from "./api";
-import { useMe } from "./use-me";
+import { ApiError, apiFetch, getCurrentSessionCookie } from "./api";
+import { profileCacheKeyForSession, useMe } from "./use-me";
 
 const mockApiFetch = apiFetch as jest.Mock;
+const mockGetCookie = getCurrentSessionCookie as jest.Mock;
 
 // Real AppState is backed by a native module the test environment can't
 // drive directly, so intercept just `addEventListener` to fire the exact
@@ -54,6 +58,7 @@ function deferred<T>() {
 describe("useMe foreground revalidation (H55)", () => {
   beforeEach(() => {
     mockApiFetch.mockReset();
+    mockGetCookie.mockReset().mockReturnValue("session=staff-a");
     mockCacheStore.clear();
     listeners = new Set();
     jest.spyOn(AppState, "addEventListener").mockImplementation((_event, cb) => {
@@ -104,17 +109,99 @@ describe("useMe foreground revalidation (H55)", () => {
     await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(2));
   });
 
+  it("keeps the profile snapshot stable when a foreground refresh has no changes", async () => {
+    const profile = { id: 1, capabilities: [], email: "person@example.com" };
+    mockApiFetch.mockResolvedValue(profile);
+    const { result } = await renderHook(() => useMe(true));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const firstSnapshot = result.current.me;
+
+    await act(async () => emitAppState("inactive"));
+    await act(async () => emitAppState("active"));
+
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(2));
+    expect(result.current.me).toBe(firstSnapshot);
+  });
+
+  it("publishes a new profile snapshot when a foreground refresh changes data", async () => {
+    mockApiFetch
+      .mockResolvedValueOnce({ id: 1, capabilities: [], email: "person@example.com" })
+      .mockResolvedValueOnce({
+        id: 1,
+        capabilities: ["queue:status"],
+        email: "person@example.com",
+      });
+    const { result } = await renderHook(() => useMe(true));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const firstSnapshot = result.current.me;
+
+    await act(async () => emitAppState("inactive"));
+    await act(async () => emitAppState("active"));
+
+    await waitFor(() => expect(result.current.me?.capabilities).toEqual(["queue:status"]));
+    expect(result.current.me).not.toBe(firstSnapshot);
+  });
+
   it("still shows a loading state for the very first fetch", async () => {
     mockApiFetch.mockReturnValue(new Promise(() => {}));
     const { result } = await renderHook(() => useMe(true));
     expect(result.current.loading).toBe(true);
     expect(result.current.me).toBeNull();
   });
+
+  it("keeps an unauthenticated auth stack mounted during a foreground revalidation", async () => {
+    mockApiFetch.mockRejectedValue(new ApiError("api error", 401));
+    const { result } = await renderHook(() => useMe(true));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.me).toBeNull();
+
+    await act(async () => emitAppState("inactive"));
+    await act(async () => emitAppState("active"));
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.me).toBeNull();
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(2));
+  });
+
+  it("coalesces concurrent profile refreshes into one request", async () => {
+    const profileFetch = deferred<{ id: number; capabilities: string[] }>();
+    mockApiFetch.mockReturnValue(profileFetch.promise);
+    const { result } = await renderHook(() => useMe(true));
+
+    const first = result.current.refetch();
+    const second = result.current.refetch();
+    expect(second).toBe(first);
+    expect(mockApiFetch).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      profileFetch.resolve({ id: 1, capabilities: [] });
+      await first;
+    });
+    expect(result.current.me?.id).toBe(1);
+  });
+
+  it("preserves the canonical visibleRoleName field without a mobile role alias", async () => {
+    mockApiFetch.mockResolvedValue({
+      id: 1,
+      capabilities: [],
+      visibleRoleName: "Event staff",
+    });
+
+    const { result } = await renderHook(() => useMe(true));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.me?.visibleRoleName).toBe("Event staff");
+    expect(result.current.me).not.toHaveProperty("role");
+  });
 });
 
 describe("useMe offline fallback", () => {
   beforeEach(() => {
     mockApiFetch.mockReset();
+    mockGetCookie.mockReset().mockReturnValue("session=staff-a");
     mockCacheStore.clear();
     listeners = new Set();
     jest.spyOn(AppState, "addEventListener").mockImplementation((_event, cb) => {
@@ -130,7 +217,7 @@ describe("useMe offline fallback", () => {
   });
 
   it("serves the last cached profile when the live fetch can't reach the server", async () => {
-    mockCacheStore.set("me", {
+    mockCacheStore.set(profileCacheKeyForSession("session=staff-a"), {
       data: { id: 1, capabilities: ["accredit:scan"] },
       updatedAt: "2025-12-01T00:00:00.000Z",
     });
@@ -155,7 +242,7 @@ describe("useMe offline fallback", () => {
   });
 
   it("clears the cached profile on a confirmed 401 instead of falling back to it", async () => {
-    mockCacheStore.set("me", {
+    mockCacheStore.set(profileCacheKeyForSession("session=staff-a"), {
       data: { id: 1, capabilities: [] },
       updatedAt: "2025-12-01T00:00:00.000Z",
     });
@@ -164,6 +251,65 @@ describe("useMe offline fallback", () => {
     const { result } = await renderHook(() => useMe(true));
 
     await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.me).toBeNull();
+    expect(result.current.offline).toBe(false);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("pins a profile request to its session and ignores a delayed predecessor", async () => {
+    const userAFetch = deferred<{ id: number; capabilities: string[] }>();
+    const userBFetch = deferred<{ id: number; capabilities: string[] }>();
+    mockApiFetch.mockReturnValueOnce(userAFetch.promise).mockReturnValueOnce(userBFetch.promise);
+    const { result } = await renderHook(() => useMe(true));
+
+    await act(async () => {
+      result.current.clear();
+      mockGetCookie.mockReturnValue("session=staff-b");
+      const next = result.current.refetch();
+      userBFetch.resolve({ id: 2, capabilities: [] });
+      await next;
+    });
+    expect(result.current.me?.id).toBe(2);
+    expect(mockApiFetch).toHaveBeenNthCalledWith(
+      1,
+      "/api/me",
+      expect.objectContaining({
+        sessionCookie: "session=staff-a",
+        signal: expect.any(AbortSignal),
+      }),
+    );
+    expect(mockApiFetch).toHaveBeenNthCalledWith(
+      2,
+      "/api/me",
+      expect.objectContaining({
+        sessionCookie: "session=staff-b",
+        signal: expect.any(AbortSignal),
+      }),
+    );
+    expect((mockApiFetch.mock.calls[0][1] as { signal: AbortSignal }).signal.aborted).toBe(true);
+
+    await act(async () => {
+      userAFetch.resolve({ id: 1, capabilities: [] });
+      await userAFetch.promise;
+    });
+    expect(result.current.me?.id).toBe(2);
+  });
+
+  it("does not restore account A's offline profile under account B's session", async () => {
+    mockCacheStore.set(profileCacheKeyForSession("session=staff-a"), {
+      data: { id: 1, capabilities: [] },
+      updatedAt: "2025-12-01T00:00:00.000Z",
+    });
+    mockApiFetch.mockRejectedValue(new TypeError("Network request failed"));
+    const { result } = await renderHook(() => useMe(true));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.me?.id).toBe(1);
+
+    await act(async () => {
+      result.current.clear();
+      mockGetCookie.mockReturnValue("session=staff-b");
+      await result.current.refetch();
+    });
     expect(result.current.me).toBeNull();
     expect(result.current.offline).toBe(false);
   });

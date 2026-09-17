@@ -81,6 +81,7 @@ export function useScheduleNotifications(items: ScheduleItem[]) {
   } = useCachedApi(
     `user:${me?.id ?? "unknown"}:schedule-notification-preferences`,
     fetchPreferences,
+    { enabled: me !== null },
   );
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<Error | null>(null);

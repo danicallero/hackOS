@@ -6,7 +6,7 @@ import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
-import { assertWithinHackingWindow, isWithinHackingWindow } from "../../lib/hacking-window.js";
+import { assertWithinHackingWindow } from "../../lib/hacking-window.js";
 import { broadcast } from "../../lib/sse.js";
 import { enqueueAuthEmail } from "../identity/outbox.js";
 import { hasEventAccess } from "../identity/role.js";
@@ -989,8 +989,8 @@ export async function getRepoForScope(
  * H55/nav: cheap existence check backing the "My project" nav item — same
  * membership definition as {@link myProjects}, without the roster join.
  */
-export async function hasMyProject(userId: number): Promise<boolean> {
-  const { rows } = await pool.query(
+export async function hasMyProject(userId: number, db: Queryable = pool): Promise<boolean> {
+  const { rows } = await db.query(
     `SELECT EXISTS (
        SELECT 1 FROM submissions s
         JOIN repos r ON r.id = s.repo_id
@@ -1888,10 +1888,25 @@ export async function participantsCanCreateProjects(): Promise<boolean> {
  * must reflect exactly the same gate createMyProject enforces, not a
  * leftover "one project only" restriction.
  */
-export async function canCreateMyProject(userId: number): Promise<boolean> {
-  if (!(await participantsCanCreateProjects())) return false;
-  if (!(await isAdmittedParticipant(pool, userId))) return false;
-  return isWithinHackingWindow(pool);
+export async function canCreateMyProject(userId: number, db: Queryable = pool): Promise<boolean> {
+  const { rows } = await db.query<{ allowed: boolean }>(
+    `SELECT (
+       ec.participants_can_create_projects IS TRUE
+       AND ec.hacking_starts_at IS NOT NULL
+       AND ec.hacking_ends_at IS NOT NULL
+       AND now() BETWEEN ec.hacking_starts_at AND ec.hacking_ends_at
+       AND EXISTS (
+         SELECT 1
+           FROM users u
+           JOIN user_event_access uea ON uea.user_id = u.id
+          WHERE u.id = $1
+       )
+     ) AS allowed
+       FROM event_config ec
+      WHERE ec.id = 1`,
+    [userId],
+  );
+  return rows[0]?.allowed === true;
 }
 
 /**
@@ -1902,7 +1917,7 @@ export async function canCreateMyProject(userId: number): Promise<boolean> {
  * framing assumed the read-only surface; self-service supersedes it, so
  * there is no longer a "you already belong to a project" check here.
  * Self-creation is further gated to admitted participants (the same
- * role-derived event-access check as mobile access) and to the configured
+ * role-derived event-access check as app entry) and to the configured
  * hacking window. The creator becomes
  * the project's first member; chosen challenges enqueue exactly like a hot
  * edit.

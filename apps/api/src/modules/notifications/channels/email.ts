@@ -2,8 +2,6 @@ import { config } from "../../../config.js";
 import type { Queryable } from "../../../db/pool.js";
 import type { EmailPayload } from "../templates.js";
 import { normalizeLanguage, renderEmailTemplate } from "../templates.js";
-import { sendViaPostal } from "./email-adapters/postal.js";
-import { sendViaResend } from "./email-adapters/resend.js";
 import { sendViaSmtp } from "./email-adapters/smtp.js";
 
 export interface MailMessage {
@@ -14,21 +12,18 @@ export interface MailMessage {
 }
 
 /**
- * Resolved mail configuration handed to the provider adapters.
+ * Resolved SMTP configuration used by the email channel.
  *
  * DELTA(H52): the story says the provider is chosen "por base de datos"; per
  * explicit user decision it is instead fixed at deploy time via env vars
- * (config.MAIL_PROVIDER et al., see src/config.ts). Switching
- * Resend/SMTP/Postal is an ops change (env + restart), not a runtime toggle,
- * and there is no mail settings table or admin endpoint.
+ * (config.MAIL_PROVIDER and SMTP settings, see src/config.ts). Relay settings are an
+ * ops change (env + restart), not a runtime toggle, and there is no mail
+ * settings table or admin endpoint.
  */
 export interface MailConfig {
-  provider: "smtp" | "resend" | "postal";
+  provider: "smtp";
   fromAddress: string;
   fromName: string;
-  resendApiKey?: string;
-  postalUrl?: string;
-  postalApiKey?: string;
   smtpHost: string;
   smtpPort: number;
   smtpUser?: string;
@@ -40,9 +35,6 @@ export function mailConfigFromEnv(): MailConfig {
     provider: config.MAIL_PROVIDER,
     fromAddress: config.MAIL_FROM_ADDRESS,
     fromName: config.MAIL_FROM_NAME,
-    resendApiKey: config.RESEND_API_KEY,
-    postalUrl: config.POSTAL_URL,
-    postalApiKey: config.POSTAL_API_KEY,
     smtpHost: config.SMTP_HOST,
     smtpPort: config.SMTP_PORT,
     smtpUser: config.SMTP_USER,
@@ -53,7 +45,7 @@ export function mailConfigFromEnv(): MailConfig {
 /**
  * Dispatches one email outbox row (H52). Resolves the recipient's language
  * from `users.language` (never trusts payload.vars for that), renders the
- * template, and hands off to whichever provider adapter MAIL_PROVIDER names.
+ * template, and hands it to the configured SMTP relay.
  */
 export async function sendEmail(
   db: Queryable,
@@ -81,12 +73,5 @@ export async function sendEmail(
     text: rendered.text,
   };
 
-  switch (mail.provider) {
-    case "resend":
-      return sendViaResend(mail, message);
-    case "postal":
-      return sendViaPostal(mail, message);
-    default:
-      return sendViaSmtp(mail, message);
-  }
+  return sendViaSmtp(mail, message);
 }

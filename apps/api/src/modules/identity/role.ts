@@ -140,28 +140,38 @@ export async function computeMembershipFlags(
   db: Queryable,
   userId: number,
 ): Promise<{ isEnterpriseJudge: boolean; isSponsorRep: boolean }> {
-  const [{ rows: judgeRows }, { rows: sponsorRows }] = await Promise.all([
-    db.query(
-      `SELECT 1 FROM enterprise_judges ej
-        JOIN users u ON u.id = ej.user_id
-       WHERE ej.user_id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
-       LIMIT 1`,
-      [userId],
-    ),
-    db.query(
-      `SELECT 1 FROM sponsors s
-        JOIN users u ON u.id = s.user_id
-       WHERE s.user_id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
-       LIMIT 1`,
-      [userId],
-    ),
-  ]);
+  const { rows } = await db.query<{
+    is_enterprise_judge: boolean;
+    is_sponsor_rep: boolean;
+  }>(
+    `SELECT
+       (
+         EXISTS (
+           SELECT 1 FROM enterprise_judges ej
+            WHERE ej.user_id = u.id
+         )
+         OR EXISTS (
+           SELECT 1 FROM sponsors s
+            WHERE s.user_id = u.id
+         )
+       ) AS is_enterprise_judge,
+       EXISTS (
+         SELECT 1 FROM sponsors s
+          WHERE s.user_id = u.id
+       ) AS is_sponsor_rep
+       FROM users u
+      WHERE u.id = $1
+        AND u.account_state = 'active'
+        AND u.anonymized_at IS NULL`,
+    [userId],
+  );
+  const row = rows[0];
   // A sponsor representative judges the rooms of their own enterprise by
   // default.  The explicit roster remains for external judges; it must not be
   // required for the people who own the challenge in the first place.
   return {
-    isEnterpriseJudge: judgeRows.length > 0 || sponsorRows.length > 0,
-    isSponsorRep: sponsorRows.length > 0,
+    isEnterpriseJudge: row?.is_enterprise_judge === true,
+    isSponsorRep: row?.is_sponsor_rep === true,
   };
 }
 
@@ -170,17 +180,14 @@ export async function computeMembershipFlags(
  * entitlement source: any assigned, non-deleted role with `event_access =
  * true` is enough, and losing one of several such roles does not matter until
  * the last one is gone. `is_visible` and effective capabilities are unrelated
- * presentation/authorization concerns. Ticket and mobile-app callers use
- * this same query so they cannot drift into separate eligibility rules.
+ * presentation/authorization concerns. Ticket and app-entry callers use this
+ * same role-derived rule so they cannot drift into separate eligibility rules.
  */
 export async function hasEventAccess(db: Queryable, userId: number): Promise<boolean> {
   const { rows } = await db.query(
     `SELECT 1
-       FROM users u
-       JOIN user_event_access uea ON uea.user_id = u.id
-      WHERE u.id = $1
-        AND u.account_state = 'active'
-        AND u.anonymized_at IS NULL
+       FROM user_event_access
+      WHERE user_id = $1
       LIMIT 1`,
     [userId],
   );
@@ -193,13 +200,11 @@ export async function hasEventAccess(db: Queryable, userId: number): Promise<boo
  * previously held from this same mechanism (a re-classification switches
  * type, it doesn't stack both). This is the write-side counterpart to
  * mentorOrParticipantType — used by PUT /api/users/:id/attendee-role and
- * accreditation's walk-in classification, the two call sites that used to
- * write `manual_attendee_roles` directly. That table is not written to by
- * either anymore (see 0808's migration comment); a genuinely explicit,
- * staff-driven classification is exactly what a real role grant is for,
- * unlike the retired applications.type guess. Caller must run this inside
- * their own transaction (client is expected to already hold a row lock on
- * the user, same as both call sites already do before this).
+ * accreditation's walk-in classification. A genuinely explicit,
+ * staff-driven classification is a real role grant, unlike the retired
+ * applications.type guess. Caller must run this inside their own transaction
+ * (client is expected to already hold a row lock on the user, same as both
+ * call sites already do before this).
  */
 export async function assignAttendeeRole(
   client: Queryable,

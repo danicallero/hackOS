@@ -47,7 +47,9 @@ const ASSETS_DIR = join(process.cwd(), "assets", "apple-wallet");
 // the "Add to Wallet" system prompt only checks the response's MIME type,
 // so a bundle missing icon.png still returns 200 but nothing ever appears.
 // logo/strip are optional visuals (carried over from the reference pkpass
-// generator this replaces) but embedded the same way.
+// generator this replaces) but embedded the same way. Keep the three strip
+// resolutions in the bundle: Wallet chooses the matching asset per device
+// scale, and falls back to a lower-resolution file only when necessary.
 const PASS_IMAGE_FILES = [
   "icon.png",
   "icon@2x.png",
@@ -56,6 +58,7 @@ const PASS_IMAGE_FILES = [
   "logo@2x.png",
   "strip.png",
   "strip@2x.png",
+  "strip@3x.png",
 ];
 
 function appleAuthToken(header: string | undefined): string {
@@ -121,6 +124,8 @@ async function passPayload(pass: PassRow) {
     throw new NotFoundError("Ticket not issued");
   if (!revoked && pass.purpose === "ticket" && !(await hasEventAccess(pool, pass.user_id)))
     throw new NotFoundError("Ticket not issued");
+  if (!revoked && pass.purpose === "badge" && !(await hasEventAccess(pool, pass.user_id)))
+    throw new NotFoundError("Badge not issued");
   if (!revoked && pass.purpose === "badge" && !u.badge_id)
     throw new BadRequestError("Badge not assigned");
 
@@ -299,9 +304,13 @@ async function passPayload(pass: PassRow) {
         messageEncoding: "iso-8859-1",
       },
     ],
-    foregroundColor: "rgb(255,255,255)",
-    backgroundColor: "rgb(40,40,40)",
-    labelColor: "rgb(255,180,0)",
+    // #030846 is used for labels/headers and #fafafa for values such as the
+    // attendee name, email, role, and pass type, as specified by the pass
+    // design. #a3d5ff is the material background.
+    foregroundColor: "rgb(250,250,250)",
+    backgroundColor: "rgb(163,213,255)",
+    labelColor: "rgb(3,8,70)",
+    suppressStripShine: true,
   };
 }
 

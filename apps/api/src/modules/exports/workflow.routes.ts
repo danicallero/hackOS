@@ -4,7 +4,11 @@ import { SSE_TOPICS } from "@hackos/shared/events";
 import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
-import { requireCapability, userHasCapability } from "../../lib/capabilities.js";
+import {
+  getRequestAuthorizationContext,
+  requireCapability,
+  userHasCapability,
+} from "../../lib/capabilities.js";
 import { ConflictError, ForbiddenError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
@@ -42,7 +46,7 @@ export function registerWorkflowRoutes(app: FastifyInstance): void {
     }
     if (
       (req.body as { type?: string } | undefined)?.type === "deletion" &&
-      !(await userHasCapability(userId, CAPABILITIES.ADMIN_ALL, req))
+      !(await userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.ADMIN_ALL))
     ) {
       throw new ForbiddenError(`Missing capability: ${CAPABILITIES.ADMIN_ALL}`, {
         capability: CAPABILITIES.ADMIN_ALL,

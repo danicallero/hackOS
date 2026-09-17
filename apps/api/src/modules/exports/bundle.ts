@@ -1,5 +1,5 @@
 import { pool, type Queryable } from "../../db/pool.js";
-import { getEffectiveCapabilities } from "../../lib/capabilities.js";
+import { createAuthorizationContext, getEffectiveCapabilities } from "../../lib/capabilities.js";
 import { NotFoundError } from "../../lib/errors.js";
 
 /**
@@ -37,7 +37,9 @@ export async function buildExportBundle(
       [subjectUserId],
     )
   ).rows;
-  const capabilities = [...(await getEffectiveCapabilities(subjectUserId, undefined, db))];
+  const capabilities = [
+    ...(await getEffectiveCapabilities(createAuthorizationContext(subjectUserId, db))),
+  ];
   const applications = (
     await db.query(
       `SELECT ar.id, ar.application_id, a.name AS application_name,

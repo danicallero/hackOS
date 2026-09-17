@@ -410,6 +410,8 @@ describe("reading a queue in order", () => {
     ]);
     expect(entries[0]).toMatchObject({ status: "presenting", room_name: "Sala A" });
     expect(entries[1]!.status).toBe("waiting");
+    expect(entries[0]).toHaveProperty("queue_name", body.group.display_name);
+    expect(entries[0]).not.toHaveProperty("challenge_title");
     expect(body.challenges).toHaveLength(2);
   });
 

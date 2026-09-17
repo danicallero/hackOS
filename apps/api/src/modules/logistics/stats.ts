@@ -149,8 +149,8 @@ export async function logisticsStats() {
  * role name (H8 full-replacement — no separate admin/judge/sponsor/staff
  * bucket; `Unassigned` covers anyone with no visible role), so the client
  * can sum whatever combination of role groups the operator has filtered to.
- * "Eligible" is the same role-derived fact `hasEventAccess`/`hasMobileAccess`
- * use: any assigned, non-deleted role with `event_access = true` is eligible,
+ * "Eligible" is the same role-derived `hasEventAccess` fact used by
+ * session/app entry: any assigned, non-deleted role with `event_access = true` is eligible,
  * regardless of visibility, capability, sponsor relationship, or application
  * status. Answered as a direct read from Postgres; freshness comes from the
  * existing logistics SSE events rather than a global cache version.

@@ -1,10 +1,11 @@
 "use client";
 
 // Participant "my queue" status (H38): the authenticated user sees, for each
-// project/challenge their team presents to, its live queue stage, position in
-// line, estimated wait and room. While waiting, every room that could judge a
-// multi-room challenge is listed; once their team is called, only the room
-// they were actually called to is shown, in a prominent "go to room X" notice.
+// project queue their team presents to, its live queue stage, position in
+// line, estimated wait and room. Shared challenge entries collapse to one
+// queue row; separate queues remain separate. While waiting, every room that
+// could judge a queue is listed; once their team is called, only the room they
+// were actually called to is shown, in a prominent "go to room X" notice.
 // A pre-call gives them a heads-up to get ready. No capability gate — this is
 // the participant-facing view, auth only.
 //
@@ -216,7 +217,7 @@ export default function MyQueuePage() {
   );
 }
 
-/** A project may be queued for several challenges; keep its live statuses together. */
+/** A project may be queued for several queues; keep their live statuses together. */
 function ProjectQueueCard({ repoName, entries }: { repoName: string; entries: MyQueueEntry[] }) {
   const { t } = useLocale();
   return (

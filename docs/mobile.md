@@ -58,7 +58,8 @@ documented in full in its own section below.
 
 **Schema.** Migration `0815_role_event_access.sql` adds the independent
 `roles.event_access` flag, its `role_seed_defaults` snapshot, and the
-`user_event_access` read view. A user is entitled when at least one assigned,
+`user_event_access` canonical read projection. A user is entitled only when
+their account is active and non-anonymized and at least one assigned,
 non-deleted role has the flag enabled; visibility and capabilities do not
 change that result. The same migration backfills roles, legacy users, durable
 tickets, and wallet-pass state so an already-approved app build keeps working
@@ -84,7 +85,8 @@ through the rollout. `push_tokens` (already existed in
   inserted a templateless, push-only outbox row directly — the pre-alert had
   no rendered subject/body and never reached in_app/email).
 - The app also calls these existing endpoints:
-  `GET /api/me` (capabilities + language + badgeId + role-derived event access),
+  `GET /api/me` (capabilities + language + badgeId + canonical
+  `visibleRoleName` + role-derived event access),
   `GET /api/public/activities`
   (schedule), `GET /api/queue/me` (H38 status), `GET /api/me/ticket` (including
   the active account-specific Apple Wallet serial number for each purpose) +
@@ -251,10 +253,9 @@ distributed to other Expo Router apps without importing hackOS code.
   first field that needs attention instead of hiding validation behind a disabled
   submit button. The password field has a 52-point, screen-reader-labelled reveal
   action, and password recovery keeps a 44-point hit target. At standard text
-  sizes the composition does not scroll: the form stays vertically centred and
-  a concise account/application note stays at the safe-area bottom. At
-  accessibility text sizes the same screen permits scrolling rather than clip a
-  field or action. The note shows the configured
+  sizes, the composition is centered. Opening the keyboard shifts only the
+  form upward with a compositor transform; its layout and the account/application
+  note anchored at the safe-area bottom do not move. The note shows the configured
   `EXPO_PUBLIC_EVENT_WEBSITE_URL` as selectable text but deliberately does not
   link out to account creation (see `docs/mobile-release.md`). The
   uncontrolled native credential fields use the username/current-password
@@ -262,20 +263,32 @@ distributed to other Expo Router apps without importing hackOS code.
   provider sheet temporarily moves focus away from the app. Session
   revalidation after Passwords/Face ID returns never unmounts the auth
   navigator, so the native fields that receive the selected values remain the
-  same instances; iOS additionally associates the domain through
-  `webcredentials`.
-  If authentication succeeds but the account lacks role-derived `mobileAccess`, the app
+  same instances. The app restores the field that opened the provider sheet
+  once iOS settles its return transition, preventing a late AutoFill event
+  from moving password focus back to email; iOS additionally associates the domain through
+  `webcredentials`. The mobile root uses one authoritative, repeatable-read
+  `GET /api/me` snapshot for session validity, role-derived event access,
+  profile and navigation facts. A background revalidation retains the existing
+  snapshot reference when its JSON data is unchanged, avoiding context-wide
+  screen updates while still publishing changed labels, profile data, and
+  capabilities. Input-heavy authentication screens consume the separately
+  stable session-action context instead, so profile changes never re-render
+  their native credential fields;
+  Better Auth remains the cookie/sign-in/sign-out transport and does not run a
+  second session probe on startup.
+  If authentication succeeds but the account lacks role-derived `hasEventAccess`, the app
   revokes that device session and returns to sign-in with a native, modal
   access-denied alert. The route signal is consumed before presentation so
-  VoiceOver does not hear the same denial again after a remount. `mobileAccess`
+  VoiceOver does not hear the same denial again after a remount. `hasEventAccess`
   is also part of the synchronous protected-stack guard: an ineligible account
   never mounts an event screen while its asynchronous sign-out is running.
   (accounts come from the web onboarding/invite flows, H10/H12).
 - `app/(auth)/forgot-password.tsx` and `reset-password.tsx` share the same
   leading, task-first composition. Their primary actions remain discoverable,
   invalid values are explained beside the relevant field, and focus moves to
-  the first correction. They stay fixed at standard text sizes and become
-  scrollable only for accessibility text sizes. The request uses
+  the first correction. They use the same fixed composition at every text size,
+  preserving field focus and entered values while the keyboard opens or closes.
+  The request uses
   `lib/password-reset.ts` to keep the platform boundary explicit: iOS keeps
   the `hackos://reset-password` native callback, while Android requests the
   event website's `/reset-password` callback so Better Auth appends the token
@@ -341,10 +354,13 @@ distributed to other Expo Router apps without importing hackOS code.
   the OS cache directory (wallet passes, and for operators the attendance
   roster), plus a confirmed "Clear cache" action. Clearing never touches the
   offline scan queue — the only record of not-yet-synced scans — or the auth
-  session; see "Scanner cache encryption & isolation" below. `wallet.tsx`
+  session; see "Scanner cache encryption & isolation" below. Ordinary account
+  caches are namespaced by user/session and are cleared on logout; late writes
+  that began before cleanup are serialized behind the cleanup. `wallet.tsx`
   renders ticket/badge QR codes. After an eligible session is restored, a
   best-effort startup warmup stores the `/api/me/ticket` payload under an
-  account-scoped cache key; the screen still refreshes online and falls back to
+  account-scoped cache key and discards a response if the session changes; the
+  screen still refreshes online and falls back to
   that payload with a stale-data banner (`components/stale-data-banner.tsx`,
   reused across schedule, queue, wallet, notifications, sponsor announcement
   management, queue operations, and the scanner's sync-queue/activities/people
@@ -791,8 +807,11 @@ physical iOS/Android and EAS verification remains a release-gate task in
 
 ## Realtime & notifications infrastructure
 
-- `lib/push.ts` — best-effort Expo push token registration, called once after
-  sign-in from `app/_layout.tsx`.
+- `lib/push.ts` — best-effort Expo push token registration, called once per
+  signed-in user and token from `app/_layout.tsx`; profile revalidations do
+  not repeat its POST, while token rotation still registers the new value.
+  Device-token registration is delivery plumbing, not an identity read-model
+  change, so the API deliberately does not publish an identity SSE refresh.
 - `lib/notifications-setup.ts` — the actual delivery handling: configures
   Expo's foreground notification handler (shown even while the app has
   focus — the default suppresses it), sets up the Android notification
@@ -803,12 +822,18 @@ physical iOS/Android and EAS verification remains a release-gate task in
   Wired once for the app's lifetime from `app/_layout.tsx`.
 - `lib/server-events.ts` — native authenticated SSE reader. It takes the
   restored cookie from Better Auth's Expo plugin, parses the RN fetch stream,
-  reconnects after interruption, and emits personal queue/wallet events. The
-  cache-backed readers in `lib/use-cached-api.ts` revalidate quietly when the
-  app returns after at least 60 seconds away; wallet and notification reads
-  also poll every 30 seconds while active as a safety net when their event
-  stream is unavailable. A successful response clears the stale-data state,
-  while an outage keeps the last rendered data in place until the next retry.
+  reconnects after interruption, and emits personal queue/wallet events. SSE
+  is intentionally lossy: reconnects, foreground returns, and numeric event-id
+  gaps emit a synthetic resync signal so mounted screens refetch their
+  authoritative read model; the `Last-Event-ID` header is telemetry for the
+  server boundary, not a replay contract. Streams are restarted when the
+  authenticated identity changes, so one account cannot consume another
+  account's personal events. The cache-backed readers in `lib/use-cached-api.ts`
+  revalidate quietly when the app returns after at least 60 seconds away; wallet
+  and notification reads also poll every 30 seconds while active as a safety
+  net when their event stream is unavailable. A successful response clears the
+  stale-data state, while an outage keeps the last rendered data in place until
+  the next retry.
 - `lib/notification-events.ts` — `subscribeToCategory`/`emitCategory`, unit
   tested in `lib/notification-events.test.ts`. Lets a mounted screen react to
   a push the moment it arrives instead of waiting out its poll interval.
@@ -863,7 +888,7 @@ run them with the root `test:ui:native` commands described in
 screenshots from a running simulator — see
 [`docs/ui-testing.md`](./ui-testing.md) § Screenshots on UI PRs for the
 build/drive/capture recipe and the local-port and
-`mobileAccess` traps that eat time on the first attempt.
+`hasEventAccess` traps that eat time on the first attempt.
 
 ## Scanner state transitions
 

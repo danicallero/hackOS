@@ -133,11 +133,36 @@ without creating another set of notification rows. Batch re-accept uses the
 same contract for the whole request.
 
 Push batches are sent to every current token for the user. A batch is marked
-`sent` when at least one Expo ticket succeeds; a failed ticket is logged by the
-worker with its platform and a masked token. This avoids retrying a push to a
-device that already received it, while still showing partial failures in the
-worker log. A `DeviceNotRegistered` ticket removes that token from
-`push_tokens`.
+`sent` when at least one Expo ticket succeeds; that only means Expo accepted
+the message, not that FCM/APNs delivered it to the device. When either
+diagnostic logging flag is enabled, the worker performs a short best-effort
+receipt poll and logs provider errors. A `DeviceNotRegistered` ticket or
+receipt removes that token from `push_tokens`.
+
+When ticket logging is enabled, every provider ticket and available receipt is
+logged by the worker with its status, ticket ID, category, and platform. In
+this redacted mode, token values and notification content are never logged.
+This avoids retrying a push to a device that already received it, while still
+showing partial failures in the worker log.
+
+Ticket logging is disabled by default. Set `LOG_EXPO_PUSH_TICKETS=true` on the
+API in inline-worker mode and on the worker in production when investigating
+delivery; restart the relevant process after changing it. The log includes only
+redacted provider metadata, so notification tokens and message content remain
+out of logs. Receipt errors such as FCM credential failures are included.
+
+Push-token registration logging is separately disabled by default. Set
+`LOG_EXPO_PUSH_TOKENS=true` on the API to log successful registrations with the
+user ID, platform, and a short token suffix hint. The full token is never
+logged.
+
+For a deliberately unsafe, full-debug trace, set
+`LOG_EXPO_PUSH_UNSAFE_DEBUG=true` on the API in inline-worker mode and on the
+worker in production. This logs the complete device token, message payload,
+Expo request/response, receipt response, user ID, and ticket details. It is
+disabled by default and should be turned off immediately after debugging,
+followed by a process restart. A receipt may still be pending when the short
+poll finishes; Expo can make receipts available later.
 
 ## Automatic translation (optional)
 
@@ -159,15 +184,14 @@ Google Cloud Translation v2 adapter (`translate/google.ts`,
 `GOOGLE_TRANSLATE_API_KEY`) or a self-hosted LibreTranslate adapter
 (`translate/libretranslate.ts`, `LIBRETRANSLATE_URL` +
 `LIBRETRANSLATE_API_KEY`, see `docs/env-vars.md`) — mirroring the
-`MAIL_PROVIDER` adapter split in `channels/email-adapters/`. `translateFields`
+the email adapter boundary in `channels/email-adapters/`. `translateFields`
 is field-shape-agnostic (announcements pass `{title, body}`, schedule passes
 `{title, description}`) so a third translatable entity needs no provider
 change. `GET /api/announcements/translate-availability`
 lets both frontends hide/disable the action when unset instead of offering
 one that will 503; every translation surface keeps working with manual-only
 entry regardless of whether a provider is configured. Exercised in tests via
-a stubbed `global.fetch`, never a live network call (same convention as the
-Resend email adapter).
+a stubbed `global.fetch`, never a live network call.
 
 ### Schedule item translation (H50 extension)
 

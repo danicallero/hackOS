@@ -88,13 +88,20 @@ localStorage copy for an instant read, and this is what makes the preference
 follow the account across devices.
 
 The same role record also carries the independent `event_access` entitlement
-bit. `hasEventAccess` is true for an active user when any assigned,
-non-deleted role has that bit enabled; it is an OR across roles and does not
-depend on role visibility, capability grants, application status, or sponsor/
-judge relationships. `mobileAccess` on `GET /api/me` remains the additive,
-backwards-compatible field name for this same result. Ticket QR/wallet
-exposure, scanner eligibility, and physical check-in use the same live query;
-role transitions reconcile wallet passes and retain the historical ticket row.
+bit. The canonical `user_event_access` projection makes `hasEventAccess` true
+only for an active, non-anonymized user when any assigned, non-deleted role has
+that bit enabled; it is an OR across roles and does not depend on role
+visibility, capability grants, application status, or sponsor/
+judge relationships. `hasEventAccess` is the single access signal returned by
+`GET /api/me` and used by the mobile app. Its illustrative highest-visible
+role label is exposed consistently as `visibleRoleName` to web and mobile;
+clients never derive an identity or authorization field from a local role
+alias. `/api/me` computes its identity,
+roles, capabilities, association flags, project/queue flags, and removal state
+from one repeatable-read database snapshot, so the bootstrap response cannot
+mix values from different authorization moments. Ticket QR/wallet exposure, scanner
+eligibility, and physical check-in use the same live query; role transitions
+reconcile wallet passes and retain the historical ticket row.
 
 Primary-email verification is deliberately not required by Better Auth at sign
 in: H1 allows an unverified account to establish a session and use read-only
@@ -281,6 +288,16 @@ relationships for display purposes only; it is never the permission source
 app's workspaces can change for a user the instant their capabilities change,
 with no reinstall or redeploy (H55).
 
+Every request receives one explicit authorization context after identity
+resolution (H8, #714). The context owns the caller id, the database handle,
+and one lazily started effective-capability snapshot, so stacked route guards
+and contextual checks share one read and never silently fall back to the pool.
+Authorization inside a mutation transaction creates a separate context with
+that transaction's `PoolClient`; this keeps the capability decision in the
+same database snapshot as the state transition. The snapshot query still
+requires an active, non-anonymized account, and the `user_effective_capabilities`
+view remains the source of the position-ordered ALLOW/DENY/INHERIT result.
+
 ### Route access policy
 Every application route declares a machine-readable `RouteAccessPolicy` in
 its `config` (`lib/route-policy.ts`), built with the shared
@@ -357,6 +374,8 @@ the same `Idempotency-Key` + same body replays the stored response instead of
 re-executing; the same key with a *different* body is a 409; a concurrent
 in-flight duplicate is a 409 with a retry hint. This is what lets a mobile
 scanner replay its offline queue after reconnecting without double-scanning.
+The complete route classification and durable-side-effect boundary are in
+[`idempotency-matrix.md`](./idempotency-matrix.md).
 
 ### Realtime (SSE)
 `broadcast(topic, EVENT, data)` from `lib/sse.ts` publishes to
@@ -371,9 +390,17 @@ topic and the API deliberately has no cross-write read cache. Consumers refetch
 Postgres-backed read models after their own topic fires. Public/TV/content
 streams receive only a narrow, payload-free "something changed" mirror of the
 relevant domain event and refetch their own sanitized projection — they never
-see the operational payload. See `architecture.md` §5 for the fan-out diagram
-and `background-workers.md`'s "Queue and public-screen streams" section for
-exactly which stream sees what.
+see the operational payload. A reconnect, detected per-topic event-id gap, or
+account/foreground lifecycle change also triggers an authoritative refetch;
+SSE is a freshness hint rather than a replay store. See `architecture.md` §5
+for the fan-out diagram and `background-workers.md`'s "Queue and public-screen
+streams" section for exactly which stream sees what.
+
+The web client scopes its small, in-memory read deduplication cache by the
+existing session identity. It aborts and drops that browser-only state on an
+identity change; successful writes and matching SSE signals invalidate exact
+resource keys before the next authoritative API read. This never changes the
+API's Postgres-backed source of truth or creates a global SSE refresh topic.
 
 ### Background work
 Background work uses two patterns. Repeatable BullMQ ticks drain durable
@@ -406,19 +433,16 @@ generic role dimensions; the winning per-panel `allow`/`inherit`/`deny`
 exception from the caller's assigned roles applies at query time. A direct
 panel `allow` can share a limited statistic with someone who has no general
 statistics capability, while `deny` overrides the general fallback. Statistics
-managers can manage application overrides through
-`GET`/`PUT /api/applications/:id/stats/access` and role-scope overrides through
+managers can manage every scope's overrides through
 `GET`/`PUT /api/statistics/access`, using the same role-position tri-state
-semantics as H8. The corresponding role-specific `DELETE` resources clear all
+semantics as H8. The corresponding role-specific `DELETE` resource clears all
 statistics overrides for that role and scope without changing its general
 Logistics capability.
 
-`GET /api/applications/stats/forms` and `GET /api/applications/:id/stats` remain
-compatible legacy resources. New application-question panels are opt-in via
-the field's `statistics` configuration (the legacy `reporting` flag remains a
-compatibility alias). Migration 0818 backfills existing choice fields so an
-existing deployment does not lose its prior panels; newly added questions do
-not become statistics automatically. Configured enum options are retained
+Application-question panels are opt-in via the field's `statistics.enabled`
+configuration. Migration 0824 transformed current retained form JSON and
+removed the former application-specific routes and `reporting` alias; newly
+added questions do not become statistics automatically. Configured enum options are retained
 when their response count is zero. Sensitive derived dimensions such as age
 and study level are calculated server-side against the event reference date;
 the raw source value is never included in a statistics response.

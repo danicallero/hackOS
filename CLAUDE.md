@@ -15,7 +15,8 @@ conflict, that file wins. Hard invariants live in `plan/07-datos-relevantes-ers.
 - `packages/shared` — `capabilities.ts` + `events.ts`. Add new names THERE, never inline.
 - `plan/` — normative docs. Read-only.
 - `docs/` — living implementation docs. Keep in sync with code.
-- `deploy/` — Dokploy / docker-compose; `deploy/README.md` is normative.
+- `deploy/` — canonical Docker Compose runtime for the staging Raspberry Pi and
+  the `hackos` LXC; `deploy/README.md` is normative.
 
 ## Non-negotiable conventions
 
@@ -91,22 +92,21 @@ See root `README.md` for the full command reference. Key points for agents:
 
 ## Deployment (keep working)
 
-`apps/api/Dockerfile` builds from the repo root; `docker compose --profile full up`
-must keep working. Workers run inline in dev (`WORKERS_INLINE`), as a separate
-container (`node dist/worker.js`) in production. Don't hardcode
-`localhost` — everything configurable comes from `src/config.ts` (zod-validated env).
+`apps/api/Dockerfile` builds from the repo root; local development's Compose
+profile must keep working. Release hosts consume pre-built multi-architecture
+GHCR images: staging runs on the home Raspberry Pi and production runs in the
+`hackos` LXC. Workers run inline in dev (`WORKERS_INLINE`), as a separate
+container (`node dist/worker.js`) in production. Don't hardcode `localhost` —
+everything configurable comes from `src/config.ts` (zod-validated env).
 
 ## Pull requests and merges
 
 - **Open every pull request as a draft** (`gh pr create --draft` or the
   GitHub UI). Mark it ready for review only when the change is ready for the
   full CI matrix; draft updates intentionally run only lightweight checks.
-- Target feature PRs at protected `integration` or `staging` as appropriate;
-  never promote a feature branch directly to `main`. `integration` is the
-  aggregation branch and does not build on every feature merge. A main
-  promotion must match the tree of `integration` or `staging`; the direct
-  `integration` path builds on main, while the `staging` path promotes the
-  immutable image already tested there.
+- PRs may target protected `staging` or `main`; `staging` is the development
+  branch and `main` is production. Both branches build and publish their
+  release images only after their PR is merged; host rollout is manual.
 - **Never add AI-attribution to anything written for this repo.** No
   `Co-Authored-By: Claude ...` (or any other assistant) trailer, no
   `Generated with ...` footer, no session-link line — in commit messages, PR
@@ -142,7 +142,7 @@ Concrete triggers — if your change does X, update Y:
 | A new module, or a module's schema/state machine | The relevant file in `docs/` (add a new one if the module has none yet; follow the format in `docs/api-reference.md` or `docs/challenges-devpost.md`) |
 | A new `docs/*.md` file | Its link in `docs/README.md`'s index |
 | `packages/shared/src/capabilities.ts` or `events.ts` | Any doc that enumerates capabilities/events by name (grep before assuming there are none) |
-| A `deploy/services/*/docker-compose.yml` env var (added/renamed/removed) | The matching row in `docs/env-vars.md`, `deploy/README.md`'s shared/service-only tables, **and** that service's `dokploy.env.example` (add/rename/remove the `${{environment.VAR}}` line to match) |
+| A `deploy/docker-compose.yml` env var (added/renamed/removed) | The matching row in `docs/env-vars.md`, `deploy/README.md`'s configuration/service-only tables, and `deploy/.env.example` when it is non-secret |
 | Root-level dev workflow (`pnpm` scripts, ports, infra services) | `README.md` |
 | `apps/web` conventions or component library | `apps/web/README.md` |
 | Design tokens, container/action hierarchy, accessibility or copy rules (any UI surface) | `docs/DESIGN.md` — the consolidated design/UX rulebook |

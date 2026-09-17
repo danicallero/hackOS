@@ -70,6 +70,15 @@ SSE/Wallet sync path is used when the last role is removed.
 
 ## 2. How the pass renders (apps/api/src/modules/logistics/wallet.ts)
 
+The Apple event-ticket bundle includes the HackUDC artwork from the supplied
+design asset. `strip.png`, `strip@2x.png`, and `strip@3x.png` are generated at
+event-ticket strip dimensions (375×98, 750×196, and 1125×294 pixels), keeping
+the source artwork sharp at each device scale. The pass also explicitly
+disables strip shine so Wallet does not alter the yellow and navy artwork.
+The pass palette uses `#030846` for labels and headers, `#fafafa` for value
+text such as name, email, role, and pass type, and `#a3d5ff` for the
+background.
+
 `passPayload()` reads `event_config` fresh on every pass fetch — nothing about
 the event is baked into issued passes. Composition:
 
@@ -116,12 +125,18 @@ Google tickets use the platform's event-ticket resources, not Generic passes:
   The resulting link follows Google's `https://pay.google.com/gp/v/save/<JWT>`
   format and is kept below Google's recommended 1,800-character limit by the
   compact payload.
-- Event name, doors-open/start/end times, venue text, venue coordinates, the
+- Event name, doors-open/start/end times, structured venue, venue coordinates, the
   ticket holder, ticket number, QR barcode, and validity interval are sent in
   the shapes documented by Google's [EventTicketClass](https://developers.google.com/wallet/reference/rest/v1/eventticketclass)
   and [EventTicketObject](https://developers.google.com/wallet/reference/rest/v1/eventticketobject)
   APIs. Class refreshes use `PATCH eventTicketClass/{resourceId}`; object
   invalidation uses `PATCH eventTicketObject/{resourceId}`.
+- The class owns the display template: the card rows and details explicitly
+  reference the event date, venue, holder, type, and ticket number. Optional
+  `GOOGLE_WALLET_LOGO_URL`, `GOOGLE_WALLET_HERO_IMAGE_URL`,
+  `GOOGLE_WALLET_WIDE_LOGO_URL`, and `GOOGLE_WALLET_BACKGROUND_COLOR` control
+  class branding. Google Wallet caches saved passes, so remove and re-add an
+  existing test pass after a class/template or image change.
 - Badges remain Generic passes. The `wallet_passes.google_object_type` column
   records the resource family so expiry and account-removal cleanup never call
   a Generic endpoint for an Event Ticket. Existing production ticket rows are

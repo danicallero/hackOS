@@ -854,7 +854,6 @@ export function serializeApplicationField(field: TemplateField): TemplateField {
     ...(field.retention_mode === "anonymous_audit" && field.anonymous_audit_dimension
       ? { anonymous_audit_dimension: field.anonymous_audit_dimension.trim() }
       : {}),
-    ...(field.reporting !== undefined ? { reporting: field.reporting } : {}),
     ...(field.statistics ? { statistics: field.statistics } : {}),
   };
 }
@@ -903,7 +902,7 @@ export function FieldEditor({
   const uid = useId();
   const cardRef = useRef<HTMLDivElement>(null);
   const expandedHeaderRef = useRef<HTMLDivElement>(null);
-  const statisticsEnabled = field.statistics?.enabled === true || field.reporting === true;
+  const statisticsEnabled = field.statistics?.enabled === true;
 
   const changeActivePreservingPosition = (change: () => void, anchorBefore: HTMLElement | null) => {
     const beforeTop = anchorBefore?.getBoundingClientRect().top;
@@ -1197,18 +1196,17 @@ export function FieldEditor({
             </>
           )}
           <div className="flex items-center justify-between gap-3 border-t pt-4">
-            <Label htmlFor={`reporting-${uid}`} className="text-sm">
+            <Label htmlFor={`statistics-enabled-${uid}`} className="text-sm">
               {t("includeInStatistics")}
             </Label>
             <Switch
-              id={`reporting-${uid}`}
+              id={`statistics-enabled-${uid}`}
               checked={statisticsEnabled}
-              onCheckedChange={(reporting) =>
+              onCheckedChange={(enabled) =>
                 onChange({
-                  reporting,
                   statistics: {
                     ...(field.statistics ?? {}),
-                    enabled: reporting,
+                    enabled,
                   },
                 })
               }

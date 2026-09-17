@@ -13,6 +13,7 @@ import {
 } from "react";
 import { useEventSource } from "../hooks/use-event-source";
 import { ApiError, api } from "./api";
+import { setServerStateIdentity } from "./server-state";
 import type { Me } from "./types";
 
 type SessionStatus = "loading" | "authenticated" | "unauthenticated";
@@ -28,12 +29,7 @@ interface SessionContextValue {
   can: (capability: Capability) => boolean;
   /** True if the user holds ANY of the listed capabilities. */
   canAny: (...capabilities: Capability[]) => boolean;
-  /**
-   * Authenticated, but with no role-derived event access and no operational
-   * role (capability, room judge, sponsor rep) — an applicant with nothing to
-   * do in the app yet besides applying. Drives hiding participant-only nav
-   * (wallet/queue/project/inbox).
-   */
+  /** Authenticated without the current event-access role entitlement. */
   isPureApplicant: boolean;
 }
 
@@ -45,38 +41,51 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<Error | null>(null);
   const meRef = useRef<Me | null>(null);
   const requestId = useRef(0);
+  const inFlight = useRef<Promise<void> | null>(null);
 
   const refresh = useCallback(async () => {
-    const currentRequest = ++requestId.current;
-    try {
-      const data = await api.get<Me>("/api/me");
-      if (currentRequest !== requestId.current) return;
-      meRef.current = data;
-      setMe(data);
-      setStatus("authenticated");
-      setError(null);
-    } catch (err) {
-      if (currentRequest !== requestId.current) return;
-      if (err instanceof ApiError && err.status === 401) {
-        meRef.current = null;
+    if (inFlight.current) return inFlight.current;
+
+    const request = (async () => {
+      const currentRequest = ++requestId.current;
+      try {
+        const data = await api.get<Me>("/api/me");
+        if (currentRequest !== requestId.current) return;
+        setServerStateIdentity(data.id);
+        meRef.current = data;
+        setMe(data);
+        setStatus("authenticated");
+        setError(null);
+      } catch (err) {
+        if (currentRequest !== requestId.current) return;
+        if (err instanceof ApiError && err.status === 401) {
+          setServerStateIdentity(null);
+          meRef.current = null;
+          setMe(null);
+          setStatus("unauthenticated");
+          setError(null);
+          return;
+        }
+        // A pending-removal session must remain on the authoritative screen
+        // while /api/me has a transient network/5xx failure. Clearing `me`
+        // here would make AuthGuard redirect to login and hide the retry path.
+        setError(err instanceof Error ? err : new Error("Failed to refresh session"));
+        if (meRef.current) {
+          setStatus("authenticated");
+          return;
+        }
+        // Before the first successful profile fetch there is no safe identity
+        // to render, so preserve the existing unauthenticated gate behavior.
         setMe(null);
         setStatus("unauthenticated");
-        setError(null);
-        return;
       }
-      // A pending-removal session must remain on the authoritative screen
-      // while /api/me has a transient network/5xx failure. Clearing `me`
-      // here would make AuthGuard redirect to login and hide the retry path.
-      setError(err instanceof Error ? err : new Error("Failed to refresh session"));
-      if (meRef.current) {
-        setStatus("authenticated");
-        return;
-      }
-      // Before the first successful profile fetch there is no safe identity
-      // to render, so preserve the existing unauthenticated gate behavior.
-      setMe(null);
-      setStatus("unauthenticated");
-    }
+    })();
+    let tracked: Promise<void>;
+    tracked = request.finally(() => {
+      if (inFlight.current === tracked) inFlight.current = null;
+    });
+    inFlight.current = tracked;
+    return tracked;
   }, []);
 
   // Fetch current session from server on mount; setState is sync, but this is external-system fetch.
@@ -91,6 +100,15 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   useEventSource("/api/events/stream?topic=sponsors", {
     events: [EVENTS.DOMAIN_CHANGED],
     onEvent: refresh,
+    onResync: refresh,
+    identityKey: me?.id ?? null,
+    enabled: status === "authenticated",
+  });
+  useEventSource("/api/events/stream?topic=identity", {
+    events: [EVENTS.DOMAIN_CHANGED],
+    onEvent: refresh,
+    onResync: refresh,
+    identityKey: me?.id ?? null,
     enabled: status === "authenticated",
   });
 
@@ -105,8 +123,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       refresh,
       can,
       canAny: (...capabilities: Capability[]) => capabilities.some(can),
-      isPureApplicant:
-        !!me && !me.hasEventAccess && !me.isEnterpriseJudge && !me.isSponsorRep && caps.size === 0,
+      isPureApplicant: !!me && !me.hasEventAccess,
     };
   }, [me, status, error, refresh]);
 

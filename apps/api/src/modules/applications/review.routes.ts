@@ -4,6 +4,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
 import {
+  getRequestAuthorizationContext,
   requireAnyCapability,
   requireCapability,
   userHasCapability,
@@ -83,9 +84,8 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const canViewAllReviews = await userHasCapability(
-        req.userId as number,
+        getRequestAuthorizationContext(req),
         CAPABILITIES.APPLICATIONS_MANAGE,
-        req,
       );
       const params: unknown[] = [req.params.id];
       let reviewFilter = "ar.author_id IS NOT NULL";
@@ -372,9 +372,8 @@ export function registerReviewRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const canViewAllReviews = await userHasCapability(
-        req.userId as number,
+        getRequestAuthorizationContext(req),
         CAPABILITIES.APPLICATIONS_MANAGE,
-        req,
       );
       return getResponseDetail(req.params.responseId, req.userId as number, canViewAllReviews);
     },

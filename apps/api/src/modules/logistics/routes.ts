@@ -5,6 +5,7 @@ import { z } from "zod";
 import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
 import {
+  getRequestAuthorizationContext,
   requireAnyCapability,
   requireAuth,
   requireCapability,
@@ -299,7 +300,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      const caller = await callerScheduleAudiences(req.userId);
+      const caller = await callerScheduleAudiences(getRequestAuthorizationContext(req));
       return { items: await listScheduleForAudiences(caller) };
     },
   );
@@ -773,7 +774,10 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       const staffId = req.query.staffId ?? callerId;
       if (
         staffId !== callerId &&
-        !(await userHasCapability(callerId, CAPABILITIES.LOGISTICS_STATS))
+        !(await userHasCapability(
+          getRequestAuthorizationContext(req),
+          CAPABILITIES.LOGISTICS_STATS,
+        ))
       ) {
         throw new ForbiddenError("Cannot view another staff member's scan log");
       }

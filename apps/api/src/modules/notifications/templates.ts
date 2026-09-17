@@ -37,23 +37,6 @@ export interface RenderedPush {
   body: string;
 }
 
-export interface EmailLayoutSettings {
-  brandName: string;
-  headerText: string;
-  headerSubtext: string;
-  logoUrl: string | undefined;
-  accentColor: string;
-  backgroundColor: string;
-  cardColor: string;
-  cardBorderColor: string;
-  textColor: string;
-  mutedTextColor: string;
-  footerBackgroundColor: string;
-  cardRadius: number;
-  maxWidth: number;
-  footerText: string;
-}
-
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, "&amp;")
@@ -66,29 +49,19 @@ function footerTextToHtml(text: string): string {
   return escapeHtml(text).replace(/\n/g, "<br/>");
 }
 
-export function emailLayoutSettingsFromConfig(): EmailLayoutSettings {
-  return {
-    brandName: config.MAIL_LAYOUT_BRAND_NAME,
-    headerText: config.MAIL_LAYOUT_HEADER_TEXT,
-    headerSubtext: config.MAIL_LAYOUT_HEADER_SUBTEXT,
-    // apps/web serves this brand mark as a static public asset; overridable (or "" to
-    // disable and fall back to the text header) for white-labeling.
-    logoUrl:
-      config.MAIL_LAYOUT_LOGO_URL === ""
-        ? undefined
-        : (config.MAIL_LAYOUT_LOGO_URL ?? `${config.WEB_URL}/email/brand-mark.png`),
-    accentColor: config.MAIL_LAYOUT_ACCENT_COLOR,
-    backgroundColor: config.MAIL_LAYOUT_BG_COLOR,
-    cardColor: config.MAIL_LAYOUT_CARD_COLOR,
-    cardBorderColor: config.MAIL_LAYOUT_CARD_BORDER_COLOR,
-    textColor: config.MAIL_LAYOUT_TEXT_COLOR,
-    mutedTextColor: config.MAIL_LAYOUT_MUTED_TEXT_COLOR,
-    footerBackgroundColor: config.MAIL_LAYOUT_FOOTER_BG_COLOR,
-    cardRadius: config.MAIL_LAYOUT_CARD_RADIUS,
-    maxWidth: config.MAIL_LAYOUT_MAX_WIDTH,
-    footerText: config.MAIL_FOOTER_TEXT,
-  };
-}
+// Keep transactional emails aligned with the hackOS web defaults. These values
+// are intentionally code-owned; email branding is not a deployment setting.
+const EMAIL_BRAND_NAME = "hackOS";
+const EMAIL_ACCENT_COLOR = "#18181b";
+const EMAIL_BACKGROUND_COLOR = "#f4f4f5";
+const EMAIL_CARD_COLOR = "#ffffff";
+const EMAIL_CARD_BORDER_COLOR = "#e4e4e7";
+const EMAIL_TEXT_COLOR = "#18181b";
+const EMAIL_MUTED_TEXT_COLOR = "#71717a";
+const EMAIL_FOOTER_BACKGROUND_COLOR = "#fafafa";
+const EMAIL_CARD_RADIUS = 8;
+const EMAIL_MAX_WIDTH = 560;
+const EMAIL_DEFAULT_FOOTER = "hackOS — this is an automated message.";
 
 // Geist is apps/web's body face (next/font/google, apps/web/src/app/layout.tsx). Clients that
 // support @font-face (Apple/iOS Mail, Outlook for Mac, most webmail) render it from Google's
@@ -102,10 +75,10 @@ const EMAIL_FONT_STACK =
   "'Geist',-apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif";
 
 // Dark-mode message palette — the exact zinc tokens apps/web itself flips to in dark mode
-// (apps/web/src/app/globals.css `.dark`), not a MAIL_LAYOUT_* setting: the message adapts to
-// the client's theme the same way the app adapts to the user's, while the header stays pinned
-// to the brand color always. Background and card share one value on purpose — in dark mode the
-// card is delimited by its hairline border only, not a separate fill.
+// (apps/web/src/app/globals.css `.dark`). The message adapts to the client's theme the same
+// way the app adapts to the user's, while the header stays pinned to the brand color always.
+// Background and card share one value on purpose — in dark mode the card is delimited by its
+// hairline border only, not a separate fill.
 const EMAIL_DARK_BG = "#09090b";
 const EMAIL_DARK_BORDER = "rgba(255,255,255,0.08)";
 const EMAIL_DARK_TEXT = "#fafafa";
@@ -119,18 +92,14 @@ const EMAIL_HEADER_TEXT_PX = 24;
 const EMAIL_HEADER_LOGO_PX = Math.round(EMAIL_HEADER_TEXT_PX * 1.3);
 const EMAIL_HEADER_GAP_PX = Math.round(EMAIL_HEADER_TEXT_PX * 0.2);
 
-function headerMarkup(layout: EmailLayoutSettings): string {
-  if (layout.logoUrl) {
-    return `<table role="presentation" cellpadding="0" cellspacing="0"><tr>
+function headerMarkup(): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0"><tr>
                   <td valign="middle" style="padding-right:${EMAIL_HEADER_GAP_PX}px;">
-                    <img src="${escapeHtml(layout.logoUrl)}" alt="${escapeHtml(layout.brandName)}" height="${EMAIL_HEADER_LOGO_PX}" style="display:block;height:${EMAIL_HEADER_LOGO_PX}px;width:auto;border:0;outline:none;" />
+                    <img src="${escapeHtml(`${config.WEB_URL}/email/brand-mark.png`)}" alt="${EMAIL_BRAND_NAME}" height="${EMAIL_HEADER_LOGO_PX}" style="display:block;height:${EMAIL_HEADER_LOGO_PX}px;width:auto;border:0;outline:none;" />
                   </td>
-                  <td valign="middle" class="email-head-title" style="font-size:${EMAIL_HEADER_TEXT_PX}px;">${escapeHtml(layout.headerText)}</td>
+                  <td valign="middle" class="email-head-title" style="font-size:${EMAIL_HEADER_TEXT_PX}px;">${EMAIL_BRAND_NAME}</td>
                 </tr></table>
-                ${layout.headerSubtext ? `<div class="email-head-subtext" style="margin-top:8px;">${escapeHtml(layout.headerSubtext)}</div>` : ""}`;
-  }
-  return `<div class="email-head-title" style="font-size:${EMAIL_HEADER_TEXT_PX}px;">${escapeHtml(layout.headerText)}</div>
-                ${layout.headerSubtext ? `<div class="email-head-subtext" style="margin-top:4px;">${escapeHtml(layout.headerSubtext)}</div>` : ""}`;
+                `;
 }
 
 /** First ~140 chars of the plain-text body, shown by inbox clients next to the subject. */
@@ -139,14 +108,7 @@ function derivePreheader(plainText: string): string {
   return flat.length > 140 ? `${flat.slice(0, 139)}…` : flat;
 }
 
-function brandWrapHtml(
-  subject: string,
-  bodyHtml: string,
-  preheader: string,
-  layout: EmailLayoutSettings = emailLayoutSettingsFromConfig(),
-): string {
-  const width = Math.max(360, Math.min(layout.maxWidth, 720));
-  const radius = Math.max(0, Math.min(layout.cardRadius, 32));
+function brandWrapHtml(subject: string, bodyHtml: string, preheader: string): string {
   // The header is a fixed brand element pinned with !important under prefers-color-scheme so
   // a client's own dark-mode remapping (Gmail, Outlook.com) can't invert it — it stays a dark
   // bar with a white logo/wordmark in both light- and dark-mode clients. The rest of the
@@ -165,22 +127,22 @@ function brandWrapHtml(
       :root { color-scheme: light dark; supported-color-schemes: light dark; }
       ${EMAIL_FONT_FACES}
       body { margin:0; padding:0; width:100% !important; }
-      a { color:${layout.accentColor}; }
+      a { color:${EMAIL_ACCENT_COLOR}; }
       .email-body a { word-break:break-word; }
-      .email-page, .email-card, .email-body, .email-foot { background:${layout.backgroundColor}; }
-      .email-card { background:${layout.cardColor}; }
-      .email-foot { background:${layout.footerBackgroundColor}; }
-      .email-body, .email-title { color:${layout.textColor}; }
-      .email-foot-brand, .email-foot-text { color:${layout.mutedTextColor}; }
-      .email-btn a { background:${layout.accentColor}; color:#ffffff; }
+      .email-page, .email-card, .email-body, .email-foot { background:${EMAIL_BACKGROUND_COLOR}; }
+      .email-card { background:${EMAIL_CARD_COLOR}; }
+      .email-foot { background:${EMAIL_FOOTER_BACKGROUND_COLOR}; }
+      .email-body, .email-title { color:${EMAIL_TEXT_COLOR}; }
+      .email-foot-brand, .email-foot-text { color:${EMAIL_MUTED_TEXT_COLOR}; }
+      .email-btn a { background:${EMAIL_ACCENT_COLOR}; color:#ffffff; }
       /* The header is a fixed brand element, not part of the adapting message — pin it under
          prefers-color-scheme so a client's own dark-mode remapping (Gmail, Outlook.com) can't
          invert it. */
-      .email-head { background:${layout.accentColor}; }
+      .email-head { background:${EMAIL_ACCENT_COLOR}; }
       .email-head-title { color:#ffffff; font-weight:700; line-height:1.2; }
       .email-head-subtext { color:rgba(255,255,255,0.85); }
       @media (prefers-color-scheme: dark) {
-        .email-head { background:${layout.accentColor} !important; }
+        .email-head { background:${EMAIL_ACCENT_COLOR} !important; }
         .email-head-title { color:#ffffff !important; }
         .email-head-subtext { color:rgba(255,255,255,0.85) !important; }
         /* Everything else adapts to the same zinc dark tokens apps/web itself uses — the card
@@ -202,28 +164,28 @@ function brandWrapHtml(
       }
     </style>
   </head>
-  <body style="margin:0;padding:0;background:${layout.backgroundColor};font-family:${EMAIL_FONT_STACK};-webkit-text-size-adjust:100%;">
+    <body style="margin:0;padding:0;background:${EMAIL_BACKGROUND_COLOR};font-family:${EMAIL_FONT_STACK};-webkit-text-size-adjust:100%;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${escapeHtml(preheader)}</div>
     <div style="display:none;max-height:0;overflow:hidden;">&#8199;&zwnj;&nbsp;&#8199;&zwnj;&nbsp;&#8199;&zwnj;&nbsp;&#8199;&zwnj;&nbsp;&#8199;&zwnj;&nbsp;</div>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="email-page" style="background:${layout.backgroundColor};padding:32px 12px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="email-page" style="background:${EMAIL_BACKGROUND_COLOR};padding:32px 12px;">
       <tr>
         <td align="center">
-          <table role="presentation" width="${width}" cellpadding="0" cellspacing="0" class="email-card" style="width:100%;max-width:${width}px;background:${layout.cardColor};border-radius:${radius}px;overflow:hidden;border:1px solid ${layout.cardBorderColor};">
+          <table role="presentation" width="${EMAIL_MAX_WIDTH}" cellpadding="0" cellspacing="0" class="email-card" style="width:100%;max-width:${EMAIL_MAX_WIDTH}px;background:${EMAIL_CARD_COLOR};border-radius:${EMAIL_CARD_RADIUS}px;overflow:hidden;border:1px solid ${EMAIL_CARD_BORDER_COLOR};">
             <tr>
-              <td class="email-head" bgcolor="${layout.accentColor}" style="background:${layout.accentColor};padding:22px 24px;">
-                ${headerMarkup(layout)}
+              <td class="email-head" bgcolor="${EMAIL_ACCENT_COLOR}" style="background:${EMAIL_ACCENT_COLOR};padding:22px 24px;">
+                ${headerMarkup()}
               </td>
             </tr>
             <tr>
-              <td class="email-body email-pad" style="padding:28px 24px;color:${layout.textColor};font-size:15px;line-height:1.6;word-break:break-word;">
-                <h1 class="email-title" style="font-size:22px;line-height:1.3;font-weight:700;margin:0 0 18px;color:${layout.textColor};">${escapeHtml(subject)}</h1>
+              <td class="email-body email-pad" style="padding:28px 24px;color:${EMAIL_TEXT_COLOR};font-size:15px;line-height:1.6;word-break:break-word;">
+                <h1 class="email-title" style="font-size:22px;line-height:1.3;font-weight:700;margin:0 0 18px;color:${EMAIL_TEXT_COLOR};">${escapeHtml(subject)}</h1>
                 ${bodyHtml}
               </td>
             </tr>
             <tr>
-              <td class="email-foot" style="padding:16px 24px;color:${layout.mutedTextColor};font-size:12px;line-height:1.5;background:${layout.footerBackgroundColor};border-top:1px solid ${layout.cardBorderColor};">
-                <div class="email-foot-brand" style="font-weight:600;margin-bottom:4px;">${escapeHtml(layout.brandName)}</div>
-                <div class="email-foot-text">${footerTextToHtml(layout.footerText)}</div>
+              <td class="email-foot" style="padding:16px 24px;color:${EMAIL_MUTED_TEXT_COLOR};font-size:12px;line-height:1.5;background:${EMAIL_FOOTER_BACKGROUND_COLOR};border-top:1px solid ${EMAIL_CARD_BORDER_COLOR};">
+                <div class="email-foot-brand" style="font-weight:600;margin-bottom:4px;">${EMAIL_BRAND_NAME}</div>
+                <div class="email-foot-text">${footerTextToHtml(EMAIL_DEFAULT_FOOTER)}</div>
               </td>
             </tr>
           </table>
@@ -238,9 +200,9 @@ function brandWrapHtml(
 const BARE_URL_LINE = /^(https?:\/\/\S+)$/;
 const LABELED_LINK_LINE = /^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/;
 
-function ctaButton(url: string, label: string, layout: EmailLayoutSettings): string {
+function ctaButton(url: string, label: string): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" class="email-btn" style="margin:4px 0 20px;">
-  <tr><td class="email-btn" bgcolor="${layout.accentColor}" style="border-radius:8px;background:${layout.accentColor};">
+  <tr><td class="email-btn" bgcolor="${EMAIL_ACCENT_COLOR}" style="border-radius:8px;background:${EMAIL_ACCENT_COLOR};">
     <a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="display:inline-block;padding:13px 28px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:8px;">${escapeHtml(label)}</a>
   </td></tr>
 </table>`;
@@ -252,7 +214,7 @@ function ctaButton(url: string, label: string, layout: EmailLayoutSettings): str
  * tappable CTA button (raw wrapping URLs looked terrible on phones); everything
  * else is escaped text with `<br/>` for soft line breaks.
  */
-function renderBodyHtml(text: string, layout: EmailLayoutSettings): string {
+function renderBodyHtml(text: string): string {
   return text
     .split(/\n\n+/)
     .map((para) => {
@@ -270,10 +232,10 @@ function renderBodyHtml(text: string, layout: EmailLayoutSettings): string {
         const bare = line.match(BARE_URL_LINE);
         if (labeled) {
           flush();
-          out += ctaButton(labeled[2] as string, labeled[1] as string, layout);
+          out += ctaButton(labeled[2] as string, labeled[1] as string);
         } else if (bare) {
           flush();
-          out += ctaButton(bare[1] as string, bare[1] as string, layout);
+          out += ctaButton(bare[1] as string, bare[1] as string);
         } else {
           buffer.push(escapeHtml(rawLine));
         }
@@ -312,11 +274,7 @@ export interface EmailPayload {
 }
 
 /** Renders subject/html/text for a template + language. Never throws — unknown template = generic. */
-export function renderEmailTemplate(
-  payload: EmailPayload,
-  language: Language,
-  layout: EmailLayoutSettings = emailLayoutSettingsFromConfig(),
-): RenderedEmail {
+export function renderEmailTemplate(payload: EmailPayload, language: Language): RenderedEmail {
   const templateName =
     payload.template && emailTemplateExists(`mail.${payload.template}.subject`, language)
       ? payload.template
@@ -330,12 +288,7 @@ export function renderEmailTemplate(
   const subject = translateEmail(`mail.${templateName}.subject`, language, vars);
   const rendered = translateEmail(`mail.${templateName}.body`, language, vars);
   const text = bodyToPlainText(rendered);
-  const html = brandWrapHtml(
-    subject,
-    renderBodyHtml(rendered, layout),
-    derivePreheader(text),
-    layout,
-  );
+  const html = brandWrapHtml(subject, renderBodyHtml(rendered), derivePreheader(text));
   return { subject, html, text };
 }
 

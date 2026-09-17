@@ -1,4 +1,5 @@
 import { apiFetch } from "./api";
+import { authClient } from "./auth-client";
 import { readCachedValue, writeCachedValue } from "./offline-cache";
 
 export interface WalletTicketPayload {
@@ -32,7 +33,13 @@ export async function warmWalletCache(userId: number): Promise<void> {
   if (await readCachedValue<WalletTicketPayload>(cacheKey)) return;
 
   try {
-    const payload = await apiFetch<WalletTicketPayload>("/api/me/ticket");
+    const sessionCookie = authClient.getCookie();
+    const payload = await apiFetch<WalletTicketPayload>("/api/me/ticket", {
+      ...(sessionCookie ? { sessionCookie } : {}),
+    });
+    // A warmup can outlive logout or an account switch. Do not persist a
+    // response obtained for a session that is no longer current.
+    if (authClient.getCookie() !== sessionCookie) return;
     await writeCachedValue(cacheKey, payload);
   } catch {
     // Warmup is best-effort; the Wallet screen owns loading and retry feedback.

@@ -4,9 +4,16 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { requireAuth, userHasCapability } from "../../lib/capabilities.js";
+import {
+  getRequestAuthorizationContext,
+  requireAuth,
+  userHasCapability,
+} from "../../lib/capabilities.js";
 import { ForbiddenError } from "../../lib/errors.js";
+import { requireIdempotencyKey } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
+import { requireApplication } from "../applications/service.js";
+import { statisticsPanelKeys } from "../applications/stats.js";
 import { lockRoleGraph, requireRoleMutationAuthority } from "../identity/role-authority.js";
 import { canonicalStatisticsPanelKey, ROLE_SCOPE_PANEL_KEYS } from "./catalog.js";
 import {
@@ -49,7 +56,7 @@ const statisticsScopeAccessDeleteParams = z.object({
 });
 
 const statisticsScopeAccessDeleteQuery = z.object({
-  scope_key: z.string().regex(/^role:[0-9]+$/),
+  scope_key: z.string().regex(/^(application|role):[0-9]+$/),
 });
 
 function sendCsv(reply: FastifyReply, filename: string, csv: string) {
@@ -71,7 +78,10 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       schema: { summary: "List statistics scopes available to the caller" },
     },
     async (req) => {
-      const scopes = await accessibleStatisticsScopes(req.userId as number, req);
+      const scopes = await accessibleStatisticsScopes(
+        req.userId as number,
+        getRequestAuthorizationContext(req),
+      );
       return {
         scopes: scopes.map(({ application: _application, ...scope }) => scope),
       };
@@ -90,7 +100,12 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
         body: statisticsQueryBody,
       },
     },
-    async (req) => queryStatistics(req.userId as number, req.body as StatisticsQuery, req),
+    async (req) =>
+      queryStatistics(
+        req.userId as number,
+        req.body as StatisticsQuery,
+        getRequestAuthorizationContext(req),
+      ),
   );
 
   r.get(
@@ -106,7 +121,9 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       },
     },
     async (req, reply) => {
-      if (!(await userHasCapability(req.userId as number, CAPABILITIES.EXPORTS_RUN, req))) {
+      if (
+        !(await userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.EXPORTS_RUN))
+      ) {
         throw new ForbiddenError("Missing capability: exports:run");
       }
       const query: StatisticsQuery = {
@@ -116,7 +133,7 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       return sendCsv(
         reply,
         "statistics.csv",
-        await statisticsCsv(req.userId as number, query, req),
+        await statisticsCsv(req.userId as number, query, getRequestAuthorizationContext(req)),
       );
     },
   );
@@ -128,15 +145,22 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       config: routeAccess({ kind: "authenticated" }),
       schema: {
         summary: "List generic statistics scope access",
-        description:
-          "Lists role-scope panel overrides for statistics managers. Application-scope overrides remain available through the application statistics access resource.",
+        description: "Lists canonical scope/panel overrides for statistics managers.",
       },
     },
     async (req) => {
-      if (!(await userHasCapability(req.userId as number, CAPABILITIES.STATISTICS_MANAGE, req))) {
+      if (
+        !(await userHasCapability(
+          getRequestAuthorizationContext(req),
+          CAPABILITIES.STATISTICS_MANAGE,
+        ))
+      ) {
         throw new ForbiddenError("Missing capability: statistics:manage");
       }
-      const scopes = await accessibleStatisticsScopes(req.userId as number, req);
+      const scopes = await accessibleStatisticsScopes(
+        req.userId as number,
+        getRequestAuthorizationContext(req),
+      );
       const { rows: access } = await pool.query(
         `SELECT scope_key, panel_key, role_id, state
            FROM statistics_scope_panel_role_access
@@ -154,6 +178,25 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       );
       return {
         scopes: scopes.map(({ application: _application, ...scope }) => scope),
+        panel_labels: Object.fromEntries(
+          scopes.flatMap((scope) =>
+            scope.application
+              ? [
+                  [
+                    scope.key,
+                    Object.fromEntries(
+                      scope.application.template
+                        .filter((field) => field.statistics?.enabled === true)
+                        .map((field) => [
+                          `field:${field.key.toLowerCase()}`,
+                          field.statistics?.label ?? field.label,
+                        ]),
+                    ),
+                  ],
+                ]
+              : [],
+          ),
+        ),
         access,
         roles,
       };
@@ -163,7 +206,7 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
   r.put(
     "/api/statistics/access",
     {
-      preHandler: requireAuth,
+      preHandler: [requireAuth, requireIdempotencyKey],
       config: routeAccess({ kind: "authenticated" }),
       schema: {
         summary: "Set a generic statistics scope panel override",
@@ -171,24 +214,35 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      if (!(await userHasCapability(req.userId as number, CAPABILITIES.STATISTICS_MANAGE, req))) {
+      if (
+        !(await userHasCapability(
+          getRequestAuthorizationContext(req),
+          CAPABILITIES.STATISTICS_MANAGE,
+        ))
+      ) {
         throw new ForbiddenError("Missing capability: statistics:manage");
       }
       const panelKey = canonicalStatisticsPanelKey(req.body.panel_key);
       const parsed = parseStatisticsScopeKey(req.body.scope_key);
-      if (
-        parsed?.kind !== "role" ||
-        !(ROLE_SCOPE_PANEL_KEYS as readonly string[]).includes(panelKey)
-      ) {
+      if (!parsed) {
         throw new ForbiddenError("Statistics scope or panel is not configurable");
       }
       return withTransaction(async (client) => {
         await lockRoleGraph(client);
-        const { rows: scopeRoles } = await client.query(
-          `SELECT id FROM roles WHERE id = $1 AND deleted_at IS NULL`,
-          [parsed.id],
-        );
-        if (!scopeRoles[0]) throw new ForbiddenError("Statistics scope is not available");
+        if (parsed.kind === "role") {
+          const { rows: scopeRoles } = await client.query(
+            `SELECT id FROM roles WHERE id = $1 AND deleted_at IS NULL`,
+            [parsed.id],
+          );
+          if (!scopeRoles[0] || !(ROLE_SCOPE_PANEL_KEYS as readonly string[]).includes(panelKey)) {
+            throw new ForbiddenError("Statistics scope or panel is not configurable");
+          }
+        } else {
+          const application = await requireApplication(client, parsed.id);
+          if (!statisticsPanelKeys(application.template).has(panelKey)) {
+            throw new ForbiddenError("Statistics scope or panel is not configurable");
+          }
+        }
         const { rows: roleRows } = await client.query(
           `SELECT position FROM roles WHERE id = $1 AND deleted_at IS NULL`,
           [req.body.role_id],
@@ -226,7 +280,7 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
   r.delete(
     "/api/statistics/access/:roleId",
     {
-      preHandler: requireAuth,
+      preHandler: [requireAuth, requireIdempotencyKey],
       config: routeAccess({ kind: "authenticated" }),
       schema: {
         summary: "Remove a role's generic statistics overrides",
@@ -237,20 +291,29 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      if (!(await userHasCapability(req.userId as number, CAPABILITIES.STATISTICS_MANAGE, req))) {
+      if (
+        !(await userHasCapability(
+          getRequestAuthorizationContext(req),
+          CAPABILITIES.STATISTICS_MANAGE,
+        ))
+      ) {
         throw new ForbiddenError("Missing capability: statistics:manage");
       }
       const parsed = parseStatisticsScopeKey(req.query.scope_key);
-      if (parsed?.kind !== "role") {
+      if (!parsed) {
         throw new ForbiddenError("Statistics scope is not configurable");
       }
       return withTransaction(async (client) => {
         await lockRoleGraph(client);
-        const { rows: scopeRoles } = await client.query(
-          `SELECT id FROM roles WHERE id = $1 AND deleted_at IS NULL`,
-          [parsed.id],
-        );
-        if (!scopeRoles[0]) throw new ForbiddenError("Statistics scope is not available");
+        if (parsed.kind === "role") {
+          const { rows: scopeRoles } = await client.query(
+            `SELECT id FROM roles WHERE id = $1 AND deleted_at IS NULL`,
+            [parsed.id],
+          );
+          if (!scopeRoles[0]) throw new ForbiddenError("Statistics scope is not available");
+        } else {
+          await requireApplication(client, parsed.id);
+        }
         const { rows: roleRows } = await client.query(
           `SELECT position FROM roles WHERE id = $1 AND deleted_at IS NULL`,
           [req.params.roleId],

@@ -24,6 +24,11 @@ export const CLOCK_SKEW_TOLERANCE_MS = 60_000;
 
 let clockSkewMs: number | null = null;
 
+/** Capture the current mobile session without making callers import Better Auth internals. */
+export function getCurrentSessionCookie(): string {
+  return authClient.getCookie();
+}
+
 export function getClockSkewMs(): number | null {
   return clockSkewMs;
 }
@@ -58,6 +63,7 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit): Promise<T>
   }
 
   const { sessionCookie, ...requestInit } = init ?? {};
+  const boundSessionCookie = sessionCookie ?? getCurrentSessionCookie();
 
   // Better Auth appends its own /api/auth base path to relative requests.
   // Our application endpoints live alongside that mount, so give $fetch an
@@ -65,31 +71,43 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit): Promise<T>
   // the restored session cookie and mobile-origin headers.
   const url = `${API_URL.replace(/\/+$/, "")}${path}`;
   const method = requestInit.method?.toUpperCase() ?? "GET";
+  const mutationHeaders = new Headers(requestInit.headers);
+  if (!["GET", "HEAD", "OPTIONS"].includes(method) && !mutationHeaders.has("Idempotency-Key")) {
+    mutationHeaders.set(
+      "Idempotency-Key",
+      globalThis.crypto?.randomUUID?.() ?? `mobile-${Date.now()}-${Math.random()}`,
+    );
+  }
   const { data, error } = await authClient.$fetch<T>(url, {
     method: requestInit.method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | undefined,
     body: requestInit.body,
-    headers: requestInit.headers as Record<string, string> | undefined,
+    signal: requestInit.signal,
+    headers: Object.fromEntries(mutationHeaders.entries()),
     // The Expo plugin's init hook runs before Better Fetch's request hooks
     // and normally reads whichever cookie is in SecureStore at that moment.
     // Override it at the last point before transport so an in-flight scanner
     // replay cannot switch staff identity between account sessions.
-    onRequest:
-      sessionCookie === undefined
-        ? undefined
-        : ({ headers }) => {
-            headers.set("cookie", sessionCookie);
-          },
+    // Capture the cookie when the operation starts. Better Auth may otherwise
+    // read SecureStore again after a logout/login race and authenticate an
+    // in-flight response as the next account.
+    onRequest: boundSessionCookie
+      ? ({ headers }) => {
+          headers.set("cookie", boundSessionCookie);
+        }
+      : undefined,
     onResponse: (context) => recordServerDate(context.response),
     onError: (context) => recordServerDate(context.response),
-    // Reads can safely ride through the short origin gap during a Dokploy
-    // replacement. Do not automatically retry non-idempotent writes.
+    // Profile/session reads must resolve promptly: the caller can show a
+    // recovery state or use its explicit offline cache instead of waiting
+    // through several seconds of deployment retries. Other idempotent
+    // reads keep a short retry for the brief origin gap during a deployment.
     retry:
-      method === "GET"
+      method === "GET" && path !== "/api/me"
         ? {
             type: "exponential",
-            attempts: 4,
-            baseDelay: 500,
-            maxDelay: 4_000,
+            attempts: 2,
+            baseDelay: 250,
+            maxDelay: 1_000,
             shouldRetry: (response) =>
               response === null || [502, 503, 504].includes(response.status),
           }

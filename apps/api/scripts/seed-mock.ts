@@ -531,7 +531,7 @@ async function seedUsers(): Promise<void> {
     "queue:operate",
   ]);
   const judgeRole = await ensureRole("mock:judge", 500, ["judge:panel"]);
-  const sponsorRole = await ensureRole("mock:sponsor", 400, ["sponsor:portal"]);
+  const sponsorRole = await ensureRole("mock:sponsor", 400, []);
 
   for (const person of STAFF) {
     const id = await upsertUser({

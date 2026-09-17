@@ -1,7 +1,11 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyRequest, preHandlerHookHandler } from "fastify";
 import { pool } from "../../db/pool.js";
-import { userHasCapability } from "../../lib/capabilities.js";
+import {
+  type AuthorizationContext,
+  getRequestAuthorizationContext,
+  userHasCapability,
+} from "../../lib/capabilities.js";
 import { ForbiddenError, NotFoundError, UnauthorizedError } from "../../lib/errors.js";
 import type {
   ContextualPolicyResolver,
@@ -55,27 +59,27 @@ async function ensureExists(challengeId: number, fixtureMarker: boolean): Promis
  * True when `userId` is an org admin over challenges (QUEUE_ADMIN,
  * SPONSORS_MANAGE, or the narrower CHALLENGES_MANAGE — H8).
  */
-export async function isChallengeAdmin(userId: number): Promise<boolean> {
+export async function isChallengeAdmin(context: AuthorizationContext): Promise<boolean> {
   return (
-    (await userHasCapability(userId, CAPABILITIES.QUEUE_ADMIN)) ||
-    (await userHasCapability(userId, CAPABILITIES.SPONSORS_MANAGE)) ||
-    (await userHasCapability(userId, CAPABILITIES.CHALLENGES_MANAGE))
+    (await userHasCapability(context, CAPABILITIES.QUEUE_ADMIN)) ||
+    (await userHasCapability(context, CAPABILITIES.SPONSORS_MANAGE)) ||
+    (await userHasCapability(context, CAPABILITIES.CHALLENGES_MANAGE))
   );
 }
 
 /**
  * H44/H8: editing a challenge (description, prizes, judging panel) is allowed
  * for org admins (QUEUE_ADMIN or SPONSORS_MANAGE) and for sponsor reps of the
- * owning enterprise. Ownership alone grants a rep access — no SPONSOR_PORTAL
- * capability is required, so a rep can always reach their own challenge
+ * owning enterprise. Ownership alone grants a rep access, so a rep can always reach their own challenge
  * regardless of what perms they were granted. Challenge existence is public, so
  * a missing challenge 404s before any permission check. Returns how access was
  * granted (the publish-gate on general fields is applied by the service).
  */
 export async function assertCanEditChallenge(
-  userId: number | null,
+  context: AuthorizationContext,
   challengeId: number,
 ): Promise<ChallengeAccess> {
+  const userId = context.userId;
   if (userId == null) throw new UnauthorizedError();
   const { rowCount: activeCount } = await pool.query(
     `SELECT 1 FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
@@ -85,7 +89,7 @@ export async function assertCanEditChallenge(
   const fixtureMarker = await isSyntheticOperator(pool, userId);
   await ensureExists(challengeId, fixtureMarker);
 
-  if (await isChallengeAdmin(userId)) return "admin";
+  if (await isChallengeAdmin(context)) return "admin";
   if (await ownsChallenge(userId, challengeId)) return "owner";
   throw new ForbiddenError("Not allowed to edit this challenge", { challengeId });
 }
@@ -96,9 +100,10 @@ export async function assertCanEditChallenge(
  * (QUEUE_OPERATE) — H44 lets sponsors "preview the panel before judging".
  */
 export async function assertCanViewPanel(
-  userId: number | null,
+  context: AuthorizationContext,
   challengeId: number,
 ): Promise<void> {
+  const userId = context.userId;
   if (userId == null) throw new UnauthorizedError();
   const { rowCount: activeCount } = await pool.query(
     `SELECT 1 FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
@@ -107,10 +112,10 @@ export async function assertCanViewPanel(
   if (!activeCount) throw new UnauthorizedError("This account is closed or being removed");
   const fixtureMarker = await isSyntheticOperator(pool, userId);
   await ensureExists(challengeId, fixtureMarker);
-  if (await isChallengeAdmin(userId)) return;
+  if (await isChallengeAdmin(context)) return;
   if (
-    (await userHasCapability(userId, CAPABILITIES.JUDGE_PANEL)) ||
-    (await userHasCapability(userId, CAPABILITIES.QUEUE_OPERATE))
+    (await userHasCapability(context, CAPABILITIES.JUDGE_PANEL)) ||
+    (await userHasCapability(context, CAPABILITIES.QUEUE_OPERATE))
   ) {
     return;
   }
@@ -149,7 +154,7 @@ export const challengeAccessPolicy: ContextualPolicyResolver<ChallengeResource> 
     return { id: Number(rows[0].id), enterpriseId: Number(rows[0].enterprise_id) };
   },
   async authorize(request, challenge) {
-    await assertCanViewPanel(request.userId, challenge.id);
+    await assertCanViewPanel(getRequestAuthorizationContext(request), challenge.id);
   },
 };
 
@@ -157,7 +162,10 @@ export const challengeAccessPolicy: ContextualPolicyResolver<ChallengeResource> 
 export function requireChallengeEdit(locator: ContextualResourceLocator): preHandlerHookHandler {
   return async (request) => {
     const challenge = await challengeAccessPolicy.resolve(request, locator);
-    editAccesses.set(request, await assertCanEditChallenge(request.userId, challenge.id));
+    editAccesses.set(
+      request,
+      await assertCanEditChallenge(getRequestAuthorizationContext(request), challenge.id),
+    );
   };
 }
 
@@ -184,7 +192,7 @@ export const requireChallengeListAccess: preHandlerHookHandler = async (request)
     [request.userId],
   );
   if (!activeCount) throw new UnauthorizedError("This account is closed or being removed");
-  if (await isChallengeAdmin(request.userId)) return;
+  if (await isChallengeAdmin(getRequestAuthorizationContext(request))) return;
   const relationship = await pool.query(
     `SELECT 1 FROM sponsors WHERE user_id = $1
      UNION ALL SELECT 1 FROM enterprise_judges WHERE user_id = $1

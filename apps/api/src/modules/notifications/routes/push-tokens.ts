@@ -1,11 +1,16 @@
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { config } from "../../../config.js";
 import { withTransaction } from "../../../db/pool.js";
 import { requireAuth } from "../../../lib/capabilities.js";
 import { NotFoundError } from "../../../lib/errors.js";
 import { routeAccessOption as routeAccess } from "../../../lib/route-policy.js";
 import { registerPushTokenBodySchema } from "../schemas.js";
+
+function pushTokenHint(token: string): string {
+  return token.length > 8 ? `…${token.slice(-8)}` : "[redacted]";
+}
 
 /**
  * H4/H51/H55: mobile app registers its Expo push token here so operational
@@ -53,6 +58,19 @@ export function registerPushTokenRoutes(app: FastifyInstance): void {
           [userId, token, platform ?? null],
         );
       });
+      if (config.logExpoPushUnsafeDebug) {
+        console.warn("Expo push token registered (unsafe debug)", {
+          userId,
+          platform: platform ?? "unknown",
+          token,
+        });
+      } else if (config.logExpoPushTokens) {
+        console.info("Expo push token registered", {
+          userId,
+          platform: platform ?? "unknown",
+          tokenHint: pushTokenHint(token),
+        });
+      }
       return { status: true as const };
     },
   );
