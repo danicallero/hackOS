@@ -114,6 +114,25 @@ El API no recibe variables de correo ni la cuenta root de MinIO.
 El worker no recibe `CORS_ORIGINS`, límites SSE, rate limits de scanner,
 fixtures ni credenciales de administración de MinIO.
 
+## Qualification pre-evento y presupuesto
+
+La qualification es un stack desechable de carga previa al evento. Usa una base
+de datos y Valkey aislados, cuentas sintéticas y una red interna sin ingress;
+se destruye después de recuperar el resultado. No reutiliza ningún servicio,
+volumen, secreto o estado de producción. Sus límites de `postgres`, `valkey`,
+`api` y `worker` deben ser exactamente los de producción para que
+`validation.releaseBudgetPassed` sea una señal significativa. El runner es un
+arnés de prueba independiente y `migrate` es un helper one-shot: ambos tienen
+límites propios, pero el conjunto sigue bajo el presupuesto de memoria de
+producción.
+
+La carga por defecto representa 600 participantes, 35 personas de staff, 30
+representantes de sponsors, 12 salas y 7 colas, con 3 colas compartidas. El
+pool base es `DB_POOL_MAX=24` por proceso. Con una API y un worker, el cálculo
+de conexiones es `(1 × 24) + (1 × 24) + 12 operativas = 60`, por debajo de
+`max_connections=100`; las 12 conexiones operativas cubren migración,
+mantenimiento, administración y superusuario.
+
 ### Migrate y web
 
 `migrate` es un proceso one-shot: sólo necesita `DATABASE_URL` y
@@ -155,12 +174,50 @@ exponen variables de memoria. Los límites actuales están fijados en Compose:
 
 | Servicio | Memoria |
 |---|---:|
-| `postgres` | `1g` |
-| `valkey` | `512m` |
+| `postgres` | `2g` |
+| `valkey` | `1g` |
 | `minio` | `1g` |
-| `api` | `512m` |
-| `worker` | `512m` |
-| `web` | `256m` |
+| `api` | `1g` |
+| `worker` | `1g` |
+| `web` | `512m` |
+
+La suma declarada es `6.5 GiB` (`2 + 1 + 1 + 1 + 1 + 0.5`) y deja margen
+dentro del presupuesto de memoria de producción para el sistema operativo,
+Docker y presión operativa breve. Los límites no se cambian mediante variables
+de entorno. Para cambiar uno, edita el Compose, recrea el servicio y comprueba
+su salud:
+
+```sh
+# editar deploy/docker-compose.yml y la qualification si el servicio se refleja allí
+docker compose --env-file /etc/hackos/hackos.env \
+  --env-file /etc/hackos/hackos.secrets \
+  -f deploy/docker-compose.yml up -d --force-recreate <service>
+docker compose --env-file /etc/hackos/hackos.env \
+  --env-file /etc/hackos/hackos.secrets \
+  -f deploy/docker-compose.yml ps <service>
+```
+
+Después vuelve a ejecutar `deploy/qualification/validate-compose.mjs` y la
+qualification completa antes de desplegar el cambio.
+
+### Árbol de decisión de `DB_POOL_MAX`
+
+El baseline operativo es 24; usa estas señales para decidir:
+
+1. P2/P3 `429` o profundidad de espera alta con conexiones Postgres, latencia
+   P0/P1 y memoria sanas: conserva 24 si es tráfico best-effort; si hace falta
+   más throughput finito, sube el pool sólo tras recalcular conexiones y
+   repetir qualification.
+2. Conexiones cerca de 88, `hackos_db_pool_waiting`/lock waits en aumento:
+   no subas el pool; reduce el burst, encuentra la consulta/bloqueo o revisa la
+   topología.
+3. OOM de Postgres: reduce pool o concurrencia y rehace el presupuesto de
+   memoria antes de tocar `max_connections`.
+4. Espera P0/P1 mientras P2/P3 se degrada: conserva 24 y revisa el camino
+   prioritario. El scheduler reserva 6 slots concurrentes para proteger de
+   todo tráfico P2/P3, incluso usuarios autenticados, y limita su cola a
+   `max(16, 24 × 8) = 192`; no es una reserva de un slot por persona de staff
+   ni preempción de peticiones activas.
 
 La red `private`, la red de salida `egress`, sus alias de servicio y las rutas
 internas de Postgres, Valkey y MinIO también son parte fija del contrato. Sólo

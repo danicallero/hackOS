@@ -29,7 +29,8 @@ export interface RequestAdmissionOptions {
 /**
  * Small in-process priority gate for finite HTTP work (H29, H38, H41-H42,
  * H540, #544). Role position orders queued requests first; reserved capacity
- * keeps role-less P2/P3 traffic from consuming the operational share.
+ * keeps all P2/P3 traffic from consuming the operational share, including
+ * authenticated participant and sponsor requests.
  */
 export class RequestAdmission {
   private readonly maxConcurrent: number;
@@ -85,7 +86,7 @@ export class RequestAdmission {
     const waitSignal = isAbortSignal(rolePositionOrSignal) ? rolePositionOrSignal : signal;
     if (waitSignal?.aborted) throw new Error("Request aborted while waiting for admission");
     const queuedAt = process.hrtime.bigint();
-    if (this.canAdmit(lane, rolePosition)) return this.start(lane, queuedAt);
+    if (this.canAdmit(lane)) return this.start(lane, queuedAt);
 
     if (
       (lane === "P2" || lane === "P3") &&
@@ -133,9 +134,9 @@ export class RequestAdmission {
     );
   }
 
-  private canAdmit(lane: RequestLane, rolePosition: number | null): boolean {
+  private canAdmit(lane: RequestLane): boolean {
     if (this.active >= this.maxConcurrent) return false;
-    if ((lane === "P2" || lane === "P3") && rolePosition === null) {
+    if (lane === "P2" || lane === "P3") {
       return this.active < this.maxConcurrent - this.reservedHighPriority;
     }
     return true;
@@ -163,7 +164,7 @@ export class RequestAdmission {
       let bestWaiter: Waiter | undefined;
       for (let index = 0; index < this.waiters.length; index++) {
         const waiter = this.waiters[index];
-        if (!waiter || !this.canAdmit(waiter.lane, waiter.rolePosition)) continue;
+        if (!waiter || !this.canAdmit(waiter.lane)) continue;
         if (!bestWaiter || compareWaiterPriority(waiter, bestWaiter) < 0) {
           bestIndex = index;
           bestWaiter = waiter;
