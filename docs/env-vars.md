@@ -305,11 +305,13 @@ A merge into `staging` creates that push, so the deploy uses the exact
 `sha-${{ github.sha }}` image tag that was just built; it never races image
 publication and never uses `latest`. The job uses the configured private-overlay
 action to create an ephemeral CI node, reaches the ARM64 host over its private
-address, and then uses SSH. The protected `staging` environment must contain
-the private-network identity values, staging host address, dedicated SSH key,
-and pinned host key. Public ingress is a separate always-on service and is not
-the administration path. The staging workflow remains manually dispatchable
-for an explicit SHA rollback or verification run.
+address, and then uses SSH. The `staging` environment supplies the staging host
+address, SSH user, and SSH port variables. The repository-level
+`STAGING_CD_SSH_PRIVATE_KEY` and `STAGING_CD_SSH_KNOWN_HOSTS` secrets are
+dedicated to this workflow and contain only the deployment key and pinned host
+key; they are not application secrets. Public ingress is a separate always-on
+service and is not the administration path. The staging workflow remains
+manually dispatchable for an explicit SHA rollback or verification run.
 
 `deploy-incus.yml` runs after a successful `main` image build on the protected
 `production` environment, or manually for rollback. It needs a self-hosted

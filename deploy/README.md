@@ -305,8 +305,12 @@ the exact `sha-<40 hex>` image tag just published; it does not use `latest` or
 race the GHCR publication. The staging job can also be dispatched manually for
 an explicit SHA rollback or verification run. It joins the configured private
 overlay network with an ephemeral GitHub Actions node, verifies the ARM64 host,
-and uses SSH to transfer the Compose file and scripts. It does not expose SSH
-through the public ingress.
+and uses SSH to transfer the Compose file and scripts. The staging environment
+supplies the host address, user, and port variables. The repository-level
+`STAGING_CD_SSH_PRIVATE_KEY` and `STAGING_CD_SSH_KNOWN_HOSTS` secrets are
+dedicated to this workflow and contain only the deployment key and pinned host
+key; they are not application secrets. It does not expose SSH through the
+public ingress.
 
 `.github/workflows/deploy-incus.yml` runs after a successful image build on
 `main` and can also be dispatched with a previous SHA for rollback. It uses the
