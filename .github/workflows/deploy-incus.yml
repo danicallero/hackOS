@@ -32,6 +32,11 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          # The token is needed for the authenticated fetch of a rollback
+          # commit below; no credential or application secret is printed.
+          persist-credentials: true
 
       - name: Validate deployment inputs
         env:
@@ -56,6 +61,18 @@ jobs:
 
           echo "Deployment inputs: environment=$DEPLOY_ENVIRONMENT tag=$IMAGE_TAG"
 
+      - name: Select release source
+        env:
+          IMAGE_TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_COMMIT="${IMAGE_TAG#sha-}"
+          git fetch --no-tags --depth=1 origin "$RELEASE_COMMIT"
+          git checkout --detach "$RELEASE_COMMIT"
+          test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
+          echo "Release source selected: $RELEASE_COMMIT"
+
       - name: Check Incus access
         shell: bash
         run: |
@@ -68,12 +85,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          incus exec hackos -- mkdir -p /root/hackos
-          incus file push deploy/docker-compose.yml hackos/root/hackos/docker-compose.yml
-          incus file push deploy/incus-deploy.sh hackos/root/hackos/deploy.sh
-          incus file push deploy/scripts/check-env.sh hackos/root/hackos/check-env.sh
-          incus exec hackos -- chmod 700 /root/hackos/deploy.sh /root/hackos/check-env.sh
-          echo "Compose, validation and deployment scripts transferred."
+          incus exec hackos -- mkdir -p /opt/hackos
+          incus file push deploy/docker-compose.yml hackos/opt/hackos/docker-compose.yml
+          incus file push deploy/incus-deploy.sh hackos/opt/hackos/deploy.sh
+          incus file push deploy/scripts/check-env.sh hackos/opt/hackos/check-env.sh
+          incus file push deploy/scripts/backup-r2.sh hackos/opt/hackos/backup-r2.sh
+          incus exec hackos -- chmod 700 /opt/hackos/deploy.sh /opt/hackos/check-env.sh /opt/hackos/backup-r2.sh
+          echo "Compose, validation, backup and deployment scripts transferred."
 
       - name: Deploy inside hackos LXC
         env:
@@ -82,4 +100,4 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          incus exec hackos -- /root/hackos/deploy.sh "$DEPLOY_ENVIRONMENT" "$IMAGE_TAG"
+          incus exec hackos -- env HACKOS_APP_DIR=/opt/hackos /opt/hackos/deploy.sh "$DEPLOY_ENVIRONMENT" "$IMAGE_TAG"

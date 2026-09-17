@@ -63,6 +63,12 @@ Cada host mantiene dos ficheros planos fuera del repositorio:
 - `/etc/hackos/hackos.secrets`: credenciales y claves privadas, con permisos
   `0600` y sin copiarlo al repositorio.
 
+El contrato canónico es siempre esta pareja. El despliegue acepta además, de
+forma explícita y temporal, un único `/etc/hackos/hackos.env` con permisos
+`0600`: es la compatibilidad necesaria para el LXC preparado localmente. No se
+acepta un fichero de secretos sin configuración, no busca `.env` junto al
+Compose y no se mantienen plantillas duplicadas por instancia.
+
 Docker Compose acepta varios `--env-file`; el segundo tiene precedencia:
 
 ```sh
@@ -77,22 +83,27 @@ $COMPOSE config >/dev/null
 El fichero de secretos debe contener, como mínimo, estas claves:
 
 ```text
-POSTGRES_USER
 POSTGRES_PASSWORD
-POSTGRES_DB
 VALKEY_PASSWORD
-MINIO_ROOT_USER
 MINIO_ROOT_PASSWORD
 BETTER_AUTH_SECRET
-S3_ACCESS_KEY
 S3_SECRET_KEY
 ```
+
+`POSTGRES_USER`, `POSTGRES_DB`, `MINIO_ROOT_USER` y `S3_ACCESS_KEY` son
+identificadores de configuración y viven en `hackos.env`; no se generan ni se
+guardan como secretos. `S3_SECRET_KEY` sí permanece en `hackos.secrets`.
 
 Para correo, `MAIL_PROVIDER=smtp` requiere `SMTP_HOST`. En producción se puede
 usar Amazon SES a través de su endpoint SMTP; `SMTP_USER` y `SMTP_PASS` se
 guardan en el fichero de secretos cuando el relay requiere autenticación. Las
 claves de firma de Apple/Google son opcionales, pero cada bloque configurado
 debe estar completo. `check-env.sh` no imprime valores secretos.
+
+Los backups opcionales de Cloudflare R2 usan `R2_ENDPOINT`, `R2_BUCKET` y
+`R2_PREFIX` en la configuración, y `R2_ACCESS_KEY_ID`/
+`R2_SECRET_ACCESS_KEY` en el fichero de secretos. El helper exige
+`R2_BACKUPS_ENABLED=true` antes de transmitir nada.
 
 La pareja `MINIO_ROOT_*` sólo se entrega a `minio` y `minio-init`. El helper
 `minio-init` usa además `S3_ACCESS_KEY`/`S3_SECRET_KEY` para crear, de forma
@@ -133,8 +144,18 @@ ghcr.io/danicallero/hackos-web:${IMAGE_TAG}
 tag de rama ni una referencia de repositorio configurable. El workflow de CD
 publica esos tags SHA; el servidor sólo hace pull.
 
-Las imágenes de infraestructura también están fijadas a versiones concretas
-en el Compose. No se modifican en el servidor.
+Las imágenes de infraestructura están fijadas por digest de índice
+multi-arquitectura en el Compose y no se modifican en el servidor:
+
+```text
+postgres@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+valkey/valkey@sha256:d2e18f3410b6f616de1417f570fa55261af2898b9c5b2cfb6781ce2373ea43d1
+quay.io/minio/minio@sha256:a1ea29fa28355559ef137d71fc570e508a214ec84ff8083e39bc5428980b015e
+quay.io/minio/mc@sha256:aead63c77f9db9107f1696fb08ecb0faeda23729cde94b0f663edf4fe09728e3
+```
+
+Las imágenes de aplicación son las de GHCR; las de infraestructura conservan
+sus registros oficiales, pero todas quedan inmutables por digest.
 
 Los límites de memoria actuales se mantienen como literales, sin variables de
 override:
@@ -153,9 +174,9 @@ No existen `API_MEM_LIMIT` ni `WEB_MEM_LIMIT` en el contrato de despliegue.
 ## CD con Incus
 
 `.github/workflows/build.yml` construye y publica `hackos-api` y `hackos-web`
-en GHCR para `linux/amd64` y `linux/arm64`. Cada ejecución genera el tag de
-rama y `sha-<commit>`; el CD sólo acepta el segundo formato y nunca usa
-`latest`.
+en GHCR para `linux/amd64` y `linux/arm64`. Cada ejecución publica únicamente
+el tag `sha-<commit>`; el CD sólo acepta ese formato y nunca usa `latest` ni
+tags mutables de rama.
 
 `.github/workflows/deploy-incus.yml` se ejecuta con `workflow_dispatch`, pide
 `production` o `staging` y un tag `sha-<40 hex>`, y usa el environment de GitHub
@@ -168,22 +189,27 @@ Esta dependencia es explícita: el bloque `setup-gh-runner` del repositorio de
 infraestructura está actualmente comentado, así que habilitar y registrar el
 runner es una operación previa y no forma parte de este repositorio.
 
-El workflow comprueba el tag, transfiere Compose, `check-env.sh` y
-`incus-deploy.sh` con `incus file push`, y ejecuta el script con
-`incus exec hackos`. El script usa `/etc/hackos/hackos.env` y
-`/etc/hackos/hackos.secrets` ya presentes dentro del LXC, adquiere un lock con
-`flock`, valida la configuración sin imprimir valores, hace pull de API,
-worker y web, ejecuta `migrate`, recrea la aplicación y espera los
-healthchecks. La salida sólo contiene estados y errores genéricos; no descifra
-SOPS, no recibe secretos de Actions y no expone Docker Remote API.
+El workflow comprueba el tag, selecciona el commit codificado en
+`sha-<commit>`, transfiere Compose, validación, backup y despliegue a
+`/opt/hackos` mediante `incus file push`, y ejecuta el script con
+`incus exec hackos`. El script usa los ficheros de entorno ya presentes dentro
+del LXC, adquiere un lock con `flock`, valida la configuración sin imprimir
+valores, prepara `/mnt/data/postgres` y `/mnt/data/minio`, hace pull de todas
+las imágenes fijadas, ejecuta el backup R2 opt-in antes de `migrate`, ejecuta
+`migrate`, recrea la aplicación y espera los healthchecks. La salida sólo
+contiene estados y errores genéricos; no descifra SOPS, no recibe secretos de
+Actions y no expone Docker Remote API.
 
 ### Rollback
 
 Para volver a la versión anterior, lanzar de nuevo
 `deploy-incus.yml` con el mismo environment y el tag SHA anterior que figure
-en el historial de despliegues. El rollback sólo cambia imágenes: no revierte
-automáticamente migraciones de base de datos. Una migración incompatible exige
-un procedimiento de base de datos revisado por separado.
+en el historial de despliegues. El workflow vuelve a seleccionar el commit
+exacto asociado al tag, por lo que Compose y los scripts también corresponden a
+esa versión; cada despliegue conserva además una copia sin secretos en
+`/opt/hackos/releases/<tag>`. El rollback no revierte automáticamente
+migraciones de base de datos: una migración incompatible exige un procedimiento
+revisado por separado.
 
 ## Orden de despliegue
 
@@ -208,13 +234,19 @@ COMPOSE=(docker compose --env-file "$CONFIG" --env-file "$SECRETS" -f deploy/doc
 # 3. Asegurar el bucket S3. Es idempotente.
 "${COMPOSE[@]}" run --rm minio-init
 
-# 4. Ejecutar explícitamente la migración one-shot.
+# 4. Si R2_BACKUPS_ENABLED=true, ejecutar el backup antes de modificar el
+#    esquema. El script usa los mismos ficheros de entorno y toma el lock.
+if grep -q '^R2_BACKUPS_ENABLED=true$' "$CONFIG"; then
+  /opt/hackos/backup-r2.sh production
+fi
+
+# 5. Ejecutar explícitamente la migración one-shot.
 "${COMPOSE[@]}" run --rm migrate
 
-# 5. Recrear sólo la aplicación con las imágenes descargadas.
+# 6. Recrear sólo la aplicación con las imágenes descargadas.
 "${COMPOSE[@]}" up -d --no-build --force-recreate api worker web
 
-# 6. Esperar API, worker y web saludables.
+# 7. Esperar API, worker y web saludables.
 "${COMPOSE[@]}" up -d --wait --wait-timeout 120 api worker web
 ```
 
@@ -236,24 +268,73 @@ Para parar el runtime sin tocar datos:
 "${COMPOSE[@]}" down
 ```
 
-No usar `down --volumes` en una operación normal: elimina los volúmenes
-persistentes de PostgreSQL y MinIO.
+No usar `down --volumes` en una operación normal. El estado ya no vive en
+volúmenes anónimos de Compose, sino en el volumen persistente del LXC; aun así,
+una operación de limpieza o restauración sobre `/mnt/data` puede destruirlo.
 
 ## Persistencia y copias
 
-Compose crea los volúmenes de proyecto `postgres-data` y `minio-data`.
-PostgreSQL contiene la fuente de verdad, auditoría, sesiones y outbox; MinIO
-contiene ficheros y logos. Valkey es deliberadamente efímero: BullMQ sólo
-marca el reloj y la señal realtime, mientras el estado durable permanece en
-PostgreSQL.
+El LXC debe montar su volumen persistente Incus en `/mnt/data`. Compose usa
+`/mnt/data/postgres` y `/mnt/data/minio` mediante bind mounts; el despliegue
+crea esos directorios si faltan y nunca declara volúmenes externos o de
+proyecto. PostgreSQL contiene la fuente de verdad, auditoría, sesiones y
+outbox; MinIO contiene ficheros y logos. Valkey es deliberadamente efímero:
+BullMQ sólo marca el reloj y la señal realtime, mientras el estado durable
+permanece en PostgreSQL.
 
-Antes de un evento, verificar copias restaurables de ambos volúmenes y de un
-`pg_dump` de la base de datos. No borrar ni recrear volúmenes para actualizar
-imágenes.
+Antes de un evento, verificar una restauración de PostgreSQL y MinIO. Con R2
+activado, `backup-r2.sh` guarda un dump custom de PostgreSQL, el bucket MinIO y
+un manifiesto bajo `R2_PREFIX/<environment>/<timestamp>/`. No borrar ni
+recrear `/mnt/data` para actualizar imágenes.
 
 `S3_PUBLIC_URL`, si se configura, debe apuntar a un endpoint HTTPS accesible
 por el navegador y gestionado fuera de esta red. MinIO no publica ningún
 puerto en el LXC; los ficheros privados siguen pasando por el API.
+
+## Backups en Cloudflare R2
+
+R2 expone una API compatible con S3. Crear manualmente un bucket privado y un
+token de API limitado a ese bucket con permisos Object Read & Write; el
+endpoint tiene la forma `https://<account-id>.r2.cloudflarestorage.com`.
+Configurar entonces:
+
+```text
+# /etc/hackos/hackos.env
+R2_BACKUPS_ENABLED=true
+R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+R2_BUCKET=hackos-backups
+R2_PREFIX=hackos
+
+# /etc/hackos/hackos.secrets (chmod 600)
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+```
+
+La primera copia puede probarse dentro del LXC con:
+
+```sh
+/opt/hackos/backup-r2.sh production
+```
+
+Para programar una copia diaria, instalar y habilitar manualmente las unidades
+incluidas en [`systemd/`](./systemd), sólo después de validar credenciales y
+una restauración:
+
+```sh
+incus file push deploy/systemd/hackos-backup.service hackos/etc/systemd/system/hackos-backup.service
+incus file push deploy/systemd/hackos-backup.timer hackos/etc/systemd/system/hackos-backup.timer
+incus exec hackos -- systemctl daemon-reload
+incus exec hackos -- systemctl enable --now hackos-backup.timer
+```
+
+El timer está preparado para producción; para staging hay que crear una unidad
+equivalente que invoque `backup-r2.sh staging`.
+
+La política de retención debe configurarse en el bucket R2 (por ejemplo,
+eliminación de objetos antiguos tras 90 días) y debe validarse una restauración
+antes del primer evento. Este helper no descifra SOPS ni imprime credenciales;
+la programación periódica mediante un timer del LXC queda como habilitación
+operativa manual porque el repositorio de infraestructura no está publicado.
 
 ## Archivos canónicos
 
@@ -261,5 +342,9 @@ puerto en el LXC; los ficheros privados siguen pasando por el API.
 - [`.env.example`](./.env.example): plantilla de configuración no secreta.
 - [`scripts/check-env.sh`](./scripts/check-env.sh): validación previa sin
   revelar secretos.
+- [`scripts/backup-r2.sh`](./scripts/backup-r2.sh): backup opt-in de PostgreSQL
+  y MinIO a R2.
+- [`systemd/`](./systemd): unidades para habilitar el backup diario de forma
+  manual.
 - [`../docs/env-vars.md`](../docs/env-vars.md): contrato de variables por
   proceso.

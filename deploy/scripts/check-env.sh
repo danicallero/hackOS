@@ -1,13 +1,22 @@
 #!/usr/bin/env bash
-# Validate the two flat env files used by the multi-architecture Compose runtime.
+# Validate the flat env files used by the multi-architecture Compose runtime.
 #
 # Usage:
 #   ./deploy/scripts/check-env.sh [config-file] [secrets-file] [image-tag]
+#
+# A single chmod-600 combined file is accepted for compatibility with the
+# current GPULux host. The canonical contract remains two files.
 
 set -euo pipefail
 
 CONFIG_FILE="${1:-/etc/hackos/hackos.env}"
-SECRETS_FILE="${2:-/etc/hackos/hackos.secrets}"
+if [[ $# -ge 2 && -n "${2:-}" ]]; then
+  SECRETS_FILE="$2"
+elif [[ -r /etc/hackos/hackos.secrets ]]; then
+  SECRETS_FILE=/etc/hackos/hackos.secrets
+else
+  SECRETS_FILE="$CONFIG_FILE"
+fi
 IMAGE_TAG_OVERRIDE="${3:-}"
 
 die() {
@@ -17,6 +26,14 @@ die() {
 
 [[ -r "$CONFIG_FILE" ]] || die "configuration file is not readable: $CONFIG_FILE"
 [[ -r "$SECRETS_FILE" ]] || die "secrets file is not readable: $SECRETS_FILE"
+
+if [[ "$CONFIG_FILE" == "$SECRETS_FILE" ]]; then
+  secret_mode="$(stat -c '%a' "$SECRETS_FILE" 2>/dev/null || stat -f '%Lp' "$SECRETS_FILE")"
+  [[ "$secret_mode" == 600 ]] || die "combined environment file must have mode 600: $SECRETS_FILE"
+else
+  secret_mode="$(stat -c '%a' "$SECRETS_FILE" 2>/dev/null || stat -f '%Lp' "$SECRETS_FILE")"
+  [[ "$secret_mode" == 600 ]] || die "secrets file must have mode 600: $SECRETS_FILE"
+fi
 
 has_key() {
   local key="$1"
@@ -85,6 +102,8 @@ api_domain="$(require_value API_DOMAIN)"
 web_domain="$(require_value WEB_DOMAIN)"
 image_tag="$(require_value IMAGE_TAG)"
 cors_origins="$(require_value CORS_ORIGINS)"
+hackos_data_dir="$(value HACKOS_DATA_DIR)"
+hackos_data_dir="${hackos_data_dir:-/mnt/data}"
 mail_provider="$(value MAIL_PROVIDER)"
 mail_provider="${mail_provider:-smtp}"
 mail_from="$(require_value MAIL_FROM_ADDRESS)"
@@ -93,6 +112,8 @@ mail_from="$(require_value MAIL_FROM_ADDRESS)"
 [[ "$web_domain" =~ ^[A-Za-z0-9.-]+$ ]] || die 'WEB_DOMAIN must be a hostname, without a scheme or path'
 [[ "$image_tag" =~ ^sha-[0-9a-f]{40}$ ]] || die 'IMAGE_TAG must match sha-<40 lowercase hexadecimal characters>'
 [[ "$image_tag" != sha-0000000000000000000000000000000000000000 ]] || die 'IMAGE_TAG must identify a real commit'
+[[ "$hackos_data_dir" == /* && "$hackos_data_dir" != "/" ]] || die 'HACKOS_DATA_DIR must be an absolute path other than /'
+[[ "$hackos_data_dir" != *$'\n'* && "$hackos_data_dir" != *$'\r'* ]] || die 'HACKOS_DATA_DIR contains a newline'
 case ",${cors_origins}," in
   *,"https://${web_domain}",*) ;;
   *) die "CORS_ORIGINS must include https://${web_domain}" ;;
@@ -119,6 +140,24 @@ s3_public_url="$(value S3_PUBLIC_URL)"
 if [[ -n "$s3_public_url" && "$s3_public_url" != https://* ]]; then
   die 'S3_PUBLIC_URL must be an https URL when configured'
 fi
+
+r2_backups_enabled="$(value R2_BACKUPS_ENABLED)"
+r2_backups_enabled="${r2_backups_enabled:-false}"
+case "$r2_backups_enabled" in
+  false) ;;
+  true)
+    r2_endpoint="$(require_value R2_ENDPOINT)"
+    r2_bucket="$(require_value R2_BUCKET)"
+    r2_prefix="$(require_value R2_PREFIX)"
+    require_value R2_ACCESS_KEY_ID >/dev/null
+    require_value R2_SECRET_ACCESS_KEY >/dev/null
+    [[ "$r2_endpoint" =~ ^https://[A-Za-z0-9.-]+$ ]] || die 'R2_ENDPOINT must be an https host URL'
+    [[ "$r2_bucket" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]] || die 'R2_BUCKET is not a valid bucket name'
+    [[ "$r2_prefix" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] || die 'R2_PREFIX contains unsafe characters'
+    [[ "$r2_prefix" != */ && "$r2_prefix" != *..* ]] || die 'R2_PREFIX must not end in / or contain ..'
+    ;;
+  *) die 'R2_BACKUPS_ENABLED must be true or false' ;;
+esac
 
 apple_keys=(
   APPLE_PASS_CERTIFICATE_PEM

@@ -79,7 +79,8 @@ HTTP ports to the external proxy; the datastores have no published ports.
 ## 2. Service inventory
 
 `deploy/docker-compose.yml` is the only production source of truth. Compose
-pulls pre-built images from GHCR and recreates the application tier after the
+pulls pre-built application images from GHCR and pinned infrastructure images
+from their official registries, then recreates the application tier after the
 explicit `migrate` process succeeds.
 
 ### api — the HTTP surface
@@ -129,10 +130,11 @@ explicit `migrate` process succeeds.
   (`apps/api/db/migrations/NNNN_name.sql`, numbered in per-workstream bands).
 - **Network:** private Compose network, **no host ports**. Reachable at `postgres:5432`
   and nowhere else. Password-protected.
-- **State:** the `pgdata` volume — one of only two stateful pieces. Back this up.
+- **State:** the `HACKOS_DATA_DIR/postgres` bind mount (normally
+  `/mnt/data/postgres`) — one of only two stateful pieces. Back this up.
 
 ### valkey — queues and realtime (ephemeral)
-- **Stack:** `valkey/valkey:8-alpine` (Redis-compatible), `requirepass`,
+- **Stack:** the pinned `valkey/valkey` digest (Redis-compatible), `requirepass`,
   **persistence off** (`--save "" --appendonly no`).
 - **Role:** three jobs, all ephemeral — (1) BullMQ queue backend for the worker
   ticks; (2) the SSE fan-out bus (§5); (3) the per-topic sequence counters.
@@ -151,7 +153,8 @@ explicit `migrate` process succeeds.
   managed outside this Compose project. MinIO has no host port; private uploads
   remain behind the API and the `enterprises/` prefix is initialized for public
   logo reads by the storage helper.
-- **State:** the `miniodata` volume — the second stateful piece. Swappable for a
+- **State:** the `HACKOS_DATA_DIR/minio` bind mount (normally `/mnt/data/minio`) —
+  the second stateful piece. Swappable for a
   managed S3/R2 by repointing `S3_ENDPOINT` + `S3_PUBLIC_URL` (§7).
 
 ### mailpit — dev only
@@ -384,9 +387,9 @@ swap it for managed S3/R2/Spaces by repointing `S3_ENDPOINT` + `S3_PUBLIC_URL`
 when object durability/scale matters more than self-hosting.
 
 **Multi-event = multi-instance, not multi-node.** A second hackathon is a second
-fully-isolated stack (a separate Compose project and volumes) — separate
-network, data and secrets, zero shared state. This is the horizontal story for
-*tenancy*; it needs no orchestration change.
+fully-isolated stack (a separate Compose project, data directory and secrets) —
+separate network, data and secrets, zero shared state. This is the horizontal
+story for *tenancy*; it needs no orchestration change.
 
 **One thing to preserve if you ever change the topology.** The worker is a
 *tick drainer*, not a per-job queue consumer, so its safety comes entirely from
@@ -430,13 +433,17 @@ and proxies the public API and web hostnames to the published ports of the
 DNS or proxy configuration.
 
 The deploy operator supplies `/etc/hackos/hackos.env` and
-`/etc/hackos/hackos.secrets`, validates them with `deploy/scripts/check-env.sh`,
-pulls the pinned images, runs `minio-init` and `migrate`, then recreates API,
-worker and web. Compose healthchecks are the handoff gate.
+`/etc/hackos/hackos.secrets` (or the explicitly supported single chmod-600
+combined file), validates them with `deploy/scripts/check-env.sh`, and keeps
+the runtime under `/opt/hackos`. The LXC must mount the persistent Incus
+volume at `/mnt/data`; the deploy script refuses a production run without that
+mount. It pulls the pinned images, runs `minio-init`, optionally backs up to
+R2, runs `migrate`, then recreates API, worker and web. Compose healthchecks are
+the handoff gate.
 
 The same project can be copied to another isolated host by using a separate
-Compose project name, volumes and secret files. There is no shared network or
-shared datastore between instances.
+Compose project name, data directory and secret files. There is no shared
+network or shared datastore between instances.
 
 ---
 
