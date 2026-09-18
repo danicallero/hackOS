@@ -64,8 +64,8 @@ async function clearSecureStoreSessionKey(baseKey: string): Promise<void> {
   await deleteStoredKey(baseKey);
 }
 
-/** Wipes the on-device session (SecureStore keys + in-memory session atom). */
-async function clearLocalSession(): Promise<void> {
+/** Wipes the on-device session's SecureStore keys. */
+async function clearStoredSession(): Promise<void> {
   try {
     await Promise.all([
       clearSecureStoreSessionKey(SESSION_COOKIE_KEY),
@@ -74,11 +74,36 @@ async function clearLocalSession(): Promise<void> {
   } catch {
     // Swallowed — see deleteStoredKey.
   }
+}
+
+/** Wipes the in-memory Better Auth session atom. */
+function clearSessionAtom(): void {
   try {
     const sessionAtom = authClient.$store.atoms.session;
     sessionAtom.set({ ...sessionAtom.get(), data: null, error: null, isPending: false });
   } catch {
     // Swallowed — the atom is only a mirror; storage is already cleared.
+  }
+}
+
+/** Wipes the on-device session (SecureStore keys + in-memory session atom). */
+async function clearLocalSession(): Promise<void> {
+  await clearStoredSession();
+  clearSessionAtom();
+}
+
+/**
+ * H4/#757: provide an immediate local escape when a sign-out attempt has
+ * already failed in the UI. SecureStore cleanup continues in the background,
+ * but navigation must never depend on it completing.
+ */
+export function forceLocalSignOut(): void {
+  void clearStoredSession();
+  clearSessionAtom();
+  try {
+    notifySignOut();
+  } catch {
+    // A listener failure must not prevent the caller from replacing the route.
   }
 }
 

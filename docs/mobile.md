@@ -290,7 +290,10 @@ distributed to other Expo Router apps without importing hackOS code.
   immediately and lands on sign-in. Server-side session revocation then runs
   as a best-effort, fire-and-forget `POST /api/auth/sign-out` with the
   pre-captured cookie; a failed revoke never blocks, retries, or surfaces an
-  error (#757).
+  error (#757). If the UI-level sign-out attempt itself fails, the recovery,
+  account, and pending-removal surfaces expose `Back to sign in`; that action
+  clears the local session synchronously and replaces the route without
+  waiting for SecureStore or the server.
 - `app/(auth)/forgot-password.tsx` and `reset-password.tsx` share the same
   leading, task-first composition. Their primary actions remain discoverable,
   invalid values are explained beside the relevant field, and focus moves to
@@ -556,8 +559,9 @@ distributed to other Expo Router apps without importing hackOS code.
   Staff details follow the schedule rules: staff-only items omit
   scan/visibility/publish fields, and already-visible items omit the spent
   publish date. On iOS, the reminder bell is a proper `headerRight` item and
-  back reads "Horario" via `headerBackTitle`; on Android those actions live
-  in the custom header. Admins get a floating glass pencil (bottom-right,
+  back is an explicit localized chevron with a safe fallback for direct links;
+  on Android those actions live in the custom header. Admins get a floating
+  glass pencil (bottom-right,
   clear of the home indicator) that opens the same `ScheduleFormModal` as the
   list's swipe-to-edit. List cards visibly mark staff-only, sponsor-only, and
   mentor-only activities when their audience is restricted to exactly that
