@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/select";
 import { Surface } from "@/components/ui/surface";
 import { useLiveQuery } from "@/hooks/use-event-source";
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { workspaceAccess } from "@/lib/judging-workspace";
 import {
@@ -180,9 +180,14 @@ export default function QueuePage() {
       setChallenges(challengeRows.challenges);
       setRoomId((current) => current ?? roomRows[0]?.id ?? null);
     } catch (err) {
-      const message = errorMessage(err, t("couldNotLoadQueueSetup"));
-      setActionError(message);
-      showQueueError(t, err, t("couldNotLoadQueueSetup"));
+      if (err instanceof ApiError && err.status === 403) {
+        setRooms([]);
+        setChallenges([]);
+      } else {
+        const message = errorMessage(err, t("couldNotLoadQueueSetup"));
+        setActionError(message);
+        showQueueError(t, err, t("couldNotLoadQueueSetup"));
+      }
     } finally {
       setRoomsLoading(false);
     }
@@ -431,12 +436,8 @@ export default function QueuePage() {
         <div className="flex flex-1 items-center justify-center">
           <EmptyState
             icon={DoorOpenIcon}
-            title={roomView.error ? t("couldNotLoadQueueSetup") : t("noRoomSelected")}
-            description={
-              roomView.error
-                ? errorMessage(roomView.error, t("couldNotLoadQueueSetup"))
-                : t("noRoomSelectedDesc")
-            }
+            title={t("noRoomSelected")}
+            description={t("noRoomSelectedDesc")}
           />
         </div>
       ) : (
