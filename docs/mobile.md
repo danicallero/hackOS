@@ -283,6 +283,14 @@ distributed to other Expo Router apps without importing hackOS code.
   is also part of the synchronous protected-stack guard: an ineligible account
   never mounts an event screen while its asynchronous sign-out is running.
   (accounts come from the web onboarding/invite flows, H10/H12).
+- Sign-out is local-first (`lib/auth-client.ts`):
+  the shared `signOut()` helper clears the SecureStore session (including
+  chunked variants) and the in-memory session atom before notifying the
+  `/api/me` store, so a device with no reachable server is signed out
+  immediately and lands on sign-in. Server-side session revocation then runs
+  as a best-effort, fire-and-forget `POST /api/auth/sign-out` with the
+  pre-captured cookie; a failed revoke never blocks, retries, or surfaces an
+  error (#757).
 - `app/(auth)/forgot-password.tsx` and `reset-password.tsx` share the same
   leading, task-first composition. Their primary actions remain discoverable,
   invalid values are explained beside the relevant field, and focus moves to
@@ -715,9 +723,9 @@ available, log ID, timestamp, source, activity/direction, and notes needed to
 reconcile the original action even when the local roster can no longer resolve
 the person. A transient sync failure (not a business rejection) surfaces via
 the same stale-data banner used elsewhere in the app, on the sync-queue,
-Activities, and People screens; a genuine server rejection (a conflict, where
-auto-retry pauses) keeps its own message with a manual retry action, since
-that case needs a person to look at it rather than wait for reconnection.
+Activities, and People screens; a genuine HTTP 409 conflict (where auto-retry
+pauses) keeps its own message with a manual retry action, since that case
+needs a person to look at it rather than wait for reconnection.
 
 ### Activities
 
