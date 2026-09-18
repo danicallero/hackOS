@@ -304,11 +304,14 @@ Nunca se usa `latest` ni un tag de rama mutable.
 
 `build.yml` calls the reusable `deploy-staging-arm64.yml` job after at least one
 selected image has published successfully for a push or manual rebuild on
-`staging`. A merge into `staging` creates that push, while a manual rebuild
-selects the images explicitly, so the deploy uses the exact
+`staging`. Runtime deployment-file changes also call it without publishing an
+image: both application change flags are false, so the host retains its current
+immutable API/web tags while Compose and the deployment scripts are refreshed.
+A merge into `staging` creates that push, while a manual rebuild selects the
+images explicitly, so an image deploy uses the exact
 `sha-${{ github.sha }}` tags that were just built; it never races image
-publication and never uses `latest`. Mobile, documentation and deploy-only
-changes skip both image publication and deployment. The job uses the configured private-overlay
+publication and never uses `latest`. Mobile and documentation-only changes
+skip both image publication and deployment. The job uses the configured private-overlay
 action to create an ephemeral CI node, reaches the ARM64 host over its private
 address, and then uses SSH. The `staging` environment supplies the staging host
 address, SSH user, and SSH port variables. The repository-level
