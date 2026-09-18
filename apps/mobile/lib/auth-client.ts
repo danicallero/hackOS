@@ -2,10 +2,12 @@ import { expoClient } from "@better-auth/expo/client";
 import { inferAdditionalFields } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import * as SecureStore from "expo-secure-store";
+import type { ApiMode } from "./api-mode";
 import { API_URL } from "./env";
 import { notifySignOut } from "./sign-out-events";
 
 const STORAGE_PREFIX = "hackos";
+let activeStoragePrefix = STORAGE_PREFIX;
 
 /**
  * Better Auth client for the Expo app (H4, H55). Points at the same Better
@@ -15,27 +17,43 @@ const STORAGE_PREFIX = "hackos";
  * (apps/api/src/modules/identity/auth.ts) to stamp the app's custom scheme
  * on the Origin header and manage the deep-link auth redirect.
  */
-export const authClient = createAuthClient({
-  baseURL: API_URL,
-  plugins: [
-    expoClient({
-      scheme: "hackos",
-      storagePrefix: STORAGE_PREFIX,
-      storage: SecureStore,
-    }),
-    inferAdditionalFields({
-      user: {
-        surname: { type: "string", required: true },
-        language: { type: "string", required: false },
-      },
-    }),
-  ],
-});
+function createMobileAuthClient(mode: ApiMode = "production") {
+  activeStoragePrefix = mode === "development" ? "hackos-dev" : STORAGE_PREFIX;
+  return createAuthClient({
+    baseURL: API_URL,
+    plugins: [
+      expoClient({
+        scheme: "hackos",
+        // Production retains the original key for existing installs. A dev
+        // session must never be sent to the production origin (or vice versa).
+        storagePrefix: activeStoragePrefix,
+        storage: SecureStore,
+      }),
+      inferAdditionalFields({
+        user: {
+          surname: { type: "string", required: true },
+          language: { type: "string", required: false },
+        },
+      }),
+    ],
+  });
+}
 
-export const { signIn } = authClient;
+export let authClient = createMobileAuthClient();
 
-const SESSION_COOKIE_KEY = `${STORAGE_PREFIX}_cookie`;
-const SESSION_DATA_KEY = `${STORAGE_PREFIX}_session_data`;
+/** Rebuild Better Auth because its base URL and SecureStore namespace are immutable. */
+export function configureAuthClient(mode: ApiMode): void {
+  authClient = createMobileAuthClient(mode);
+}
+
+// Keep this export stable for forms while resolving the active client at the
+// moment the user submits, after an endpoint switch has rebuilt it.
+export const signIn = {
+  email: (...args: Parameters<typeof authClient.signIn.email>) => authClient.signIn.email(...args),
+};
+
+const sessionCookieKey = () => `${activeStoragePrefix}_cookie`;
+const sessionDataKey = () => `${activeStoragePrefix}_session_data`;
 // The expo plugin mirrors the browser cookie jar and session JSON in
 // expo-secure-store, chunking larger payloads as "key.0..N" with the base key
 // holding "\u0001ba-chunks:<count>". Sign-out must drop the chunked keys too,
@@ -68,8 +86,8 @@ async function clearSecureStoreSessionKey(baseKey: string): Promise<void> {
 async function clearStoredSession(): Promise<void> {
   try {
     await Promise.all([
-      clearSecureStoreSessionKey(SESSION_COOKIE_KEY),
-      clearSecureStoreSessionKey(SESSION_DATA_KEY),
+      clearSecureStoreSessionKey(sessionCookieKey()),
+      clearSecureStoreSessionKey(sessionDataKey()),
     ]);
   } catch {
     // Swallowed — see deleteStoredKey.
@@ -118,6 +136,20 @@ async function revokeServerSession(sessionCookie: string): Promise<void> {
     // Best effort — the device is already signed out locally; a failed server
     // revocation must never surface as an error to the user.
   }
+}
+
+/**
+ * Unlike normal local-first sign-out, an API endpoint transition must confirm
+ * that the old server revoked the session before it may point at a new server.
+ */
+export async function closeSessionForEnvironmentChange(): Promise<void> {
+  const sessionCookie = authClient.getCookie();
+  if (!sessionCookie) return;
+  const result = (await authClient.$fetch(`${API_URL.replace(/\/+$/, "")}/api/auth/sign-out`, {
+    method: "POST",
+    onRequest: ({ headers }) => headers.set("cookie", sessionCookie),
+  })) as { error?: { message?: string } | null };
+  if (result.error) throw new Error(result.error.message || "Could not close the previous session");
 }
 
 /**

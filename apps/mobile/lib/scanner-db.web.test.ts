@@ -9,6 +9,7 @@ import {
   pendingScans,
   retryScan,
   syncErrorHistory,
+  wipeAllOfflineScanQueues,
   wipeOfflineScanQueue,
 } from "./scanner-db.web";
 import type { ScanPayload } from "./scanner-types";
@@ -86,5 +87,15 @@ describe("web scanner queue ownership", () => {
 
     await wipeOfflineScanQueue(OWNER_USER_ID);
     expect(await syncErrorHistory(OWNER_USER_ID)).toEqual([]);
+  });
+
+  it("purges every owner's queue at an API environment boundary", async () => {
+    await enqueueLocalScan(payload, OWNER_USER_ID);
+    await enqueueLocalScan(payload, OTHER_USER_ID);
+
+    await wipeAllOfflineScanQueues();
+
+    expect(await pendingScans(OWNER_USER_ID)).toEqual([]);
+    expect(await pendingScans(OTHER_USER_ID)).toEqual([]);
   });
 });

@@ -9,6 +9,7 @@ import {
 } from "@/components/auth-credential-field";
 import { AuthAlert, AuthButton, AuthHeader, AuthScreen } from "@/components/auth-ui";
 import { apiFetch } from "@/lib/api";
+import { useApiMode } from "@/lib/api-mode";
 import { signIn, signOut } from "@/lib/auth-client";
 import { EVENT_WEBSITE_DISPLAY, EVENT_WEBSITE_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
@@ -25,6 +26,7 @@ export default function SignInScreen() {
   const router = useRouter();
   const { accessDenied } = useLocalSearchParams<{ accessDenied?: string }>();
   const { t } = useLocale();
+  const { mode, setMode } = useApiMode();
   const { refetch } = useMeActions();
   const emailRef = useRef<AuthCredentialFieldHandle>(null);
   const passwordRef = useRef<AuthCredentialFieldHandle>(null);
@@ -37,6 +39,15 @@ export default function SignInScreen() {
   const [error, setError] = useState<string | null>(null);
   const [event, setEvent] = useState<PublicEvent | null>(null);
   const [removalProgress, setRemovalProgress] = useState<AccountRemovalProgress | null>(null);
+  const developerTapCount = useRef(0);
+  const developerTapTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (developerTapTimeout.current) clearTimeout(developerTapTimeout.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     let active = true;
@@ -149,6 +160,31 @@ export default function SignInScreen() {
     }
   }
 
+  function revealDeveloperMode() {
+    developerTapCount.current += 1;
+    if (developerTapTimeout.current) clearTimeout(developerTapTimeout.current);
+    developerTapTimeout.current = setTimeout(() => {
+      developerTapCount.current = 0;
+    }, 2_000);
+    if (developerTapCount.current < 7) return;
+    developerTapCount.current = 0;
+    Alert.alert(
+      t("apiModeTitle"),
+      mode === "development" ? t("apiModeProductionBody") : t("apiModeDevelopmentBody"),
+      [
+        { text: t("cancel"), style: "cancel" },
+        {
+          text: t("apiModeSwitch"),
+          onPress: () => {
+            void setMode(mode === "development" ? "production" : "development").catch(() => {
+              Alert.alert(t("apiModeTitle"), t("apiModeSwitchError"));
+            });
+          },
+        },
+      ],
+    );
+  }
+
   return (
     <AuthScreen
       scrollable={false}
@@ -203,6 +239,16 @@ export default function SignInScreen() {
               </Text>
             </Pressable>
           </View>
+          <Pressable
+            accessibilityLabel="v1.0.1"
+            hitSlop={10}
+            onPress={revealDeveloperMode}
+            style={({ pressed }) => ({ marginTop: 2, opacity: pressed ? 0.6 : 1, padding: 4 })}
+          >
+            <Text style={{ color: colors.tertiaryLabel, fontSize: 12, lineHeight: 18 }}>
+              v1.0.1
+            </Text>
+          </Pressable>
         </View>
       }
     >

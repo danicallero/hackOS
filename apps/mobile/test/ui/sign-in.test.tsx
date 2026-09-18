@@ -6,6 +6,7 @@ const mockSearchParams: { accessDenied?: string } = {};
 const mockReplace = jest.fn();
 const mockSetParams = jest.fn();
 const mockRefetch = jest.fn();
+const mockSetMode = jest.fn();
 
 jest.mock("expo-router", () => ({
   useLocalSearchParams: () => mockSearchParams,
@@ -19,6 +20,9 @@ jest.mock("@/lib/me-context", () => ({
 jest.mock("@/lib/auth-client", () => ({
   signIn: { email: jest.fn() },
   signOut: jest.fn(),
+}));
+jest.mock("@/lib/api-mode", () => ({
+  useApiMode: () => ({ mode: "production", setMode: mockSetMode }),
 }));
 jest.mock("@/components/auth-credential-field", () =>
   jest.requireActual("@/components/auth-credential-field.tsx"),
@@ -65,6 +69,11 @@ jest.mock("@/lib/i18n", () => ({
         signInError: "Could not sign in",
         signInTitle: "Sign in",
         close: "Close",
+        cancel: "Cancel",
+        apiModeTitle: "API mode",
+        apiModeDevelopmentBody: "Switch to development?",
+        apiModeProductionBody: "Switch to production?",
+        apiModeSwitch: "Switch",
       })[key] ?? key,
   }),
 }));
@@ -87,6 +96,7 @@ describe("native sign-in UI contract", () => {
     mockRefetch.mockReset().mockResolvedValue({ hasEventAccess: false, accountState: "active" });
     mockSignInEmail.mockReset().mockResolvedValue({ error: null });
     mockSignOut.mockReset().mockResolvedValue({ error: null });
+    mockSetMode.mockReset().mockResolvedValue(undefined);
   });
 
   it("announces missing mobile access in a native modal", async () => {
@@ -183,5 +193,20 @@ describe("native sign-in UI contract", () => {
 
     await waitFor(() => expect(screen.getByTestId(UI_TEST_IDS.auth.error)).toBeTruthy());
     expect(screen.getByTestId(UI_TEST_IDS.auth.error)).toHaveProp("accessibilityRole", "alert");
+  });
+
+  it("reveals the API mode switch before sign-in after seven version taps", async () => {
+    const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    const user = userEvent.setup();
+    await renderMobile(<SignInScreen />);
+
+    const version = screen.getByLabelText("v1.0.1");
+    for (let index = 0; index < 7; index += 1) await user.press(version);
+
+    expect(alert).toHaveBeenCalledWith("API mode", "Switch to development?", [
+      { text: "Cancel", style: "cancel" },
+      expect.objectContaining({ text: "Switch" }),
+    ]);
+    alert.mockRestore();
   });
 });
