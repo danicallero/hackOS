@@ -1,6 +1,11 @@
 import * as SecureStore from "expo-secure-store";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
-import { authClient, configureAuthClient, signOut } from "./auth-client";
+import {
+  authClient,
+  closeSessionForEnvironmentChange,
+  configureAuthClient,
+  forceLocalSignOut,
+} from "./auth-client";
 import { DEVELOPMENT_API_URL, PRODUCTION_API_URL, setApiUrl } from "./env";
 import { clearApiEnvironmentData } from "./storage-usage";
 
@@ -60,9 +65,8 @@ export function ApiModeProvider({ children }: { children: ReactNode }) {
       // fails (for example offline), retain the old environment and its queue
       // rather than risk replaying a scanner operation against a new server.
       if (authClient.getCookie()) {
-        const result = await signOut();
-        if (result.error)
-          throw new Error(result.error.message || "Could not close the previous session");
+        await closeSessionForEnvironmentChange();
+        forceLocalSignOut();
       }
       await clearApiEnvironmentData();
       await SecureStore.setItemAsync(STORAGE_KEY, nextMode);
