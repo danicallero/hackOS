@@ -1,16 +1,23 @@
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import { AuthAlert, AuthButton, AuthHeader, AuthScreen } from "@/components/auth-ui";
-import { signOut } from "@/lib/auth-client";
+import { forceLocalSignOut, signOut } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
 
 /** Recoverable H4 session boundary shown while the authenticated profile is unavailable. */
 export function SessionState({ loading, onRetry }: { loading: boolean; onRetry: () => void }) {
   const { t } = useLocale();
+  const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<Error | null>(null);
+
+  function returnToSignIn() {
+    forceLocalSignOut();
+    router.replace("/(auth)/sign-in");
+  }
 
   async function endSession() {
     setSigningOut(true);
@@ -84,6 +91,29 @@ export function SessionState({ loading, onRetry }: { loading: boolean; onRetry: 
         >
           <Text style={{ color: colors.interactiveText, fontSize: 15, fontWeight: "600" }}>
             {t("signOut")}
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityLabel={t("backToSignIn")}
+          accessibilityRole="link"
+          onPress={returnToSignIn}
+          style={({ pressed }) => ({
+            alignItems: "center",
+            justifyContent: "center",
+            minHeight: 44,
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <Text
+            selectable
+            style={{
+              color: colors.interactiveText,
+              fontSize: 15,
+              fontWeight: "700",
+              textAlign: "center",
+            }}
+          >
+            {t("backToSignIn")}
           </Text>
         </Pressable>
       </View>

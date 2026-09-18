@@ -283,6 +283,17 @@ distributed to other Expo Router apps without importing hackOS code.
   is also part of the synchronous protected-stack guard: an ineligible account
   never mounts an event screen while its asynchronous sign-out is running.
   (accounts come from the web onboarding/invite flows, H10/H12).
+- Sign-out is local-first (`lib/auth-client.ts`):
+  the shared `signOut()` helper clears the SecureStore session (including
+  chunked variants) and the in-memory session atom before notifying the
+  `/api/me` store, so a device with no reachable server is signed out
+  immediately and lands on sign-in. Server-side session revocation then runs
+  as a best-effort, fire-and-forget `POST /api/auth/sign-out` with the
+  pre-captured cookie; a failed revoke never blocks, retries, or surfaces an
+  error (#757). If the UI-level sign-out attempt itself fails, the recovery,
+  account, and pending-removal surfaces expose `Back to sign in`; that action
+  clears the local session synchronously and replaces the route without
+  waiting for SecureStore or the server.
 - `app/(auth)/forgot-password.tsx` and `reset-password.tsx` share the same
   leading, task-first composition. Their primary actions remain discoverable,
   invalid values are explained beside the relevant field, and focus moves to

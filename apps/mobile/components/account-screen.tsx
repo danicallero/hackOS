@@ -21,7 +21,7 @@ import {
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { apiFetch } from "@/lib/api";
-import { signOut } from "@/lib/auth-client";
+import { forceLocalSignOut, signOut } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";
 import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -58,6 +58,11 @@ export default function AccountScreen() {
   const [refreshingAccount, setRefreshingAccount] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<Error | null>(null);
+
+  function returnToSignIn() {
+    forceLocalSignOut();
+    router.replace("/(auth)/sign-in");
+  }
 
   const loadSupportingData = useCallback(async () => {
     if (!me) return;
@@ -364,12 +369,37 @@ export default function AccountScreen() {
         </Section>
 
         {signOutError ? (
-          <RequestFeedback
-            error={signOutError}
-            message={t("signOutError")}
-            onRetry={() => void endSession()}
-            retrying={signingOut}
-          />
+          <>
+            <RequestFeedback
+              error={signOutError}
+              message={t("signOutError")}
+              onRetry={() => void endSession()}
+              retrying={signingOut}
+            />
+            <Pressable
+              accessibilityLabel={t("backToSignIn")}
+              accessibilityRole="link"
+              onPress={returnToSignIn}
+              style={({ pressed }) => ({
+                alignItems: "center",
+                justifyContent: "center",
+                minHeight: 44,
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <Text
+                selectable
+                style={{
+                  color: colors.interactiveText,
+                  fontSize: 15,
+                  fontWeight: "700",
+                  textAlign: "center",
+                }}
+              >
+                {t("backToSignIn")}
+              </Text>
+            </Pressable>
+          </>
         ) : null}
         <Section title={t("sessionTitle")} footer={t("sessionActive", { email: me.email })}>
           <ActionButton
