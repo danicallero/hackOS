@@ -1055,6 +1055,25 @@ export async function wipeOfflineScanQueue(ownerUserId: number): Promise<void> {
   await resetQueueKey(ownerUserId);
 }
 
+/**
+ * An API endpoint change is a device-wide trust boundary, not an account
+ * switch. Pending operations must never cross that boundary, including rows
+ * left by another staff account on the same device.
+ */
+export async function wipeAllOfflineScanQueues(): Promise<void> {
+  const database = await queueDb();
+  const ownerIds = await withSerializedTransaction(queueChainRef, database, async () => {
+    const rows = await database.getAllAsync<{ created_by_user_id: number }>(
+      `SELECT DISTINCT created_by_user_id FROM pending_scans
+       UNION
+       SELECT DISTINCT created_by_user_id FROM scanner_sync_errors`,
+    );
+    await database.execAsync(`DELETE FROM pending_scans; DELETE FROM scanner_sync_errors;`);
+    return rows.map((row) => row.created_by_user_id);
+  });
+  await Promise.all(ownerIds.map((ownerUserId) => resetQueueKey(ownerUserId)));
+}
+
 /** Returns every replay error for this operator, newest first. */
 export async function syncErrorHistory(ownerUserId: number): Promise<ScannerSyncErrorEntry[]> {
   const rows = await (await queueDb(ownerUserId)).getAllAsync<{

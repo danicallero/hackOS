@@ -5,13 +5,15 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router/react-naviga
 import { Stack } from "expo-router/stack";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useRef, useState } from "react";
-import { View } from "react-native";
+import { Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import "react-native-reanimated";
 
 import { PendingRemovalScreen } from "@/components/pending-removal-screen";
 import { SessionState } from "@/components/session-state";
 import { useColorScheme } from "@/components/useColorScheme";
+import { ApiModeProvider, useApiMode } from "@/lib/api-mode";
 import { signOut } from "@/lib/auth-client";
 import { isSupportedLanguage, LocaleProvider, useLocale } from "@/lib/i18n";
 import { MeProvider, useMeContext } from "@/lib/me-context";
@@ -57,7 +59,9 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <LocaleProvider>
-        <RootLayoutSession />
+        <ApiModeProvider>
+          <RootLayoutSession />
+        </ApiModeProvider>
       </LocaleProvider>
     </GestureHandlerRootView>
   );
@@ -73,10 +77,11 @@ function RootLayoutSession() {
 
 function RootLayoutSessionContents() {
   const { me, authenticated, loading, error } = useMeContext();
+  const { mode } = useApiMode();
   const initialSessionPending = useInitialSessionPending(loading);
 
   return (
-    <>
+    <View style={{ flex: 1 }}>
       <LanguageSync />
       <PushRegistration authenticated={authenticated} />
       <WalletCacheWarmup authenticated={authenticated} />
@@ -91,7 +96,8 @@ function RootLayoutSessionContents() {
         loading={loading}
         error={error}
       />
-    </>
+      {mode === "development" ? <DevelopmentIndicator /> : null}
+    </View>
   );
 }
 
@@ -329,6 +335,34 @@ function RootLayoutNav({
         </Stack.Protected>
       </Stack>
     </ThemeProvider>
+  );
+}
+
+/** A persistent, non-interactive safety cue whenever requests target development. */
+function DevelopmentIndicator() {
+  const insets = useSafeAreaInsets();
+  return (
+    <View
+      pointerEvents="none"
+      accessible
+      accessibilityLabel="Development server active"
+      style={{
+        alignItems: "center",
+        backgroundColor: "#d70015",
+        borderCurve: "continuous",
+        borderRadius: 999,
+        paddingHorizontal: 9,
+        paddingVertical: 4,
+        position: "absolute",
+        right: 12,
+        top: insets.top + 8,
+        zIndex: 10,
+      }}
+    >
+      <Text style={{ color: "#ffffff", fontSize: 11, fontWeight: "800", letterSpacing: 0.5 }}>
+        DEV
+      </Text>
+    </View>
   );
 }
 

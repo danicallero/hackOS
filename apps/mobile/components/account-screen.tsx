@@ -21,6 +21,7 @@ import {
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { apiFetch } from "@/lib/api";
+import { useApiMode } from "@/lib/api-mode";
 import { signOut } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";
 import { type Lang, useLocale } from "@/lib/i18n";
@@ -51,6 +52,7 @@ export default function AccountScreen() {
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
   const { me, loading, error, offline, staleSince, refetch } = useMeContext();
+  const { mode, setMode } = useApiMode();
   const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
   const [savingLanguage, setSavingLanguage] = useState(false);
   const [languageError, setLanguageError] = useState<Error | null>(null);
@@ -58,6 +60,8 @@ export default function AccountScreen() {
   const [refreshingAccount, setRefreshingAccount] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<Error | null>(null);
+  const developerTapCount = useRef(0);
+  const developerTapTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadSupportingData = useCallback(async () => {
     if (!me) return;
@@ -149,6 +153,31 @@ export default function AccountScreen() {
       { text: t("cancel"), style: "cancel" },
       { text: t("signOut"), style: "destructive", onPress: () => void endSession() },
     ]);
+  }
+
+  function revealDeveloperMode() {
+    developerTapCount.current += 1;
+    if (developerTapTimeout.current) clearTimeout(developerTapTimeout.current);
+    developerTapTimeout.current = setTimeout(() => {
+      developerTapCount.current = 0;
+    }, 2_000);
+    if (developerTapCount.current < 7) return;
+    developerTapCount.current = 0;
+    Alert.alert(
+      t("apiModeTitle"),
+      mode === "development" ? t("apiModeProductionBody") : t("apiModeDevelopmentBody"),
+      [
+        { text: t("cancel"), style: "cancel" },
+        {
+          text: t("apiModeSwitch"),
+          onPress: () => {
+            void setMode(mode === "development" ? "production" : "development").catch(() => {
+              Alert.alert(t("apiModeTitle"), t("apiModeSwitchError"));
+            });
+          },
+        },
+      ],
+    );
   }
 
   if (loading && !me) return <RequestFeedback loading />;
@@ -380,6 +409,13 @@ export default function AccountScreen() {
             onPress={confirmSignOut}
           />
         </Section>
+        <Pressable
+          accessibilityLabel="v1.0.1"
+          onPress={revealDeveloperMode}
+          style={{ alignSelf: "center", padding: 8 }}
+        >
+          <Text style={{ color: colors.tertiaryLabel, fontSize: 12 }}>v1.0.1</Text>
+        </Pressable>
       </ScrollView>
       <AndroidStatusBarScrim />
     </View>

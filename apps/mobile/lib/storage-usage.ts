@@ -1,7 +1,7 @@
 import { File, Paths } from "expo-file-system";
 
 import { clearOfflineCache, getOfflineCacheBytes } from "./offline-cache";
-import { wipeAttendanceRoster, wipeOfflineScanQueue } from "./scanner-db";
+import { wipeAllOfflineScanQueues, wipeAttendanceRoster, wipeOfflineScanQueue } from "./scanner-db";
 
 export interface StorageUsage {
   /** Offline API fallback cache (schedule, wallet, notifications — see offline-cache.ts). */
@@ -51,6 +51,25 @@ export async function clearAccountData(ownerUserId: number): Promise<void> {
     clearOfflineCache(),
     wipeAttendanceRoster(),
     wipeOfflineScanQueue(ownerUserId),
+  ]);
+  clearDownloadedFiles();
+  const failure = results.find(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  );
+  if (failure) throw failure.reason;
+}
+
+/**
+ * Removes every local artifact associated with one API environment. Unlike
+ * ordinary sign-out, this discards every owner's pending scanner work: queue
+ * payloads, roster entries and cached reads from one endpoint cannot be sent
+ * to another endpoint after a developer mode change.
+ */
+export async function clearApiEnvironmentData(): Promise<void> {
+  const results = await Promise.allSettled([
+    clearOfflineCache(),
+    wipeAttendanceRoster(),
+    wipeAllOfflineScanQueues(),
   ]);
   clearDownloadedFiles();
   const failure = results.find(

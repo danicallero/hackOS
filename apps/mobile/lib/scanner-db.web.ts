@@ -237,6 +237,11 @@ export async function wipeOfflineScanQueue(ownerUserId: number): Promise<void> {
   syncErrors = syncErrors.filter((entry) => entry.ownerUserId !== ownerUserId);
 }
 
+export async function wipeAllOfflineScanQueues(): Promise<void> {
+  scans = [];
+  syncErrors = [];
+}
+
 export async function syncErrorHistory(ownerUserId: number): Promise<ScannerSyncErrorEntry[]> {
   return syncErrors
     .filter((entry) => entry.ownerUserId === ownerUserId)

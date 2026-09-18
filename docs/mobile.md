@@ -5,6 +5,16 @@ capability-driven tabs, participant-facing screens, authenticated realtime,
 and offline SQLite scanners for accreditation, badge rotation, presence,
 meals, and registrable activities.
 
+**Developer API mode.** Seven taps on the understated `v1.0.1` footer in Account
+or Sign in reveals a confirmation that switches between production
+(`api.hackudc.com`) and development (`api.dani.md`). The choice is persisted
+in SecureStore. A switch must first close the old server session; it then
+clears all endpoint-specific caches, downloaded passes, roster data, and every
+pending scanner queue before enabling the new API. A failed old-server
+sign-out refuses the switch, so no scanner work can cross environments. A fixed
+red `DEV` badge overlays every screen while development is active. This is
+intentionally undiscoverable during ordinary use.
+
 For development builds, prebuild/CNG, EAS profiles, signing, certificates,
 store assets, submission, and the release checklist, see
 [`mobile-release.md`](./mobile-release.md).
