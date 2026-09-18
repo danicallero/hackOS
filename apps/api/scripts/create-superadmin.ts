@@ -1,3 +1,4 @@
+import { createInterface } from "node:readline";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { pool, withTransaction } from "../src/db/pool.js";
 import { audit } from "../src/lib/audit.js";
@@ -8,7 +9,7 @@ import { auth } from "../src/modules/identity/auth.js";
  * by attaching ADMIN_ALL via a dedicated, always-highest-position role (H8).
  *
  * Usage:
- *   pnpm --filter @hackos/api superadmin:create --email root@example.com [--password 'secret123' --name Root --surname Admin] [--language en|es|gl] [--allow-existing-admin]
+ *   pnpm --filter @hackos/api superadmin:create --email root@example.com [--password 'secret123' | --password-stdin] --name Root --surname Admin [--language en|es|gl] [--allow-existing-admin]
  *
  * If --email already exists, this script grants superadmin to that account.
  * If it does not exist, it creates the account (requiring --password, --name,
@@ -40,6 +41,15 @@ function requireFlagIfMissing(name: string, current: string | undefined): string
   throw new Error(`Missing required flag for new account creation: ${name}`);
 }
 
+async function readPasswordFromStdin(): Promise<string> {
+  const input = createInterface({ input: process.stdin, crlfDelay: Infinity });
+  for await (const line of input) {
+    input.close();
+    return line;
+  }
+  return "";
+}
+
 async function hasAdminAllUser(): Promise<boolean> {
   const { rows } = await pool.query(
     `SELECT 1 FROM user_effective_capabilities WHERE capability = $1 LIMIT 1`,
@@ -50,7 +60,12 @@ async function hasAdminAllUser(): Promise<boolean> {
 
 async function main(): Promise<void> {
   const email = requiredFlag("--email").trim().toLowerCase();
-  const password = readFlag("--password");
+  const passwordFlag = readFlag("--password");
+  const passwordFromStdin = hasFlag("--password-stdin");
+  if (passwordFlag !== undefined && passwordFromStdin) {
+    throw new Error("Use either --password or --password-stdin, not both");
+  }
+  const password = passwordFromStdin ? await readPasswordFromStdin() : passwordFlag;
   const name = readFlag("--name");
   const surname = readFlag("--surname");
   const language = readFlag("--language") as Language | undefined;
