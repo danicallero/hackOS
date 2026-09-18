@@ -502,10 +502,11 @@ The interactive shell supports arrows, Enter or right-arrow to select,
 left-arrow/Escape/`b` to go back, and `q` to quit. Service actions use Space
 to select multiple services and Enter to confirm. Status includes a short
 reason for stopped one-shot or failed containers. The log view supports
-filters (`all`, `error`, `warning`, `request`, `health`) and custom text
-search, with refresh/follow/filter/service navigation and an export command
-for saving remote logs locally. Start also offers per-service start/recreate,
-image release information, and local rebuild instructions.
+multi-select filters (`error`, `warning`, `request`, `health`) and optional
+custom text search, with refresh/follow/filter/service navigation and an export
+command for saving remote logs locally. Selected event categories are combined;
+custom text narrows the result further. Start also offers per-service
+start/recreate, image release information, and local rebuild instructions.
 The non-interactive equivalents are:
 
 ```sh
@@ -547,8 +548,13 @@ ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging logs \
 ```
 
 The interactive log view's `e` action prints an `ssh` + `scp` + cleanup block
-when a remote file is preferable. It removes the temporary remote file only
-after `scp` succeeds, so a failed transfer can be retried.
+when a remote file is preferable. When the shell was entered over SSH, the
+current SSH user, server address, and non-default port are offered as the
+default target; press Enter to accept it. `HACKOS_SSH_TARGET` and
+`HACKOS_SSH_PORT` can override that default when an SSH alias is preferred.
+When the shell was entered through Incus, provide the workstation-reachable
+target at the prompt. The temporary remote file is removed only after `scp`
+succeeds, so a failed transfer can be retried.
 
 Use `ssh -tt ... logs --follow api` for a live colored stream.
 
