@@ -454,6 +454,34 @@ incus exec "$PRODUCTION_INSTANCE" -- /opt/hackos/services.sh production start
 incus exec "$PRODUCTION_INSTANCE" -- /opt/hackos/services.sh production shutdown
 ```
 
+For an interactive menu, replace the action with `shell`:
+
+```sh
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging shell
+incus exec "$PRODUCTION_INSTANCE" -- /opt/hackos/services.sh production shell
+```
+
+The shell includes the CLI-only `system:superadmin` setup and management flow.
+It calls the official server-side scripts in the API image, so grants and
+revocations remain audited and the last active superadmin cannot be removed.
+The non-interactive equivalents are:
+
+```sh
+/opt/hackos/services.sh staging superadmin list
+/opt/hackos/services.sh staging superadmin create --email admin@example.org \
+  --password 'choose-a-strong-password' --name Event --surname Admin
+/opt/hackos/services.sh staging superadmin grant --email existing@example.org
+/opt/hackos/services.sh staging superadmin revoke --email admin@example.org
+```
+
+Replace `staging` with `production` when operating the production project.
+For production, run the command through Incus as shown above, for example:
+`incus exec "$PRODUCTION_INSTANCE" -- /opt/hackos/services.sh production
+superadmin list`.
+Create a new account only from a protected operator session; use `grant` when
+the account already exists. The optional `--allow-existing-admin` override is
+deliberate and should be used only when a second superadmin is required.
+
 `status` includes stopped containers, `logs` accepts the Compose service names,
 and `start` starts the long-running runtime plus its required one-shot
 dependencies and waits for health checks. `stop` can target selected services;

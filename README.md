@@ -153,11 +153,13 @@ add/remove is written to `audit_log` (`grant_superadmin`/`create_superadmin`/
 `revoke_superadmin`).
 
 In production, run the same commands from a shell on the API container/host
-(`node scripts/grant-superadmin.mjs --email ...`, `node
-scripts/list-superadmins.mjs`, `node scripts/revoke-superadmin.mjs --email
-...` — no `tsx`/`pnpm` needed for the `.mjs` scripts) with `DATABASE_URL` set
-to the production database. See `docs/audits/access-control-audit-plan.md`'s
-"`system:superadmin` is CLI-only" section for the full design rationale.
+(`node dist/create-superadmin.js ...`, `node scripts/grant-superadmin.mjs
+--email ...`, `node scripts/list-superadmins.mjs`, `node
+scripts/revoke-superadmin.mjs --email ...`) with `DATABASE_URL` set to the
+production database. The deployed `/opt/hackos/services.sh production shell`
+also provides this flow interactively. See
+`docs/audits/access-control-audit-plan.md`'s "`system:superadmin` is CLI-only"
+section for the full design rationale.
 
 ### Start the mobile app
 
