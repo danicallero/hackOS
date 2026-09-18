@@ -233,9 +233,9 @@ Incus runner. To test the current production tree in staging, open an explicit
 pull request from `main` to `staging`.
 
 The Build images workflow also supports a manual rebuild of `api`, `web`, or
-`both` for the selected branch. Manual rebuilds publish the requested image
-tags without triggering a deployment; use the protected deployment workflow
-separately when a rollout is intended.
+`both` for the selected branch. On `staging`, the selected images are deployed
+after they publish successfully; on other branches, manual rebuilds only
+publish the requested image tags.
 
 The merge to either protected branch builds only the affected release artifact.
 Mobile, documentation and deploy-only changes skip image publication and host
