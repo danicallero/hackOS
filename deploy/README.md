@@ -304,8 +304,8 @@ disparan un despliegue. Cada imagen afectada se construye en paralelo en sus
 `linux/amd64` y `linux/arm64` nativos, y un job final publica el manifiesto
 multi-arquitectura `sha-<commit>`; no se usa QEMU para compilar la imagen ARM.
 El mismo workflow se puede lanzar manualmente desde Actions con la selección
-`api`, `web` o `both`; esa reconstrucción publica los tags elegidos pero no
-despliega automáticamente.
+`api`, `web` o `both`; en `staging`, esa reconstrucción publica y despliega
+automáticamente únicamente las imágenes elegidas.
 
 `.github/workflows/build.yml` calls the reusable
 `.github/workflows/deploy-staging-arm64.yml` job after at least one affected
