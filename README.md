@@ -232,6 +232,11 @@ through a private network before using SSH; production uses a self-hosted
 Incus runner. To test the current production tree in staging, open an explicit
 pull request from `main` to `staging`.
 
+The Build images workflow also supports a manual rebuild of `api`, `web`, or
+`both` for the selected branch. Manual rebuilds publish the requested image
+tags without triggering a deployment; use the protected deployment workflow
+separately when a rollout is intended.
+
 The merge to either protected branch builds only the affected release artifact.
 Mobile, documentation and deploy-only changes skip image publication and host
 deployment. The staging and production stacks use the same multi-architecture

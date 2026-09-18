@@ -5,6 +5,17 @@ on:
     branches:
       - main
       - staging
+  workflow_dispatch:
+    inputs:
+      rebuild:
+        description: Image set to rebuild on the selected branch
+        required: true
+        type: choice
+        default: both
+        options:
+          - api
+          - web
+          - both
 
 permissions:
   contents: read
@@ -39,8 +50,29 @@ jobs:
         env:
           BEFORE_SHA: ${{ github.event.before }}
           AFTER_SHA: ${{ github.sha }}
+          REBUILD: ${{ inputs.rebuild }}
         shell: bash
-        run: ./.github/scripts/classify-image-changes.sh "$BEFORE_SHA" "$AFTER_SHA" >> "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            case "$REBUILD" in
+              api)
+                printf 'api_image=true\nweb_image=false\nany_image=true\n' >> "$GITHUB_OUTPUT"
+                ;;
+              web)
+                printf 'api_image=false\nweb_image=true\nany_image=true\n' >> "$GITHUB_OUTPUT"
+                ;;
+              both)
+                printf 'api_image=true\nweb_image=true\nany_image=true\n' >> "$GITHUB_OUTPUT"
+                ;;
+              *)
+                echo "Unknown rebuild selection: $REBUILD" >&2
+                exit 1
+                ;;
+            esac
+            exit 0
+          fi
+          ./.github/scripts/classify-image-changes.sh "$BEFORE_SHA" "$AFTER_SHA" >> "$GITHUB_OUTPUT"
 
   build-api:
     name: Build API image (${{ matrix.arch }})
@@ -221,7 +253,9 @@ jobs:
       needs.detect.result == 'success' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/staging' &&
-      (needs.publish-api.result == 'success' || needs.publish-web.result == 'success')
+      needs.detect.outputs.any_image == 'true' &&
+      (needs.detect.outputs.api_image != 'true' || needs.publish-api.result == 'success') &&
+      (needs.detect.outputs.web_image != 'true' || needs.publish-web.result == 'success')
     uses: ./.github/workflows/deploy-staging-arm64.yml
     with:
       tag: sha-${{ github.sha }}
