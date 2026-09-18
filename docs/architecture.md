@@ -2,8 +2,8 @@
 
 How hackOS is put together as a running system: the services, the stacks they're
 built on, how they connect, why the boundaries are drawn where they are, and how
-it scales. This is the *system* view; for the operational runbook (Dokploy
-modes, secrets, deploy order) see [`deploy/README.md`](../deploy/README.md), and
+it scales. This is the *system* view; for the operational runbook (Compose,
+secrets and deploy order) see [`deploy/README.md`](../deploy/README.md), and
 for per-container env vars see [`env-vars.md`](./env-vars.md).
 
 > **One image, one tenant.** The whole backend is a single Docker image
@@ -24,7 +24,10 @@ with one platform:
 | `apps/mobile` | Participant & operator phone app | Expo Router (EAS builds, native APNs/FCM) |
 | `packages/shared` | Cross-cutting `capabilities.ts` + `events.ts` | TypeScript, consumed by all |
 
-At runtime that becomes **six containers** plus external push/mail providers:
+At runtime that becomes one multi-architecture Compose project with seven
+application/runtime services plus the idempotent `minio-init` helper. The same
+pre-built SHA image is used by ARM64 staging and Linux/x86_64 production inside
+an isolated LXC:
 
 ```mermaid
 flowchart TB
@@ -33,28 +36,34 @@ flowchart TB
         phone[Mobile app]
     end
 
-    subgraph edge[edge network · dokploy-network]
-        tunnel[Cloudflare Tunnel]
-        traefik[Traefik reverse proxy]
-        web[web · Next.js :3001]
-    end
-
-    subgraph instance[instance network · hackos-&lt;name&gt;-net · private, no host ports]
+    subgraph private[private Compose network]
         api[api · Fastify :3000 HTTP + SSE]
         worker[worker · BullMQ ticks, no HTTP]
         pg[(postgres · source of truth)]
         vk[(valkey · queues + pub/sub, ephemeral)]
         minio[(minio · S3 object store)]
+        migrate[migrate · one-shot SQL]
+        init[minio-init · one-shot bucket setup]
     end
 
-    subgraph ext[External]
+    subgraph egress[egress Compose network]
+        web[web · Next.js :3001]
+    end
+
+    subgraph ingress[Proxy LXC]
+        caddy[Caddy · TLS + reverse proxy]
+    end
+
+    subgraph ext[Providers]
         expo[Expo Push → APNs/FCM]
-        mail[Mail provider · SMTP/Resend/Postal]
+        mail[Mail transport · SMTP]
     end
 
-    browser & phone --> tunnel --> traefik
-    traefik --> web
-    traefik --> api
+    browser & phone --> caddy
+    caddy -->|hackos LXC :3000| api
+    caddy -->|hackos LXC :3001| web
+    migrate --> pg
+    init --> minio
     web -->|browser XHR to API_DOMAIN| api
     api --- pg & vk & minio
     worker --- pg & vk & minio
@@ -62,142 +71,131 @@ flowchart TB
     phone -.push.-> expo
 ```
 
-The two boxes are the two Docker networks; the boundary between them is the
-whole security model (§3).
+The Compose networks are private to the project. API and web publish only their
+HTTP ports to the external proxy; the datastores have no published ports.
 
 ---
 
 ## 2. Service inventory
 
-Each service is its own Dokploy "Compose" service (Mode A) so it deploys, rolls
-back, scales, and logs independently. `deploy/services/<svc>/docker-compose.yml`
-is the source of truth for each.
+`deploy/docker-compose.yml` is the only production source of truth. Compose
+pulls pre-built application images from GHCR and pinned infrastructure images
+from their official registries, then recreates the application tier after the
+explicit `migrate` process succeeds.
 
 ### api — the HTTP surface
 - **Stack:** Fastify 5, `fastify-type-provider-zod` (schemas *are* the OpenAPI
   docs, served at `/documentation`), Better Auth for identity, `pg` for raw
   parameterized SQL (no ORM), `ioredis` for Valkey.
-- **Image/command:** the shared image; `node dist/migrate.js && exec node
-  dist/server.js` is the safe default, and the server entrypoint repeats the
-  migration check for direct launches. Compose also retains a separate
-  one-shot migration service.
-- **Networks:** `instance` **and** `edge` — the only service on both, because
-  it's the only one that is both publicly reachable *and* talks to datastores.
-- **Public:** yes, via Traefik router `${STACK_NAME}-api` on `${API_DOMAIN}`.
-  Sets HSTS / nosniff / `X-Frame-Options: DENY` / referrer policy, trusts
-  `X-Forwarded-*` (`TRUST_PROXY=true`) so the audit trail logs real client IPs.
+- **Image/command:** the shared GHCR image, `node dist/server.js`; the server
+  entrypoint repeats the migration check as a process-level guard.
+- **Network:** the private and egress Compose bridges, with a configurable host
+  binding (port `3000`) for the external proxy.
+- **Public:** Caddy terminates TLS and proxies the configured API hostname.
+  `TRUST_PROXY=true` preserves the real client IP for the audit trail.
 - **State:** none. Fully horizontally scalable (§7).
-- **Health:** `/healthz` is dependency-free process liveness. Traefik gates
-  traffic on `/readyz`: PostgreSQL failure returns 503, while an ephemeral
-  Valkey outage returns 200 with `status: degraded` so durable reads remain
-  available and the process is not restarted or removed from ingress.
-- **Bundled one-shot:** `migrate` (`node dist/migrate.js`) runs first, guarded by
-  a Postgres advisory lock so concurrent redeploys/replicas can't race schema.
+- **Health:** Docker probes `/healthz`; Compose waits for PostgreSQL, Valkey,
+  MinIO, migration completion and the API healthcheck before the handoff.
+- **Migration:** `migrate` (`node dist/migrate.js`) is a separate one-shot,
+  guarded by a Postgres advisory lock.
 
 ### worker — background processing
 - **Stack:** same image, `node dist/worker.js`. No HTTP listener at all.
-- **Networks:** `instance` only. It needs internet egress (Expo push, mail,
-  APNs) but no ingress, so it stays off the proxy network. Egress rides the
-  instance bridge's NAT; external DNS is pinned (§3, §8) so it never depends on
-  the host's transient `resolv.conf`.
+- **Network:** the private and egress Compose bridges. It has no host port or
+  HTTP ingress, but its NAT egress reaches Expo Push, mail and APNs.
 - **What it does:** repeatable BullMQ ticks drain DB-backed tables, while
   event-driven jobs carry explicit payloads for request-started work such as
   account-removal cleanup, meal scans, wallet sync and queue invalidations —
   see [`background-workers.md`](./background-workers.md). Domain state remains
   authoritative in Postgres; the event-driven jobs own their own idempotency
   and retry policy, while BullMQ provides the dispatch and repeatable timing.
-- **Health:** disabled (serves no HTTP); liveness is process-based via
-  `restart: unless-stopped`.
+- **Health:** process liveness is checked with the container's Node process;
+  `restart: unless-stopped` handles crashes.
 - **Scale:** replicas are safe — the outbox claim uses `FOR UPDATE SKIP LOCKED`,
   so no row is ever processed twice.
 
 ### web — frontend + TV screens
 - **Stack:** Next.js 16, standalone output, `apps/web/Dockerfile`.
-- **Networks:** `edge` only. **The web tier never touches the datastores** — it
-  talks to the API over the public internet like any other browser client, so it
-  has no reason to be on the private network.
-- **Public:** its **own** Traefik router `${STACK_NAME}-web` on `${WEB_DOMAIN}`,
-  never served behind the API. The running Next.js server serves
-  `/runtime-config.js` from its environment-specific `API_DOMAIN`/`WEB_DOMAIN`,
-  so staging and production can use the same image code with environment-
-  specific runtime configuration.
+- **Network:** the egress Compose bridge, with a configurable host binding (port
+  `3001`) for the external proxy. It receives only public domain variables and
+  never receives a secret or datastore credential.
+- **Public:** Caddy proxies `${WEB_DOMAIN}` directly to it. The running Next.js
+  server serves `/runtime-config.js` from its `API_DOMAIN`/`WEB_DOMAIN`, so the
+  same image digest works in different environments.
 - **CORS coupling:** `https://${WEB_DOMAIN}` must be in the API's
   `CORS_ORIGINS` or the browser's credentialed calls are refused.
 
 ### postgres — source of truth
 - **Stack:** `postgres:17-alpine`, `--data-checksums`. Raw SQL migrations only
   (`apps/api/db/migrations/NNNN_name.sql`, numbered in per-workstream bands).
-- **Networks:** `instance` only, **no host ports**. Reachable at `postgres:5432`
+- **Network:** private Compose network, **no host ports**. Reachable at `postgres:5432`
   and nowhere else. Password-protected.
-- **State:** the `pgdata` volume — one of only two stateful pieces. Back this up.
+- **State:** the `HACKOS_DATA_DIR/postgres` bind mount (normally
+  `/mnt/data/postgres`) — one of only two stateful pieces. Back this up.
 
 ### valkey — queues and realtime (ephemeral)
-- **Stack:** `valkey/valkey:8-alpine` (Redis-compatible), `requirepass`,
+- **Stack:** the pinned `valkey/valkey` digest (Redis-compatible), `requirepass`,
   **persistence off** (`--save "" --appendonly no`).
 - **Role:** three jobs, all ephemeral — (1) BullMQ queue backend for the worker
   ticks; (2) the SSE fan-out bus (§5); (3) the per-topic sequence counters.
   Losing Valkey loses only in-flight/transient state; the source of truth is
   always Postgres, so it recovers by re-ticking and clients refetching.
-- **Networks:** `instance` only, no host ports, reachable at `valkey:6379`.
+- **Network:** private Compose network, no host ports, reachable at `valkey:6379`.
 
 ### minio — object storage
 - **Stack:** MinIO (S3-compatible) + a one-shot `mc` sidecar that creates the
   bucket idempotently and sets prefix policy: **`enterprises/` is anonymously
   readable** (sponsor logos, H44), **`uploads/` is private** (application files,
   H12, served only through the API's owner-or-staff proxied-download route).
-- **Networks:** `instance` only, no host ports, `minio:9000`. Console off by
-  default (`MINIO_BROWSER=off`).
-- **Public read path:** the browser loads sponsor logos directly from
-  `S3_PUBLIC_URL` — a **Cloudflare-fronted hostname that proxies to the
-  `enterprises/` prefix**. This is the single narrow public read into object
-  storage; the admin API and the private `uploads/` prefix are never exposed
-  (see §3). Without `S3_PUBLIC_URL` set, logo URLs fall back to the internal
-  `http://minio:9000` host the browser can't reach, so they silently fail to
-  load even though the upload succeeded.
-- **State:** the `miniodata` volume — the second stateful piece. Swappable for a
+- **Network:** private Compose network, no host ports, `minio:9000`. When the
+  optional shared ingress network is enabled for a host-level tunnel, MinIO
+  joins that network as well so the S3 hostname can resolve `minio:9000`; the
+  console remains off (`MINIO_BROWSER=off`).
+- **Public read path:** production sets
+  `S3_PUBLIC_URL=https://s3.example.org/hackos/`. An external ingress must route
+  that hostname to MinIO's S3 API, never to the console. MinIO has no host port
+  in this Compose project; private uploads remain behind the API and the
+  `enterprises/` prefix is initialized for public logo reads by the storage
+  helper.
+- **State:** the `HACKOS_DATA_DIR/minio` bind mount (normally `/mnt/data/minio`) —
+  the second stateful piece. Swappable for a
   managed S3/R2 by repointing `S3_ENDPOINT` + `S3_PUBLIC_URL` (§7).
 
 ### mailpit — dev only
 - Local `pnpm infra:up` catches all outbound mail at `localhost:8025`. Not part
-  of any production deploy; production uses SMTP/Resend/Postal via
-  `MAIL_PROVIDER`.
+  of any production deploy; production uses SMTP (for example, Amazon SES's
+  SMTP endpoint) via `MAIL_PROVIDER`.
 
 ---
 
-## 3. Networks: two boundaries, one security model
+## 3. Network boundary and ingress
 
-There are exactly two networks, and the split is the entire perimeter:
+Compose creates two project-private bridge networks:
 
-| | **instance** (`hackos-<name>-net`) | **edge** (`dokploy-network`) |
+| Purpose | Network | Host exposure |
 |---|---|---|
-| Purpose | All inter-service + datastore traffic | Public ingress (Traefik / tunnel) |
-| Host ports | **none** | Traefik's 443 only |
-| Members | api, worker, postgres, valkey, minio | api, web, Traefik, Cloudflare Tunnel |
-| Reachability | by service name, internal only | public via routers |
+| Inter-service traffic and datastore access | `private` | None by default |
+| Provider egress and web publishing | `egress` | API and web published ports |
 
-**Why two.** Datastores publish no host ports and live only on `instance`, so
-they are unreachable from the host or the internet — only named services on the
-same private network can talk to them. Only the api (both networks) and the web
-(edge only) are ever public. This is why `postgres` and `valkey` need no
-firewall of their own: there is simply no route to them from outside.
+Datastores, migration and storage bootstrap join `private`. API and worker join
+both networks; web joins `egress`. Service discovery uses the fixed names
+`postgres`, `valkey` and `minio`. PostgreSQL, Valkey and MinIO publish no host
+ports. API and web are reachable through their configured host ports, where the
+external proxy can terminate TLS and apply the host policy.
 
-**The one exception — MinIO's public prefix.** MinIO is on `instance` and its
-admin API / S3 port are *not* exposed, but the `enterprises/` prefix carries an
-anonymous-download policy (§4) and is served to browsers as public logos. That
-read path is exposed through a **Cloudflare-fronted hostname** set as
-`S3_PUBLIC_URL`, which proxies to MinIO's `enterprises/` prefix only — no host
-port, no admin access, and the private `uploads/` prefix stays unreachable. So
-the accurate statement is: MinIO has exactly one narrow public *read* path (its
-public prefix), and nothing else about the datastores is reachable from outside.
+The `private` bridge is marked `internal`; the separate `egress` bridge provides
+NAT for API, worker and web. This does not create an ingress path to a container
+without a published port.
 
-**Egress.** The `instance` network is a *normal* bridge (not `internal`), so api
-and worker reach the internet for mail and Expo push through its NAT. Datastores
-don't need egress and effectively don't use it.
+The `enterprises/` logo prefix is initialized for public reads, and production
+uses `https://s3.example.org/hackos/` as `S3_PUBLIC_URL`. The external ingress
+must provide the route to MinIO's S3 API; the private `uploads/` prefix is
+served through the API.
 
 > **DNS gotcha (learned the hard way, H51).** Docker's embedded resolver
 > (`127.0.0.11`) snapshots the *host's* upstream DNS servers at
 > container-create time. If the host `resolv.conf` is transiently wrong during a
-> deploy (a reboot, or Tailscale/MagicDNS reconnecting), the container bakes in
+> deploy (a reboot, or the host network reconnecting), the container bakes in
 > dead upstreams: internal names still resolve, but every *external* lookup
 > times out and outbound `fetch` dies with an opaque `fetch failed` — silently
 > dropping push delivery while credentials are perfectly fine. The fix, now in
@@ -205,8 +203,10 @@ don't need egress and effectively don't use it.
 > external resolution deterministic and independent of host state.
 
 **Names are the contract.** `DATABASE_URL`, `VALKEY_URL`, and `S3_ENDPOINT` hard-code
-`postgres:5432` / `valkey:6379` / `minio:9000`. Nothing hard-codes `localhost`;
-everything configurable comes from `src/config.ts` (zod-validated env).
+`postgres:5432` / `valkey:6379` / `minio:9000`. Only proxy bindings use host
+addressing; application dependencies use the Compose service names and all
+configurable application values come from
+`src/config.ts` (zod-validated env).
 
 ---
 
@@ -273,15 +273,16 @@ hijacked. All of it is scraped at `/metrics` (`hackos_sse_local_connections`,
 **Event-day priority lanes (#544).** Non-streaming HTTP requests pass through
 an in-process admission scheduler derived from the existing per-process
 `DB_POOL_MAX` value; it does not resize or reconfigure the #540 pool. The
-request user's highest-position assigned role is the primary priority: a
-higher `roles.position` is admitted before a lower one, while anonymous
-requests are below every assigned role. P0 is queue operators, judges and
-accreditation/presence staff; P1 is sponsor/judge collaboration; P2 is public
-TV/content; P3 is participant and other best-effort traffic. The lane remains
-the tie-breaker for requests at the same role priority. Reserved capacity keeps
-role-less P2/P3 traffic from consuming the operational share, while
-role-bearing requests participate in the role ordering. The bounded
-best-effort wait queue may shed P2/P3 with `429`.
+scheduler classifies the request by lane before the route handler:
+P0 is queue operators, judges and accreditation/presence staff; P1 is
+sponsor/judge collaboration; P2 is public
+TV/content; P3 is participant and other best-effort traffic. Six slots at the
+event-day baseline are reserved from all P2/P3 admission, so participant and
+sponsor roles cannot consume the operational share. Queued requests are
+selected by lane rank and arrival order. The bounded best-effort wait queue may
+shed P2/P3 with `429`. The scheduler's direct API can also order callers that
+already provide a trusted role-position snapshot, but the HTTP hook does not
+query PostgreSQL before admission.
 The complete route/topic classification, capacity formula, role examples, and
 edge cases live in [`request-admission.md`](./request-admission.md).
 Long-lived SSE requests bypass this scheduler so they continue to be governed
@@ -317,7 +318,8 @@ Everything backend ships as one artifact (`apps/api/Dockerfile`,
 
 ```
 node dist/migrate.js && exec node dist/server.js
-                        → api      (HTTP + SSE)     default CMD, /healthz
+                        → direct image launch      default CMD, /healthz
+node dist/server.js     → api      (HTTP + SSE)     Compose command, /healthz
 node dist/worker.js     → worker   (BullMQ ticks)   no HTTP
 node dist/migrate.js    → migrate  (one-shot)       advisory-locked, exits 0
 ```
@@ -338,9 +340,10 @@ hackathon-scale load is bursty (registration opens, judging starts, meals) but
 not large. The design leans on that: scale the stateless tier, keep one
 Postgres.
 
-**api — scale freely.** Stateless; add replicas behind Traefik. SSE works across
-replicas via Valkey (§5), and `/readyz` gating keeps initializing replicas out
-of rotation. The only shared state is Postgres/Valkey, both reached by name.
+**api — stateless.** The runtime runs one API container behind Caddy.
+SSE remains backed by Valkey (§5), and `/readyz` is available for an ingress
+health policy. If a future host adds replicas, the shared Postgres/Valkey
+contract remains the same.
 
 **worker — scale by replica count.** The outbox claim is
 `FOR UPDATE SKIP LOCKED`, so N workers split the load with no double-send.
@@ -361,11 +364,13 @@ env-configurable per process (`DB_POOL_MAX`, `DB_*_TIMEOUT_MS`; H540 — see
 the budget to respect before scaling replicas is:
 
 ```
-(api replicas × DB_POOL_MAX) + (worker replicas × DB_POOL_MAX) < Postgres max_connections
+(api replicas × DB_POOL_MAX) + (worker replicas × DB_POOL_MAX) + operational allowance < Postgres max_connections
 ```
 
-with headroom left for `migrate`'s one-shot connections and admin/superuser
-use (Postgres defaults `max_connections` to 100). `/metrics` exposes pool
+The event-day baseline is one API and one worker with `DB_POOL_MAX=24` each:
+`24 + 24 + 12 operational connections = 60`, below the stock
+`max_connections=100`. The allowance covers `migrate`, health/maintenance,
+admin and superuser use. `/metrics` exposes pool
 saturation (`hackos_db_pool_total/idle/waiting`), acquire-wait latency
 (`hackos_db_pool_wait_seconds`), and aborted queries
 (`hackos_db_query_timeouts_total`) to watch before that budget is exceeded.
@@ -389,10 +394,9 @@ swap it for managed S3/R2/Spaces by repointing `S3_ENDPOINT` + `S3_PUBLIC_URL`
 when object durability/scale matters more than self-hosting.
 
 **Multi-event = multi-instance, not multi-node.** A second hackathon is a second
-fully-isolated stack (unique `STACK_NAME` + `INSTANCE_NETWORK` + Dokploy
-project) — separate networks, volumes, secrets, and Traefik routers, zero shared
-state. This is the horizontal story for *tenancy*; it needs no orchestration
-change.
+fully-isolated stack (a separate Compose project, data directory and secrets) —
+separate network, data and secrets, zero shared state. This is the horizontal
+story for *tenancy*; it needs no orchestration change.
 
 **One thing to preserve if you ever change the topology.** The worker is a
 *tick drainer*, not a per-job queue consumer, so its safety comes entirely from
@@ -415,79 +419,60 @@ it with naive writable replicas.
 | **Permissions by capability, never role** (H8) | Routes guard on `requireCapability(CAPABILITIES.X)`; the mobile app derives its tabs the same way, so a permission change applies without a reinstall (H55). |
 | **One image, three commands** | One build, one version, zero enqueue/drain drift. |
 | **Datastores off all public networks** | The perimeter is a network boundary, not per-service firewalls — nothing routes to `postgres`/`valkey`/`minio` from outside. |
-| **Mail provider via env, not DB** (DELTA H52) | Switching SMTP/Resend/Postal is an ops action (redeploy), validated at boot by zod — no runtime toggle to get wrong. |
+| **Mail transport via env, not DB** (DELTA H52) | SMTP settings are an ops action (redeploy), validated at boot by zod — no runtime toggle to get wrong. Production may use Amazon SES through SMTP. |
 | **Wallet creds optional but never half-set** (H28) | Zod `superRefine` fails boot on a partially-configured platform; an unconfigured one returns a clean `503`, so a typo can't ship an invalid pass. |
 | **Deterministic container DNS** (H51) | `dns:` pinned so external resolution never depends on the host's transient `resolv.conf` — the root cause of a real push outage. |
-| **Web talks to API over the public URL** | The frontend is just another client; keeping it off the private network shrinks the trusted surface and lets it deploy/scale on its own domain. |
+| **Web talks to API over the public URL** | The frontend is just another client; it receives only public runtime configuration and uses the egress network for its published HTTP service. |
 
 ---
 
-## 9. Deployment profiles
+## 9. Incus deployment profile
 
-The same six compose files run in two very different settings. **Only the host
-and the ingress path differ** — the services, networks, and env are identical,
-which is the point of keeping ingress out of the app.
+Staging runs the canonical Compose project on an ARM64 host. Production runs
+the same project inside an isolated Linux/x86_64 LXC. Both hosts consume the same
+pre-built `linux/amd64` and `linux/arm64` GHCR images, selected by an immutable
+`sha-<commit>` tag; neither host builds application images.
 
-### Profile A — small / testing (self-hosted, behind CGNAT)
+In production, the proxy is an external host-level concern: it terminates TLS
+and proxies the public API and web hostnames to the published ports of the
+`hackos` LXC. `PUBLISH_BIND_ADDRESS`, `API_PUBLISH_PORT` and
+`WEB_PUBLISH_PORT` define that boundary. The Compose project does not own TLS,
+DNS or proxy configuration.
 
-For development, demos, and low-stakes testing on whatever hardware is handy —
-often a home server or a single Raspberry Pi, which is typically behind
-**carrier-grade NAT** with no inbound port forwarding available:
+For a host-level tunnel that resolves Docker service names, the optional
+`EDGE_NETWORK_NAME`/`EDGE_NETWORK_EXTERNAL` profile connects `api`, `web`, and
+`minio` to an existing ingress network using their stable service aliases. The
+database and queue store remain private. The default production profile leaves
+this network Compose-owned and uses published ports instead.
 
-- **Host:** a single small box (e.g. Raspberry Pi 5, arm64) running **Dokploy**.
-- **Ingress:** a **Cloudflare Tunnel** (`cloudflared`) instead of open ports —
-  it dials *out* to Cloudflare, so the box is reachable **despite CGNAT** with
-  no port forwarding. The tunnel sits on the `edge` network and reaches the
-  api/web containers through their stack-qualified aliases
-  (`http://${STACK_NAME}-api:3000`, `http://${STACK_NAME}-web:3001`), so
-  separate stacks can share the proxy network without ambiguous DNS; Traefik
-  still handles internal routing.
-- **Admin plane:** **Tailscale** (100.x MagicDNS) for SSH/ops, off the public
-  path. (This is also the source of the §3 DNS gotcha: a MagicDNS reconnect
-  mid-deploy is what poisoned the worker's resolver.)
+The deploy operator supplies `/etc/hackos/hackos.env` and
+`/etc/hackos/hackos.secrets` (or the explicitly supported single chmod-600
+combined file), validates them with `deploy/scripts/check-env.sh`, and keeps
+the runtime under `/opt/hackos`. The LXC must mount the persistent Incus
+volume at `/mnt/data`; the deploy script refuses a production run without that
+mount. It pulls the pinned images, runs `minio-init`, optionally backs up to
+R2, runs `migrate`, then recreates API, worker and web. Compose healthchecks are
+the handoff gate.
 
-### Profile B — real events (VPS / cloud, public IP)
-
-Actual hackathons run on a proper provider — **Hetzner** or similar — with a
-real public IP:
-
-- **Host:** a cloud VPS/dedicated box running Dokploy (single or multi-node).
-- **Ingress:** **Traefik directly on the public IP**, terminating TLS via ACME
-  (`CERT_RESOLVER=letsencrypt`) on `${API_DOMAIN}` / `${WEB_DOMAIN}`. No tunnel
-  needed — there's no CGNAT to punch through — though a Cloudflare Tunnel
-  remains a valid choice if you'd rather not expose the origin IP.
-- **Scale headroom:** a bigger instance handles the api/worker/Postgres load for
-  a full event; the §7 levers (worker replicas, PgBouncer, managed
-  S3/Postgres) apply here first.
-
-**Why document both.** The architecture deliberately doesn't bake in an ingress
-assumption: `cloudflared` vs. public Traefik is a host-level choice that never
-touches the compose files. The CGNAT/tunnel path exists so testing works from a
-home network; production drops it for a plain public route. Either way,
-postgres/valkey/minio stay local containers on the private `instance` network —
-back up `pgdata` + `miniodata` regardless of host.
+The same project can be copied to another isolated host by using a separate
+Compose project name, data directory and secret files. There is no shared
+network or shared datastore between instances.
 
 ---
 
 ## 10. Security posture (summary)
 
-Full detail in [`deploy/README.md`](../deploy/README.md#security-posture); the
-load-bearing points:
+The load-bearing points are:
 
-- **The api is the only public route into the datastores**; web is public but
-  store-less; postgres and valkey have no public route at all. MinIO's sole
-  public surface is the anonymous-read `enterprises/` prefix, served via a
-  Cloudflare-fronted `S3_PUBLIC_URL` — its admin API and private `uploads/`
-  prefix are never exposed.
-- **Containers run unprivileged** (`USER node`, `no-new-privileges:true`) under
-  `tini`.
-- **CORS locked** to `CORS_ORIGINS` in production; credentialed cross-origin
-  calls from anywhere else are refused.
-- **Secrets live only in the env store** (Dokploy Environment / gitignored
-  `.env.<instance>`), never in the image or repo; each instance gets its own, so
-  a leak is contained to one event.
-- **Audit trail** records real client IPs via `TRUST_PROXY` behind the proxy
-  (H53); sensitive mutations are audited in the same transaction as the write.
+- Postgres, Valkey and MinIO have no published ports. API and web publish only
+  the configured HTTP ports for the external proxy.
+- Containers run unprivileged (`USER node`, `no-new-privileges:true`) under
+  `tini` where provided by the image.
+- CORS is locked to `CORS_ORIGINS` in production, and `TRUST_PROXY=true` lets
+  the API record the client address forwarded by Caddy for audit purposes.
+- Secrets live only in the LXC secret file, never in the image or repository.
+- The API and worker receive separate least-privilege environment subsets;
+  web receives only public domain values and migrate only migration inputs.
 
 ---
 

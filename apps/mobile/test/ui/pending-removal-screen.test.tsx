@@ -63,7 +63,10 @@ jest.mock("@/lib/api", () => ({
     code?: string;
   },
 }));
+const mockReplace = jest.fn();
+jest.mock("expo-router", () => ({ useRouter: () => ({ replace: mockReplace }) }));
 jest.mock("@/lib/auth-client", () => ({
+  forceLocalSignOut: jest.fn(),
   signOut: jest.fn(),
 }));
 jest.mock("@/lib/env", () => ({ EVENT_WEBSITE_URL: "https://event.example" }));
@@ -90,6 +93,7 @@ jest.mock("@/lib/i18n", () => ({
         close: "Close",
         keepAnonymization: "Keep anonymization",
         retry: "Retry",
+        backToSignIn: "Back to sign in",
         signOut: "Sign out",
         signOutError: "Couldn't sign out.",
       })[key] ?? key,
@@ -116,7 +120,7 @@ jest.mock("@/theme/colors", () => ({
 }));
 
 import { PendingRemovalScreen } from "@/components/pending-removal-screen";
-import { signOut } from "@/lib/auth-client";
+import { forceLocalSignOut, signOut } from "@/lib/auth-client";
 import { clearAccountRemovalProgress } from "@/lib/removal-progress";
 import { cancelPendingAnonymization } from "@/lib/self-service";
 import { renderMobile } from "./render";
@@ -171,6 +175,19 @@ describe("pending account-removal screen", () => {
     fireEvent.press(screen.getByText("Sign out"));
 
     await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
+  });
+
+  it("offers a local route back to sign in when sign-out fails", async () => {
+    (signOut as jest.Mock).mockRejectedValueOnce(new Error("offline"));
+    await renderMobile(<PendingRemovalScreen removal={removal} onRefresh={jest.fn()} />);
+
+    fireEvent.press(screen.getByText("Sign out"));
+
+    await waitFor(() => expect(screen.getByRole("link", { name: "Back to sign in" })).toBeTruthy());
+    fireEvent.press(screen.getByRole("link", { name: "Back to sign in" }));
+
+    expect(forceLocalSignOut).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith("/(auth)/sign-in");
   });
 
   it("keeps the screen visible and retries after a transient refresh failure", async () => {

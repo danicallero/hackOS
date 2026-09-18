@@ -8,7 +8,7 @@ import { translateViaLibreTranslate } from "./libretranslate.js";
  * Isolated translation-provider boundary — every caller (announcements,
  * schedule, and indirectly both frontends) goes through `translateFields` /
  * `isTranslationAvailable` only, never a provider module directly.
- * TRANSLATE_PROVIDER (mirroring MAIL_PROVIDER, see channels/email.ts) picks
+ * TRANSLATE_PROVIDER picks
  * Google Translate or a self-hosted LibreTranslate instance. Entirely
  * optional: every caller must keep working with manual-only translation
  * entry when the selected provider isn't configured, so this module

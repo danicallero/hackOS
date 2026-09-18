@@ -58,8 +58,12 @@ interface Fixture {
   participants: Array<{ id: number; badgeId: string | null }>;
   operators: number[];
   judges: number[];
+  sponsors: number[];
   rooms: number[];
   challengeId: number;
+  challengeIds: number[];
+  queueGroupIds: number[];
+  sharedQueueGroupIds: number[];
   entryIds: number[];
   reviewEntryIds: number[];
   mealActivityId: number;
@@ -74,6 +78,10 @@ interface Options {
   participants: number;
   operators: number;
   judges: number;
+  sponsors: number;
+  rooms: number;
+  queues: number;
+  sharedQueues: number;
   tvs: number;
   durationMs: number;
 }
@@ -125,6 +133,11 @@ function parseArgs(argv: string[]): Options {
     const value = values.get(key) ?? fallback;
     return isAbsolute(value) ? value : resolve(REPO_ROOT, value);
   };
+  const queues = numberOption("queues", 7);
+  const sharedQueues = numberOption("shared-queues", 3);
+  if (sharedQueues > queues) {
+    throw new Error("--shared-queues cannot exceed --queues");
+  }
   return {
     mode,
     baseUrl: values.get("base-url") ?? DEFAULT_BASE_URL,
@@ -133,7 +146,12 @@ function parseArgs(argv: string[]): Options {
     outputPath: pathOption("output", DEFAULT_OUTPUT_PATH),
     participants: numberOption("participants", 600),
     operators: numberOption("operators", 20),
-    judges: numberOption("judges", 20),
+    // 20 operators + 15 judges = 35 staff identities with P0/P1 roles.
+    judges: numberOption("judges", 15),
+    sponsors: numberOption("sponsors", 30),
+    rooms: numberOption("rooms", 12),
+    queues,
+    sharedQueues,
     tvs: numberOption("tvs", 4),
     durationMs: numberOption("duration-seconds", DEFAULT_DURATION_MS / 1_000) * 1_000,
   };
@@ -256,7 +274,7 @@ async function prepareFixture(options: Options): Promise<Fixture> {
       .map((person) => person.id);
     await client.query(
       `INSERT INTO user_roles (user_id, role_id, source)
-       SELECT id, r.id, 'event_day_load'
+       SELECT users.id, r.id, 'event_day_load'
          FROM users
          CROSS JOIN roles r
         WHERE users.id = ANY($1::int[])
@@ -291,11 +309,11 @@ async function prepareFixture(options: Options): Promise<Fixture> {
 
     const operatorRole = await client.query<{ id: number }>(
       `INSERT INTO roles (name, position, event_access)
-       VALUES ('event-day-load-operators', 700, true) RETURNING id`,
+       VALUES ('event-day-load-operators', 18600, true) RETURNING id`,
     );
     const judgeRole = await client.query<{ id: number }>(
       `INSERT INTO roles (name, position, event_access)
-       VALUES ('event-day-load-judges', 690, true) RETURNING id`,
+       VALUES ('event-day-load-judges', 18500, true) RETURNING id`,
     );
     const operatorRoleId = operatorRole.rows[0]?.id;
     const judgeRoleId = judgeRole.rows[0]?.id;
@@ -344,28 +362,90 @@ async function prepareFixture(options: Options): Promise<Fixture> {
     if (enterpriseId === undefined || operators[0] === undefined) {
       throw new Error("Load fixture enterprise was not created");
     }
-    const sponsor = await client.query<{ id: number }>(
-      `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id`,
-      [enterpriseId, operators[0]],
+    const sponsorUserRows = await client.query<{ id: number }>(
+      `INSERT INTO users (email, name, surname, email_verified)
+       SELECT 'event-day-sponsor-' || n || '@load.test', 'Sponsor ' || n, 'Representative', true
+         FROM generate_series(1, $1::int) AS n RETURNING id`,
+      [options.sponsors],
     );
-    const challenge = await client.query<{ id: number }>(
-      `INSERT INTO challenges
-         (author, title, description, judging_panel_criteria, visibility, max_in_waiting_area)
-       VALUES ($1, 'Event-day representative queue', 'Issue #544 representative load fixture', NULL, 'visible', 1000)
-       RETURNING id`,
-      [sponsor.rows[0]?.id],
-    );
-    const sponsorId = sponsor.rows[0]?.id;
-    const challengeId = challenge.rows[0]?.id;
-    if (sponsorId === undefined || challengeId === undefined) {
-      throw new Error("Load fixture sponsor/challenge was not created");
+    const sponsors = sponsorUserRows.rows.map((row) => Number(row.id));
+    if (sponsors.length !== options.sponsors) {
+      throw new Error("Load fixture sponsor representatives were not created");
     }
-    const group = await client.query<{ queue_group_id: number }>(
-      `SELECT queue_group_id FROM queue_group_challenges WHERE challenge_id = $1`,
-      [challengeId],
+    const sponsorRows = await client.query<{ id: number }>(
+      `INSERT INTO sponsors (enterprise_id, user_id)
+       SELECT $1, unnest($2::int[]) RETURNING id`,
+      [enterpriseId, sponsors],
     );
-    const queueGroupId = group.rows[0]?.queue_group_id;
-    if (queueGroupId === undefined) throw new Error("Load fixture queue group was not created");
+    const sponsorIds = sponsorRows.rows.map((row) => Number(row.id));
+    if (sponsorIds.length !== sponsors.length) {
+      throw new Error("Load fixture sponsor memberships were not created");
+    }
+    await client.query(
+      `INSERT INTO user_roles (user_id, role_id, source)
+       SELECT users.id, r.id, 'event_day_load'
+         FROM users
+         CROSS JOIN roles r
+        WHERE users.id = ANY($1::int[])
+          AND r.name = 'Sponsor' AND r.is_seeded = true AND r.deleted_at IS NULL
+       ON CONFLICT (user_id, role_id) DO NOTHING`,
+      [sponsors],
+    );
+    const challengeIds: number[] = [];
+    const challengeCount = options.queues + options.sharedQueues;
+    for (let index = 0; index < challengeCount; index += 1) {
+      const challenge = await client.query<{ id: number }>(
+        `INSERT INTO challenges
+           (author, title, description, judging_panel_criteria, visibility, max_in_waiting_area)
+         VALUES ($1, $2, 'Issue #544 representative load fixture', NULL, 'visible', 1000)
+         RETURNING id`,
+        [sponsorIds[index % sponsorIds.length], `Event-day Queue ${index + 1}`],
+      );
+      const challengeId = challenge.rows[0]?.id;
+      if (challengeId === undefined) throw new Error("Load fixture challenge was not created");
+      challengeIds.push(Number(challengeId));
+    }
+    const challengeGroupRows = await client.query<{
+      challenge_id: number;
+      queue_group_id: number;
+    }>(
+      `SELECT challenge_id, queue_group_id
+         FROM queue_group_challenges
+        WHERE challenge_id = ANY($1::int[])`,
+      [challengeIds],
+    );
+    const challengeGroupIds = new Map(
+      challengeGroupRows.rows.map((row) => [Number(row.challenge_id), Number(row.queue_group_id)]),
+    );
+    const queueGroupIds: number[] = [];
+    for (const challengeId of challengeIds.slice(0, options.queues)) {
+      const queueGroupId = challengeGroupIds.get(challengeId);
+      if (queueGroupId === undefined) throw new Error("Load fixture queue group was not created");
+      queueGroupIds.push(queueGroupId);
+    }
+    for (let index = 0; index < options.sharedQueues; index += 1) {
+      const targetChallengeId = challengeIds[index];
+      const donorChallengeId = challengeIds[options.queues + index];
+      const targetGroupId = queueGroupIds[index];
+      const donorGroupId = donorChallengeId ? challengeGroupIds.get(donorChallengeId) : undefined;
+      if (
+        targetChallengeId === undefined ||
+        donorChallengeId === undefined ||
+        targetGroupId === undefined ||
+        donorGroupId === undefined
+      ) {
+        throw new Error("Load fixture shared queue groups were not created");
+      }
+      await client.query(`DELETE FROM queue_group_challenges WHERE challenge_id = $1`, [
+        donorChallengeId,
+      ]);
+      await client.query(`DELETE FROM queue_groups WHERE id = $1`, [donorGroupId]);
+      await client.query(
+        `INSERT INTO queue_group_challenges (queue_group_id, challenge_id) VALUES ($1, $2)`,
+        [targetGroupId, donorChallengeId],
+      );
+    }
+    const sharedQueueGroupIds = queueGroupIds.slice(0, options.sharedQueues);
     await client.query(
       `INSERT INTO enterprise_judges (enterprise_id, user_id, added_by)
        SELECT $1, unnest($2::int[]), $3`,
@@ -375,9 +455,23 @@ async function prepareFixture(options: Options): Promise<Fixture> {
     const roomRows = await client.query<{ id: number }>(
       `INSERT INTO rooms (name, slug, status)
        SELECT 'Event-day Room ' || n, 'event-day-room-' || n, 'active'
-         FROM generate_series(1, 4) AS n RETURNING id`,
+         FROM generate_series(1, $1::int) AS n RETURNING id`,
+      [options.rooms],
     );
     const rooms = roomRows.rows.map((row) => Number(row.id));
+    const nonSharedQueueCount = options.queues - options.sharedQueues;
+    const sharedRoomSlots = Math.min(
+      options.rooms,
+      Math.max(options.sharedQueues, options.rooms - nonSharedQueueCount),
+    );
+    const roomQueueGroupIds = rooms.map((_, index) => {
+      if (index < sharedRoomSlots) {
+        return queueGroupIds[index % options.sharedQueues]!;
+      }
+      return queueGroupIds[
+        options.sharedQueues + ((index - sharedRoomSlots) % Math.max(1, nonSharedQueueCount))
+      ]!;
+    });
     await client.query(
       `INSERT INTO room_queue_state (room_id, is_paused, max_in_waiting_area, desired_minutes_per_team)
        SELECT unnest($1::int[]), false, 1000, 8`,
@@ -390,8 +484,9 @@ async function prepareFixture(options: Options): Promise<Fixture> {
     );
     await client.query(
       `INSERT INTO room_queue_groups (room_id, queue_group_id)
-       SELECT unnest($1::int[]), $2`,
-      [rooms, queueGroupId],
+       SELECT assignment.room_id, assignment.queue_group_id
+         FROM unnest($1::int[], $2::int[]) AS assignment(room_id, queue_group_id)`,
+      [rooms, roomQueueGroupIds],
     );
     await client.query(
       `UPDATE queue_settings
@@ -406,16 +501,27 @@ async function prepareFixture(options: Options): Promise<Fixture> {
       [participantIds],
     );
     const repoIds = repoRows.rows.map((row) => Number(row.id));
+    const assignedChallengeIds = participantIds.map(
+      (_, index) => challengeIds[index % challengeIds.length]!,
+    );
     await client.query(
       `INSERT INTO submissions (repo_id, user_id)
        SELECT unnest($1::int[]), unnest($2::int[])`,
       [repoIds, participantIds],
     );
     const entryRows = await client.query<{ id: number }>(
-      `INSERT INTO queue_entries (challenge_id, repo_id, status, position)
-       SELECT $1, unnest($2::int[]), 'waiting', generate_subscripts($2::int[], 1)
+      `WITH assignments AS (
+         SELECT assignment.repo_id, assignment.challenge_id
+           FROM unnest($1::int[], $2::int[]) AS assignment(repo_id, challenge_id)
+       )
+       INSERT INTO queue_entries (challenge_id, repo_id, status, position)
+       SELECT challenge_id,
+              repo_id,
+              'waiting',
+              row_number() OVER (PARTITION BY challenge_id ORDER BY repo_id)::int
+         FROM assignments
        RETURNING id`,
-      [challengeId, repoIds],
+      [repoIds, assignedChallengeIds],
     );
     const entryIds = entryRows.rows.map((row) => Number(row.id));
     const meal = await client.query<{ id: number }>(
@@ -431,8 +537,12 @@ async function prepareFixture(options: Options): Promise<Fixture> {
       participants,
       operators,
       judges,
+      sponsors,
       rooms,
-      challengeId,
+      challengeId: challengeIds[0]!,
+      challengeIds,
+      queueGroupIds,
+      sharedQueueGroupIds,
       entryIds,
       reviewEntryIds: entryIds.slice(0, Math.max(20, Math.min(40, entryIds.length))),
       mealActivityId: Number(meal.rows[0]?.id),
@@ -821,18 +931,26 @@ async function runLoad(options: Options, fixture: Fixture): Promise<Record<strin
   for (let i = 0; i < fixture.judges.length * 5; i += 1) {
     const entryId = fixture.reviewEntryIds[i % fixture.reviewEntryIds.length];
     traffic.push(
-      requestSample(
-        options.baseUrl,
-        "P1",
-        "review:autosave",
-        `/api/queue/entries/${entryId}/review`,
-        {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ notes: `event-day collaborative save ${i}` }),
-        },
-        fixture.judges[i % fixture.judges.length],
-      ),
+      (async () => {
+        // Judges autosave in rounds rather than all at one exact instant;
+        // retain overlap while modeling the event's collaborative cadence
+        // and avoiding an artificial lock convoy on the same review rows.
+        const round = Math.floor(i / fixture.judges.length);
+        const judgeOffset = i % fixture.judges.length;
+        await sleep(round * 1_000 + judgeOffset * 50);
+        return requestSample(
+          options.baseUrl,
+          "P1",
+          "review:autosave",
+          `/api/queue/entries/${entryId}/review`,
+          {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ notes: `event-day collaborative save ${i}` }),
+          },
+          fixture.judges[judgeOffset % fixture.judges.length],
+        );
+      })(),
     );
   }
 
@@ -990,8 +1108,12 @@ async function runLoad(options: Options, fixture: Fixture): Promise<Record<strin
       participants: fixture.participants.length,
       operators: fixture.operators.length,
       judges: fixture.judges.length,
+      staff: fixture.operators.length + fixture.judges.length,
+      sponsors: fixture.sponsors.length,
       tvs: options.tvs,
       rooms: fixture.rooms.length,
+      queues: fixture.queueGroupIds.length,
+      sharedQueues: fixture.sharedQueueGroupIds.length,
       queueEntries: fixture.entryIds.length,
       reviewEntries: fixture.reviewEntryIds.length,
     },
@@ -1086,8 +1208,12 @@ async function smoke(): Promise<void> {
     participants,
     operators: [20, 21],
     judges: [30, 31],
+    sponsors: [35],
     rooms: [40, 41],
     challengeId: 50,
+    challengeIds: [50],
+    queueGroupIds: [51],
+    sharedQueueGroupIds: [],
     entryIds: Array.from({ length: 12 }, (_, index) => index + 60),
     reviewEntryIds: [60, 61],
     mealActivityId: 70,
@@ -1103,19 +1229,32 @@ async function smoke(): Promise<void> {
         participants: participants.length,
         operators: 2,
         judges: 2,
+        sponsors: 1,
+        rooms: 2,
+        queues: 1,
+        sharedQueues: 1,
         tvs: 2,
         durationMs: 1_000,
       },
       fixture,
     );
-    const validation = result.validation as { p0p1Passed: boolean };
+    const validation = result.validation as {
+      p0p1Passed: boolean;
+      releaseBudgetPassed: boolean;
+    };
     const workload = result.workload as { samples: number; sseConnectionsOpened: number };
-    if (!validation.p0p1Passed || workload.samples < 20 || workload.sseConnectionsOpened < 12) {
+    if (
+      !validation.releaseBudgetPassed ||
+      !validation.p0p1Passed ||
+      workload.samples < 20 ||
+      workload.sseConnectionsOpened < 12
+    ) {
       throw new Error(`Smoke validation failed: ${JSON.stringify(result.validation)}`);
     }
     console.log(
       JSON.stringify({
         smoke: "passed",
+        releaseBudgetPassed: validation.releaseBudgetPassed,
         samples: workload.samples,
         sse: workload.sseConnectionsOpened,
       }),
@@ -1143,7 +1282,11 @@ async function main(): Promise<void> {
           participants: fixture.participants.length,
           operators: fixture.operators.length,
           judges: fixture.judges.length,
+          staff: fixture.operators.length + fixture.judges.length,
+          sponsors: fixture.sponsors.length,
           rooms: fixture.rooms.length,
+          queues: fixture.queueGroupIds.length,
+          sharedQueues: fixture.sharedQueueGroupIds.length,
           queueEntries: fixture.entryIds.length,
         },
       }),
@@ -1151,8 +1294,18 @@ async function main(): Promise<void> {
     return;
   }
   const fixture = JSON.parse(await readFile(options.fixturePath, "utf8")) as Fixture;
-  if (fixture.participants.length < 600 || fixture.operators.length + fixture.judges.length < 20) {
-    throw new Error("Fixture does not meet #544 minimums (600 participants, 20 judges/operators)");
+  const staffCount = fixture.operators.length + fixture.judges.length;
+  if (
+    fixture.participants.length < 600 ||
+    staffCount < 35 ||
+    fixture.sponsors.length < 30 ||
+    fixture.rooms.length < 12 ||
+    fixture.queueGroupIds.length < 7 ||
+    fixture.sharedQueueGroupIds.length < 3
+  ) {
+    throw new Error(
+      "Fixture does not meet #544 event-shape minimums (600 participants, 35 staff, 30 sponsor representatives, 12 rooms, 7 queues including 3 shared)",
+    );
   }
   const result = await runLoad(options, fixture);
   await mkdir(dirname(options.outputPath), { recursive: true });

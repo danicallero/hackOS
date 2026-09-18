@@ -1,4 +1,4 @@
-# Plan de despliegue e infraestructura (Dokploy)
+# Plan de despliegue e infraestructura (Docker Compose)
 
 Fuente funcional: `historias-hackos.md`.  
 Invariantes operativas: `07-datos-relevantes-ers.md`.
@@ -87,9 +87,9 @@ Montar hackOS en **servicios independientes** dentro de un proyecto para que:
 3. Reinicio de `worker` independiente.
 4. Backups de `postgres` programados.
 
-### 6. MinIO (template Dokploy recomendado)
+### 6. MinIO (plantilla Compose recomendada)
 
-Usa el compose generado por Dokploy como base y conserva estas reglas:
+Usa el compose de `deploy/services/minio/docker-compose.yml` como base y conserva estas reglas:
 
 1. Volumen persistente (`minio-data:/data`).
 2. API en `9000`; consola en `9001` con acceso restringido.

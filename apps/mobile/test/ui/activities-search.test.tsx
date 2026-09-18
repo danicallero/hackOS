@@ -5,6 +5,10 @@ const mockPush = jest.fn();
 const mockListActivities = jest.fn();
 const mockSync = jest.fn().mockResolvedValue(undefined);
 let mockSyncing = false;
+let mockSyncError: { message: string; conflict: boolean; status: number | null } | null = null;
+let mockAutoRetryPaused = false;
+let mockServerSnapshot: { activities: ScannerActivity[] } | null = null;
+let mockLastSync: string | null = null;
 
 jest.mock("expo-router", () => ({
   useFocusEffect: () => {},
@@ -29,13 +33,23 @@ jest.mock("@/lib/api", () => ({
 jest.mock("@/lib/scanner-db", () => ({ listScannerActivities: () => mockListActivities() }));
 jest.mock("@/lib/use-scanner", () => ({
   useScannerSync: () => ({
-    autoRetryPaused: false,
-    error: null,
-    lastSync: null,
+    autoRetryPaused: mockAutoRetryPaused,
+    error: mockSyncError,
+    lastSync: mockLastSync,
+    serverSnapshot: mockServerSnapshot,
     sync: mockSync,
     syncing: mockSyncing,
   }),
+  isSyncConflict: (error: { conflict: boolean; status: number | null } | null) =>
+    error?.conflict && error.status === 409,
 }));
+jest.mock("@/components/stale-data-banner", () => {
+  const ReactLib = require("react");
+  const { Text } = require("react-native");
+  return {
+    StaleDataBanner: () => ReactLib.createElement(Text, null, "offline-data-banner"),
+  };
+});
 jest.mock("@/lib/i18n", () => ({
   useLocale: () => ({
     language: "en",
@@ -44,6 +58,8 @@ jest.mock("@/lib/i18n", () => ({
         scannerActivitiesNext: "Next",
         scannerActivitiesNoMatches: "No matching activities",
         scannerActivitiesNoMatchesBody: "Try another search term.",
+        scannerSyncRejected:
+          "The server rejected the sync. Auto-retry is paused — check the conflict and retry manually.",
         scheduleNow: "Now",
         typeMeal: "Meal",
         typeTalk: "Talk",
@@ -70,6 +86,10 @@ import { renderMobile } from "./render";
 
 const NOW = Date.parse("2026-08-22T12:00:00.000Z");
 const hours = (offset: number) => new Date(NOW + offset * 3600_000).toISOString();
+
+/** Must stay byte-identical to `scannerSyncRejected` in packages/shared/locales/en/mobile.json. */
+const SCANNER_SYNC_REJECTED =
+  "The server rejected the sync. Auto-retry is paused — check the conflict and retry manually.";
 
 const I18N_DEFAULTS = { primaryLanguage: "es", nameI18n: {}, descriptionI18n: {} } as const;
 
@@ -120,6 +140,10 @@ async function chooseKind(id: string) {
 describe("activities list search, filter and now marker (H25, H26)", () => {
   beforeEach(() => {
     mockSyncing = false;
+    mockSyncError = null;
+    mockAutoRetryPaused = false;
+    mockServerSnapshot = null;
+    mockLastSync = null;
     mockSetOptions.mockClear();
     mockSync.mockClear();
     mockListActivities.mockReset().mockResolvedValue(ACTIVITIES);
@@ -195,5 +219,28 @@ describe("activities list search, filter and now marker (H25, H26)", () => {
       list.props.refreshControl.props.onRefresh();
     });
     expect(mockSync).toHaveBeenCalled();
+  });
+
+  it("renders cached data with the offline banner, not the conflict banner, when the server is unreachable", async () => {
+    mockAutoRetryPaused = true;
+    mockSyncError = { message: "Network request failed", conflict: false, status: null };
+
+    await renderMobile(<ActivitiesScreen />);
+    await waitFor(() => expect(screen.getByText("Charla Grafana")).toBeTruthy());
+
+    expect(screen.getByText("Cena Sábado")).toBeTruthy();
+    expect(screen.getByText("offline-data-banner")).toBeTruthy();
+    expect(screen.queryByText(SCANNER_SYNC_REJECTED)).toBeNull();
+  });
+
+  it("keeps the rejected-sync banner unchanged on a genuine 409 conflict", async () => {
+    mockAutoRetryPaused = true;
+    mockSyncError = { message: "Badge already assigned", conflict: true, status: 409 };
+
+    await renderMobile(<ActivitiesScreen />);
+    await waitFor(() => expect(screen.getByText("Charla Grafana")).toBeTruthy());
+
+    expect(screen.getByText(SCANNER_SYNC_REJECTED)).toBeTruthy();
+    expect(screen.queryByText("offline-data-banner")).toBeNull();
   });
 });

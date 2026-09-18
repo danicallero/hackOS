@@ -1,9 +1,10 @@
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Linking, Pressable, Text, useWindowDimensions, View } from "react-native";
 
 import { AuthAlert, AuthButton, AuthHeader, AuthScreen } from "@/components/auth-ui";
 import { ApiError } from "@/lib/api";
-import { signOut } from "@/lib/auth-client";
+import { forceLocalSignOut, signOut } from "@/lib/auth-client";
 import { EVENT_WEBSITE_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import { clearAccountRemovalProgress } from "@/lib/removal-progress";
@@ -23,11 +24,13 @@ export function PendingRemovalScreen({
   refreshError?: Error | null;
 }) {
   const { t } = useLocale();
+  const router = useRouter();
   const { fontScale } = useWindowDimensions();
   const [now, setNow] = useState(Date.now());
   const [cancelling, setCancelling] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [signOutFailed, setSignOutFailed] = useState(false);
   const [refreshFailure, setRefreshFailure] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const refreshInFlight = useRef(false);
@@ -43,6 +46,11 @@ export function PendingRemovalScreen({
     [secondsRemaining, t],
   );
   const canCancel = removal.status === "pending_exit" && secondsRemaining !== 0;
+
+  function returnToSignIn() {
+    forceLocalSignOut();
+    router.replace("/(auth)/sign-in");
+  }
 
   const refresh = useCallback(async () => {
     if (refreshInFlight.current) return;
@@ -87,6 +95,7 @@ export function PendingRemovalScreen({
     if (!canCancel || cancelling) return;
     setCancelling(true);
     setError(null);
+    setSignOutFailed(false);
     try {
       await cancelPendingAnonymization();
       await clearAccountRemovalProgress();
@@ -111,11 +120,13 @@ export function PendingRemovalScreen({
     if (signingOut) return;
     setSigningOut(true);
     setError(null);
+    setSignOutFailed(false);
     try {
       const result = await signOut();
       if (result.error) throw new Error(result.error.message || t("signOutError"));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t("signOutError"));
+      setSignOutFailed(true);
       setSigningOut(false);
     }
   }
@@ -164,6 +175,31 @@ export function PendingRemovalScreen({
           </View>
         ) : null}
         {error ? <AuthAlert message={error} /> : null}
+        {signOutFailed ? (
+          <Pressable
+            accessibilityLabel={t("backToSignIn")}
+            accessibilityRole="link"
+            onPress={returnToSignIn}
+            style={({ pressed }) => ({
+              alignItems: "center",
+              justifyContent: "center",
+              minHeight: 44,
+              opacity: pressed ? 0.7 : 1,
+            })}
+          >
+            <Text
+              selectable
+              style={{
+                color: colors.interactiveText,
+                fontSize: 15,
+                fontWeight: "700",
+                textAlign: "center",
+              }}
+            >
+              {t("backToSignIn")}
+            </Text>
+          </Pressable>
+        ) : null}
         {refreshError || refreshFailure ? (
           <AuthAlert
             testID="account-removal-refresh-error"
