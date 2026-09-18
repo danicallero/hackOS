@@ -34,7 +34,7 @@ import { listScannerPeople } from "@/lib/scanner-db";
 import type { ScannerPerson } from "@/lib/scanner-types";
 import { isPadIdiom } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
-import { useScannerSync } from "@/lib/use-scanner";
+import { isSyncConflict, useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
 
 export function PeopleDirectoryScreen() {
@@ -343,7 +343,7 @@ export function PeopleDirectoryScreen() {
                 retrying={loading || refreshing || sync.syncing}
               />
             ) : null}
-            {syncError?.conflict ? (
+            {syncError && isSyncConflict(syncError) ? (
               <RequestFeedback
                 error={new Error(syncError.message)}
                 message={t("scannerSyncRejected")}
@@ -351,7 +351,7 @@ export function PeopleDirectoryScreen() {
                 retrying={sync.syncing}
               />
             ) : null}
-            {syncError && !syncError.conflict ? (
+            {syncError && !isSyncConflict(syncError) ? (
               <StaleDataBanner updatedAt={sync.lastSync} />
             ) : null}
           </View>
