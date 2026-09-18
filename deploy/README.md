@@ -168,14 +168,17 @@ correo; y `migrate` no recibe Valkey, S3, correo ni Wallet.
 Las imágenes de aplicación son referencias fijas y completas de GHCR:
 
 ```text
-ghcr.io/danicallero/hackos-api:${IMAGE_TAG}
-ghcr.io/danicallero/hackos-web:${IMAGE_TAG}
+ghcr.io/danicallero/hackos-api:${API_IMAGE_TAG}
+ghcr.io/danicallero/hackos-web:${WEB_IMAGE_TAG}
 ```
 
-`IMAGE_TAG` es la única selección de versión y debe ser exactamente
-`sha-<40 caracteres hexadecimales en minúscula>`. No se acepta `latest`, un
-tag de rama ni una referencia de repositorio configurable. El workflow de CD
-publica esos tags SHA; el servidor sólo hace pull.
+`IMAGE_TAG` es el tag SHA del commit de release y debe ser exactamente
+`sha-<40 caracteres hexadecimales en minúscula>`. El script de despliegue lo
+usa como tag de la unidad modificada y exporta `API_IMAGE_TAG` y
+`WEB_IMAGE_TAG` para que la otra conserve su release anterior. No se acepta
+`latest`, un tag de rama ni una referencia de repositorio configurable. El
+workflow de CD publica sólo los tags SHA de las imágenes que cambiaron; el
+servidor sólo hace pull.
 
 Las imágenes de infraestructura están fijadas por digest de índice
 multi-arquitectura en el Compose y no se modifican en el servidor:
@@ -293,17 +296,23 @@ misma topología prevista y documenta el rollback antes del evento.
 
 ## CI/CD paths
 
-`.github/workflows/build.yml` construye y publica `hackos-api` y `hackos-web`
-en GHCR para `linux/amd64` y `linux/arm64`. Cada ejecución publica únicamente
-el tag `sha-<commit>`; el CD sólo acepta ese formato y nunca usa `latest` ni
-tags mutables de rama.
+`.github/workflows/build.yml` clasifica los cambios antes de construir. Las
+rutas de `apps/api` construyen sólo `hackos-api`, las de `apps/web` sólo
+`hackos-web`, y `packages/shared` o los manifiestos de dependencias construyen
+ambas. Mobile, documentación y cambios de despliegue no producen imágenes ni
+disparan un despliegue. Cada imagen afectada se construye en paralelo en sus
+`linux/amd64` y `linux/arm64` nativos, y un job final publica el manifiesto
+multi-arquitectura `sha-<commit>`; no se usa QEMU para compilar la imagen ARM.
 
 `.github/workflows/build.yml` calls the reusable
-`.github/workflows/deploy-staging-arm64.yml` job after both application image
-jobs succeed on a push to `staging`. A merge into `staging` therefore deploys
-the exact `sha-<40 hex>` image tag just published; it does not use `latest` or
-race the GHCR publication. The staging job can also be dispatched manually for
-an explicit SHA rollback or verification run. It joins the configured private
+`.github/workflows/deploy-staging-arm64.yml` job after at least one affected
+image manifest succeeds on a push to `staging`. The reusable job receives the
+API/web change flags and recreates only the changed unit; an API change runs
+`migrate` and updates `api` + `worker`, while a web-only change updates only
+`web`. A merge into `staging` therefore deploys the exact `sha-<40 hex>` image
+tags just published without asking GHCR for a nonexistent sibling tag. It does
+not use `latest` or race the GHCR publication. The staging job can also be
+dispatched manually for an explicit SHA rollback or verification run. It joins the configured private
 overlay network with an ephemeral GitHub Actions node, verifies the ARM64 host,
 and uses SSH to transfer the Compose file and scripts. The staging environment
 supplies the host address, user, and port variables. The repository-level
@@ -313,8 +322,11 @@ key; they are not application secrets. It does not expose SSH through the
 public ingress.
 
 `.github/workflows/deploy-incus.yml` runs after a successful image build on
-`main` and can also be dispatched with a previous SHA for rollback. It uses the
-protected `production` environment. The protection of both environments must
+`main`, reclassifies the release commit, and skips cleanly when the build
+workflow produced no application image. It passes the same partial-release
+flags to the host script and can also be dispatched with a previous SHA for
+rollback (which updates both units). It uses the protected `production`
+environment. The protection of both environments must
 be configured in GitHub (approval and, where appropriate, branch restrictions);
 the workflows do not contain application secrets.
 
@@ -329,22 +341,27 @@ Both workflows check the tag and select the exact commit encoded in
 and executes the deployment with `incus exec`; the staging workflow uses the
 equivalent SSH transfer on the ARM64 host. The host-local environment files
 are validated without printing values, a `flock` lock prevents concurrent
-deployments, pinned images are pulled, the optional R2 backup runs before
-`migrate`, and healthchecks gate the application handoff. Neither workflow
-decrypts SOPS, receives application secrets from Actions, or exposes Docker
-Remote API. Any staging tunnel or proxy remains a separate ingress service and
-must be routed to the new published ports when replacing an existing platform.
+deployments, pinned images are pulled, the optional R2 backup and `migrate`
+run only for an API-image change, and healthchecks gate each changed unit.
+Neither workflow decrypts SOPS, receives application secrets from Actions, or
+exposes Docker Remote API. Any staging tunnel or proxy remains a separate
+ingress service and must be routed to the new published ports when replacing
+an existing platform.
 
-For a configuration-only redeploy, the host script can resolve the exact
-currently configured immutable tag itself:
+For an operator-run redeploy, the host script can resolve the exact currently
+configured immutable tag itself. It also remembers the independent API/web
+tags in `/opt/hackos/.image-tags`, so the next partial release cannot roll the
+unchanged service back accidentally:
 
 ```sh
-HACKOS_APP_DIR=/opt/hackos /opt/hackos/incus-deploy.sh staging
+HACKOS_APP_DIR=/opt/hackos /opt/hackos/incus-deploy.sh staging current
 ```
 
 This is a convenience for operators; it still reads and validates a
 `sha-<commit>` value from `IMAGE_TAG`. It never falls back to `latest` or a
-mutable branch tag.
+mutable branch tag. The optional third and fourth arguments select whether to
+update API and web respectively, for example
+`incus-deploy.sh staging sha-<commit> false true` for a web-only update.
 
 ### Rollback
 
@@ -364,6 +381,8 @@ conserva el proyecto existente y no elimina volúmenes.
 ```sh
 CONFIG=/etc/hackos/hackos.env
 SECRETS=/etc/hackos/hackos.secrets
+RELEASE=sha-<40-lowercase-hex>
+export IMAGE_TAG="$RELEASE" API_IMAGE_TAG="$RELEASE" WEB_IMAGE_TAG="$RELEASE"
 COMPOSE=(docker compose --env-file "$CONFIG" --env-file "$SECRETS" -f deploy/docker-compose.yml)
 
 ./deploy/scripts/check-env.sh "$CONFIG" "$SECRETS"

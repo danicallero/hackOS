@@ -32,6 +32,7 @@ valores públicos compilados en la app móvil.
 | Variable | Ubicación | Obligatoria | Uso |
 |---|---|---:|---|
 | `IMAGE_TAG` | configuración | sí | Tag inmutable de las imágenes de aplicación. Debe coincidir con `sha-` seguido de 40 caracteres hexadecimales en minúscula. |
+| `API_IMAGE_TAG`, `WEB_IMAGE_TAG` | derivadas por el despliegue | no | Tags inmutables independientes para la imagen API y web. `incus-deploy.sh` los exporta para un release parcial y conserva el tag de la unidad que no cambió; no hace falta añadirlos al fichero del host. |
 | `API_DOMAIN` | configuración | sí | Hostname público del API, sin esquema. Se convierte en `https://...` para Better Auth y el runtime web. |
 | `WEB_DOMAIN` | configuración | sí | Hostname público del frontend, sin esquema. |
 | `CORS_ORIGINS` | configuración | sí | Lista separada por comas; debe incluir `https://${WEB_DOMAIN}`. |
@@ -77,6 +78,7 @@ contrato anterior:
 | `S3_ENDPOINT` | `http://minio:9000` | Ruta privada del servicio S3 dentro de Compose. |
 | `HOST` | `0.0.0.0` | Default interno del API; no modifica el puerto publicado. |
 | `PORT` | `3000` | Puerto interno fijo del contenedor API. |
+| `API_IMAGE_TAG`, `WEB_IMAGE_TAG` | tags seleccionados por `incus-deploy.sh` | Compose necesita una referencia independiente para cada unidad de release. Si no se proporcionan, ambas usan `IMAGE_TAG` para mantener la compatibilidad con el uso directo de Compose. |
 
 `HOST` y `PORT` siguen documentadas aquí porque forman parte del esquema de
 configuración del API, aunque no son variables del contrato operativo del LXC.
@@ -294,16 +296,18 @@ persistencia deliberada.
 
 ## CI/CD deployment paths
 
-El workflow de build publica las dos imágenes en GHCR para `linux/amd64` y
-`linux/arm64`, únicamente con `sha-<commit>`. El workflow de deploy sólo
-acepta un tag SHA completo y lo inyecta como `IMAGE_TAG`; nunca usa `latest` ni
-tags de rama mutables.
+El workflow de build clasifica las rutas y publica sólo las imágenes afectadas
+en GHCR para `linux/amd64` y `linux/arm64`, únicamente con `sha-<commit>`. El
+workflow de deploy sólo acepta tags SHA completos; `incus-deploy.sh` exporta
+`API_IMAGE_TAG` y `WEB_IMAGE_TAG` por separado para los releases parciales.
+Nunca se usa `latest` ni un tag de rama mutable.
 
-`build.yml` calls the reusable `deploy-staging-arm64.yml` job only after both
-the API and web images have published successfully for a push to `staging`.
-A merge into `staging` creates that push, so the deploy uses the exact
-`sha-${{ github.sha }}` image tag that was just built; it never races image
-publication and never uses `latest`. The job uses the configured private-overlay
+`build.yml` calls the reusable `deploy-staging-arm64.yml` job after at least one
+affected image has published successfully for a push to `staging`. A merge into
+`staging` creates that push, so the deploy uses the exact
+`sha-${{ github.sha }}` tags that were just built; it never races image
+publication and never uses `latest`. Mobile, documentation and deploy-only
+changes skip both image publication and deployment. The job uses the configured private-overlay
 action to create an ephemeral CI node, reaches the ARM64 host over its private
 address, and then uses SSH. The `staging` environment supplies the staging host
 address, SSH user, and SSH port variables. The repository-level
@@ -313,14 +317,16 @@ key; they are not application secrets. Public ingress is a separate always-on
 service and is not the administration path. The staging workflow remains
 manually dispatchable for an explicit SHA rollback or verification run.
 
-`deploy-incus.yml` runs after a successful `main` image build on the protected
-`production` environment, or manually for rollback. It needs a self-hosted
-runner with local Incus access. Registering that runner is an infrastructure
-prerequisite outside this repository.
+`deploy-incus.yml` reclassifies the release commit after a successful `main`
+image build and skips cleanly when no application image was published. It can
+also run manually for rollback, where both service tags are updated. It needs a
+self-hosted runner with local Incus access. Registering that runner is an
+infrastructure prerequisite outside this repository.
 
 Both paths transfer only Compose and deployment scripts. They do not receive
 application secrets, decrypt SOPS, or use Docker Remote API. The host script
 reads the canonical environment files, takes a lock, validates without
-printing values, pulls pinned images, optionally runs the R2 backup, applies
-migrations, and waits for healthchecks. Rollback selects an earlier SHA and
-does not automatically reverse database migrations.
+printing values, pulls pinned images, optionally runs the R2 backup and applies
+migrations only for an API-image change, and waits for healthchecks on each
+changed unit. Rollback selects an earlier SHA and does not automatically
+reverse database migrations.

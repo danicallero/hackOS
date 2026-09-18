@@ -21,16 +21,46 @@ env:
   IMAGE_TAG: sha-${{ github.sha }}
 
 jobs:
-  api:
-    name: Build and publish API image
+  detect:
+    name: Detect changed images
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    outputs:
+      api_image: ${{ steps.classify.outputs.api_image }}
+      web_image: ${{ steps.classify.outputs.web_image }}
+      any_image: ${{ steps.classify.outputs.any_image }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Classify changed paths
+        id: classify
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        shell: bash
+        run: ./.github/scripts/classify-image-changes.sh "$BEFORE_SHA" "$AFTER_SHA" >> "$GITHUB_OUTPUT"
+
+  build-api:
+    name: Build API image (${{ matrix.arch }})
+    needs: detect
+    if: needs.detect.outputs.api_image == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
@@ -42,31 +72,79 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and publish API image
+      - name: Build and publish API platform image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: apps/api/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platform }}
           push: true
           tags: |
-            ${{ env.IMAGE_NAMESPACE }}/hackos-api:${{ env.IMAGE_TAG }}
+            ${{ env.IMAGE_NAMESPACE }}/hackos-api:${{ env.IMAGE_TAG }}-${{ matrix.arch }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-          cache-from: type=gha,scope=hackos-api
-          cache-to: type=gha,mode=max,scope=hackos-api
+          cache-from: type=gha,scope=hackos-api-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=hackos-api-${{ matrix.arch }}
 
-  web:
-    name: Build and publish web image
+  publish-api:
+    name: Publish API multi-architecture manifest
+    needs: [detect, build-api]
+    if: >-
+      always() &&
+      needs.detect.result == 'success' &&
+      needs.detect.outputs.api_image == 'true' &&
+      needs.build-api.result == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 10
+    steps:
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish API multi-architecture manifest
+        env:
+          API_IMAGE: ${{ env.IMAGE_NAMESPACE }}/hackos-api:${{ env.IMAGE_TAG }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..6}; do
+            if docker buildx imagetools create \
+              --tag "$API_IMAGE" \
+              "${API_IMAGE}-amd64" \
+              "${API_IMAGE}-arm64"; then
+              exit 0
+            fi
+            echo "The API platform images are not visible in GHCR yet; retrying ($attempt/6)." >&2
+            sleep 10
+          done
+          exit 1
+
+  build-web:
+    name: Build web image (${{ matrix.arch }})
+    needs: detect
+    if: needs.detect.outputs.web_image == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
@@ -78,30 +156,77 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and publish web image
+      - name: Build and publish web platform image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: apps/web/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platform }}
           push: true
           tags: |
-            ${{ env.IMAGE_NAMESPACE }}/hackos-web:${{ env.IMAGE_TAG }}
+            ${{ env.IMAGE_NAMESPACE }}/hackos-web:${{ env.IMAGE_TAG }}-${{ matrix.arch }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-          cache-from: type=gha,scope=hackos-web
-          cache-to: type=gha,mode=max,scope=hackos-web
+          cache-from: type=gha,scope=hackos-web-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=hackos-web-${{ matrix.arch }}
+
+  publish-web:
+    name: Publish web multi-architecture manifest
+    needs: [detect, build-web]
+    if: >-
+      always() &&
+      needs.detect.result == 'success' &&
+      needs.detect.outputs.web_image == 'true' &&
+      needs.build-web.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish web multi-architecture manifest
+        env:
+          WEB_IMAGE: ${{ env.IMAGE_NAMESPACE }}/hackos-web:${{ env.IMAGE_TAG }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..6}; do
+            if docker buildx imagetools create \
+              --tag "$WEB_IMAGE" \
+              "${WEB_IMAGE}-amd64" \
+              "${WEB_IMAGE}-arm64"; then
+              exit 0
+            fi
+            echo "The web platform images are not visible in GHCR yet; retrying ($attempt/6)." >&2
+            sleep 10
+          done
+          exit 1
 
   deploy-staging:
     name: Deploy staging after both images publish
     needs:
-      - api
-      - web
-    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+      - detect
+      - publish-api
+      - publish-web
+    if: >-
+      always() &&
+      needs.detect.result == 'success' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/staging' &&
+      (needs.publish-api.result == 'success' || needs.publish-web.result == 'success')
     uses: ./.github/workflows/deploy-staging-arm64.yml
     with:
       tag: sha-${{ github.sha }}
+      api_changed: ${{ needs.detect.outputs.api_image == 'true' }}
+      web_changed: ${{ needs.detect.outputs.web_image == 'true' }}
     secrets:
       TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
       TS_AUDIENCE: ${{ secrets.TS_AUDIENCE }}

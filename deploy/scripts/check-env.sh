@@ -3,6 +3,7 @@
 #
 # Usage:
 #   ./deploy/scripts/check-env.sh [config-file] [secrets-file] [image-tag]
+#     [api-image-tag] [web-image-tag]
 #
 # A single chmod-600 combined file is accepted for compatibility with the
 # current production host. The canonical contract remains two files.
@@ -18,6 +19,8 @@ else
   SECRETS_FILE="$CONFIG_FILE"
 fi
 IMAGE_TAG_OVERRIDE="${3:-}"
+API_IMAGE_TAG_OVERRIDE="${4:-}"
+WEB_IMAGE_TAG_OVERRIDE="${5:-}"
 
 die() {
   printf 'check-env: %s\n' "$1" >&2
@@ -78,6 +81,14 @@ value() {
     printf '%s' "$IMAGE_TAG_OVERRIDE"
     return 0
   fi
+  if [[ "$key" == API_IMAGE_TAG && -n "$API_IMAGE_TAG_OVERRIDE" ]]; then
+    printf '%s' "$API_IMAGE_TAG_OVERRIDE"
+    return 0
+  fi
+  if [[ "$key" == WEB_IMAGE_TAG && -n "$WEB_IMAGE_TAG_OVERRIDE" ]]; then
+    printf '%s' "$WEB_IMAGE_TAG_OVERRIDE"
+    return 0
+  fi
   if has_key "$key" "$SECRETS_FILE"; then
     result="$(value_in_file "$key" "$SECRETS_FILE")"
   elif has_key "$key" "$CONFIG_FILE"; then
@@ -101,6 +112,10 @@ require_value() {
 api_domain="$(require_value API_DOMAIN)"
 web_domain="$(require_value WEB_DOMAIN)"
 image_tag="$(require_value IMAGE_TAG)"
+api_image_tag="$(value API_IMAGE_TAG)"
+api_image_tag="${api_image_tag:-$image_tag}"
+web_image_tag="$(value WEB_IMAGE_TAG)"
+web_image_tag="${web_image_tag:-$image_tag}"
 cors_origins="$(require_value CORS_ORIGINS)"
 hackos_data_dir="$(value HACKOS_DATA_DIR)"
 hackos_data_dir="${hackos_data_dir:-/mnt/data}"
@@ -112,6 +127,10 @@ mail_from="$(require_value MAIL_FROM_ADDRESS)"
 [[ "$web_domain" =~ ^[A-Za-z0-9.-]+$ ]] || die 'WEB_DOMAIN must be a hostname, without a scheme or path'
 [[ "$image_tag" =~ ^sha-[0-9a-f]{40}$ ]] || die 'IMAGE_TAG must match sha-<40 lowercase hexadecimal characters>'
 [[ "$image_tag" != sha-0000000000000000000000000000000000000000 ]] || die 'IMAGE_TAG must identify a real commit'
+[[ "$api_image_tag" =~ ^sha-[0-9a-f]{40}$ ]] || die 'API_IMAGE_TAG must match sha-<40 lowercase hexadecimal characters>'
+[[ "$api_image_tag" != sha-0000000000000000000000000000000000000000 ]] || die 'API_IMAGE_TAG must identify a real commit'
+[[ "$web_image_tag" =~ ^sha-[0-9a-f]{40}$ ]] || die 'WEB_IMAGE_TAG must match sha-<40 lowercase hexadecimal characters>'
+[[ "$web_image_tag" != sha-0000000000000000000000000000000000000000 ]] || die 'WEB_IMAGE_TAG must identify a real commit'
 [[ "$hackos_data_dir" == /* && "$hackos_data_dir" != "/" ]] || die 'HACKOS_DATA_DIR must be an absolute path other than /'
 [[ "$hackos_data_dir" != *$'\n'* && "$hackos_data_dir" != *$'\r'* ]] || die 'HACKOS_DATA_DIR contains a newline'
 case ",${cors_origins}," in

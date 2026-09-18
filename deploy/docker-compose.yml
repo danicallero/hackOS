@@ -22,8 +22,12 @@
 # services and adds only its disposable 1 GiB runner and 512 MiB migrate
 # helper, keeping that stack at the same 6.5 GiB declared budget.
 
-x-api-image: &api-image "ghcr.io/danicallero/hackos-api:${IMAGE_TAG:?IMAGE_TAG is required}"
-x-web-image: &web-image "ghcr.io/danicallero/hackos-web:${IMAGE_TAG:?IMAGE_TAG is required}"
+# API and web are released as separate immutable tags. The deploy script sets
+# the service-specific variables so a partial release can retain the image for
+# the service that did not change; direct Compose use still falls back to the
+# legacy single IMAGE_TAG contract.
+x-api-image: &api-image "ghcr.io/danicallero/hackos-api:${API_IMAGE_TAG:-${IMAGE_TAG:?IMAGE_TAG is required}}"
+x-web-image: &web-image "ghcr.io/danicallero/hackos-web:${WEB_IMAGE_TAG:-${IMAGE_TAG:?IMAGE_TAG is required}}"
 
 x-database-env: &database-env
   DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
