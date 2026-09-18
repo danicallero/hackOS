@@ -144,6 +144,31 @@ idempotente, la cuenta de aplicación y una política limitada al bucket. Esas
 credenciales S3 sólo se entregan después a `api` y `worker`; nunca son la
 cuenta root de MinIO ni llegan a `web` o `migrate`.
 
+### Safely changing environment values
+
+The operator shell never prints environment values. Use `sudoedit`, validate,
+then explicitly recreate affected services:
+
+```sh
+sudoedit /etc/hackos/hackos.env
+sudoedit /etc/hackos/hackos.secrets
+/opt/hackos/check-env.sh /etc/hackos/hackos.env /etc/hackos/hackos.secrets
+```
+
+For the temporary combined-file layout, edit and validate that one `0600` file
+instead. `check-env.sh` validates keys, domains, tags, credential blocks, and
+permissions without printing secret values:
+
+```sh
+docker compose --env-file /etc/hackos/hackos.env \
+  --env-file /etc/hackos/hackos.secrets \
+  -f /opt/hackos/docker-compose.yml \
+  up -d --no-build --force-recreate --wait --wait-timeout 120 api worker web
+```
+
+Never put a secret in a command, CI log, Compose output, or repository file.
+The secret editor remains an explicit host-permission operation.
+
 ## Variables por servicio
 
 La siguiente matriz es deliberada: no se pasa el entorno completo a cada
@@ -438,6 +463,7 @@ STAGING_HOST=staging-tailnet-host
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging status
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging logs --tail 200 api worker web
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging logs --follow api
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging logs --event-type error api
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging start
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging stop api
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging shutdown
@@ -464,12 +490,19 @@ incus exec "$PRODUCTION_INSTANCE" -- /opt/hackos/services.sh production shell
 The shell includes the CLI-only `system:superadmin` setup and management flow.
 It calls the official server-side scripts in the API image, so grants and
 revocations remain audited and the last active superadmin cannot be removed.
+The interactive shell supports arrows, Enter, number shortcuts, `b` back, and
+`q` quit. Its service picker lists Compose services; logs support event filters
+(`all`, `error`, `warning`, `request`, `health`) and custom text search, with
+terminal colors when available.
 The non-interactive equivalents are:
 
 ```sh
 /opt/hackos/services.sh staging superadmin list
-/opt/hackos/services.sh staging superadmin create --email admin@example.org \
-  --password 'choose-a-strong-password' --name Event --surname Admin
+read -r -s SUPERADMIN_PASSWORD
+printf '%s\n' "$SUPERADMIN_PASSWORD" | \
+  /opt/hackos/services.sh staging superadmin create --email admin@example.org \
+  --password-stdin --name Event --surname Admin
+unset SUPERADMIN_PASSWORD
 /opt/hackos/services.sh staging superadmin grant --email existing@example.org
 /opt/hackos/services.sh staging superadmin revoke --email admin@example.org
 ```
@@ -490,7 +523,19 @@ and object-storage data; neither command removes containers, volumes, or
 bind-mounted data. Release updates still go through the immutable-image CD
 workflow. The helper intentionally does not manage a host-level tunnel or
 proxy service; that ingress remains available while the application project is
-stopped.
+stopped. Superadmin commands use the running API container when available;
+otherwise they use a quiet disposable container and do not build an image.
+
+Capture a filtered log stream locally with SSH redirection:
+
+```sh
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging logs \
+  --event-type error api > hackos-api-errors.log
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging logs \
+  --match "request completed" --tail 500 api worker > hackos-requests.log
+```
+
+Use `ssh -tt ... logs --follow api` for a live colored stream.
 
 Para revisar el estado y los logs:
 
