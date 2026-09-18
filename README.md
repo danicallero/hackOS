@@ -222,8 +222,8 @@ The release paths are:
 
 | Branch | CD behavior |
 | --- | --- |
-| `staging` | Merge an approved development PR here. Build publishes immutable `linux/amd64` and `linux/arm64` images; the protected private-network SSH workflow deploys the selected SHA to the ARM64 staging host. |
-| `main` | Merge an approved PR from any branch. Build publishes immutable `linux/amd64` and `linux/arm64` images; the protected Incus workflow deploys the selected SHA to production. |
+| `staging` | Merge an approved development PR here. CD builds only affected API/web images on native `linux/amd64` and `linux/arm64` runners; the protected private-network SSH workflow deploys only the changed unit to the ARM64 staging host. |
+| `main` | Merge an approved PR from any branch. CD builds only affected API/web images on native `linux/amd64` and `linux/arm64` runners; the protected Incus workflow deploys only the changed unit to production. |
 
 `main` and `staging` are independent environments. Merging into either branch
 publishes its release artifact and starts the corresponding protected
@@ -232,11 +232,18 @@ through a private network before using SSH; production uses a self-hosted
 Incus runner. To test the current production tree in staging, open an explicit
 pull request from `main` to `staging`.
 
-The merge to either protected branch builds its release artifact. The staging
-and production stacks use the same multi-architecture image repositories,
-Compose file, and SHA tag format, with separate host configuration and secret
-files. Protect exactly `staging` and `main`; CI accepts PRs into either branch,
-while the protected environments control deployment approval.
+The Build images workflow also supports a manual rebuild of `api`, `web`, or
+`both` for the selected branch. Manual rebuilds publish the requested image
+tags without triggering a deployment; use the protected deployment workflow
+separately when a rollout is intended.
+
+The merge to either protected branch builds only the affected release artifact.
+Mobile, documentation and deploy-only changes skip image publication and host
+deployment. The staging and production stacks use the same multi-architecture
+image repositories, Compose file, and SHA tag format, with separate host
+configuration and secret files. Protect exactly `staging` and `main`; CI
+accepts PRs into either branch, while the protected environments control
+deployment approval.
 The API test job provides fresh Postgres, Valkey and Mailpit service containers
 plus health-checked MinIO, then provisions the test bucket; local API runs
 still use `pnpm infra:up` and the commands above.

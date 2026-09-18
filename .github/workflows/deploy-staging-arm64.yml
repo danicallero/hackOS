@@ -7,6 +7,14 @@ on:
         description: Immutable GHCR tag, for example sha-<40 lowercase hex characters>
         required: true
         type: string
+      api_changed:
+        description: Whether the release contains a new API image
+        required: true
+        type: boolean
+      web_changed:
+        description: Whether the release contains a new web image
+        required: true
+        type: boolean
     secrets:
       TS_OAUTH_CLIENT_ID:
         required: true
@@ -22,6 +30,16 @@ on:
         description: Immutable GHCR tag, for example sha-<40 lowercase hex characters>
         required: true
         type: string
+      api_changed:
+        description: Whether the release contains a new API image
+        required: false
+        default: true
+        type: boolean
+      web_changed:
+        description: Whether the release contains a new web image
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -40,6 +58,8 @@ jobs:
       name: staging
     env:
       IMAGE_TAG: ${{ inputs.tag }}
+      DEPLOY_API: ${{ inputs.api_changed }}
+      DEPLOY_WEB: ${{ inputs.web_changed }}
       SSH_HOST: ${{ vars.STAGING_TAILSCALE_HOST }}
       SSH_USER: ${{ vars.STAGING_SSH_USER }}
       SSH_PORT: ${{ vars.STAGING_SSH_PORT }}
@@ -59,9 +79,17 @@ jobs:
             echo "The deployment tag must match sha-<40 lowercase hex characters>." >&2
             exit 1
           fi
+          [[ "$DEPLOY_API" == true || "$DEPLOY_API" == false ]] || {
+            echo "DEPLOY_API must be true or false." >&2
+            exit 1
+          }
+          [[ "$DEPLOY_WEB" == true || "$DEPLOY_WEB" == false ]] || {
+            echo "DEPLOY_WEB must be true or false." >&2
+            exit 1
+          }
           [[ -n "$SSH_HOST" ]] || { echo "STAGING_TAILSCALE_HOST is missing." >&2; exit 1; }
           [[ -n "$SSH_USER" ]] || { echo "STAGING_SSH_USER is missing." >&2; exit 1; }
-          echo "Deployment inputs: environment=staging tag=$IMAGE_TAG"
+          echo "Deployment inputs: environment=staging tag=$IMAGE_TAG api=$DEPLOY_API web=$DEPLOY_WEB"
 
       - name: Select release source
         shell: bash
@@ -145,4 +173,4 @@ jobs:
             -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="$HACKOS_SSH_KNOWN_HOSTS_FILE" \
             "$SSH_USER@$SSH_HOST" \
-            "env HACKOS_APP_DIR=/opt/hackos /opt/hackos/deploy.sh staging '$IMAGE_TAG'"
+            "env HACKOS_APP_DIR=/opt/hackos /opt/hackos/deploy.sh staging '$IMAGE_TAG' '$DEPLOY_API' '$DEPLOY_WEB'"

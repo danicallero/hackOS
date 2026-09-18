@@ -5,11 +5,29 @@ set -Eeuo pipefail
 
 environment="${1:-}"
 image_tag="${2:-current}"
+deploy_api="${3:-true}"
+deploy_web="${4:-true}"
+current_mode=false
 
 case "$environment" in
   production|staging) ;;
   *)
     echo "ERROR: environment must be production or staging" >&2
+    exit 2
+    ;;
+esac
+
+case "$deploy_api" in
+  true|false) ;;
+  *)
+    echo "ERROR: API deployment flag must be true or false" >&2
+    exit 2
+    ;;
+esac
+case "$deploy_web" in
+  true|false) ;;
+  *)
+    echo "ERROR: web deployment flag must be true or false" >&2
     exit 2
     ;;
 esac
@@ -25,6 +43,7 @@ backup_file="${HACKOS_BACKUP_FILE:-$app_dir/backup-r2.sh}"
 release_root="${HACKOS_RELEASE_DIR:-$app_dir/releases}"
 
 if [[ "$image_tag" == current ]]; then
+  current_mode=true
   if [[ ! -r "$config_file" ]]; then
     echo "ERROR: cannot resolve current image tag; configuration file is missing" >&2
     exit 1
@@ -104,6 +123,10 @@ fi
 
 export COMPOSE_PROJECT_NAME="$project_name"
 export IMAGE_TAG="$image_tag"
+# Set safe initial values so `compose ps` can inspect the currently running
+# services before the partial-release tags are resolved below.
+export API_IMAGE_TAG="$image_tag"
+export WEB_IMAGE_TAG="$image_tag"
 
 env_value() {
   local key="$1"
@@ -146,6 +169,103 @@ compose() {
     "$@"
 }
 
+state_file="${HACKOS_IMAGE_STATE_FILE:-$app_dir/.image-tags}"
+
+state_value() {
+  local key="$1"
+  [[ -r "$state_file" ]] || return 0
+  awk -v key="$key" '
+    /^[[:space:]]*(#|$)/ { next }
+    {
+      line = $0
+      sub(/^[[:space:]]*/, "", line)
+      split(line, fields, "=")
+      if (fields[1] == key) {
+        sub(/^[^=]*=/, "", line)
+        value = line
+      }
+    }
+    END {
+      value = value ? value : ""
+      value = value ~ /^".*"$/ ? substr(value, 2, length(value) - 2) : value
+      print value
+    }
+  ' "$state_file"
+}
+
+valid_image_tag() {
+  [[ "$1" =~ ^sha-[0-9a-f]{40}$ ]]
+}
+
+running_image_tag() {
+  local service="$1"
+  local container_id image
+  container_id="$(compose ps --quiet "$service" 2>/dev/null || true)"
+  [[ -n "$container_id" ]] || return 1
+  image="$(docker inspect --format '{{.Config.Image}}' "$container_id" 2>/dev/null || true)"
+  if [[ "$image" =~ :((sha-)[0-9a-f]{40})$ ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+  return 1
+}
+
+resolve_existing_tag() {
+  local service="$1"
+  local key="$2"
+  local fallback="$3"
+  local tag
+
+  tag="$(running_image_tag "$service" || true)"
+  if valid_image_tag "$tag"; then
+    printf '%s\n' "$tag"
+    return 0
+  fi
+
+  tag="$(state_value "$key")"
+  if valid_image_tag "$tag"; then
+    printf '%s\n' "$tag"
+    return 0
+  fi
+
+  tag="$(env_value "$key")"
+  if valid_image_tag "$tag"; then
+    printf '%s\n' "$tag"
+    return 0
+  fi
+
+  if valid_image_tag "$fallback"; then
+    printf '%s\n' "$fallback"
+    return 0
+  fi
+
+  echo "ERROR: cannot resolve the current $service image tag" >&2
+  return 1
+}
+
+if [[ "$current_mode" == true || "$deploy_api" == true ]]; then
+  if [[ "$current_mode" == true ]]; then
+    api_image_tag="$(resolve_existing_tag api API_IMAGE_TAG "$image_tag")"
+  else
+    api_image_tag="$image_tag"
+  fi
+else
+  api_image_tag="$(resolve_existing_tag api API_IMAGE_TAG "$image_tag")"
+fi
+
+if [[ "$current_mode" == true || "$deploy_web" == true ]]; then
+  if [[ "$current_mode" == true ]]; then
+    web_image_tag="$(resolve_existing_tag web WEB_IMAGE_TAG "$image_tag")"
+  else
+    web_image_tag="$image_tag"
+  fi
+else
+  web_image_tag="$(resolve_existing_tag web WEB_IMAGE_TAG "$image_tag")"
+fi
+
+export API_IMAGE_TAG="$api_image_tag"
+export WEB_IMAGE_TAG="$web_image_tag"
+
 run_compose() {
   local description="$1"
   shift
@@ -167,7 +287,7 @@ if [[ ! -x "$validator_file" ]]; then
   exit 1
 fi
 validator_output="$(mktemp)"
-if ! "$validator_file" "$validator_config" "$validator_secrets" "$image_tag" >"$validator_output" 2>&1; then
+if ! "$validator_file" "$validator_config" "$validator_secrets" "$image_tag" "$api_image_tag" "$web_image_tag" >"$validator_output" 2>&1; then
   rm -f "$validator_output"
   echo "ERROR: deployment environment validation failed" >&2
   exit 1
@@ -201,6 +321,9 @@ printf 'environment=%s\nimage_tag=%s\ndeployed_at=%s\n' \
   "$environment" \
   "$image_tag" \
   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$release_dir/metadata"
+printf 'api_image_tag=%s\nweb_image_tag=%s\n' \
+  "$api_image_tag" \
+  "$web_image_tag" >>"$release_dir/metadata"
 chmod 0640 "$release_dir/metadata"
 
 wait_for_health() {
@@ -238,7 +361,7 @@ wait_for_health postgres
 wait_for_health valkey
 wait_for_health minio
 run_compose "initialize object storage" run --rm --no-deps minio-init
-if [[ "$(env_value R2_BACKUPS_ENABLED)" == true ]]; then
+if [[ "$deploy_api" == true && "$(env_value R2_BACKUPS_ENABLED)" == true ]]; then
   if [[ ! -x "$backup_file" ]]; then
     echo "ERROR: R2 backups are enabled but $backup_file is missing" >&2
     exit 1
@@ -246,9 +369,25 @@ if [[ "$(env_value R2_BACKUPS_ENABLED)" == true ]]; then
   echo "BACKUP: creating R2 backup before migration"
   HACKOS_LOCK_HELD=true "$backup_file" "$environment"
 fi
-run_compose "migrate database" run --rm --no-deps migrate
-run_compose "update api worker web" up --detach --no-deps --force-recreate api worker web
-wait_for_health api
-wait_for_health worker
-wait_for_health web
+if [[ "$deploy_api" == true ]]; then
+  run_compose "migrate database" run --rm --no-deps migrate
+  run_compose "update api and worker" up --detach --no-deps --force-recreate api worker
+  wait_for_health api
+  wait_for_health worker
+else
+  echo "SKIP: API and worker unchanged"
+fi
+if [[ "$deploy_web" == true ]]; then
+  run_compose "update web" up --detach --no-deps --force-recreate web
+  wait_for_health web
+else
+  echo "SKIP: web unchanged"
+fi
+
+state_tmp="$(mktemp "${state_file}.XXXXXX")"
+printf 'API_IMAGE_TAG=%s\nWEB_IMAGE_TAG=%s\n' \
+  "$api_image_tag" \
+  "$web_image_tag" >"$state_tmp"
+chmod 0600 "$state_tmp"
+mv -f "$state_tmp" "$state_file"
 echo "OK: hackOS $environment deployed"
