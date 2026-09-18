@@ -324,18 +324,24 @@ misma topología prevista y documenta el rollback antes del evento.
 `.github/workflows/build.yml` clasifica los cambios antes de construir. Las
 rutas de `apps/api` construyen sólo `hackos-api`, las de `apps/web` sólo
 `hackos-web`, y `packages/shared` o los manifiestos de dependencias construyen
-ambas. Mobile, documentación y cambios de despliegue no producen imágenes ni
-disparan un despliegue. Cada imagen afectada se construye en paralelo en sus
-`linux/amd64` y `linux/arm64` nativos, y un job final publica el manifiesto
-multi-arquitectura `sha-<commit>`; no se usa QEMU para compilar la imagen ARM.
+ambas. Mobile y documentación no producen imágenes ni disparan un despliegue.
+Los archivos de runtime de `deploy/` no producen imágenes, pero en `staging`
+disparan un rollout sólo de archivos: se transfieren Compose y los scripts, se
+conservan los tags actuales de API/web y no se recrean esos contenedores. Cada
+imagen afectada se construye en paralelo en sus `linux/amd64` y `linux/arm64`
+nativos, y un job final publica el manifiesto multi-arquitectura
+`sha-<commit>`; no se usa QEMU para compilar la imagen ARM.
 El mismo workflow se puede lanzar manualmente desde Actions con la selección
 `api`, `web` o `both`; en `staging`, esa reconstrucción publica y despliega
 automáticamente únicamente las imágenes elegidas.
 
 `.github/workflows/build.yml` calls the reusable
 `.github/workflows/deploy-staging-arm64.yml` job after at least one affected
-image manifest succeeds on a push to `staging`. The reusable job receives the
-API/web change flags and recreates only the changed unit; an API change runs
+image manifest succeeds on a push to `staging`, or after a runtime deployment
+file changes. For the latter, no image manifest is required: the reusable job
+receives both API/web flags as false, retains the existing immutable image
+tags, and refreshes only the deployment files. For image releases, the job
+receives the API/web change flags and recreates only the changed unit; an API change runs
 `migrate` and updates `api` + `worker`, while a web-only change updates only
 `web`. A merge into `staging` therefore deploys the exact `sha-<40 hex>` image
 tags just published without asking GHCR for a nonexistent sibling tag. It does

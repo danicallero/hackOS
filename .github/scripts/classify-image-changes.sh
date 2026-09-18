@@ -14,6 +14,7 @@ fi
 
 api_image=false
 web_image=false
+deploy_files=false
 
 while IFS= read -r path; do
   [[ -n "$path" ]] || continue
@@ -28,6 +29,9 @@ while IFS= read -r path; do
       api_image=true
       web_image=true
       ;;
+    deploy/docker-compose.yml|deploy/incus-deploy.sh|deploy/scripts/*|.github/scripts/classify-image-changes.sh|.github/workflows/build.yml|.github/workflows/deploy-staging-arm64.yml)
+      deploy_files=true
+      ;;
   esac
 done <<< "$changed_files"
 
@@ -39,3 +43,4 @@ fi
 printf 'api_image=%s\n' "$api_image"
 printf 'web_image=%s\n' "$web_image"
 printf 'any_image=%s\n' "$any_image"
+printf 'deploy_files=%s\n' "$deploy_files"

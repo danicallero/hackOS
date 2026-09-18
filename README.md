@@ -240,12 +240,15 @@ after they publish successfully; on other branches, manual rebuilds only
 publish the requested image tags.
 
 The merge to either protected branch builds only the affected release artifact.
-Mobile, documentation and deploy-only changes skip image publication and host
-deployment. The staging and production stacks use the same multi-architecture
-image repositories, Compose file, and SHA tag format, with separate host
-configuration and secret files. Protect exactly `staging` and `main`; CI
-accepts PRs into either branch, while the protected environments control
-deployment approval.
+Mobile and documentation-only changes skip image publication and host
+deployment. Runtime deployment changes skip image publication but trigger a
+file-only staging rollout; the current API and web image tags are retained and
+only the deployment files are refreshed. Production remains image-gated and
+does not roll out deploy-only changes automatically. The staging and production
+stacks use the same multi-architecture image repositories, Compose file, and
+SHA tag format, with separate host configuration and secret files. Protect
+exactly `staging` and `main`; CI accepts PRs into either branch, while the
+protected environments control deployment approval.
 The API test job provides fresh Postgres, Valkey and Mailpit service containers
 plus health-checked MinIO, then provisions the test bucket; local API runs
 still use `pnpm infra:up` and the commands above.

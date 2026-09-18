@@ -39,6 +39,7 @@ jobs:
       api_image: ${{ steps.classify.outputs.api_image }}
       web_image: ${{ steps.classify.outputs.web_image }}
       any_image: ${{ steps.classify.outputs.any_image }}
+      deploy_files: ${{ steps.classify.outputs.deploy_files }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
@@ -57,13 +58,13 @@ jobs:
           if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
             case "$REBUILD" in
               api)
-                printf 'api_image=true\nweb_image=false\nany_image=true\n' >> "$GITHUB_OUTPUT"
+                printf 'api_image=true\nweb_image=false\nany_image=true\ndeploy_files=false\n' >> "$GITHUB_OUTPUT"
                 ;;
               web)
-                printf 'api_image=false\nweb_image=true\nany_image=true\n' >> "$GITHUB_OUTPUT"
+                printf 'api_image=false\nweb_image=true\nany_image=true\ndeploy_files=false\n' >> "$GITHUB_OUTPUT"
                 ;;
               both)
-                printf 'api_image=true\nweb_image=true\nany_image=true\n' >> "$GITHUB_OUTPUT"
+                printf 'api_image=true\nweb_image=true\nany_image=true\ndeploy_files=false\n' >> "$GITHUB_OUTPUT"
                 ;;
               *)
                 echo "Unknown rebuild selection: $REBUILD" >&2
@@ -252,7 +253,7 @@ jobs:
       always() &&
       needs.detect.result == 'success' &&
       github.ref == 'refs/heads/staging' &&
-      needs.detect.outputs.any_image == 'true' &&
+      (needs.detect.outputs.any_image == 'true' || needs.detect.outputs.deploy_files == 'true') &&
       (needs.detect.outputs.api_image != 'true' || needs.publish-api.result == 'success') &&
       (needs.detect.outputs.web_image != 'true' || needs.publish-web.result == 'success')
     uses: ./.github/workflows/deploy-staging-arm64.yml
