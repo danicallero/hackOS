@@ -421,35 +421,48 @@ seguridad propia de la aplicación; el servicio `migrate` sigue siendo el paso
 operativo explícito y bloquea el arranque mediante `depends_on` hasta terminar
 correctamente.
 
-## Staging service operations
+## Service operations
 
-Each staging release installs the staging-only operator helper at
-`/opt/hackos/staging-services.sh`. It uses the same Compose project, host
-environment files, and deployment lock as the release script. It cannot be
-pointed at the production project by accident.
+Every deployment installs the same operator helper at
+`/opt/hackos/services.sh`. The first argument must be the explicit environment
+(`staging` or `production`); the helper derives the corresponding Compose
+project name and refuses any other environment. It uses the host environment
+files and the same deployment lock as the release script.
 
-Run these commands over the staging host's private SSH path:
+For staging, run the commands over the staging host's private SSH path:
 
 ```sh
 STAGING_USER=staging-user
 STAGING_HOST=staging-tailnet-host
 
-ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/staging-services.sh status
-ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/staging-services.sh logs --tail 200 api worker web
-ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/staging-services.sh logs --follow api
-ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/staging-services.sh start
-ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/staging-services.sh stop api
-ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/staging-services.sh shutdown
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging status
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging logs --tail 200 api worker web
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging logs --follow api
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging start
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging stop api
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging shutdown
+```
+
+For production, run the same helper through the private Incus path:
+
+```sh
+PRODUCTION_INSTANCE=production-instance
+
+incus exec "$PRODUCTION_INSTANCE" -- /opt/hackos/services.sh production status
+incus exec "$PRODUCTION_INSTANCE" -- /opt/hackos/services.sh production logs --tail 200 api worker web
+incus exec "$PRODUCTION_INSTANCE" -- /opt/hackos/services.sh production start
+incus exec "$PRODUCTION_INSTANCE" -- /opt/hackos/services.sh production shutdown
 ```
 
 `status` includes stopped containers, `logs` accepts the Compose service names,
 and `start` starts the long-running runtime plus its required one-shot
-dependencies. `stop` can target selected services; `shutdown` stops the whole
-staging project. Both retain the persistent PostgreSQL and object-storage data;
-neither command removes containers, volumes, or bind-mounted data. Release
-updates still go through the immutable-image CD workflow. The helper intentionally
-does not manage a host-level tunnel or proxy service; that ingress remains
-available while the application project is stopped.
+dependencies and waits for health checks. `stop` can target selected services;
+`shutdown` stops the whole selected project. Both retain persistent PostgreSQL
+and object-storage data; neither command removes containers, volumes, or
+bind-mounted data. Release updates still go through the immutable-image CD
+workflow. The helper intentionally does not manage a host-level tunnel or
+proxy service; that ingress remains available while the application project is
+stopped.
 
 Para revisar el estado y los logs:
 
@@ -542,6 +555,8 @@ operativa manual porque el repositorio de infraestructura no está publicado.
   revelar secretos.
 - [`scripts/backup-r2.sh`](./scripts/backup-r2.sh): backup opt-in de PostgreSQL
   y MinIO a R2.
+- [`scripts/services.sh`](./scripts/services.sh): operaciones seguras de estado,
+  logs y ciclo de vida para los proyectos staging y production.
 - [`systemd/`](./systemd): unidades para habilitar el backup diario de forma
   manual.
 - [`../docs/env-vars.md`](../docs/env-vars.md): contrato de variables por

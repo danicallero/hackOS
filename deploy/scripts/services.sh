@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
-# Operate the staging hackOS Compose project without changing data.
+# Operate a hackOS Compose project without changing data.
 set -Eeuo pipefail
 
 usage() {
   cat >&2 <<'EOF'
 Usage:
-  staging-services.sh status [service ...]
-  staging-services.sh logs [--follow] [--tail N] [service ...]
-  staging-services.sh start [service ...]
-  staging-services.sh stop [service ...]
-  staging-services.sh shutdown
+  services.sh <environment> status [service ...]
+  services.sh <environment> logs [--follow] [--tail N] [service ...]
+  services.sh <environment> start [service ...]
+  services.sh <environment> stop [service ...]
+  services.sh <environment> shutdown
 
+Environments: staging production
 Services: postgres valkey minio minio-init migrate api worker web
 
-The default start/stop operations cover the long-running runtime. shutdown is
-an alias for stopping the whole project and never removes volumes or bind data.
+The default start/stop operations cover the long-running runtime. shutdown
+stops the whole selected project and never removes volumes or bind data.
 EOF
   exit 2
 }
@@ -24,8 +25,16 @@ die() {
   exit 1
 }
 
-action="${1:-}"
-shift || true
+environment="${1:-}"
+action="${2:-}"
+if (($# < 2)); then
+  usage
+fi
+shift 2
+case "$environment" in
+  staging|production) ;;
+  *) usage ;;
+esac
 case "$action" in
   status|logs|start|stop|shutdown) ;;
   *) usage ;;
@@ -33,12 +42,11 @@ esac
 
 app_dir="${HACKOS_APP_DIR:-/opt/hackos}"
 compose_file="${HACKOS_COMPOSE_FILE:-$app_dir/docker-compose.yml}"
-project_name="${HACKOS_COMPOSE_PROJECT_NAME:-hackos-staging}"
+project_name="hackos-$environment"
 config_file="${HACKOS_CONFIG_FILE:-/etc/hackos/hackos.env}"
 secrets_file="${HACKOS_SECRETS_FILE:-/etc/hackos/hackos.secrets}"
 lock_file="${HACKOS_LOCK_FILE:-$app_dir/.deploy.lock}"
 
-[[ "$project_name" == hackos-staging ]] || die "this helper only operates the staging Compose project"
 [[ -f "$compose_file" ]] || die "Compose file is missing: $compose_file"
 command -v docker >/dev/null 2>&1 || die "Docker is not available"
 docker compose version >/dev/null 2>&1 || die "Docker Compose is not available"
@@ -95,7 +103,7 @@ lock_mutation() {
   mkdir -p "$app_dir"
   command -v flock >/dev/null 2>&1 || die "flock is not available"
   exec 9>"$lock_file"
-  flock -n 9 || die "another hackOS deployment or service operation is running"
+  flock -n 9 || die "another hackOS $environment deployment or service operation is running"
 }
 
 case "$action" in
