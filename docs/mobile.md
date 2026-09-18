@@ -294,6 +294,7 @@ distributed to other Expo Router apps without importing hackOS code.
   account, and pending-removal surfaces expose `Back to sign in`; that action
   clears the local session synchronously and replaces the route without
   waiting for SecureStore or the server.
+  error (#757).
 - `app/(auth)/forgot-password.tsx` and `reset-password.tsx` share the same
   leading, task-first composition. Their primary actions remain discoverable,
   invalid values are explained beside the relevant field, and focus moves to
@@ -727,9 +728,9 @@ available, log ID, timestamp, source, activity/direction, and notes needed to
 reconcile the original action even when the local roster can no longer resolve
 the person. A transient sync failure (not a business rejection) surfaces via
 the same stale-data banner used elsewhere in the app, on the sync-queue,
-Activities, and People screens; a genuine server rejection (a conflict, where
-auto-retry pauses) keeps its own message with a manual retry action, since
-that case needs a person to look at it rather than wait for reconnection.
+Activities, and People screens; a genuine HTTP 409 conflict (where auto-retry
+pauses) keeps its own message with a manual retry action, since that case
+needs a person to look at it rather than wait for reconnection.
 
 ### Activities
 

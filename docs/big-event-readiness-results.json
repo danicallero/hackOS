@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "generatedAt": "2026-08-25T00:29:16.212Z",
   "gitCommit": "ba44c0a5264214b4f3cd42334134e48d80262176",
-  "command": "/opt/homebrew/Cellar/node/25.2.1/bin/node /Users/dani/orca/workspaces/fablehackos/issue-544-queue-coalesce-gate/apps/api/scripts/event-day-load.ts -- --mode load --fixture /private/tmp/hackos-event-day-fixture.json --duration-seconds 10 --output /Users/dani/orca/workspaces/fablehackos/issue-544-queue-coalesce-gate/docs/big-event-readiness-results.json",
+  "command": "node apps/api/scripts/event-day-load.ts --mode load --fixture /tmp/hackos-event-day-fixture.json --duration-seconds 10 --output docs/big-event-readiness-results.json",
   "environment": {
     "node": "v25.2.1",
     "platform": "darwin",

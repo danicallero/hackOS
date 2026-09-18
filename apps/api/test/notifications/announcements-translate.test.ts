@@ -10,8 +10,8 @@ import { resetNotificationsState } from "./notif-helpers.js";
 /**
  * H50 automatic translation: an isolated, entirely optional provider
  * boundary (modules/notifications/translate/) — see announcements.md.
- * Google Translate is stubbed via `global.fetch`, mirroring the Resend
- * email adapter's own test convention; no live network call.
+ * Google Translate is stubbed via `global.fetch`, mirroring the email
+ * adapter's isolated network boundary; no live network call.
  */
 
 let app: App;

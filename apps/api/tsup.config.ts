@@ -7,6 +7,7 @@ export default defineConfig({
     migrate: "scripts/migrate.ts",
     seed: "scripts/seed.ts",
     "event-day-load": "scripts/event-day-load.ts",
+    "create-superadmin": "scripts/create-superadmin.ts",
   },
   format: ["esm"],
   target: "node22",

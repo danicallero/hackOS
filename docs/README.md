@@ -35,15 +35,15 @@ Architecture & modules:
   work. Start here for "what does the API do and how is it organized";
   `/documentation` (Swagger UI, generated from route schemas) is the
   route-by-route reference this page deliberately doesn't duplicate.
-- [Architecture & infrastructure](./architecture.md) — the system view: the six
-  services and their stacks, the two-network security boundary, state ownership
+- [Architecture & infrastructure](./architecture.md) — the system view: the
+  services and their private/egress network boundary, state ownership
   (Postgres truth vs. ephemeral Valkey), realtime SSE fan-out, the one-image
   model, scalability (more workers, the Postgres ceiling, multi-instance
   tenancy), the reasoning behind the big decisions, and the small-vs-real
   deployment profiles. Start here for the whole-system picture;
   `deploy/README.md` is the operational runbook.
 - [API request admission and priorities](./request-admission.md) — the exact
-  role-position ordering, P0–P3 lane definitions, route/topic classification,
+  lane ordering, P0–P3 lane definitions, route/topic classification,
   reserved capacity, best-effort shedding, and multi-replica limitations.
 - [Database schema](./database-schema.md) — the generated DBML ERD for the
   current post-migration schema, plus the migration identity/checksum rules.
@@ -134,13 +134,14 @@ Frontend (web & mobile):
 
 Deployment:
 
-- [Environment variables per service](./env-vars.md) — for each container in
-  an isolated deploy (`deploy/services/*`), exactly which env vars it needs and
-  whether they're read at container start or baked in at build time.
+- [Environment variables per service](./env-vars.md) — the two host env files
+  and the exact least-privilege variables delivered to each Compose service.
+- [Deployment runbook](../deploy/README.md) — GHCR build tags, protected
+  workflows, host transfer/exec, health gates and rollback limits.
 - [Big-event readiness](./big-event-readiness.md) — the concrete pre-event
-  checklist for ~600 concurrent users: what to set (`DB_POOL_MAX`, memory
-  limits, replica counts), the Postgres connection budget arithmetic, load
-  testing the hot paths, and the monitoring queries to watch during the event.
+  checklist for ~600 concurrent event identities: pool sizing, the fixed
+  Compose memory limits, load testing the hot paths, and the monitoring queries
+  to watch.
 
 Historical (not required reading — see [`audits/README.md`](./audits/README.md)):
 
@@ -154,4 +155,4 @@ own `/documentation` (Swagger UI, generated from route schemas — not a file in
 this folder), [`apps/web/README.md`](../apps/web/README.md) for web frontend
 conventions and the component library, and
 [`deploy/README.md`](../deploy/README.md) for the full deployment story
-(networking, secrets, Dokploy modes).
+(networking, secrets, Caddy and rollout order).

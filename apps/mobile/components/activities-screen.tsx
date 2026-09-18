@@ -28,7 +28,7 @@ import { listScannerActivities } from "@/lib/scanner-db";
 import { resolveActivityText, type ScannerActivity } from "@/lib/scanner-types";
 import { activityKindSymbol, scheduleTypeLabel } from "@/lib/schedule";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
-import { useScannerSync } from "@/lib/use-scanner";
+import { isSyncConflict, useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
 
 /** How often the "Now"/"Next" marker re-evaluates which row it belongs to. */
@@ -387,7 +387,7 @@ export function ActivitiesScreen() {
                   retrying={loading || refreshing}
                 />
               ) : null}
-              {syncError?.conflict ? (
+              {syncError && isSyncConflict(syncError) ? (
                 <RequestFeedback
                   error={new Error(syncError.message)}
                   message={t("scannerSyncRejected")}
@@ -395,7 +395,7 @@ export function ActivitiesScreen() {
                   retrying={sync.syncing}
                 />
               ) : null}
-              {syncError && !syncError.conflict ? (
+              {syncError && !isSyncConflict(syncError) ? (
                 <StaleDataBanner updatedAt={sync.lastSync} />
               ) : null}
             </View>

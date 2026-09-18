@@ -4,6 +4,8 @@ import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import { AuthAlert, AuthButton, AuthHeader, AuthScreen } from "@/components/auth-ui";
 import { forceLocalSignOut, signOut } from "@/lib/auth-client";
+import { AuthButton, AuthHeader, AuthScreen } from "@/components/auth-ui";
+import { signOut } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
 
@@ -12,7 +14,6 @@ export function SessionState({ loading, onRetry }: { loading: boolean; onRetry: 
   const { t } = useLocale();
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
-  const [signOutError, setSignOutError] = useState<Error | null>(null);
 
   function returnToSignIn() {
     forceLocalSignOut();
@@ -21,15 +22,7 @@ export function SessionState({ loading, onRetry }: { loading: boolean; onRetry: 
 
   async function endSession() {
     setSigningOut(true);
-    setSignOutError(null);
-    try {
-      const result = await signOut();
-      if (result.error) throw new Error(result.error.message || t("signOutError"));
-    } catch (cause) {
-      setSignOutError(cause instanceof Error ? cause : new Error(t("signOutError")));
-    } finally {
-      setSigningOut(false);
-    }
+    await signOut();
   }
 
   if (loading) {
@@ -75,7 +68,6 @@ export function SessionState({ loading, onRetry }: { loading: boolean; onRetry: 
         description={t("sessionRecoveryDescription")}
       />
       <View style={{ gap: 12 }}>
-        {signOutError ? <AuthAlert message={t("signOutError")} /> : null}
         <AuthButton label={t("retry")} onPress={onRetry} />
         <Pressable
           accessibilityRole="button"

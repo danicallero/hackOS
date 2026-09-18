@@ -36,7 +36,7 @@ export const { signIn } = authClient;
 
 const SESSION_COOKIE_KEY = `${STORAGE_PREFIX}_cookie`;
 const SESSION_DATA_KEY = `${STORAGE_PREFIX}_session_data`;
-// The Expo plugin mirrors the browser cookie jar and session JSON in
+// The expo plugin mirrors the browser cookie jar and session JSON in
 // expo-secure-store, chunking larger payloads as "key.0..N" with the base key
 // holding "\u0001ba-chunks:<count>". Sign-out must drop the chunked keys too,
 // or token material lingers on the device.
@@ -64,8 +64,8 @@ async function clearSecureStoreSessionKey(baseKey: string): Promise<void> {
   await deleteStoredKey(baseKey);
 }
 
-/** Wipes the on-device session's SecureStore keys. */
-async function clearStoredSession(): Promise<void> {
+/** Wipes the on-device session (SecureStore keys + in-memory session atom). */
+async function clearLocalSession(): Promise<void> {
   try {
     await Promise.all([
       clearSecureStoreSessionKey(SESSION_COOKIE_KEY),
@@ -121,10 +121,10 @@ async function revokeServerSession(sessionCookie: string): Promise<void> {
 }
 
 /**
- * H4/#757: sign out locally first and immediately so a user is never stuck
- * signed-in-looking when the server is unreachable, then tell the shared
- * /api/me store to clear, and finally revoke the server session as a
- * fire-and-forget request that never blocks or reports an error.
+ * Signs out locally first and immediately: clears the on-device session so a
+ * user is never stuck signed-in-looking when the server is unreachable, then
+ * tells the shared /api/me store to clear, then revokes the server session as
+ * a fire-and-forget request that never blocks or reports an error.
  */
 export async function signOut(): Promise<Awaited<ReturnType<typeof authClient.signOut>>> {
   let sessionCookie = "";

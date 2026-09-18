@@ -1,0 +1,157 @@
+name: Deploy with Incus
+
+on:
+  workflow_run:
+    workflows:
+      - Build images
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Immutable GHCR tag, for example sha-<40 lowercase hex characters>
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hackos-incus-production
+  cancel-in-progress: false
+
+jobs:
+  detect-release:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion == 'success')
+    name: Detect release image set
+    runs-on: ubuntu-latest
+    outputs:
+      api_image: ${{ steps.classify.outputs.api_image }}
+      web_image: ${{ steps.classify.outputs.web_image }}
+    steps:
+      - name: Check out release repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Classify release paths
+        id: classify
+        env:
+          RELEASE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            # A manual dispatch is an explicit rollback/verification request;
+            # both images are known to exist at the requested immutable tag.
+            echo "api_image=true" >> "$GITHUB_OUTPUT"
+            echo "web_image=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          before_sha="$(git rev-parse "${RELEASE_SHA}^1")"
+          ./.github/scripts/classify-image-changes.sh "$before_sha" "$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: detect-release
+    if: >-
+      always() &&
+      needs.detect-release.result == 'success' &&
+      (needs.detect-release.outputs.api_image == 'true' || needs.detect-release.outputs.web_image == 'true')
+    name: Deploy hackOS production with Incus
+    runs-on: self-hosted
+    timeout-minutes: 30
+    environment:
+      name: production
+    env:
+      DEPLOY_ENVIRONMENT: production
+      IMAGE_TAG: ${{ github.event_name == 'workflow_run' && format('sha-{0}', github.event.workflow_run.head_sha) || inputs.tag }}
+      DEPLOY_API: ${{ needs.detect-release.outputs.api_image }}
+      DEPLOY_WEB: ${{ needs.detect-release.outputs.web_image }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          # The token is needed for the authenticated fetch of a rollback
+          # commit below; no credential or application secret is printed.
+          persist-credentials: true
+
+      - name: Validate deployment inputs
+        env:
+          DEPLOY_ENVIRONMENT: ${{ env.DEPLOY_ENVIRONMENT }}
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "$DEPLOY_ENVIRONMENT" in
+            production) ;;
+            *)
+              echo "Invalid deployment environment." >&2
+              exit 1
+              ;;
+          esac
+
+          if [[ ! "$IMAGE_TAG" =~ ^sha-[0-9a-f]{40}$ ]]; then
+            echo "The deployment tag must match sha-<40 lowercase hex characters>." >&2
+            exit 1
+          fi
+          [[ "$DEPLOY_API" == true || "$DEPLOY_API" == false ]] || {
+            echo "DEPLOY_API must be true or false." >&2
+            exit 1
+          }
+          [[ "$DEPLOY_WEB" == true || "$DEPLOY_WEB" == false ]] || {
+            echo "DEPLOY_WEB must be true or false." >&2
+            exit 1
+          }
+
+          echo "Deployment inputs: environment=$DEPLOY_ENVIRONMENT tag=$IMAGE_TAG api=$DEPLOY_API web=$DEPLOY_WEB"
+
+      - name: Select release source
+        env:
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_COMMIT="${IMAGE_TAG#sha-}"
+          git fetch --no-tags --depth=1 origin "$RELEASE_COMMIT"
+          git checkout --detach "$RELEASE_COMMIT"
+          test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
+          echo "Release source selected: $RELEASE_COMMIT"
+
+      - name: Check Incus access
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v incus >/dev/null
+          incus info hackos >/dev/null
+          echo "Incus instance hackos is reachable."
+
+      - name: Transfer deployment files to hackos LXC
+        shell: bash
+        run: |
+          set -euo pipefail
+          incus exec hackos -- mkdir -p /opt/hackos
+          incus file push deploy/docker-compose.yml hackos/opt/hackos/docker-compose.yml
+          incus file push deploy/incus-deploy.sh hackos/opt/hackos/deploy.sh
+          incus file push deploy/scripts/check-env.sh hackos/opt/hackos/check-env.sh
+          incus file push deploy/scripts/backup-r2.sh hackos/opt/hackos/backup-r2.sh
+          incus file push deploy/scripts/services.sh hackos/opt/hackos/services.sh
+          incus exec hackos -- chmod 700 /opt/hackos/deploy.sh /opt/hackos/check-env.sh /opt/hackos/backup-r2.sh /opt/hackos/services.sh
+          echo "Compose, validation, backup, service and deployment scripts transferred."
+
+      - name: Deploy inside hackos LXC
+        env:
+          DEPLOY_ENVIRONMENT: ${{ env.DEPLOY_ENVIRONMENT }}
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          incus exec hackos -- env HACKOS_APP_DIR=/opt/hackos /opt/hackos/deploy.sh "$DEPLOY_ENVIRONMENT" "$IMAGE_TAG" "$DEPLOY_API" "$DEPLOY_WEB"

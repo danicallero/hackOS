@@ -28,6 +28,19 @@ export interface ScannerSyncError {
   message: string;
   /** A genuine server rejection (e.g. conflict) rather than a transient blip. */
   conflict: boolean;
+  /** The HTTP status that produced the error, when an API response did. */
+  status: number | null;
+}
+
+/**
+ * A sync error that is specifically an HTTP 409 conflict (two devices/operators
+ * made conflicting edits). Only this case keeps the "server rejected the sync"
+ * banner with its manual-retry action; everything else — the network being
+ * down, a timeout, or any other server status — degrades to cached on-device
+ * data behind the offline banner instead.
+ */
+export function isSyncConflict(error: ScannerSyncError): boolean {
+  return error.conflict && error.status === 409;
 }
 
 interface ScannerSyncSnapshot {
@@ -139,7 +152,11 @@ class ScannerSyncStore {
         this.setState({ autoRetryPaused: true });
       }
       this.setState({
-        error: { message: cause instanceof Error ? cause.message : "Sync failed", conflict },
+        error: {
+          message: cause instanceof Error ? cause.message : "Sync failed",
+          conflict,
+          status: cause instanceof ApiError ? cause.status : null,
+        },
       });
     } finally {
       // Keep local queue metadata best-effort too. A locked/corrupt backup
