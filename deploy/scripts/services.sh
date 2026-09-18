@@ -949,12 +949,12 @@ quote_shell_value() {
 }
 
 print_log_export_command() {
-  local target output filter_args service_args service
+  local target output filter_args service_args service remote_path remote_command cleanup_command
   local key_tty_state
 
   clear_shell
   printf '%s\n\n' "${c_cyan}${c_bold}hackOS ${environment} · export logs${c_reset}"
-  printf '%s\n' "Run the printed command on your workstation; the redirection creates the local file."
+  printf '%s\n' "Run the printed block on your workstation; it creates, downloads, and cleans up a remote file."
   read_shell_input "SSH target (user@host, b back, q quit): "
   case "$shell_navigation" in
     back) return 0 ;;
@@ -976,23 +976,32 @@ print_log_export_command() {
   fi
   service_args=()
   for service in "${selected_services[@]}"; do
-    service_args+=("$(quote_shell_value "$service")")
+    service_args+=("$service")
   done
   if ((${#service_args[@]} == 0)); then
     service_args=("all services")
   fi
-  printf '\n%s\n' "${c_bold}Copy this to your workstation:${c_reset}"
-  printf 'ssh -T %s /opt/hackos/services.sh %s logs --tail %s' \
-    "$(quote_shell_value "$target")" \
-    "$(quote_shell_value "$environment")" \
-    "$(quote_shell_value "${HACKOS_LOG_TAIL:-200}")"
+  remote_path="/tmp/hackos-${environment}-logs-$(date +%Y%m%d-%H%M%S)-$$.log"
+  remote_command="/opt/hackos/services.sh $(quote_shell_value "$environment") logs --tail $(quote_shell_value "${HACKOS_LOG_TAIL:-200}")"
   for service in "${filter_args[@]}"; do
-    printf ' %s' "$(quote_shell_value "$service")"
+    remote_command="$remote_command $(quote_shell_value "$service")"
   done
   for service in "${service_args[@]}"; do
-    printf ' %s' "$service"
+    remote_command="$remote_command $(quote_shell_value "$service")"
   done
-  printf ' > %s\n' "$(quote_shell_value "$output")"
+  remote_command="$remote_command > $(quote_shell_value "$remote_path")"
+  cleanup_command="rm -f $(quote_shell_value "$remote_path")"
+  printf '\n%s\n' "${c_bold}Copy this to your workstation:${c_reset}"
+  printf 'ssh -T %s %s &&\n' \
+    "$(quote_shell_value "$target")" \
+    "$(quote_shell_value "$remote_command")"
+  printf 'scp %s %s &&\n' \
+    "$(quote_shell_value "${target}:${remote_path}")" \
+    "$(quote_shell_value "$output")"
+  printf 'ssh -T %s %s\n' \
+    "$(quote_shell_value "$target")" \
+    "$(quote_shell_value "$cleanup_command")"
+  printf '%s\n' "${c_dim}The remote temporary file is retained if ssh or scp fails, so it can be retried.${c_reset}"
   printf '\n%s\n' "${c_dim}Press any key to return. ←/Esc also returns.${c_reset}"
   key_tty_state="$(stty -g)" || return 1
   stty -echo -icanon min 1 time 0

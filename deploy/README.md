@@ -531,7 +531,7 @@ CD; local rebuilds are for a repository checkout, not a deployment host.
 The helper does not manage a host-level tunnel or proxy. Superadmin commands
 use the running API container when available, otherwise a disposable one.
 
-Capture a filtered log stream locally with SSH redirection:
+Capture a filtered log stream locally from your workstation:
 
 ```sh
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging logs \
@@ -539,6 +539,10 @@ ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging logs \
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging logs \
   --match "request completed" --tail 500 api worker > hackos-requests.log
 ```
+
+The interactive log view's `e` action prints an `ssh` + `scp` + cleanup block
+when a remote file is preferable. It removes the temporary remote file only
+after `scp` succeeds, so a failed transfer can be retried.
 
 Use `ssh -tt ... logs --follow api` for a live colored stream.
 
