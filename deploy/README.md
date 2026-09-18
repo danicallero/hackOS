@@ -421,6 +421,36 @@ seguridad propia de la aplicación; el servicio `migrate` sigue siendo el paso
 operativo explícito y bloquea el arranque mediante `depends_on` hasta terminar
 correctamente.
 
+## Staging service operations
+
+Each staging release installs the staging-only operator helper at
+`/opt/hackos/staging-services.sh`. It uses the same Compose project, host
+environment files, and deployment lock as the release script. It cannot be
+pointed at the production project by accident.
+
+Run these commands over the staging host's private SSH path:
+
+```sh
+STAGING_USER=staging-user
+STAGING_HOST=staging-tailnet-host
+
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/staging-services.sh status
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/staging-services.sh logs --tail 200 api worker web
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/staging-services.sh logs --follow api
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/staging-services.sh start
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/staging-services.sh stop api
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/staging-services.sh shutdown
+```
+
+`status` includes stopped containers, `logs` accepts the Compose service names,
+and `start` starts the long-running runtime plus its required one-shot
+dependencies. `stop` can target selected services; `shutdown` stops the whole
+staging project. Both retain the persistent PostgreSQL and object-storage data;
+neither command removes containers, volumes, or bind-mounted data. Release
+updates still go through the immutable-image CD workflow. The helper intentionally
+does not manage a host-level tunnel or proxy service; that ingress remains
+available while the application project is stopped.
+
 Para revisar el estado y los logs:
 
 ```sh

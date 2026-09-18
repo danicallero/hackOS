@@ -142,7 +142,7 @@ jobs:
             -C "$GITHUB_WORKSPACE/deploy" \
             docker-compose.yml incus-deploy.sh \
             -C "$GITHUB_WORKSPACE/deploy/scripts" \
-            check-env.sh backup-r2.sh
+            check-env.sh backup-r2.sh staging-services.sh
 
           scp \
             -i "$HACKOS_SSH_KEY_FILE" \
@@ -159,7 +159,7 @@ jobs:
             -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="$HACKOS_SSH_KNOWN_HOSTS_FILE" \
             "$SSH_USER@$SSH_HOST" \
-            "set -eu; command -v docker >/dev/null; docker compose version >/dev/null; test \"\$(docker ps --filter name=cloudflared --format '{{.Names}}' | head -n 1)\"; install -d -m 700 /opt/hackos; tar --no-same-owner -xzf /tmp/$archive_name -C /opt/hackos; rm -f /tmp/$archive_name; chmod 700 /opt/hackos/incus-deploy.sh /opt/hackos/check-env.sh /opt/hackos/backup-r2.sh; cp /opt/hackos/incus-deploy.sh /opt/hackos/deploy.sh; chmod 700 /opt/hackos/deploy.sh"
+            "set -eu; command -v docker >/dev/null; docker compose version >/dev/null; test \"\$(docker ps --filter name=cloudflared --format '{{.Names}}' | head -n 1)\"; install -d -m 700 /opt/hackos; tar --no-same-owner -xzf /tmp/$archive_name -C /opt/hackos; rm -f /tmp/$archive_name; chmod 700 /opt/hackos/incus-deploy.sh /opt/hackos/check-env.sh /opt/hackos/backup-r2.sh /opt/hackos/staging-services.sh; cp /opt/hackos/incus-deploy.sh /opt/hackos/deploy.sh; chmod 700 /opt/hackos/deploy.sh"
 
       - name: Deploy on staging host
         shell: bash
