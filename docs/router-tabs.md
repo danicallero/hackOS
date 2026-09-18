@@ -13,9 +13,10 @@ available on every platform:
 - The overflow circle is a real menu control, not a fake fifth tab: while an
   overflow destination is active it keeps the same Liquid Glass/opaque surface
   and swaps the ellipsis for that destination's selected icon.
-- The direct surface is one continuous scrub area. The selection lens follows
-  the finger on the UI thread and navigation commits to the cell under the
-  finger when the gesture ends.
+- The direct surface is one continuous scrub area. Native Liquid Glass uses a
+  `clear` outer surface and a separate interactive `regular` frosted pill that
+  follows the finger; opaque fallbacks use the matching theme lens.
+  Navigation commits to the cell under the finger when the gesture ends.
 - The shell publishes its geometry to route content, so scrollable screens can
   finish above the floating bar without copying device-specific constants.
 
@@ -51,7 +52,7 @@ The component has two layers:
 
 | Layer | Owns | Does not own |
 | --- | --- | --- |
-| `RouterTabs` | Expo Router tab registration, direct-tab rendering, Liquid Glass/opaque geometry, scrub gesture, selection lens, safe-area contract, direct-tab press callbacks | Capabilities, localization, icon choice, overflow destination policy, native menu actions |
+| `RouterTabs` | Expo Router tab registration, direct-tab rendering, Liquid Glass/opaque geometry, scrub gesture, native selection pill or fallback lens, safe-area contract, direct-tab press callbacks | Capabilities, localization, icon choice, overflow destination policy, native menu actions |
 | `OpaqueRouterTabs` | hackOS capabilities, localized labels, SF Symbols, unread state, direct/overflow partitioning, overflow menu actions (native `MenuView` on iOS, a hand-rolled matching card on Android), pseudo-tab replacement semantics | The shell's geometry or gesture implementation |
 
 Keep this boundary when adding destinations. A library consumer should be able
@@ -184,10 +185,11 @@ not change as capability or overflow state changes.
 | `shadow?` | Optional React Native `boxShadow` value applied to the bar and lens. |
 
 On iOS 26+, `surface` and `selectedSurface` are not painted as opaque fills;
-the native Liquid Glass surfaces provide the material. They remain required so
-the same theme has a complete fallback. Icon colours are intentionally not in
-the theme: `RouterTabItem` accepts arbitrary React nodes, so the consumer can
-use any icon library and own its inactive/active rendering.
+the native Liquid Glass surfaces provide the clear outer material and regular
+frosted active pill. They remain required so the same theme has a complete fallback.
+Icon colours are intentionally not in the theme: `RouterTabItem` accepts
+arbitrary React nodes, so the consumer can use any icon library and own its
+inactive/active rendering.
 
 ### `RouterTabsProps`
 
@@ -200,6 +202,7 @@ use any icon library and own its inactive/active rendering.
 | `maxDirectTabs` | no | Direct-cell budget when `overflow` exists. Defaults to 4. |
 | `maxTabsWithoutOverflow` | no | Direct-cell budget when `overflow` is absent. Defaults to 5. |
 | `fallbackTheme` | no | Partial theme used only by the opaque fallback when the screen's scheme differs from the system scheme. |
+| `colorScheme` | no | Explicit Liquid Glass appearance; defaults to `auto`. |
 | `surfaceComponent` | no | Custom material renderer. The built-in Expo Glass renderer is used when omitted. |
 | `onTabPress` | no | Called by an ordinary direct-tab press. Use for haptics or analytics. |
 | `onTabSelect` | no | Called only when a horizontal scrub commits to a new direct cell. Ordinary taps stay in Expo Router's `TabTrigger` event pipeline. |
@@ -238,6 +241,7 @@ surface, a third-party blur implementation, or a platform-specific renderer:
 import type { RouterTabsSurfaceProps } from "@/components/router-tabs";
 
 function AppSurface({
+  colorScheme,
   children,
   mode,
   style,
@@ -246,6 +250,7 @@ function AppSurface({
   // Keep the same geometry and children contract; only the material changes.
   return (
     <MyGlassOrSolidSurface
+      colorScheme={colorScheme}
       material={mode}
       style={style}
       testID={testID}
@@ -338,8 +343,8 @@ The shell reads Reanimated's `useReducedMotion()` preference. When the user
 has enabled Reduce Motion / Remove animations:
 
 - route selection still changes normally;
-- the selection lens still follows a finger during a direct scrub, because
-  that is direct manipulation rather than an autonomous animation;
+- the selection pill/lens still follows a finger during a direct scrub,
+  because that is direct manipulation rather than an autonomous animation;
 - the arrival animation is replaced with an immediate position update; and
 - the resolved `reducedMotion` flag is passed to a custom `surfaceComponent` so
   its own material transitions can be disabled as well.
@@ -353,20 +358,24 @@ The gesture activates only after a small horizontal movement and fails for a
 primarily vertical movement, allowing the individual `TabTrigger` pressables
 to keep ordinary taps. Once active:
 
-1. the selection lens follows the finger continuously on a Reanimated worklet;
+1. the native regular frosted selection pill, or opaque fallback lens, follows the
+   finger continuously on a Reanimated worklet;
 2. no route changes while the finger is moving;
 3. the final x-coordinate is converted to a direct-cell index on release; and
 4. navigation commits once to the tab under the finger.
 
-The lens is inset evenly on all four sides of its cell. The full cell remains
-the hit target, so the visual padding does not make a tab harder to touch.
+The pill/lens is inset evenly on all four sides of its cell. The full cell
+remains the hit target, so the visual padding does not make a tab harder to
+touch. The outer Liquid Glass surface uses the clear treatment while the active
+pill uses the regular frosted treatment.
 The overflow circle is outside this gesture and opens its native menu.
 
 ### Selection and route changes
 
 The shell determines the active direct cell from the current pathname, after
 removing query/hash suffixes, trailing slashes, and Expo Router group segments.
-Changing the route from elsewhere animates the lens to the matching cell. A
+Changing the route from elsewhere animates the native clear pill or opaque
+fallback lens to the matching cell. A
 scrubbed selection uses the headless Expo Router tab trigger state and emits
 the selection callback once; it does not simulate a second press on the target,
 which would incorrectly trigger a retap-to-top action.
@@ -455,7 +464,7 @@ the usual cause of lists ending too high.
 
 | Platform | Material | Navigation/menu | Consumer responsibility |
 | --- | --- | --- | --- |
-| iOS 26+ | Native Liquid Glass with interactive selection surface | Expo Router triggers + native `MenuView` overflow | Keep content edge-to-edge and use the inset hook for reachable endings. |
+| iOS 26+ | Native Liquid Glass: a clear outer surface plus a regular frosted interactive selection pill | Expo Router triggers + native `MenuView` overflow | Keep content edge-to-edge and use the inset hook for reachable endings. |
 | iOS <26 | Opaque colour-scheme-aware surface with matching geometry | Same | Supply `fallbackTheme` for screens with an explicit dark surface. |
 | Android | Opaque colour-scheme-aware surface with matching geometry | Same trigger contract; hackOS's `OpaqueRouterTabs` adapter renders a hand-rolled card menu here instead of `MenuView`'s Compose `DropdownMenu` fallback, to match the iOS card look (see `navigation.md`) | Ensure the app has Gesture Handler/Reanimated configured; use the inset hook for navigation-bar clearance. |
 | iPad / regular tablet width | Slightly thinner bar; up to six direct cells | Same | Treat width as a layout policy, not a different navigation model. |

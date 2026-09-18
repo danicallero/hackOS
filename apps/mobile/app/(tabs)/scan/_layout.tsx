@@ -2,7 +2,7 @@ import { Stack } from "expo-router/stack";
 
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { useLocale } from "@/lib/i18n";
-import { transparentDetailHeaderOptions } from "@/lib/navigation";
+import { darkScannerHeaderOptions, transparentDetailHeaderOptions } from "@/lib/navigation";
 
 export default function ScannerLayout() {
   const { t } = useLocale();
@@ -12,6 +12,7 @@ export default function ScannerLayout() {
       <Stack.Screen
         name="index"
         options={{
+          ...darkScannerHeaderOptions,
           title: t("tabScan"),
           // Keep the camera edge-to-edge while letting iOS place its native
           // directory action alongside the regular-width navigation chrome.
@@ -19,7 +20,6 @@ export default function ScannerLayout() {
           headerTransparent: true,
           headerShadowVisible: false,
           headerTitle: "",
-          headerTintColor: "white",
         }}
       />
       <Stack.Screen name="scan-log" />

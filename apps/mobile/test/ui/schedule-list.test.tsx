@@ -86,11 +86,14 @@ const items = [
 const emptyPreferences = { channels: ["push"], mandatoryCategories: [], overrides: [] };
 
 /** Stands in for the server: a PUT persists the override the next GET returns. */
-function mockApi(initial: { category: string; channel: string; enabled: boolean }[] = []) {
+function mockApi(
+  initial: { category: string; channel: string; enabled: boolean }[] = [],
+  scheduleItems = items,
+) {
   let overrides = initial;
   (apiFetch as jest.Mock).mockImplementation(
     (path: string, init?: { method?: string; body?: string }) => {
-      if (path === "/api/public/activities") return Promise.resolve({ items });
+      if (path === "/api/public/activities") return Promise.resolve({ items: scheduleItems });
       if (path === "/api/me/notification-preferences") {
         if (init?.method === "PUT") overrides = JSON.parse(init.body ?? "{}").preferences;
         return Promise.resolve({ ...emptyPreferences, overrides });
@@ -128,6 +131,22 @@ describe("schedule list (H374)", () => {
 
     await screen.findByText("Check-in");
     expect(screen.getByText("Mesa 1").props.numberOfLines).toBeUndefined();
+  });
+
+  it("keeps a midnight meridiem on one line in the timeline gutter", async () => {
+    const midnightItems = [
+      {
+        ...items[0],
+        startsAt: "2026-07-04T00:00:00",
+        endsAt: "2026-07-04T01:00:00",
+      },
+    ];
+    mockApi([], midnightItems);
+
+    await renderMobile(<ScheduleScreen />);
+
+    const midnight = await screen.findByText("12:00 AM", { includeHiddenElements: true });
+    expect(midnight.props.numberOfLines).toBe(1);
   });
 
   it("marks activities restricted to sponsors or mentors", async () => {

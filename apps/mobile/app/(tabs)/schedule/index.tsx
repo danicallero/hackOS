@@ -608,8 +608,9 @@ export default function ScheduleScreen() {
             item.kind === "now" ? (
               <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
                 <View style={{ flexDirection: "row", alignItems: "center" }}>
-                  <View style={{ width: 70, alignItems: "center" }}>
+                  <View style={{ width: TIMELINE_GUTTER_WIDTH, alignItems: "center" }}>
                     <Text
+                      numberOfLines={1}
                       style={{
                         color: colors.accent,
                         fontSize: 13,
@@ -772,6 +773,8 @@ const TIMELINE_GAP_AFTER_LABEL = 6;
 const TIMELINE_GAP_BEFORE_LABEL = 8;
 // Fixed-length connector between one activity's end and the next one's start.
 const TIMELINE_GAP_LINE_LENGTH = 12;
+// Keep localized 12-hour labels and their meridiem on one line.
+const TIMELINE_GUTTER_WIDTH = 76;
 
 const COLLAPSED_TITLE_LINES = 2;
 const COLLAPSED_DESCRIPTION_LINES = 2;
@@ -804,6 +807,7 @@ function StartTimeFlag({ time }: { time: string }) {
       }}
     >
       <Text
+        numberOfLines={1}
         style={{
           color: colors.accentText,
           fontSize: 13,
@@ -863,7 +867,7 @@ function ScheduleCard({
         <View
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
-          style={{ alignItems: "center", width: 70 }}
+          style={{ alignItems: "center", width: TIMELINE_GUTTER_WIDTH }}
         >
           {active ? (
             <View style={{ marginTop: TIMELINE_GAP_BEFORE_LABEL }}>
@@ -871,6 +875,7 @@ function ScheduleCard({
             </View>
           ) : (
             <Text
+              numberOfLines={1}
               style={{
                 color: colors.label,
                 fontSize: 15,
@@ -892,6 +897,7 @@ function ScheduleCard({
             }}
           />
           <Text
+            numberOfLines={1}
             style={{
               color: colors.tertiaryLabel,
               fontSize: 13,
@@ -1042,7 +1048,7 @@ function ScheduleCard({
           <View
             accessibilityElementsHidden
             importantForAccessibility="no-hide-descendants"
-            style={{ alignItems: "center", width: 70 }}
+            style={{ alignItems: "center", width: TIMELINE_GUTTER_WIDTH }}
           >
             <View style={{ backgroundColor: colors.separator, flex: 1, width: 1 }} />
           </View>

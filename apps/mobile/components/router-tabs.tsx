@@ -23,7 +23,6 @@ import {
   Pressable,
   type StyleProp,
   Text,
-  useColorScheme,
   View,
   type ViewStyle,
 } from "react-native";
@@ -58,10 +57,13 @@ const ROUTER_TAB_BAR_HORIZONTAL_PADDING = 16;
 const TAB_SELECTION_SPRING = { damping: 20, mass: 0.8, stiffness: 220 };
 
 export type RouterTabsSurfaceMode = "liquid-glass" | "opaque";
+export type RouterTabsColorScheme = "auto" | "light" | "dark";
 
 /** Props a custom tab-surface renderer must accept. */
 export interface RouterTabsSurfaceProps {
   children?: ReactNode;
+  /** Appearance used by native Liquid Glass; opaque fallbacks may ignore it. */
+  colorScheme: RouterTabsColorScheme;
   /** Whether the native material should use its interactive treatment. */
   isInteractive: boolean;
   /** The shell's resolved material mode for the current platform. */
@@ -139,6 +141,8 @@ export interface RouterTabsProps {
   maxTabsWithoutOverflow?: number;
   /** Theme overrides for opaque fallbacks on intentionally themed screens. */
   fallbackTheme?: Partial<RouterTabsTheme>;
+  /** Appearance used by native Liquid Glass surfaces and opaque fallbacks. */
+  colorScheme?: RouterTabsColorScheme;
   /** Optional material adapter; Expo Glass is used when omitted. */
   surfaceComponent?: RouterTabsSurfaceComponent;
   /** Prefix for the shell's native test identifiers. */
@@ -163,6 +167,7 @@ export function RouterTabs({
   fallbackTheme,
   maxDirectTabs = MAX_DIRECT_TABS,
   maxTabsWithoutOverflow = MAX_TABS_WITHOUT_OVERFLOW,
+  colorScheme = "auto",
   surfaceComponent = DefaultRouterTabsSurface,
   testID = "router-tabs",
   theme,
@@ -185,6 +190,7 @@ export function RouterTabs({
       <Tabs style={{ flex: 1 }} testID={testID}>
         <TabSlot style={{ flex: 1 }} />
         <RouterTabsContent
+          colorScheme={colorScheme}
           directTabs={directTabs}
           liquidGlass={liquidGlass}
           onTabPress={onTabPress}
@@ -205,6 +211,7 @@ export function RouterTabs({
 }
 
 interface RouterTabsContentProps {
+  colorScheme: RouterTabsColorScheme;
   directTabs: RouterTabItem[];
   liquidGlass: boolean;
   onTabPress?: (tab: RouterTabItem) => void;
@@ -216,6 +223,7 @@ interface RouterTabsContentProps {
 }
 
 function RouterTabsContent({
+  colorScheme,
   directTabs,
   liquidGlass,
   onTabPress,
@@ -343,6 +351,7 @@ function RouterTabsContent({
           style={{ flex: 1, height: tabBarHeight }}
         >
           <TabSurface
+            colorScheme={colorScheme}
             liquidGlass={liquidGlass}
             reducedMotion={reducedMotion}
             surfaceComponent={surfaceComponent}
@@ -351,7 +360,9 @@ function RouterTabsContent({
           >
             <TabSelectionBlob
               cellWidth={directTabCellWidth}
+              colorScheme={colorScheme}
               itemHeight={tabItemHeight}
+              liquidGlass={liquidGlass}
               selectionInset={tabItemVerticalInset}
               offset={selectionOffset}
               theme={theme}
@@ -382,6 +393,7 @@ function RouterTabsContent({
 
       {overflow ? (
         <TabSurface
+          colorScheme={colorScheme}
           liquidGlass={liquidGlass}
           reducedMotion={reducedMotion}
           surfaceComponent={surfaceComponent}
@@ -503,20 +515,23 @@ const RouterTabButton = forwardRef<View, RouterTabButtonProps>(function RouterTa
 
 function TabSelectionBlob({
   cellWidth,
+  colorScheme,
   itemHeight,
+  liquidGlass,
   selectionInset,
   offset,
   theme,
   visible,
 }: {
   cellWidth: number;
+  colorScheme: RouterTabsColorScheme;
   itemHeight: number;
+  liquidGlass: boolean;
   selectionInset: number;
   offset: SharedValue<number>;
   theme: RouterTabsTheme;
   visible: boolean;
 }) {
-  const colorScheme = useColorScheme();
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: offset.value }],
   }));
@@ -539,23 +554,30 @@ function TabSelectionBlob({
         animatedStyle,
       ]}
     >
-      <View
-        style={{
-          // Keep the travelling lens transform-only. A second glass hierarchy
-          // here makes UIKit refract and distort the tab content itself.
-          backgroundColor:
-            colorScheme === "dark" ? "rgba(255, 255, 255, 0.16)" : "rgba(0, 0, 0, 0.1)",
-          borderCurve: "continuous",
-          borderRadius: itemHeight / 2,
-          boxShadow: theme.shadow,
-          flex: 1,
-        }}
-      />
+      {liquidGlass ? (
+        <ExpoGlassView
+          colorScheme={colorScheme}
+          glassEffectStyle="regular"
+          isInteractive
+          style={{ borderRadius: itemHeight / 2, flex: 1 }}
+        />
+      ) : (
+        <View
+          style={{
+            backgroundColor: theme.selectedSurface,
+            borderCurve: "continuous",
+            borderRadius: itemHeight / 2,
+            boxShadow: theme.shadow,
+            flex: 1,
+          }}
+        />
+      )}
     </Animated.View>
   );
 }
 
 function TabSurface({
+  colorScheme,
   children,
   liquidGlass,
   reducedMotion,
@@ -564,6 +586,7 @@ function TabSurface({
   testID,
   theme,
 }: {
+  colorScheme: RouterTabsColorScheme;
   children: ReactNode;
   liquidGlass: boolean;
   reducedMotion: boolean;
@@ -572,10 +595,13 @@ function TabSurface({
   testID?: string;
   theme: RouterTabsTheme;
 }) {
+  const borderColor = colorScheme === "dark" ? "rgba(255, 255, 255, 0.14)" : "rgba(0, 0, 0, 0.14)";
   const baseStyle: ViewStyle = {
+    borderColor,
+    borderWidth: 0.5,
     borderCurve: "continuous",
     borderRadius: ROUTER_TAB_BAR_HEIGHT / 2,
-    boxShadow: theme.shadow,
+    boxShadow: liquidGlass ? undefined : theme.shadow,
     flexDirection: "row",
     overflow: "hidden",
   };
@@ -587,7 +613,8 @@ function TabSurface({
 
   return (
     <SurfaceComponent
-      isInteractive={liquidGlass}
+      colorScheme={colorScheme}
+      isInteractive={true}
       mode={liquidGlass ? "liquid-glass" : "opaque"}
       reducedMotion={reducedMotion}
       surfaceComponent={surfaceComponent}
@@ -600,6 +627,7 @@ function TabSurface({
 }
 
 function SurfaceComponent({
+  colorScheme,
   children,
   isInteractive,
   mode,
@@ -611,6 +639,7 @@ function SurfaceComponent({
   const Surface = surfaceComponent;
   return (
     <Surface
+      colorScheme={colorScheme}
       isInteractive={isInteractive}
       mode={mode}
       reducedMotion={reducedMotion}
@@ -623,6 +652,7 @@ function SurfaceComponent({
 }
 
 function DefaultRouterTabsSurface({
+  colorScheme,
   children,
   isInteractive,
   mode,
@@ -632,7 +662,8 @@ function DefaultRouterTabsSurface({
   if (mode === "liquid-glass") {
     return (
       <ExpoGlassView
-        glassEffectStyle="regular"
+        colorScheme={colorScheme}
+        glassEffectStyle="clear"
         isInteractive={isInteractive}
         style={style}
         testID={testID}
