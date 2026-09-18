@@ -243,7 +243,7 @@ jobs:
           exit 1
 
   deploy-staging:
-    name: Deploy staging after both images publish
+    name: Deploy selected staging images
     needs:
       - detect
       - publish-api
@@ -251,7 +251,6 @@ jobs:
     if: >-
       always() &&
       needs.detect.result == 'success' &&
-      github.event_name == 'push' &&
       github.ref == 'refs/heads/staging' &&
       needs.detect.outputs.any_image == 'true' &&
       (needs.detect.outputs.api_image != 'true' || needs.publish-api.result == 'success') &&
