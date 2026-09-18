@@ -355,7 +355,9 @@ function DevelopmentIndicator() {
         paddingVertical: 4,
         position: "absolute",
         right: 12,
-        top: insets.top + 8,
+        // Keep this directly below the status indicators and above any
+        // screen-specific header actions (search, filters, overflow, etc.).
+        top: Math.max(0, insets.top - 4),
         zIndex: 10,
       }}
     >
