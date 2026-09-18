@@ -1,6 +1,8 @@
 import { type MenuAction, MenuView } from "@expo/ui/community/menu";
+import { NavigationBar } from "expo-navigation-bar";
 import type { Href } from "expo-router";
 import { usePathname, useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import type { SFSymbol } from "expo-symbols";
 import { useRef, useState } from "react";
 import {
@@ -18,6 +20,7 @@ import {
   type RouterTabItem,
   type RouterTabRoute,
   RouterTabs,
+  type RouterTabsSurfaceProps,
   type RouterTabsTheme,
 } from "@/components/router-tabs";
 import { SymbolView } from "@/components/symbol";
@@ -38,6 +41,7 @@ import {
   routerTabBarMaxTabsWithoutOverflowForWidth,
   useRouterTabBarInsets,
 } from "@/lib/router-tabs-inset";
+import { isDarkScannerSurface } from "@/lib/scanner-surface";
 import { overflowTabs, primaryTabs, type TabKey } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
 
@@ -148,12 +152,13 @@ export function OpaqueRouterTabs({
   const pathname = usePathname();
   const systemColorScheme = useColorScheme();
   const { width } = useWindowDimensions();
-  const fallbackColorScheme: "dark" | "light" = isDarkScannerSurface(pathname)
+  const darkScannerSurface = isDarkScannerSurface(pathname);
+  const fallbackColorScheme: "dark" | "light" = darkScannerSurface
     ? "dark"
     : systemColorScheme === "dark"
       ? "dark"
       : "light";
-  const tabIconColor = fallbackColorScheme === "dark" ? "#ffffff" : "#6c6c70";
+  const tabIconColor = fallbackColorScheme === "dark" ? "#ffffff" : "#000000";
   const tabSelectedColor = fallbackColorScheme === "dark" ? "#0a84ff" : "#007aff";
   const personalTabContext = { hasQueueItems };
   const primaryTabKeys = primaryTabs(capabilities, personalTabContext);
@@ -207,50 +212,81 @@ export function OpaqueRouterTabs({
           surface: "#1c1c1e",
         }
       : {
-          label: "#6c6c70",
+          label: "#000000",
           selectedLabel: "#007aff",
           selectedSurface: "#e5e5ea",
           surface: "#ffffff",
         };
 
   return (
-    <RouterTabs
-      onTabPress={() => void haptic("selection")}
-      onTabSelect={() => void haptic("selection")}
-      overflow={
-        overflowIds.length > 0 ? (
-          <OpaqueOverflowMenu
-            activeIconColor={tabSelectedColor}
-            colorScheme={fallbackColorScheme}
-            iconColor={tabIconColor}
-            overflowIds={overflowIds}
-          />
-        ) : null
-      }
-      maxDirectTabs={directTabLimit}
-      maxTabsWithoutOverflow={maxTabsWithoutOverflow}
-      fallbackTheme={fallbackTheme}
-      routes={REGISTERED_TAB_ROUTES}
-      tabs={tabs}
-      testID="opaque-router-tabs"
-      theme={{
-        label: fallbackColorScheme === "dark" ? "#ffffff" : colors.secondaryLabel,
-        selectedLabel: colors.accent,
-        selectedSurface: colors.accentSurface,
-        shadow: colors.controlShadow,
-        surface: colors.surface,
-        transparent: colors.transparent,
-      }}
-    />
+    <>
+      <StatusBar style={darkScannerSurface ? "light" : "auto"} />
+      {Platform.OS === "android" ? (
+        // expo-navigation-bar's `light` style means light system-button
+        // content, keeping Android's navigation surface dark for the camera.
+        <NavigationBar style={darkScannerSurface ? "light" : "auto"} />
+      ) : null}
+      <RouterTabs
+        colorScheme={fallbackColorScheme}
+        onTabPress={() => void haptic("selection")}
+        onTabSelect={() => void haptic("selection")}
+        overflow={
+          overflowIds.length > 0 ? (
+            <OpaqueOverflowMenu
+              activeIconColor={tabSelectedColor}
+              colorScheme={fallbackColorScheme}
+              iconColor={tabIconColor}
+              overflowIds={overflowIds}
+            />
+          ) : null
+        }
+        maxDirectTabs={directTabLimit}
+        maxTabsWithoutOverflow={maxTabsWithoutOverflow}
+        fallbackTheme={fallbackTheme}
+        routes={REGISTERED_TAB_ROUTES}
+        surfaceComponent={OpaqueRouterTabsSurface}
+        tabs={tabs}
+        testID="opaque-router-tabs"
+        theme={{
+          label: fallbackColorScheme === "dark" ? "#ffffff" : "#000000",
+          selectedLabel: colors.accent,
+          selectedSurface: colors.accentSurface,
+          shadow: colors.controlShadow,
+          surface: colors.surface,
+          transparent: colors.transparent,
+        }}
+      />
+    </>
   );
 }
 
-function isDarkScannerSurface(pathname: string): boolean {
-  const routePath = pathname.replace(/\/\([^/]+\)/g, "");
-  // The activity scanner uses a numeric activity route. People Finder is also
-  // nested below `/activities`, but it is a light list surface and must not
-  // inherit the scanner's dark tab bar after navigation from the camera.
-  return routePath === "/scan" || /^\/activities\/\d+$/.test(routePath);
+/**
+ * The clear Liquid Glass material loses its perimeter against a light canvas,
+ * making the tab bar read as an opaque white strip. Use the same regular,
+ * interactive material as the app's other floating controls in light mode;
+ * its native rim and refraction retain the liquid-glass affordance. Dark
+ * surfaces keep the clearer treatment, where the surrounding contrast already
+ * defines the bar cleanly.
+ */
+function OpaqueRouterTabsSurface({
+  children,
+  colorScheme,
+  isInteractive,
+  mode,
+  style,
+  testID,
+}: RouterTabsSurfaceProps) {
+  return (
+    <GlassView
+      colorScheme={colorScheme}
+      glassEffectStyle={mode === "liquid-glass" && colorScheme === "light" ? "regular" : "clear"}
+      isInteractive={isInteractive}
+      style={style}
+      testID={testID}
+    >
+      {children}
+    </GlassView>
+  );
 }
 
 interface OpaqueOverflowMenuProps {

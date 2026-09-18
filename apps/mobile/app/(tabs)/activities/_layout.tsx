@@ -2,7 +2,7 @@ import { Stack } from "expo-router/stack";
 
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { useLocale } from "@/lib/i18n";
-import { transparentDetailHeaderOptions } from "@/lib/navigation";
+import { darkScannerHeaderOptions, transparentDetailHeaderOptions } from "@/lib/navigation";
 import { colors } from "@/theme/colors";
 
 export default function ActivitiesLayout() {
@@ -23,12 +23,12 @@ export default function ActivitiesLayout() {
       <Stack.Screen
         name="[id]"
         options={{
+          ...darkScannerHeaderOptions,
           title: t("scannerScanActivity"),
           headerShown: process.env.EXPO_OS === "ios",
           headerTransparent: true,
           headerShadowVisible: false,
           headerTitle: "",
-          headerTintColor: "white",
           headerBackVisible: false,
         }}
       />

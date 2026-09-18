@@ -18,6 +18,21 @@ export const transparentDetailHeaderOptions = {
 } as const;
 
 /**
+ * Native header options for camera surfaces. The explicit native interface
+ * style keeps iOS 26's Liquid Glass back button/header dark even when the app
+ * theme is light; the transparent header lets the camera remain edge-to-edge.
+ */
+export const darkScannerHeaderOptions = {
+  headerStyle: { backgroundColor: "transparent" },
+  headerTintColor: "white",
+  unstable_nativeProps: {
+    headerConfig: {
+      experimental_userInterfaceStyle: "dark",
+    },
+  },
+} as const;
+
+/**
  * Back buttons are also rendered on routes that can be opened directly from a
  * notification or a deep link. In that case there is no stack entry to pop;
  * replacing with the owning surface keeps the button useful without sending

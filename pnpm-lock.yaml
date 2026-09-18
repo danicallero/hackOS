@@ -203,6 +203,9 @@ importers:
       expo-linking:
         specifier: ~57.0.10
         version: 57.0.10(expo@57.0.23)(react-native@0.86.3(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.3)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)
+      expo-navigation-bar:
+        specifier: ~57.0.2
+        version: 57.0.2(expo@57.0.23)(react-native@0.86.3(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.3)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)
       expo-network:
         specifier: ~57.0.2
         version: 57.0.2(expo@57.0.23)(react@19.2.3)
@@ -4647,6 +4650,13 @@ packages:
   expo-modules-jsi@57.1.0:
     resolution: {integrity: sha512-a5ckeHfnbYfonhcHGkM0EU/a0Keh+/OufXy/HyFS+spr5Ib0N4Oh1ZsSYFQhp5xdOUFkVofKRhfH+VmcccIIpA==}
     peerDependencies:
+      react-native: '*'
+
+  expo-navigation-bar@57.0.2:
+    resolution: {integrity: sha512-Ufe49dsTZjarA7gMMwwwnNJWpXo+oTyl5Ud0g3lsGVrj2HXjyw9cb9098N8+CoWpjfIa5PghuRYYXrcCrGQIHg==}
+    peerDependencies:
+      expo: '*'
+      react: '*'
       react-native: '*'
 
   expo-network@57.0.2:
@@ -12822,6 +12832,15 @@ snapshots:
     dependencies:
       react-native: 0.86.3(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.4))(@react-native/metro-config@0.86.3)(@types/react@19.2.17)(react@19.2.4)
     optional: true
+
+  expo-navigation-bar@57.0.2(expo@57.0.23)(react-native@0.86.3(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.3)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3):
+    dependencies:
+      debug: 4.4.3
+      expo: 57.0.23(@babel/core@7.29.7)(@expo/metro-runtime@57.0.15)(expo-router@57.0.21)(react-dom@19.2.3(react@19.2.3))(react-native-web@0.21.2(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-native-worklets@0.10.1(@babel/core@7.29.7)(@react-native/metro-config@0.86.3)(react-native@0.86.3(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.3)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3))(react-native@0.86.3(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.3)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)(typescript@6.0.3)
+      react: 19.2.3
+      react-native: 0.86.3(@react-native/jest-preset@0.86.3(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.3)(@types/react@19.2.17)(react@19.2.3)
+    transitivePeerDependencies:
+      - supports-color
 
   expo-network@57.0.2(expo@57.0.23)(react@19.2.3):
     dependencies:

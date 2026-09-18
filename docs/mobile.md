@@ -471,7 +471,9 @@ distributed to other Expo Router apps without importing hackOS code.
   spacing (`TIMELINE_GAP_AFTER_LABEL`) right after a time label, wider
   spacing (`TIMELINE_GAP_BEFORE_LABEL`) as it approaches the next one, so
   each label reads as anchored to the line above it with a beat of
-  anticipation before the next. Adjacent overlapping entries get a warning
+  anticipation before the next. The time gutter reserves 76pt and clamps its
+  labels to one line, keeping 12-hour meridiems such as `AM`/`PM` attached to
+  their time. Adjacent overlapping entries get a warning
   glyph in the time gutter (`entriesOverlap`, `lib/schedule.ts`). The
   reminder bell sits absolutely positioned in the card's top-right corner
   (`hitSlop` — a 44pt touch box stretched the row and pulled the bell off the
@@ -501,7 +503,10 @@ distributed to other Expo Router apps without importing hackOS code.
   everyone, audience filter only to `schedule:manage` holders. The custom tab
   bar is an absolute overlay, so the screen keeps its full-height content and
   the list can pass behind the translucent Liquid Glass surface (opaque on
-  Android and earlier iOS). Its direct surface is one native gesture
+  Android and earlier iOS). In light mode the hackOS adapter uses the native
+  interactive `regular` material for the outer tab surface, preserving the
+  visible liquid-glass rim used by the app's other floating controls; dark
+  mode keeps the clearer material. Its direct surface is one native gesture
   surface: the selection lens follows the finger from touch-down and
   navigation commits on release to the tab cell under the finger, while the
   separate Others circle remains its own menu (native `MenuView` on iOS; a
@@ -620,6 +625,11 @@ gets a device notification. The layout is one column on phones, two from
 accreditation, badge replacement, door presence, meals, and activities),
 a dedicated primary tab for operators (see `docs/navigation.md`). Its
 person/people drill-down routes live under `app/(tabs)/scan/*`. Screen-level
+scanner routes own dark system-bar chrome as well: iOS 26+ uses an explicit
+dark native header interface style with a transparent header, while Android
+sets light system-button content on the dark camera surface. Both are scoped
+to `/scan` and `/activities/:id` and return to automatic system styling on
+light routes.
 actions use `AdaptiveToolbarButton`: real Liquid Glass runtimes promote
 navigation actions into UIKit's top toolbar; iOS <26 and Android use the same
 44-point opaque glass buttons inline on the camera surface. The camera preview

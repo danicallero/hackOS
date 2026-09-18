@@ -34,6 +34,7 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
     plugins: [
       ...(config.plugins ?? []),
       "expo-font",
+      ["expo-navigation-bar", { enforceContrast: false }],
       "expo-secure-store",
       "expo-status-bar",
       "expo-web-browser",

@@ -19,6 +19,22 @@ jest.mock("expo-router", () => ({
   usePathname: () => mockUsePathname(),
   useRouter: () => mockUseRouter(),
 }));
+jest.mock("expo-status-bar", () => {
+  const ReactLib = require("react");
+  const Native = jest.requireActual("react-native");
+  return {
+    StatusBar: ({ style }: { style: string }) =>
+      ReactLib.createElement(Native.View, { style, testID: "scanner-status-bar" }),
+  };
+});
+jest.mock("expo-navigation-bar", () => {
+  const ReactLib = require("react");
+  const Native = jest.requireActual("react-native");
+  return {
+    NavigationBar: ({ style }: { style: string }) =>
+      ReactLib.createElement(Native.View, { style, testID: "scanner-navigation-bar" }),
+  };
+});
 jest.mock("expo-router/ui", () => {
   const ReactLib = require("react");
   const Native = jest.requireActual("react-native");
@@ -178,7 +194,7 @@ jest.mock("@/theme/colors", () => ({
   },
 }));
 
-import { render, screen } from "@testing-library/react-native";
+import { act, render, screen } from "@testing-library/react-native";
 import { OpaqueRouterTabs } from "@/components/opaque-router-tabs";
 
 const DEFAULT_PROPS = {
@@ -196,6 +212,7 @@ async function renderTabs(hasUnreadNotifications: boolean) {
 describe("OpaqueRouterTabs — Android unread notification indicator (issue #625)", () => {
   beforeEach(() => {
     Object.defineProperty(Platform, "OS", { configurable: true, value: "android" });
+    mockUsePathname.mockReturnValue("/(tabs)/schedule");
   });
 
   afterEach(() => {
@@ -239,5 +256,31 @@ describe("OpaqueRouterTabs — Android unread notification indicator (issue #625
 
     // Geometry (flex: 1, etc.) must be identical; only icon content changes.
     expect(styleAfter).toEqual(styleBefore);
+  });
+
+  it("uses dark scanner system bars only on scanner routes and restores automatic styling", async () => {
+    const rendered = await renderTabs(false);
+    expect(screen.getByTestId("scanner-status-bar").props.style).toBe("auto");
+    expect(screen.getByTestId("scanner-navigation-bar").props.style).toBe("auto");
+
+    await act(async () => {
+      mockUsePathname.mockReturnValue("/(tabs)/scan");
+      rendered.rerender(<OpaqueRouterTabs {...DEFAULT_PROPS} hasUnreadNotifications={false} />);
+    });
+    expect(screen.getByTestId("scanner-status-bar").props.style).toBe("light");
+    expect(screen.getByTestId("scanner-navigation-bar").props.style).toBe("light");
+
+    await act(async () => {
+      mockUsePathname.mockReturnValue("/(tabs)/activities/42");
+      rendered.rerender(<OpaqueRouterTabs {...DEFAULT_PROPS} hasUnreadNotifications={false} />);
+    });
+    expect(screen.getByTestId("scanner-status-bar").props.style).toBe("light");
+
+    await act(async () => {
+      mockUsePathname.mockReturnValue("/(tabs)/activities/people");
+      rendered.rerender(<OpaqueRouterTabs {...DEFAULT_PROPS} hasUnreadNotifications={false} />);
+    });
+    expect(screen.getByTestId("scanner-status-bar").props.style).toBe("auto");
+    expect(screen.getByTestId("scanner-navigation-bar").props.style).toBe("auto");
   });
 });
