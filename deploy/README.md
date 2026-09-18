@@ -465,6 +465,8 @@ ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging logs --tail 20
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging logs --follow api
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging logs --event-type error api
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging start
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging recreate api
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging release api
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging stop api
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging shutdown
 ```
@@ -490,10 +492,14 @@ incus exec "$PRODUCTION_INSTANCE" -- /opt/hackos/services.sh production shell
 The shell includes the CLI-only `system:superadmin` setup and management flow.
 It calls the official server-side scripts in the API image, so grants and
 revocations remain audited and the last active superadmin cannot be removed.
-The interactive shell supports arrows, Enter, number shortcuts, `b` back, and
-`q` quit. Its service picker lists Compose services; logs support event filters
-(`all`, `error`, `warning`, `request`, `health`) and custom text search, with
-terminal colors when available.
+The interactive shell supports arrows, Enter or right-arrow to select,
+left-arrow/Escape/`b` to go back, and `q` to quit. Service actions use Space
+to select multiple services and Enter to confirm. Status includes a short
+reason for stopped one-shot or failed containers. The log view supports
+filters (`all`, `error`, `warning`, `request`, `health`) and custom text
+search, with refresh/follow/filter/service navigation and an export command
+for saving remote logs locally. Start also offers per-service start/recreate,
+image release information, and local rebuild instructions.
 The non-interactive equivalents are:
 
 ```sh
@@ -515,18 +521,17 @@ Create a new account only from a protected operator session; use `grant` when
 the account already exists. The optional `--allow-existing-admin` override is
 deliberate and should be used only when a second superadmin is required.
 
-`status` includes stopped containers, `logs` accepts the Compose service names,
-and `start` starts the long-running runtime plus its required one-shot
-dependencies and waits for health checks. `stop` can target selected services;
-`shutdown` stops the whole selected project. Both retain persistent PostgreSQL
-and object-storage data; neither command removes containers, volumes, or
-bind-mounted data. Release updates still go through the immutable-image CD
-workflow. The helper intentionally does not manage a host-level tunnel or
-proxy service; that ingress remains available while the application project is
-stopped. Superadmin commands use the running API container when available;
-otherwise they use a quiet disposable container and do not build an image.
+`status` includes stopped containers, `logs` accepts Compose service names, and
+`start` starts the long-running runtime plus its required one-shot dependencies
+and waits for health checks. `recreate` force-recreates selected services
+without building; `release` shows the OCI revision and image build timestamp.
+`stop` can target selected services, while `shutdown` stops the whole project.
+Both retain persistent data. Release updates still go through immutable-image
+CD; local rebuilds are for a repository checkout, not a deployment host.
+The helper does not manage a host-level tunnel or proxy. Superadmin commands
+use the running API container when available, otherwise a disposable one.
 
-Capture a filtered log stream locally with SSH redirection:
+Capture a filtered log stream locally from your workstation:
 
 ```sh
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging logs \
@@ -534,6 +539,10 @@ ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging logs \
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging logs \
   --match "request completed" --tail 500 api worker > hackos-requests.log
 ```
+
+The interactive log view's `e` action prints an `ssh` + `scp` + cleanup block
+when a remote file is preferable. It removes the temporary remote file only
+after `scp` succeeds, so a failed transfer can be retried.
 
 Use `ssh -tt ... logs --follow api` for a live colored stream.
 

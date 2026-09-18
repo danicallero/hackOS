@@ -8,8 +8,10 @@ Usage:
   services.sh <environment> status [service ...]
   services.sh <environment> logs [--follow] [--tail N] [--event-type TYPE] [--match TEXT] [service ...]
   services.sh <environment> start [service ...]
+  services.sh <environment> recreate [service ...]
   services.sh <environment> stop [service ...]
   services.sh <environment> shutdown
+  services.sh <environment> release [service ...]
   services.sh <environment> shell
   services.sh <environment> superadmin <list|create|grant|revoke> [options]
 
@@ -18,6 +20,8 @@ Services: postgres valkey minio minio-init migrate api worker web
 
 The default start/stop operations cover the long-running runtime. shutdown
 stops the whole selected project and never removes volumes or bind data.
+recreate force-recreates selected runtime services without building; release
+prints the image revision and build timestamp.
 
 Log event types: all, error, warning, request, health. Use --match TEXT for a
 case-insensitive literal search instead of a built-in event type.
@@ -74,7 +78,23 @@ clear_shell() {
 }
 
 pause_shell() {
-  read -r -p "${c_dim}Press Enter to return to the menu...${c_reset}" _ || true
+  local pause_tty_state
+
+  printf '%s' "${c_dim}Press any key to return · ←/Esc also returns.${c_reset}"
+  if [[ -t 0 ]]; then
+    pause_tty_state="$(stty -g 2>/dev/null || true)"
+    if [[ -n "$pause_tty_state" ]]; then
+      stty -echo -icanon min 1 time 0
+      trap 'navigation_action=quit' INT TERM
+      read_navigation_key || true
+      stty "$pause_tty_state" 2>/dev/null || true
+      trap - INT TERM
+      printf '\n'
+      return 0
+    fi
+  fi
+  read -r _ || true
+  printf '\n'
 }
 
 read_shell_input() {
@@ -108,23 +128,32 @@ print_shell_help() {
   clear_shell
   printf '%s\n\n' "${c_cyan}${c_bold}hackOS ${environment} · help${c_reset}"
   printf '%s\n' "${c_bold}Service commands${c_reset}"
-  printf '%s\n' "  status       Show service state, health, and published ports."
+  printf '%s\n' "  status       Show state, health, ports, and a short stopped-service reason."
   printf '%s\n' "  logs         Show colored logs; add --follow, --tail N, or --event-type."
   printf '%s\n' "               Event types: all, error, warning, request, health."
   printf '%s\n' "               Use --match TEXT for a case-insensitive literal search."
-  printf '%s\n' "  start        Start the runtime and wait for health checks."
+  printf '%s\n' "  start        Start named services, or the runtime when no names are given."
+  printf '%s\n' "  recreate     Recreate named services without building images."
   printf '%s\n' "  stop         Stop all services or named services."
   printf '%s\n' "  shutdown     Stop the whole project; persistent data is retained."
+  printf '%s\n' "  release      Show the OCI revision and build time of a service image."
   printf '\n%s\n' "${c_bold}Superadmin commands${c_reset}"
   printf '%s\n' "  superadmin list"
   printf '%s\n' "  superadmin create --email ... [--password-stdin] --name ... --surname ..."
   printf '%s\n' "  superadmin grant --email ... [--allow-existing-admin]"
   printf '%s\n' "  superadmin revoke --email ..."
-  printf '\n%s\n' "${c_dim}Arrow keys move through menus; Enter selects; number keys are shortcuts."
-  printf '%s\n' "b goes back and q exits from menus and data-entry prompts."
+  printf '\n%s\n' "${c_bold}Direct SSH examples${c_reset}"
+  printf '%s\n' "  ssh user@host /opt/hackos/services.sh ${environment} status"
+  printf '%s\n' "  ssh user@host /opt/hackos/services.sh ${environment} logs --event-type error api > api-errors.log"
+  printf '%s\n' "  ssh user@host /opt/hackos/services.sh ${environment} recreate api"
+  printf '%s\n' "  ssh user@host /opt/hackos/services.sh ${environment} release api"
+  printf '\n%s\n' "${c_dim}↑/↓ move · Enter or → select · ←/Esc/b back · Space toggles service selections."
+  printf '%s\n' "Tab changes log filters; q exits. Log views accept ←/Esc without an Enter prompt."
   printf '%s\n' "Superadmin operations call the audited server-side scripts in the API image."
-  printf '%s\n' "Service actions do not build images; an admin command pulls quietly only if needed."
+  printf '%s\n' "Service actions do not build images; releases use immutable registry images."
+  printf '%s\n' "Use the shell's local-build entry for the workstation-only rebuild command."
   printf '%s\n' "Environment values are not printed or edited in this menu; use sudoedit + check-env.sh."
+  printf '%s\n' "Use e in a log view to print a command that saves remote logs locally."
   printf '%s\n' "Use Ctrl-C to leave a following log stream.${c_reset}"
   pause_shell
 }
@@ -143,7 +172,7 @@ case "$environment" in
   *) usage 2 ;;
 esac
 case "$action" in
-  status|logs|start|stop|shutdown|shell|superadmin) ;;
+  status|logs|start|recreate|stop|shutdown|release|shell|superadmin) ;;
   -h|--help|help) usage 0 ;;
   *) usage 2 ;;
 esac
@@ -203,7 +232,7 @@ run_api_script() {
 
 all_services=(postgres valkey minio minio-init migrate api worker web)
 runtime_services=(postgres valkey minio api worker web)
-service_status_format='table {{.Service}}\t{{.State}}\t{{.Health}}\t{{.Ports}}'
+service_status_format='{{.Service}}\t{{.State}}\t{{.Health}}\t{{.ExitCode}}\t{{.Ports}}'
 
 validate_services() {
   local service candidate candidate_service
@@ -339,6 +368,44 @@ restore_menu_terminal() {
   fi
 }
 
+read_navigation_key() {
+  local key sequence
+
+  navigation_action=value
+  navigation_value=''
+  key=''
+  if ! IFS= read -r -s -n 1 key; then
+    navigation_action=quit
+    return 1
+  fi
+  # Bash 3's read -n treats a terminal newline as the delimiter and returns
+  # it as an empty value when canonical mode is disabled (H22-H42, H46, H540, #544).
+  if [[ -z "$key" ]]; then
+    navigation_action=enter
+    return 0
+  fi
+
+  case "$key" in
+    $'\033')
+      sequence=''
+      IFS= read -r -s -n 2 sequence || true
+      case "$sequence" in
+        '[A'|OA) navigation_action=up ;;
+        '[B'|OB) navigation_action=down ;;
+        '[C'|OC) navigation_action=right ;;
+        '[D'|OD) navigation_action=left ;;
+        *) navigation_action=escape ;;
+      esac
+      ;;
+    $'\n'|$'\r') navigation_action=enter ;;
+    $'\t') navigation_action=tab ;;
+    ' ') navigation_action=space ;;
+    b|B) navigation_action=back ;;
+    q|Q|$'\003'|$'\004') navigation_action=quit ;;
+    *) navigation_value="$key" ;;
+  esac
+}
+
 render_menu() {
   local title="$1"
   local subtitle="$2"
@@ -347,7 +414,11 @@ render_menu() {
   local options=("$@")
   local index
 
-  clear_shell
+  if [[ "${preserve_next_menu:-false}" == true ]]; then
+    preserve_next_menu=false
+  else
+    clear_shell
+  fi
   printf '%s\n' "${c_cyan}${c_bold}hackOS ${environment} · ${title}${c_reset}"
   printf '%s\n' "${c_dim}${subtitle}${c_reset}"
   printf '%s\n\n' "${c_cyan}────────────────────────────────────────────────────────────${c_reset}"
@@ -358,7 +429,7 @@ render_menu() {
       printf '    %d  %s\n' "$((index + 1))" "${options[index]}"
     fi
   done
-  printf '\n%s\n' "${c_dim}↑/↓ move · Enter select · 1–9 shortcut · b back · q quit${c_reset}"
+  printf '\n%s\n' "${c_dim}↑/↓ move · Enter/→ select · ←/Esc/b back · 1–9 shortcut · q quit${c_reset}"
 }
 
 menu_select() {
@@ -367,7 +438,7 @@ menu_select() {
   shift 2
   local options=("$@")
   local selected=0
-  local key sequence index
+  local index
 
   menu_navigation=active
   menu_choice=-1
@@ -378,8 +449,7 @@ menu_select() {
 
   while true; do
     render_menu "$title" "$subtitle" "$selected" "${options[@]}"
-    key=''
-    if ! IFS= read -r -s -n 1 key; then
+    if ! read_navigation_key; then
       menu_navigation=quit
       break
     fi
@@ -387,45 +457,42 @@ menu_select() {
       break
     fi
 
-    case "$key" in
-      $'\033')
-        sequence=''
-        IFS= read -r -s -n 2 sequence || true
-        case "$sequence" in
-          '[A'|OA)
-            if ((selected > 0)); then
-              selected=$((selected - 1))
-            else
-              selected=$((${#options[@]} - 1))
-            fi
-            ;;
-          '[B'|OB)
-            if ((selected < ${#options[@]} - 1)); then
-              selected=$((selected + 1))
-            else
-              selected=0
-            fi
-            ;;
-        esac
+    case "$navigation_action" in
+      up)
+        if ((selected > 0)); then
+          selected=$((selected - 1))
+        else
+          selected=$((${#options[@]} - 1))
+        fi
         ;;
-      $'\n'|$'\r')
+      down|tab)
+        if ((selected < ${#options[@]} - 1)); then
+          selected=$((selected + 1))
+        else
+          selected=0
+        fi
+        ;;
+      right|enter)
         menu_choice=$selected
         menu_navigation=select
         break
         ;;
-      [1-9])
-        index=$((key - 1))
+      left|escape|back)
+        menu_navigation=back
+        break
+        ;;
+      value)
+        case "$navigation_value" in
+          [1-9]) index=$((navigation_value - 1)) ;;
+          *) continue ;;
+        esac
         if ((index < ${#options[@]})); then
           menu_choice=$index
           menu_navigation=select
           break
         fi
         ;;
-      b|B)
-        menu_navigation=back
-        break
-        ;;
-      q|Q|$'\003'|$'\004')
+      quit)
         menu_navigation=quit
         break
         ;;
@@ -444,6 +511,16 @@ run_action() {
   printf '%s\n\n' "${c_dim}Compose project: ${project_name}${c_reset}"
   run_child "$@"
   pause_shell
+}
+
+run_action_without_pause() {
+  local label="$1"
+  shift
+  clear_shell
+  printf '%s\n' "${c_cyan}${c_bold}hackOS ${environment} · ${label}${c_reset}"
+  printf '%s\n\n' "${c_dim}Compose project: ${project_name}${c_reset}"
+  run_child "$@"
+  preserve_next_menu=true
 }
 
 report_child_failure() {
@@ -499,14 +576,33 @@ format_status_stream() {
     -v yellow="$c_yellow" \
     -v red="$c_red" \
     '
-      NR == 1 { printf "%s%s%s\n", cyan, bold $0, reset; next }
+      BEGIN { FS = "\t"; OFS = "\t" }
+      BEGIN {
+        printf "%s%sSERVICE\tSTATE\tHEALTH\tEXIT CODE\tPORTS\tREASON%s\n", cyan, bold, reset
+      }
       {
-        lower = tolower($0)
+        service = $1
+        state = $2
+        health = $3
+        exit_code = $4
+        ports = $5
+        lower = tolower(state " " health)
+        reason = "-"
+        if (tolower(state) ~ /exited/) {
+          if (exit_code == "0" && service ~ /^(migrate|minio-init)$/) reason = "completed (one-shot)"
+          else if (exit_code == "0") reason = "stopped cleanly"
+          else if (exit_code ~ /^[0-9]+$/) reason = "failed (exit " exit_code ")"
+          else reason = "stopped"
+        } else if (tolower(state) ~ /created/) reason = "not started"
+        else if (tolower(state) ~ /restarting/) reason = "restarting"
+        else if (tolower(health) ~ /unhealthy/) reason = "healthcheck failing"
+        else if (tolower(state) ~ /running|up/ && tolower(health) ~ /healthy/) reason = "ready"
+        else if (tolower(state) ~ /running|up/) reason = "running"
         colour = ""
         if (lower ~ /exited|dead|removing|failed/) colour = red
         else if (lower ~ /starting|restarting|created/) colour = yellow
         else if (lower ~ /running|up|healthy/) colour = green
-        printf "%s%s%s\n", colour, $0, reset
+        printf "%s%s\t%s\t%s\t%s\t%s\t%s%s\n", colour, service, state, health, exit_code, ports, reason, reset
       }
     '
 }
@@ -558,35 +654,207 @@ format_log_stream() {
     '
 }
 
-select_services() {
-  local mode="$1"
-  local title="Choose a service"
-  local subtitle
-  local candidates=()
-  local choices=("All services")
-  local service
+render_multi_menu() {
+  local title="$1"
+  local subtitle="$2"
+  local selected="$3"
+  shift 3
+  local options=("$@")
+  local index marker
 
-  if [[ "$mode" == stop ]]; then
-    subtitle="Stop selected runtime services · b returns to the main menu"
-    candidates=("${runtime_services[@]}")
-  else
-    subtitle="View logs from one service or the whole project · b returns"
-    candidates=("${all_services[@]}")
+  clear_shell
+  printf '%s\n' "${c_cyan}${c_bold}hackOS ${environment} · ${title}${c_reset}"
+  printf '%s\n' "${c_dim}${subtitle}${c_reset}"
+  printf '%s\n\n' "${c_cyan}────────────────────────────────────────────────────────────${c_reset}"
+  for index in "${!options[@]}"; do
+    marker=' '
+    if [[ "${multi_selected_flags[index]:-false}" == true ]]; then
+      marker='x'
+    fi
+    if ((index == selected)); then
+      printf '  %s%s▸ [%s] %d  %s%s\n' "$c_cyan" "$c_bold" "$marker" "$((index + 1))" "${options[index]}" "$c_reset"
+    else
+      printf '    [%s] %d  %s\n' "$marker" "$((index + 1))" "${options[index]}"
+    fi
+  done
+  printf '\n%s\n' "${c_dim}↑/↓ or Tab move · Space toggle · Enter/→ confirm · ←/Esc/b back · q quit${c_reset}"
+}
+
+multi_menu_select() {
+  local title="$1"
+  local subtitle="$2"
+  shift 2
+  local options=("$@")
+  local selected=0
+  local index all_selected has_selection
+
+  multi_navigation=active
+  multi_tty_state=''
+  multi_tty_state="$(stty -g)" || return 1
+  stty -echo -icanon min 1 time 0
+  trap 'multi_navigation=quit' INT TERM
+
+  while true; do
+    render_multi_menu "$title" "$subtitle" "$selected" "${options[@]}"
+    if ! read_navigation_key; then
+      multi_navigation=quit
+      break
+    fi
+    if [[ "$multi_navigation" == quit ]]; then
+      break
+    fi
+
+    case "$navigation_action" in
+      up)
+        if ((selected > 0)); then
+          selected=$((selected - 1))
+        else
+          selected=$((${#options[@]} - 1))
+        fi
+        ;;
+      down|tab)
+        if ((selected < ${#options[@]} - 1)); then
+          selected=$((selected + 1))
+        else
+          selected=0
+        fi
+        ;;
+      right|enter)
+        has_selection=false
+        for index in "${!multi_selected_flags[@]}"; do
+          if [[ "${multi_selected_flags[index]}" == true ]]; then
+            has_selection=true
+            break
+          fi
+        done
+        if [[ "$has_selection" == true ]]; then
+          multi_navigation=select
+          break
+        fi
+        printf '%s\n' "${c_yellow}Select at least one service with Space, or choose All services.${c_reset}"
+        sleep 1
+        ;;
+      left|escape|back)
+        multi_navigation=back
+        break
+        ;;
+      space)
+        if ((selected == 0)); then
+          if [[ "${multi_selected_flags[0]:-false}" == true ]]; then
+            for index in "${!multi_selected_flags[@]}"; do
+              multi_selected_flags[index]=false
+            done
+          else
+            for index in "${!multi_selected_flags[@]}"; do
+              multi_selected_flags[index]=true
+            done
+          fi
+        else
+          if [[ "${multi_selected_flags[selected]:-false}" == true ]]; then
+            multi_selected_flags[selected]=false
+          else
+            multi_selected_flags[selected]=true
+          fi
+          all_selected=true
+          for index in "${!multi_selected_flags[@]}"; do
+            if ((index > 0)) && [[ "${multi_selected_flags[index]}" != true ]]; then
+              all_selected=false
+            fi
+          done
+          multi_selected_flags[0]="$all_selected"
+        fi
+        ;;
+      value)
+        case "$navigation_value" in
+          [1-9])
+            index=$((navigation_value - 1))
+            if ((index < ${#options[@]})); then
+              selected=$index
+            fi
+            ;;
+        esac
+        ;;
+      quit)
+        multi_navigation=quit
+        break
+        ;;
+    esac
+  done
+
+  if [[ -n "${multi_tty_state:-}" ]]; then
+    stty "$multi_tty_state" 2>/dev/null || true
+    multi_tty_state=''
   fi
+  trap - INT TERM
+}
+
+select_services_multi() {
+  local mode="$1"
+  local title subtitle scope_label default_all
+  local candidates=()
+  local choices=()
+  local service index
+
+  case "$mode" in
+    logs)
+      title="Choose log services"
+      subtitle="Space toggles services · Enter confirms · Tab moves · ←/Esc returns"
+      scope_label="All services"
+      candidates=("${all_services[@]}")
+      default_all=true
+      ;;
+    start)
+      title="Choose services to start"
+      subtitle="Select stopped or healthy services to bring up · Space toggles"
+      scope_label="All runtime services"
+      candidates=("${runtime_services[@]}")
+      default_all=false
+      ;;
+    stop)
+      title="Choose services to stop"
+      subtitle="Select runtime services to stop · Space toggles"
+      scope_label="All runtime services"
+      candidates=("${runtime_services[@]}")
+      default_all=false
+      ;;
+    recreate|release)
+      title="Choose services"
+      subtitle="Select long-running services · Space toggles"
+      scope_label="All runtime services"
+      candidates=("${runtime_services[@]}")
+      default_all=false
+      ;;
+    *)
+      die "unknown service selection mode: $mode"
+      ;;
+  esac
+
+  choices=("$scope_label")
   for service in "${candidates[@]}"; do
     choices+=("$service")
   done
+  multi_selected_flags=()
+  for index in "${!choices[@]}"; do
+    multi_selected_flags[index]=false
+  done
+  if [[ "$default_all" == true ]]; then
+    for index in "${!multi_selected_flags[@]}"; do
+      multi_selected_flags[index]=true
+    done
+  fi
 
-  selected_services=()
-  if ! menu_select "$title" "$subtitle" "${choices[@]}"; then
+  if ! multi_menu_select "$title" "$subtitle" "${choices[@]}"; then
     service_selection_navigation=quit
     return 0
   fi
-  service_selection_navigation="$menu_navigation"
-  [[ "$menu_navigation" == select ]] || return 0
-  if ((menu_choice > 0)); then
-    selected_services=("${candidates[$((menu_choice - 1))]}")
-  fi
+  service_selection_navigation="$multi_navigation"
+  selected_services=()
+  [[ "$multi_navigation" == select ]] || return 0
+  for index in "${!candidates[@]}"; do
+    if [[ "${multi_selected_flags[$((index + 1))]}" == true ]]; then
+      selected_services+=("${candidates[index]}")
+    fi
+  done
 }
 
 select_log_filter() {
@@ -638,6 +906,331 @@ select_log_filter() {
       done
       ;;
   esac
+}
+
+print_service_releases() {
+  local service image revision created
+
+  printf '%s\n' "${c_bold}Image releases${c_reset}"
+  printf '%s\n' "${c_dim}The revision comes from the image's OCI label; the timestamp is the local image build time.${c_reset}"
+  for service in "$@"; do
+    image="$(compose ps --all --format '{{.Image}}' "$service" 2>/dev/null | sed -n '1p' || true)"
+    if [[ -z "$image" ]]; then
+      printf '%s\n' "${c_yellow}${service}: no container/image found${c_reset}"
+      continue
+    fi
+    revision="$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' "$image" 2>/dev/null || true)"
+    created="$(docker image inspect --format '{{.Created}}' "$image" 2>/dev/null || true)"
+    if [[ -z "$revision" || "$revision" == '<no value>' ]]; then
+      printf '%s\n' "${c_yellow}${service}: ${image} · revision unavailable${c_reset}"
+    else
+      printf '%s\n' "${c_green}${service}: ${image}${c_reset}"
+      printf '%s\n' "  revision: ${revision}"
+      printf '%s\n' "  built:    ${created:-unknown}"
+      printf '%s\n' "  GitHub:   https://github.com/danicallero/hackOS/commit/${revision}"
+    fi
+  done
+}
+
+print_local_build_help() {
+  clear_shell
+  printf '%s\n\n' "${c_cyan}${c_bold}hackOS ${environment} · local rebuild${c_reset}"
+  printf '%s\n' "The deployment host consumes immutable registry images and has no source checkout."
+  printf '%s\n' "From a hackOS checkout on your workstation, build the services locally:"
+  printf '\n%s\n' "  docker build -f apps/api/Dockerfile -t hackos-api:local ."
+  printf '%s\n' "  docker build -f apps/web/Dockerfile -t hackos-web:local ."
+  printf '\n%s\n' "Use the repository's local Compose workflow for a full local runtime."
+  printf '%s\n' "A local build does not change the deployed release or registry tags."
+  pause_shell
+}
+
+quote_shell_value() {
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+print_log_export_command() {
+  local target output filter_args service_args service remote_path remote_command cleanup_command
+  local key_tty_state
+
+  clear_shell
+  printf '%s\n\n' "${c_cyan}${c_bold}hackOS ${environment} · export logs${c_reset}"
+  printf '%s\n' "Run the printed block on your workstation; it creates, downloads, and cleans up a remote file."
+  read_shell_input "SSH target (user@host, b back, q quit): "
+  case "$shell_navigation" in
+    back) return 0 ;;
+    quit) log_view_navigation=quit; return 0 ;;
+  esac
+  target="$shell_input"
+  [[ -n "$target" ]] || target="user@host"
+  read_shell_input "Local output file [hackos-${environment}-logs.log] (b back, q quit): "
+  case "$shell_navigation" in
+    back) return 0 ;;
+    quit) log_view_navigation=quit; return 0 ;;
+  esac
+  output="$shell_input"
+  [[ -n "$output" ]] || output="hackos-${environment}-logs.log"
+
+  filter_args=(--event-type "$log_event_type")
+  if [[ "$log_event_type" == match ]]; then
+    filter_args=(--match "$log_event_match")
+  fi
+  service_args=()
+  for service in "${selected_services[@]}"; do
+    service_args+=("$service")
+  done
+  if ((${#service_args[@]} == 0)); then
+    service_args=("all services")
+  fi
+  remote_path="/tmp/hackos-${environment}-logs-$(date +%Y%m%d-%H%M%S)-$$.log"
+  remote_command="/opt/hackos/services.sh $(quote_shell_value "$environment") logs --tail $(quote_shell_value "${HACKOS_LOG_TAIL:-200}")"
+  for service in "${filter_args[@]}"; do
+    remote_command="$remote_command $(quote_shell_value "$service")"
+  done
+  for service in "${service_args[@]}"; do
+    remote_command="$remote_command $(quote_shell_value "$service")"
+  done
+  remote_command="$remote_command > $(quote_shell_value "$remote_path")"
+  cleanup_command="rm -f $(quote_shell_value "$remote_path")"
+  printf '\n%s\n' "${c_bold}Copy this to your workstation:${c_reset}"
+  printf 'ssh -T %s %s &&\n' \
+    "$(quote_shell_value "$target")" \
+    "$(quote_shell_value "$remote_command")"
+  printf 'scp %s %s &&\n' \
+    "$(quote_shell_value "${target}:${remote_path}")" \
+    "$(quote_shell_value "$output")"
+  printf 'ssh -T %s %s\n' \
+    "$(quote_shell_value "$target")" \
+    "$(quote_shell_value "$cleanup_command")"
+  printf '%s\n' "${c_dim}The remote temporary file is retained if ssh or scp fails, so it can be retried.${c_reset}"
+  printf '\n%s\n' "${c_dim}Press any key to return. ←/Esc also returns.${c_reset}"
+  key_tty_state="$(stty -g)" || return 1
+  stty -echo -icanon min 1 time 0
+  trap 'navigation_action=quit' INT TERM
+  if ! read_navigation_key; then
+    log_view_navigation=quit
+  elif [[ "$navigation_action" == quit ]]; then
+    log_view_navigation=quit
+  fi
+  stty "$key_tty_state" 2>/dev/null || true
+  trap - INT TERM
+}
+
+build_log_args() {
+  log_args=(logs --no-color --timestamps --tail "${HACKOS_LOG_TAIL:-200}")
+  log_args+=("${selected_services[@]}")
+}
+
+log_view_key_loop() {
+  local key_tty_state
+
+  key_tty_state="$(stty -g)" || return 1
+  stty -echo -icanon min 1 time 0
+  trap 'log_view_navigation=quit' INT TERM
+  if read_navigation_key; then
+    case "$navigation_action" in
+      value)
+        case "$navigation_value" in
+          r|R) log_view_navigation=refresh ;;
+          f|F) log_view_navigation=follow ;;
+          e|E) log_view_navigation=export ;;
+          s|S) log_view_navigation=services ;;
+          *) log_view_navigation=refresh ;;
+        esac
+        ;;
+      enter|right) log_view_navigation=refresh ;;
+      tab) log_view_navigation=filter ;;
+      left|escape|back) log_view_navigation=back ;;
+      quit) log_view_navigation=quit ;;
+      *) log_view_navigation=refresh ;;
+    esac
+  else
+    log_view_navigation=quit
+  fi
+  stty "$key_tty_state" 2>/dev/null || true
+  trap - INT TERM
+}
+
+follow_log_view() {
+  local stream_pid key_tty_state
+  local follow_args=()
+
+  build_log_args
+  follow_args=("${log_args[@]}" --follow)
+  clear_shell
+  printf '%s\n\n' "${c_cyan}${c_bold}hackOS ${environment} · live logs${c_reset}"
+  printf '%s\n' "${c_dim}Following ${selected_services[*]} · ${log_event_type}${c_reset}"
+  printf '%s\n\n' "${c_dim}←/Esc back · Tab filters · s services · e export · Ctrl-C stops following${c_reset}"
+  (compose "${follow_args[@]}" | format_log_stream "$log_event_type" "$log_event_match") </dev/null &
+  stream_pid=$!
+  key_tty_state="$(stty -g)" || return 1
+  stty -echo -icanon min 1 time 0
+  log_view_navigation=follow
+  trap 'log_view_navigation=quit' INT TERM
+  while true; do
+    if ! read_navigation_key; then
+      log_view_navigation=quit
+      break
+    fi
+    case "$navigation_action" in
+      left|escape|back) log_view_navigation=back; break ;;
+      tab) log_view_navigation=filter; break ;;
+      quit) log_view_navigation=quit; break ;;
+      value)
+        case "$navigation_value" in
+          s|S) log_view_navigation=services; break ;;
+          e|E) log_view_navigation=export; break ;;
+          *) : ;;
+        esac
+        ;;
+    esac
+  done
+  kill "$stream_pid" 2>/dev/null || true
+  if command -v pkill >/dev/null 2>&1; then
+    pkill -TERM -P "$stream_pid" 2>/dev/null || true
+  fi
+  wait "$stream_pid" 2>/dev/null || true
+  stty "$key_tty_state" 2>/dev/null || true
+  trap - INT TERM
+}
+
+show_log_view() {
+  while true; do
+    build_log_args
+    clear_shell
+    printf '%s\n\n' "${c_cyan}${c_bold}hackOS ${environment} · logs${c_reset}"
+    printf '%s\n' "${c_dim}${selected_services[*]} · ${log_event_type}${log_event_match:+ · ${log_event_match}}${c_reset}"
+    printf '%s\n\n' "${c_cyan}────────────────────────────────────────────────────────────${c_reset}"
+    if compose "${log_args[@]}" | format_log_stream "$log_event_type" "$log_event_match"; then
+      :
+    else
+      printf '%s\n' "${c_red}Could not read the selected logs.${c_reset}"
+    fi
+    printf '\n%s\n' "${c_dim}r/Enter refresh · f follow · Tab filters · s services · e export · ←/Esc back · q quit${c_reset}"
+    if ! log_view_key_loop; then
+      log_view_navigation=quit
+    fi
+    case "$log_view_navigation" in
+      refresh) ;;
+      follow)
+        follow_log_view
+        ;;
+      filter|services|export|back|quit)
+        if [[ "$log_view_navigation" == export ]]; then
+          print_log_export_command
+          [[ "$log_view_navigation" == quit ]] && return 0
+          log_view_navigation=refresh
+        else
+          return 0
+        fi
+        ;;
+    esac
+    [[ "$log_view_navigation" == quit ]] && return 0
+  done
+}
+
+logs_shell() {
+  while true; do
+    select_services_multi logs
+    case "$service_selection_navigation" in
+      quit) shell_quit=true; return 0 ;;
+      back) return 0 ;;
+    esac
+    while true; do
+      select_log_filter
+      case "$log_filter_navigation" in
+        quit) shell_quit=true; return 0 ;;
+        back) break ;;
+      esac
+      show_log_view
+      case "$log_view_navigation" in
+        quit) shell_quit=true; return 0 ;;
+        services) break ;;
+        filter) continue ;;
+        back) return 0 ;;
+      esac
+    done
+  done
+}
+
+recreate_selected_services() {
+  local confirmation recreate_command=()
+
+  clear_shell
+  printf '%s\n\n' "${c_cyan}${c_bold}hackOS ${environment} · recreate services${c_reset}"
+  printf '%s\n' "${c_dim}The selected containers will be recreated with their current immutable image tags.${c_reset}"
+  print_service_releases "${selected_services[@]}"
+  printf '\n%s\n' "${c_yellow}This restarts: ${selected_services[*]}.${c_reset}"
+  read_shell_input "Type RECREATE to continue (b back, q quit): "
+  case "$shell_navigation" in
+    back) return 0 ;;
+    quit) shell_quit=true; return 0 ;;
+  esac
+  confirmation="$shell_input"
+  if [[ "$confirmation" != RECREATE ]]; then
+    printf '%s\n' "${c_dim}Recreation cancelled; no container was changed.${c_reset}"
+    pause_shell
+    return 0
+  fi
+  recreate_command=(recreate)
+  recreate_command+=("${selected_services[@]}")
+  printf '\n'
+  run_child "${recreate_command[@]}"
+  pause_shell
+}
+
+start_runtime_shell() {
+  local choices=(
+    "Start selected runtime services"
+    "Recreate selected runtime services"
+    "Show image releases"
+    "Local rebuild instructions"
+  )
+  local start_command=() release_command=()
+
+  while [[ "$shell_quit" != true ]]; do
+    if ! menu_select "Start runtime" "Select a focused action · ←/Esc returns" "${choices[@]}"; then
+      shell_quit=true
+      return 0
+    fi
+    case "$menu_navigation" in
+      back) return 0 ;;
+      quit) shell_quit=true; return 0 ;;
+      select)
+        case "$menu_choice" in
+          0)
+            select_services_multi start
+            case "$service_selection_navigation" in
+              quit) shell_quit=true; return 0 ;;
+              select)
+                start_command=(start "${selected_services[@]}")
+                run_action "start · ${selected_services[*]}" "${start_command[@]}"
+                ;;
+            esac
+            ;;
+          1)
+            select_services_multi recreate
+            case "$service_selection_navigation" in
+              quit) shell_quit=true; return 0 ;;
+              select) recreate_selected_services ;;
+            esac
+            ;;
+          2)
+            select_services_multi release
+            case "$service_selection_navigation" in
+              quit) shell_quit=true; return 0 ;;
+              select)
+                release_command=(release "${selected_services[@]}")
+                run_action "image releases · ${selected_services[*]}" "${release_command[@]}"
+                ;;
+            esac
+            ;;
+          3)
+            print_local_build_help
+            ;;
+        esac
+        ;;
+    esac
+  done
 }
 
 superadmin_count() {
@@ -714,7 +1307,7 @@ superadmin_shell() {
       select)
         case "$menu_choice" in
           0)
-            run_action "superadmins" superadmin list
+            run_action_without_pause "superadmins" superadmin list
             ;;
           1)
             read_shell_input "New account email (b back, q quit): "
@@ -832,7 +1425,7 @@ interactive_shell() {
     "Manage superadmins"
     "Help"
   )
-  local log_command=() stop_command=() follow_logs service_label
+  local stop_command=()
   local confirmation
 
   while [[ "$shell_quit" != true ]]; do
@@ -849,50 +1442,20 @@ interactive_shell() {
             run_action "service status" status
             ;;
           1)
-            select_services logs
-            if [[ "$service_selection_navigation" == quit ]]; then
-              return 0
-            fi
-            [[ "$service_selection_navigation" == select ]] || continue
-            select_log_filter
-            if [[ "$log_filter_navigation" == quit ]]; then
-              return 0
-            fi
-            [[ "$log_filter_navigation" == select ]] || continue
-            read_shell_input "Follow logs? [y/N] (b back, q quit): "
-            if [[ "$shell_navigation" == quit ]]; then
-              return 0
-            fi
-            [[ "$shell_navigation" == value ]] || continue
-            log_command=(logs --tail "${HACKOS_LOG_TAIL:-200}" --event-type "$log_event_type")
-            if [[ "$log_event_type" == match ]]; then
-              log_command+=(--match "$log_event_match")
-            fi
-            if [[ "$shell_input" == [yY] ]]; then
-              log_command+=(--follow)
-            fi
-            if ((${#selected_services[@]} == 0)); then
-              service_label="all services"
-            else
-              service_label="${selected_services[*]}"
-              log_command+=("${selected_services[@]}")
-            fi
-            run_action "logs · ${service_label} · ${log_event_type}" "${log_command[@]}"
+            logs_shell
             ;;
           2)
-            run_action "start runtime" start
+            start_runtime_shell
             ;;
           3)
-            select_services stop
+            select_services_multi stop
             if [[ "$service_selection_navigation" == quit ]]; then
               return 0
             fi
             [[ "$service_selection_navigation" == select ]] || continue
             stop_command=(stop)
-            if ((${#selected_services[@]} > 0)); then
-              stop_command+=("${selected_services[@]}")
-            fi
-            run_action "stop · ${selected_services[*]:-all runtime services}" "${stop_command[@]}"
+            stop_command+=("${selected_services[@]}")
+            run_action "stop · ${selected_services[*]}" "${stop_command[@]}"
             ;;
           4)
             read_shell_input "Type SHUTDOWN to stop all ${environment} services (b back, q quit): "
@@ -1021,6 +1584,17 @@ case "$action" in
     compose ps --all
     ;;
 
+  recreate)
+    validate_services "$@"
+    lock_mutation
+    recreate_services=("${runtime_services[@]}")
+    if (($# > 0)); then
+      recreate_services=("$@")
+    fi
+    compose up --detach --no-build --force-recreate --wait --wait-timeout 120 "${recreate_services[@]}"
+    compose ps --all
+    ;;
+
   stop)
     validate_services "$@"
     lock_mutation
@@ -1036,6 +1610,15 @@ case "$action" in
     lock_mutation
     echo "Stopping $project_name; persistent data is retained."
     compose stop
+    ;;
+
+  release)
+    release_services=("${runtime_services[@]}")
+    if (($# > 0)); then
+      validate_services "$@"
+      release_services=("$@")
+    fi
+    print_service_releases "${release_services[@]}"
     ;;
 
   superadmin)
