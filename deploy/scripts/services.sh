@@ -130,7 +130,7 @@ print_shell_help() {
   printf '%s\n' "${c_bold}Service commands${c_reset}"
   printf '%s\n' "  status       Show state, health, ports, and a short stopped-service reason."
   printf '%s\n' "  logs         Show colored logs; add --follow, --tail N, or --event-type."
-  printf '%s\n' "               Event types: all, error, warning, request, health."
+  printf '%s\n' "               Event types: all, error, warning, request, health; combine filters in the shell."
   printf '%s\n' "               Use --match TEXT for a case-insensitive literal search."
   printf '%s\n' "  start        Start named services, or the runtime when no names are given."
   printf '%s\n' "  recreate     Recreate named services without building images."
@@ -632,12 +632,19 @@ format_log_stream() {
         return ""
       }
       function selected_event(lower) {
-        if (filter == "all") return 1
-        if (filter == "error") return lower ~ /error|fatal|panic|exception|uncaught|failed|failure|out of memory|oom|"level"[[:space:]]*:[[:space:]]*(50|60)/
-        if (filter == "warning") return lower ~ /warn|warning|deprecated|retry|reconnect/
-        if (filter == "request") return lower ~ /incoming request|request completed|http|"method"[[:space:]]*:|statuscode/
-        if (filter == "health") return lower ~ /healthz|readiness|liveness|health/
-        if (filter == "match") return index(lower, tolower(needle)) > 0
+        matches_category = 0
+        if (filter == "match") {
+          matches_category = 1
+        } else if (index("," filter ",", ",all,") > 0) {
+          matches_category = 1
+        } else {
+          if (index("," filter ",", ",error,") > 0 && lower ~ /error|fatal|panic|exception|uncaught|failed|failure|out of memory|oom|"level"[[:space:]]*:[[:space:]]*(50|60)/) matches_category = 1
+          if (index("," filter ",", ",warning,") > 0 && lower ~ /warn|warning|deprecated|retry|reconnect/) matches_category = 1
+          if (index("," filter ",", ",request,") > 0 && lower ~ /incoming request|request completed|http|"method"[[:space:]]*:|statuscode/) matches_category = 1
+          if (index("," filter ",", ",health,") > 0 && lower ~ /healthz|readiness|liveness|health/) matches_category = 1
+        }
+        if (!matches_category) return 0
+        if (needle != "" && index(lower, tolower(needle)) == 0) return 0
         return 1
       }
       {
@@ -740,28 +747,48 @@ multi_menu_select() {
         ;;
       space)
         if ((selected == 0)); then
-          if [[ "${multi_selected_flags[0]:-false}" == true ]]; then
+          if [[ "${multi_all_exclusive:-false}" == true ]]; then
+            if [[ "${multi_selected_flags[0]:-false}" == true ]]; then
+              multi_selected_flags[0]=false
+            else
+              for index in "${!multi_selected_flags[@]}"; do
+                multi_selected_flags[index]=false
+              done
+              multi_selected_flags[0]=true
+            fi
+          else
+            if [[ "${multi_selected_flags[0]:-false}" == true ]]; then
+              for index in "${!multi_selected_flags[@]}"; do
+                multi_selected_flags[index]=false
+              done
+            else
+              for index in "${!multi_selected_flags[@]}"; do
+                multi_selected_flags[index]=true
+              done
+            fi
+          fi
+        else
+          if [[ "${multi_all_exclusive:-false}" == true && "${multi_selected_flags[0]:-false}" == true ]]; then
             for index in "${!multi_selected_flags[@]}"; do
               multi_selected_flags[index]=false
             done
-          else
-            for index in "${!multi_selected_flags[@]}"; do
-              multi_selected_flags[index]=true
-            done
-          fi
-        else
-          if [[ "${multi_selected_flags[selected]:-false}" == true ]]; then
+            multi_selected_flags[selected]=true
+          elif [[ "${multi_selected_flags[selected]:-false}" == true ]]; then
             multi_selected_flags[selected]=false
           else
             multi_selected_flags[selected]=true
           fi
-          all_selected=true
-          for index in "${!multi_selected_flags[@]}"; do
-            if ((index > 0)) && [[ "${multi_selected_flags[index]}" != true ]]; then
-              all_selected=false
-            fi
-          done
-          multi_selected_flags[0]="$all_selected"
+          if [[ "${multi_all_exclusive:-false}" == true ]]; then
+            multi_selected_flags[0]=false
+          else
+            all_selected=true
+            for index in "${!multi_selected_flags[@]}"; do
+              if ((index > 0)) && [[ "${multi_selected_flags[index]}" != true ]]; then
+                all_selected=false
+              fi
+            done
+            multi_selected_flags[0]="$all_selected"
+          fi
         fi
         ;;
       value)
@@ -795,6 +822,7 @@ select_services_multi() {
   local choices=()
   local service index
 
+  multi_all_exclusive=false
   case "$mode" in
     logs)
       title="Choose log services"
@@ -866,31 +894,51 @@ select_log_filter() {
     "Health checks"
     "Custom text search"
   )
-  local custom_match
+  local custom_match index
 
   log_event_type=all
   log_event_match=''
-  if ! menu_select "Filter log events" "Choose a built-in category or search for text" "${choices[@]}"; then
-    log_filter_navigation=quit
-    return 0
-  fi
-  log_filter_navigation="$menu_navigation"
-  [[ "$menu_navigation" == select ]] || return 0
+  multi_all_exclusive=true
+  multi_selected_flags=()
+  for index in "${!choices[@]}"; do
+    multi_selected_flags[index]=false
+  done
 
-  case "$menu_choice" in
-    0) log_event_type=all ;;
-    1) log_event_type=error ;;
-    2) log_event_type=warning ;;
-    3) log_event_type=request ;;
-    4) log_event_type=health ;;
-    5)
+  while true; do
+    if ! multi_menu_select "Filter log events" "Space toggles · Enter confirms · All events overrides categories" "${choices[@]}"; then
+      log_filter_navigation=quit
+      return 0
+    fi
+    log_filter_navigation="$multi_navigation"
+    [[ "$multi_navigation" == select ]] || return 0
+
+    log_event_type=''
+    log_event_match=''
+    if [[ "${multi_selected_flags[0]:-false}" == true ]]; then
+      log_event_type=all
+    else
+      for index in 1 2 3 4; do
+        if [[ "${multi_selected_flags[index]:-false}" == true ]]; then
+          case "$index" in
+            1) custom_match=error ;;
+            2) custom_match=warning ;;
+            3) custom_match=request ;;
+            4) custom_match=health ;;
+          esac
+          if [[ -n "$log_event_type" ]]; then
+            log_event_type="${log_event_type},${custom_match}"
+          else
+            log_event_type="$custom_match"
+          fi
+        fi
+      done
+    fi
+
+    if [[ "${multi_selected_flags[5]:-false}" == true ]]; then
       while true; do
         read_shell_input "Text to match (b back, q quit): "
         case "$shell_navigation" in
-          back)
-            log_filter_navigation=back
-            return 0
-            ;;
+          back) break ;;
           quit)
             log_filter_navigation=quit
             return 0
@@ -898,14 +946,17 @@ select_log_filter() {
         esac
         custom_match="$shell_input"
         if [[ -n "$custom_match" ]]; then
-          log_event_type=match
           log_event_match="$custom_match"
           break
         fi
         printf '%s\n' "${c_yellow}Enter text to search for, or type b to go back.${c_reset}"
       done
-      ;;
-  esac
+      [[ -n "$log_event_match" ]] || continue
+    fi
+
+    [[ -n "$log_event_type" ]] || log_event_type=all
+    return 0
+  done
 }
 
 print_service_releases() {
@@ -948,20 +999,60 @@ quote_shell_value() {
   printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
 }
 
+infer_ssh_target() {
+  local connection_host connection_user
+
+  if [[ -n "${HACKOS_SSH_TARGET:-}" ]]; then
+    printf '%s\n' "$HACKOS_SSH_TARGET"
+    return 0
+  fi
+
+  connection_host="$(printf '%s\n' "${SSH_CONNECTION:-}" | awk '{ print $3 }')"
+  connection_user="${HACKOS_SSH_USER:-${USER:-}}"
+  if [[ -n "$connection_host" && -n "$connection_user" ]]; then
+    printf '%s@%s\n' "$connection_user" "$connection_host"
+  fi
+}
+
+infer_ssh_port() {
+  local connection_port
+
+  if [[ -n "${HACKOS_SSH_PORT:-}" ]]; then
+    printf '%s\n' "$HACKOS_SSH_PORT"
+    return 0
+  fi
+
+  connection_port="$(printf '%s\n' "${SSH_CONNECTION:-}" | awk '{ print $4 }')"
+  if [[ "$connection_port" =~ ^[0-9]+$ && "$connection_port" != 22 ]]; then
+    printf '%s\n' "$connection_port"
+  fi
+}
+
 print_log_export_command() {
-  local target output filter_args service_args service remote_path remote_command cleanup_command
+  local target output default_target ssh_port filter_args service_args service remote_path remote_command cleanup_command
   local key_tty_state
 
   clear_shell
   printf '%s\n\n' "${c_cyan}${c_bold}hackOS ${environment} · export logs${c_reset}"
   printf '%s\n' "Run the printed block on your workstation; it creates, downloads, and cleans up a remote file."
-  read_shell_input "SSH target (user@host, b back, q quit): "
+  default_target="$(infer_ssh_target)"
+  ssh_port="$(infer_ssh_port)"
+  if [[ -n "$default_target" ]]; then
+    read_shell_input "SSH target [${default_target}] (Enter accepts, b back, q quit): "
+  else
+    read_shell_input "SSH target (user@host, b back, q quit): "
+  fi
   case "$shell_navigation" in
     back) return 0 ;;
     quit) log_view_navigation=quit; return 0 ;;
   esac
   target="$shell_input"
-  [[ -n "$target" ]] || target="user@host"
+  [[ -n "$target" ]] || target="$default_target"
+  if [[ -z "$target" ]]; then
+    printf '%s\n' "${c_yellow}No SSH target was supplied; export cancelled.${c_reset}"
+    pause_shell
+    return 0
+  fi
   read_shell_input "Local output file [hackos-${environment}-logs.log] (b back, q quit): "
   case "$shell_navigation" in
     back) return 0 ;;
@@ -971,7 +1062,9 @@ print_log_export_command() {
   [[ -n "$output" ]] || output="hackos-${environment}-logs.log"
 
   filter_args=(--event-type "$log_event_type")
-  if [[ "$log_event_type" == match ]]; then
+  if [[ -n "$log_event_match" ]]; then
+    filter_args+=(--match "$log_event_match")
+  elif [[ "$log_event_type" == match ]]; then
     filter_args=(--match "$log_event_match")
   fi
   service_args=()
@@ -992,13 +1085,25 @@ print_log_export_command() {
   remote_command="$remote_command > $(quote_shell_value "$remote_path")"
   cleanup_command="rm -f $(quote_shell_value "$remote_path")"
   printf '\n%s\n' "${c_bold}Copy this to your workstation:${c_reset}"
-  printf 'ssh -T %s %s &&\n' \
+  printf 'ssh -T'
+  if [[ -n "$ssh_port" ]]; then
+    printf ' -p %s' "$(quote_shell_value "$ssh_port")"
+  fi
+  printf ' %s %s &&\n' \
     "$(quote_shell_value "$target")" \
     "$(quote_shell_value "$remote_command")"
-  printf 'scp %s %s &&\n' \
+  printf 'scp'
+  if [[ -n "$ssh_port" ]]; then
+    printf ' -P %s' "$(quote_shell_value "$ssh_port")"
+  fi
+  printf ' %s %s &&\n' \
     "$(quote_shell_value "${target}:${remote_path}")" \
     "$(quote_shell_value "$output")"
-  printf 'ssh -T %s %s\n' \
+  printf 'ssh -T'
+  if [[ -n "$ssh_port" ]]; then
+    printf ' -p %s' "$(quote_shell_value "$ssh_port")"
+  fi
+  printf ' %s %s\n' \
     "$(quote_shell_value "$target")" \
     "$(quote_shell_value "$cleanup_command")"
   printf '%s\n' "${c_dim}The remote temporary file is retained if ssh or scp fails, so it can be retried.${c_reset}"
@@ -1528,12 +1633,12 @@ case "$action" in
         --match)
           shift
           (($# > 0)) || die "--match requires text"
-          event_type=match
           event_match="$1"
+          [[ "$event_type" != all ]] || event_type=match
           ;;
         --match=*)
-          event_type=match
           event_match="${1#*=}"
+          [[ "$event_type" != all ]] || event_type=match
           ;;
         --)
           shift
@@ -1556,7 +1661,8 @@ case "$action" in
         [[ -n "$event_match" ]] || die "--match requires non-empty text"
         ;;
       *)
-        die "unknown event type: $event_type (use all, error, warning, request, health, or --match TEXT)"
+        [[ "$event_type" =~ ^(error|warning|request|health)(,(error|warning|request|health))*$ ]] || \
+          die "unknown event type: $event_type (use all, error, warning, request, health, comma-separated filters, or --match TEXT)"
         ;;
     esac
     validate_services "${services[@]}"
