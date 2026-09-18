@@ -294,7 +294,6 @@ distributed to other Expo Router apps without importing hackOS code.
   account, and pending-removal surfaces expose `Back to sign in`; that action
   clears the local session synchronously and replaces the route without
   waiting for SecureStore or the server.
-  error (#757).
 - `app/(auth)/forgot-password.tsx` and `reset-password.tsx` share the same
   leading, task-first composition. Their primary actions remain discoverable,
   invalid values are explained beside the relevant field, and focus moves to

@@ -57,6 +57,7 @@ export default function AccountScreen() {
   const [languageRetry, setLanguageRetry] = useState<Lang | null>(null);
   const [refreshingAccount, setRefreshingAccount] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<Error | null>(null);
 
   function returnToSignIn() {
     forceLocalSignOut();
@@ -119,7 +120,15 @@ export default function AccountScreen() {
     if (!me || signingOut) return;
     const ownerUserId = me.id;
     setSigningOut(true);
-    await signOut();
+    setSignOutError(null);
+    try {
+      const { error: authError } = await signOut();
+      if (authError) throw new Error(authError.message || t("signOutError"));
+    } catch (cause) {
+      setSignOutError(cause instanceof Error ? cause : new Error(t("signOutError")));
+      setSigningOut(false);
+      return;
+    }
     // The roster is shared event data, while the offline scan queue is
     // user-owned and intentionally remains available after a re-login.
     try {

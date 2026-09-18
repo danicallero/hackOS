@@ -64,8 +64,8 @@ async function clearSecureStoreSessionKey(baseKey: string): Promise<void> {
   await deleteStoredKey(baseKey);
 }
 
-/** Wipes the on-device session (SecureStore keys + in-memory session atom). */
-async function clearLocalSession(): Promise<void> {
+/** Wipes the on-device session's SecureStore keys. */
+async function clearStoredSession(): Promise<void> {
   try {
     await Promise.all([
       clearSecureStoreSessionKey(SESSION_COOKIE_KEY),
