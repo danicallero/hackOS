@@ -143,8 +143,9 @@ jobs:
           incus file push deploy/incus-deploy.sh hackos/opt/hackos/deploy.sh
           incus file push deploy/scripts/check-env.sh hackos/opt/hackos/check-env.sh
           incus file push deploy/scripts/backup-r2.sh hackos/opt/hackos/backup-r2.sh
-          incus exec hackos -- chmod 700 /opt/hackos/deploy.sh /opt/hackos/check-env.sh /opt/hackos/backup-r2.sh
-          echo "Compose, validation, backup and deployment scripts transferred."
+          incus file push deploy/scripts/services.sh hackos/opt/hackos/services.sh
+          incus exec hackos -- chmod 700 /opt/hackos/deploy.sh /opt/hackos/check-env.sh /opt/hackos/backup-r2.sh /opt/hackos/services.sh
+          echo "Compose, validation, backup, service and deployment scripts transferred."
 
       - name: Deploy inside hackos LXC
         env:
