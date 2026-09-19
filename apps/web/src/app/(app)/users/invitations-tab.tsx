@@ -184,6 +184,26 @@ export function InvitationsScreen() {
         </span>
       ),
     },
+    {
+      id: "copy",
+      header: <span className="sr-only">{t("copyInviteLink")}</span>,
+      align: "right",
+      width: "w-12",
+      cell: (row) =>
+        row.url ? (
+          <IconButton
+            variant="ghost"
+            size="icon-sm"
+            label={t("copyInviteLink")}
+            onClick={(event) => {
+              event.stopPropagation();
+              void copy(row.url as string);
+            }}
+          >
+            <CopyIcon className="size-4" aria-hidden="true" />
+          </IconButton>
+        ) : null,
+    },
   ];
 
   async function expire() {
@@ -234,21 +254,6 @@ export function InvitationsScreen() {
         searchable={(row) => `${row.label} ${row.enterprise ?? ""}`}
         searchPlaceholder={t("searchByEmailType")}
         empty={{ icon: MailIcon, title: t("noActiveInvitations") }}
-        rowActions={(row) =>
-          row.url ? (
-            <IconButton
-              variant="ghost"
-              size="icon-sm"
-              label={t("copyInviteLink")}
-              onClick={(event) => {
-                event.stopPropagation();
-                void copy(row.url as string);
-              }}
-            >
-              <CopyIcon className="size-4" aria-hidden="true" />
-            </IconButton>
-          ) : null
-        }
       />
       <SidePanelEditor
         open={selected !== null}
