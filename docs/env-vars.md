@@ -21,7 +21,7 @@ El despliegue no busca `.env` ni `.env.<environment>` dentro de `/opt/hackos`.
 
 La plantilla no secreta está en
 [`deploy/.env.example`](../deploy/.env.example) y la plantilla de nombres de
-secretos en [`deploy/.env.secrets.example`](../deploy/.env.secrets.example).
+secretos en [`deploy/.secrets.example`](../deploy/.secrets.example).
 Los valores reales se generan y cargan fuera del repositorio. El fichero raíz
 [`.env.example`](../.env.example) es sólo para overrides del API local y
 [`apps/mobile/.env.example`](../apps/mobile/.env.example) contiene únicamente

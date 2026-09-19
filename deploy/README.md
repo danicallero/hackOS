@@ -92,7 +92,7 @@ Cada host mantiene dos ficheros planos fuera del repositorio:
 | Fichero | Contenido | Plantilla |
 |---|---|---|
 | `/etc/hackos/hackos.env` | Sólo configuración no secreta: imagen, dominios, puertos, nombres de cuentas, S3 público, correo, logs, R2 y metadatos Wallet. | [`deploy/.env.example`](./.env.example) |
-| `/etc/hackos/hackos.secrets` | Sólo credenciales y material privado: contraseñas, claves S3/R2/SMTP, `BETTER_AUTH_SECRET`, claves de traducción, fixtures y PEM Wallet. Permisos `0600`. | [`deploy/.env.secrets.example`](./.env.secrets.example) |
+| `/etc/hackos/hackos.secrets` | Sólo credenciales y material privado: contraseñas, claves S3/R2/SMTP, `BETTER_AUTH_SECRET`, claves de traducción, fixtures y PEM Wallet. Permisos `0600`. | [`deploy/.secrets.example`](./.secrets.example) |
 
 No se permite duplicar una clave entre los dos ficheros. La plantilla de
 secretos contiene nombres y valores vacíos; nunca se usa como fichero real ni
@@ -473,6 +473,9 @@ ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging logs --event-t
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging start
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging recreate api
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging release api
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging available
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging deploy latest --both
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging deploy sha-<40-hex> --api
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging stop api
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging shutdown
 ```
@@ -507,6 +510,23 @@ custom text search, with refresh/follow/filter/service navigation and an export
 command for saving remote logs locally. Selected event categories are combined;
 custom text narrows the result further. Start also offers per-service
 start/recreate, image release information, and local rebuild instructions.
+
+### Lifecycle and release operations are deliberately separate
+
+The same distinction applies to the interactive shell's **Releases and
+deployment** submenu and to the CLI:
+
+| Operation | Registry/GitHub access | Effect |
+|---|---|---|
+| `start`, `stop`, `recreate`, `shutdown` | None | Operate only on containers and images already present on the host. `start` never pulls. |
+| `status`, `release` | Local Docker inspection only | Show service state; `release` also shows the deployed image, channel, commit and creation time. |
+| `available` | GitHub Releases | List operator-selectable published releases. |
+| `deploy latest` | Resolves the current channel release, then pulls it | Staging deploys the latest successful staging build; production prints the protected workflow command instead of bypassing approval. |
+| `deploy sha-<commit>` | Validates the immutable SHA release, then pulls it | Deploy or roll back the selected API, web, or both units. |
+
+`latest` never means Docker `:latest`: every deploy resolves a published
+immutable `sha-<40 hexadecimal characters>` tag. The command prints the
+environment, affected units and selected image tag before acting.
 The non-interactive equivalents are:
 
 ```sh
