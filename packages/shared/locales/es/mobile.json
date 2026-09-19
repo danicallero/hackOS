@@ -558,6 +558,7 @@
   "scannerUnconfirmed": "Plaza no confirmada",
   "scannerAlreadyCount": "Pases anteriores: {count}",
   "scannerRepeatTitle": "Ya se le ha servido",
+  "scannerRepeatFound": "Ya se ha escaneado aquí",
   "scannerRepeatBody": "Esta persona ya tiene {count} pase(s). ¿Permitir repetición?",
   "scannerActivitiesEmpty": "No hay actividades escaneables",
   "scannerActivitiesEmptyBody": "Las actividades configuradas para registrar accesos aparecerán aquí.",

@@ -32,8 +32,9 @@ interface ActivityScanResult {
   badgeId: string;
   count: number;
   person: ScannerPerson;
-  state: "saved" | "confirmed" | "attention";
+  state: "saved" | "confirmed" | "attention" | "repeat_pending";
   error?: string;
+  wasRepeat?: boolean;
 }
 
 export function ActivityScannerScreen() {
@@ -54,6 +55,7 @@ export function ActivityScannerScreen() {
   const { sync: runSync, lastSync } = syncState;
   const [localActivity, setLocalActivity] = useState<ScannerActivity | null>(null);
   const [result, setResult] = useState<ActivityScanResult | null>(null);
+  const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<ActivityStats | null>(null);
   const handledManualScan = useRef<string | null>(null);
@@ -94,44 +96,42 @@ export function ActivityScannerScreen() {
   const store = useCallback(
     async (person: ScannerPerson, badgeId: string, allowRepeat: boolean, count: number) => {
       if (ownerUserId === undefined) return;
+      setRegistering(true);
       setError(null);
-      const scanId = await enqueueLocalScan(
-        {
-          kind: "activity",
-          activityId,
-          badgeId,
-          allowRepeat,
-          scannedAt: new Date().toISOString(),
-        },
-        ownerUserId,
-      );
-      setResult({
-        badgeId,
-        count: count + 1,
-        person,
-        state: "saved",
-      });
-      void haptic("light");
-      await runSync();
-      // A business rejection fails the queued scan permanently — surface it
-      // here instead of leaving the operator believing it was registered.
-      const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
-      if (stored?.status === "failed") {
-        void haptic("error");
-        setResult((current) =>
-          current
-            ? {
-                ...current,
-                error: stored.lastError ?? t("presenceScanRejectedBody"),
-                state: "attention",
-              }
-            : current,
+      try {
+        const scanId = await enqueueLocalScan(
+          {
+            kind: "activity",
+            activityId,
+            badgeId,
+            allowRepeat,
+            scannedAt: new Date().toISOString(),
+          },
+          ownerUserId,
         );
-      } else if (stored?.status === "acknowledged") {
-        void haptic("success");
-        setResult((current) => (current ? { ...current, state: "confirmed" } : current));
+        setResult({ badgeId, count: count + 1, person, state: "saved", wasRepeat: allowRepeat });
+        void haptic("light");
+        await runSync();
+        const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
+        if (stored?.status === "failed") {
+          void haptic("error");
+          setResult((current) =>
+            current
+              ? {
+                  ...current,
+                  error: stored.lastError ?? t("presenceScanRejectedBody"),
+                  state: "attention",
+                }
+              : current,
+          );
+        } else if (stored?.status === "acknowledged") {
+          void haptic("success");
+          setResult((current) => (current ? { ...current, state: "confirmed" } : current));
+        }
+        await loadStats();
+      } finally {
+        setRegistering(false);
       }
-      await loadStats();
     },
     [activityId, loadStats, ownerUserId, runSync, t],
   );
@@ -162,6 +162,18 @@ export function ActivityScannerScreen() {
           }
         : await getActivityState(found.person.userId, activityId);
       setError(null);
+      setRegistering(false);
+      if (state.count > 0) {
+        void haptic("warning");
+        setResult({
+          badgeId,
+          count: state.count,
+          person: found.person,
+          state: "repeat_pending",
+          wasRepeat: true,
+        });
+        return;
+      }
       await store(found.person, badgeId, false, state.count);
     },
     [activityId, store, syncState.serverSnapshot, t],
@@ -309,10 +321,16 @@ export function ActivityScannerScreen() {
           activity={activity}
           language={language}
           result={result}
+          registering={registering}
           tabBarBottomInset={tabBarBottomInset}
+          onCancel={() => {
+            setResult(null);
+            setRegistering(false);
+          }}
           onContinue={() => {
             setResult(null);
           }}
+          onRegisterAnother={() => void store(result.person, result.badgeId, true, result.count)}
         />
       ) : null}
     </View>
@@ -322,20 +340,27 @@ export function ActivityScannerScreen() {
 function ActivityResultPanel({
   activity,
   language,
+  registering,
   result,
   tabBarBottomInset,
+  onCancel,
   onContinue,
+  onRegisterAnother,
 }: {
   activity: ScannerActivity | null;
   language: "en" | "es" | "gl";
+  registering: boolean;
   result: ActivityScanResult;
   tabBarBottomInset: number;
+  onCancel: () => void;
   onContinue: () => void;
+  onRegisterAnother: () => void;
 }) {
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const meal = isMealActivityKind(activity?.category);
+  const repeatPending = result.state === "repeat_pending";
   const fullName =
     [result.person.name, result.person.surname].filter(Boolean).join(" ") || result.person.email;
   const hasMealDetails =
@@ -347,7 +372,6 @@ function ActivityResultPanel({
   // bottom of the screen with no way to scroll to them — cap the card and
   // let its body scroll instead, keeping the buttons always reachable.
   const cardMaxHeight = windowHeight - insets.top - insets.bottom - tabBarBottomInset - 40;
-  const cardHeight = Math.min(cardMaxHeight, 560);
 
   return (
     <View
@@ -371,7 +395,7 @@ function ActivityResultPanel({
         style={{
           borderCurve: "continuous",
           borderRadius: 28,
-          height: cardHeight,
+          minHeight: 238,
           maxHeight: cardMaxHeight,
           maxWidth: 390,
           overflow: "hidden",
@@ -387,9 +411,9 @@ function ActivityResultPanel({
             math for its children, so the same cap is repeated here on an
             ordinary View — that's what actually lets the ScrollView give up
             space to the footer instead of just being clipped along with it. */}
-        <View style={{ flex: 1, maxHeight: cardMaxHeight, overflow: "hidden" }}>
+        <View style={{ flexShrink: 1, maxHeight: cardMaxHeight, overflow: "hidden" }}>
           <ScrollView
-            style={{ flex: 1, flexShrink: 1, minHeight: 0 }}
+            style={{ flexGrow: 0, flexShrink: 1, minHeight: 0 }}
             contentContainerStyle={{ gap: 18, padding: 20 }}
           >
             <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 16 }}>
@@ -398,14 +422,16 @@ function ActivityResultPanel({
                   <SymbolView
                     accessible={false}
                     name={
-                      result.state === "confirmed"
-                        ? "checkmark.circle.fill"
-                        : result.state === "attention"
-                          ? "exclamationmark.triangle.fill"
-                          : "internaldrive.fill"
+                      repeatPending
+                        ? "clock.badge.exclamationmark"
+                        : result.state === "confirmed"
+                          ? "checkmark.circle.fill"
+                          : result.state === "attention"
+                            ? "exclamationmark.triangle.fill"
+                            : "internaldrive.fill"
                     }
                     tintColor={
-                      result.state === "saved"
+                      repeatPending || result.state === "saved"
                         ? colors.warning
                         : result.state === "attention"
                           ? colors.destructive
@@ -417,7 +443,7 @@ function ActivityResultPanel({
                     selectable
                     style={{
                       color:
-                        result.state === "saved"
+                        repeatPending || result.state === "saved"
                           ? colors.warning
                           : result.state === "attention"
                             ? colors.destructive
@@ -426,11 +452,13 @@ function ActivityResultPanel({
                       fontWeight: "700",
                     }}
                   >
-                    {result.state === "confirmed"
-                      ? t("scannerStateConfirmed")
-                      : result.state === "attention"
-                        ? t("scannerStateAttention")
-                        : t("scannerStateSaved")}
+                    {repeatPending
+                      ? t("scannerRepeatFound")
+                      : result.state === "confirmed"
+                        ? t("scannerStateConfirmed")
+                        : result.state === "attention"
+                          ? t("scannerStateAttention")
+                          : t("scannerStateSaved")}
                   </Text>
                 </View>
                 <Text selectable style={{ color: "white", fontSize: 23, fontWeight: "700" }}>
@@ -443,7 +471,7 @@ function ActivityResultPanel({
               <View
                 style={{
                   alignItems: "center",
-                  backgroundColor: "rgba(52,199,89,0.18)",
+                  backgroundColor: repeatPending ? "rgba(255,149,0,0.18)" : "rgba(52,199,89,0.18)",
                   borderRadius: 18,
                   height: 64,
                   justifyContent: "center",
@@ -453,7 +481,7 @@ function ActivityResultPanel({
                 <Text
                   selectable
                   style={{
-                    color: colors.success,
+                    color: repeatPending ? colors.warning : colors.success,
                     fontSize: 32,
                     fontVariant: ["tabular-nums"],
                     fontWeight: "800",
@@ -545,11 +573,29 @@ function ActivityResultPanel({
               paddingTop: 4,
             }}
           >
-            <ResultActionButton
-              testID={UI_TEST_IDS.scanner.continue}
-              label={t("close")}
-              onPress={onContinue}
-            />
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              {repeatPending ? (
+                <>
+                  <ResultActionButton
+                    disabled={registering}
+                    label={t("scannerRepeatNoAdd")}
+                    onPress={onCancel}
+                    secondary
+                  />
+                  <ResultActionButton
+                    disabled={registering}
+                    label={t("scannerRepeatAdd")}
+                    onPress={onRegisterAnother}
+                  />
+                </>
+              ) : (
+                <ResultActionButton
+                  testID={UI_TEST_IDS.scanner.continue}
+                  label={t("close")}
+                  onPress={onContinue}
+                />
+              )}
+            </View>
           </View>
         </View>
       </GlassView>
@@ -560,32 +606,39 @@ function ActivityResultPanel({
 function ResultActionButton({
   label,
   onPress,
+  disabled = false,
+  secondary = false,
   testID,
 }: {
   label: string;
   onPress: () => void;
+  disabled?: boolean;
+  secondary?: boolean;
   testID?: string;
 }) {
   return (
     <Pressable
       testID={testID}
       accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => ({
         alignItems: "center",
         alignSelf: "stretch",
-        backgroundColor: colors.accent,
+        backgroundColor: secondary ? "rgba(255,255,255,0.12)" : colors.accent,
         borderRadius: 999,
+        flex: 1,
         height: 50,
         justifyContent: "center",
-        opacity: pressed ? 0.72 : 1,
+        opacity: disabled ? 0.45 : pressed ? 0.72 : 1,
         paddingHorizontal: 12,
       })}
     >
       <Text
         selectable
         style={{
-          color: colors.accentText,
+          color: secondary ? "white" : colors.accentText,
           fontSize: 16,
           fontWeight: "600",
           textAlign: "center",

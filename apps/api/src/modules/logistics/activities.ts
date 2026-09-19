@@ -1,6 +1,7 @@
 import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { pool, withTransaction } from "../../db/pool.js";
+import { audit } from "../../lib/audit.js";
 import { isImplausiblyFuture } from "../../lib/clock.js";
 import { AppError, BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { broadcastForActiveUser } from "./active-broadcast.js";
@@ -123,6 +124,22 @@ export async function activityScan(
     const timesBefore = cnt.rows[0].n as number;
     const firstTime = timesBefore === 0;
 
+    if (!firstTime && !input.allowRepeat) {
+      return {
+        status: 409,
+        body: {
+          registered: false,
+          firstTime: false,
+          repeat: true,
+          timesEaten: timesBefore,
+          card,
+          message: isMeal
+            ? "Already served; confirm to register a repetition"
+            : "Already registered for this activity; confirm to register a repetition",
+        },
+      };
+    }
+
     await client.query(
       `INSERT INTO activity_logs
          (user_id, activity_id, logged_by, logged_at, source_device_id, source_scan_id)
@@ -139,6 +156,16 @@ export async function activityScan(
         input.sourceScanId ?? null,
       ],
     );
+
+    if (!firstTime) {
+      await audit(client, {
+        actorId,
+        entityType: isMeal ? "meal" : "activity",
+        entityId: userId,
+        action: "repeat_override",
+        after: { activityId, timesEaten: timesBefore + 1 },
+      });
+    }
 
     return {
       status: 200,
