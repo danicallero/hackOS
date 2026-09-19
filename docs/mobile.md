@@ -730,6 +730,9 @@ snapshot cannot leave an otherwise intact offline roster without its activity
 choices. Activity scans themselves are inserted into the durable per-operator
 queue before a sync is attempted, and are replayed with that persisted scan ID
 when the app next regains a server connection — including after a cold restart.
+Meal repeats remain a deliberate operator override; registrable-activity scans
+are attendance events, so every locally queued repeat is accepted on replay
+without a confirmation conflict.
 A scan rejected as "timestamp must be in the past" (device clock running
 ahead of the server's) is corrected once by the measured clock skew — read
 from the API's `Date` response header in `lib/api.ts` — and retried before
