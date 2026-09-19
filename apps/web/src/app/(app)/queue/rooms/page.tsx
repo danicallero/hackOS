@@ -110,9 +110,14 @@ export default function QueueRoomsPage() {
       setEnterprises(enterpriseRows);
       setCreateDraft((draft) => (draft.name ? draft : { ...emptyRoomEditor() }));
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : t("couldNotLoadRoomAdminData");
-      setLoadError(message);
-      toast.error(message);
+      if (err instanceof ApiError && err.status === 403) {
+        setLoadError(null);
+        setRooms([]);
+      } else {
+        const message = err instanceof ApiError ? err.message : t("couldNotLoadRoomAdminData");
+        setLoadError(message);
+        toast.error(message);
+      }
     } finally {
       setLoading(false);
     }

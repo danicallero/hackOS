@@ -72,8 +72,9 @@ migrations. There is no ORM.
 - **Background work and realtime:** BullMQ ticks and SSE fan-out use Valkey.
 Durable work, retries and dead-letter state remain in Postgres, so Valkey can
 be treated as ephemeral.
-- **Files and mail:** MinIO provides S3-compatible storage locally. Email can
-go through SMTP, Resend or Postal; local mail is caught by Mailpit.
+- **Files and mail:** MinIO provides S3-compatible storage locally. Email uses
+  SMTP (Amazon SES can provide the production relay); local mail is caught by
+  Mailpit.
 - **Shared contracts:** [`packages/shared`](packages/shared) owns capability
 names, realtime event names and cross-client UI test identifiers.
 
@@ -152,11 +153,13 @@ add/remove is written to `audit_log` (`grant_superadmin`/`create_superadmin`/
 `revoke_superadmin`).
 
 In production, run the same commands from a shell on the API container/host
-(`node scripts/grant-superadmin.mjs --email ...`, `node
-scripts/list-superadmins.mjs`, `node scripts/revoke-superadmin.mjs --email
-...` — no `tsx`/`pnpm` needed for the `.mjs` scripts) with `DATABASE_URL` set
-to the production database. See `docs/audits/access-control-audit-plan.md`'s
-"`system:superadmin` is CLI-only" section for the full design rationale.
+(`node dist/create-superadmin.js ...`, `node scripts/grant-superadmin.mjs
+--email ...`, `node scripts/list-superadmins.mjs`, `node
+scripts/revoke-superadmin.mjs --email ...`) with `DATABASE_URL` set to the
+production database. The deployed `/opt/hackos/services.sh production shell`
+also provides this flow interactively. See
+`docs/audits/access-control-audit-plan.md`'s "`system:superadmin` is CLI-only"
+section for the full design rationale.
 
 ### Start the mobile app
 
@@ -221,18 +224,31 @@ The release paths are:
 
 | Branch | CD behavior |
 | --- | --- |
-| `staging` | Merge an approved development PR here. CD builds and publishes the images, then deploys the staging Dokploy Environment. |
-| `main` | Merge an approved PR from any branch. CD builds and publishes production images, then deploys production. |
+| `staging` | Merge an approved development PR here. CD builds only affected API/web images on native `linux/amd64` and `linux/arm64` runners; the protected private-network SSH workflow deploys only the changed unit to the ARM64 staging host. |
+| `main` | Merge an approved PR from any branch. CD builds only affected API/web images on native `linux/amd64` and `linux/arm64` runners; the protected Incus workflow deploys only the changed unit to production. |
 
-`main` and `staging` are independent environments. Merging into `main` deploys
-production and does not update `staging`; merging into `staging` deploys the
-development environment. To test the current production tree in staging, open
-an explicit pull request from `main` to `staging`.
+`main` and `staging` are independent environments. Merging into either branch
+publishes its release artifact and starts the corresponding protected
+deployment workflow after the image build succeeds. Staging reaches its host
+through a private network before using SSH; production uses a self-hosted
+Incus runner. To test the current production tree in staging, open an explicit
+pull request from `main` to `staging`.
 
-The merge to either protected branch is what builds its release artifact. The
-existing main webhook, production deployment variables, and production
-Dokploy setup remain valid. Protect exactly `staging` and `main`; CI accepts
-PRs into either branch and CD only runs on their post-merge pushes.
+The Build images workflow also supports a manual rebuild of `api`, `web`, or
+`both` for the selected branch. On `staging`, the selected images are deployed
+after they publish successfully; on other branches, manual rebuilds only
+publish the requested image tags.
+
+The merge to either protected branch builds only the affected release artifact.
+Mobile and documentation-only changes skip image publication and host
+deployment. Runtime deployment changes skip image publication but trigger a
+file-only staging rollout; the current API and web image tags are retained and
+only the deployment files are refreshed. Production remains image-gated and
+does not roll out deploy-only changes automatically. The staging and production
+stacks use the same multi-architecture image repositories, Compose file, and
+SHA tag format, with separate host configuration and secret files. Protect
+exactly `staging` and `main`; CI accepts PRs into either branch, while the
+protected environments control deployment approval.
 The API test job provides fresh Postgres, Valkey and Mailpit service containers
 plus health-checked MinIO, then provisions the test bucket; local API runs
 still use `pnpm infra:up` and the commands above.
@@ -247,7 +263,7 @@ packages/shared/      capability, event and cross-client test contracts
 e2e/                  Playwright and Detox flows
 plan/                 normative user stories and hard invariants
 docs/                 current architecture and implementation notes
-deploy/               Docker Compose and Dokploy deployment files
+deploy/               Canonical Docker Compose runtime and host runbook
 ```
 
 The backend is split by domain under `apps/api/src/modules`: identity,
@@ -296,19 +312,18 @@ Useful next reads:
 
 ## Deployment
 
-Production is designed as one isolated stack per event. The API, worker and web
-services can be deployed independently; Postgres, Valkey and MinIO stay on a
-private network, while Traefik exposes only the API and web routes. A one-shot
-migration command runs before the API starts and uses a Postgres advisory lock
-to make concurrent deploys safe. The API repeats this no-op-safe migration
-check immediately before listening so a reused one-shot container cannot leave
-the running image ahead of the database schema.
+Production and staging are isolated Compose projects: production runs in a
+Linux/x86_64 LXC and staging runs on an ARM64 host. The API, worker and web run
+from pinned GHCR SHA images; Postgres, Valkey and MinIO stay on private
+networks, while the environment's external proxy reaches only the published
+API and web HTTP ports. A one-shot migration command runs before the API starts
+and uses a Postgres advisory lock to make concurrent deploys safe.
+The API repeats this no-op-safe migration check immediately before listening so
+a reused one-shot container cannot leave the running image ahead of the schema.
 
-[`deploy/README.md`](deploy/README.md) documents both the recommended
-per-service Dokploy setup and a single Compose stack, including secrets,
-domains, mail providers, Wallet credentials, backups and multi-event hosting.
-Use [`docs/env-vars.md`](docs/env-vars.md) as the per-service environment
-variable checklist.
+[`deploy/README.md`](deploy/README.md) documents the canonical Compose runtime,
+private-network deployment paths, secrets, health gates, and rollback. Use
+[`docs/env-vars.md`](docs/env-vars.md) as the per-service environment checklist.
 
 The mobile implementation and automated tests are in place. Offline recovery,
 APNs/FCM delivery, camera behaviour, encrypted SQLite and Wallet flows still

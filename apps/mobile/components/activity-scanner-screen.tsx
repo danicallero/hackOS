@@ -34,7 +34,7 @@ interface ActivityScanResult {
   person: ScannerPerson;
   state: "saved" | "confirmed" | "attention" | "repeat_pending";
   error?: string;
-  wasRepeat: boolean;
+  wasRepeat?: boolean;
 }
 
 export function ActivityScannerScreen() {
@@ -109,17 +109,9 @@ export function ActivityScannerScreen() {
           },
           ownerUserId,
         );
-        setResult({
-          badgeId,
-          count: count + 1,
-          person,
-          state: "saved",
-          wasRepeat: allowRepeat,
-        });
+        setResult({ badgeId, count: count + 1, person, state: "saved", wasRepeat: allowRepeat });
         void haptic("light");
         await runSync();
-        // A business rejection fails the queued scan permanently — surface it
-        // here instead of leaving the operator believing it was registered.
         const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
         if (stored?.status === "failed") {
           void haptic("error");
@@ -147,11 +139,6 @@ export function ActivityScannerScreen() {
   const scanned = useCallback(
     async (raw: string) => {
       const badgeId = raw.trim();
-      // A dialog for a new scan must never inherit a `registering` flag left
-      // over from a still-in-flight store() call for the previous scan
-      // (e.g. a slow/unresponsive sync), which would render its buttons
-      // permanently disabled.
-      setRegistering(false);
       const serverPerson = syncState.serverSnapshot?.people.find(
         (candidate) => candidate.badgeId === badgeId,
       );
@@ -175,9 +162,7 @@ export function ActivityScannerScreen() {
           }
         : await getActivityState(found.person.userId, activityId);
       setError(null);
-      // Any repeat — meal or registrable activity — needs explicit staff
-      // confirmation (H25/H26): the API 409s repeats sent without allowRepeat,
-      // which would strand the queued scan as failed.
+      setRegistering(false);
       if (state.count > 0) {
         void haptic("warning");
         setResult({
@@ -335,8 +320,8 @@ export function ActivityScannerScreen() {
         <ActivityResultPanel
           activity={activity}
           language={language}
-          registering={registering}
           result={result}
+          registering={registering}
           tabBarBottomInset={tabBarBottomInset}
           onCancel={() => {
             setResult(null);
@@ -344,7 +329,6 @@ export function ActivityScannerScreen() {
           }}
           onContinue={() => {
             setResult(null);
-            setRegistering(false);
           }}
           onRegisterAnother={() => void store(result.person, result.badgeId, true, result.count)}
         />
@@ -579,20 +563,27 @@ function ActivityResultPanel({
             ) : null}
           </ScrollView>
 
-          <View style={{ paddingBottom: 20, paddingHorizontal: 20, paddingTop: 4 }}>
+          <View
+            style={{
+              flexShrink: 0,
+              minHeight: 50,
+              paddingBottom: 20,
+              paddingHorizontal: 20,
+              paddingTop: 4,
+            }}
+          >
             <View style={{ flexDirection: "row", gap: 10 }}>
               {repeatPending ? (
                 <>
                   <ResultActionButton
-                    testID={UI_TEST_IDS.scanner.confirmRepeat}
                     disabled={registering}
-                    label={t("cancel")}
+                    label={t("scannerRepeatNoAdd")}
                     onPress={onCancel}
                     secondary
                   />
                   <ResultActionButton
                     disabled={registering}
-                    label={t("scannerRegisterAnother")}
+                    label={t("scannerRepeatAdd")}
                     onPress={onRegisterAnother}
                   />
                 </>
@@ -633,6 +624,7 @@ function ResultActionButton({
       onPress={onPress}
       style={({ pressed }) => ({
         alignItems: "center",
+        alignSelf: "stretch",
         backgroundColor: secondary ? "rgba(255,255,255,0.12)" : colors.accent,
         borderRadius: 999,
         flex: 1,

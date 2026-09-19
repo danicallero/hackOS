@@ -413,6 +413,8 @@ Table enterprise_invite_link_redemptions {
   link_id integer [not null]
   name text
   redeemed_at "timestamp with time zone" [not null, default: `now()`]
+  redeemed_ip inet
+  redeemed_user_agent text
   user_id integer
 
   indexes {
@@ -449,12 +451,11 @@ Table enterprises {
   created_at "timestamp with time zone" [not null, default: `now()`]
   description text
   director_id integer
-  display_priority integer
   id integer [pk, increment, not null]
   logo_negative_url text
   logo_url text
   name text [unique, not null]
-  tier_id integer
+  priority integer
   visibility text [not null, default: `'hidden'::text`]
   website text
 }
@@ -846,17 +847,6 @@ Table sponsor_faq {
   updated_at "timestamp with time zone" [not null, default: `now()`]
 }
 
-Table sponsor_tiers {
-  created_at "timestamp with time zone" [not null, default: `now()`]
-  description text
-  id integer [pk, increment, not null]
-  logo_priority integer [not null, default: `0`]
-  max_challenges integer [not null, default: `1`]
-  max_judges integer [not null, default: `0`]
-  max_seats integer [not null, default: `1`]
-  name text [unique, not null]
-}
-
 Table sponsors {
   enterprise_id integer [not null]
   id integer [pk, increment, not null]
@@ -963,6 +953,8 @@ Table user_invite_link_redemptions {
   link_id integer [not null]
   name text
   redeemed_at "timestamp with time zone" [not null, default: `now()`]
+  redeemed_ip inet
+  redeemed_user_agent text
   user_id integer
 
   indexes {
@@ -1030,7 +1022,7 @@ Table users {
   university_id integer
   updated_at "timestamp with time zone" [not null, default: `now()`]
 
-  Note: 'No role column: role is derived at login from relationships (admin > staff > judge > sponsor > participant). Permissions come from capability groups only (H8).'
+  Note: 'Authorization is resolved from the user\'s assigned roles and each role\'s tri-state capability grants (H8). Display labels may be relationship-derived, but never authorize access.'
 }
 
 Table verifications {
@@ -1131,7 +1123,6 @@ Ref: enterprise_judges.added_by > users.id
 Ref: enterprise_judges.enterprise_id > enterprises.id
 Ref: enterprise_judges.user_id > users.id
 Ref: enterprises.director_id > users.id
-Ref: enterprises.tier_id > sponsor_tiers.id
 Ref: food_intolerances.proposed_by > users.id
 Ref: judging_session.judge_id > users.id
 Ref: judging_session.queue_entry_id > queue_entries.id

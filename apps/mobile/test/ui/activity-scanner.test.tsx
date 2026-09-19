@@ -33,6 +33,9 @@ jest.mock("@/lib/i18n", () => ({
         scannerStateConfirmed: "Confirmed",
         scannerStateAttention: "Attention",
         scannerRepeatFound: "Already scanned here",
+        scannerRepeatNoAdd: "Do not add",
+        scannerRepeatAdd: "Add another",
+        scannerRepeatBody: "This person already has {count} scan(s). Allow a repeat?",
         accountNotSet: "Account not set",
       })[key] ?? key,
   }),
@@ -103,6 +106,7 @@ jest.mock("@/theme/colors", () => ({
 }));
 
 import { ActivityScannerScreen } from "@/components/activity-scanner-screen";
+import { enqueueLocalScan, getActivityState } from "@/lib/scanner-db";
 import { renderMobile } from "./render";
 
 describe("activity scanner result (H26)", () => {
@@ -114,5 +118,22 @@ describe("activity scanner result (H26)", () => {
 
     fireEvent.press(close);
     await waitFor(() => expect(screen.queryByRole("button", { name: "Close" })).toBeNull());
+  });
+
+  it("asks before queuing a repeated registrable-activity scan", async () => {
+    jest.mocked(enqueueLocalScan).mockClear();
+    jest.mocked(getActivityState).mockResolvedValueOnce({ userId: 21, activityId: 7, count: 1 });
+
+    await renderMobile(<ActivityScannerScreen />);
+
+    expect(await screen.findByRole("button", { name: "Add another" })).toBeTruthy();
+    expect(enqueueLocalScan).not.toHaveBeenCalled();
+    fireEvent.press(screen.getByRole("button", { name: "Add another" }));
+    await waitFor(() =>
+      expect(enqueueLocalScan).toHaveBeenCalledWith(
+        expect.objectContaining({ allowRepeat: true, kind: "activity" }),
+        11,
+      ),
+    );
   });
 });

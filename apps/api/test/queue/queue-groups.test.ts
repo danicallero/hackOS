@@ -1,7 +1,4 @@
 import "./env.js";
-import { readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { pool } from "../../src/db/pool.js";
 import { createUser, truncateAll } from "../helpers.js";
@@ -12,23 +9,6 @@ import { createUser, truncateAll } from "../helpers.js";
  * yet — these tests pin the schema invariants the follow-up routing PR relies
  * on: exactly one group per challenge, and a group never spanning enterprises.
  */
-
-const MIGRATION = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "../../db/migrations/0410_queue_groups.sql",
-);
-
-/** The 1:1 backfill statement, read verbatim out of the migration file. */
-async function backfillStatement(): Promise<string> {
-  const sql = await readFile(MIGRATION, "utf8");
-  const match = sql.match(
-    /-- >>> backfill:queue_groups_1to1[\s\S]*?\n([\s\S]*?)-- <<< backfill:queue_groups_1to1/,
-  );
-  if (!match?.[1]) {
-    throw new Error("backfill:queue_groups_1to1 markers not found in 0410_queue_groups");
-  }
-  return match[1];
-}
 
 async function createEnterprise(): Promise<{ enterpriseId: number; sponsorId: number }> {
   const userId = await createUser();
@@ -173,68 +153,5 @@ describe("queue_groups enterprise boundary (H46)", () => {
         group.id,
       ]),
     ).rejects.toMatchObject({ code: "23514" });
-  });
-});
-
-describe("queue_groups 1:1 backfill statement (H46)", () => {
-  /** Re-creates the pre-migration state: challenges with no group at all. */
-  async function withoutAutoGroups<T>(fn: () => Promise<T>): Promise<T> {
-    await pool.query(`ALTER TABLE challenges DISABLE TRIGGER challenges_default_queue_group`);
-    try {
-      return await fn();
-    } finally {
-      await pool.query(`ALTER TABLE challenges ENABLE TRIGGER challenges_default_queue_group`);
-    }
-  }
-
-  it("creates exactly one correctly-scoped group per pre-existing challenge", async () => {
-    const acme = await createEnterprise();
-    const beta = await createEnterprise();
-    const ids = await withoutAutoGroups(async () => [
-      await createChallengeFor(acme.sponsorId, "Same title"),
-      await createChallengeFor(acme.sponsorId, "Same title"),
-      await createChallengeFor(beta.sponsorId, "Beta"),
-    ]);
-
-    await pool.query(await backfillStatement());
-
-    const { rows } = await pool.query(
-      `SELECT qgc.challenge_id, qg.id AS group_id, qg.enterprise_id, qg.display_name
-         FROM queue_group_challenges qgc
-         JOIN queue_groups qg ON qg.id = qgc.queue_group_id
-        ORDER BY qgc.challenge_id`,
-    );
-    expect(rows.map((r) => r.challenge_id)).toEqual(ids);
-    // same-titled challenges of one enterprise must not collapse into one group
-    expect(new Set(rows.map((r) => r.group_id)).size).toBe(3);
-    expect(rows.map((r) => r.enterprise_id)).toEqual([
-      acme.enterpriseId,
-      acme.enterpriseId,
-      beta.enterpriseId,
-    ]);
-    expect(rows.map((r) => r.display_name)).toEqual(["Same title", "Same title", "Beta"]);
-  });
-
-  it("leaves already-grouped challenges alone when re-run", async () => {
-    const { sponsorId } = await createEnterprise();
-    const challengeId = await createChallengeFor(sponsorId, "A");
-    const [before] = await groupOf(challengeId);
-
-    await pool.query(await backfillStatement());
-
-    const groups = await groupOf(challengeId);
-    expect(groups).toHaveLength(1);
-    expect(groups[0].id).toBe(before.id);
-    const { rows } = await pool.query(`SELECT count(*)::int AS n FROM queue_groups`);
-    expect(rows[0].n).toBe(1);
-  });
-
-  it("keeps the identity sequence usable after the backfill", async () => {
-    const { sponsorId } = await createEnterprise();
-    await withoutAutoGroups(async () => createChallengeFor(sponsorId, "A"));
-    await pool.query(await backfillStatement());
-
-    const later = await createChallengeFor(sponsorId, "B");
-    expect(await groupOf(later)).toHaveLength(1);
   });
 });

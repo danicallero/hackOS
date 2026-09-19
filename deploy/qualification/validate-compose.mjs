@@ -57,15 +57,20 @@ if (!String(environment("runner").DATABASE_URL).includes("hackos_event_day_quali
 const limits = (service) => services[service]?.deploy?.resources?.limits ?? {};
 const normalizedLimit = (key, value) => {
   if (key === "cpus") return Number(value);
-  const bytes = { "512m": "536870912", "1g": "1073741824", "2g": "2147483648" };
+  const bytes = {
+    "512m": "536870912",
+    "1g": "1073741824",
+    "2g": "2147483648",
+  };
   return bytes[value] ?? value;
 };
 const expectedLimits = {
   api: { cpus: "2.0", memory: "1g" },
   runner: { cpus: "2.0", memory: "1g" },
-  worker: { cpus: "2.0", memory: "512m" },
+  worker: { cpus: "2.0", memory: "1g" },
   postgres: { cpus: "2.0", memory: "2g" },
-  valkey: { cpus: "1.0", memory: "512m" },
+  valkey: { cpus: "1.0", memory: "1g" },
+  migrate: { cpus: "1.0", memory: "512m" },
 };
 for (const [service, expected] of Object.entries(expectedLimits)) {
   for (const [key, value] of Object.entries(expected)) {
@@ -75,8 +80,21 @@ for (const [service, expected] of Object.entries(expectedLimits)) {
   }
 }
 
+const qualificationMemoryServices = ["postgres", "valkey", "migrate", "api", "worker", "runner"];
+const qualificationMemoryBytes = qualificationMemoryServices.reduce((total, service) => {
+  const memory = Number(normalizedLimit("memory", limits(service).memory));
+  if (!Number.isFinite(memory)) fail(`${service} memory limit is not numeric`);
+  return total + (Number.isFinite(memory) ? memory : 0);
+}, 0);
+const qualificationBudgetBytes = 8 * 1024 ** 3;
+if (qualificationMemoryBytes >= qualificationBudgetBytes) {
+  fail("qualification declared memory budget must remain below the production host budget");
+}
+
 if (failures.length) {
   console.error(`qualification compose validation failed:\n- ${failures.join("\n- ")}`);
   process.exit(1);
 }
-console.log(`qualification compose validated: ${expectedImage}`);
+console.log(
+  `qualification compose validated: ${expectedImage} (${qualificationMemoryBytes / 1024 ** 3} GiB declared)`,
+);

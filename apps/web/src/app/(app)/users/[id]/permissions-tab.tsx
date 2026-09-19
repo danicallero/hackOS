@@ -8,17 +8,11 @@ import { Building2Icon, KeyRoundIcon, ShieldIcon, UsersIcon, XIcon } from "lucid
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { EntityCombobox } from "@/components/common/entity-combobox";
+import { MultiSelect } from "@/components/common/multi-select";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
@@ -29,6 +23,7 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
   const { t } = useLocale();
   const canManage = useCan(CAPABILITIES.PERMISSIONS_MANAGE);
   const [allRoles, setAllRoles] = useState<RoleSummary[]>([]);
+  const [roleIdsToAdd, setRoleIdsToAdd] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -42,15 +37,24 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
   const assignedIds = new Set(user.roles.map((r) => r.id));
   const addable = allRoles.filter((r) => !assignedIds.has(r.id));
 
-  async function addRole(roleId: string) {
+  async function addRoles() {
+    if (roleIdsToAdd.length === 0) return;
     setBusy(true);
+    const added: string[] = [];
     try {
-      await api.post(`/api/roles/${roleId}/users/${user.id}`, {});
-      toast.success(t("roleAdded"));
-      onChanged();
+      for (const roleId of roleIdsToAdd) {
+        await api.post(`/api/roles/${roleId}/users/${user.id}`, {});
+        added.push(roleId);
+      }
+      toast.success(t("rolesAdded"));
+      setRoleIdsToAdd([]);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotAddRole"));
     } finally {
+      if (added.length > 0) {
+        setRoleIdsToAdd((current) => current.filter((roleId) => !added.includes(roleId)));
+        onChanged();
+      }
       setBusy(false);
     }
   }
@@ -75,18 +79,22 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
         title={t("rolesTitle")}
         action={
           canManage && addable.length > 0 ? (
-            <Select value="" onValueChange={addRole} disabled={busy}>
-              <SelectTrigger className="w-52">
-                <SelectValue placeholder={t("addRolePlaceholder")} />
-              </SelectTrigger>
-              <SelectContent>
-                {addable.map((r) => (
-                  <SelectItem key={r.id} value={String(r.id)}>
-                    {r.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
+              <div className="min-w-52 flex-1 sm:w-64 sm:flex-none">
+                <MultiSelect
+                  options={addable.map((role) => ({ value: String(role.id), label: role.name }))}
+                  value={roleIdsToAdd}
+                  onChange={setRoleIdsToAdd}
+                  disabled={busy}
+                  placeholder={t("addRolePlaceholder")}
+                  searchPlaceholder={t("searchRolesPlaceholder")}
+                  emptyText={t("noRolesYet")}
+                />
+              </div>
+              <Button size="sm" onClick={addRoles} disabled={busy || roleIdsToAdd.length === 0}>
+                {t("addRoles")}
+              </Button>
+            </div>
           ) : undefined
         }
       >

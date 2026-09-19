@@ -597,8 +597,8 @@ synthetic identity-shaped `users` row.
 | `universities`: name/proposer | Shared catalog | Demographic lookup | Null subject proposer | University text copied to anonymous subject if required | Catalog is not a person record. |
 | `schedule_owners`: user/assigner/free-text name | Staff ownership | Operations | Delete subject-owned row; null subject assigner; never copy real name to free text | No | Avoid hidden name snapshot. |
 | `announcements`: author/payload | Staff content | Notifications | Null subject author; inspect payload/provider logs operationally | No | Personal authorship/payload is not audit data. |
-| `enterprise_invite_link_redemptions`: user/email/name | Invite history | Access provisioning | Delete by FK and normalized email | No | Denormalized invitee identity. |
-| `user_invite_link_redemptions`: user/email/name | Invite history | Access provisioning | Delete by FK and normalized email | No | Denormalized invitee identity. |
+| `enterprise_invite_link_redemptions`: user/email/name/IP/user-agent | Invite history | Access provisioning | Delete by FK and normalized email | No | Denormalized invitee identity and claim provenance. |
+| `user_invite_link_redemptions`: user/email/name/IP/user-agent | Invite history | Access provisioning | Delete by FK and normalized email | No | Denormalized invitee identity and claim provenance. |
 | `enterprise_invite_links` / `user_invite_links`: creator/token | Shared invite config | Provisioning | Null subject creator; expire/revoke shared token as normal | No | Shared link survives; subject authorship does not. |
 | `devpost_participants`: repo/email/name/surname/username/user/linker | Imported project identity | Project reconciliation | Delete subject match by FK/email; capture FK-linked Devpost-only roots before deletion; shared repo may survive | No | External project snapshot is identity-bearing. |
 | `repos`: creator/name/description/URLs | Project/team | Judging/project service | Null creator; delete solo orphan; preserve shared repo for remaining members | No | Shared project is not anonymous demographic audit. |

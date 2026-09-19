@@ -4,7 +4,7 @@ import type { MailConfig, MailMessage } from "../email.js";
 /**
  * SMTP adapter (H52) — nodemailer against config.SMTP_HOST/PORT (+ optional
  * SMTP_USER/PASS). In dev/test that's the Mailpit container (localhost:1025,
- * no auth); production points the env at a real relay.
+ * no auth); production points the env at a real relay such as Amazon SES.
  */
 export async function sendViaSmtp(mail: MailConfig, message: MailMessage): Promise<void> {
   const transport = nodemailer.createTransport({

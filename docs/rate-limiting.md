@@ -46,8 +46,8 @@ whether the route is Better Auth's own or this app's.
 
 **Auth limits are fixed in code, not env-configurable.** A change to the
 security posture of login/registration/reset throttling should go through
-code review, the same way `MAIL_PROVIDER` is a deploy-time choice rather than
-a runtime toggle (`config.ts`) — not something an ops env var can loosen
+code review, the same way `MAIL_PROVIDER` is a deploy-time mail setting rather
+than a runtime toggle (`config.ts`) — not something an ops env var can loosen
 casually.
 
 **Operational (scan/meal-batch/snapshot) limits are env-configurable**
@@ -84,7 +84,7 @@ directly exposed. To close it, `betterAuthPassthrough`
 `x-forwarded-for` with Fastify's own `request.ip` before forwarding to Better
 Auth's handler — and `request.ip` is only trust-aware of proxy headers when
 `config.trustProxy` is set (`TRUST_PROXY=true`, hardcoded in
-`deploy/services/api/docker-compose.yml` and the root `deploy/docker-compose.yml`,
+the canonical `deploy/docker-compose.yml`,
 and the default whenever `NODE_ENV=production` even without it — see
 `config.ts`). In other words: rate limiting inherits the same trusted-proxy
 posture the rest of the app already requires — see `deploy/README.md`'s

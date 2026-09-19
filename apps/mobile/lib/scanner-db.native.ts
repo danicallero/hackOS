@@ -1,4 +1,4 @@
-import { type Directory, File, Paths } from "expo-file-system";
+import { Directory, File, Paths } from "expo-file-system";
 import * as SQLite from "expo-sqlite";
 import {
   decryptJson,
@@ -9,6 +9,7 @@ import {
   resetRosterKey,
 } from "./scanner-crypto";
 import { revokedBadgesFromSnapshot } from "./scanner-model";
+import { clearRosterBackup, loadRosterBackup, saveRosterBackup } from "./scanner-roster-backup";
 import type {
   PendingScan,
   ScannerActivity,
@@ -22,10 +23,11 @@ import type {
 /**
  * Two physical SQLite files, deliberately kept apart:
  *
- * - The roster (this event's people/badges/activities) lives in the cache
- *   directory, which the OS excludes from iCloud/Google auto-backups, and is
- *   wiped in full on sign-out (wipeAttendanceRoster). It's disposable: a
- *   fresh GET /api/scanner/snapshot always reconstructs it.
+ * - The roster (this event's people/badges/activities) lives in the default
+ *   document SQLite directory so staff can use it after a cold offline
+ *   restart. It is wiped in full on sign-out (wipeAttendanceRoster) or when
+ *   the operator clears offline data; a fresh GET /api/scanner/snapshot can
+ *   reconstruct it after either intentional removal.
  * - The offline scan queue is durable (the only record of a not-yet-synced
  *   transaction), so it stays in the default document directory and is
  *   never wiped on logout — see queue.native.ts-style ownership notes below.
@@ -39,6 +41,15 @@ const ROSTER_DATABASE_NAME = "hackos-scanner-roster.db";
 const QUEUE_DATABASE_NAME = "hackos-scanner-queue.db";
 const LEGACY_DATABASE_NAME = "hackos-scanner.db";
 const SQLITE_SIDECAR_SUFFIXES = ["-wal", "-shm", "-journal"] as const;
+// Keep filesystem migration paths tied to Expo SQLite's actual default, not a
+// hand-built Documents/SQLite URI. The two can differ between native runtime
+// versions; opening one while migrating/checking the other produces the
+// empty-on-restart symptom despite a successful live snapshot (#775).
+const ROSTER_DOCUMENT_DIRECTORY = new Directory(SQLite.defaultDatabaseDirectory);
+// #775's first repair constructed this path directly. Preserve an offline
+// upgrade that wrote there before discovering that a runtime's SQLite default
+// can differ from it.
+const LEGACY_ROSTER_DOCUMENT_DIRECTORY = new Directory(Paths.document, "SQLite");
 
 let rosterDatabase: Promise<SQLite.SQLiteDatabase> | null = null;
 let queueDatabase: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -119,6 +130,59 @@ function removeSqliteSidecars(directory: Directory, databaseName: string): void 
   }
 }
 
+function rosterDatabaseFile(directory: Directory): File {
+  return new File(directory, ROSTER_DATABASE_NAME);
+}
+
+/**
+ * Moves every pre-default-location roster into SQLite's durable default directory.
+ * This runs before opening either database, so an upgrade made while offline
+ * preserves the existing encrypted rows and their SecureStore key.
+ */
+async function migrateCachedRosterIfNeeded(): Promise<void> {
+  const durable = rosterDatabaseFile(ROSTER_DOCUMENT_DIRECTORY);
+  const sourceDirectories = [Paths.cache, LEGACY_ROSTER_DOCUMENT_DIRECTORY].filter(
+    (directory) => directory.uri !== ROSTER_DOCUMENT_DIRECTORY.uri,
+  );
+  let sourceDirectory: Directory | null = null;
+  let sourceFile: File | null = null;
+  for (const directory of sourceDirectories) {
+    const candidate = rosterDatabaseFile(directory);
+    if (
+      candidate.exists &&
+      (!sourceFile || (candidate.lastModified ?? 0) > (sourceFile.lastModified ?? 0))
+    ) {
+      sourceDirectory = directory;
+      sourceFile = candidate;
+    }
+  }
+
+  if (!sourceDirectory || !sourceFile) return;
+
+  ROSTER_DOCUMENT_DIRECTORY.create({ idempotent: true, intermediates: true });
+  // A partially completed previous migration can leave several copies behind.
+  // Prefer the newest complete main database; current in-memory generation and
+  // owner fences still guard every later snapshot/write in this process.
+  if (!durable.exists || (sourceFile.lastModified ?? 0) > (durable.lastModified ?? 0)) {
+    await sourceFile.copy(durable, { overwrite: true });
+    for (const suffix of SQLITE_SIDECAR_SUFFIXES) {
+      const source = new File(sourceDirectory, `${ROSTER_DATABASE_NAME}${suffix}`);
+      if (source.exists) {
+        await source.copy(new File(ROSTER_DOCUMENT_DIRECTORY, source.name), { overwrite: true });
+      }
+    }
+  }
+}
+
+function removeLegacyRosterCopies(): void {
+  for (const directory of [Paths.cache, LEGACY_ROSTER_DOCUMENT_DIRECTORY]) {
+    if (directory.uri === ROSTER_DOCUMENT_DIRECTORY.uri) continue;
+    const roster = rosterDatabaseFile(directory);
+    if (roster.exists) roster.delete();
+    removeSqliteSidecars(directory, ROSTER_DATABASE_NAME);
+  }
+}
+
 async function prepareRosterDatabase(db: SQLite.SQLiteDatabase): Promise<boolean> {
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
@@ -178,21 +242,30 @@ async function prepareRosterDatabase(db: SQLite.SQLiteDatabase): Promise<boolean
 }
 
 async function openRosterDatabase(): Promise<SQLite.SQLiteDatabase> {
-  let opened = await SQLite.openDatabaseAsync(ROSTER_DATABASE_NAME, undefined, Paths.cache.uri);
+  await migrateCachedRosterIfNeeded();
+  let opened = await SQLite.openDatabaseAsync(ROSTER_DATABASE_NAME);
   try {
-    if (await prepareRosterDatabase(opened)) return opened;
+    if (await prepareRosterDatabase(opened)) {
+      // Remove the legacy source only after the selected document copy has
+      // passed its schema validation; a corrupt document copy must not cost a
+      // valid cache roster during an offline upgrade.
+      removeLegacyRosterCopies();
+      return opened;
+    }
 
-    // The roster is disposable cache data. A database with the old plaintext
-    // shape, a partial migration, or any unknown extra NOT NULL column cannot
-    // be made safe by ALTER TABLE; discard only this cache file and rebuild it
-    // from the next server snapshot.
+    // A database with the old plaintext shape, a partial migration, or any
+    // unknown extra NOT NULL column cannot be made safe by ALTER TABLE. This
+    // deliberate corrupt-schema recovery rebuilds the roster from the next
+    // server snapshot; it is not routine cache cleanup.
     await opened.closeAsync();
-    await SQLite.deleteDatabaseAsync(ROSTER_DATABASE_NAME, Paths.cache.uri);
-    removeSqliteSidecars(Paths.cache, ROSTER_DATABASE_NAME);
-    opened = await SQLite.openDatabaseAsync(ROSTER_DATABASE_NAME, undefined, Paths.cache.uri);
+    await SQLite.deleteDatabaseAsync(ROSTER_DATABASE_NAME);
+    removeSqliteSidecars(ROSTER_DOCUMENT_DIRECTORY, ROSTER_DATABASE_NAME);
+    await migrateCachedRosterIfNeeded();
+    opened = await SQLite.openDatabaseAsync(ROSTER_DATABASE_NAME);
     if (!(await prepareRosterDatabase(opened))) {
       throw new Error("Unable to initialize the encrypted scanner roster");
     }
+    removeLegacyRosterCopies();
     return opened;
   } catch (error) {
     await opened.closeAsync().catch(() => undefined);
@@ -425,7 +498,60 @@ export async function applyScannerSnapshot(
         ? rawGeneratedAt.toISOString()
         : null;
   if (!generatedAt) throw new Error("Scanner snapshot is missing generatedAt");
+  // Persist the complete encrypted snapshot through the same durable KV
+  // substrate as Schedule before touching the disposable SQLite index.
+  await saveRosterBackup(snapshot);
   const database = await rosterDb();
+
+  // Activity selection has to survive as soon as an online snapshot is shown.
+  // Encrypting an event-sized people list can take long enough that iOS kills
+  // the JS runtime before the replace-all roster transaction starts. In that
+  // window the previous people rows survive a cold restart but newly fetched
+  // scannable activities do not (#775 follow-up). Activities and their counts
+  // are non-sensitive, so commit that small offline scan index first; the
+  // encrypted identity portion follows below under the same owner/generation
+  // fence. A subsequent complete roster write never clears this index.
+  await withSerializedTransaction(rosterChainRef, database, async () => {
+    if (
+      generation !== rosterGeneration ||
+      (ownerUserId !== undefined && rosterOwnerUserId !== ownerUserId)
+    ) {
+      return;
+    }
+    await database.runAsync("DELETE FROM scanner_activities");
+    await database.runAsync("DELETE FROM scanner_activity_states");
+    for (const activity of snapshot.activities) {
+      await database.runAsync(
+        `INSERT INTO scanner_activities
+        (id, name, category, requires_scan, starts_at, primary_language, name_i18n, description_i18n)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        activity.id,
+        activity.name,
+        activity.category,
+        activity.requiresScan ? 1 : 0,
+        activity.startsAt,
+        activity.primaryLanguage,
+        JSON.stringify(activity.nameI18n),
+        JSON.stringify(activity.descriptionI18n),
+      );
+    }
+    for (const state of snapshot.activityStates) {
+      await database.runAsync(
+        `INSERT INTO scanner_activity_states
+        (user_id, activity_id, scan_count)
+        VALUES (?, ?, ?)`,
+        state.userId,
+        state.activityId,
+        state.count,
+      );
+    }
+    await database.runAsync(
+      `INSERT INTO scanner_metadata (key, value)
+        VALUES ('last_sync', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      generatedAt,
+    );
+  });
   const key = await getRosterKey();
   // expo-crypto's Android bridge does not reliably complete several AES
   // operations issued at once. The roster is event-sized, so serialize the
@@ -470,8 +596,6 @@ export async function applyScannerSnapshot(
     await database.runAsync("DELETE FROM scanner_people");
     await database.runAsync("DELETE FROM revoked_badges");
     await database.runAsync("DELETE FROM revoked_tickets");
-    await database.runAsync("DELETE FROM scanner_activities");
-    await database.runAsync("DELETE FROM scanner_activity_states");
     for (const { person, encrypted } of encryptedPeople) {
       await database.runAsync(
         `INSERT INTO scanner_people
@@ -489,37 +613,6 @@ export async function applyScannerSnapshot(
     for (const revoked of snapshot.revokedTicketTokens ?? []) {
       await database.runAsync(`INSERT INTO revoked_tickets (ticket_token) VALUES (?)`, revoked);
     }
-    for (const activity of snapshot.activities) {
-      await database.runAsync(
-        `INSERT INTO scanner_activities
-        (id, name, category, requires_scan, starts_at, primary_language, name_i18n, description_i18n)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        activity.id,
-        activity.name,
-        activity.category,
-        activity.requiresScan ? 1 : 0,
-        activity.startsAt,
-        activity.primaryLanguage,
-        JSON.stringify(activity.nameI18n),
-        JSON.stringify(activity.descriptionI18n),
-      );
-    }
-    for (const state of snapshot.activityStates) {
-      await database.runAsync(
-        `INSERT INTO scanner_activity_states
-        (user_id, activity_id, scan_count)
-        VALUES (?, ?, ?)`,
-        state.userId,
-        state.activityId,
-        state.count,
-      );
-    }
-    await database.runAsync(
-      `INSERT INTO scanner_metadata (key, value)
-        VALUES ('last_sync', ?)
-        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-      generatedAt,
-    );
   });
 }
 
@@ -562,6 +655,10 @@ export async function wipeAttendanceRoster(ownerUserId?: number): Promise<void> 
       DELETE FROM scanner_metadata;
     `);
   });
+  // #775: clean up a legacy cache-dir copy as well, so it cannot be migrated
+  // back after this intentional session/data boundary.
+  removeLegacyRosterCopies();
+  await clearRosterBackup();
   if (generation === rosterGeneration && rosterOwnerUserId === null) await resetRosterKey();
 }
 
@@ -623,14 +720,18 @@ export async function findPersonByTicket(ticketToken: string): Promise<ScannerPe
       ticketToken,
     );
   });
-  return row ? personFromRow(row) : null;
+  if (row) return personFromRow(row);
+  const backup = await loadRosterBackup();
+  if (backup?.revokedTicketTokens?.includes(ticketToken)) return null;
+  return backup?.people.find((person) => person.ticketToken === ticketToken) ?? null;
 }
 
 export async function findPersonById(userId: number): Promise<ScannerPerson | null> {
   const row = await withSerializedRosterOperation((database) =>
     database.getFirstAsync<PersonRow>(`SELECT * FROM scanner_people WHERE user_id = ?`, userId),
   );
-  return row ? personFromRow(row) : null;
+  if (row) return personFromRow(row);
+  return (await loadRosterBackup())?.people.find((person) => person.userId === userId) ?? null;
 }
 
 /**
@@ -643,7 +744,10 @@ export async function listScannerPeople(query = ""): Promise<ScannerPerson[]> {
   const rows = await withSerializedRosterOperation((database) =>
     database.getAllAsync<PersonRow>(`SELECT * FROM scanner_people`),
   );
-  const people = await Promise.all(rows.map(personFromRow));
+  const people =
+    rows.length > 0
+      ? await Promise.all(rows.map(personFromRow))
+      : ((await loadRosterBackup())?.people ?? []);
   return people
     .filter((person) =>
       [person.name, person.surname, person.email, person.badgeId]
@@ -676,9 +780,14 @@ export async function findPersonByBadge(
       revoked: false,
     };
   });
+  if (result.row || result.revoked) {
+    return { person: result.row ? await personFromRow(result.row) : null, revoked: result.revoked };
+  }
+  const backup = await loadRosterBackup();
+  if (backup?.revokedBadgeIds?.includes(badgeId)) return { person: null, revoked: true };
   return {
-    person: result.row ? await personFromRow(result.row) : null,
-    revoked: result.revoked,
+    person: backup?.people.find((person) => person.badgeId === badgeId) ?? null,
+    revoked: false,
   };
 }
 
@@ -695,7 +804,7 @@ export async function listScannerActivities(): Promise<ScannerActivity[]> {
       description_i18n: string;
     }>(`SELECT * FROM scanner_activities ORDER BY starts_at IS NULL, starts_at, name, id`),
   );
-  return rows.map((row) => ({
+  const activities = rows.map((row) => ({
     id: row.id,
     name: row.name,
     category: row.category,
@@ -705,6 +814,9 @@ export async function listScannerActivities(): Promise<ScannerActivity[]> {
     nameI18n: JSON.parse(row.name_i18n),
     descriptionI18n: JSON.parse(row.description_i18n),
   }));
+  if (activities.length > 0) return activities;
+  const backup = await loadRosterBackup();
+  return backup?.activities ?? [];
 }
 
 export async function getActivityState(
@@ -1053,6 +1165,25 @@ export async function wipeOfflineScanQueue(ownerUserId: number): Promise<void> {
     );
   });
   await resetQueueKey(ownerUserId);
+}
+
+/**
+ * An API endpoint change is a device-wide trust boundary, not an account
+ * switch. Pending operations must never cross that boundary, including rows
+ * left by another staff account on the same device.
+ */
+export async function wipeAllOfflineScanQueues(): Promise<void> {
+  const database = await queueDb();
+  const ownerIds = await withSerializedTransaction(queueChainRef, database, async () => {
+    const rows = await database.getAllAsync<{ created_by_user_id: number }>(
+      `SELECT DISTINCT created_by_user_id FROM pending_scans
+       UNION
+       SELECT DISTINCT created_by_user_id FROM scanner_sync_errors`,
+    );
+    await database.execAsync(`DELETE FROM pending_scans; DELETE FROM scanner_sync_errors;`);
+    return rows.map((row) => row.created_by_user_id);
+  });
+  await Promise.all(ownerIds.map((ownerUserId) => resetQueueKey(ownerUserId)));
 }
 
 /** Returns every replay error for this operator, newest first. */

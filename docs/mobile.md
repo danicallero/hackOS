@@ -5,6 +5,16 @@ capability-driven tabs, participant-facing screens, authenticated realtime,
 and offline SQLite scanners for accreditation, badge rotation, presence,
 meals, and registrable activities.
 
+**Developer API mode.** Seven taps on the understated `v1.0.1` footer in Account
+or Sign in reveals a confirmation that switches between production
+(`api.hackudc.com`) and development (`api.dani.md`). The choice is persisted
+in SecureStore. A switch must first close the old server session; it then
+clears all endpoint-specific caches, downloaded passes, roster data, and every
+pending scanner queue before enabling the new API. A failed old-server
+sign-out refuses the switch, so no scanner work can cross environments. A fixed
+red `DEV` badge overlays every screen while development is active. This is
+intentionally undiscoverable during ordinary use.
+
 For development builds, prebuild/CNG, EAS profiles, signing, certificates,
 store assets, submission, and the release checklist, see
 [`mobile-release.md`](./mobile-release.md).
@@ -283,6 +293,17 @@ distributed to other Expo Router apps without importing hackOS code.
   is also part of the synchronous protected-stack guard: an ineligible account
   never mounts an event screen while its asynchronous sign-out is running.
   (accounts come from the web onboarding/invite flows, H10/H12).
+- Sign-out is local-first (`lib/auth-client.ts`):
+  the shared `signOut()` helper clears the SecureStore session (including
+  chunked variants) and the in-memory session atom before notifying the
+  `/api/me` store, so a device with no reachable server is signed out
+  immediately and lands on sign-in. Server-side session revocation then runs
+  as a best-effort, fire-and-forget `POST /api/auth/sign-out` with the
+  pre-captured cookie; a failed revoke never blocks, retries, or surfaces an
+  error (#757). If the UI-level sign-out attempt itself fails, the recovery,
+  account, and pending-removal surfaces expose `Back to sign in`; that action
+  clears the local session synchronously and replaces the route without
+  waiting for SecureStore or the server.
 - `app/(auth)/forgot-password.tsx` and `reset-password.tsx` share the same
   leading, task-first composition. Their primary actions remain discoverable,
   invalid values are explained beside the relevant field, and focus moves to
@@ -297,8 +318,11 @@ distributed to other Expo Router apps without importing hackOS code.
 - `app/_layout.tsx` keeps a neutral background while the authenticated profile
   restores. It only announces and renders the session progress state
   (`components/session-state.tsx`) after a 500 ms grace period, so a normal
-  fast restore does not flash an intermediate screen; a persistent recovery
-  error still shows retry and sign-out actions.
+  fast restore does not flash an intermediate screen. When the current Better
+  Auth session has its own cached `/api/me` profile, a "Continue offline"
+  action appears after a further short grace period and restores only that
+  session-bound profile; it never searches or restores another account's
+  cache. A persistent recovery error still shows retry and sign-out actions.
 
 ## Participant screens
 
@@ -351,8 +375,8 @@ distributed to other Expo Router apps without importing hackOS code.
   Storage screen carries the
   "App storage" section (`lib/storage-usage.ts`) showing the size of the offline API
   fallback cache (`lib/offline-cache.ts`) and of downloaded files sitting in
-  the OS cache directory (wallet passes, and for operators the attendance
-  roster), plus a confirmed "Clear cache" action. Clearing never touches the
+  the OS cache directory (wallet passes), plus the durable attendance roster
+  for operators, and a confirmed "Clear cache" action. Clearing never touches the
   offline scan queue — the only record of not-yet-synced scans — or the auth
   session; see "Scanner cache encryption & isolation" below. Ordinary account
   caches are namespaced by user/session and are cleared on logout; late writes
@@ -700,6 +724,14 @@ written to the encrypted offline queue, preserving the same persisted scan id
 as `Idempotency-Key` for replay in creation order. The latest server
 snapshot/revocation set is rendered even when its best-effort SQLite cache
 write fails; SQLite is the fallback for offline directory/activity reads.
+The small plaintext scannable-activity index is committed before the
+event-sized encrypted people portion, so force-quitting during a newly received
+snapshot cannot leave an otherwise intact offline roster without its activity
+choices. Activity scans themselves are inserted into the durable per-operator
+queue before a sync is attempted, and are replayed with that persisted scan ID
+when the app next regains a server connection — including after a cold restart.
+Scans at meals and registrable activities are attendance events, so every
+locally queued repeat is accepted on replay without a confirmation conflict.
 A scan rejected as "timestamp must be in the past" (device clock running
 ahead of the server's) is corrected once by the measured clock skew — read
 from the API's `Date` response header in `lib/api.ts` — and retried before
@@ -726,9 +758,9 @@ available, log ID, timestamp, source, activity/direction, and notes needed to
 reconcile the original action even when the local roster can no longer resolve
 the person. A transient sync failure (not a business rejection) surfaces via
 the same stale-data banner used elsewhere in the app, on the sync-queue,
-Activities, and People screens; a genuine server rejection (a conflict, where
-auto-retry pauses) keeps its own message with a manual retry action, since
-that case needs a person to look at it rather than wait for reconnection.
+Activities, and People screens; a genuine HTTP 409 conflict (where auto-retry
+pauses) keeps its own message with a manual retry action, since that case
+needs a person to look at it rather than wait for reconnection.
 
 ### Activities
 
@@ -768,11 +800,16 @@ physical iOS/Android and EAS verification remains a release-gate task in
   `food_intolerance_notes`, `notes`, presence state) is AES-256-GCM encrypted
   as one JSON blob per person under a single roster key
   (`expo-crypto`'s `AESEncryptionKey`, persisted in `expo-secure-store`).
-  The database file itself lives in the OS cache directory
-  (`Paths.cache` from `expo-file-system`), which iOS/Android exclude from
-  iCloud/Google auto-backups by default — no config plugin or native code
-  needed. The whole roster is disposable: `wipeAttendanceRoster()` deletes
-  every table and retires the roster key, called from
+  The database file lives in SQLite's default document directory so a
+  previously synchronized roster remains available after a cold offline
+  restart. On first open after this storage change, a legacy `Paths.cache`
+  database — or a roster stranded in the earlier hand-built Documents/SQLite
+  migration path — and its SQLite sidecars are copied into SQLite's actual
+  default directory before legacy copies are removed; if several files exist,
+  the newer one wins. The roster
+  is intentionally removed only by `wipeAttendanceRoster()`, which deletes
+  every table, removes any residual legacy cache copy, and retires the roster
+  key. It is called from
   `components/account-screen.tsx`'s sign-out handler and the
   `storage-screen.tsx` "Storage" → "Clear cache" action
   (`lib/storage-usage.ts`'s `clearAllCaches`, operators only), and a fresh
@@ -805,8 +842,8 @@ physical iOS/Android and EAS verification remains a release-gate task in
   later authenticated call. A fresh install does not create the legacy file
   just to inspect it, and retirement addresses the default `document/SQLite`
   directory through an Expo FileSystem URI on both platforms. The encrypted
-  roster validates its table shape on open; stale or partial roster cache data
-  is disposable and is rebuilt from the next snapshot, while an incompatible
+  roster validates its table shape on open; a corrupt or incompatible roster
+  schema is deliberately removed and rebuilt from the next snapshot, while an incompatible
   durable queue is left untouched and fails closed rather than being
   reinterpreted or deleted. A scan recorded before the server's current badge
   assignment boundary is a terminal stale-credential result: API enqueue and

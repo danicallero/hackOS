@@ -70,8 +70,15 @@ class FakeDatabase {
 const mockDatabase = new FakeDatabase();
 
 jest.mock("expo-file-system", () => ({
+  Directory: class {
+    exists = true;
+    create() {}
+  },
   File: class {
     exists = false;
+    lastModified = null;
+    name = "file";
+    async copy() {}
     delete() {}
   },
   Paths: { cache: { uri: "cache://" }, document: { uri: "document://" } },
@@ -96,6 +103,11 @@ jest.mock("./scanner-crypto", () => ({
 }));
 
 jest.mock("./scanner-model", () => ({ revokedBadgesFromSnapshot: jest.fn(() => []) }));
+jest.mock("./scanner-roster-backup", () => ({
+  clearRosterBackup: jest.fn(),
+  loadRosterBackup: jest.fn(async () => null),
+  saveRosterBackup: jest.fn(async () => undefined),
+}));
 
 import * as SQLite from "expo-sqlite";
 import { encryptJson } from "./scanner-crypto";
@@ -128,13 +140,27 @@ function snapshot(name: string): ScannerSnapshot {
         lastPresenceAt: null,
       },
     ],
-    activities: [],
-    activityStates: [],
+    activities: [
+      {
+        id: name === "A" ? 10 : 20,
+        name: `Activity ${name}`,
+        category: "activity",
+        requiresScan: true,
+        startsAt: null,
+        primaryLanguage: "en",
+        nameI18n: {},
+        descriptionI18n: {},
+      },
+    ],
+    activityStates: [
+      { userId: name === "A" ? 1 : 2, activityId: name === "A" ? 10 : 20, count: 0 },
+    ],
   };
 }
 
 describe("native scanner roster generation fencing", () => {
   beforeEach(() => {
+    jest.clearAllMocks();
     mockExecStatements.length = 0;
     mockRunStatements.length = 0;
     jest.mocked(encryptJson).mockImplementation(async (payload: unknown) => {
@@ -175,6 +201,12 @@ describe("native scanner roster generation fencing", () => {
     expect(installedSnapshots).toHaveLength(1);
     expect(installedSnapshots[0]?.args).toContain("encrypted-B");
     expect(installedSnapshots[0]?.args).not.toContain("encrypted-A");
+    expect(SQLite.openDatabaseAsync).toHaveBeenCalledWith("hackos-scanner-roster.db");
+    expect(SQLite.openDatabaseAsync).not.toHaveBeenCalledWith(
+      "hackos-scanner-roster.db",
+      undefined,
+      "cache://",
+    );
   });
 
   it("does not create the ownerless legacy database on a fresh queue", async () => {
@@ -202,5 +234,39 @@ describe("native scanner roster generation fencing", () => {
       sql.includes("INSERT INTO scanner_metadata"),
     );
     expect(metadataInsert?.args).toEqual([generatedAt.toISOString()]);
+  });
+
+  it("commits scannable activities before a delayed roster encryption completes", async () => {
+    let releaseEncryption!: () => void;
+    const encryptionGate = new Promise<void>((resolve) => {
+      releaseEncryption = resolve;
+    });
+    jest.mocked(encryptJson).mockImplementation(async () => {
+      await encryptionGate;
+      return "encrypted-A";
+    });
+
+    const write = applyScannerSnapshot(snapshot("A"), 1);
+    // Database initialization performs several async schema checks before it
+    // reaches the activity transaction; wait for that observable boundary,
+    // not an arbitrary number of microtasks.
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      if (mockRunStatements.some(({ sql }) => sql.includes("INSERT INTO scanner_activities")))
+        break;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    expect(
+      mockRunStatements.some(
+        ({ sql, args }) =>
+          sql.includes("INSERT INTO scanner_activities") && args.includes("Activity A"),
+      ),
+    ).toBe(true);
+    expect(mockRunStatements.some(({ sql }) => sql.includes("INSERT INTO scanner_people"))).toBe(
+      false,
+    );
+
+    releaseEncryption();
+    await write;
   });
 });

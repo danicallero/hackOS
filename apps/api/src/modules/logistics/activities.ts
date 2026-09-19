@@ -30,9 +30,9 @@ interface ScanResult {
  *
  * - Everyone has the right to eat: no entitlement check gates meal scans.
  * - First scan auto-registers and reports firstTime.
- * - Any repeated meal/activity does NOT re-register immediately: it returns a
- *   409 payload requiring explicit confirmation. Re-scanning with
- *   allowRepeat=true registers an audited staff override.
+ * - Every distinct scan creates an attendance record, including repeated
+ *   meal scans. The operation is an event log, not a state transition or a
+ *   one-serving entitlement (#775).
  *
  * Concurrency: a per (user, activity) advisory xact lock serializes parallel
  * scanners so two simultaneous first-time scans produce exactly one row.
@@ -125,7 +125,6 @@ export async function activityScan(
     const firstTime = timesBefore === 0;
 
     if (!firstTime && !input.allowRepeat) {
-      // Repeat needs explicit confirmation — do NOT register.
       return {
         status: 409,
         body: {
@@ -159,7 +158,6 @@ export async function activityScan(
     );
 
     if (!firstTime) {
-      // Every repetition is an explicit staff override and remains auditable.
       await audit(client, {
         actorId,
         entityType: isMeal ? "meal" : "activity",
