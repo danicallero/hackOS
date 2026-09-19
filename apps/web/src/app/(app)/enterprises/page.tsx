@@ -8,7 +8,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Building2Icon, EyeIcon, EyeOffIcon, PlusIcon } from "lucide-react";
+import { Building2Icon, EyeIcon, EyeOffIcon, PlusIcon, UploadIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -42,12 +42,19 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, apiUpload } from "@/lib/api";
 import { formatScheduledDateTime, fromDatetimeLocal } from "@/lib/datetime";
 import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
-import { type Enterprise, initials, isScheduled, visibilityTone } from "./shared";
+import {
+  type Enterprise,
+  initials,
+  isScheduled,
+  LOGO_ACCEPT,
+  LOGO_CONTENT_TYPES,
+  visibilityTone,
+} from "./shared";
 
 // Optional URL: allow blank, otherwise must be a valid URL.
 const optionalUrl = z.string().url("Enter a valid URL").or(z.literal(""));
@@ -62,8 +69,7 @@ const createSchema = z.object({
   logoUrl: optionalUrl,
   logoNegativeUrl: optionalUrl,
   description: z.string().max(2000),
-  tierId: optionalPositiveInt,
-  displayPriority: optionalPositiveInt,
+  priority: optionalPositiveInt,
   visibility: z.enum(["visible", "hidden"]),
   availableFrom: z.string(),
 });
@@ -146,10 +152,10 @@ function buildColumns(t: Translate, locale: string): Column<Enterprise>[] {
       id: "priority",
       header: t("priorityLabel"),
       align: "right",
-      sortValue: (e) => e.display_priority ?? Number.POSITIVE_INFINITY,
+      sortValue: (e) => e.priority ?? Number.POSITIVE_INFINITY,
       cell: (e) =>
-        e.display_priority != null ? (
-          <span className="text-sm">{e.display_priority}</span>
+        e.priority != null ? (
+          <span className="text-sm">{e.priority}</span>
         ) : (
           <span className="text-muted-foreground">—</span>
         ),
@@ -390,18 +396,41 @@ function CreateEnterpriseModal({
       logoUrl: "",
       logoNegativeUrl: "",
       description: "",
-      tierId: "",
-      displayPriority: "",
+      priority: "",
       visibility: "hidden",
       availableFrom: "",
     },
   });
   const { reset } = form;
+  const defaultLogoInputRef = useRef<HTMLInputElement>(null);
+  const darkLogoInputRef = useRef<HTMLInputElement>(null);
+  const [defaultLogo, setDefaultLogo] = useState<File | null>(null);
+  const [darkLogo, setDarkLogo] = useState<File | null>(null);
 
   // Reset the form each time the modal opens so stale input never lingers.
   useEffect(() => {
-    if (open) reset();
+    if (open) {
+      reset();
+      setDefaultLogo(null);
+      setDarkLogo(null);
+    }
   }, [open, reset]);
+
+  function selectLogo(file: File | undefined, variant: "default" | "negative") {
+    if (!file) return;
+    if (!LOGO_CONTENT_TYPES.includes(file.type as (typeof LOGO_CONTENT_TYPES)[number])) {
+      toast.error(t("unsupportedFileType"));
+      return;
+    }
+    if (variant === "default") setDefaultLogo(file);
+    else setDarkLogo(file);
+  }
+
+  async function uploadLogo(enterpriseId: number, file: File, variant: "default" | "negative") {
+    const data = new FormData();
+    data.append("file", file);
+    await apiUpload(`/api/enterprises/${enterpriseId}/logo?variant=${variant}`, data);
+  }
 
   async function onSubmit(values: CreateValues) {
     try {
@@ -413,11 +442,16 @@ function CreateEnterpriseModal({
         logoUrl: values.logoUrl || null,
         logoNegativeUrl: values.logoNegativeUrl || null,
         description: values.description || null,
-        tierId: values.tierId ? Number(values.tierId) : null,
-        displayPriority: values.displayPriority ? Number(values.displayPriority) : null,
+        priority: values.priority ? Number(values.priority) : null,
         visibility: values.visibility,
         availableFrom: fromDatetimeLocal(values.availableFrom),
       });
+      try {
+        if (defaultLogo) await uploadLogo(created.id, defaultLogo, "default");
+        if (darkLogo) await uploadLogo(created.id, darkLogo, "negative");
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : t("couldNotUploadLogo"));
+      }
       toast.success(t("enterpriseCreated"));
       await onCreated(created);
     } catch (err) {
@@ -456,6 +490,46 @@ function CreateEnterpriseModal({
               </FormItem>
             )}
           />
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={form.formState.isSubmitting}
+              onClick={() => defaultLogoInputRef.current?.click()}
+            >
+              <UploadIcon aria-hidden="true" />
+              {defaultLogo ? defaultLogo.name : t("uploadLogo")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={form.formState.isSubmitting}
+              onClick={() => darkLogoInputRef.current?.click()}
+            >
+              <UploadIcon aria-hidden="true" />
+              {darkLogo ? darkLogo.name : t("uploadDarkLogo")}
+            </Button>
+            <input
+              ref={defaultLogoInputRef}
+              type="file"
+              accept={LOGO_ACCEPT}
+              className="hidden"
+              onChange={(event) => {
+                selectLogo(event.target.files?.[0], "default");
+                event.target.value = "";
+              }}
+            />
+            <input
+              ref={darkLogoInputRef}
+              type="file"
+              accept={LOGO_ACCEPT}
+              className="hidden"
+              onChange={(event) => {
+                selectLogo(event.target.files?.[0], "negative");
+                event.target.value = "";
+              }}
+            />
+          </div>
           <FormField
             control={form.control}
             name="website"
@@ -509,35 +583,20 @@ function CreateEnterpriseModal({
               </FormItem>
             )}
           />
-          <div className="grid gap-5 sm:grid-cols-2">
-            <FormField
-              control={form.control}
-              name="tierId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("tierIdLabel")}</FormLabel>
-                  <FormControl>
-                    <Input inputMode="numeric" placeholder={`${t("egPrefix")} 1`} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="displayPriority"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("displayPriorityLabel")}</FormLabel>
-                  <FormControl>
-                    <Input inputMode="numeric" placeholder="1 = first" {...field} />
-                  </FormControl>
-                  <FormDescription>{t("lowerShowsFirstDesc")}</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
+          <FormField
+            control={form.control}
+            name="priority"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("priorityLabel")}</FormLabel>
+                <FormControl>
+                  <Input inputMode="numeric" placeholder="1 = first" {...field} />
+                </FormControl>
+                <FormDescription>{t("lowerShowsFirstDesc")}</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           <FormField
             control={form.control}
             name="visibility"

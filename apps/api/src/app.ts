@@ -25,7 +25,6 @@ import { openApiSecurityForPolicy, registerRoutePolicyInfrastructure } from "./l
 import { broadcast } from "./lib/sse.js";
 import { mutationDomainForPath, publicContentMutationForPath } from "./lib/sse-routing.js";
 import { valkey } from "./lib/valkey.js";
-import { highestRolePosition } from "./modules/identity/role-authority.js";
 import { registerModules } from "./modules/index.js";
 import { authContextPlugin } from "./plugins/auth-context.js";
 import { requestContextPlugin } from "./plugins/request-context.js";
@@ -275,20 +274,6 @@ export async function buildApp(): Promise<App> {
   app.addHook("onRequest", async (req) => {
     const requestPath = req.url.split("?", 1)[0] ?? req.url;
     const isSessionProbe = requestPath === "/api/auth/get-session";
-    if (
-      req.userId != null &&
-      !isSessionProbe &&
-      config.REVIEW_FIXTURE_PASSWORD &&
-      config.REVIEW_FIXTURE_DELETION_PIN
-    ) {
-      try {
-        req.reviewFixtureContext = await findReviewFixtureByUserId(pool, req.userId);
-      } catch {
-        // Reviewer diagnostics must never turn an otherwise valid request into
-        // a failure when the optional lookup is unavailable.
-        req.reviewFixtureContext = null;
-      }
-    }
     const lane = classifyRequestLane({ url: req.url, method: req.method, userId: req.userId });
     observeHttpRequest(lane, req.method);
     // A long-lived SSE socket must never hold an admission slot for its whole
@@ -303,18 +288,27 @@ export async function buildApp(): Promise<App> {
     ) {
       return;
     }
-    let rolePosition: number | null = null;
-    if (req.userId != null && !isSessionProbe) {
+    // Admission must not perform a DB lookup before the gate: a burst of
+    // authenticated requests could otherwise consume the same pool slots that
+    // the gate is meant to protect. Lane classification already keeps P0/P1
+    // operational work ahead of the reserved P2/P3 share; authorization still
+    // runs in the route handler.
+    const lease = await requestAdmission.acquire(lane);
+    admissionLeases.set(req, lease);
+    if (
+      req.userId != null &&
+      !isSessionProbe &&
+      config.REVIEW_FIXTURE_PASSWORD &&
+      config.REVIEW_FIXTURE_DELETION_PIN
+    ) {
       try {
-        rolePosition = await highestRolePosition(pool, req.userId);
-      } catch (err) {
-        // Admission is a resilience guard, not an authorization boundary;
-        // preserve the lane fallback if the optional H8 lookup is unavailable.
-        logSoftFailure(req, err, "request role-priority lookup failed");
+        req.reviewFixtureContext = await findReviewFixtureByUserId(pool, req.userId);
+      } catch {
+        // Reviewer diagnostics must never turn an otherwise valid request into
+        // a failure when the optional lookup is unavailable.
+        req.reviewFixtureContext = null;
       }
     }
-    const lease = await requestAdmission.acquire(lane, rolePosition);
-    admissionLeases.set(req, lease);
   });
 
   const releaseAdmission = (req: FastifyRequest) => {

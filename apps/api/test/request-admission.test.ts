@@ -60,22 +60,19 @@ describe("event-day request lanes (#544)", () => {
     admittedLowerRole.release();
   });
 
-  it("applies role priority even when the lower-role request uses a reserved lane", async () => {
+  it("keeps reserved capacity from authenticated best-effort requests", async () => {
     const admission = new RequestAdmission({
       maxConcurrent: 2,
       reservedHighPriority: 1,
     });
     const activeParticipant = await admission.acquire("P3", 500);
+    const waitingSponsor = admission.acquire("P3", 1_000);
     const activeOperational = await admission.acquire("P0", 5_000);
-    const lowerRole = admission.acquire("P0", 5_000);
-    const higherRole = admission.acquire("P3", 19_000);
 
     activeParticipant.release();
-    const admittedHigherRole = await higherRole;
-    admittedHigherRole.release();
     activeOperational.release();
-    const admittedLowerRole = await lowerRole;
-    admittedLowerRole.release();
+    const admittedSponsor = await waitingSponsor;
+    admittedSponsor.release();
   });
 
   it("keeps the endpoint lane ordering for users at the same role level", async () => {

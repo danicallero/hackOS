@@ -1,13 +1,13 @@
 # @hackos/web
 
 The hackOS web frontend — Next.js (App Router) + shadcn/ui, styled in the same
-dark-first family as **Dokploy**. It consumes the Fastify API (Better Auth
+dark-first family as the rest of hackOS. It consumes the Fastify API (Better Auth
 included) and follows the same user stories (`plan/historias-hackos.md`) as the
 backend, one workstream at a time.
 
-> **The web app is its own deployable service behind its own Traefik router.**
-> It is never served by, or routed together with, the API. See
-> `deploy/services/web` and the `web` service in `deploy/docker-compose.yml`.
+> **The web app is its own deployable service behind Caddy.** It is never
+> served by, or routed together with, the API. See the `web` service in
+> `deploy/docker-compose.yml`.
 
 ## Stack
 
@@ -39,9 +39,13 @@ deduplication layer: API reads remain the authoritative Postgres projection.
 Use `@/lib/toast` rather than importing Sileo directly. Toasts live in the
 top-right and are compact by default; a `description` or `action` expands only
 when the user hovers or focuses it, keeping feedback from covering the current
-workspace. Their surface is intentionally inverted (light toast on dark UI,
-dark toast on light UI), with state colors tuned for that surface. The adapter
-also exposes Sileo's richer flows:
+workspace. One exception: a `toast.error`/`toast.warning` whose sole message is
+longer than ~80 chars (typically a server error detail) is automatically spilled
+into the expandable description behind a short generic title and auto-expands,
+so long error text is never clipped with no way to read the rest. Their surface
+is intentionally inverted (light toast on dark UI, dark toast on light UI), with
+state colors tuned for that surface. The adapter also exposes Sileo's richer
+flows:
 
 - `toast.promise(...)` for operations with loading, success and error states.
 - `toast.loading(...)` for a long-running operation that must remain visible.

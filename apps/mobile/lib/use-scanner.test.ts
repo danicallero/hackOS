@@ -39,7 +39,7 @@ jest.mock("./scanner-sync", () => ({
 }));
 
 import { synchronizeScanner } from "./scanner-sync";
-import { useScannerSync } from "./use-scanner";
+import { isSyncConflict, useScannerSync } from "./use-scanner";
 
 const mockSynchronizeScanner = synchronizeScanner as jest.Mock;
 
@@ -144,5 +144,22 @@ describe("useScannerSync (shared store across mounted screens)", () => {
 
     await first.unmount();
     await second.unmount();
+  });
+});
+
+describe("isSyncConflict (display rule for the Activities/People sync banner)", () => {
+  it("treats a genuine 409 as a conflict", () => {
+    expect(isSyncConflict({ message: "conflict", conflict: true, status: 409 })).toBe(true);
+  });
+
+  it("treats other non-transient 4xx responses as reachability problems, not conflicts", () => {
+    expect(isSyncConflict({ message: "bad request", conflict: true, status: 400 })).toBe(false);
+    expect(isSyncConflict({ message: "unprocessable", conflict: true, status: 422 })).toBe(false);
+  });
+
+  it("treats network/timeout failures as non-conflicts", () => {
+    expect(
+      isSyncConflict({ message: "Network request failed", conflict: false, status: null }),
+    ).toBe(false);
   });
 });

@@ -1279,7 +1279,9 @@ CREATE TABLE public.enterprise_invite_link_redemptions (
     user_id integer,
     email text NOT NULL,
     name text,
-    redeemed_at timestamp with time zone DEFAULT now() NOT NULL
+    redeemed_at timestamp with time zone DEFAULT now() NOT NULL,
+    redeemed_ip inet,
+    redeemed_user_agent text
 );
 
 
@@ -1356,14 +1358,14 @@ CREATE TABLE public.enterprises (
     name text NOT NULL,
     logo_url text,
     website text,
-    tier_id integer,
     director_id integer,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     description text,
     visibility text DEFAULT 'hidden'::text NOT NULL,
     available_from timestamp with time zone,
-    display_priority integer,
+    priority integer,
     logo_negative_url text,
+    CONSTRAINT enterprises_priority_check CHECK (((priority IS NULL) OR (priority > 0))),
     CONSTRAINT enterprises_visibility_check CHECK ((visibility = ANY (ARRAY['visible'::text, 'hidden'::text])))
 );
 
@@ -2302,36 +2304,6 @@ CREATE TABLE public.sponsor_faq (
 
 
 --
--- Name: sponsor_tiers; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.sponsor_tiers (
-    id integer NOT NULL,
-    name text NOT NULL,
-    description text,
-    max_seats integer DEFAULT 1 NOT NULL,
-    max_challenges integer DEFAULT 1 NOT NULL,
-    max_judges integer DEFAULT 0 NOT NULL,
-    logo_priority integer DEFAULT 0 NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
--- Name: sponsor_tiers_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-ALTER TABLE public.sponsor_tiers ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
-    SEQUENCE NAME public.sponsor_tiers_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1
-);
-
-
---
 -- Name: sponsors; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2717,7 +2689,9 @@ CREATE TABLE public.user_invite_link_redemptions (
     user_id integer,
     email text NOT NULL,
     name text,
-    redeemed_at timestamp with time zone DEFAULT now() NOT NULL
+    redeemed_at timestamp with time zone DEFAULT now() NOT NULL,
+    redeemed_ip inet,
+    redeemed_user_agent text
 );
 
 
@@ -3632,22 +3606,6 @@ ALTER TABLE ONLY public.sessions
 
 ALTER TABLE ONLY public.sponsor_faq
     ADD CONSTRAINT sponsor_faq_pkey PRIMARY KEY (id);
-
-
---
--- Name: sponsor_tiers sponsor_tiers_name_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.sponsor_tiers
-    ADD CONSTRAINT sponsor_tiers_name_key UNIQUE (name);
-
-
---
--- Name: sponsor_tiers sponsor_tiers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.sponsor_tiers
-    ADD CONSTRAINT sponsor_tiers_pkey PRIMARY KEY (id);
 
 
 --
@@ -5343,14 +5301,6 @@ ALTER TABLE ONLY public.enterprises
 
 
 --
--- Name: enterprises enterprises_tier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.enterprises
-    ADD CONSTRAINT enterprises_tier_id_fkey FOREIGN KEY (tier_id) REFERENCES public.sponsor_tiers(id);
-
-
---
 -- Name: email_verification_tokens evt_enterprise_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5903,6 +5853,7 @@ ALTER TABLE ONLY public.wallet_passes
 
 
 --
+-- PostgreSQL database dump complete
 --
 
 

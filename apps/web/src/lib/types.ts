@@ -231,6 +231,7 @@ export interface InviteListItem {
   roleIds: number[];
   expiresAt: string;
   createdAt: string;
+  token: string;
 }
 
 /** GET /api/invites/lookup — what the invitee sees before accepting. */
@@ -261,6 +262,7 @@ export interface EnterpriseInviteLink {
   expiresAt: string | null;
   revokedAt: string | null;
   createdAt: string;
+  createdByName: string | null;
   status: "active" | "expired" | "exhausted" | "withdrawn";
   redemptions: Array<{
     id: number;
@@ -268,6 +270,8 @@ export interface EnterpriseInviteLink {
     email: string;
     name: string | null;
     redeemedAt: string;
+    redeemedIp: string | null;
+    redeemedUserAgent: string | null;
   }>;
 }
 
@@ -286,6 +290,7 @@ export interface UserInviteLink {
   expiresAt: string | null;
   revokedAt: string | null;
   createdAt: string;
+  createdByName: string | null;
   status: "active" | "expired" | "exhausted" | "withdrawn";
   redemptions: Array<{
     id: number;
@@ -293,6 +298,8 @@ export interface UserInviteLink {
     email: string;
     name: string | null;
     redeemedAt: string;
+    redeemedIp: string | null;
+    redeemedUserAgent: string | null;
   }>;
 }
 

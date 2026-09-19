@@ -1,7 +1,7 @@
 "use client";
 
 // Enterprise detail (H43/H44): admins with sponsors:manage edit a sponsor's
-// full profile — name, links, tier, reveal window/visibility — and manage its
+// full profile — name, links, priority, reveal window/visibility — and manage its
 // logo. The logo is uploaded via a presigned PUT (H44 object storage); the API
 // sets logo_url to the resulting public URL server-side, so we just reload.
 
@@ -68,8 +68,7 @@ const editSchema = z.object({
   logoUrl: optionalUrl,
   logoNegativeUrl: optionalUrl,
   description: z.string().max(2000),
-  tierId: optionalPositiveInt,
-  displayPriority: optionalPositiveInt,
+  priority: optionalPositiveInt,
   visibility: z.enum(["visible", "hidden"]),
   availableFrom: z.string(),
 });
@@ -82,8 +81,7 @@ function toFormValues(e: Enterprise): EditValues {
     logoUrl: e.logo_url ?? "",
     logoNegativeUrl: e.logo_negative_url === e.logo_url ? "" : (e.logo_negative_url ?? ""),
     description: e.description ?? "",
-    tierId: e.tier_id != null ? String(e.tier_id) : "",
-    displayPriority: e.display_priority != null ? String(e.display_priority) : "",
+    priority: e.priority != null ? String(e.priority) : "",
     visibility: e.visibility,
     availableFrom: toDatetimeLocal(e.available_from),
   };
@@ -467,8 +465,7 @@ export function EditCard({
           ? {
               ...ownerPatch,
               name: values.name,
-              tierId: values.tierId ? Number(values.tierId) : null,
-              displayPriority: values.displayPriority ? Number(values.displayPriority) : null,
+              priority: values.priority ? Number(values.priority) : null,
               visibility: values.visibility,
               availableFrom: fromDatetimeLocal(values.availableFrom),
             }
@@ -564,23 +561,10 @@ export function EditCard({
               <div className="grid gap-5 sm:grid-cols-2">
                 <FormField
                   control={form.control}
-                  name="tierId"
+                  name="priority"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("tierIdLabel")}</FormLabel>
-                      <FormControl>
-                        <Input inputMode="numeric" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="displayPriority"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("displayPriorityLabel")}</FormLabel>
+                      <FormLabel>{t("priorityLabel")}</FormLabel>
                       <FormControl>
                         <Input inputMode="numeric" {...field} />
                       </FormControl>

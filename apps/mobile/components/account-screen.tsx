@@ -21,7 +21,8 @@ import {
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { apiFetch } from "@/lib/api";
-import { signOut } from "@/lib/auth-client";
+import { useApiMode } from "@/lib/api-mode";
+import { forceLocalSignOut, signOut } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";
 import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -51,6 +52,7 @@ export default function AccountScreen() {
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
   const { me, loading, error, offline, staleSince, refetch } = useMeContext();
+  const { mode, setMode } = useApiMode();
   const [intolerances, setIntolerances] = useState<Intolerance[]>([]);
   const [savingLanguage, setSavingLanguage] = useState(false);
   const [languageError, setLanguageError] = useState<Error | null>(null);
@@ -58,6 +60,13 @@ export default function AccountScreen() {
   const [refreshingAccount, setRefreshingAccount] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<Error | null>(null);
+  const developerTapCount = useRef(0);
+  const developerTapTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function returnToSignIn() {
+    forceLocalSignOut();
+    router.replace("/(auth)/sign-in");
+  }
 
   const loadSupportingData = useCallback(async () => {
     if (!me) return;
@@ -119,12 +128,18 @@ export default function AccountScreen() {
     try {
       const { error: authError } = await signOut();
       if (authError) throw new Error(authError.message || t("signOutError"));
-      // The roster is shared event data, while the offline scan queue is
-      // user-owned and intentionally remains available after a re-login.
-      await wipeAttendanceRoster(ownerUserId);
     } catch (cause) {
       setSignOutError(cause instanceof Error ? cause : new Error(t("signOutError")));
       setSigningOut(false);
+      return;
+    }
+    // The roster is shared event data, while the offline scan queue is
+    // user-owned and intentionally remains available after a re-login.
+    try {
+      await wipeAttendanceRoster(ownerUserId);
+    } catch {
+      // Best effort: a failed local roster wipe must not resurface after the
+      // on-device session is already gone.
     }
   }
 
@@ -149,6 +164,31 @@ export default function AccountScreen() {
       { text: t("cancel"), style: "cancel" },
       { text: t("signOut"), style: "destructive", onPress: () => void endSession() },
     ]);
+  }
+
+  function revealDeveloperMode() {
+    developerTapCount.current += 1;
+    if (developerTapTimeout.current) clearTimeout(developerTapTimeout.current);
+    developerTapTimeout.current = setTimeout(() => {
+      developerTapCount.current = 0;
+    }, 2_000);
+    if (developerTapCount.current < 7) return;
+    developerTapCount.current = 0;
+    Alert.alert(
+      t("apiModeTitle"),
+      mode === "development" ? t("apiModeProductionBody") : t("apiModeDevelopmentBody"),
+      [
+        { text: t("cancel"), style: "cancel" },
+        {
+          text: t("apiModeSwitch"),
+          onPress: () => {
+            void setMode(mode === "development" ? "production" : "development").catch(() => {
+              Alert.alert(t("apiModeTitle"), t("apiModeSwitchError"));
+            });
+          },
+        },
+      ],
+    );
   }
 
   if (loading && !me) return <RequestFeedback loading />;
@@ -364,12 +404,37 @@ export default function AccountScreen() {
         </Section>
 
         {signOutError ? (
-          <RequestFeedback
-            error={signOutError}
-            message={t("signOutError")}
-            onRetry={() => void endSession()}
-            retrying={signingOut}
-          />
+          <>
+            <RequestFeedback
+              error={signOutError}
+              message={t("signOutError")}
+              onRetry={() => void endSession()}
+              retrying={signingOut}
+            />
+            <Pressable
+              accessibilityLabel={t("backToSignIn")}
+              accessibilityRole="link"
+              onPress={returnToSignIn}
+              style={({ pressed }) => ({
+                alignItems: "center",
+                justifyContent: "center",
+                minHeight: 44,
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <Text
+                selectable
+                style={{
+                  color: colors.interactiveText,
+                  fontSize: 15,
+                  fontWeight: "700",
+                  textAlign: "center",
+                }}
+              >
+                {t("backToSignIn")}
+              </Text>
+            </Pressable>
+          </>
         ) : null}
         <Section title={t("sessionTitle")} footer={t("sessionActive", { email: me.email })}>
           <ActionButton
@@ -380,6 +445,13 @@ export default function AccountScreen() {
             onPress={confirmSignOut}
           />
         </Section>
+        <Pressable
+          accessibilityLabel="v1.0.1"
+          onPress={revealDeveloperMode}
+          style={{ alignSelf: "center", padding: 8 }}
+        >
+          <Text style={{ color: colors.tertiaryLabel, fontSize: 12 }}>v1.0.1</Text>
+        </Pressable>
       </ScrollView>
       <AndroidStatusBarScrim />
     </View>

@@ -1,7 +1,9 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { act, screen, userEvent, waitFor } from "@testing-library/react-native";
+import { Alert } from "react-native";
 
 const mockPush = jest.fn();
+const mockReplace = jest.fn();
 const mockFocusEffect = jest.fn();
 const mockApiFetch = jest.fn();
 const mockDeleteOwnAccount = jest.fn();
@@ -47,7 +49,7 @@ jest.mock("expo-router", () => ({
     const ReactLib = require("react");
     ReactLib.useEffect(callback, []);
   },
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
   useScrollToTop: jest.fn(),
 }));
 jest.mock("expo-router/stack", () => ({ Stack: { Screen: () => null } }));
@@ -146,7 +148,10 @@ jest.mock("@/lib/api", () => {
   }
   return { ApiError: MockApiError, apiFetch: (...args: unknown[]) => mockApiFetch(...args) };
 });
-jest.mock("@/lib/auth-client", () => ({ signOut: jest.fn().mockResolvedValue({ error: null }) }));
+jest.mock("@/lib/auth-client", () => ({
+  forceLocalSignOut: jest.fn(),
+  signOut: jest.fn().mockResolvedValue({ error: null }),
+}));
 jest.mock("@/lib/env", () => ({ EVENT_WEBSITE_URL: "https://event.example" }));
 jest.mock("@/lib/haptics", () => ({ haptic: jest.fn() }));
 jest.mock("@/lib/i18n", () => {
@@ -236,8 +241,10 @@ jest.mock("@/lib/i18n", () => {
       sessionActive: `Signed in as ${values?.email ?? ""}`,
       sessionTitle: "Session",
       signOut: "Sign out",
+      signOutError: "Couldn't sign out.",
       signOutConfirmBody: "Sign out of this device?",
       signOutConfirmTitle: "Sign out",
+      backToSignIn: "Back to sign in",
       storageTitle: "Storage",
       storageDataTitle: "App storage",
     })[key] ?? key;
@@ -285,6 +292,7 @@ jest.mock("@/theme/colors", () => ({
 import AccountScreen from "@/components/account-screen";
 import DeleteAccountScreen from "@/components/delete-account-screen";
 import { ApiError } from "@/lib/api";
+import { forceLocalSignOut, signOut } from "@/lib/auth-client";
 import { renderMobile } from "./render";
 
 describe("account removal UI flow", () => {
@@ -395,5 +403,25 @@ describe("account removal UI flow", () => {
     expect(screen.getByText("Staff")).toBeTruthy();
     await user.press(screen.getByRole("button", { name: "Statistics" }));
     expect(mockPush).toHaveBeenCalledWith("/(tabs)/others/statistics");
+  });
+
+  it("offers a local route back to sign in when sign-out fails", async () => {
+    const user = userEvent.setup();
+    const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    (signOut as jest.Mock).mockRejectedValueOnce(new Error("offline"));
+    await renderMobile(<AccountScreen />);
+
+    await user.press(screen.getByRole("button", { name: "Sign out" }));
+    const actions = alert.mock.calls[0]?.[2] as
+      | Array<{ text: string; onPress?: () => void }>
+      | undefined;
+    actions?.find((action) => action.text === "Sign out")?.onPress?.();
+
+    await waitFor(() => expect(screen.getByRole("link", { name: "Back to sign in" })).toBeTruthy());
+    await user.press(screen.getByRole("link", { name: "Back to sign in" }));
+
+    expect(forceLocalSignOut).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith("/(auth)/sign-in");
+    alert.mockRestore();
   });
 });
