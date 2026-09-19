@@ -520,7 +520,7 @@ deployment** submenu and to the CLI:
 |---|---|---|
 | `start`, `stop`, `recreate`, `shutdown` | None | Operate only on containers and images already present on the host. `start` never pulls. |
 | `status`, `release` | Local Docker inspection only | Show service state; `release` also shows the deployed image, channel, commit and creation time. |
-| `available` | GitHub Releases | List operator-selectable published releases. |
+| `available` | GHCR package registry | List operator-selectable API/web images, distinguishing `staging`, `main` and legacy SHA tags. |
 | `deploy latest` | Resolves the current channel release, then pulls it | Staging deploys the latest successful staging build; production prints the protected workflow command instead of bypassing approval. |
 | `deploy sha-<commit>` | Validates the immutable SHA release, then pulls it | Deploy or roll back the selected API, web, or both units. |
 

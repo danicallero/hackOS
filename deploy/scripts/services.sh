@@ -23,7 +23,7 @@ Services: postgres valkey minio minio-init migrate api worker web
 The default start/stop operations cover the long-running runtime. shutdown
 stops the whole selected project and never removes volumes or bind data.
 recreate force-recreates selected runtime services without building; release
-prints the deployed image identity. available reads published GitHub releases;
+prints the deployed image identity. available reads published GHCR package tags;
 deploy is explicit and never accepts Docker :latest.
 
 Log event types: all, error, warning, request, health. Use --match TEXT for a
@@ -1524,27 +1524,116 @@ superadmin_shell() {
 }
 
 github_repository="${HACKOS_GITHUB_REPOSITORY:-danicallero/hackOS}"
+github_owner="${github_repository%%/*}"
+
+require_registry_tools() {
+  command -v curl >/dev/null 2>&1 || die "registry operations require curl"
+  command -v python3 >/dev/null 2>&1 || die "registry operations require python3"
+}
+
+ghcr_tags() {
+  local package="$1" token
+  require_registry_tools
+  token="$(
+    curl --fail --silent --show-error --get 'https://ghcr.io/token' \
+      --data-urlencode 'service=ghcr.io' \
+      --data-urlencode "scope=repository:${github_owner}/${package}:pull" |
+      python3 -c 'import json, sys; print(json.load(sys.stdin)["token"])'
+  )" || die "could not obtain a read-only GHCR token for $package"
+  curl --fail --silent --show-error \
+    -H "Authorization: Bearer $token" \
+    "https://ghcr.io/v2/${github_owner}/${package}/tags/list?n=1000" |
+    python3 -c 'import json, sys; print("\n".join(json.load(sys.stdin).get("tags", [])))' ||
+    die "could not list GHCR tags for $package"
+}
+
+github_api() {
+  require_registry_tools
+  curl --fail --silent --show-error \
+    -H 'Accept: application/vnd.github+json' \
+    "https://api.github.com/repos/${github_repository}/$1"
+}
+
+is_release_tag() {
+  [[ "$1" =~ ^(staging-|main-)?sha-[0-9a-f]{40}$ ]]
+}
 
 published_releases() {
-  command -v gh >/dev/null 2>&1 || die "available requires the GitHub CLI (gh)"
-  gh release list --repo "$github_repository" --limit 30
+  local tag channel
+  local -A api_tags=() web_tags=() all_tags=()
+
+  while IFS= read -r tag; do
+    is_release_tag "$tag" || continue
+    api_tags["$tag"]=true
+    all_tags["$tag"]=true
+  done < <(ghcr_tags hackos-api)
+  while IFS= read -r tag; do
+    is_release_tag "$tag" || continue
+    web_tags["$tag"]=true
+    all_tags["$tag"]=true
+  done < <(ghcr_tags hackos-web)
+
+  printf '%-12s %-52s %-5s %-5s\n' 'CHANNEL' 'TAG' 'API' 'WEB'
+  for tag in "${!all_tags[@]}"; do
+    case "$tag" in
+      staging-sha-*) channel=staging ;;
+      main-sha-*) channel=main ;;
+      *) channel=legacy ;;
+    esac
+    printf '%-12s %-52s %-5s %-5s\n' \
+      "$channel" "$tag" \
+      "${api_tags[$tag]:-no}" "${web_tags[$tag]:-no}"
+  done | sort -r
+}
+
+latest_staging_tag() {
+  local api_changed="$1" web_changed="$2" commit tag
+  while IFS= read -r commit; do
+    [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || continue
+    tag="sha-$commit"
+    if [[ "$api_changed" == true ]] && ! published_for_unit hackos-api "$tag"; then
+      continue
+    fi
+    if [[ "$web_changed" == true ]] && ! published_for_unit hackos-web "$tag"; then
+      continue
+    fi
+    printf '%s\n' "$tag"
+    return 0
+  done < <(github_api 'commits?sha=staging&per_page=100' | python3 -c 'import json, sys; print("\n".join(item["sha"] for item in json.load(sys.stdin)))')
+  die "could not find a published staging image set for the selected units"
 }
 
 resolve_release_tag() {
-  local requested="$1" commit
+  local requested="$1" api_changed="$2" web_changed="$3" commit
   if [[ "$requested" != latest ]]; then
     [[ "$requested" =~ ^sha-[0-9a-f]{40}$ ]] || die "release must be latest or sha-<40 lowercase hex characters>"
     printf '%s\n' "$requested"
     return 0
   fi
-  command -v gh >/dev/null 2>&1 || die "deploy latest requires the GitHub CLI (gh)"
   if [[ "$environment" == production ]]; then
-    commit="$(gh release view --repo "$github_repository" --json targetCommitish --jq .targetCommitish)"
+    commit="$(github_api releases/latest | python3 -c 'import json, sys; print(json.load(sys.stdin)["target_commitish"])')" ||
+      die "could not resolve the latest production GitHub Release"
   else
-    commit="$(gh run list --repo "$github_repository" --workflow build.yml --branch staging --status success --limit 1 --json headSha --jq '.[0].headSha')"
+    latest_staging_tag "$api_changed" "$web_changed"
+    return 0
   fi
   [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die "could not resolve the latest published $environment release"
   printf 'sha-%s\n' "$commit"
+}
+
+published_for_unit() {
+  local package="$1" tag="$2"
+  ghcr_tags "$package" | grep --fixed-strings --line-regexp --quiet "$tag"
+}
+
+validate_published_release() {
+  local tag="$1" api_changed="$2" web_changed="$3"
+  if [[ "$api_changed" == true ]] && ! published_for_unit hackos-api "$tag"; then
+    die "GHCR does not publish API image $tag"
+  fi
+  if [[ "$web_changed" == true ]] && ! published_for_unit hackos-web "$tag"; then
+    die "GHCR does not publish web image $tag"
+  fi
 }
 
 deploy_release() {
@@ -1559,13 +1648,14 @@ deploy_release() {
     esac
     shift
   done
-  tag="$(resolve_release_tag "$requested")"
   api_changed=false; web_changed=false
   case "$unit" in
     api) api_changed=true ;;
     web) web_changed=true ;;
     both) api_changed=true; web_changed=true ;;
   esac
+  tag="$(resolve_release_tag "$requested" "$api_changed" "$web_changed")"
+  validate_published_release "$tag" "$api_changed" "$web_changed"
   printf 'Environment: %s\nAction: deploy\nAPI/worker: %s\nWeb: %s\n' "$environment" "$tag ($api_changed)" "$tag ($web_changed)"
   if [[ "$environment" == production ]]; then
     printf '%s\n' "Production is protected; run: gh workflow run deploy-incus.yml --repo $github_repository -f tag=$tag -f api_changed=$api_changed -f web_changed=$web_changed"
