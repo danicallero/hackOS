@@ -347,6 +347,7 @@ function ActivityResultPanel({
   // bottom of the screen with no way to scroll to them — cap the card and
   // let its body scroll instead, keeping the buttons always reachable.
   const cardMaxHeight = windowHeight - insets.top - insets.bottom - tabBarBottomInset - 40;
+  const cardHeight = Math.min(cardMaxHeight, 560);
 
   return (
     <View
@@ -370,6 +371,7 @@ function ActivityResultPanel({
         style={{
           borderCurve: "continuous",
           borderRadius: 28,
+          height: cardHeight,
           maxHeight: cardMaxHeight,
           maxWidth: 390,
           overflow: "hidden",
@@ -385,7 +387,7 @@ function ActivityResultPanel({
             math for its children, so the same cap is repeated here on an
             ordinary View — that's what actually lets the ScrollView give up
             space to the footer instead of just being clipped along with it. */}
-        <View style={{ flexShrink: 1, maxHeight: cardMaxHeight, overflow: "hidden" }}>
+        <View style={{ flex: 1, maxHeight: cardMaxHeight, overflow: "hidden" }}>
           <ScrollView
             style={{ flex: 1, flexShrink: 1, minHeight: 0 }}
             contentContainerStyle={{ gap: 18, padding: 20 }}
