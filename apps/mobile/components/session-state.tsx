@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import { AuthAlert, AuthButton, AuthHeader, AuthScreen } from "@/components/auth-ui";
@@ -8,11 +8,36 @@ import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
 
 /** Recoverable H4 session boundary shown while the authenticated profile is unavailable. */
-export function SessionState({ loading, onRetry }: { loading: boolean; onRetry: () => void }) {
+export function SessionState({
+  loading,
+  offlineAvailable = false,
+  onContinueOffline,
+  onRetry,
+}: {
+  loading: boolean;
+  offlineAvailable?: boolean;
+  onContinueOffline?: () => void;
+  onRetry: () => void;
+}) {
   const { t } = useLocale();
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<Error | null>(null);
+  const [showOfflineAction, setShowOfflineAction] = useState(false);
+
+  useEffect(() => {
+    if (!offlineAvailable) {
+      setShowOfflineAction(false);
+      return;
+    }
+    const timeout = setTimeout(() => setShowOfflineAction(true), 2_000);
+    return () => clearTimeout(timeout);
+  }, [offlineAvailable]);
+
+  const offlineAction =
+    showOfflineAction && onContinueOffline ? (
+      <AuthButton label={t("continueOffline")} onPress={onContinueOffline} />
+    ) : null;
 
   function returnToSignIn() {
     forceLocalSignOut();
@@ -62,6 +87,7 @@ export function SessionState({ loading, onRetry }: { loading: boolean; onRetry: 
             </Text>
           </View>
         </View>
+        {offlineAction}
       </AuthScreen>
     );
   }
@@ -77,6 +103,7 @@ export function SessionState({ loading, onRetry }: { loading: boolean; onRetry: 
       <View style={{ gap: 12 }}>
         {signOutError ? <AuthAlert message={t("signOutError")} /> : null}
         <AuthButton label={t("retry")} onPress={onRetry} />
+        {offlineAction}
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ busy: signingOut, disabled: signingOut }}

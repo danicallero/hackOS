@@ -318,8 +318,11 @@ distributed to other Expo Router apps without importing hackOS code.
 - `app/_layout.tsx` keeps a neutral background while the authenticated profile
   restores. It only announces and renders the session progress state
   (`components/session-state.tsx`) after a 500 ms grace period, so a normal
-  fast restore does not flash an intermediate screen; a persistent recovery
-  error still shows retry and sign-out actions.
+  fast restore does not flash an intermediate screen. When the current Better
+  Auth session has its own cached `/api/me` profile, a "Continue offline"
+  action appears after a further short grace period and restores only that
+  session-bound profile; it never searches or restores another account's
+  cache. A persistent recovery error still shows retry and sign-out actions.
 
 ## Participant screens
 
@@ -372,8 +375,8 @@ distributed to other Expo Router apps without importing hackOS code.
   Storage screen carries the
   "App storage" section (`lib/storage-usage.ts`) showing the size of the offline API
   fallback cache (`lib/offline-cache.ts`) and of downloaded files sitting in
-  the OS cache directory (wallet passes, and for operators the attendance
-  roster), plus a confirmed "Clear cache" action. Clearing never touches the
+  the OS cache directory (wallet passes), plus the durable attendance roster
+  for operators, and a confirmed "Clear cache" action. Clearing never touches the
   offline scan queue — the only record of not-yet-synced scans — or the auth
   session; see "Scanner cache encryption & isolation" below. Ordinary account
   caches are namespaced by user/session and are cleared on logout; late writes
@@ -789,11 +792,14 @@ physical iOS/Android and EAS verification remains a release-gate task in
   `food_intolerance_notes`, `notes`, presence state) is AES-256-GCM encrypted
   as one JSON blob per person under a single roster key
   (`expo-crypto`'s `AESEncryptionKey`, persisted in `expo-secure-store`).
-  The database file itself lives in the OS cache directory
-  (`Paths.cache` from `expo-file-system`), which iOS/Android exclude from
-  iCloud/Google auto-backups by default — no config plugin or native code
-  needed. The whole roster is disposable: `wipeAttendanceRoster()` deletes
-  every table and retires the roster key, called from
+  The database file lives in SQLite's default document directory so a
+  previously synchronized roster remains available after a cold offline
+  restart. On first open after this storage change, a legacy `Paths.cache`
+  database and its SQLite sidecars are copied into that directory before the
+  cache copy is removed; if both files exist, the newer one wins. The roster
+  is intentionally removed only by `wipeAttendanceRoster()`, which deletes
+  every table, removes any residual legacy cache copy, and retires the roster
+  key. It is called from
   `components/account-screen.tsx`'s sign-out handler and the
   `storage-screen.tsx` "Storage" → "Clear cache" action
   (`lib/storage-usage.ts`'s `clearAllCaches`, operators only), and a fresh
@@ -826,8 +832,8 @@ physical iOS/Android and EAS verification remains a release-gate task in
   later authenticated call. A fresh install does not create the legacy file
   just to inspect it, and retirement addresses the default `document/SQLite`
   directory through an Expo FileSystem URI on both platforms. The encrypted
-  roster validates its table shape on open; stale or partial roster cache data
-  is disposable and is rebuilt from the next snapshot, while an incompatible
+  roster validates its table shape on open; a corrupt or incompatible roster
+  schema is deliberately removed and rebuilt from the next snapshot, while an incompatible
   durable queue is left untouched and fails closed rather than being
   reinterpreted or deleted. A scan recorded before the server's current badge
   assignment boundary is a terminal stale-credential result: API enqueue and

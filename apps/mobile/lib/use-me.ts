@@ -48,6 +48,7 @@ export function useMe(enabled = true) {
   const [error, setError] = useState<Error | null>(null);
   const [offline, setOffline] = useState(false);
   const [staleSince, setStaleSince] = useState<string | null>(null);
+  const [offlineEntryAvailable, setOfflineEntryAvailable] = useState(false);
   const appState = useRef(AppState.currentState);
   const requestId = useRef(0);
   const meRef = useRef<Me | null>(null);
@@ -85,9 +86,51 @@ export function useMe(enabled = true) {
     setLoading(false);
     setOffline(false);
     setStaleSince(null);
+    setOfflineEntryAvailable(false);
     if (previousCacheKey) void clearCachedValue(previousCacheKey);
     if (previousMe) void clearCachedValues(`user:${previousMe.id}:`);
   }, [enabled]);
+
+  // Check only the current Better Auth session namespace. This intentionally
+  // does not scan profile caches: a different account's stale profile must
+  // never make offline entry available (H54).
+  useEffect(() => {
+    let active = true;
+    const sessionCookie = enabled ? getCurrentSessionCookie() : null;
+    const cacheKey = sessionCookie ? profileCacheKeyForSession(sessionCookie) : null;
+    if (!cacheKey) {
+      setOfflineEntryAvailable(false);
+      return () => {
+        active = false;
+      };
+    }
+    void readCachedValue<Me>(cacheKey).then((cached) => {
+      if (active && getCurrentSessionCookie() === sessionCookie)
+        setOfflineEntryAvailable(cached !== null);
+    });
+    return () => {
+      active = false;
+    };
+  }, [enabled]);
+
+  const enterOffline = useCallback(async (): Promise<void> => {
+    const sessionCookie = getCurrentSessionCookie();
+    const cacheKey = sessionCookie ? profileCacheKeyForSession(sessionCookie) : null;
+    if (!cacheKey) return;
+    const cached = await readCachedValue<Me>(cacheKey);
+    // Recheck after awaiting storage: the user may have signed out or switched
+    // accounts while this action was resolving.
+    if (!cached || getCurrentSessionCookie() !== sessionCookie) return;
+    hasData.current = true;
+    hasResolved.current = true;
+    cacheKeyRef.current = cacheKey;
+    meRef.current = cached.data;
+    setMe(cached.data);
+    setOffline(true);
+    setStaleSince(cached.updatedAt);
+    setError(null);
+    setLoading(false);
+  }, []);
 
   const refetch = useCallback((): Promise<Me | null> => {
     if (!enabled) return Promise.resolve(null);
@@ -152,6 +195,7 @@ export function useMe(enabled = true) {
           setError(null);
           setOffline(false);
           setStaleSince(null);
+          setOfflineEntryAvailable(false);
           if (cacheKey) void clearCachedValue(cacheKey);
           if (invalidatedMe) void clearCachedValues(`user:${invalidatedMe.id}:`);
           return null;
@@ -229,9 +273,11 @@ export function useMe(enabled = true) {
       error,
       offline,
       staleSince,
+      offlineEntryAvailable,
+      enterOffline,
       refetch,
       clear,
     }),
-    [me, loading, error, offline, staleSince, refetch, clear],
+    [me, loading, error, offline, staleSince, offlineEntryAvailable, enterOffline, refetch, clear],
   );
 }
