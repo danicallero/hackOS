@@ -1,4 +1,4 @@
-import { type Directory, File, Paths } from "expo-file-system";
+import { Directory, File, Paths } from "expo-file-system";
 import * as SQLite from "expo-sqlite";
 import {
   decryptJson,
@@ -22,10 +22,11 @@ import type {
 /**
  * Two physical SQLite files, deliberately kept apart:
  *
- * - The roster (this event's people/badges/activities) lives in the cache
- *   directory, which the OS excludes from iCloud/Google auto-backups, and is
- *   wiped in full on sign-out (wipeAttendanceRoster). It's disposable: a
- *   fresh GET /api/scanner/snapshot always reconstructs it.
+ * - The roster (this event's people/badges/activities) lives in the default
+ *   document SQLite directory so staff can use it after a cold offline
+ *   restart. It is wiped in full on sign-out (wipeAttendanceRoster) or when
+ *   the operator clears offline data; a fresh GET /api/scanner/snapshot can
+ *   reconstruct it after either intentional removal.
  * - The offline scan queue is durable (the only record of a not-yet-synced
  *   transaction), so it stays in the default document directory and is
  *   never wiped on logout — see queue.native.ts-style ownership notes below.
@@ -39,6 +40,7 @@ const ROSTER_DATABASE_NAME = "hackos-scanner-roster.db";
 const QUEUE_DATABASE_NAME = "hackos-scanner-queue.db";
 const LEGACY_DATABASE_NAME = "hackos-scanner.db";
 const SQLITE_SIDECAR_SUFFIXES = ["-wal", "-shm", "-journal"] as const;
+const ROSTER_DOCUMENT_DIRECTORY = new Directory(Paths.document, "SQLite");
 
 let rosterDatabase: Promise<SQLite.SQLiteDatabase> | null = null;
 let queueDatabase: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -119,6 +121,45 @@ function removeSqliteSidecars(directory: Directory, databaseName: string): void 
   }
 }
 
+function rosterDatabaseFile(directory: Directory): File {
+  return new File(directory, ROSTER_DATABASE_NAME);
+}
+
+/**
+ * Moves the pre-#775 cache roster into SQLite's durable default directory.
+ * This runs before opening either database, so an upgrade made while offline
+ * preserves the existing encrypted rows and their SecureStore key.
+ */
+async function migrateCachedRosterIfNeeded(): Promise<void> {
+  const cached = rosterDatabaseFile(Paths.cache);
+  const durable = rosterDatabaseFile(ROSTER_DOCUMENT_DIRECTORY);
+  const cachedSidecars = sqliteSidecarFiles(Paths.cache, ROSTER_DATABASE_NAME);
+
+  if (!cached.exists && !cachedSidecars.some((file) => file.exists)) return;
+
+  ROSTER_DOCUMENT_DIRECTORY.create({ idempotent: true, intermediates: true });
+  // A partially completed previous migration can leave both files behind.
+  // Prefer the newest complete main database; current in-memory generation and
+  // owner fences still guard every later snapshot/write in this process.
+  const useCachedRoster =
+    cached.exists && (!durable.exists || (cached.lastModified ?? 0) > (durable.lastModified ?? 0));
+  if (useCachedRoster) {
+    if (cached.exists) await cached.copy(durable, { overwrite: true });
+    for (const suffix of SQLITE_SIDECAR_SUFFIXES) {
+      const source = new File(Paths.cache, `${ROSTER_DATABASE_NAME}${suffix}`);
+      if (source.exists) {
+        await source.copy(new File(ROSTER_DOCUMENT_DIRECTORY, source.name), { overwrite: true });
+      }
+    }
+  }
+}
+
+function removeCachedRoster(): void {
+  const cached = rosterDatabaseFile(Paths.cache);
+  if (cached.exists) cached.delete();
+  removeSqliteSidecars(Paths.cache, ROSTER_DATABASE_NAME);
+}
+
 async function prepareRosterDatabase(db: SQLite.SQLiteDatabase): Promise<boolean> {
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
@@ -178,21 +219,30 @@ async function prepareRosterDatabase(db: SQLite.SQLiteDatabase): Promise<boolean
 }
 
 async function openRosterDatabase(): Promise<SQLite.SQLiteDatabase> {
-  let opened = await SQLite.openDatabaseAsync(ROSTER_DATABASE_NAME, undefined, Paths.cache.uri);
+  await migrateCachedRosterIfNeeded();
+  let opened = await SQLite.openDatabaseAsync(ROSTER_DATABASE_NAME);
   try {
-    if (await prepareRosterDatabase(opened)) return opened;
+    if (await prepareRosterDatabase(opened)) {
+      // Remove the legacy source only after the selected document copy has
+      // passed its schema validation; a corrupt document copy must not cost a
+      // valid cache roster during an offline upgrade.
+      removeCachedRoster();
+      return opened;
+    }
 
-    // The roster is disposable cache data. A database with the old plaintext
-    // shape, a partial migration, or any unknown extra NOT NULL column cannot
-    // be made safe by ALTER TABLE; discard only this cache file and rebuild it
-    // from the next server snapshot.
+    // A database with the old plaintext shape, a partial migration, or any
+    // unknown extra NOT NULL column cannot be made safe by ALTER TABLE. This
+    // deliberate corrupt-schema recovery rebuilds the roster from the next
+    // server snapshot; it is not routine cache cleanup.
     await opened.closeAsync();
-    await SQLite.deleteDatabaseAsync(ROSTER_DATABASE_NAME, Paths.cache.uri);
-    removeSqliteSidecars(Paths.cache, ROSTER_DATABASE_NAME);
-    opened = await SQLite.openDatabaseAsync(ROSTER_DATABASE_NAME, undefined, Paths.cache.uri);
+    await SQLite.deleteDatabaseAsync(ROSTER_DATABASE_NAME);
+    removeSqliteSidecars(ROSTER_DOCUMENT_DIRECTORY, ROSTER_DATABASE_NAME);
+    await migrateCachedRosterIfNeeded();
+    opened = await SQLite.openDatabaseAsync(ROSTER_DATABASE_NAME);
     if (!(await prepareRosterDatabase(opened))) {
       throw new Error("Unable to initialize the encrypted scanner roster");
     }
+    removeCachedRoster();
     return opened;
   } catch (error) {
     await opened.closeAsync().catch(() => undefined);
@@ -562,6 +612,9 @@ export async function wipeAttendanceRoster(ownerUserId?: number): Promise<void> 
       DELETE FROM scanner_metadata;
     `);
   });
+  // #775: clean up a legacy cache-dir copy as well, so it cannot be migrated
+  // back after this intentional session/data boundary.
+  removeCachedRoster();
   if (generation === rosterGeneration && rosterOwnerUserId === null) await resetRosterKey();
 }
 

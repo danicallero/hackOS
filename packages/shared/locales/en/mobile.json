@@ -47,6 +47,7 @@
   "sessionRestoringDescription": "Checking your session…",
   "sessionRecoveryTitle": "Couldn't restore your session",
   "sessionRecoveryDescription": "Check your connection and try again. If it continues, sign in again.",
+  "continueOffline": "Continue offline",
   "offlineDataTitle": "Offline data",
   "offlineDataBody": "The server didn't respond. Last update: {updatedAt}.",
   "yesterday": "Yesterday",

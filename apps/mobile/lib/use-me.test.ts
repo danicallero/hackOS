@@ -241,6 +241,21 @@ describe("useMe offline fallback", () => {
     expect(result.current.error).not.toBeNull();
   });
 
+  it("enters offline immediately from the current session's cached profile", async () => {
+    mockCacheStore.set(profileCacheKeyForSession("session=staff-a"), {
+      data: { id: 1, capabilities: ["accredit:scan"] },
+      updatedAt: "2025-12-01T00:00:00.000Z",
+    });
+    mockApiFetch.mockReturnValue(new Promise(() => {}));
+
+    const { result } = await renderHook(() => useMe(true));
+    await act(async () => result.current.enterOffline());
+
+    expect(result.current.me).toEqual({ id: 1, capabilities: ["accredit:scan"] });
+    expect(result.current.offline).toBe(true);
+    expect(result.current.staleSince).toBe("2025-12-01T00:00:00.000Z");
+  });
+
   it("clears the cached profile on a confirmed 401 instead of falling back to it", async () => {
     mockCacheStore.set(profileCacheKeyForSession("session=staff-a"), {
       data: { id: 1, capabilities: [] },

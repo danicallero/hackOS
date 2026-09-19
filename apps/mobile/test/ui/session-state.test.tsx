@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 import type { ReactNode } from "react";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -39,6 +39,7 @@ jest.mock("@/lib/i18n", () => ({
     t: (key: string) =>
       ({
         backToSignIn: "Back to sign in",
+        continueOffline: "Continue offline",
         retry: "Retry",
         sessionRecoveryDescription: "Check your connection and try again.",
         sessionRecoveryTitle: "Session unavailable",
@@ -78,5 +79,26 @@ describe("session recovery sign-out fallback", () => {
 
     expect(forceLocalSignOut).toHaveBeenCalledTimes(1);
     expect(mockReplace).toHaveBeenCalledWith("/(auth)/sign-in");
+  });
+
+  it("offers offline entry only after the recovery grace period", async () => {
+    jest.useFakeTimers();
+    const onContinueOffline = jest.fn();
+    await renderMobile(
+      <SessionState
+        loading
+        offlineAvailable
+        onContinueOffline={onContinueOffline}
+        onRetry={jest.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Continue offline" })).toBeNull();
+    await act(async () => {
+      jest.advanceTimersByTime(2_000);
+    });
+    fireEvent.press(screen.getByRole("button", { name: "Continue offline" }));
+    expect(onContinueOffline).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
   });
 });
