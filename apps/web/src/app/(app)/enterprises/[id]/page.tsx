@@ -1,7 +1,7 @@
 "use client";
 
 // Enterprise detail (H43/H44): admins with sponsors:manage edit a sponsor's
-// full profile — name, links, tier, reveal window/visibility — and manage its
+// full profile — name, links, priority, reveal window/visibility — and manage its
 // logo. The logo is uploaded via a presigned PUT (H44 object storage); the API
 // sets logo_url to the resulting public URL server-side, so we just reload.
 

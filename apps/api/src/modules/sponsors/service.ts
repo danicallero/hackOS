@@ -17,8 +17,8 @@ import { enqueueWalletSync } from "../logistics/wallet-sync.js";
 import type { CreateEnterpriseBody, FaqItem, UpdateEnterpriseBody } from "./schemas.js";
 
 const COLUMNS = `id, name, website, logo_url,
-  COALESCE(logo_negative_url, logo_url) AS logo_negative_url, description, tier_id,
-  display_priority, visibility, available_from, director_id, created_at`;
+  COALESCE(logo_negative_url, logo_url) AS logo_negative_url, description, priority,
+  visibility, available_from, director_id, created_at`;
 
 const COLUMN_FOR: Record<string, string> = {
   name: "name",
@@ -26,8 +26,7 @@ const COLUMN_FOR: Record<string, string> = {
   logoUrl: "logo_url",
   logoNegativeUrl: "logo_negative_url",
   description: "description",
-  tierId: "tier_id",
-  displayPriority: "display_priority",
+  priority: "priority",
   visibility: "visibility",
   availableFrom: "available_from",
 };
@@ -130,8 +129,8 @@ export async function createEnterprise(input: CreateEnterpriseBody, actorId: num
     return await withTransaction(async (client) => {
       const { rows } = await client.query(
         `INSERT INTO enterprises
-           (name, website, logo_url, logo_negative_url, description, tier_id, display_priority, visibility, available_from)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           (name, website, logo_url, logo_negative_url, description, priority, visibility, available_from)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING ${COLUMNS}`,
         [
           input.name,
@@ -139,8 +138,7 @@ export async function createEnterprise(input: CreateEnterpriseBody, actorId: num
           input.logoUrl ?? null,
           input.logoNegativeUrl ?? null,
           input.description ?? null,
-          input.tierId ?? null,
-          input.displayPriority ?? null,
+          input.priority ?? null,
           input.visibility,
           input.availableFrom ?? null,
         ],
@@ -623,16 +621,14 @@ export interface PublicSponsor {
 /**
  * Publicly-revealed sponsors for the website / TV logo grid (H45). Driven by
  * the enterprise's own visibility; scheduled reveal is handled by the background
- * trigger. Ordered by display priority (1 = primary / biggest), falling back to
- * the sponsor tier's logo_priority.
+ * trigger. Ordered by each enterprise's priority (1 = primary / biggest).
  */
 export async function listPublicSponsors(client: Queryable = pool): Promise<PublicSponsor[]> {
   const { rows } = await client.query(
     `SELECT e.id AS enterprise_id, e.name, e.website, e.logo_url,
             COALESCE(e.logo_negative_url, e.logo_url) AS logo_negative_url,
-            COALESCE(e.display_priority, st.logo_priority, 9999) AS priority
+            COALESCE(e.priority, 9999) AS priority
       FROM enterprises e
-       LEFT JOIN sponsor_tiers st ON st.id = e.tier_id
       WHERE e.visibility = 'visible'
         AND NOT ${ENTERPRISE_HAS_SYNTHETIC}
       ORDER BY priority ASC, e.name ASC`,
