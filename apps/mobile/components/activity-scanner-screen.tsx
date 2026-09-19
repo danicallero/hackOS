@@ -387,7 +387,7 @@ function ActivityResultPanel({
             space to the footer instead of just being clipped along with it. */}
         <View style={{ flexShrink: 1, maxHeight: cardMaxHeight, overflow: "hidden" }}>
           <ScrollView
-            style={{ flexGrow: 0, flexShrink: 1, minHeight: 0 }}
+            style={{ flex: 1, flexShrink: 1, minHeight: 0 }}
             contentContainerStyle={{ gap: 18, padding: 20 }}
           >
             <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 16 }}>
@@ -534,7 +534,14 @@ function ActivityResultPanel({
             ) : null}
           </ScrollView>
 
-          <View style={{ paddingBottom: 20, paddingHorizontal: 20, paddingTop: 4 }}>
+          <View
+            style={{
+              flexShrink: 0,
+              paddingBottom: 20,
+              paddingHorizontal: 20,
+              paddingTop: 4,
+            }}
+          >
             <ResultActionButton
               testID={UI_TEST_IDS.scanner.continue}
               label={t("close")}
