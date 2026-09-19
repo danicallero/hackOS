@@ -40,6 +40,8 @@ export function InviteUserDialog({ onChanged }: { onChanged?: () => void | Promi
   const [customExpiresAt, setCustomExpiresAt] = useState("");
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
   const [roles, setRoles] = useState<RoleSummary[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(false);
+  const [rolesError, setRolesError] = useState(false);
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<{ email?: string; url?: string; summary: string } | null>(
     null,
@@ -48,20 +50,24 @@ export function InviteUserDialog({ onChanged }: { onChanged?: () => void | Promi
 
   useEffect(() => {
     if (!open) return;
-    void Promise.all([
-      api.get<{ enterprises: EnterpriseSummary[] }>("/api/invites/enterprise-options"),
-      api.get<RoleSummary[]>("/api/roles"),
-    ])
-      .then(([enterpriseData, roleData]) => {
-        setEnterprises(enterpriseData.enterprises);
+    setRolesLoading(true);
+    setRolesError(false);
+    void api
+      .get<{ enterprises: EnterpriseSummary[] }>("/api/invites/enterprise-options")
+      .then((enterpriseData) => setEnterprises(enterpriseData.enterprises))
+      .catch(() => setEnterprises([]));
+    void api
+      .get<RoleSummary[]>("/api/roles")
+      .then((roleData) => {
         setRoles(
           roleData.filter((role) => !role.isProtected && role.name.toLowerCase() !== "sponsor"),
         );
       })
       .catch(() => {
-        setEnterprises([]);
         setRoles([]);
-      });
+        setRolesError(true);
+      })
+      .finally(() => setRolesLoading(false));
   }, [open]);
 
   function reset() {
@@ -228,10 +234,17 @@ export function InviteUserDialog({ onChanged }: { onChanged?: () => void | Promi
                 options={roles.map((role) => ({ value: String(role.id), label: role.name }))}
                 value={roleIds}
                 onChange={setRoleIds}
+                disabled={rolesLoading || rolesError}
+                aria-describedby={rolesError ? "invite-roles-error" : undefined}
                 placeholder={t("selectRolesPlaceholder")}
                 searchPlaceholder={t("searchRolesPlaceholder")}
                 emptyText={t("noRolesYet")}
               />
+              {rolesError && (
+                <p id="invite-roles-error" className="text-destructive text-sm" role="alert">
+                  {t("couldNotLoadRoles")}
+                </p>
+              )}
             </div>
             <div className={fieldClass}>
               <Label htmlFor="invite-enterprise">{t("enterpriseLabel")}</Label>
