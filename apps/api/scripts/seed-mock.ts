@@ -579,14 +579,6 @@ async function seedUsers(): Promise<void> {
 // ── enterprises ──────────────────────────────────────────────────────────
 
 async function seedEnterprises(): Promise<void> {
-  const tier = await client.query(
-    `INSERT INTO sponsor_tiers (name, description, max_seats, max_challenges, max_judges, logo_priority)
-     VALUES ('Gold Sponsor', 'Full challenge sponsorship with dedicated judge seats', 5, 3, 2, 10)
-     ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description
-     RETURNING id`,
-  );
-  const tierId = tier.rows[0].id;
-
   const sponsorUsers = await client.query(
     `SELECT u.id, u.email FROM users u
      JOIN user_roles ur ON ur.user_id = u.id
@@ -605,11 +597,11 @@ async function seedEnterprises(): Promise<void> {
     if (!company) continue;
     const repUser = sponsorUsers.rows[i % sponsorUsers.rows.length];
     const enterprise = await client.query(
-      `INSERT INTO enterprises (name, website, tier_id, director_id)
+      `INSERT INTO enterprises (name, website, priority, director_id)
        VALUES ($1, $2, $3, $4)
-       ON CONFLICT (name) DO UPDATE SET tier_id = EXCLUDED.tier_id, website = EXCLUDED.website
+       ON CONFLICT (name) DO UPDATE SET priority = EXCLUDED.priority, website = EXCLUDED.website
        RETURNING id`,
-      [company.name, company.website, tierId, repUser.id],
+      [company.name, company.website, i + 1, repUser.id],
     );
     const enterpriseId = enterprise.rows[0].id;
 
@@ -627,7 +619,7 @@ async function seedEnterprises(): Promise<void> {
   }
 
   console.log(
-    `enterprises: ${SPONSOR_COMPANIES.length} companies (tier #${tierId}), ${createdSponsors} sponsor links`,
+    `enterprises: ${SPONSOR_COMPANIES.length} companies, ${createdSponsors} sponsor links`,
   );
 }
 

@@ -15,8 +15,7 @@ export interface Enterprise {
   logo_url: string | null;
   logo_negative_url: string | null;
   description: string | null;
-  tier_id: number | null;
-  display_priority: number | null;
+  priority: number | null;
   visibility: Visibility;
   available_from: string | null;
   director_id: number | null;

@@ -39,24 +39,17 @@ describe("public content catalog (H48, H49)", () => {
       `INSERT INTO users (email, email_verified) VALUES ('sponsor-hidden@test.local', true) RETURNING id`,
     );
 
-    const tierPrimary = await pool.query(
-      `INSERT INTO sponsor_tiers (name, logo_priority) VALUES ('Primary', 1) RETURNING id`,
-    );
-    const tierStandard = await pool.query(
-      `INSERT INTO sponsor_tiers (name, logo_priority) VALUES ('Standard', 2) RETURNING id`,
-    );
-
     // Enterprises are revealed by their OWN visibility window (H45), not by
     // owning a published challenge.
     const entA = await pool.query(
-      `INSERT INTO enterprises (name, logo_url, website, tier_id, visibility, available_from)
-       VALUES ($1, $2, $3, $4, 'visible', now() - interval '1 hour') RETURNING id`,
-      ["Acme", "https://cdn.test/acme.png", "https://acme.test", tierPrimary.rows[0].id],
+      `INSERT INTO enterprises (name, logo_url, website, priority, visibility, available_from)
+       VALUES ($1, $2, $3, 1, 'visible', now() - interval '1 hour') RETURNING id`,
+      ["Acme", "https://cdn.test/acme.png", "https://acme.test"],
     );
     const entB = await pool.query(
-      `INSERT INTO enterprises (name, logo_url, website, tier_id, visibility, available_from)
-       VALUES ($1, $2, $3, $4, 'visible', now() - interval '2 hours') RETURNING id`,
-      ["Beta", "https://cdn.test/beta.png", "https://beta.test", tierStandard.rows[0].id],
+      `INSERT INTO enterprises (name, logo_url, website, priority, visibility, available_from)
+       VALUES ($1, $2, $3, 2, 'visible', now() - interval '2 hours') RETURNING id`,
+      ["Beta", "https://cdn.test/beta.png", "https://beta.test"],
     );
     const entHidden = await pool.query(
       `INSERT INTO enterprises (name, logo_url) VALUES ($1, $2) RETURNING id`,

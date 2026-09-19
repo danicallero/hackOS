@@ -47,10 +47,10 @@ export const CAPABILITIES = {
   JUDGING_EXPORT: "judging:export",
 
   // sponsors (H43-H46)
-  SPONSORS_MANAGE: "sponsors:manage", // org-side: enterprises, tiers, invites
+  SPONSORS_MANAGE: "sponsors:manage", // org-side: enterprises and invites
 
   // challenges (H43-H46, H8): split from SPONSORS_MANAGE so a role can create/
-  // edit/publish sponsor challenges without full enterprise/tier/invite
+  // edit/publish sponsor challenges without full enterprise/invite
   // administration — held internally by Hacker Experience and Sponsors Team.
   // A challenge's own enterprise still gates ownership-scoped edits via the
   // relationship check in challenges/access.ts; this capability only widens
@@ -116,7 +116,7 @@ export const CAPABILITY_DESCRIPTIONS: Record<Capability, string> = {
   "queue:admin": "Manage rooms, assignments, settings, and disqualifications",
   "judge:panel": "Bring in, start, and evaluate judging sessions",
   "judging:export": "Export judging scores and results",
-  "sponsors:manage": "Manage enterprises, tiers, and sponsor invites",
+  "sponsors:manage": "Manage enterprises and sponsor invites",
   "challenges:manage": "Create, edit, and publish sponsor challenges",
   "schedule:manage": "Manage the event schedule",
   "announcements:manage": "Create and send announcements",
