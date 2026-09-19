@@ -204,7 +204,7 @@ export function InvitationsScreen() {
   }
 
   async function resend() {
-    if (!selected || selected.source !== "email") return;
+    if (selected?.source !== "email") return;
     setResending(true);
     try {
       await api.post(`/api/invites/${selected.id}/resend`);

@@ -603,7 +603,7 @@
   "enterpriseLabel": "Empresa",
   "selectSponsorEnterprise": "Selecciona a empresa do patrocinador",
   "linkedAutomatically": "Vincularanse a esta empresa automaticamente cando acepten.",
-  "allowClosedFormsLabel": "Permitir enviar formularios de inscrición pechados",
+  "allowClosedFormsLabel": "Permitir solicitudes despois do peche",
   "allowClosedFormsHint": "Poderá enviar unha inscrición aínda que o prazo pechase ou o aforo estea completo, e confirmarase automaticamente.",
   "capabilityGroupsLabel": "Grupos de permisos",
   "optionalPreassignGroups": "Opcional — preasigna grupos de permisos",
