@@ -13,8 +13,7 @@ export const createEnterpriseBody = z
     logoUrl: z.string().url().nullish(),
     logoNegativeUrl: z.string().url().nullish(),
     description: z.string().nullish(),
-    tierId: z.number().int().positive().nullish(),
-    displayPriority: z.number().int().positive().nullish(),
+    priority: z.number().int().positive().nullish(),
     visibility: visibilityEnum.default("hidden"),
     availableFrom: z.coerce.date().nullish(),
   })
@@ -32,8 +31,7 @@ export const updateEnterpriseBody = z
     logoUrl: z.string().url().nullish(),
     logoNegativeUrl: z.string().url().nullish(),
     description: z.string().nullish(),
-    tierId: z.number().int().positive().nullish(),
-    displayPriority: z.number().int().positive().nullish(),
+    priority: z.number().int().positive().nullish(),
     visibility: visibilityEnum.optional(),
     availableFrom: z.coerce.date().nullish(),
   })

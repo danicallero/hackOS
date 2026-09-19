@@ -54,6 +54,7 @@ describe("enterprise management (H43-H45)", () => {
       payload: { name: "Acme", website: "https://acme.test", visibility: "hidden" },
     });
     expect(created.statusCode).toBe(201);
+    expect(created.json()).not.toHaveProperty("tier_id");
     const entId = created.json().id;
 
     const owner = await createUser();
@@ -192,7 +193,7 @@ describe("enterprise management (H43-H45)", () => {
         method: "POST",
         url: "/api/enterprises",
         headers: asUser(admin),
-        payload: { name, displayPriority: priority, visibility, availableFrom },
+        payload: { name, priority, visibility, availableFrom },
       });
       return res.json().id;
     };
