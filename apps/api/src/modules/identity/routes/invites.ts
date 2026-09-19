@@ -283,6 +283,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
               roleIds: z.array(z.number()),
               expiresAt: z.string(),
               createdAt: z.string(),
+              token: z.string(),
             }),
           ),
         },
@@ -304,6 +305,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         roleIds: row.role_ids,
         expiresAt: row.expires_at.toISOString(),
         createdAt: row.created_at.toISOString(),
+        token: row.token,
       }));
     },
   );
@@ -818,9 +820,17 @@ export function registerInviteRoutes(app: FastifyInstance): void {
 
         if (enterpriseLink) {
           await client.query(
-            `INSERT INTO enterprise_invite_link_redemptions (link_id, user_id, email, name)
-             VALUES ($1, $2, $3, $4)`,
-            [enterpriseLink.id, userId, email, [name, surname].filter(Boolean).join(" ")],
+            `INSERT INTO enterprise_invite_link_redemptions
+               (link_id, user_id, email, name, redeemed_ip, redeemed_user_agent)
+             VALUES ($1, $2, $3, $4, $5::inet, $6)`,
+            [
+              enterpriseLink.id,
+              userId,
+              email,
+              [name, surname].filter(Boolean).join(" "),
+              req.ip,
+              typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : null,
+            ],
           );
           await client.query(
             `UPDATE enterprise_invite_links
@@ -831,9 +841,17 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         }
         if (userLink) {
           await client.query(
-            `INSERT INTO user_invite_link_redemptions (link_id, user_id, email, name)
-             VALUES ($1, $2, $3, $4)`,
-            [userLink.id, userId, email, [name, surname].filter(Boolean).join(" ")],
+            `INSERT INTO user_invite_link_redemptions
+               (link_id, user_id, email, name, redeemed_ip, redeemed_user_agent)
+             VALUES ($1, $2, $3, $4, $5::inet, $6)`,
+            [
+              userLink.id,
+              userId,
+              email,
+              [name, surname].filter(Boolean).join(" "),
+              req.ip,
+              typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : null,
+            ],
           );
           await client.query(
             `UPDATE user_invite_links

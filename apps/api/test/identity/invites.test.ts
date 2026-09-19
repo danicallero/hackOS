@@ -1163,6 +1163,68 @@ describe("H9 invite regeneration", () => {
 });
 
 describe("H10 reusable user invite links", () => {
+  it("edits an active unused link, but never changes a redeemed link", async () => {
+    const a = await getApp();
+    const actor = await inviter();
+    const enterpriseId = await createEnterprise();
+    const { createRole } = await import("../helpers.js");
+    const roleId = await createRole([CAPABILITIES.QUEUE_OPERATE], { name: "editable-link-role" });
+    const link = await createUserInviteLink(a, actor, {
+      kind: "staff",
+      roleIds: [roleId],
+      maxRedeems: 2,
+      expiresInMinutes: null,
+    });
+
+    const updated = await a.inject({
+      method: "PUT",
+      url: `/api/invites/user-links/${link.id}`,
+      headers: asUser(actor),
+      payload: {
+        kind: "sponsor",
+        enterpriseId,
+        roleIds: [roleId],
+        maxRedeems: 3,
+        expiresInMinutes: 60,
+      },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json()).toMatchObject({ kind: "sponsor", enterpriseId, maxRedeems: 3 });
+
+    const accepted = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      headers: { "user-agent": "invite-test-agent" },
+      payload: { ...ACCEPT_BASE, token: link.token, email: "edited-link@example.com" },
+    });
+    expect(accepted.statusCode).toBe(201);
+
+    const afterRedemption = await a.inject({
+      method: "PUT",
+      url: `/api/invites/user-links/${link.id}`,
+      headers: asUser(actor),
+      payload: {
+        kind: "sponsor",
+        enterpriseId,
+        roleIds: [roleId],
+        maxRedeems: 3,
+        expiresInMinutes: 60,
+      },
+    });
+    expect(afterRedemption.statusCode).toBe(409);
+
+    const listed = await a.inject({
+      method: "GET",
+      url: "/api/invites/user-links",
+      headers: asUser(actor),
+    });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json()[0].redemptions[0]).toMatchObject({
+      email: "edited-link@example.com",
+      redeemedUserAgent: "invite-test-agent",
+    });
+  });
+
   it("requires a capability-backed role for a staff link", async () => {
     const a = await getApp();
     const actor = await inviter();
