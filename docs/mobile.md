@@ -803,8 +803,10 @@ physical iOS/Android and EAS verification remains a release-gate task in
   The database file lives in SQLite's default document directory so a
   previously synchronized roster remains available after a cold offline
   restart. On first open after this storage change, a legacy `Paths.cache`
-  database and its SQLite sidecars are copied into that directory before the
-  cache copy is removed; if both files exist, the newer one wins. The roster
+  database — or a roster stranded in the earlier hand-built Documents/SQLite
+  migration path — and its SQLite sidecars are copied into SQLite's actual
+  default directory before legacy copies are removed; if several files exist,
+  the newer one wins. The roster
   is intentionally removed only by `wipeAttendanceRoster()`, which deletes
   every table, removes any residual legacy cache copy, and retires the roster
   key. It is called from

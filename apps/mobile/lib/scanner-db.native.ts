@@ -45,6 +45,10 @@ const SQLITE_SIDECAR_SUFFIXES = ["-wal", "-shm", "-journal"] as const;
 // versions; opening one while migrating/checking the other produces the
 // empty-on-restart symptom despite a successful live snapshot (#775).
 const ROSTER_DOCUMENT_DIRECTORY = new Directory(SQLite.defaultDatabaseDirectory);
+// #775's first repair constructed this path directly. Preserve an offline
+// upgrade that wrote there before discovering that a runtime's SQLite default
+// can differ from it.
+const LEGACY_ROSTER_DOCUMENT_DIRECTORY = new Directory(Paths.document, "SQLite");
 
 let rosterDatabase: Promise<SQLite.SQLiteDatabase> | null = null;
 let queueDatabase: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -130,27 +134,38 @@ function rosterDatabaseFile(directory: Directory): File {
 }
 
 /**
- * Moves the pre-#775 cache roster into SQLite's durable default directory.
+ * Moves every pre-default-location roster into SQLite's durable default directory.
  * This runs before opening either database, so an upgrade made while offline
  * preserves the existing encrypted rows and their SecureStore key.
  */
 async function migrateCachedRosterIfNeeded(): Promise<void> {
-  const cached = rosterDatabaseFile(Paths.cache);
   const durable = rosterDatabaseFile(ROSTER_DOCUMENT_DIRECTORY);
-  const cachedSidecars = sqliteSidecarFiles(Paths.cache, ROSTER_DATABASE_NAME);
+  const sourceDirectories = [Paths.cache, LEGACY_ROSTER_DOCUMENT_DIRECTORY].filter(
+    (directory) => directory.uri !== ROSTER_DOCUMENT_DIRECTORY.uri,
+  );
+  let sourceDirectory: Directory | null = null;
+  let sourceFile: File | null = null;
+  for (const directory of sourceDirectories) {
+    const candidate = rosterDatabaseFile(directory);
+    if (
+      candidate.exists &&
+      (!sourceFile || (candidate.lastModified ?? 0) > (sourceFile.lastModified ?? 0))
+    ) {
+      sourceDirectory = directory;
+      sourceFile = candidate;
+    }
+  }
 
-  if (!cached.exists && !cachedSidecars.some((file) => file.exists)) return;
+  if (!sourceDirectory || !sourceFile) return;
 
   ROSTER_DOCUMENT_DIRECTORY.create({ idempotent: true, intermediates: true });
-  // A partially completed previous migration can leave both files behind.
+  // A partially completed previous migration can leave several copies behind.
   // Prefer the newest complete main database; current in-memory generation and
   // owner fences still guard every later snapshot/write in this process.
-  const useCachedRoster =
-    cached.exists && (!durable.exists || (cached.lastModified ?? 0) > (durable.lastModified ?? 0));
-  if (useCachedRoster) {
-    if (cached.exists) await cached.copy(durable, { overwrite: true });
+  if (!durable.exists || (sourceFile.lastModified ?? 0) > (durable.lastModified ?? 0)) {
+    await sourceFile.copy(durable, { overwrite: true });
     for (const suffix of SQLITE_SIDECAR_SUFFIXES) {
-      const source = new File(Paths.cache, `${ROSTER_DATABASE_NAME}${suffix}`);
+      const source = new File(sourceDirectory, `${ROSTER_DATABASE_NAME}${suffix}`);
       if (source.exists) {
         await source.copy(new File(ROSTER_DOCUMENT_DIRECTORY, source.name), { overwrite: true });
       }
@@ -158,10 +173,13 @@ async function migrateCachedRosterIfNeeded(): Promise<void> {
   }
 }
 
-function removeCachedRoster(): void {
-  const cached = rosterDatabaseFile(Paths.cache);
-  if (cached.exists) cached.delete();
-  removeSqliteSidecars(Paths.cache, ROSTER_DATABASE_NAME);
+function removeLegacyRosterCopies(): void {
+  for (const directory of [Paths.cache, LEGACY_ROSTER_DOCUMENT_DIRECTORY]) {
+    if (directory.uri === ROSTER_DOCUMENT_DIRECTORY.uri) continue;
+    const roster = rosterDatabaseFile(directory);
+    if (roster.exists) roster.delete();
+    removeSqliteSidecars(directory, ROSTER_DATABASE_NAME);
+  }
 }
 
 async function prepareRosterDatabase(db: SQLite.SQLiteDatabase): Promise<boolean> {
@@ -230,7 +248,7 @@ async function openRosterDatabase(): Promise<SQLite.SQLiteDatabase> {
       // Remove the legacy source only after the selected document copy has
       // passed its schema validation; a corrupt document copy must not cost a
       // valid cache roster during an offline upgrade.
-      removeCachedRoster();
+      removeLegacyRosterCopies();
       return opened;
     }
 
@@ -246,7 +264,7 @@ async function openRosterDatabase(): Promise<SQLite.SQLiteDatabase> {
     if (!(await prepareRosterDatabase(opened))) {
       throw new Error("Unable to initialize the encrypted scanner roster");
     }
-    removeCachedRoster();
+    removeLegacyRosterCopies();
     return opened;
   } catch (error) {
     await opened.closeAsync().catch(() => undefined);
@@ -635,7 +653,7 @@ export async function wipeAttendanceRoster(ownerUserId?: number): Promise<void> 
   });
   // #775: clean up a legacy cache-dir copy as well, so it cannot be migrated
   // back after this intentional session/data boundary.
-  removeCachedRoster();
+  removeLegacyRosterCopies();
   if (generation === rosterGeneration && rosterOwnerUserId === null) await resetRosterKey();
 }
 
