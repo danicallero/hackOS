@@ -131,16 +131,6 @@ export function InvitationsScreen() {
       ),
     },
     {
-      id: "invite",
-      header: t("invitationManagement"),
-      sortValue: (row) => row.label,
-      cell: (row) => (
-        <span className={row.url ? "block max-w-80 truncate font-mono text-xs" : "font-medium"}>
-          {row.label}
-        </span>
-      ),
-    },
-    {
       id: "grants",
       header: t("rolesTitle"),
       cell: (row) => (
@@ -169,6 +159,16 @@ export function InvitationsScreen() {
       cell: (row) => (
         <span className="text-muted-foreground text-sm">
           {row.expires ? dateFmt.format(new Date(row.expires)) : t("linkNeverExpires")}
+        </span>
+      ),
+    },
+    {
+      id: "created",
+      header: t("created"),
+      sortValue: (row) => row.created,
+      cell: (row) => (
+        <span className="text-muted-foreground text-sm">
+          {dateFmt.format(new Date(row.created))}
         </span>
       ),
     },
@@ -229,7 +229,8 @@ export function InvitationsScreen() {
         open={selected !== null}
         onOpenChange={(open) => !open && setSelected(null)}
         icon={selected?.source === "email" ? MailIcon : LinkIcon}
-        title={selected?.label ?? t("invitationManagement")}
+        title={selected?.source === "email" ? selected.label : t("inviteLink")}
+        className="sm:w-[min(40rem,calc(100vw-2rem))]"
         footer={
           selected ? (
             <AlertModal
@@ -266,18 +267,24 @@ export function InvitationsScreen() {
                 </dd>
               </div>
             </dl>
-            <section className="space-y-3">
+            <section className="space-y-4">
               <h2 className="type-section-title">{t("created")}</h2>
-              <ol className="space-y-3 border-l pl-4 text-sm">
-                <li>
-                  <p>{selected.source === "email" ? t("inviteSentMsg") : t("linkCreated")}</p>
+              <ol className="space-y-0 text-sm">
+                <li className="relative border-l pb-5 pl-5 before:absolute before:-left-1.25 before:top-1 before:size-2 before:rounded-full before:bg-foreground">
+                  <p className="font-medium">
+                    {selected.source === "email" ? t("invitationSent") : t("inviteLinkCreated")}
+                  </p>
                   <time className="text-muted-foreground text-xs">
                     {dateFmt.format(new Date(selected.created))}
                   </time>
                 </li>
                 {selected.redemptions.map((redemption) => (
-                  <li key={`${redemption.email}:${redemption.redeemedAt}`}>
-                    <p>{redemption.name ?? redemption.email}</p>
+                  <li
+                    key={`${redemption.email}:${redemption.redeemedAt}`}
+                    className="relative border-l pb-5 pl-5 before:absolute before:-left-1.25 before:top-1 before:size-2 before:rounded-full before:bg-muted-foreground"
+                  >
+                    <p className="font-medium">{redemption.name ?? redemption.email}</p>
+                    <p className="text-muted-foreground text-xs">{redemption.email}</p>
                     <time className="text-muted-foreground text-xs">
                       {dateFmt.format(new Date(redemption.redeemedAt))}
                       {redemption.redeemedIp ? ` · ${redemption.redeemedIp}` : ""}
@@ -286,8 +293,8 @@ export function InvitationsScreen() {
                   </li>
                 ))}
                 {selected.expires && (
-                  <li>
-                    <p>{t("linkStatusExpired")}</p>
+                  <li className="relative pl-5 before:absolute before:-left-1.25 before:top-1 before:size-2 before:rounded-full before:bg-muted-foreground">
+                    <p className="font-medium">{t("linkStatusExpired")}</p>
                     <time className="text-muted-foreground text-xs">
                       {dateFmt.format(new Date(selected.expires))}
                     </time>
