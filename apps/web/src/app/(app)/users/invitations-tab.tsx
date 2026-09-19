@@ -9,13 +9,19 @@ import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { StatusBadge } from "@/components/common/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { ApiError, api } from "@/lib/api";
 import { shortDateTimeFmt } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
-import type { EnterpriseInviteLink, InviteListItem, UserInviteLink } from "@/lib/types";
+import type {
+  EnterpriseInviteLink,
+  InviteListItem,
+  RoleSummary,
+  UserInviteLink,
+} from "@/lib/types";
 import { InviteUserDialog } from "./invite-dialog";
 
 const dateFmt = shortDateTimeFmt;
@@ -50,6 +56,7 @@ export function InvitationsScreen() {
   const [emails, setEmails] = useState<InviteListItem[]>([]);
   const [links, setLinks] = useState<UserInviteLink[]>([]);
   const [enterpriseLinks, setEnterpriseLinks] = useState<EnterpriseInviteLink[]>([]);
+  const [roles, setRoles] = useState<RoleSummary[]>([]);
   const [selected, setSelected] = useState<Record | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +82,17 @@ export function InvitationsScreen() {
     }
   }, [t]);
   useEffect(() => void load(), [load]);
+  useEffect(() => {
+    void api
+      .get<RoleSummary[]>("/api/roles")
+      .then(setRoles)
+      .catch(() => setRoles([]));
+  }, []);
+
+  const roleNames = useMemo(
+    () => new Map(roles.map((role) => [role.id, role.name] as const)),
+    [roles],
+  );
 
   const rows = useMemo<Record[]>(
     () =>
@@ -306,13 +324,27 @@ export function InvitationsScreen() {
               </div>
               <div>
                 <dt className="text-muted-foreground">{t("rolesTitle")}</dt>
-                <dd>
-                  {selected.enterprise ??
-                    (selected.roles.length
-                      ? `${selected.roles.length} ${t("rolesTitle").toLowerCase()}`
-                      : "—")}
+                <dd className="mt-1">
+                  {selected.roles.length ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {selected.roles.map((roleId) => (
+                        <Badge key={roleId} variant="outline">
+                          {roleNames.get(roleId) ?? `#${roleId}`}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    "—"
+                  )}
                 </dd>
               </div>
+              {selected.enterprise && (
+                <div>
+                  <dt className="text-muted-foreground">{t("enterpriseLabel")}</dt>
+                  <dd>{selected.enterprise}</dd>
+                  <p className="mt-1 text-muted-foreground text-xs">{t("sponsorRoleAutomatic")}</p>
+                </div>
+              )}
             </dl>
             <section className="space-y-4">
               <h2 className="type-section-title">{t("created")}</h2>
