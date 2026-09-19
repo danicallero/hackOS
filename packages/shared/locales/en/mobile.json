@@ -558,6 +558,7 @@
   "scannerUnconfirmed": "Place not confirmed",
   "scannerAlreadyCount": "Previous scans: {count}",
   "scannerRepeatTitle": "Already served",
+  "scannerRepeatFound": "Already scanned here",
   "scannerRepeatBody": "This person already has {count} scan(s). Allow a repeat?",
   "scannerActivitiesEmpty": "No scannable activities",
   "scannerActivitiesEmptyBody": "Activities configured to register access will appear here.",
