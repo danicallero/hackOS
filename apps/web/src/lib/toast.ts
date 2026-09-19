@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 import { type SileoOptions, type SileoPosition, sileo } from "sileo";
+import { isLanguage, translateMessage } from "./i18n";
+import type { Language } from "./types";
 
 export interface ToastOptions {
   autopilot?: SileoOptions["autopilot"];
@@ -56,6 +58,10 @@ const DEFAULT_DURATIONS: Record<ToastState, number> = {
 const DEFAULT_POSITION: SileoPosition = "top-right";
 const MAX_VISIBLE_TOASTS = 3;
 const TOAST_EXIT_BUFFER_MS = 700;
+// Longest closed-form title any current `toast.error/warning` uses as its sole
+// message is ~77 chars; past here a single-line Sileo title clips anyway, so
+// spill the text into the expandable description instead of losing it.
+const TITLE_SPILL_CHARS = 80;
 
 type TrackedToast = {
   createdAt: number;
@@ -237,6 +243,33 @@ function normalizePromiseContent(
   return options;
 }
 
+function currentLanguage(): Language {
+  if (typeof document === "undefined") return "es";
+  return isLanguage(document.documentElement.lang) ? document.documentElement.lang : "es";
+}
+
+/**
+ * Sileo renders titles on a single clipped line and only expands toasts that
+ * carry a `description`/`button`. A long error message passed as a sole
+ * `toast.error|warning` argument (e.g. an API error detail) was therefore
+ * truncated with no way to read the rest. Spill such a title into the
+ * expandable description behind a short generic one so the full text is always
+ * readable — and, because the spill keeps Sileo's default autopilot, the toast
+ * auto-expands to show it.
+ */
+function spillLongTitle(
+  method: "success" | "error" | "warning" | "info",
+  options: SileoOptionsWithId,
+) {
+  if (method !== "error" && method !== "warning") return false;
+  if (typeof options.title !== "string" || options.title.length <= TITLE_SPILL_CHARS) return false;
+  if (options.description !== undefined || options.button) return false;
+  const longText = options.title;
+  options.title = translateMessage(currentLanguage(), "actionFailedGeneric");
+  options.description = longText;
+  return true;
+}
+
 function show(
   method: "success" | "error" | "warning" | "info",
   message: ToastMessage,
@@ -244,11 +277,14 @@ function show(
 ) {
   const id = nextToastId();
   const sileoOptions = normalizeMessage(message, options, id);
+  const spilled = spillLongTitle(method, sileoOptions);
   const key = dedupeKey(method, sileoOptions);
   const existingId = findDedupedToast(key);
   if (existingId) return existingId;
   const hasExpandableContent = Boolean(sileoOptions.description) || Boolean(sileoOptions.button);
-  if (hasExpandableContent && options?.autopilot === undefined) sileoOptions.autopilot = false;
+  if (hasExpandableContent && options?.autopilot === undefined && !spilled) {
+    sileoOptions.autopilot = false;
+  }
   if (sileoOptions.duration === undefined) sileoOptions.duration = DEFAULT_DURATIONS[method];
 
   const result = sileo[method](sileoOptions);

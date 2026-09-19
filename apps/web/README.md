@@ -39,9 +39,13 @@ deduplication layer: API reads remain the authoritative Postgres projection.
 Use `@/lib/toast` rather than importing Sileo directly. Toasts live in the
 top-right and are compact by default; a `description` or `action` expands only
 when the user hovers or focuses it, keeping feedback from covering the current
-workspace. Their surface is intentionally inverted (light toast on dark UI,
-dark toast on light UI), with state colors tuned for that surface. The adapter
-also exposes Sileo's richer flows:
+workspace. One exception: a `toast.error`/`toast.warning` whose sole message is
+longer than ~80 chars (typically a server error detail) is automatically spilled
+into the expandable description behind a short generic title and auto-expands,
+so long error text is never clipped with no way to read the rest. Their surface
+is intentionally inverted (light toast on dark UI, dark toast on light UI), with
+state colors tuned for that surface. The adapter also exposes Sileo's richer
+flows:
 
 - `toast.promise(...)` for operations with loading, success and error states.
 - `toast.loading(...)` for a long-running operation that must remain visible.
