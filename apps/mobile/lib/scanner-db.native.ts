@@ -720,14 +720,18 @@ export async function findPersonByTicket(ticketToken: string): Promise<ScannerPe
       ticketToken,
     );
   });
-  return row ? personFromRow(row) : null;
+  if (row) return personFromRow(row);
+  const backup = await loadRosterBackup();
+  if (backup?.revokedTicketTokens?.includes(ticketToken)) return null;
+  return backup?.people.find((person) => person.ticketToken === ticketToken) ?? null;
 }
 
 export async function findPersonById(userId: number): Promise<ScannerPerson | null> {
   const row = await withSerializedRosterOperation((database) =>
     database.getFirstAsync<PersonRow>(`SELECT * FROM scanner_people WHERE user_id = ?`, userId),
   );
-  return row ? personFromRow(row) : null;
+  if (row) return personFromRow(row);
+  return (await loadRosterBackup())?.people.find((person) => person.userId === userId) ?? null;
 }
 
 /**
@@ -776,9 +780,14 @@ export async function findPersonByBadge(
       revoked: false,
     };
   });
+  if (result.row || result.revoked) {
+    return { person: result.row ? await personFromRow(result.row) : null, revoked: result.revoked };
+  }
+  const backup = await loadRosterBackup();
+  if (backup?.revokedBadgeIds?.includes(badgeId)) return { person: null, revoked: true };
   return {
-    person: result.row ? await personFromRow(result.row) : null,
-    revoked: result.revoked,
+    person: backup?.people.find((person) => person.badgeId === badgeId) ?? null,
+    revoked: false,
   };
 }
 
