@@ -30,9 +30,10 @@ interface ScanResult {
  *
  * - Everyone has the right to eat: no entitlement check gates meal scans.
  * - First scan auto-registers and reports firstTime.
- * - Any repeated meal/activity does NOT re-register immediately: it returns a
- *   409 payload requiring explicit confirmation. Re-scanning with
- *   allowRepeat=true registers an audited staff override.
+ * - A repeated meal returns a 409 requiring explicit confirmation;
+ *   allowRepeat=true records an audited staff override. Registrable
+ *   activities record every distinct scan, including repeats: attendance is
+ *   an event log, not a one-serving entitlement (#775).
  *
  * Concurrency: a per (user, activity) advisory xact lock serializes parallel
  * scanners so two simultaneous first-time scans produce exactly one row.
@@ -124,7 +125,7 @@ export async function activityScan(
     const timesBefore = cnt.rows[0].n as number;
     const firstTime = timesBefore === 0;
 
-    if (!firstTime && !input.allowRepeat) {
+    if (isMeal && !firstTime && !input.allowRepeat) {
       // Repeat needs explicit confirmation — do NOT register.
       return {
         status: 409,
@@ -134,9 +135,7 @@ export async function activityScan(
           repeat: true,
           timesEaten: timesBefore,
           card,
-          message: isMeal
-            ? "Already served; confirm to register a repetition"
-            : "Already registered for this activity; confirm to register a repetition",
+          message: "Already served; confirm to register a repetition",
         },
       };
     }
@@ -158,8 +157,8 @@ export async function activityScan(
       ],
     );
 
-    if (!firstTime) {
-      // Every repetition is an explicit staff override and remains auditable.
+    if (isMeal && !firstTime) {
+      // A repeated meal is an explicit staff override and remains auditable.
       await audit(client, {
         actorId,
         entityType: isMeal ? "meal" : "activity",

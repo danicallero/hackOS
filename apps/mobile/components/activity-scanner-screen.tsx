@@ -114,7 +114,7 @@ export function ActivityScannerScreen() {
           count: count + 1,
           person,
           state: "saved",
-          wasRepeat: allowRepeat,
+          wasRepeat: count > 0,
         });
         void haptic("light");
         await runSync();
@@ -175,10 +175,10 @@ export function ActivityScannerScreen() {
           }
         : await getActivityState(found.person.userId, activityId);
       setError(null);
-      // Any repeat — meal or registrable activity — needs explicit staff
-      // confirmation (H25/H26): the API 409s repeats sent without allowRepeat,
-      // which would strand the queued scan as failed.
-      if (state.count > 0) {
+      // Meals are a one-serving entitlement, so a repeat requires a deliberate
+      // override. Registrable activities are attendance events: every scan is
+      // recorded and can replay after a device reconnects without a 409 lock.
+      if (state.count > 0 && activity && isMealActivityKind(activity.category)) {
         void haptic("warning");
         setResult({
           badgeId,
@@ -191,7 +191,7 @@ export function ActivityScannerScreen() {
       }
       await store(found.person, badgeId, false, state.count);
     },
-    [activityId, store, syncState.serverSnapshot, t],
+    [activity, activityId, store, syncState.serverSnapshot, t],
   );
 
   useEffect(() => {

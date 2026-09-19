@@ -103,6 +103,7 @@ jest.mock("@/theme/colors", () => ({
 }));
 
 import { ActivityScannerScreen } from "@/components/activity-scanner-screen";
+import { enqueueLocalScan, getActivityState } from "@/lib/scanner-db";
 import { renderMobile } from "./render";
 
 describe("activity scanner result (H26)", () => {
@@ -114,5 +115,20 @@ describe("activity scanner result (H26)", () => {
 
     fireEvent.press(close);
     await waitFor(() => expect(screen.queryByRole("button", { name: "Close" })).toBeNull());
+  });
+
+  it("queues a repeated registrable-activity scan without a confirmation lock", async () => {
+    jest.mocked(getActivityState).mockResolvedValueOnce({ userId: 21, activityId: 7, count: 1 });
+
+    await renderMobile(<ActivityScannerScreen />);
+
+    await waitFor(() =>
+      expect(enqueueLocalScan).toHaveBeenCalledWith(
+        expect.objectContaining({ allowRepeat: false, kind: "activity" }),
+        11,
+      ),
+    );
+    expect(screen.queryByRole("button", { name: "Register another" })).toBeNull();
+    expect(await screen.findByRole("button", { name: "Close" })).toBeTruthy();
   });
 });

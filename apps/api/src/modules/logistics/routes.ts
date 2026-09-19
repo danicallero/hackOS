@@ -678,7 +678,12 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     {
       ...routeAccess(access.activity),
       preHandler: [activity, idempotencyGuard],
-      schema: { params: activityIdParam, body: activityScanBody },
+      schema: {
+        params: activityIdParam,
+        body: activityScanBody,
+        description:
+          "Records one meal serving or activity-attendance event. Repeated meals require allowRepeat=true; registrable activities record every distinct idempotent scan without confirmation.",
+      },
     },
     async (req, reply) => {
       const r = await activityScan(actor(req.userId), req.params.id, {

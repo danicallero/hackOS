@@ -476,6 +476,56 @@ export async function applyScannerSnapshot(
         : null;
   if (!generatedAt) throw new Error("Scanner snapshot is missing generatedAt");
   const database = await rosterDb();
+
+  // Activity selection has to survive as soon as an online snapshot is shown.
+  // Encrypting an event-sized people list can take long enough that iOS kills
+  // the JS runtime before the replace-all roster transaction starts. In that
+  // window the previous people rows survive a cold restart but newly fetched
+  // scannable activities do not (#775 follow-up). Activities and their counts
+  // are non-sensitive, so commit that small offline scan index first; the
+  // encrypted identity portion follows below under the same owner/generation
+  // fence. A subsequent complete roster write never clears this index.
+  await withSerializedTransaction(rosterChainRef, database, async () => {
+    if (
+      generation !== rosterGeneration ||
+      (ownerUserId !== undefined && rosterOwnerUserId !== ownerUserId)
+    ) {
+      return;
+    }
+    await database.runAsync("DELETE FROM scanner_activities");
+    await database.runAsync("DELETE FROM scanner_activity_states");
+    for (const activity of snapshot.activities) {
+      await database.runAsync(
+        `INSERT INTO scanner_activities
+        (id, name, category, requires_scan, starts_at, primary_language, name_i18n, description_i18n)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        activity.id,
+        activity.name,
+        activity.category,
+        activity.requiresScan ? 1 : 0,
+        activity.startsAt,
+        activity.primaryLanguage,
+        JSON.stringify(activity.nameI18n),
+        JSON.stringify(activity.descriptionI18n),
+      );
+    }
+    for (const state of snapshot.activityStates) {
+      await database.runAsync(
+        `INSERT INTO scanner_activity_states
+        (user_id, activity_id, scan_count)
+        VALUES (?, ?, ?)`,
+        state.userId,
+        state.activityId,
+        state.count,
+      );
+    }
+    await database.runAsync(
+      `INSERT INTO scanner_metadata (key, value)
+        VALUES ('last_sync', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      generatedAt,
+    );
+  });
   const key = await getRosterKey();
   // expo-crypto's Android bridge does not reliably complete several AES
   // operations issued at once. The roster is event-sized, so serialize the
@@ -520,8 +570,6 @@ export async function applyScannerSnapshot(
     await database.runAsync("DELETE FROM scanner_people");
     await database.runAsync("DELETE FROM revoked_badges");
     await database.runAsync("DELETE FROM revoked_tickets");
-    await database.runAsync("DELETE FROM scanner_activities");
-    await database.runAsync("DELETE FROM scanner_activity_states");
     for (const { person, encrypted } of encryptedPeople) {
       await database.runAsync(
         `INSERT INTO scanner_people
@@ -539,37 +587,6 @@ export async function applyScannerSnapshot(
     for (const revoked of snapshot.revokedTicketTokens ?? []) {
       await database.runAsync(`INSERT INTO revoked_tickets (ticket_token) VALUES (?)`, revoked);
     }
-    for (const activity of snapshot.activities) {
-      await database.runAsync(
-        `INSERT INTO scanner_activities
-        (id, name, category, requires_scan, starts_at, primary_language, name_i18n, description_i18n)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        activity.id,
-        activity.name,
-        activity.category,
-        activity.requiresScan ? 1 : 0,
-        activity.startsAt,
-        activity.primaryLanguage,
-        JSON.stringify(activity.nameI18n),
-        JSON.stringify(activity.descriptionI18n),
-      );
-    }
-    for (const state of snapshot.activityStates) {
-      await database.runAsync(
-        `INSERT INTO scanner_activity_states
-        (user_id, activity_id, scan_count)
-        VALUES (?, ?, ?)`,
-        state.userId,
-        state.activityId,
-        state.count,
-      );
-    }
-    await database.runAsync(
-      `INSERT INTO scanner_metadata (key, value)
-        VALUES ('last_sync', ?)
-        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-      generatedAt,
-    );
   });
 }
 
