@@ -76,6 +76,8 @@ const enterpriseInviteLinkResponse = z.object({
       email: z.string(),
       name: z.string().nullable(),
       redeemedAt: z.string(),
+      redeemedIp: z.string().nullable(),
+      redeemedUserAgent: z.string().nullable(),
     }),
   ),
 });
@@ -125,6 +127,8 @@ function toResponse(row: Record<string, unknown>): EnterpriseInviteLinkResponse 
         email: String(item.email),
         name: (item.name as string | null) ?? null,
         redeemedAt: new Date(item.redeemed_at as string).toISOString(),
+        redeemedIp: (item.redeemed_ip as string | null) ?? null,
+        redeemedUserAgent: (item.redeemed_user_agent as string | null) ?? null,
       };
     }),
   };
@@ -141,7 +145,9 @@ async function listLinks(enterpriseId?: number): Promise<EnterpriseInviteLinkRes
                   'user_id', r.user_id,
                   'email', r.email,
                   'name', r.name,
-                  'redeemed_at', r.redeemed_at
+                  'redeemed_at', r.redeemed_at,
+                  'redeemed_ip', r.redeemed_ip,
+                  'redeemed_user_agent', r.redeemed_user_agent
                 ) ORDER BY r.redeemed_at DESC
               ) FILTER (WHERE r.id IS NOT NULL),
               '[]'::json

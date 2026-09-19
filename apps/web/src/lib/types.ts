@@ -268,6 +268,8 @@ export interface EnterpriseInviteLink {
     email: string;
     name: string | null;
     redeemedAt: string;
+    redeemedIp: string | null;
+    redeemedUserAgent: string | null;
   }>;
 }
 
@@ -293,6 +295,8 @@ export interface UserInviteLink {
     email: string;
     name: string | null;
     redeemedAt: string;
+    redeemedIp: string | null;
+    redeemedUserAgent: string | null;
   }>;
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { CopyIcon, UserPlusIcon } from "lucide-react";
+import { CopyIcon, LinkIcon, UserPlusIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { MultiSelect } from "@/components/common/multi-select";
@@ -14,7 +14,13 @@ import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
-import type { EnterpriseSummary, Invite, InviteKind, RoleSummary } from "@/lib/types";
+import type {
+  EnterpriseSummary,
+  Invite,
+  InviteKind,
+  RoleSummary,
+  UserInviteLink,
+} from "@/lib/types";
 
 /**
  * Invite a user (H9/H10). The admin no longer picks an "account type" up
@@ -29,7 +35,7 @@ import type { EnterpriseSummary, Invite, InviteKind, RoleSummary } from "@/lib/t
  * Pre-assigned roles (roleIds) are independent of this and can be combined
  * with either of the above (e.g. a sponsor rep also holding a staff role).
  */
-export function InviteUserDialog() {
+export function InviteUserDialog({ onChanged }: { onChanged?: () => void | Promise<void> }) {
   const { t } = useLocale();
   const copyToClipboard = useCopyToClipboard();
   const [open, setOpen] = useState(false);
@@ -41,6 +47,11 @@ export function InviteUserDialog() {
   const [groups, setGroups] = useState<RoleSummary[]>([]);
   const [pending, setPending] = useState(false);
   const [created, setCreated] = useState<Invite | null>(null);
+  const [createdUrl, setCreatedUrl] = useState<string | null>(null);
+  const [shareable, setShareable] = useState(false);
+  const [maxRedeems, setMaxRedeems] = useState("");
+  const [expiryMinutes, setExpiryMinutes] = useState("10080");
+  const [neverExpires, setNeverExpires] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -63,24 +74,52 @@ export function InviteUserDialog() {
     setAllowClosedForms(false);
     setRoleIds([]);
     setCreated(null);
+    setCreatedUrl(null);
+    setShareable(false);
+    setMaxRedeems("");
+    setExpiryMinutes("10080");
+    setNeverExpires(false);
   }
 
   async function submit() {
+    const parsedMax = maxRedeems.trim() ? Number(maxRedeems) : null;
+    const parsedExpiry = expiryMinutes.trim() ? Number(expiryMinutes) : NaN;
+    if (shareable && parsedMax !== null && (!Number.isInteger(parsedMax) || parsedMax < 1)) {
+      toast.error(t("maxRedeemsDesc"));
+      return;
+    }
+    if (shareable && !neverExpires && (!Number.isInteger(parsedExpiry) || parsedExpiry < 1)) {
+      toast.error(t("expiryMinutesDesc"));
+      return;
+    }
+    const kind: InviteKind = enterpriseId ? "sponsor" : allowClosedForms ? "participant" : "staff";
+    if (shareable && kind === "staff" && roleIds.length === 0) {
+      toast.error(t("staffLinkGroupsRequired"));
+      return;
+    }
     setPending(true);
     try {
-      const kind: InviteKind = enterpriseId
-        ? "sponsor"
-        : allowClosedForms
-          ? "participant"
-          : "staff";
-      const invite = await api.post<Invite>("/api/invites", {
-        email: email.trim().toLowerCase(),
-        kind,
-        ...(kind === "sponsor" ? { enterpriseId: Number(enterpriseId) } : {}),
-        roleIds: roleIds.map(Number),
-      });
-      setCreated(invite);
-      toast.success(t("inviteSentMsg"));
+      if (shareable) {
+        const link = await api.post<UserInviteLink>("/api/invites/user-links", {
+          kind,
+          ...(kind === "sponsor" ? { enterpriseId: Number(enterpriseId) } : {}),
+          roleIds: roleIds.map(Number),
+          maxRedeems: parsedMax,
+          expiresInMinutes: neverExpires ? null : parsedExpiry,
+        });
+        setCreatedUrl(link.url);
+        toast.success(t("userInviteLinkCreated"));
+      } else {
+        const invite = await api.post<Invite>("/api/invites", {
+          email: email.trim().toLowerCase(),
+          kind,
+          ...(kind === "sponsor" ? { enterpriseId: Number(enterpriseId) } : {}),
+          roleIds: roleIds.map(Number),
+        });
+        setCreated(invite);
+        toast.success(t("inviteSentMsg"));
+      }
+      await onChanged?.();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotCreateInvite"));
     } finally {
@@ -88,9 +127,9 @@ export function InviteUserDialog() {
     }
   }
 
-  const claimUrl = created?.token
-    ? `${window.location.origin}/claim-account?token=${created.token}`
-    : "";
+  const claimUrl =
+    createdUrl ??
+    (created?.token ? `${window.location.origin}/claim-account?token=${created.token}` : "");
 
   return (
     <SidePanelEditor
@@ -106,22 +145,22 @@ export function InviteUserDialog() {
       }
       icon={UserPlusIcon}
       title={t("inviteAUser")}
-      description={t("inviteUserDesc")}
       footer={
-        created ? (
+        created || createdUrl ? (
           <Button onClick={() => setOpen(false)}>{t("done")}</Button>
         ) : (
-          <SubmitButton pending={pending} disabled={!email.includes("@")} onClick={submit}>
+          <SubmitButton pending={pending} onClick={submit}>
             {t("sendInvite")}
           </SubmitButton>
         )
       }
     >
-      {created ? (
+      {created || createdUrl ? (
         <div className="space-y-3">
           <p className="text-muted-foreground text-sm">
-            {t("inviteSentToPrefix")} <strong className="text-foreground">{created.email}</strong>.{" "}
-            {t("inviteSentToSuffix")}
+            {created
+              ? `${t("inviteSentToPrefix")} ${created.email}. ${t("inviteSentToSuffix")}`
+              : t("linkCreated")}
           </p>
           <div className="flex items-center gap-2">
             <Input value={claimUrl} readOnly className="font-mono text-xs" />
@@ -141,16 +180,31 @@ export function InviteUserDialog() {
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="invite-email">{t("email")}</Label>
-            <Input
-              id="invite-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder={t("emailPlaceholder")}
+          <div className="flex items-start gap-3 rounded-lg border p-3">
+            <Checkbox
+              id="invite-shareable"
+              checked={shareable}
+              onCheckedChange={(checked) => setShareable(checked === true)}
             />
+            <div className="space-y-1">
+              <Label htmlFor="invite-shareable" className="leading-5">
+                <LinkIcon className="mr-1 inline size-4" aria-hidden="true" /> {t("createLink")}
+              </Label>
+              <p className="text-muted-foreground text-xs">{t("inviteUserDesc")}</p>
+            </div>
           </div>
+          {!shareable && (
+            <div className="space-y-2">
+              <Label htmlFor="invite-email">{t("email")}</Label>
+              <Input
+                id="invite-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={t("emailPlaceholder")}
+              />
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="invite-capability-groups">{t("rolesTitle")}</Label>
             <MultiSelect
@@ -199,6 +253,40 @@ export function InviteUserDialog() {
               <p className="text-muted-foreground text-xs">{t("allowClosedFormsHint")}</p>
             </div>
           </div>
+          {shareable && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="invite-max-redeems">{t("maxRedeemsLabel")}</Label>
+                <Input
+                  id="invite-max-redeems"
+                  type="number"
+                  min="1"
+                  value={maxRedeems}
+                  onChange={(event) => setMaxRedeems(event.target.value)}
+                  placeholder={t("unlimitedRedeems")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="invite-expiry-minutes">{t("expiryMinutesLabel")}</Label>
+                <Input
+                  id="invite-expiry-minutes"
+                  type="number"
+                  min="1"
+                  value={expiryMinutes}
+                  disabled={neverExpires}
+                  onChange={(event) => setExpiryMinutes(event.target.value)}
+                />
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="invite-never-expires"
+                    checked={neverExpires}
+                    onCheckedChange={(checked) => setNeverExpires(checked === true)}
+                  />
+                  <Label htmlFor="invite-never-expires">{t("neverExpiresLabel")}</Label>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </SidePanelEditor>

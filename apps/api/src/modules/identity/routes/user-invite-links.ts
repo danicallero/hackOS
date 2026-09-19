@@ -82,6 +82,8 @@ const userInviteLinkResponse = z.object({
       email: z.string(),
       name: z.string().nullable(),
       redeemedAt: z.string(),
+      redeemedIp: z.string().nullable(),
+      redeemedUserAgent: z.string().nullable(),
     }),
   ),
 });
@@ -131,6 +133,8 @@ function toResponse(row: Record<string, unknown>): UserInviteLinkResponse {
         email: String(item.email),
         name: (item.name as string | null) ?? null,
         redeemedAt: new Date(item.redeemed_at as string).toISOString(),
+        redeemedIp: (item.redeemed_ip as string | null) ?? null,
+        redeemedUserAgent: (item.redeemed_user_agent as string | null) ?? null,
       };
     }),
   };
@@ -148,7 +152,9 @@ async function listLinks(): Promise<UserInviteLinkResponse[]> {
                   'user_id', r.user_id,
                   'email', r.email,
                   'name', r.name,
-                  'redeemed_at', r.redeemed_at
+                  'redeemed_at', r.redeemed_at,
+                  'redeemed_ip', r.redeemed_ip,
+                  'redeemed_user_agent', r.redeemed_user_agent
                 ) ORDER BY r.redeemed_at DESC
               ) FILTER (WHERE r.id IS NOT NULL),
               '[]'::json
@@ -288,6 +294,112 @@ export function registerUserInviteLinkRoutes(app: FastifyInstance): void {
       });
 
       return reply.code(201).send(toResponse(result));
+    },
+  );
+
+  api.put(
+    "/api/invites/user-links/:id",
+    {
+      preHandler: manage,
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
+      schema: {
+        params: z.object({ id: z.coerce.number().int().positive() }),
+        body: z.object({
+          kind: inviteKind,
+          enterpriseId: z.number().int().positive().nullable(),
+          roleIds: z.array(z.number().int().positive()),
+          maxRedeems: z.number().int().positive().nullable(),
+          expiresInMinutes: z.number().int().positive().nullable(),
+        }),
+        response: { 200: userInviteLinkResponse },
+        summary: "Edit an unused reusable user invite link",
+        description:
+          "Changes a reusable invite link's grants, limit, and expiry only before its first redemption and while it is active (H8, H10, #777).",
+      },
+    },
+    async (req) => {
+      const { kind, enterpriseId, maxRedeems, expiresInMinutes } = req.body;
+      const roleIds = [...new Set(req.body.roleIds)];
+      if ((kind === "sponsor") !== (enterpriseId !== null)) {
+        throw new BadRequestError(
+          "Sponsor invite links require enterpriseId; other invite links cannot have one",
+        );
+      }
+      if (kind === "staff" && roleIds.length === 0) {
+        throw new BadRequestError("Staff invite links require at least one role");
+      }
+      const updated = await withTransaction(async (client) => {
+        await lockRoleGraph(client);
+        const { rows } = await client.query(
+          `SELECT id, token, kind, enterprise_id, role_ids, wildcard_authorized, max_redeems,
+                  redeemed_count, expires_at, revoked_at, created_at
+             FROM user_invite_links WHERE id = $1 FOR UPDATE`,
+          [req.params.id],
+        );
+        const link = rows[0] as UserInviteLinkRow | undefined;
+        if (!link) throw new NotFoundError("User invite link not found", { id: req.params.id });
+        if (link.redeemed_count > 0 || userInviteLinkIsExpired(link)) {
+          throw new ConflictError("Only active, unused user invite links can be edited", {
+            id: req.params.id,
+          });
+        }
+        const wildcardAuthorized = await requireWildcardInviteAuthority(
+          client,
+          req.userId as number,
+          roleIds,
+          { requireExisting: true },
+        );
+        if (kind === "staff" && !(await roleIdsGrantCapability(client, roleIds))) {
+          throw new BadRequestError("Staff invite links require a role with capabilities");
+        }
+        let enterpriseName: string | null = null;
+        if (enterpriseId !== null) {
+          const enterprise = await client.query(
+            `SELECT name FROM enterprises WHERE id = $1 FOR SHARE`,
+            [enterpriseId],
+          );
+          if (!enterprise.rows[0])
+            throw new NotFoundError("Enterprise not found", { enterpriseId });
+          enterpriseName = (enterprise.rows[0] as { name: string }).name;
+        }
+        const result = await client.query(
+          `UPDATE user_invite_links
+              SET kind = $2, enterprise_id = $3, role_ids = $4, wildcard_authorized = $5,
+                  max_redeems = $6,
+                  expires_at = CASE WHEN $7::integer IS NULL THEN NULL
+                                    ELSE now() + ($7::integer * interval '1 minute') END
+            WHERE id = $1
+          RETURNING id, token, kind, enterprise_id, role_ids, wildcard_authorized, max_redeems,
+                    redeemed_count, expires_at, revoked_at, created_at`,
+          [
+            req.params.id,
+            kind,
+            enterpriseId,
+            roleIds,
+            wildcardAuthorized,
+            maxRedeems,
+            expiresInMinutes,
+          ],
+        );
+        const row = result.rows[0] as UserInviteLinkRow;
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "user_invite_link",
+          entityId: row.id,
+          action: "update",
+          source: "admin",
+          before: {
+            kind: link.kind,
+            enterpriseId: link.enterprise_id,
+            roleIds: link.role_ids,
+            maxRedeems: link.max_redeems,
+            expiresAt: link.expires_at?.toISOString() ?? null,
+          },
+          after: { kind, enterpriseId, roleIds, maxRedeems, expiresInMinutes },
+        });
+        return { ...row, enterprise_name: enterpriseName, redemptions: [] };
+      });
+      return toResponse(updated);
     },
   );
 
