@@ -1,7 +1,6 @@
 import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { pool, withTransaction } from "../../db/pool.js";
-import { audit } from "../../lib/audit.js";
 import { isImplausiblyFuture } from "../../lib/clock.js";
 import { AppError, BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { broadcastForActiveUser } from "./active-broadcast.js";
@@ -30,10 +29,9 @@ interface ScanResult {
  *
  * - Everyone has the right to eat: no entitlement check gates meal scans.
  * - First scan auto-registers and reports firstTime.
- * - A repeated meal returns a 409 requiring explicit confirmation;
- *   allowRepeat=true records an audited staff override. Registrable
- *   activities record every distinct scan, including repeats: attendance is
- *   an event log, not a one-serving entitlement (#775).
+ * - Every distinct scan creates an attendance record, including repeated
+ *   meal scans. The operation is an event log, not a state transition or a
+ *   one-serving entitlement (#775).
  *
  * Concurrency: a per (user, activity) advisory xact lock serializes parallel
  * scanners so two simultaneous first-time scans produce exactly one row.
@@ -125,21 +123,6 @@ export async function activityScan(
     const timesBefore = cnt.rows[0].n as number;
     const firstTime = timesBefore === 0;
 
-    if (isMeal && !firstTime && !input.allowRepeat) {
-      // Repeat needs explicit confirmation — do NOT register.
-      return {
-        status: 409,
-        body: {
-          registered: false,
-          firstTime: false,
-          repeat: true,
-          timesEaten: timesBefore,
-          card,
-          message: "Already served; confirm to register a repetition",
-        },
-      };
-    }
-
     await client.query(
       `INSERT INTO activity_logs
          (user_id, activity_id, logged_by, logged_at, source_device_id, source_scan_id)
@@ -156,17 +139,6 @@ export async function activityScan(
         input.sourceScanId ?? null,
       ],
     );
-
-    if (isMeal && !firstTime) {
-      // A repeated meal is an explicit staff override and remains auditable.
-      await audit(client, {
-        actorId,
-        entityType: isMeal ? "meal" : "activity",
-        entityId: userId,
-        action: "repeat_override",
-        after: { activityId, timesEaten: timesBefore + 1 },
-      });
-    }
 
     return {
       status: 200,

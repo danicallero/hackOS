@@ -40,7 +40,11 @@ const ROSTER_DATABASE_NAME = "hackos-scanner-roster.db";
 const QUEUE_DATABASE_NAME = "hackos-scanner-queue.db";
 const LEGACY_DATABASE_NAME = "hackos-scanner.db";
 const SQLITE_SIDECAR_SUFFIXES = ["-wal", "-shm", "-journal"] as const;
-const ROSTER_DOCUMENT_DIRECTORY = new Directory(Paths.document, "SQLite");
+// Keep filesystem migration paths tied to Expo SQLite's actual default, not a
+// hand-built Documents/SQLite URI. The two can differ between native runtime
+// versions; opening one while migrating/checking the other produces the
+// empty-on-restart symptom despite a successful live snapshot (#775).
+const ROSTER_DOCUMENT_DIRECTORY = new Directory(SQLite.defaultDatabaseDirectory);
 
 let rosterDatabase: Promise<SQLite.SQLiteDatabase> | null = null;
 let queueDatabase: Promise<SQLite.SQLiteDatabase> | null = null;
