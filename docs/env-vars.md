@@ -47,6 +47,7 @@ valores públicos compilados en la app móvil.
 | `S3_REGION` | configuración | no | Región S3 para el cliente SDK; por defecto `us-east-1`. |
 | `S3_PUBLIC_URL` | configuration | required in production | Public HTTPS object URL served by the environment's object-storage ingress; Compose does not publish MinIO. |
 | `R2_BACKUPS_ENABLED` | configuración | no | `false` por defecto; con `true`, el despliegue ejecuta `backup-r2.sh` antes de `migrate`. |
+| `R2_BACKUP_FREQUENCY` | configuración | no | Frecuencia del timer gestionado por infraestructura: `disabled` (por defecto), `daily`, `weekly` o `monthly`. Requiere `R2_BACKUPS_ENABLED=true` salvo `disabled`. |
 | `R2_ENDPOINT`, `R2_BUCKET`, `R2_PREFIX` | configuración | si R2 está activo | Endpoint S3-compatible HTTPS, bucket privado y prefijo para las copias. |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | secreto | si R2 está activo | Credenciales del token R2 limitado al bucket; nunca se pasan a `api`, `worker` ni `web`. |
 | `MAIL_PROVIDER` | configuración | no | `smtp`; el transporte se mantiene explícito para el despliegue. |
@@ -232,8 +233,9 @@ bucket y prefijo válidos, y las dos credenciales R2. Crea un dump custom de
 PostgreSQL, replica el bucket MinIO y escribe un manifiesto bajo
 `R2_PREFIX/<environment>/<timestamp>/`. El token debe limitarse al bucket de
 backups y el bucket debe tener una política de retención configurada fuera del
-repositorio. La ejecución automática periódica en el LXC es una habilitación
-operativa manual.
+repositorio. `R2_BACKUP_FREQUENCY` determina el timer instalado por la
+infraestructura; `disabled` permite mantener la copia previa a migraciones sin
+programar ejecuciones periódicas.
 
 ## Valores fijos deliberados
 

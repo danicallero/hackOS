@@ -604,6 +604,7 @@ Configurar entonces:
 ```text
 # /etc/hackos/hackos.env
 R2_BACKUPS_ENABLED=true
+R2_BACKUP_FREQUENCY=daily # disabled, daily, weekly or monthly
 R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
 R2_BUCKET=hackos-backups
 R2_PREFIX=hackos
@@ -619,25 +620,18 @@ La primera copia puede probarse dentro del LXC con:
 /opt/hackos/backup-r2.sh production
 ```
 
-Para programar una copia diaria, instalar y habilitar manualmente las unidades
-incluidas en [`systemd/`](./systemd), sólo después de validar credenciales y
-una restauración:
-
-```sh
-incus file push deploy/systemd/hackos-backup.service hackos/etc/systemd/system/hackos-backup.service
-incus file push deploy/systemd/hackos-backup.timer hackos/etc/systemd/system/hackos-backup.timer
-incus exec hackos -- systemctl daemon-reload
-incus exec hackos -- systemctl enable --now hackos-backup.timer
-```
-
-El timer está preparado para producción; para staging hay que crear una unidad
-equivalente que invoque `backup-r2.sh staging`.
+La infraestructura instala el timer al aplicar la configuración del LXC. Usa
+`R2_BACKUP_FREQUENCY=disabled` para no programarlo, o `daily`, `weekly` o
+`monthly` después de validar las credenciales y una restauración. La frecuencia
+no acepta expresiones cron arbitrarias; así una edición del `.env` no puede
+inyectar opciones en systemd. Staging debe usar su propio `.env`, credenciales
+y timer, nunca el de producción.
 
 La política de retención debe configurarse en el bucket R2 (por ejemplo,
 eliminación de objetos antiguos tras 90 días) y debe validarse una restauración
 antes del primer evento. Este helper no descifra SOPS ni imprime credenciales;
-la programación periódica mediante un timer del LXC queda como habilitación
-operativa manual porque el repositorio de infraestructura no está publicado.
+la programación periódica mediante un timer del LXC queda gestionada por la
+configuración de infraestructura, no por un despliegue de aplicación.
 
 ## Archivos canónicos
 
@@ -649,7 +643,7 @@ operativa manual porque el repositorio de infraestructura no está publicado.
   y MinIO a R2.
 - [`scripts/services.sh`](./scripts/services.sh): operaciones seguras de estado,
   logs y ciclo de vida para los proyectos staging y production.
-- [`systemd/`](./systemd): unidades para habilitar el backup diario de forma
-  manual.
+- La infraestructura genera las unidades systemd del backup a partir de
+  `R2_BACKUP_FREQUENCY`.
 - [`../docs/env-vars.md`](../docs/env-vars.md): contrato de variables por
   proceso.
