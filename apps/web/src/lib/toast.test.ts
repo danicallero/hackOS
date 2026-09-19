@@ -89,6 +89,55 @@ describe("toast adapter", () => {
     expect(sileoMock.error).toHaveBeenCalledWith(expect.objectContaining({ duration: 5_000 }));
   });
 
+  it("spills an over-long error title into an auto-expanded description", () => {
+    const longMessage = "D".repeat(120);
+    toast.error(longMessage);
+
+    expect(sileoMock.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "La acción ha fallado.",
+        description: longMessage,
+      }),
+    );
+    const options = sileoMock.error.mock.calls[0]?.[0] as
+      | { autopilot?: boolean; button?: unknown }
+      | undefined;
+    expect(options?.autopilot).toBeUndefined();
+    expect(options?.button).toBeUndefined();
+  });
+
+  it("spills over-long warning titles the same way", () => {
+    toast.warning("W".repeat(100));
+
+    expect(sileoMock.warning).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "La acción ha fallado.",
+        description: "W".repeat(100),
+      }),
+    );
+  });
+
+  it("leaves intentional short error titles as compact single-line toasts", () => {
+    toast.error("Pide a un administrador acceso al horario para buscar usuarios.");
+
+    const options = sileoMock.error.mock.calls[0]?.[0] as
+      | { title?: string; description?: unknown }
+      | undefined;
+    expect(options?.title).toBe("Pide a un administrador acceso al horario para buscar usuarios.");
+    expect(options?.description).toBeUndefined();
+  });
+
+  it("keeps the full review-fixtures server error readable", () => {
+    const serverMessage =
+      "Review fixtures are disabled until REVIEW_FIXTURE_PASSWORD and REVIEW_FIXTURE_DELETION_PIN are configured.";
+    expect(serverMessage.length).toBeGreaterThan(80);
+    toast.error(serverMessage);
+
+    expect(sileoMock.error).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "La acción ha fallado.", description: serverMessage }),
+    );
+  });
+
   it("coalesces identical plain feedback without restarting its timeline", () => {
     const first = toast.error("Couldn't call team", {
       description: "One member is active in another room.",
