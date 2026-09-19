@@ -9,9 +9,9 @@ artifacts/
 # keep templates tracked; ignore any filled-in env files
 !.env.example
 !deploy/.env.example
-!deploy/.env.secrets.example
 deploy/.secrets*
 deploy/*.secrets
+!deploy/.secrets.example
 .DS_Store
 .turbo/
 example-csvs/

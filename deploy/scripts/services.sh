@@ -23,7 +23,7 @@ Services: postgres valkey minio minio-init migrate api worker web
 The default start/stop operations cover the long-running runtime. shutdown
 stops the whole selected project and never removes volumes or bind data.
 recreate force-recreates selected runtime services without building; release
-prints the deployed image identity. available reads published GitHub releases;
+prints the deployed image identity. available reads published GHCR package tags;
 deploy is explicit and never accepts Docker :latest.
 
 Log event types: all, error, warning, request, health. Use --match TEXT for a
@@ -140,6 +140,13 @@ print_shell_help() {
   printf '%s\n' "  stop         Stop all services or named services."
   printf '%s\n' "  shutdown     Stop the whole project; persistent data is retained."
   printf '%s\n' "  release      Show the OCI revision and build time of a service image."
+  printf '\n%s\n' "${c_bold}Image release commands${c_reset}"
+  printf '%s\n' "  available    List published GHCR API/web image tags; no image is pulled."
+  printf '%s\n' "  deploy latest [--api|--web|--both]"
+  printf '%s\n' "                Pull and deploy the newest published image for the selected unit."
+  printf '%s\n' "  deploy sha-<commit> [--api|--web|--both]"
+  printf '%s\n' "                Validate, pull and deploy (or roll back to) that exact image."
+  printf '%s\n' "  start/stop/recreate never query GHCR or pull an image."
   printf '\n%s\n' "${c_bold}Superadmin commands${c_reset}"
   printf '%s\n' "  superadmin list"
   printf '%s\n' "  superadmin create --email ... [--password-stdin] --name ... --surname ..."
@@ -150,6 +157,9 @@ print_shell_help() {
   printf '%s\n' "  ssh user@host /opt/hackos/services.sh ${environment} logs --event-type error api > api-errors.log"
   printf '%s\n' "  ssh user@host /opt/hackos/services.sh ${environment} recreate api"
   printf '%s\n' "  ssh user@host /opt/hackos/services.sh ${environment} release api"
+  printf '%s\n' "  ssh user@host /opt/hackos/services.sh ${environment} available"
+  printf '%s\n' "  ssh user@host /opt/hackos/services.sh ${environment} deploy latest --web"
+  printf '%s\n' "  ssh user@host /opt/hackos/services.sh ${environment} deploy sha-<commit> --api"
   printf '\n%s\n' "${c_dim}↑/↓ move · Enter or → select · ←/Esc/b back · Space toggles service selections."
   printf '%s\n' "Tab changes log filters; q exits. Log views accept ←/Esc without an Enter prompt."
   printf '%s\n' "Superadmin operations call the audited server-side scripts in the API image."
@@ -1524,27 +1534,189 @@ superadmin_shell() {
 }
 
 github_repository="${HACKOS_GITHUB_REPOSITORY:-danicallero/hackOS}"
+github_owner="${github_repository%%/*}"
+
+require_registry_tools() {
+  command -v curl >/dev/null 2>&1 || die "registry operations require curl"
+  command -v python3 >/dev/null 2>&1 || die "registry operations require python3"
+}
+
+ghcr_tags() {
+  local package="$1" token
+  require_registry_tools
+  token="$(
+    curl --fail --silent --show-error --get 'https://ghcr.io/token' \
+      --data-urlencode 'service=ghcr.io' \
+      --data-urlencode "scope=repository:${github_owner}/${package}:pull" |
+      python3 -c 'import json, sys; print(json.load(sys.stdin)["token"])'
+  )" || die "could not obtain a read-only GHCR token for $package"
+  curl --fail --silent --show-error \
+    -H "Authorization: Bearer $token" \
+    "https://ghcr.io/v2/${github_owner}/${package}/tags/list?n=1000" |
+    python3 -c 'import json, sys; print("\n".join(json.load(sys.stdin).get("tags", [])))' ||
+    die "could not list GHCR tags for $package"
+}
+
+ghcr_created_at() {
+  local package="$1" tag="$2" token
+  require_registry_tools
+  token="$(
+    curl --fail --silent --show-error --get 'https://ghcr.io/token' \
+      --data-urlencode 'service=ghcr.io' \
+      --data-urlencode "scope=repository:${github_owner}/${package}:pull" |
+      python3 -c 'import json, sys; print(json.load(sys.stdin)["token"])'
+  )" || die "could not obtain a read-only GHCR token for $package"
+  GHCR_TOKEN="$token" python3 - "$github_owner" "$package" "$tag" <<'PY'
+import json
+import os
+import sys
+from urllib.request import Request, urlopen
+
+owner, package, tag = sys.argv[1:]
+base = f"https://ghcr.io/v2/{owner}/{package}"
+headers = {
+    "Authorization": f"Bearer {os.environ['GHCR_TOKEN']}",
+    "Accept": "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json",
+}
+
+def get_json(url, accept=None):
+    request_headers = dict(headers)
+    if accept:
+        request_headers["Accept"] = accept
+    with urlopen(Request(url, headers=request_headers), timeout=20) as response:
+        return json.load(response)
+
+index = get_json(f"{base}/manifests/{tag}")
+manifests = index.get("manifests", [index])
+manifest = next(
+    (item for item in manifests if item.get("platform", {}).get("os") == "linux" and item.get("platform", {}).get("architecture") == "arm64"),
+    next((item for item in manifests if item.get("platform", {}).get("os") == "linux"), None),
+)
+if not manifest:
+    raise SystemExit("no Linux image manifest found")
+image = get_json(
+    f"{base}/manifests/{manifest['digest']}",
+    "application/vnd.oci.image.manifest.v1+json",
+)
+config = get_json(f"{base}/blobs/{image['config']['digest']}")
+labels = config.get("config", {}).get("Labels", {}) or {}
+print(labels.get("org.opencontainers.image.created") or config.get("created") or "unknown")
+PY
+}
+
+github_api() {
+  require_registry_tools
+  curl --fail --silent --show-error \
+    -H 'Accept: application/vnd.github+json' \
+    "https://api.github.com/repos/${github_repository}/$1"
+}
+
+canonical_release_tag() {
+  local tag="$1"
+  case "$tag" in
+    sha-[0-9a-f]*) [[ "$tag" =~ ^sha-[0-9a-f]{40}$ ]] && printf '%s\n' "$tag" ;;
+    staging-sha-[0-9a-f]*)
+      tag="sha-${tag#staging-sha-}"
+      [[ "$tag" =~ ^sha-[0-9a-f]{40}$ ]] && printf '%s\n' "$tag"
+      ;;
+    main-sha-[0-9a-f]*)
+      tag="sha-${tag#main-sha-}"
+      [[ "$tag" =~ ^sha-[0-9a-f]{40}$ ]] && printf '%s\n' "$tag"
+      ;;
+  esac
+}
 
 published_releases() {
-  command -v gh >/dev/null 2>&1 || die "available requires the GitHub CLI (gh)"
-  gh release list --repo "$github_repository" --limit 30
+  local tag release_tag channel created
+  local -A api_tags=() web_tags=() all_tags=() channels=()
+
+  while IFS= read -r tag; do
+    release_tag="$(canonical_release_tag "$tag" || true)"
+    [[ -n "$release_tag" ]] || continue
+    case "$tag" in
+      staging-*) channels["$release_tag"]=staging ;;
+      main-*) channels["$release_tag"]=main ;;
+    esac
+    if [[ "$tag" == "$release_tag" ]]; then
+      api_tags["$release_tag"]=true
+      all_tags["$release_tag"]=true
+    fi
+  done < <(ghcr_tags hackos-api)
+  while IFS= read -r tag; do
+    release_tag="$(canonical_release_tag "$tag" || true)"
+    [[ -n "$release_tag" ]] || continue
+    case "$tag" in
+      staging-*) channels["$release_tag"]=staging ;;
+      main-*) channels["$release_tag"]=main ;;
+    esac
+    if [[ "$tag" == "$release_tag" ]]; then
+      web_tags["$release_tag"]=true
+      all_tags["$release_tag"]=true
+    fi
+  done < <(ghcr_tags hackos-web)
+
+  printf '%-25s %-10s %-52s %-5s %-5s\n' 'PUBLISHED (UTC)' 'CHANNEL' 'TAG' 'API' 'WEB'
+  for tag in "${!all_tags[@]}"; do
+    channel="${channels[$tag]:-legacy}"
+    if [[ -n "${api_tags[$tag]:-}" ]]; then
+      created="$(ghcr_created_at hackos-api "$tag")"
+    else
+      created="$(ghcr_created_at hackos-web "$tag")"
+    fi
+    printf '%s\t%-25s %-10s %-52s %-5s %-5s\n' \
+      "$created" "$created" "$channel" "$tag" \
+      "${api_tags[$tag]:-no}" "${web_tags[$tag]:-no}"
+  done | sort -r | cut -f2-
+}
+
+latest_staging_tag() {
+  local api_changed="$1" web_changed="$2" commit tag
+  while IFS= read -r commit; do
+    [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || continue
+    tag="sha-$commit"
+    if [[ "$api_changed" == true ]] && ! published_for_unit hackos-api "$tag"; then
+      continue
+    fi
+    if [[ "$web_changed" == true ]] && ! published_for_unit hackos-web "$tag"; then
+      continue
+    fi
+    printf '%s\n' "$tag"
+    return 0
+  done < <(github_api 'commits?sha=staging&per_page=100' | python3 -c 'import json, sys; print("\n".join(item["sha"] for item in json.load(sys.stdin)))')
+  die "could not find a published staging image set for the selected units"
 }
 
 resolve_release_tag() {
-  local requested="$1" commit
+  local requested="$1" api_changed="$2" web_changed="$3" commit
   if [[ "$requested" != latest ]]; then
     [[ "$requested" =~ ^sha-[0-9a-f]{40}$ ]] || die "release must be latest or sha-<40 lowercase hex characters>"
     printf '%s\n' "$requested"
     return 0
   fi
-  command -v gh >/dev/null 2>&1 || die "deploy latest requires the GitHub CLI (gh)"
   if [[ "$environment" == production ]]; then
-    commit="$(gh release view --repo "$github_repository" --json targetCommitish --jq .targetCommitish)"
+    commit="$(github_api releases/latest | python3 -c 'import json, sys; print(json.load(sys.stdin)["target_commitish"])')" ||
+      die "could not resolve the latest production GitHub Release"
   else
-    commit="$(gh run list --repo "$github_repository" --workflow build.yml --branch staging --status success --limit 1 --json headSha --jq '.[0].headSha')"
+    latest_staging_tag "$api_changed" "$web_changed"
+    return 0
   fi
   [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die "could not resolve the latest published $environment release"
   printf 'sha-%s\n' "$commit"
+}
+
+published_for_unit() {
+  local package="$1" tag="$2"
+  ghcr_tags "$package" | grep --fixed-strings --line-regexp --quiet "$tag"
+}
+
+validate_published_release() {
+  local tag="$1" api_changed="$2" web_changed="$3"
+  if [[ "$api_changed" == true ]] && ! published_for_unit hackos-api "$tag"; then
+    die "GHCR does not publish API image $tag"
+  fi
+  if [[ "$web_changed" == true ]] && ! published_for_unit hackos-web "$tag"; then
+    die "GHCR does not publish web image $tag"
+  fi
 }
 
 deploy_release() {
@@ -1559,13 +1731,14 @@ deploy_release() {
     esac
     shift
   done
-  tag="$(resolve_release_tag "$requested")"
   api_changed=false; web_changed=false
   case "$unit" in
     api) api_changed=true ;;
     web) web_changed=true ;;
     both) api_changed=true; web_changed=true ;;
   esac
+  tag="$(resolve_release_tag "$requested" "$api_changed" "$web_changed")"
+  validate_published_release "$tag" "$api_changed" "$web_changed"
   printf 'Environment: %s\nAction: deploy\nAPI/worker: %s\nWeb: %s\n' "$environment" "$tag ($api_changed)" "$tag ($web_changed)"
   if [[ "$environment" == production ]]; then
     printf '%s\n' "Production is protected; run: gh workflow run deploy-incus.yml --repo $github_repository -f tag=$tag -f api_changed=$api_changed -f web_changed=$web_changed"
@@ -1575,17 +1748,80 @@ deploy_release() {
   "$app_dir/deploy.sh" staging "$tag" "$api_changed" "$web_changed"
 }
 
-release_shell() {
-  local choices=("Show deployed images" "List published releases" "Deploy latest published release" "Deploy a selected SHA")
-  if ! menu_select "Releases" "Local operations never pull; deployment is explicit" "${choices[@]}"; then return 0; fi
+deploy_target_shell() {
+  local requested="$1" tag option api_changed web_changed
+  local choices=("API + worker" "Web" "API + worker and web")
+  if ! menu_select "Choose deployment target" "Only the selected unit is pulled and recreated" "${choices[@]}"; then return 0; fi
   case "$menu_choice" in
-    0) run_action "deployed releases" release ;;
-    1) run_action "published releases" available ;;
-    2) run_action "deploy latest" deploy latest --both ;;
+    0) option=--api; api_changed=true; web_changed=false ;;
+    1) option=--web; api_changed=false; web_changed=true ;;
+    2) option=--both; api_changed=true; web_changed=true ;;
+  esac
+  tag="$(resolve_release_tag "$requested" "$api_changed" "$web_changed")"
+  validate_published_release "$tag" "$api_changed" "$web_changed"
+  clear_shell
+  printf '%s\n\n' "${c_cyan}${c_bold}Confirm deployment${c_reset}"
+  printf 'Environment: %s\nRelease:     %s\nAPI/worker:  %s\nWeb:         %s\n\n' \
+    "$environment" "$tag" "$api_changed" "$web_changed"
+  if [[ "$environment" == production ]]; then
+    printf '%s\n' "Production opens the protected GitHub workflow; it does not deploy directly from this shell."
+  else
+    printf '%s\n' "This pulls the selected immutable image and recreates only the selected services."
+  fi
+  read_shell_input "Type DEPLOY to continue (b back, q quit): "
+  [[ "$shell_navigation" == value ]] || return 0
+  if [[ "$shell_input" == DEPLOY ]]; then
+    run_action "deploy $tag" deploy "$tag" "$option"
+  else
+    printf '%s\n' "${c_dim}Deployment cancelled; no image was pulled.${c_reset}"
+    pause_shell
+  fi
+}
+
+release_shell() {
+  local choices=("Inspect deployed images" "Browse published images" "Deploy latest published image" "Deploy a selected SHA")
+  if ! menu_select "Images and releases" "Inspection is local · deployments are explicit" "${choices[@]}"; then return 0; fi
+  case "$menu_choice" in
+    0) run_action "deployed images" release ;;
+    1) run_action "published images" available ;;
+    2) deploy_target_shell latest ;;
     3)
-      read_shell_input "SHA tag (sha-..., b back, q quit): "
+      run_action "published images" available
+      read_shell_input "Release tag (sha-<40 hex>, b back, q quit): "
       [[ "$shell_navigation" == value ]] || return 0
-      run_action "deploy selected release" deploy "$shell_input" --both
+      deploy_target_shell "$shell_input"
+      ;;
+  esac
+}
+
+service_operations_shell() {
+  local choices=("Start installed services" "Stop services" "Recreate installed services" "Stop all services")
+  local stop_command=()
+  local confirmation
+  if ! menu_select "Operate installed services" "These actions never query GHCR or pull images" "${choices[@]}"; then return 0; fi
+  case "$menu_choice" in
+    0) start_runtime_shell ;;
+    1)
+      select_services_multi stop
+      [[ "$service_selection_navigation" == select ]] || return 0
+      stop_command=(stop "${selected_services[@]}")
+      run_action "stop · ${selected_services[*]}" "${stop_command[@]}"
+      ;;
+    2)
+      select_services_multi recreate
+      [[ "$service_selection_navigation" == select ]] || return 0
+      run_action "recreate · ${selected_services[*]}" recreate "${selected_services[@]}"
+      ;;
+    3)
+      read_shell_input "Type STOP to stop all ${environment} services (b back, q quit): "
+      [[ "$shell_navigation" == value ]] || return 0
+      confirmation="$shell_input"
+      if [[ "$confirmation" == STOP ]]; then
+        run_action "stop all services" shutdown
+      else
+        printf '%s\n' "${c_dim}Stop cancelled; persistent data was not changed.${c_reset}"
+        pause_shell
+      fi
       ;;
   esac
 }
@@ -1595,20 +1831,16 @@ interactive_shell() {
   terminal_setup
   shell_quit=false
   local choices=(
-    "Show service status"
-    "View logs and event filters"
-    "Start runtime"
-    "Stop selected services"
-    "Shut down all services"
-    "Releases and deployment"
+    "Overview"
+    "Operate installed services"
+    "View logs"
+    "Images and releases"
     "Manage superadmins"
     "Help"
   )
-  local stop_command=()
-  local confirmation
 
   while [[ "$shell_quit" != true ]]; do
-    if ! menu_select "Service shell" "${project_name} · arrows navigate, number keys select" "${choices[@]}"; then
+    if ! menu_select "Operator console" "${project_name} · choose a task" "${choices[@]}"; then
       return 0
     fi
     case "$menu_navigation" in
@@ -1618,43 +1850,21 @@ interactive_shell() {
       select)
         case "$menu_choice" in
           0)
-            run_action "service status" status
+            run_action "overview" status
             ;;
           1)
-            logs_shell
+            service_operations_shell
             ;;
           2)
-            start_runtime_shell
+            logs_shell
             ;;
           3)
-            select_services_multi stop
-            if [[ "$service_selection_navigation" == quit ]]; then
-              return 0
-            fi
-            [[ "$service_selection_navigation" == select ]] || continue
-            stop_command=(stop)
-            stop_command+=("${selected_services[@]}")
-            run_action "stop · ${selected_services[*]}" "${stop_command[@]}"
-            ;;
-          4)
-            read_shell_input "Type SHUTDOWN to stop all ${environment} services (b back, q quit): "
-            [[ "$shell_navigation" == quit ]] && return 0
-            [[ "$shell_navigation" == value ]] || continue
-            confirmation="$shell_input"
-            if [[ "$confirmation" == SHUTDOWN ]]; then
-              run_action "shutdown" shutdown
-            else
-              printf '%s\n' "${c_dim}Shutdown cancelled; persistent data was not changed.${c_reset}"
-              pause_shell
-            fi
-            ;;
-          5)
             release_shell
             ;;
-          6)
+          4)
             superadmin_shell
             ;;
-          7)
+          5)
             print_shell_help
             ;;
         esac

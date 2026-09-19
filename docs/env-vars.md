@@ -21,11 +21,25 @@ El despliegue no busca `.env` ni `.env.<environment>` dentro de `/opt/hackos`.
 
 La plantilla no secreta está en
 [`deploy/.env.example`](../deploy/.env.example) y la plantilla de nombres de
-secretos en [`deploy/.env.secrets.example`](../deploy/.env.secrets.example).
+secretos en [`deploy/.secrets.example`](../deploy/.secrets.example).
 Los valores reales se generan y cargan fuera del repositorio. El fichero raíz
 [`.env.example`](../.env.example) es sólo para overrides del API local y
 [`apps/mobile/.env.example`](../apps/mobile/.env.example) contiene únicamente
 valores públicos compilados en la app móvil.
+
+## Los dos ficheros del host
+
+No hay un único `.env` de producción. Crear y mantener siempre estos dos
+ficheros separados:
+
+| Fichero | Debe contener | No debe contener |
+|---|---|---|
+| `/etc/hackos/hackos.env` | `IMAGE_TAG`, dominios/CORS, puertos, `POSTGRES_USER`, `POSTGRES_DB`, `MINIO_ROOT_USER`, `S3_ACCESS_KEY`, bucket/URL S3, correo, logs, R2 y metadatos Wallet. | Contraseñas, tokens, claves privadas o PEM. |
+| `/etc/hackos/hackos.secrets` (`0600`) | `POSTGRES_PASSWORD`, `VALKEY_PASSWORD`, `MINIO_ROOT_PASSWORD`, `BETTER_AUTH_SECRET`, `S3_SECRET_KEY`, credenciales SMTP/R2/traducción/fixtures y PEM Wallet. | Tags, dominios, puertos, identificadores o cualquier configuración no secreta. |
+
+`IMAGE_REPO` y `WEB_IMAGE_REPO` no pertenecen a ninguno: son referencias
+fijas de Compose. Las plantillas enlazadas arriba son la lista completa y la
+tabla siguiente especifica cada variable individualmente.
 
 ## Reglas del contrato
 
@@ -47,6 +61,7 @@ valores públicos compilados en la app móvil.
 | `S3_REGION` | configuración | no | Región S3 para el cliente SDK; por defecto `us-east-1`. |
 | `S3_PUBLIC_URL` | configuration | required in production | Public HTTPS object URL served by the environment's object-storage ingress; Compose does not publish MinIO. |
 | `R2_BACKUPS_ENABLED` | configuración | no | `false` por defecto; con `true`, el despliegue ejecuta `backup-r2.sh` antes de `migrate`. |
+| `R2_BACKUP_FREQUENCY` | configuración | no | Frecuencia del timer gestionado por infraestructura: `disabled` (por defecto), `daily`, `weekly` o `monthly`. Requiere `R2_BACKUPS_ENABLED=true` salvo `disabled`. |
 | `R2_ENDPOINT`, `R2_BUCKET`, `R2_PREFIX` | configuración | si R2 está activo | Endpoint S3-compatible HTTPS, bucket privado y prefijo para las copias. |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | secreto | si R2 está activo | Credenciales del token R2 limitado al bucket; nunca se pasan a `api`, `worker` ni `web`. |
 | `MAIL_PROVIDER` | configuración | no | `smtp`; el transporte se mantiene explícito para el despliegue. |
@@ -232,8 +247,9 @@ bucket y prefijo válidos, y las dos credenciales R2. Crea un dump custom de
 PostgreSQL, replica el bucket MinIO y escribe un manifiesto bajo
 `R2_PREFIX/<environment>/<timestamp>/`. El token debe limitarse al bucket de
 backups y el bucket debe tener una política de retención configurada fuera del
-repositorio. La ejecución automática periódica en el LXC es una habilitación
-operativa manual.
+repositorio. `R2_BACKUP_FREQUENCY` determina el timer instalado por la
+infraestructura; `disabled` permite mantener la copia previa a migraciones sin
+programar ejecuciones periódicas.
 
 ## Valores fijos deliberados
 

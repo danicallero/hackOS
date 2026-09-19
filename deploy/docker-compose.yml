@@ -195,6 +195,10 @@ services:
       # same reviewed ingress network used by api and web. The console remains
       # disabled and is never routed.
       edge: {}
+    # Public S3 API only. MinIO's anonymous policy permits downloads exclusively
+    # below enterprises/; the console remains disabled and has no listener.
+    ports:
+      - "${PUBLISH_BIND_ADDRESS:-0.0.0.0}:${S3_PUBLISH_PORT:-9000}:9000"
     healthcheck:
       test: ["CMD-SHELL", "mc ready local || exit 1"]
       interval: 15s
