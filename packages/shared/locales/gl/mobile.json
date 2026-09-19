@@ -47,6 +47,7 @@
   "sessionRestoringDescription": "Comprobando a túa sesión…",
   "sessionRecoveryTitle": "Non se puido recuperar a túa sesión",
   "sessionRecoveryDescription": "Comproba a conexión e téntao de novo. Se continúa, volve iniciar sesión.",
+  "continueOffline": "Continuar sen conexión",
   "offlineDataTitle": "Datos sen conexión",
   "offlineDataBody": "O servidor non respondeu. Última actualización: {updatedAt}.",
   "yesterday": "Onte",

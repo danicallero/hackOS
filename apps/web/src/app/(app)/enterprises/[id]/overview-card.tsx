@@ -195,12 +195,8 @@ export function EnterpriseOverviewCard({
         </div>
         <dl className="grid gap-3 text-sm sm:grid-cols-3 lg:grid-cols-1">
           <div>
-            <dt className="text-muted-foreground">{t("tierIdLabel")}</dt>
-            <dd className="mt-1 tabular-nums">{enterprise.tier_id ?? t("notSet")}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">{t("displayPriorityLabel")}</dt>
-            <dd className="mt-1 tabular-nums">{enterprise.display_priority ?? t("notSet")}</dd>
+            <dt className="text-muted-foreground">{t("priorityLabel")}</dt>
+            <dd className="mt-1 tabular-nums">{enterprise.priority ?? t("notSet")}</dd>
           </div>
           <div>
             <dt className="text-muted-foreground">{t("created")}</dt>

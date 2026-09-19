@@ -70,8 +70,15 @@ class FakeDatabase {
 const mockDatabase = new FakeDatabase();
 
 jest.mock("expo-file-system", () => ({
+  Directory: class {
+    exists = true;
+    create() {}
+  },
   File: class {
     exists = false;
+    lastModified = null;
+    name = "file";
+    async copy() {}
     delete() {}
   },
   Paths: { cache: { uri: "cache://" }, document: { uri: "document://" } },
@@ -135,6 +142,7 @@ function snapshot(name: string): ScannerSnapshot {
 
 describe("native scanner roster generation fencing", () => {
   beforeEach(() => {
+    jest.clearAllMocks();
     mockExecStatements.length = 0;
     mockRunStatements.length = 0;
     jest.mocked(encryptJson).mockImplementation(async (payload: unknown) => {
@@ -175,6 +183,12 @@ describe("native scanner roster generation fencing", () => {
     expect(installedSnapshots).toHaveLength(1);
     expect(installedSnapshots[0]?.args).toContain("encrypted-B");
     expect(installedSnapshots[0]?.args).not.toContain("encrypted-A");
+    expect(SQLite.openDatabaseAsync).toHaveBeenCalledWith("hackos-scanner-roster.db");
+    expect(SQLite.openDatabaseAsync).not.toHaveBeenCalledWith(
+      "hackos-scanner-roster.db",
+      undefined,
+      "cache://",
+    );
   });
 
   it("does not create the ownerless legacy database on a fresh queue", async () => {
