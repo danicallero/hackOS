@@ -682,7 +682,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         params: activityIdParam,
         body: activityScanBody,
         description:
-          "Records one meal serving or activity-attendance event. Repeated meals require allowRepeat=true; registrable activities record every distinct idempotent scan without confirmation.",
+          "Records one meal or activity-attendance event. Every distinct idempotent scan is recorded, including repeats; door presence remains the separate state-transition flow.",
       },
     },
     async (req, reply) => {

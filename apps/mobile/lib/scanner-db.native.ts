@@ -9,6 +9,7 @@ import {
   resetRosterKey,
 } from "./scanner-crypto";
 import { revokedBadgesFromSnapshot } from "./scanner-model";
+import { clearRosterBackup, loadRosterBackup, saveRosterBackup } from "./scanner-roster-backup";
 import type {
   PendingScan,
   ScannerActivity,
@@ -40,7 +41,15 @@ const ROSTER_DATABASE_NAME = "hackos-scanner-roster.db";
 const QUEUE_DATABASE_NAME = "hackos-scanner-queue.db";
 const LEGACY_DATABASE_NAME = "hackos-scanner.db";
 const SQLITE_SIDECAR_SUFFIXES = ["-wal", "-shm", "-journal"] as const;
-const ROSTER_DOCUMENT_DIRECTORY = new Directory(Paths.document, "SQLite");
+// Keep filesystem migration paths tied to Expo SQLite's actual default, not a
+// hand-built Documents/SQLite URI. The two can differ between native runtime
+// versions; opening one while migrating/checking the other produces the
+// empty-on-restart symptom despite a successful live snapshot (#775).
+const ROSTER_DOCUMENT_DIRECTORY = new Directory(SQLite.defaultDatabaseDirectory);
+// #775's first repair constructed this path directly. Preserve an offline
+// upgrade that wrote there before discovering that a runtime's SQLite default
+// can differ from it.
+const LEGACY_ROSTER_DOCUMENT_DIRECTORY = new Directory(Paths.document, "SQLite");
 
 let rosterDatabase: Promise<SQLite.SQLiteDatabase> | null = null;
 let queueDatabase: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -126,27 +135,38 @@ function rosterDatabaseFile(directory: Directory): File {
 }
 
 /**
- * Moves the pre-#775 cache roster into SQLite's durable default directory.
+ * Moves every pre-default-location roster into SQLite's durable default directory.
  * This runs before opening either database, so an upgrade made while offline
  * preserves the existing encrypted rows and their SecureStore key.
  */
 async function migrateCachedRosterIfNeeded(): Promise<void> {
-  const cached = rosterDatabaseFile(Paths.cache);
   const durable = rosterDatabaseFile(ROSTER_DOCUMENT_DIRECTORY);
-  const cachedSidecars = sqliteSidecarFiles(Paths.cache, ROSTER_DATABASE_NAME);
+  const sourceDirectories = [Paths.cache, LEGACY_ROSTER_DOCUMENT_DIRECTORY].filter(
+    (directory) => directory.uri !== ROSTER_DOCUMENT_DIRECTORY.uri,
+  );
+  let sourceDirectory: Directory | null = null;
+  let sourceFile: File | null = null;
+  for (const directory of sourceDirectories) {
+    const candidate = rosterDatabaseFile(directory);
+    if (
+      candidate.exists &&
+      (!sourceFile || (candidate.lastModified ?? 0) > (sourceFile.lastModified ?? 0))
+    ) {
+      sourceDirectory = directory;
+      sourceFile = candidate;
+    }
+  }
 
-  if (!cached.exists && !cachedSidecars.some((file) => file.exists)) return;
+  if (!sourceDirectory || !sourceFile) return;
 
   ROSTER_DOCUMENT_DIRECTORY.create({ idempotent: true, intermediates: true });
-  // A partially completed previous migration can leave both files behind.
+  // A partially completed previous migration can leave several copies behind.
   // Prefer the newest complete main database; current in-memory generation and
   // owner fences still guard every later snapshot/write in this process.
-  const useCachedRoster =
-    cached.exists && (!durable.exists || (cached.lastModified ?? 0) > (durable.lastModified ?? 0));
-  if (useCachedRoster) {
-    if (cached.exists) await cached.copy(durable, { overwrite: true });
+  if (!durable.exists || (sourceFile.lastModified ?? 0) > (durable.lastModified ?? 0)) {
+    await sourceFile.copy(durable, { overwrite: true });
     for (const suffix of SQLITE_SIDECAR_SUFFIXES) {
-      const source = new File(Paths.cache, `${ROSTER_DATABASE_NAME}${suffix}`);
+      const source = new File(sourceDirectory, `${ROSTER_DATABASE_NAME}${suffix}`);
       if (source.exists) {
         await source.copy(new File(ROSTER_DOCUMENT_DIRECTORY, source.name), { overwrite: true });
       }
@@ -154,10 +174,13 @@ async function migrateCachedRosterIfNeeded(): Promise<void> {
   }
 }
 
-function removeCachedRoster(): void {
-  const cached = rosterDatabaseFile(Paths.cache);
-  if (cached.exists) cached.delete();
-  removeSqliteSidecars(Paths.cache, ROSTER_DATABASE_NAME);
+function removeLegacyRosterCopies(): void {
+  for (const directory of [Paths.cache, LEGACY_ROSTER_DOCUMENT_DIRECTORY]) {
+    if (directory.uri === ROSTER_DOCUMENT_DIRECTORY.uri) continue;
+    const roster = rosterDatabaseFile(directory);
+    if (roster.exists) roster.delete();
+    removeSqliteSidecars(directory, ROSTER_DATABASE_NAME);
+  }
 }
 
 async function prepareRosterDatabase(db: SQLite.SQLiteDatabase): Promise<boolean> {
@@ -226,7 +249,7 @@ async function openRosterDatabase(): Promise<SQLite.SQLiteDatabase> {
       // Remove the legacy source only after the selected document copy has
       // passed its schema validation; a corrupt document copy must not cost a
       // valid cache roster during an offline upgrade.
-      removeCachedRoster();
+      removeLegacyRosterCopies();
       return opened;
     }
 
@@ -242,7 +265,7 @@ async function openRosterDatabase(): Promise<SQLite.SQLiteDatabase> {
     if (!(await prepareRosterDatabase(opened))) {
       throw new Error("Unable to initialize the encrypted scanner roster");
     }
-    removeCachedRoster();
+    removeLegacyRosterCopies();
     return opened;
   } catch (error) {
     await opened.closeAsync().catch(() => undefined);
@@ -475,6 +498,9 @@ export async function applyScannerSnapshot(
         ? rawGeneratedAt.toISOString()
         : null;
   if (!generatedAt) throw new Error("Scanner snapshot is missing generatedAt");
+  // Persist the complete encrypted snapshot through the same durable KV
+  // substrate as Schedule before touching the disposable SQLite index.
+  await saveRosterBackup(snapshot);
   const database = await rosterDb();
 
   // Activity selection has to survive as soon as an online snapshot is shown.
@@ -631,7 +657,8 @@ export async function wipeAttendanceRoster(ownerUserId?: number): Promise<void> 
   });
   // #775: clean up a legacy cache-dir copy as well, so it cannot be migrated
   // back after this intentional session/data boundary.
-  removeCachedRoster();
+  removeLegacyRosterCopies();
+  await clearRosterBackup();
   if (generation === rosterGeneration && rosterOwnerUserId === null) await resetRosterKey();
 }
 
@@ -693,14 +720,18 @@ export async function findPersonByTicket(ticketToken: string): Promise<ScannerPe
       ticketToken,
     );
   });
-  return row ? personFromRow(row) : null;
+  if (row) return personFromRow(row);
+  const backup = await loadRosterBackup();
+  if (backup?.revokedTicketTokens?.includes(ticketToken)) return null;
+  return backup?.people.find((person) => person.ticketToken === ticketToken) ?? null;
 }
 
 export async function findPersonById(userId: number): Promise<ScannerPerson | null> {
   const row = await withSerializedRosterOperation((database) =>
     database.getFirstAsync<PersonRow>(`SELECT * FROM scanner_people WHERE user_id = ?`, userId),
   );
-  return row ? personFromRow(row) : null;
+  if (row) return personFromRow(row);
+  return (await loadRosterBackup())?.people.find((person) => person.userId === userId) ?? null;
 }
 
 /**
@@ -713,7 +744,10 @@ export async function listScannerPeople(query = ""): Promise<ScannerPerson[]> {
   const rows = await withSerializedRosterOperation((database) =>
     database.getAllAsync<PersonRow>(`SELECT * FROM scanner_people`),
   );
-  const people = await Promise.all(rows.map(personFromRow));
+  const people =
+    rows.length > 0
+      ? await Promise.all(rows.map(personFromRow))
+      : ((await loadRosterBackup())?.people ?? []);
   return people
     .filter((person) =>
       [person.name, person.surname, person.email, person.badgeId]
@@ -746,9 +780,14 @@ export async function findPersonByBadge(
       revoked: false,
     };
   });
+  if (result.row || result.revoked) {
+    return { person: result.row ? await personFromRow(result.row) : null, revoked: result.revoked };
+  }
+  const backup = await loadRosterBackup();
+  if (backup?.revokedBadgeIds?.includes(badgeId)) return { person: null, revoked: true };
   return {
-    person: result.row ? await personFromRow(result.row) : null,
-    revoked: result.revoked,
+    person: backup?.people.find((person) => person.badgeId === badgeId) ?? null,
+    revoked: false,
   };
 }
 
@@ -765,7 +804,7 @@ export async function listScannerActivities(): Promise<ScannerActivity[]> {
       description_i18n: string;
     }>(`SELECT * FROM scanner_activities ORDER BY starts_at IS NULL, starts_at, name, id`),
   );
-  return rows.map((row) => ({
+  const activities = rows.map((row) => ({
     id: row.id,
     name: row.name,
     category: row.category,
@@ -775,6 +814,9 @@ export async function listScannerActivities(): Promise<ScannerActivity[]> {
     nameI18n: JSON.parse(row.name_i18n),
     descriptionI18n: JSON.parse(row.description_i18n),
   }));
+  if (activities.length > 0) return activities;
+  const backup = await loadRosterBackup();
+  return backup?.activities ?? [];
 }
 
 export async function getActivityState(

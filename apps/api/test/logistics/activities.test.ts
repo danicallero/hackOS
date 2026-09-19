@@ -84,7 +84,7 @@ describe("H25 meals", () => {
     ).toBe(0);
   });
 
-  it("repeat requires explicit confirmation, then registers with allowRepeat", async () => {
+  it("records repeated meal scans without confirmation", async () => {
     const meal = await createMeal();
     const uid = await createUser();
     await assignBadge(uid, "MB-3");
@@ -104,31 +104,20 @@ describe("H25 meals", () => {
       headers: asUser(scanner),
       payload: { badgeId: "MB-3" },
     });
-    expect(repeat.statusCode).toBe(409);
+    expect(repeat.statusCode).toBe(200);
     expect(repeat.json().repeat).toBe(true);
-    expect(repeat.json().registered).toBe(false);
-    // still only one row — the repeat did not register
-    let logs = await pool.query(`SELECT * FROM activity_logs WHERE user_id = $1`, [uid]);
-    expect(logs.rows).toHaveLength(1);
-
-    const confirmed = await app.inject({
-      method: "POST",
-      url: `/api/activities/${meal}/scan`,
-      headers: asUser(scanner),
-      payload: { badgeId: "MB-3", allowRepeat: true },
-    });
-    expect(confirmed.statusCode).toBe(200);
-    expect(confirmed.json().timesEaten).toBe(2);
-    logs = await pool.query(`SELECT * FROM activity_logs WHERE user_id = $1`, [uid]);
+    expect(repeat.json().registered).toBe(true);
+    expect(repeat.json().timesEaten).toBe(2);
+    const logs = await pool.query(`SELECT * FROM activity_logs WHERE user_id = $1`, [uid]);
     expect(logs.rows).toHaveLength(2);
     const audits = await pool.query(
       `SELECT * FROM audit_log WHERE entity_type = 'meal' AND action = 'repeat_override' AND entity_id = $1`,
       [String(uid)],
     );
-    expect(audits.rows).toHaveLength(1);
+    expect(audits.rows).toHaveLength(0);
   });
 
-  it("two simultaneous first-time scans register exactly once (concurrency)", async () => {
+  it("records simultaneous meal scans as separate attendance events", async () => {
     const meal = await createMeal();
     const uid = await createUser();
     await assignBadge(uid, "MB-RACE");
@@ -147,12 +136,11 @@ describe("H25 meals", () => {
         payload: { badgeId: "MB-RACE" },
       }),
     ]);
-    const codes = [a.statusCode, b.statusCode].sort();
-    expect(codes).toEqual([200, 409]); // one registers, one sees the repeat
+    expect([a.statusCode, b.statusCode]).toEqual([200, 200]);
 
     const { pool } = await import("../../src/db/pool.js");
     const logs = await pool.query(`SELECT * FROM activity_logs WHERE user_id = $1`, [uid]);
-    expect(logs.rows).toHaveLength(1);
+    expect(logs.rows).toHaveLength(2);
   });
 
   it("idempotency-key replays a meal scan without double-registering", async () => {

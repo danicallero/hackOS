@@ -730,9 +730,8 @@ snapshot cannot leave an otherwise intact offline roster without its activity
 choices. Activity scans themselves are inserted into the durable per-operator
 queue before a sync is attempted, and are replayed with that persisted scan ID
 when the app next regains a server connection — including after a cold restart.
-Meal repeats remain a deliberate operator override; registrable-activity scans
-are attendance events, so every locally queued repeat is accepted on replay
-without a confirmation conflict.
+Scans at meals and registrable activities are attendance events, so every
+locally queued repeat is accepted on replay without a confirmation conflict.
 A scan rejected as "timestamp must be in the past" (device clock running
 ahead of the server's) is corrected once by the measured clock skew — read
 from the API's `Date` response header in `lib/api.ts` — and retried before
@@ -804,8 +803,10 @@ physical iOS/Android and EAS verification remains a release-gate task in
   The database file lives in SQLite's default document directory so a
   previously synchronized roster remains available after a cold offline
   restart. On first open after this storage change, a legacy `Paths.cache`
-  database and its SQLite sidecars are copied into that directory before the
-  cache copy is removed; if both files exist, the newer one wins. The roster
+  database — or a roster stranded in the earlier hand-built Documents/SQLite
+  migration path — and its SQLite sidecars are copied into SQLite's actual
+  default directory before legacy copies are removed; if several files exist,
+  the newer one wins. The roster
   is intentionally removed only by `wipeAttendanceRoster()`, which deletes
   every table, removes any residual legacy cache copy, and retires the roster
   key. It is called from

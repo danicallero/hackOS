@@ -17,7 +17,6 @@
     "manualSubmit": "scanner-manual-submit",
     "linkBadge": "scanner-link-badge",
     "result": "scanner-result",
-    "continue": "scanner-continue",
-    "confirmRepeat": "scanner-confirm-repeat"
+    "continue": "scanner-continue"
   }
 }
