@@ -76,7 +76,7 @@ function RootLayoutSession() {
 }
 
 function RootLayoutSessionContents() {
-  const { me, authenticated, loading, error } = useMeContext();
+  const { me, authenticated, loading, error, offlineEntryAvailable, enterOffline } = useMeContext();
   const { mode } = useApiMode();
   const initialSessionPending = useInitialSessionPending(loading);
 
@@ -95,6 +95,8 @@ function RootLayoutSessionContents() {
         me={me}
         loading={loading}
         error={error}
+        offlineEntryAvailable={offlineEntryAvailable}
+        enterOffline={enterOffline}
       />
       {mode === "development" ? <DevelopmentIndicator /> : null}
     </View>
@@ -264,12 +266,16 @@ function RootLayoutNav({
   me,
   loading,
   error,
+  offlineEntryAvailable,
+  enterOffline,
 }: {
   authenticated: boolean;
   pending: boolean;
   me: ReturnType<typeof useMeContext>["me"];
   loading: boolean;
   error: Error | null;
+  offlineEntryAvailable: boolean;
+  enterOffline: () => Promise<void>;
 }) {
   const colorScheme = useColorScheme();
   const { refetch } = useMeContext();
@@ -291,7 +297,14 @@ function RootLayoutNav({
     if (loading && !showRestoringSession) {
       return <View style={{ backgroundColor: colors.background, flex: 1 }} />;
     }
-    return <SessionState loading={loading} onRetry={() => void refetch()} />;
+    return (
+      <SessionState
+        loading={loading}
+        offlineAvailable={offlineEntryAvailable}
+        onContinueOffline={() => void enterOffline()}
+        onRetry={() => void refetch()}
+      />
+    );
   }
 
   if (me?.accountState === "removal_pending" && me.removal) {
