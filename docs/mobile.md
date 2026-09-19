@@ -724,6 +724,12 @@ written to the encrypted offline queue, preserving the same persisted scan id
 as `Idempotency-Key` for replay in creation order. The latest server
 snapshot/revocation set is rendered even when its best-effort SQLite cache
 write fails; SQLite is the fallback for offline directory/activity reads.
+The small plaintext scannable-activity index is committed before the
+event-sized encrypted people portion, so force-quitting during a newly received
+snapshot cannot leave an otherwise intact offline roster without its activity
+choices. Activity scans themselves are inserted into the durable per-operator
+queue before a sync is attempted, and are replayed with that persisted scan ID
+when the app next regains a server connection — including after a cold restart.
 A scan rejected as "timestamp must be in the past" (device clock running
 ahead of the server's) is corrected once by the measured clock skew — read
 from the API's `Date` response header in `lib/api.ts` — and retried before
