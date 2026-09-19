@@ -140,6 +140,13 @@ print_shell_help() {
   printf '%s\n' "  stop         Stop all services or named services."
   printf '%s\n' "  shutdown     Stop the whole project; persistent data is retained."
   printf '%s\n' "  release      Show the OCI revision and build time of a service image."
+  printf '\n%s\n' "${c_bold}Image release commands${c_reset}"
+  printf '%s\n' "  available    List published GHCR API/web image tags; no image is pulled."
+  printf '%s\n' "  deploy latest [--api|--web|--both]"
+  printf '%s\n' "                Pull and deploy the newest published image for the selected unit."
+  printf '%s\n' "  deploy sha-<commit> [--api|--web|--both]"
+  printf '%s\n' "                Validate, pull and deploy (or roll back to) that exact image."
+  printf '%s\n' "  start/stop/recreate never query GHCR or pull an image."
   printf '\n%s\n' "${c_bold}Superadmin commands${c_reset}"
   printf '%s\n' "  superadmin list"
   printf '%s\n' "  superadmin create --email ... [--password-stdin] --name ... --surname ..."
@@ -150,6 +157,9 @@ print_shell_help() {
   printf '%s\n' "  ssh user@host /opt/hackos/services.sh ${environment} logs --event-type error api > api-errors.log"
   printf '%s\n' "  ssh user@host /opt/hackos/services.sh ${environment} recreate api"
   printf '%s\n' "  ssh user@host /opt/hackos/services.sh ${environment} release api"
+  printf '%s\n' "  ssh user@host /opt/hackos/services.sh ${environment} available"
+  printf '%s\n' "  ssh user@host /opt/hackos/services.sh ${environment} deploy latest --web"
+  printf '%s\n' "  ssh user@host /opt/hackos/services.sh ${environment} deploy sha-<commit> --api"
   printf '\n%s\n' "${c_dim}↑/↓ move · Enter or → select · ←/Esc/b back · Space toggles service selections."
   printf '%s\n' "Tab changes log filters; q exits. Log views accept ←/Esc without an Enter prompt."
   printf '%s\n' "Superadmin operations call the audited server-side scripts in the API image."
@@ -1665,17 +1675,79 @@ deploy_release() {
   "$app_dir/deploy.sh" staging "$tag" "$api_changed" "$web_changed"
 }
 
-release_shell() {
-  local choices=("Show deployed images" "List published releases" "Deploy latest published release" "Deploy a selected SHA")
-  if ! menu_select "Releases" "Local operations never pull; deployment is explicit" "${choices[@]}"; then return 0; fi
+deploy_target_shell() {
+  local requested="$1" tag option api_changed web_changed
+  local choices=("API + worker" "Web" "API + worker and web")
+  if ! menu_select "Choose deployment target" "Only the selected unit is pulled and recreated" "${choices[@]}"; then return 0; fi
   case "$menu_choice" in
-    0) run_action "deployed releases" release ;;
-    1) run_action "published releases" available ;;
-    2) run_action "deploy latest" deploy latest --both ;;
+    0) option=--api; api_changed=true; web_changed=false ;;
+    1) option=--web; api_changed=false; web_changed=true ;;
+    2) option=--both; api_changed=true; web_changed=true ;;
+  esac
+  tag="$(resolve_release_tag "$requested" "$api_changed" "$web_changed")"
+  validate_published_release "$tag" "$api_changed" "$web_changed"
+  clear_shell
+  printf '%s\n\n' "${c_cyan}${c_bold}Confirm deployment${c_reset}"
+  printf 'Environment: %s\nRelease:     %s\nAPI/worker:  %s\nWeb:         %s\n\n' \
+    "$environment" "$tag" "$api_changed" "$web_changed"
+  if [[ "$environment" == production ]]; then
+    printf '%s\n' "Production opens the protected GitHub workflow; it does not deploy directly from this shell."
+  else
+    printf '%s\n' "This pulls the selected immutable image and recreates only the selected services."
+  fi
+  read_shell_input "Type DEPLOY to continue (b back, q quit): "
+  [[ "$shell_navigation" == value ]] || return 0
+  if [[ "$shell_input" == DEPLOY ]]; then
+    run_action "deploy $tag" deploy "$tag" "$option"
+  else
+    printf '%s\n' "${c_dim}Deployment cancelled; no image was pulled.${c_reset}"
+    pause_shell
+  fi
+}
+
+release_shell() {
+  local choices=("Inspect deployed images" "Browse published images" "Deploy latest published image" "Deploy a selected SHA")
+  if ! menu_select "Images and releases" "Inspection is local · deployments are explicit" "${choices[@]}"; then return 0; fi
+  case "$menu_choice" in
+    0) run_action "deployed images" release ;;
+    1) run_action "published images" available ;;
+    2) deploy_target_shell latest ;;
     3)
-      read_shell_input "SHA tag (sha-..., b back, q quit): "
+      read_shell_input "Release tag (sha-<40 hex>, b back, q quit): "
       [[ "$shell_navigation" == value ]] || return 0
-      run_action "deploy selected release" deploy "$shell_input" --both
+      deploy_target_shell "$shell_input"
+      ;;
+  esac
+}
+
+service_operations_shell() {
+  local choices=("Start installed services" "Stop services" "Recreate installed services" "Stop all services")
+  local stop_command=()
+  local confirmation
+  if ! menu_select "Operate installed services" "These actions never query GHCR or pull images" "${choices[@]}"; then return 0; fi
+  case "$menu_choice" in
+    0) start_runtime_shell ;;
+    1)
+      select_services_multi stop
+      [[ "$service_selection_navigation" == select ]] || return 0
+      stop_command=(stop "${selected_services[@]}")
+      run_action "stop · ${selected_services[*]}" "${stop_command[@]}"
+      ;;
+    2)
+      select_services_multi recreate
+      [[ "$service_selection_navigation" == select ]] || return 0
+      run_action "recreate · ${selected_services[*]}" recreate "${selected_services[@]}"
+      ;;
+    3)
+      read_shell_input "Type STOP to stop all ${environment} services (b back, q quit): "
+      [[ "$shell_navigation" == value ]] || return 0
+      confirmation="$shell_input"
+      if [[ "$confirmation" == STOP ]]; then
+        run_action "stop all services" shutdown
+      else
+        printf '%s\n' "${c_dim}Stop cancelled; persistent data was not changed.${c_reset}"
+        pause_shell
+      fi
       ;;
   esac
 }
@@ -1685,20 +1757,16 @@ interactive_shell() {
   terminal_setup
   shell_quit=false
   local choices=(
-    "Show service status"
-    "View logs and event filters"
-    "Start runtime"
-    "Stop selected services"
-    "Shut down all services"
-    "Releases and deployment"
+    "Overview"
+    "Operate installed services"
+    "View logs"
+    "Images and releases"
     "Manage superadmins"
     "Help"
   )
-  local stop_command=()
-  local confirmation
 
   while [[ "$shell_quit" != true ]]; do
-    if ! menu_select "Service shell" "${project_name} · arrows navigate, number keys select" "${choices[@]}"; then
+    if ! menu_select "Operator console" "${project_name} · choose a task" "${choices[@]}"; then
       return 0
     fi
     case "$menu_navigation" in
@@ -1708,43 +1776,21 @@ interactive_shell() {
       select)
         case "$menu_choice" in
           0)
-            run_action "service status" status
+            run_action "overview" status
             ;;
           1)
-            logs_shell
+            service_operations_shell
             ;;
           2)
-            start_runtime_shell
+            logs_shell
             ;;
           3)
-            select_services_multi stop
-            if [[ "$service_selection_navigation" == quit ]]; then
-              return 0
-            fi
-            [[ "$service_selection_navigation" == select ]] || continue
-            stop_command=(stop)
-            stop_command+=("${selected_services[@]}")
-            run_action "stop · ${selected_services[*]}" "${stop_command[@]}"
-            ;;
-          4)
-            read_shell_input "Type SHUTDOWN to stop all ${environment} services (b back, q quit): "
-            [[ "$shell_navigation" == quit ]] && return 0
-            [[ "$shell_navigation" == value ]] || continue
-            confirmation="$shell_input"
-            if [[ "$confirmation" == SHUTDOWN ]]; then
-              run_action "shutdown" shutdown
-            else
-              printf '%s\n' "${c_dim}Shutdown cancelled; persistent data was not changed.${c_reset}"
-              pause_shell
-            fi
-            ;;
-          5)
             release_shell
             ;;
-          6)
+          4)
             superadmin_shell
             ;;
-          7)
+          5)
             print_shell_help
             ;;
         esac

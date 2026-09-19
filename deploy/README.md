@@ -510,6 +510,13 @@ custom text search, with refresh/follow/filter/service navigation and an export
 command for saving remote logs locally. Selected event categories are combined;
 custom text narrows the result further. Start also offers per-service
 start/recreate, image release information, and local rebuild instructions.
+The home screen is task-led: **Overview**, **Operate installed services**,
+**View logs**, **Images and releases**, **Manage superadmins**, and **Help**.
+The service screen contains only start, stop, recreate and stop-all actions;
+it never accesses the registry. The release screen separates inspection,
+published-image browsing and deployment. Deployment then asks for the target
+unit, resolves and displays the immutable SHA, and requires typing `DEPLOY`
+before pulling or replacing anything.
 
 ### Lifecycle and release operations are deliberately separate
 
