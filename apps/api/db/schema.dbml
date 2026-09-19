@@ -1030,7 +1030,7 @@ Table users {
   university_id integer
   updated_at "timestamp with time zone" [not null, default: `now()`]
 
-  Note: 'No role column: role is derived at login from relationships (admin > staff > judge > sponsor > participant). Permissions come from capability groups only (H8).'
+  Note: 'Authorization is resolved from the user\'s assigned roles and each role\'s tri-state capability grants (H8). Display labels may be relationship-derived, but never authorize access.'
 }
 
 Table verifications {
