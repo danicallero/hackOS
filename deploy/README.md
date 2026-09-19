@@ -355,11 +355,9 @@ dedicated to this workflow and contain only the deployment key and pinned host
 key; they are not application secrets. It does not expose SSH through the
 public ingress.
 
-`.github/workflows/deploy-incus.yml` runs after a successful image build on
-`main`, reclassifies the release commit, and skips cleanly when the build
-workflow produced no application image. It passes the same partial-release
-flags to the host script and can also be dispatched with a previous SHA for
-rollback (which updates both units). It uses the protected `production`
+`.github/workflows/deploy-incus.yml` runs only by manual dispatch after an
+operator selects a published SHA and its API/web image set. It passes those
+partial-release flags to the host script and uses the protected `production`
 environment. The protection of both environments must
 be configured in GitHub (approval and, where appropriate, branch restrictions);
 the workflows do not contain application secrets.
