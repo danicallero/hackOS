@@ -1,6 +1,6 @@
 "use client";
 
-import { CopyIcon, LinkIcon, UserPlusIcon } from "lucide-react";
+import { CopyIcon, LinkIcon, MailIcon, UserPlusIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { MultiSelect } from "@/components/common/multi-select";
@@ -13,7 +13,6 @@ import { Label } from "@/components/ui/label";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import { toast } from "@/lib/toast";
 import type {
   EnterpriseSummary,
   Invite,
@@ -22,270 +21,321 @@ import type {
   UserInviteLink,
 } from "@/lib/types";
 
-/**
- * Invite a user (H9/H10). The admin no longer picks an "account type" up
- * front — roles and the enterprise link are always available, and `kind` is
- * derived from what's actually filled in on submit:
- *   - an enterprise picked -> kind "sponsor" (auto-linked to it on accept, H9/H43)
- *   - "allow closed-form submission" checked -> kind "participant" (H10: lets
- *     the invitee discover/submit a CLOSED application and auto-confirms it,
- *     independent of any pre-assigned role — most participant invites don't
- *     pre-assign one, since the application form grants a role on confirm)
- *   - neither -> kind "staff"
- * Pre-assigned roles (roleIds) are independent of this and can be combined
- * with either of the above (e.g. a sponsor rep also holding a staff role).
- */
+type Method = "email" | "link";
+type Uses = "unlimited" | "limited";
+type Expiration = "week" | "custom" | "never";
+
 export function InviteUserDialog({ onChanged }: { onChanged?: () => void | Promise<void> }) {
   const { t } = useLocale();
-  const copyToClipboard = useCopyToClipboard();
+  const copy = useCopyToClipboard();
   const [open, setOpen] = useState(false);
+  const [method, setMethod] = useState<Method>("email");
   const [email, setEmail] = useState("");
-  const [enterpriseId, setEnterpriseId] = useState<string>("");
-  const [allowClosedForms, setAllowClosedForms] = useState(false);
   const [roleIds, setRoleIds] = useState<string[]>([]);
+  const [enterpriseId, setEnterpriseId] = useState("");
+  const [applicationAccess, setApplicationAccess] = useState(false);
+  const [uses, setUses] = useState<Uses>("unlimited");
+  const [maxUses, setMaxUses] = useState("10");
+  const [expiration, setExpiration] = useState<Expiration>("week");
+  const [customExpiresAt, setCustomExpiresAt] = useState("");
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
-  const [groups, setGroups] = useState<RoleSummary[]>([]);
+  const [roles, setRoles] = useState<RoleSummary[]>([]);
   const [pending, setPending] = useState(false);
-  const [created, setCreated] = useState<Invite | null>(null);
-  const [createdUrl, setCreatedUrl] = useState<string | null>(null);
-  const [shareable, setShareable] = useState(false);
-  const [maxRedeems, setMaxRedeems] = useState("");
-  const [expiryMinutes, setExpiryMinutes] = useState("10080");
-  const [neverExpires, setNeverExpires] = useState(false);
+  const [result, setResult] = useState<{ email?: string; url?: string; summary: string } | null>(
+    null,
+  );
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    api
-      .get<{ enterprises: EnterpriseSummary[] }>("/api/invites/enterprise-options")
-      .then((r) => setEnterprises(r.enterprises))
-      .catch(() => setEnterprises([]));
-    api
-      .get<RoleSummary[]>("/api/roles")
-      // A protected role (system:superadmin today, CLI-only, H8) is never
-      // offerable as a pre-assignable invite role even though the list
-      // endpoint returns it — assigning it would 403 server-side anyway.
-      .then((roles) => setGroups(roles.filter((r) => !r.isProtected)))
-      .catch(() => setGroups([]));
+    void Promise.all([
+      api.get<{ enterprises: EnterpriseSummary[] }>("/api/invites/enterprise-options"),
+      api.get<RoleSummary[]>("/api/roles"),
+    ])
+      .then(([enterpriseData, roleData]) => {
+        setEnterprises(enterpriseData.enterprises);
+        setRoles(
+          roleData.filter((role) => !role.isProtected && role.name.toLowerCase() !== "sponsor"),
+        );
+      })
+      .catch(() => {
+        setEnterprises([]);
+        setRoles([]);
+      });
   }, [open]);
 
   function reset() {
+    setMethod("email");
     setEmail("");
-    setEnterpriseId("");
-    setAllowClosedForms(false);
     setRoleIds([]);
-    setCreated(null);
-    setCreatedUrl(null);
-    setShareable(false);
-    setMaxRedeems("");
-    setExpiryMinutes("10080");
-    setNeverExpires(false);
+    setEnterpriseId("");
+    setApplicationAccess(false);
+    setUses("unlimited");
+    setMaxUses("10");
+    setExpiration("week");
+    setCustomExpiresAt("");
+    setResult(null);
+    setError(null);
   }
 
   async function submit() {
-    const parsedMax = maxRedeems.trim() ? Number(maxRedeems) : null;
-    const parsedExpiry = expiryMinutes.trim() ? Number(expiryMinutes) : NaN;
-    if (shareable && parsedMax !== null && (!Number.isInteger(parsedMax) || parsedMax < 1)) {
-      toast.error(t("maxRedeemsDesc"));
-      return;
-    }
-    if (shareable && !neverExpires && (!Number.isInteger(parsedExpiry) || parsedExpiry < 1)) {
-      toast.error(t("expiryMinutesDesc"));
-      return;
-    }
-    const kind: InviteKind = enterpriseId ? "sponsor" : allowClosedForms ? "participant" : "staff";
-    if (shareable && kind === "staff" && roleIds.length === 0) {
-      toast.error(t("staffLinkGroupsRequired"));
-      return;
-    }
+    setError(null);
+    if (method === "email" && !email.trim()) return setError(t("emailRequired"));
+    const kind: InviteKind = enterpriseId ? "sponsor" : applicationAccess ? "participant" : "staff";
+    if (method === "link" && kind === "staff" && roleIds.length === 0)
+      return setError(t("staffLinkGroupsRequired"));
+    const limitedUses = Number(maxUses);
+    if (
+      method === "link" &&
+      uses === "limited" &&
+      (!Number.isInteger(limitedUses) || limitedUses < 1)
+    )
+      return setError(t("enterAtLeastOneUse"));
+    const customMinutes = customExpiresAt
+      ? Math.ceil((new Date(customExpiresAt).getTime() - Date.now()) / 60_000)
+      : 0;
+    if (method === "link" && expiration === "custom" && customMinutes < 1)
+      return setError(t("selectExpirationDate"));
     setPending(true);
     try {
-      if (shareable) {
-        const link = await api.post<UserInviteLink>("/api/invites/user-links", {
-          kind,
-          ...(kind === "sponsor" ? { enterpriseId: Number(enterpriseId) } : {}),
-          roleIds: roleIds.map(Number),
-          maxRedeems: parsedMax,
-          expiresInMinutes: neverExpires ? null : parsedExpiry,
-        });
-        setCreatedUrl(link.url);
-        toast.success(t("userInviteLinkCreated"));
-      } else {
+      if (method === "email") {
         const invite = await api.post<Invite>("/api/invites", {
           email: email.trim().toLowerCase(),
           kind,
           ...(kind === "sponsor" ? { enterpriseId: Number(enterpriseId) } : {}),
           roleIds: roleIds.map(Number),
         });
-        setCreated(invite);
-        toast.success(t("inviteSentMsg"));
+        setResult({ email: invite.email, summary: invite.email });
+      } else {
+        const link = await api.post<UserInviteLink>("/api/invites/user-links", {
+          kind,
+          ...(kind === "sponsor" ? { enterpriseId: Number(enterpriseId) } : {}),
+          roleIds: roleIds.map(Number),
+          maxRedeems: uses === "limited" ? limitedUses : null,
+          expiresInMinutes:
+            expiration === "never" ? null : expiration === "week" ? 10_080 : customMinutes,
+        });
+        const selectedEnterprise = enterprises.find(
+          (enterprise) => String(enterprise.id) === enterpriseId,
+        )?.name;
+        setResult({
+          url: link.url,
+          summary: [
+            selectedEnterprise,
+            uses === "limited"
+              ? t("redeemedCountLabel", { used: 0, maximum: limitedUses })
+              : t("unlimitedRedeems"),
+            expiration === "never" ? t("linkNeverExpires") : t("sevenDays"),
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        });
       }
       await onChanged?.();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateInvite"));
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : t("couldNotCreateInvite"));
     } finally {
       setPending(false);
     }
   }
 
-  const claimUrl =
-    createdUrl ??
-    (created?.token ? `${window.location.origin}/claim-account?token=${created.token}` : "");
-
+  const fieldClass = "space-y-2";
   return (
     <SidePanelEditor
       open={open}
-      onOpenChange={(o) => {
-        setOpen(o);
-        if (!o) reset();
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) reset();
       }}
       trigger={
         <Button>
           <UserPlusIcon className="size-4" aria-hidden="true" /> {t("inviteUser")}
         </Button>
       }
-      icon={UserPlusIcon}
-      title={t("inviteAUser")}
+      icon={method === "email" ? MailIcon : LinkIcon}
+      title={method === "email" ? t("inviteUser") : t("createLink")}
       footer={
-        created || createdUrl ? (
-          <Button onClick={() => setOpen(false)}>{t("done")}</Button>
+        result ? (
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={reset}>
+              {t("createAnotherLink")}
+            </Button>
+            <Button onClick={() => setOpen(false)}>{t("done")}</Button>
+          </div>
         ) : (
           <SubmitButton pending={pending} onClick={submit}>
-            {t("sendInvite")}
+            {method === "email" ? t("sendInvite") : t("createLink")}
           </SubmitButton>
         )
       }
     >
-      {created || createdUrl ? (
-        <div className="space-y-3">
-          <p className="text-muted-foreground text-sm">
-            {created
-              ? `${t("inviteSentToPrefix")} ${created.email}. ${t("inviteSentToSuffix")}`
-              : t("linkCreated")}
-          </p>
-          <div className="flex items-center gap-2">
-            <Input value={claimUrl} readOnly className="font-mono text-xs" />
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              aria-label={t("copyInviteLink")}
-              title={t("copyInviteLink")}
-              onClick={() => {
-                void copyToClipboard(claimUrl);
-              }}
-            >
-              <CopyIcon className="size-4" aria-hidden="true" />
-            </Button>
-          </div>
+      {result ? (
+        <div className="space-y-4">
+          <h2 className="type-section-title">
+            {result.url ? t("inviteLinkCreated") : t("invitationSent")}
+          </h2>
+          {result.email && <p className="font-medium">{result.email}</p>}
+          {result.url && (
+            <>
+              <div className="flex gap-2">
+                <Input value={result.url} readOnly className="font-mono text-xs" />
+                <Button variant="outline" onClick={() => void copy(result.url as string)}>
+                  <CopyIcon className="size-4" aria-hidden="true" /> {t("copyInviteLink")}
+                </Button>
+              </div>
+              <p className="text-muted-foreground text-sm">{result.summary}</p>
+            </>
+          )}
         </div>
       ) : (
-        <div className="space-y-4">
-          <div className="flex items-start gap-3 rounded-lg border p-3">
-            <Checkbox
-              id="invite-shareable"
-              checked={shareable}
-              onCheckedChange={(checked) => setShareable(checked === true)}
-            />
-            <div className="space-y-1">
-              <Label htmlFor="invite-shareable" className="leading-5">
-                <LinkIcon className="mr-1 inline size-4" aria-hidden="true" /> {t("createLink")}
-              </Label>
-              <p className="text-muted-foreground text-xs">{t("inviteUserDesc")}</p>
-            </div>
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-2" role="tablist" aria-label={t("inviteUser")}>
+            <Button
+              type="button"
+              variant={method === "email" ? "default" : "outline"}
+              onClick={() => setMethod("email")}
+            >
+              <MailIcon className="size-4" aria-hidden="true" /> {t("emailInvitation")}
+            </Button>
+            <Button
+              type="button"
+              variant={method === "link" ? "default" : "outline"}
+              onClick={() => setMethod("link")}
+            >
+              <LinkIcon className="size-4" aria-hidden="true" /> {t("inviteLink")}
+            </Button>
           </div>
-          {!shareable && (
-            <div className="space-y-2">
+          {method === "email" && (
+            <div className={fieldClass}>
               <Label htmlFor="invite-email">{t("email")}</Label>
               <Input
                 id="invite-email"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
                 placeholder={t("emailPlaceholder")}
+                onChange={(event) => setEmail(event.target.value)}
               />
             </div>
           )}
-          <div className="space-y-2">
-            <Label htmlFor="invite-capability-groups">{t("rolesTitle")}</Label>
-            <MultiSelect
-              inDialog
-              id="invite-capability-groups"
-              options={groups.map((g) => ({ value: String(g.id), label: g.name }))}
-              value={roleIds}
-              onChange={setRoleIds}
-              placeholder={t("optionalPreassignRoles")}
-              searchPlaceholder={t("searchRolesPlaceholder")}
-              emptyText={t("noRolesYet")}
-            />
-            <p className="text-muted-foreground text-xs">{t("accountHoldsPermissions")}</p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="invite-enterprise">{t("enterpriseLabel")}</Label>
-            <EntityCombobox
-              id="invite-enterprise"
-              inDialog
-              options={enterprises}
-              value={enterpriseId}
-              onChange={(v) => {
-                setEnterpriseId(v);
-                // A sponsor invite and the closed-form bypass are mutually
-                // exclusive kinds on the backend (H9/H10) — picking an
-                // enterprise here makes this a sponsor invite.
-                if (v) setAllowClosedForms(false);
-              }}
-              getId={(e) => e.id}
-              getLabel={(e) => e.name}
-              placeholder={t("selectSponsorEnterprise")}
-            />
-            <p className="text-muted-foreground text-xs">{t("linkedAutomatically")}</p>
-          </div>
-          <div className="flex items-start gap-3">
-            <Checkbox
-              id="invite-allow-closed-forms"
-              checked={allowClosedForms}
-              disabled={Boolean(enterpriseId)}
-              onCheckedChange={(checked) => setAllowClosedForms(checked === true)}
-            />
-            <div className="space-y-1">
-              <Label htmlFor="invite-allow-closed-forms" className="leading-5">
-                {t("allowClosedFormsLabel")}
-              </Label>
-              <p className="text-muted-foreground text-xs">{t("allowClosedFormsHint")}</p>
+          <section className="space-y-4">
+            <h2 className="type-section-title">{t("access")}</h2>
+            <div className={fieldClass}>
+              <Label htmlFor="invite-roles">{t("rolesTitle")}</Label>
+              <MultiSelect
+                inDialog
+                id="invite-roles"
+                options={roles.map((role) => ({ value: String(role.id), label: role.name }))}
+                value={roleIds}
+                onChange={setRoleIds}
+                placeholder={t("selectRolesPlaceholder")}
+                searchPlaceholder={t("searchRolesPlaceholder")}
+                emptyText={t("noRolesYet")}
+              />
             </div>
-          </div>
-          {shareable && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="invite-max-redeems">{t("maxRedeemsLabel")}</Label>
-                <Input
-                  id="invite-max-redeems"
-                  type="number"
-                  min="1"
-                  value={maxRedeems}
-                  onChange={(event) => setMaxRedeems(event.target.value)}
-                  placeholder={t("unlimitedRedeems")}
+            <div className={fieldClass}>
+              <Label htmlFor="invite-enterprise">{t("enterpriseLabel")}</Label>
+              <EntityCombobox
+                id="invite-enterprise"
+                inDialog
+                options={enterprises}
+                value={enterpriseId}
+                onChange={(value) => setEnterpriseId(value)}
+                getId={(enterprise) => enterprise.id}
+                getLabel={(enterprise) => enterprise.name}
+                placeholder={t("selectEnterprisePlaceholder")}
+              />
+              {enterpriseId && (
+                <p className="text-muted-foreground text-xs">{t("sponsorRoleAutomatic")}</p>
+              )}
+            </div>
+            <div className="space-y-3">
+              <h3 className="type-label">{t("applicationAccess")}</h3>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="invite-application-access"
+                  checked={applicationAccess}
+                  disabled={Boolean(enterpriseId)}
+                  onCheckedChange={(checked) => setApplicationAccess(checked === true)}
                 />
+                <Label htmlFor="invite-application-access">{t("allowClosedFormsLabel")}</Label>
               </div>
+            </div>
+          </section>
+          {method === "link" && (
+            <section className="space-y-4">
+              <h2 className="type-section-title">{t("linkSettings")}</h2>
               <div className="space-y-2">
-                <Label htmlFor="invite-expiry-minutes">{t("expiryMinutesLabel")}</Label>
-                <Input
-                  id="invite-expiry-minutes"
-                  type="number"
-                  min="1"
-                  value={expiryMinutes}
-                  disabled={neverExpires}
-                  onChange={(event) => setExpiryMinutes(event.target.value)}
-                />
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="invite-never-expires"
-                    checked={neverExpires}
-                    onCheckedChange={(checked) => setNeverExpires(checked === true)}
-                  />
-                  <Label htmlFor="invite-never-expires">{t("neverExpiresLabel")}</Label>
+                <Label>{t("uses")}</Label>
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      checked={uses === "unlimited"}
+                      onChange={() => setUses("unlimited")}
+                    />{" "}
+                    {t("unlimitedRedeems")}
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      checked={uses === "limited"}
+                      onChange={() => setUses("limited")}
+                    />{" "}
+                    {t("limitTo")}
+                  </label>
+                  {uses === "limited" && (
+                    <Input
+                      className="w-20"
+                      type="number"
+                      min="1"
+                      value={maxUses}
+                      onChange={(event) => setMaxUses(event.target.value)}
+                    />
+                  )}
                 </div>
               </div>
-            </div>
+              <div className="space-y-2">
+                <Label>{t("expiration")}</Label>
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      checked={expiration === "week"}
+                      onChange={() => setExpiration("week")}
+                    />{" "}
+                    {t("sevenDays")}
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      checked={expiration === "custom"}
+                      onChange={() => setExpiration("custom")}
+                    />{" "}
+                    {t("custom")}
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      checked={expiration === "never"}
+                      onChange={() => setExpiration("never")}
+                    />{" "}
+                    {t("never")}
+                  </label>
+                </div>
+                {expiration === "custom" && (
+                  <Input
+                    type="datetime-local"
+                    value={customExpiresAt}
+                    onChange={(event) => setCustomExpiresAt(event.target.value)}
+                  />
+                )}
+              </div>
+            </section>
+          )}
+          {error && (
+            <p className="text-destructive text-sm" role="alert">
+              {error}
+            </p>
           )}
         </div>
       )}
