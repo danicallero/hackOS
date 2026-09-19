@@ -225,7 +225,7 @@ The release paths are:
 | Branch | CD behavior |
 | --- | --- |
 | `staging` | Merge an approved development PR here. CD builds only affected API/web images on native `linux/amd64` and `linux/arm64` runners; the protected private-network SSH workflow deploys only the changed unit to the ARM64 staging host. |
-| `main` | Merge an approved PR from any branch. CD builds only affected API/web images on native `linux/amd64` and `linux/arm64` runners; the protected Incus workflow deploys only the changed unit to production. |
+| `main` | Merge an approved PR from any branch. CD builds only affected API/web images on native `linux/amd64` and `linux/arm64` runners. An operator later starts the protected Incus workflow with the selected immutable tag. |
 
 `main` and `staging` are independent environments. Merging into either branch
 publishes its release artifact and starts the corresponding protected

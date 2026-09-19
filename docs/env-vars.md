@@ -321,11 +321,10 @@ key; they are not application secrets. Public ingress is a separate always-on
 service and is not the administration path. The staging workflow remains
 manually dispatchable for an explicit SHA rollback or verification run.
 
-`deploy-incus.yml` reclassifies the release commit after a successful `main`
-image build and skips cleanly when no application image was published. It can
-also run manually for rollback, where both service tags are updated. It needs a
-self-hosted runner with local Incus access. Registering that runner is an
-infrastructure prerequisite outside this repository.
+`deploy-incus.yml` runs only when an authorised operator manually selects an
+already-published release tag and its API/web image set. It needs a self-hosted
+runner with local Incus access. Registering that runner is an infrastructure
+prerequisite outside this repository.
 
 Both paths transfer only Compose and deployment scripts. They do not receive
 application secrets, decrypt SOPS, or use Docker Remote API. The host script

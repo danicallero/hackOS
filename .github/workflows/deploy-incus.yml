@@ -1,19 +1,22 @@
 name: Deploy with Incus
 
 on:
-  workflow_run:
-    workflows:
-      - Build images
-    types:
-      - completed
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       tag:
         description: Immutable GHCR tag, for example sha-<40 lowercase hex characters>
         required: true
         type: string
+      api_changed:
+        description: Deploy the API and worker image at this tag
+        required: true
+        default: true
+        type: boolean
+      web_changed:
+        description: Deploy the web image at this tag
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -23,47 +26,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  detect-release:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.conclusion == 'success')
-    name: Detect release image set
+  select-release:
+    name: Select release image set
     runs-on: ubuntu-latest
     outputs:
-      api_image: ${{ steps.classify.outputs.api_image }}
-      web_image: ${{ steps.classify.outputs.web_image }}
+      api_image: ${{ steps.select.outputs.api_image }}
+      web_image: ${{ steps.select.outputs.web_image }}
     steps:
-      - name: Check out release repository
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
-
-      - name: Classify release paths
-        id: classify
-        env:
-          RELEASE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      - name: Validate selected image set
+        id: select
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
-            # A manual dispatch is an explicit rollback/verification request;
-            # both images are known to exist at the requested immutable tag.
-            echo "api_image=true" >> "$GITHUB_OUTPUT"
-            echo "web_image=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          before_sha="$(git rev-parse "${RELEASE_SHA}^1")"
-          ./.github/scripts/classify-image-changes.sh "$before_sha" "$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "api_image=${{ inputs.api_changed }}" >> "$GITHUB_OUTPUT"
+          echo "web_image=${{ inputs.web_changed }}" >> "$GITHUB_OUTPUT"
 
   deploy:
-    needs: detect-release
+    needs: select-release
     if: >-
       always() &&
-      needs.detect-release.result == 'success' &&
-      (needs.detect-release.outputs.api_image == 'true' || needs.detect-release.outputs.web_image == 'true')
+      needs.select-release.result == 'success' &&
+      (needs.select-release.outputs.api_image == 'true' || needs.select-release.outputs.web_image == 'true')
     name: Deploy hackOS production with Incus
     runs-on: self-hosted
     timeout-minutes: 30
@@ -71,9 +54,9 @@ jobs:
       name: production
     env:
       DEPLOY_ENVIRONMENT: production
-      IMAGE_TAG: ${{ github.event_name == 'workflow_run' && format('sha-{0}', github.event.workflow_run.head_sha) || inputs.tag }}
-      DEPLOY_API: ${{ needs.detect-release.outputs.api_image }}
-      DEPLOY_WEB: ${{ needs.detect-release.outputs.web_image }}
+      IMAGE_TAG: ${{ inputs.tag }}
+      DEPLOY_API: ${{ needs.select-release.outputs.api_image }}
+      DEPLOY_WEB: ${{ needs.select-release.outputs.web_image }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v5

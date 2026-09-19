@@ -12,6 +12,8 @@ Usage:
   services.sh <environment> stop [service ...]
   services.sh <environment> shutdown
   services.sh <environment> release [service ...]
+  services.sh <environment> available
+  services.sh <environment> deploy <latest|sha-commit> [--api|--web|--both]
   services.sh <environment> shell
   services.sh <environment> superadmin <list|create|grant|revoke> [options]
 
@@ -21,7 +23,8 @@ Services: postgres valkey minio minio-init migrate api worker web
 The default start/stop operations cover the long-running runtime. shutdown
 stops the whole selected project and never removes volumes or bind data.
 recreate force-recreates selected runtime services without building; release
-prints the image revision and build timestamp.
+prints the deployed image identity. available reads published GitHub releases;
+deploy is explicit and never accepts Docker :latest.
 
 Log event types: all, error, warning, request, health. Use --match TEXT for a
 case-insensitive literal search instead of a built-in event type.
@@ -172,7 +175,7 @@ case "$environment" in
   *) usage 2 ;;
 esac
 case "$action" in
-  status|logs|start|recreate|stop|shutdown|release|shell|superadmin) ;;
+  status|logs|start|recreate|stop|shutdown|release|available|deploy|shell|superadmin) ;;
   -h|--help|help) usage 0 ;;
   *) usage 2 ;;
 esac
@@ -960,10 +963,10 @@ select_log_filter() {
 }
 
 print_service_releases() {
-  local service image revision created
+  local service image revision created channel
 
   printf '%s\n' "${c_bold}Image releases${c_reset}"
-  printf '%s\n' "${c_dim}The revision comes from the image's OCI label; the timestamp is the local image build time.${c_reset}"
+  printf '%s\n' "${c_dim}Channel, revision and timestamp come from immutable OCI image metadata.${c_reset}"
   for service in "$@"; do
     image="$(compose ps --all --format '{{.Image}}' "$service" 2>/dev/null | sed -n '1p' || true)"
     if [[ -z "$image" ]]; then
@@ -971,12 +974,15 @@ print_service_releases() {
       continue
     fi
     revision="$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' "$image" 2>/dev/null || true)"
-    created="$(docker image inspect --format '{{.Created}}' "$image" 2>/dev/null || true)"
+    channel="$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.ref.name\" }}' "$image" 2>/dev/null || true)"
+    created="$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.created\" }}' "$image" 2>/dev/null || true)"
+    [[ -n "$created" && "$created" != '<no value>' ]] || created="$(docker image inspect --format '{{.Created}}' "$image" 2>/dev/null || true)"
     if [[ -z "$revision" || "$revision" == '<no value>' ]]; then
       printf '%s\n' "${c_yellow}${service}: ${image} · revision unavailable${c_reset}"
     else
       printf '%s\n' "${c_green}${service}: ${image}${c_reset}"
       printf '%s\n' "  revision: ${revision}"
+      printf '%s\n' "  channel:  ${channel:-unknown}"
       printf '%s\n' "  built:    ${created:-unknown}"
       printf '%s\n' "  GitHub:   https://github.com/danicallero/hackOS/commit/${revision}"
     fi
@@ -1517,6 +1523,73 @@ superadmin_shell() {
   done
 }
 
+github_repository="${HACKOS_GITHUB_REPOSITORY:-danicallero/hackOS}"
+
+published_releases() {
+  command -v gh >/dev/null 2>&1 || die "available requires the GitHub CLI (gh)"
+  gh release list --repo "$github_repository" --limit 30
+}
+
+resolve_release_tag() {
+  local requested="$1" commit
+  if [[ "$requested" != latest ]]; then
+    [[ "$requested" =~ ^sha-[0-9a-f]{40}$ ]] || die "release must be latest or sha-<40 lowercase hex characters>"
+    printf '%s\n' "$requested"
+    return 0
+  fi
+  command -v gh >/dev/null 2>&1 || die "deploy latest requires the GitHub CLI (gh)"
+  if [[ "$environment" == production ]]; then
+    commit="$(gh release view --repo "$github_repository" --json targetCommitish --jq .targetCommitish)"
+  else
+    commit="$(gh run list --repo "$github_repository" --workflow build.yml --branch staging --status success --limit 1 --json headSha --jq '.[0].headSha')"
+  fi
+  [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die "could not resolve the latest published $environment release"
+  printf 'sha-%s\n' "$commit"
+}
+
+deploy_release() {
+  local requested="$1" unit="both" tag api_changed web_changed
+  shift
+  while (($#)); do
+    case "$1" in
+      --api) unit=api ;;
+      --web) unit=web ;;
+      --both) unit=both ;;
+      *) die "unknown deploy option: $1" ;;
+    esac
+    shift
+  done
+  tag="$(resolve_release_tag "$requested")"
+  api_changed=false; web_changed=false
+  case "$unit" in
+    api) api_changed=true ;;
+    web) web_changed=true ;;
+    both) api_changed=true; web_changed=true ;;
+  esac
+  printf 'Environment: %s\nAction: deploy\nAPI/worker: %s\nWeb: %s\n' "$environment" "$tag ($api_changed)" "$tag ($web_changed)"
+  if [[ "$environment" == production ]]; then
+    printf '%s\n' "Production is protected; run: gh workflow run deploy-incus.yml --repo $github_repository -f tag=$tag -f api_changed=$api_changed -f web_changed=$web_changed"
+    return 0
+  fi
+  lock_mutation
+  "$app_dir/deploy.sh" staging "$tag" "$api_changed" "$web_changed"
+}
+
+release_shell() {
+  local choices=("Show deployed images" "List published releases" "Deploy latest published release" "Deploy a selected SHA")
+  if ! menu_select "Releases" "Local operations never pull; deployment is explicit" "${choices[@]}"; then return 0; fi
+  case "$menu_choice" in
+    0) run_action "deployed releases" release ;;
+    1) run_action "published releases" available ;;
+    2) run_action "deploy latest" deploy latest --both ;;
+    3)
+      read_shell_input "SHA tag (sha-..., b back, q quit): "
+      [[ "$shell_navigation" == value ]] || return 0
+      run_action "deploy selected release" deploy "$shell_input" --both
+      ;;
+  esac
+}
+
 interactive_shell() {
   [[ -t 0 && -t 1 ]] || die "the interactive shell requires a terminal"
   terminal_setup
@@ -1527,6 +1600,7 @@ interactive_shell() {
     "Start runtime"
     "Stop selected services"
     "Shut down all services"
+    "Releases and deployment"
     "Manage superadmins"
     "Help"
   )
@@ -1575,9 +1649,12 @@ interactive_shell() {
             fi
             ;;
           5)
-            superadmin_shell
+            release_shell
             ;;
           6)
+            superadmin_shell
+            ;;
+          7)
             print_shell_help
             ;;
         esac
@@ -1725,6 +1802,16 @@ case "$action" in
       release_services=("$@")
     fi
     print_service_releases "${release_services[@]}"
+    ;;
+
+  available)
+    (($# == 0)) || usage
+    published_releases
+    ;;
+
+  deploy)
+    (($# >= 1)) || usage
+    deploy_release "$@"
     ;;
 
   superadmin)

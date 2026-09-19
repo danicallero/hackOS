@@ -117,6 +117,8 @@ jobs:
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.ref.name=${{ github.ref_name }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
           cache-from: type=gha,scope=hackos-api-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=hackos-api-${{ matrix.arch }}
 
@@ -144,12 +146,14 @@ jobs:
       - name: Publish API multi-architecture manifest
         env:
           API_IMAGE: ${{ env.IMAGE_NAMESPACE }}/hackos-api:${{ env.IMAGE_TAG }}
+          CHANNEL_IMAGE: ${{ env.IMAGE_NAMESPACE }}/hackos-api:${{ github.ref_name }}-${{ env.IMAGE_TAG }}
         shell: bash
         run: |
           set -euo pipefail
           for attempt in {1..6}; do
             if docker buildx imagetools create \
               --tag "$API_IMAGE" \
+              --tag "$CHANNEL_IMAGE" \
               "${API_IMAGE}-amd64" \
               "${API_IMAGE}-arm64"; then
               exit 0
@@ -201,6 +205,8 @@ jobs:
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.ref.name=${{ github.ref_name }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
           cache-from: type=gha,scope=hackos-web-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=hackos-web-${{ matrix.arch }}
 
@@ -228,12 +234,14 @@ jobs:
       - name: Publish web multi-architecture manifest
         env:
           WEB_IMAGE: ${{ env.IMAGE_NAMESPACE }}/hackos-web:${{ env.IMAGE_TAG }}
+          CHANNEL_IMAGE: ${{ env.IMAGE_NAMESPACE }}/hackos-web:${{ github.ref_name }}-${{ env.IMAGE_TAG }}
         shell: bash
         run: |
           set -euo pipefail
           for attempt in {1..6}; do
             if docker buildx imagetools create \
               --tag "$WEB_IMAGE" \
+              --tag "$CHANNEL_IMAGE" \
               "${WEB_IMAGE}-amd64" \
               "${WEB_IMAGE}-arm64"; then
               exit 0
