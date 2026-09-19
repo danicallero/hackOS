@@ -50,7 +50,10 @@ conflict, that file wins. Hard invariants live in `plan/07-datos-relevantes-ers.
 ## Database & migrations
 
 - Migrations: `apps/api/db/migrations/NNNN_name.sql`, applied lexicographically
-  by `pnpm migrate` (advisory-locked, one transaction per file).
+  by `pnpm migrate` (advisory-locked, one transaction per file). The current
+  staging-reset lineage begins with `0001_hackos_baseline.sql`; retired
+  development history lives in `apps/api/db/migration-history/` and is never
+  applied.
 - Every active migration has a unique four-digit sequence prefix and is
   immutable after application; `_migrations` stores a SHA-256 checksum and the
   runner fails before later work when an applied file changes. Use a new

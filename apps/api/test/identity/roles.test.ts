@@ -901,27 +901,7 @@ describe("H8 is_protected is the real, enforced lockout (not just system:superad
   });
 });
 
-describe("H8 0801's 'Platform administrator' template is not protected", () => {
-  it("the 0801 migration seeds it with is_protected = false, like every other default template", async () => {
-    // Regression guard for the exact bug this fixed: 0801 previously set
-    // is_protected = true only for this one template row, which would have
-    // made it permanently un-editable/un-deletable on an upgrade install
-    // that happened to instantiate it — inconsistent with every other
-    // default role (0801/0805), which are all fully mutable.
-    const { readFileSync } = await import("node:fs");
-    const { fileURLToPath } = await import("node:url");
-    const migrationPath = fileURLToPath(
-      new URL("../../db/migrations/0801_roles_data_migration.sql", import.meta.url),
-    );
-    const sql = readFileSync(migrationPath, "utf8");
-    expect(sql).toMatch(
-      /'Platform administrator',\s*'platform-administrator',\s*19000,\s*true,\s*false/,
-    );
-    expect(sql).not.toMatch(
-      /'Platform administrator',\s*'platform-administrator',\s*19000,\s*true,\s*true/,
-    );
-  });
-
+describe("H8 platform-administrator roles are mutable", () => {
   it("a role named 'Platform administrator' seeded the way 0801 seeds it is fully mutable via the API", async () => {
     const a = await getApp();
     const actor = await manager();
