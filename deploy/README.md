@@ -89,12 +89,14 @@ containers are recreated.
 
 Cada host mantiene dos ficheros planos fuera del repositorio:
 
-- `/etc/hackos/hackos.env`: configuración no secreta, basada en
-  [`deploy/.env.example`](./.env.example).
-- `/etc/hackos/hackos.secrets`: credenciales y claves privadas, con permisos
-  `0600` y sin copiarlo al repositorio.
-- [`deploy/.env.secrets.example`](./.env.secrets.example): plantilla con los
-  nombres de secretos y valores vacíos; nunca se usa como fichero real.
+| Fichero | Contenido | Plantilla |
+|---|---|---|
+| `/etc/hackos/hackos.env` | Sólo configuración no secreta: imagen, dominios, puertos, nombres de cuentas, S3 público, correo, logs, R2 y metadatos Wallet. | [`deploy/.env.example`](./.env.example) |
+| `/etc/hackos/hackos.secrets` | Sólo credenciales y material privado: contraseñas, claves S3/R2/SMTP, `BETTER_AUTH_SECRET`, claves de traducción, fixtures y PEM Wallet. Permisos `0600`. | [`deploy/.env.secrets.example`](./.env.secrets.example) |
+
+No se permite duplicar una clave entre los dos ficheros. La plantilla de
+secretos contiene nombres y valores vacíos; nunca se usa como fichero real ni
+se copia al repositorio.
 
 El contrato canónico es siempre esta pareja. El despliegue acepta además, de
 forma explícita y temporal, un único `/etc/hackos/hackos.env` con permisos

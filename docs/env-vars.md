@@ -27,6 +27,20 @@ Los valores reales se generan y cargan fuera del repositorio. El fichero raíz
 [`apps/mobile/.env.example`](../apps/mobile/.env.example) contiene únicamente
 valores públicos compilados en la app móvil.
 
+## Los dos ficheros del host
+
+No hay un único `.env` de producción. Crear y mantener siempre estos dos
+ficheros separados:
+
+| Fichero | Debe contener | No debe contener |
+|---|---|---|
+| `/etc/hackos/hackos.env` | `IMAGE_TAG`, dominios/CORS, puertos, `POSTGRES_USER`, `POSTGRES_DB`, `MINIO_ROOT_USER`, `S3_ACCESS_KEY`, bucket/URL S3, correo, logs, R2 y metadatos Wallet. | Contraseñas, tokens, claves privadas o PEM. |
+| `/etc/hackos/hackos.secrets` (`0600`) | `POSTGRES_PASSWORD`, `VALKEY_PASSWORD`, `MINIO_ROOT_PASSWORD`, `BETTER_AUTH_SECRET`, `S3_SECRET_KEY`, credenciales SMTP/R2/traducción/fixtures y PEM Wallet. | Tags, dominios, puertos, identificadores o cualquier configuración no secreta. |
+
+`IMAGE_REPO` y `WEB_IMAGE_REPO` no pertenecen a ninguno: son referencias
+fijas de Compose. Las plantillas enlazadas arriba son la lista completa y la
+tabla siguiente especifica cada variable individualmente.
+
 ## Reglas del contrato
 
 | Variable | Ubicación | Obligatoria | Uso |
