@@ -40,6 +40,7 @@ type Record = {
   created: string;
   createdBy: string | null;
   redemptions: Redemption[];
+  token: string | null;
 };
 
 /** The persistent invitation workspace (#777): one composer, one list, one inspector. */
@@ -53,6 +54,7 @@ export function InvitationsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expiring, setExpiring] = useState(false);
+  const [resending, setResending] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -91,6 +93,7 @@ export function InvitationsScreen() {
           created: item.createdAt,
           createdBy: null,
           redemptions: [],
+          token: item.token,
         })),
         ...links.map((item) => ({
           key: `user-link:${item.id}`,
@@ -106,6 +109,7 @@ export function InvitationsScreen() {
           created: item.createdAt,
           createdBy: item.createdByName,
           redemptions: item.redemptions,
+          token: null,
         })),
         ...enterpriseLinks.map((item) => ({
           key: `enterprise-link:${item.id}`,
@@ -121,6 +125,7 @@ export function InvitationsScreen() {
           created: item.createdAt,
           createdBy: item.createdByName,
           redemptions: item.redemptions,
+          token: null,
         })),
       ].sort((a, b) => b.created.localeCompare(a.created)),
     [emails, links, enterpriseLinks],
@@ -198,6 +203,19 @@ export function InvitationsScreen() {
     }
   }
 
+  async function resend() {
+    if (!selected || selected.source !== "email") return;
+    setResending(true);
+    try {
+      await api.post(`/api/invites/${selected.id}/resend`);
+      toast.success(t("inviteResent"));
+    } catch (cause) {
+      toast.error(cause instanceof ApiError ? cause.message : t("couldNotInviteAction"));
+    } finally {
+      setResending(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -240,20 +258,37 @@ export function InvitationsScreen() {
         className="sm:w-[min(40rem,calc(100vw-2rem))]"
         footer={
           selected ? (
-            <AlertModal
-              trigger={
-                <Button variant="destructive">
-                  <BanIcon className="size-4" aria-hidden="true" /> {t("expire")}
+            <div className="flex flex-wrap gap-2">
+              {selected.source === "email" && selected.token && (
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    void copy(`${window.location.origin}/claim-account?token=${selected.token}`)
+                  }
+                >
+                  <CopyIcon className="size-4" aria-hidden="true" /> {t("copyInviteLink")}
                 </Button>
-              }
-              title={t("withdrawLinkTitle")}
-              description={t("withdrawLinkDesc")}
-              cancelLabel={t("cancel")}
-              confirmLabel={t("expire")}
-              destructive
-              pending={expiring}
-              onConfirm={() => void expire()}
-            />
+              )}
+              {selected.source === "email" && (
+                <Button variant="outline" disabled={resending} onClick={() => void resend()}>
+                  {t("resendEmail")}
+                </Button>
+              )}
+              <AlertModal
+                trigger={
+                  <Button variant="destructive">
+                    <BanIcon className="size-4" aria-hidden="true" /> {t("expire")}
+                  </Button>
+                }
+                title={t("withdrawLinkTitle")}
+                description={t("withdrawLinkDesc")}
+                cancelLabel={t("cancel")}
+                confirmLabel={t("expire")}
+                destructive
+                pending={expiring}
+                onConfirm={() => void expire()}
+              />
+            </div>
           ) : undefined
         }
       >

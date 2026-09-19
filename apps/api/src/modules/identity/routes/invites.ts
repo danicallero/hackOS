@@ -283,6 +283,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
               roleIds: z.array(z.number()),
               expiresAt: z.string(),
               createdAt: z.string(),
+              token: z.string(),
             }),
           ),
         },
@@ -304,6 +305,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         roleIds: row.role_ids,
         expiresAt: row.expires_at.toISOString(),
         createdAt: row.created_at.toISOString(),
+        token: row.token,
       }));
     },
   );

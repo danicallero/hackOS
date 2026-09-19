@@ -231,6 +231,7 @@ export interface InviteListItem {
   roleIds: number[];
   expiresAt: string;
   createdAt: string;
+  token: string;
 }
 
 /** GET /api/invites/lookup — what the invitee sees before accepting. */
