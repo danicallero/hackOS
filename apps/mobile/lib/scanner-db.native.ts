@@ -9,6 +9,7 @@ import {
   resetRosterKey,
 } from "./scanner-crypto";
 import { revokedBadgesFromSnapshot } from "./scanner-model";
+import { clearRosterBackup, loadRosterBackup, saveRosterBackup } from "./scanner-roster-backup";
 import type {
   PendingScan,
   ScannerActivity,
@@ -497,6 +498,9 @@ export async function applyScannerSnapshot(
         ? rawGeneratedAt.toISOString()
         : null;
   if (!generatedAt) throw new Error("Scanner snapshot is missing generatedAt");
+  // Persist the complete encrypted snapshot through the same durable KV
+  // substrate as Schedule before touching the disposable SQLite index.
+  await saveRosterBackup(snapshot);
   const database = await rosterDb();
 
   // Activity selection has to survive as soon as an online snapshot is shown.
@@ -654,6 +658,7 @@ export async function wipeAttendanceRoster(ownerUserId?: number): Promise<void> 
   // #775: clean up a legacy cache-dir copy as well, so it cannot be migrated
   // back after this intentional session/data boundary.
   removeLegacyRosterCopies();
+  await clearRosterBackup();
   if (generation === rosterGeneration && rosterOwnerUserId === null) await resetRosterKey();
 }
 
@@ -735,7 +740,10 @@ export async function listScannerPeople(query = ""): Promise<ScannerPerson[]> {
   const rows = await withSerializedRosterOperation((database) =>
     database.getAllAsync<PersonRow>(`SELECT * FROM scanner_people`),
   );
-  const people = await Promise.all(rows.map(personFromRow));
+  const people =
+    rows.length > 0
+      ? await Promise.all(rows.map(personFromRow))
+      : ((await loadRosterBackup())?.people ?? []);
   return people
     .filter((person) =>
       [person.name, person.surname, person.email, person.badgeId]
@@ -787,7 +795,7 @@ export async function listScannerActivities(): Promise<ScannerActivity[]> {
       description_i18n: string;
     }>(`SELECT * FROM scanner_activities ORDER BY starts_at IS NULL, starts_at, name, id`),
   );
-  return rows.map((row) => ({
+  const activities = rows.map((row) => ({
     id: row.id,
     name: row.name,
     category: row.category,
@@ -797,6 +805,9 @@ export async function listScannerActivities(): Promise<ScannerActivity[]> {
     nameI18n: JSON.parse(row.name_i18n),
     descriptionI18n: JSON.parse(row.description_i18n),
   }));
+  if (activities.length > 0) return activities;
+  const backup = await loadRosterBackup();
+  return backup?.activities ?? [];
 }
 
 export async function getActivityState(

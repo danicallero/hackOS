@@ -103,6 +103,11 @@ jest.mock("./scanner-crypto", () => ({
 }));
 
 jest.mock("./scanner-model", () => ({ revokedBadgesFromSnapshot: jest.fn(() => []) }));
+jest.mock("./scanner-roster-backup", () => ({
+  clearRosterBackup: jest.fn(),
+  loadRosterBackup: jest.fn(async () => null),
+  saveRosterBackup: jest.fn(async () => undefined),
+}));
 
 import * as SQLite from "expo-sqlite";
 import { encryptJson } from "./scanner-crypto";
