@@ -261,6 +261,7 @@ export interface EnterpriseInviteLink {
   expiresAt: string | null;
   revokedAt: string | null;
   createdAt: string;
+  createdByName: string | null;
   status: "active" | "expired" | "exhausted" | "withdrawn";
   redemptions: Array<{
     id: number;
@@ -288,6 +289,7 @@ export interface UserInviteLink {
   expiresAt: string | null;
   revokedAt: string | null;
   createdAt: string;
+  createdByName: string | null;
   status: "active" | "expired" | "exhausted" | "withdrawn";
   redemptions: Array<{
     id: number;

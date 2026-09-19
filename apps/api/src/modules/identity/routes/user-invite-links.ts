@@ -74,6 +74,7 @@ const userInviteLinkResponse = z.object({
   expiresAt: z.string().nullable(),
   revokedAt: z.string().nullable(),
   createdAt: z.string(),
+  createdByName: z.string().nullable(),
   status: userInviteLinkStatus,
   redemptions: z.array(
     z.object({
@@ -124,6 +125,7 @@ function toResponse(row: Record<string, unknown>): UserInviteLinkResponse {
     expiresAt: link.expires_at?.toISOString() ?? null,
     revokedAt: link.revoked_at?.toISOString() ?? null,
     createdAt: (row.created_at as Date).toISOString(),
+    createdByName: (row.created_by_name as string | null) ?? null,
     status: statusFor(link),
     redemptions: redemptions.map((redemption) => {
       const item = redemption as Record<string, unknown>;
@@ -143,6 +145,7 @@ function toResponse(row: Record<string, unknown>): UserInviteLinkResponse {
 async function listLinks(): Promise<UserInviteLinkResponse[]> {
   const { rows } = await pool.query(
     `SELECT l.id, l.token, l.kind, l.enterprise_id, e.name AS enterprise_name,
+            NULLIF(BTRIM(CONCAT_WS(' ', creator.name, creator.surname)), '') AS created_by_name,
             l.role_ids, l.max_redeems, l.redeemed_count, l.expires_at,
             l.revoked_at, l.created_at,
             COALESCE(
@@ -161,8 +164,9 @@ async function listLinks(): Promise<UserInviteLinkResponse[]> {
             ) AS redemptions
        FROM user_invite_links l
        LEFT JOIN enterprises e ON e.id = l.enterprise_id
+       LEFT JOIN users creator ON creator.id = l.created_by
        LEFT JOIN user_invite_link_redemptions r ON r.link_id = l.id
-      GROUP BY l.id, e.name
+      GROUP BY l.id, e.name, creator.name, creator.surname
       ORDER BY l.created_at DESC`,
   );
   return rows.map((row: Record<string, unknown>) => toResponse(row));

@@ -38,6 +38,7 @@ type Record = {
   used: number;
   expires: string | null;
   created: string;
+  createdBy: string | null;
   redemptions: Redemption[];
 };
 
@@ -88,6 +89,7 @@ export function InvitationsScreen() {
           used: 0,
           expires: item.expiresAt,
           created: item.createdAt,
+          createdBy: null,
           redemptions: [],
         })),
         ...links.map((item) => ({
@@ -102,6 +104,7 @@ export function InvitationsScreen() {
           used: item.redeemedCount,
           expires: item.expiresAt,
           created: item.createdAt,
+          createdBy: item.createdByName,
           redemptions: item.redemptions,
         })),
         ...enterpriseLinks.map((item) => ({
@@ -116,6 +119,7 @@ export function InvitationsScreen() {
           used: item.redeemedCount,
           expires: item.expiresAt,
           created: item.createdAt,
+          createdBy: item.createdByName,
           redemptions: item.redemptions,
         })),
       ].sort((a, b) => b.created.localeCompare(a.created)),
@@ -275,7 +279,11 @@ export function InvitationsScreen() {
               <ol className="space-y-0 text-sm">
                 <li className="relative border-l pb-5 pl-5 before:absolute before:-left-1.25 before:top-1 before:size-2 before:rounded-full before:bg-foreground">
                   <p className="font-medium">
-                    {selected.source === "email" ? t("invitationSent") : t("inviteLinkCreated")}
+                    {selected.createdBy
+                      ? `${selected.createdBy} · ${selected.source === "email" ? t("invitationSent") : t("inviteLinkCreated")}`
+                      : selected.source === "email"
+                        ? t("invitationSent")
+                        : t("inviteLinkCreated")}
                   </p>
                   <time className="text-muted-foreground text-xs">
                     {dateFmt.format(new Date(selected.created))}
