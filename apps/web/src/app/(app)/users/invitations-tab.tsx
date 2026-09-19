@@ -312,7 +312,35 @@ export function InvitationsScreen() {
             <section className="space-y-4">
               <h2 className="type-section-title">{t("created")}</h2>
               <ol className="space-y-0 text-sm">
-                <li className="relative border-l pb-5 pl-5 before:absolute before:-left-1.25 before:top-1 before:size-2 before:rounded-full before:bg-foreground">
+                {selected.expires && (
+                  <li className="relative border-l pb-5 pl-5 before:absolute before:-left-1.25 before:top-1 before:size-2 before:rounded-full before:bg-muted-foreground">
+                    <p className="font-medium">
+                      {new Date(selected.expires) <= new Date()
+                        ? t("linkStatusExpired")
+                        : t("colExpires")}
+                    </p>
+                    <time className="text-muted-foreground text-xs">
+                      {dateFmt.format(new Date(selected.expires))}
+                    </time>
+                  </li>
+                )}
+                {[...selected.redemptions]
+                  .sort((a, b) => b.redeemedAt.localeCompare(a.redeemedAt))
+                  .map((redemption) => (
+                    <li
+                      key={`${redemption.email}:${redemption.redeemedAt}`}
+                      className="relative border-l pb-5 pl-5 before:absolute before:-left-1.25 before:top-1 before:size-2 before:rounded-full before:bg-muted-foreground"
+                    >
+                      <p className="font-medium">{redemption.name ?? redemption.email}</p>
+                      <p className="text-muted-foreground text-xs">{redemption.email}</p>
+                      <time className="text-muted-foreground text-xs">
+                        {dateFmt.format(new Date(redemption.redeemedAt))}
+                        {redemption.redeemedIp ? ` · ${redemption.redeemedIp}` : ""}
+                        {redemption.redeemedUserAgent ? ` · ${redemption.redeemedUserAgent}` : ""}
+                      </time>
+                    </li>
+                  ))}
+                <li className="relative pl-5 before:absolute before:-left-1.25 before:top-1 before:size-2 before:rounded-full before:bg-foreground">
                   <p className="font-medium">
                     {selected.createdBy
                       ? `${selected.createdBy} · ${selected.source === "email" ? t("invitationSent") : t("inviteLinkCreated")}`
@@ -324,28 +352,6 @@ export function InvitationsScreen() {
                     {dateFmt.format(new Date(selected.created))}
                   </time>
                 </li>
-                {selected.redemptions.map((redemption) => (
-                  <li
-                    key={`${redemption.email}:${redemption.redeemedAt}`}
-                    className="relative border-l pb-5 pl-5 before:absolute before:-left-1.25 before:top-1 before:size-2 before:rounded-full before:bg-muted-foreground"
-                  >
-                    <p className="font-medium">{redemption.name ?? redemption.email}</p>
-                    <p className="text-muted-foreground text-xs">{redemption.email}</p>
-                    <time className="text-muted-foreground text-xs">
-                      {dateFmt.format(new Date(redemption.redeemedAt))}
-                      {redemption.redeemedIp ? ` · ${redemption.redeemedIp}` : ""}
-                      {redemption.redeemedUserAgent ? ` · ${redemption.redeemedUserAgent}` : ""}
-                    </time>
-                  </li>
-                ))}
-                {selected.expires && (
-                  <li className="relative pl-5 before:absolute before:-left-1.25 before:top-1 before:size-2 before:rounded-full before:bg-muted-foreground">
-                    <p className="font-medium">{t("linkStatusExpired")}</p>
-                    <time className="text-muted-foreground text-xs">
-                      {dateFmt.format(new Date(selected.expires))}
-                    </time>
-                  </li>
-                )}
               </ol>
             </section>
           </div>
