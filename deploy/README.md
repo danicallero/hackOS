@@ -514,9 +514,12 @@ The home screen is task-led: **Overview**, **Operate installed services**,
 **View logs**, **Images and releases**, **Manage superadmins**, and **Help**.
 The service screen contains only start, stop, recreate and stop-all actions;
 it never accesses the registry. The release screen separates inspection,
-published-image browsing and deployment. Deployment then asks for the target
-unit, resolves and displays the immutable SHA, and requires typing `DEPLOY`
-before pulling or replacing anything.
+published-image browsing and deployment. Published images are grouped by
+canonical SHA and sorted newest first using their OCI publication time; the
+same row shows the channel and API/web availability. Selecting a SHA first
+shows that list, then asks for the chosen tag and target unit. Deployment
+resolves and displays the immutable SHA, and requires typing `DEPLOY` before
+pulling or replacing anything.
 
 ### Lifecycle and release operations are deliberately separate
 
@@ -527,7 +530,7 @@ deployment** submenu and to the CLI:
 |---|---|---|
 | `start`, `stop`, `recreate`, `shutdown` | None | Operate only on containers and images already present on the host. `start` never pulls. |
 | `status`, `release` | Local Docker inspection only | Show service state; `release` also shows the deployed image, channel, commit and creation time. |
-| `available` | GHCR package registry | List operator-selectable API/web images, distinguishing `staging`, `main` and legacy SHA tags. |
+| `available` | GHCR package registry | List operator-selectable API/web images by OCI publication date (newest first), distinguishing `staging`, `main` and legacy SHA tags. |
 | `deploy latest` | Resolves the current channel release, then pulls it | Staging deploys the latest successful staging build; production prints the protected workflow command instead of bypassing approval. |
 | `deploy sha-<commit>` | Validates the immutable SHA release, then pulls it | Deploy or roll back the selected API, web, or both units. |
 

@@ -1557,6 +1557,53 @@ ghcr_tags() {
     die "could not list GHCR tags for $package"
 }
 
+ghcr_created_at() {
+  local package="$1" tag="$2" token
+  require_registry_tools
+  token="$(
+    curl --fail --silent --show-error --get 'https://ghcr.io/token' \
+      --data-urlencode 'service=ghcr.io' \
+      --data-urlencode "scope=repository:${github_owner}/${package}:pull" |
+      python3 -c 'import json, sys; print(json.load(sys.stdin)["token"])'
+  )" || die "could not obtain a read-only GHCR token for $package"
+  GHCR_TOKEN="$token" python3 - "$github_owner" "$package" "$tag" <<'PY'
+import json
+import os
+import sys
+from urllib.request import Request, urlopen
+
+owner, package, tag = sys.argv[1:]
+base = f"https://ghcr.io/v2/{owner}/{package}"
+headers = {
+    "Authorization": f"Bearer {os.environ['GHCR_TOKEN']}",
+    "Accept": "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json",
+}
+
+def get_json(url, accept=None):
+    request_headers = dict(headers)
+    if accept:
+        request_headers["Accept"] = accept
+    with urlopen(Request(url, headers=request_headers), timeout=20) as response:
+        return json.load(response)
+
+index = get_json(f"{base}/manifests/{tag}")
+manifests = index.get("manifests", [index])
+manifest = next(
+    (item for item in manifests if item.get("platform", {}).get("os") == "linux" and item.get("platform", {}).get("architecture") == "arm64"),
+    next((item for item in manifests if item.get("platform", {}).get("os") == "linux"), None),
+)
+if not manifest:
+    raise SystemExit("no Linux image manifest found")
+image = get_json(
+    f"{base}/manifests/{manifest['digest']}",
+    "application/vnd.oci.image.manifest.v1+json",
+)
+config = get_json(f"{base}/blobs/{image['config']['digest']}")
+labels = config.get("config", {}).get("Labels", {}) or {}
+print(labels.get("org.opencontainers.image.created") or config.get("created") or "unknown")
+PY
+}
+
 github_api() {
   require_registry_tools
   curl --fail --silent --show-error \
@@ -1564,36 +1611,62 @@ github_api() {
     "https://api.github.com/repos/${github_repository}/$1"
 }
 
-is_release_tag() {
-  [[ "$1" =~ ^(staging-|main-)?sha-[0-9a-f]{40}$ ]]
+canonical_release_tag() {
+  local tag="$1"
+  case "$tag" in
+    sha-[0-9a-f]*) [[ "$tag" =~ ^sha-[0-9a-f]{40}$ ]] && printf '%s\n' "$tag" ;;
+    staging-sha-[0-9a-f]*)
+      tag="sha-${tag#staging-sha-}"
+      [[ "$tag" =~ ^sha-[0-9a-f]{40}$ ]] && printf '%s\n' "$tag"
+      ;;
+    main-sha-[0-9a-f]*)
+      tag="sha-${tag#main-sha-}"
+      [[ "$tag" =~ ^sha-[0-9a-f]{40}$ ]] && printf '%s\n' "$tag"
+      ;;
+  esac
 }
 
 published_releases() {
-  local tag channel
-  local -A api_tags=() web_tags=() all_tags=()
+  local tag release_tag channel created
+  local -A api_tags=() web_tags=() all_tags=() channels=()
 
   while IFS= read -r tag; do
-    is_release_tag "$tag" || continue
-    api_tags["$tag"]=true
-    all_tags["$tag"]=true
+    release_tag="$(canonical_release_tag "$tag" || true)"
+    [[ -n "$release_tag" ]] || continue
+    case "$tag" in
+      staging-*) channels["$release_tag"]=staging ;;
+      main-*) channels["$release_tag"]=main ;;
+    esac
+    if [[ "$tag" == "$release_tag" ]]; then
+      api_tags["$release_tag"]=true
+      all_tags["$release_tag"]=true
+    fi
   done < <(ghcr_tags hackos-api)
   while IFS= read -r tag; do
-    is_release_tag "$tag" || continue
-    web_tags["$tag"]=true
-    all_tags["$tag"]=true
+    release_tag="$(canonical_release_tag "$tag" || true)"
+    [[ -n "$release_tag" ]] || continue
+    case "$tag" in
+      staging-*) channels["$release_tag"]=staging ;;
+      main-*) channels["$release_tag"]=main ;;
+    esac
+    if [[ "$tag" == "$release_tag" ]]; then
+      web_tags["$release_tag"]=true
+      all_tags["$release_tag"]=true
+    fi
   done < <(ghcr_tags hackos-web)
 
-  printf '%-12s %-52s %-5s %-5s\n' 'CHANNEL' 'TAG' 'API' 'WEB'
+  printf '%-25s %-10s %-52s %-5s %-5s\n' 'PUBLISHED (UTC)' 'CHANNEL' 'TAG' 'API' 'WEB'
   for tag in "${!all_tags[@]}"; do
-    case "$tag" in
-      staging-sha-*) channel=staging ;;
-      main-sha-*) channel=main ;;
-      *) channel=legacy ;;
-    esac
-    printf '%-12s %-52s %-5s %-5s\n' \
-      "$channel" "$tag" \
+    channel="${channels[$tag]:-legacy}"
+    if [[ -n "${api_tags[$tag]:-}" ]]; then
+      created="$(ghcr_created_at hackos-api "$tag")"
+    else
+      created="$(ghcr_created_at hackos-web "$tag")"
+    fi
+    printf '%s\t%-25s %-10s %-52s %-5s %-5s\n' \
+      "$created" "$created" "$channel" "$tag" \
       "${api_tags[$tag]:-no}" "${web_tags[$tag]:-no}"
-  done | sort -r
+  done | sort -r | cut -f2-
 }
 
 latest_staging_tag() {
@@ -1713,6 +1786,7 @@ release_shell() {
     1) run_action "published images" available ;;
     2) deploy_target_shell latest ;;
     3)
+      run_action "published images" available
       read_shell_input "Release tag (sha-<40 hex>, b back, q quit): "
       [[ "$shell_navigation" == value ]] || return 0
       deploy_target_shell "$shell_input"
