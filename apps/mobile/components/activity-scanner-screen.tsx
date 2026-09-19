@@ -395,7 +395,6 @@ function ActivityResultPanel({
         style={{
           borderCurve: "continuous",
           borderRadius: 28,
-          minHeight: 238,
           maxHeight: cardMaxHeight,
           maxWidth: 390,
           overflow: "hidden",
