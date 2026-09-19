@@ -539,6 +539,7 @@ function ActivityResultPanel({
           <View
             style={{
               flexShrink: 0,
+              minHeight: 50,
               paddingBottom: 20,
               paddingHorizontal: 20,
               paddingTop: 4,
@@ -572,9 +573,9 @@ function ResultActionButton({
       onPress={onPress}
       style={({ pressed }) => ({
         alignItems: "center",
+        alignSelf: "stretch",
         backgroundColor: colors.accent,
         borderRadius: 999,
-        flex: 1,
         height: 50,
         justifyContent: "center",
         opacity: pressed ? 0.72 : 1,
