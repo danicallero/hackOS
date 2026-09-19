@@ -124,11 +124,14 @@ export function InvitationsScreen() {
 
   const columns: Column<Record>[] = [
     {
-      id: "kind",
-      header: t("colType"),
-      cell: (row) => (
-        <StatusBadge tone="neutral">{row.source === "email" ? t("email") : t("link")}</StatusBadge>
-      ),
+      id: "recipient",
+      header: t("recipient"),
+      cell: (row) =>
+        row.source === "email" ? (
+          <span className="font-medium">{row.label}</span>
+        ) : (
+          <StatusBadge tone="neutral">{t("inviteLink")}</StatusBadge>
+        ),
     },
     {
       id: "grants",
