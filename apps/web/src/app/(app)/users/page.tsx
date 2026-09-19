@@ -42,7 +42,6 @@ import { logisticsApi } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type { UserList, UserListItem } from "@/lib/types";
-import { InvitationsModal } from "./invitations-tab";
 import { ReviewFixturesDialog } from "./review-fixtures-dialog";
 
 function fullName(u: UserListItem): string {
@@ -479,7 +478,9 @@ export default function UsersPage() {
         actions={
           <>
             <CapabilityGate capability={CAPABILITIES.INVITES_MANAGE}>
-              <InvitationsModal />
+              <Button asChild variant="outline">
+                <Link href="/users/invites">{t("invitationManagement")}</Link>
+              </Button>
             </CapabilityGate>
             <CapabilityGate capability={CAPABILITIES.ADMIN_ALL}>
               <ReviewFixturesDialog />
