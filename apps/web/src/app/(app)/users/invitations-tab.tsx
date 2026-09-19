@@ -260,7 +260,7 @@ export function InvitationsScreen() {
         onOpenChange={(open) => !open && setSelected(null)}
         icon={selected?.source === "email" ? MailIcon : LinkIcon}
         title={selected?.source === "email" ? selected.label : t("inviteLink")}
-        className="sm:w-[min(40rem,calc(100vw-2rem))]"
+        className="w-[min(40rem,calc(100vw-1rem))] sm:w-[min(40rem,calc(100vw-2rem))]"
         footer={
           selected ? (
             <div className="flex flex-wrap gap-2">

@@ -152,6 +152,7 @@ export function InviteUserDialog({ onChanged }: { onChanged?: () => void | Promi
           <UserPlusIcon className="size-4" aria-hidden="true" /> {t("inviteUser")}
         </Button>
       }
+      className="w-[min(40rem,calc(100vw-1rem))] sm:w-[min(40rem,calc(100vw-2rem))]"
       icon={method === "email" ? MailIcon : LinkIcon}
       title={method === "email" ? t("inviteUser") : t("createLink")}
       footer={
