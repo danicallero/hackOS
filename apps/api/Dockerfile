@@ -49,6 +49,11 @@ ENV NODE_ENV=production
 # throw ENOENT the first time a configured deploy tries to sign a pass.
 RUN apk add --no-cache tini openssl
 COPY --from=build /app /app
+# `pnpm deploy` copies the package runtime but does not include this
+# repository-level migration bundle. Keep it beside the deployed package so
+# dist/migrate.js can resolve ../db/migrations at runtime (H10, H53).
+COPY --from=build /repo/apps/api/db/migrations /app/db/migrations
+RUN test -f /app/db/migrations/0001_hackos_baseline.sql
 WORKDIR /app
 
 # Drop root. node:alpine ships an unprivileged `node` user (uid 1000).
