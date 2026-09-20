@@ -162,6 +162,8 @@ fi
 
 r2_backups_enabled="$(value R2_BACKUPS_ENABLED)"
 r2_backups_enabled="${r2_backups_enabled:-false}"
+r2_backup_frequency="$(value R2_BACKUP_FREQUENCY)"
+r2_backup_frequency="${r2_backup_frequency:-disabled}"
 case "$r2_backups_enabled" in
   false) ;;
   true)
@@ -177,6 +179,14 @@ case "$r2_backups_enabled" in
     ;;
   *) die 'R2_BACKUPS_ENABLED must be true or false' ;;
 esac
+
+case "$r2_backup_frequency" in
+  disabled|daily|weekly|monthly) ;;
+  *) die 'R2_BACKUP_FREQUENCY must be disabled, daily, weekly or monthly' ;;
+esac
+if [[ "$r2_backups_enabled" != true && "$r2_backup_frequency" != disabled ]]; then
+  die 'R2_BACKUP_FREQUENCY requires R2_BACKUPS_ENABLED=true'
+fi
 
 apple_keys=(
   APPLE_PASS_CERTIFICATE_PEM

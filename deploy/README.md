@@ -89,12 +89,14 @@ containers are recreated.
 
 Cada host mantiene dos ficheros planos fuera del repositorio:
 
-- `/etc/hackos/hackos.env`: configuración no secreta, basada en
-  [`deploy/.env.example`](./.env.example).
-- `/etc/hackos/hackos.secrets`: credenciales y claves privadas, con permisos
-  `0600` y sin copiarlo al repositorio.
-- [`deploy/.env.secrets.example`](./.env.secrets.example): plantilla con los
-  nombres de secretos y valores vacíos; nunca se usa como fichero real.
+| Fichero | Contenido | Plantilla |
+|---|---|---|
+| `/etc/hackos/hackos.env` | Sólo configuración no secreta: imagen, dominios, puertos, nombres de cuentas, S3 público, correo, logs, R2 y metadatos Wallet. | [`deploy/.env.example`](./.env.example) |
+| `/etc/hackos/hackos.secrets` | Sólo credenciales y material privado: contraseñas, claves S3/R2/SMTP, `BETTER_AUTH_SECRET`, claves de traducción, fixtures y PEM Wallet. Permisos `0600`. | [`deploy/.secrets.example`](./.secrets.example) |
+
+No se permite duplicar una clave entre los dos ficheros. La plantilla de
+secretos contiene nombres y valores vacíos; nunca se usa como fichero real ni
+se copia al repositorio.
 
 El contrato canónico es siempre esta pareja. El despliegue acepta además, de
 forma explícita y temporal, un único `/etc/hackos/hackos.env` con permisos
@@ -471,6 +473,9 @@ ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging logs --event-t
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging start
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging recreate api
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging release api
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging available
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging deploy latest --both
+ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging deploy sha-<40-hex> --api
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging stop api
 ssh "$STAGING_USER@$STAGING_HOST" /opt/hackos/services.sh staging shutdown
 ```
@@ -497,14 +502,40 @@ The shell includes the CLI-only `system:superadmin` setup and management flow.
 It calls the official server-side scripts in the API image, so grants and
 revocations remain audited and the last active superadmin cannot be removed.
 The interactive shell supports arrows, Enter or right-arrow to select,
-left-arrow/Escape/`b` to go back, and `q` to quit. Service actions use Space
+left-arrow/Escape/`b` to go back exactly one menu level, and `q` to quit. Service actions use Space
 to select multiple services and Enter to confirm. Status includes a short
 reason for stopped one-shot or failed containers. The log view supports
 multi-select filters (`error`, `warning`, `request`, `health`) and optional
 custom text search, with refresh/follow/filter/service navigation and an export
 command for saving remote logs locally. Selected event categories are combined;
-custom text narrows the result further. Start also offers per-service
-start/recreate, image release information, and local rebuild instructions.
+custom text narrows the result further.
+The home screen is task-led: **Overview**, **Operate installed services**,
+**View logs**, **Images and releases**, **Manage superadmins**, and **Help**.
+The service screen contains only direct start, stop, recreate and stop-all actions;
+it never accesses the registry. The release screen separates inspection,
+published-image browsing, deployment and local rebuild instructions. Published images are grouped by
+canonical SHA and sorted newest first using their OCI publication time; the
+same row shows the channel and API/web availability. Selecting a SHA first
+shows that list, then asks for the chosen tag and target unit. Deployment
+resolves and displays the immutable SHA, and requires typing `DEPLOY` before
+pulling or replacing anything.
+
+### Lifecycle and release operations are deliberately separate
+
+The same distinction applies to the interactive shell's **Releases and
+deployment** submenu and to the CLI:
+
+| Operation | Registry/GitHub access | Effect |
+|---|---|---|
+| `start`, `stop`, `recreate`, `shutdown` | None | Operate only on containers and images already present on the host. `start` unpauses paused containers and starts existing stopped containers without pulling or rebuilding (falling back to `--pull never` only if a container was deleted); it never queries GHCR or downloads images. `recreate` explicitly uses Compose's `--pull never`. |
+| `status`, `release` | Local Docker inspection only | Show service state; `release` also shows the deployed image, channel, commit and creation time. |
+| `available` | GHCR package registry | List operator-selectable API/web images by OCI publication date (newest first), distinguishing `staging`, `main` and legacy SHA tags. |
+| `deploy latest` | Resolves the current channel release, then pulls it | Staging deploys the latest successful staging build; production prints the protected workflow command instead of bypassing approval. |
+| `deploy sha-<commit>` | Validates the immutable SHA release, then pulls it | Deploy or roll back the selected API, web, or both units. |
+
+`latest` never means Docker `:latest`: every deploy resolves a published
+immutable `sha-<40 hexadecimal characters>` tag. The command prints the
+environment, affected units and selected image tag before acting.
 The non-interactive equivalents are:
 
 ```sh
@@ -604,6 +635,7 @@ Configurar entonces:
 ```text
 # /etc/hackos/hackos.env
 R2_BACKUPS_ENABLED=true
+R2_BACKUP_FREQUENCY=daily # disabled, daily, weekly or monthly
 R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
 R2_BUCKET=hackos-backups
 R2_PREFIX=hackos
@@ -619,25 +651,18 @@ La primera copia puede probarse dentro del LXC con:
 /opt/hackos/backup-r2.sh production
 ```
 
-Para programar una copia diaria, instalar y habilitar manualmente las unidades
-incluidas en [`systemd/`](./systemd), sólo después de validar credenciales y
-una restauración:
-
-```sh
-incus file push deploy/systemd/hackos-backup.service hackos/etc/systemd/system/hackos-backup.service
-incus file push deploy/systemd/hackos-backup.timer hackos/etc/systemd/system/hackos-backup.timer
-incus exec hackos -- systemctl daemon-reload
-incus exec hackos -- systemctl enable --now hackos-backup.timer
-```
-
-El timer está preparado para producción; para staging hay que crear una unidad
-equivalente que invoque `backup-r2.sh staging`.
+La infraestructura instala el timer al aplicar la configuración del LXC. Usa
+`R2_BACKUP_FREQUENCY=disabled` para no programarlo, o `daily`, `weekly` o
+`monthly` después de validar las credenciales y una restauración. La frecuencia
+no acepta expresiones cron arbitrarias; así una edición del `.env` no puede
+inyectar opciones en systemd. Staging debe usar su propio `.env`, credenciales
+y timer, nunca el de producción.
 
 La política de retención debe configurarse en el bucket R2 (por ejemplo,
 eliminación de objetos antiguos tras 90 días) y debe validarse una restauración
 antes del primer evento. Este helper no descifra SOPS ni imprime credenciales;
-la programación periódica mediante un timer del LXC queda como habilitación
-operativa manual porque el repositorio de infraestructura no está publicado.
+la programación periódica mediante un timer del LXC queda gestionada por la
+configuración de infraestructura, no por un despliegue de aplicación.
 
 ## Archivos canónicos
 
@@ -649,7 +674,7 @@ operativa manual porque el repositorio de infraestructura no está publicado.
   y MinIO a R2.
 - [`scripts/services.sh`](./scripts/services.sh): operaciones seguras de estado,
   logs y ciclo de vida para los proyectos staging y production.
-- [`systemd/`](./systemd): unidades para habilitar el backup diario de forma
-  manual.
+- La infraestructura genera las unidades systemd del backup a partir de
+  `R2_BACKUP_FREQUENCY`.
 - [`../docs/env-vars.md`](../docs/env-vars.md): contrato de variables por
   proceso.
