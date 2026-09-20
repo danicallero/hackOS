@@ -97,6 +97,11 @@ function SheetContent({
         }}
         {...props}
       >
+        <div
+          data-slot="sheet-portal-container"
+          className="pointer-events-none fixed inset-0 z-50"
+          aria-hidden="true"
+        />
         {children}
         {showCloseButton && (
           <SheetPrimitive.Close className={cn(dialogIconButtonClass, "absolute top-3 right-3 z-10")} title={t("close")}>

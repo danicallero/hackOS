@@ -10,7 +10,7 @@ import {
 } from "react";
 
 export const OVERLAY_CONTAINER_SELECTOR =
-  '[data-slot="dialog-content"], [data-slot="sheet-content"], [data-slot="alert-dialog-content"], [data-slot="popover-content"], [data-slot="dropdown-menu-content"], [data-slot="select-content"]';
+  '[data-slot="sheet-portal-container"], [data-slot="dialog-content"], [data-slot="sheet-content"], [data-slot="alert-dialog-content"], [data-slot="popover-content"], [data-slot="dropdown-menu-content"], [data-slot="select-content"]';
 
 export function getOverlayContainer(anchor: HTMLElement | null) {
   return anchor?.closest<HTMLElement>(OVERLAY_CONTAINER_SELECTOR) ?? null;
