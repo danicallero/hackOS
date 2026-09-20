@@ -114,6 +114,11 @@ function DialogContent({
         }}
         {...props}
       >
+        <div
+          data-slot="dialog-portal-container"
+          className="pointer-events-none fixed inset-0 z-50"
+          aria-hidden="true"
+        />
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close
