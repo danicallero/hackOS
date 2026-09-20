@@ -21,8 +21,8 @@ jobs:
         run: |
           set -euo pipefail
           tag="release-${RELEASE_SHA:0:12}"
-          if gh release view "$tag" >/dev/null 2>&1; then
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             exit 0
           fi
-          gh release create "$tag" --target "$RELEASE_SHA" --generate-notes \
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$RELEASE_SHA" --generate-notes \
             --title "Production candidate ${RELEASE_SHA:0:12}"
