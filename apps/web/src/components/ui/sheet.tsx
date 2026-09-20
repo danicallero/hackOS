@@ -101,14 +101,15 @@ function SheetContent({
           data-slot="sheet-portal-container"
           className="pointer-events-none fixed inset-0 z-50"
           aria-hidden="true"
-        />
-        {children}
-        {showCloseButton && (
-          <SheetPrimitive.Close className={cn(dialogIconButtonClass, "absolute top-3 right-3 z-10")} title={t("close")}>
-            <XIcon className="size-4" />
-            <span className="sr-only">{t("close")}</span>
-          </SheetPrimitive.Close>
-        )}
+        >
+          {children}
+          {showCloseButton && (
+            <SheetPrimitive.Close className={cn(dialogIconButtonClass, "absolute top-3 right-3 z-10")} title={t("close")}>
+              <XIcon className="size-4" />
+              <span className="sr-only">{t("close")}</span>
+            </SheetPrimitive.Close>
+          )}
+        </div>
       </SheetPrimitive.Content>
     </SheetPortal>
   )
