@@ -116,21 +116,20 @@ function DialogContent({
       >
         <div
           data-slot="dialog-portal-container"
-          className="pointer-events-none fixed inset-0 z-50"
+          className="fixed inset-0 z-50"
           aria-hidden="true"
-        >
-          {children}
-          {showCloseButton && (
-            <DialogPrimitive.Close
-              data-slot="dialog-close"
-              className={cn(dialogIconButtonClass, "absolute top-3 right-3 z-10")}
-              title={t("close")}
-            >
-              <XIcon />
-              <span className="sr-only">{t("close")}</span>
-            </DialogPrimitive.Close>
-          )}
-        </div>
+        />
+        {children}
+        {showCloseButton && (
+          <DialogPrimitive.Close
+            data-slot="dialog-close"
+            className={cn(dialogIconButtonClass, "absolute top-3 right-3 z-10")}
+            title={t("close")}
+          >
+            <XIcon />
+            <span className="sr-only">{t("close")}</span>
+          </DialogPrimitive.Close>
+        )}
       </DialogPrimitive.Content>
       {floatingContent}
     </DialogPortal>
