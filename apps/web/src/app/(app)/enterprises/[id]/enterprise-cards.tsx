@@ -22,6 +22,7 @@ import { SubmitButton } from "@/components/common/submit-button";
 import { type UserOption, UserPicker } from "@/components/common/user-picker";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
   FormControl,
@@ -443,10 +444,15 @@ export function EditCard({
     defaultValues: toFormValues(enterprise),
   });
   const { reset } = form;
+  const [scheduledPublish, setScheduledPublish] = useState(
+    enterprise.visibility === "hidden" && Boolean(enterprise.available_from),
+  );
+  const visibility = form.watch("visibility");
 
   // Re-sync when the underlying record changes (e.g. after a logo upload reload).
   useEffect(() => {
     reset(toFormValues(enterprise));
+    setScheduledPublish(enterprise.visibility === "hidden" && Boolean(enterprise.available_from));
   }, [enterprise, reset]);
 
   async function onSubmit(values: EditValues) {
@@ -580,7 +586,16 @@ export function EditCard({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>{t("colVisibility")}</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select
+                      onValueChange={(next) => {
+                        field.onChange(next);
+                        if (next === "visible") {
+                          setScheduledPublish(false);
+                          form.setValue("availableFrom", "", { shouldDirty: true });
+                        }
+                      }}
+                      value={field.value}
+                    >
                       <FormControl>
                         <SelectTrigger className="w-full">
                           <SelectValue />
@@ -595,25 +610,47 @@ export function EditCard({
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="availableFrom"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("revealFromLabel")}</FormLabel>
-                    <FormControl>
-                      <DateTimeInput
-                        value={field.value}
-                        onChange={(value) =>
-                          form.setValue("availableFrom", value, { shouldDirty: true })
-                        }
-                        nullOption={{ label: t("immediate") }}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {visibility === "hidden" && (
+                <div className="space-y-3">
+                  <Label htmlFor="enterprise-scheduled-publish" className="flex items-center gap-2">
+                    <Checkbox
+                      id="enterprise-scheduled-publish"
+                      checked={scheduledPublish}
+                      onCheckedChange={(checked) => {
+                        const next = checked === true;
+                        setScheduledPublish(next);
+                        form.setValue(
+                          "availableFrom",
+                          next ? toDatetimeLocal(new Date().toISOString()) : "",
+                          { shouldDirty: true },
+                        );
+                      }}
+                    />
+                    {t("schedulePublicationLabel")}
+                  </Label>
+                  {scheduledPublish && (
+                    <FormField
+                      control={form.control}
+                      name="availableFrom"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t("publishAtLabel")}</FormLabel>
+                          <FormControl>
+                            <DateTimeInput
+                              value={field.value}
+                              onChange={(value) => {
+                                setScheduledPublish(Boolean(value));
+                                form.setValue("availableFrom", value, { shouldDirty: true });
+                              }}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                </div>
+              )}
             </>
           )}
         </SectionCard>

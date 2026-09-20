@@ -1,10 +1,5 @@
 "use client";
 
-// Enterprises directory (H43/H44): admins with sponsors:manage list every
-// sponsor enterprise and create new ones. An enterprise is created up-front so
-// it can be referenced when inviting a sponsor rep, who auto-links to it on
-// acceptance. Row click drills into the edit page.
-
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -23,6 +18,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
   FormControl,
@@ -33,6 +29,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -43,7 +40,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api, apiUpload } from "@/lib/api";
-import { formatScheduledDateTime, fromDatetimeLocal } from "@/lib/datetime";
+import { formatScheduledDateTime, fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
@@ -56,9 +53,7 @@ import {
   visibilityTone,
 } from "./shared";
 
-// Optional URL: allow blank, otherwise must be a valid URL.
 const optionalUrl = z.string().url("Enter a valid URL").or(z.literal(""));
-// Optional positive integer typed as text so the input can be cleared.
 const optionalPositiveInt = z
   .string()
   .refine((v) => v === "" || (/^\d+$/.test(v) && Number(v) > 0), "Must be a positive number");
@@ -406,6 +401,8 @@ function CreateEnterpriseModal({
   const darkLogoInputRef = useRef<HTMLInputElement>(null);
   const [defaultLogo, setDefaultLogo] = useState<File | null>(null);
   const [darkLogo, setDarkLogo] = useState<File | null>(null);
+  const [scheduledPublish, setScheduledPublish] = useState(false);
+  const visibility = form.watch("visibility");
 
   // Reset the form each time the modal opens so stale input never lingers.
   useEffect(() => {
@@ -413,6 +410,7 @@ function CreateEnterpriseModal({
       reset();
       setDefaultLogo(null);
       setDarkLogo(null);
+      setScheduledPublish(false);
     }
   }, [open, reset]);
 
@@ -490,46 +488,6 @@ function CreateEnterpriseModal({
               </FormItem>
             )}
           />
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={form.formState.isSubmitting}
-              onClick={() => defaultLogoInputRef.current?.click()}
-            >
-              <UploadIcon aria-hidden="true" />
-              {defaultLogo ? defaultLogo.name : t("uploadLogo")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={form.formState.isSubmitting}
-              onClick={() => darkLogoInputRef.current?.click()}
-            >
-              <UploadIcon aria-hidden="true" />
-              {darkLogo ? darkLogo.name : t("uploadDarkLogo")}
-            </Button>
-            <input
-              ref={defaultLogoInputRef}
-              type="file"
-              accept={LOGO_ACCEPT}
-              className="hidden"
-              onChange={(event) => {
-                selectLogo(event.target.files?.[0], "default");
-                event.target.value = "";
-              }}
-            />
-            <input
-              ref={darkLogoInputRef}
-              type="file"
-              accept={LOGO_ACCEPT}
-              className="hidden"
-              onChange={(event) => {
-                selectLogo(event.target.files?.[0], "negative");
-                event.target.value = "";
-              }}
-            />
-          </div>
           <FormField
             control={form.control}
             name="website"
@@ -570,6 +528,51 @@ function CreateEnterpriseModal({
               </FormItem>
             )}
           />
+          <div className="space-y-2">
+            <p className="text-sm font-medium">{t("logoTitle")}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={form.formState.isSubmitting}
+                onClick={() => defaultLogoInputRef.current?.click()}
+              >
+                <UploadIcon aria-hidden="true" />
+                {defaultLogo ? defaultLogo.name : t("uploadLogo")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={form.formState.isSubmitting}
+                onClick={() => darkLogoInputRef.current?.click()}
+              >
+                <UploadIcon aria-hidden="true" />
+                {darkLogo ? darkLogo.name : t("uploadDarkLogo")}
+              </Button>
+            </div>
+            <input
+              ref={defaultLogoInputRef}
+              type="file"
+              accept={LOGO_ACCEPT}
+              className="sr-only"
+              aria-label={t("uploadLogo")}
+              onChange={(event) => {
+                selectLogo(event.target.files?.[0], "default");
+                event.target.value = "";
+              }}
+            />
+            <input
+              ref={darkLogoInputRef}
+              type="file"
+              accept={LOGO_ACCEPT}
+              className="sr-only"
+              aria-label={t("uploadDarkLogo")}
+              onChange={(event) => {
+                selectLogo(event.target.files?.[0], "negative");
+                event.target.value = "";
+              }}
+            />
+          </div>
           <FormField
             control={form.control}
             name="description"
@@ -603,7 +606,16 @@ function CreateEnterpriseModal({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>{t("colVisibility")}</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <Select
+                  onValueChange={(next) => {
+                    field.onChange(next);
+                    if (next === "visible") {
+                      setScheduledPublish(false);
+                      form.setValue("availableFrom", "", { shouldDirty: true });
+                    }
+                  }}
+                  value={field.value}
+                >
                   <FormControl>
                     <SelectTrigger className="w-full">
                       <SelectValue />
@@ -618,25 +630,47 @@ function CreateEnterpriseModal({
               </FormItem>
             )}
           />
-          <FormField
-            control={form.control}
-            name="availableFrom"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("revealFromLabel")}</FormLabel>
-                <FormControl>
-                  <DateTimeInput
-                    value={field.value}
-                    onChange={(value) =>
-                      form.setValue("availableFrom", value, { shouldDirty: true })
-                    }
-                    nullOption={{ label: t("immediate") }}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {visibility === "hidden" && (
+            <div className="space-y-3">
+              <Label htmlFor="enterprise-scheduled-publish" className="flex items-center gap-2">
+                <Checkbox
+                  id="enterprise-scheduled-publish"
+                  checked={scheduledPublish}
+                  onCheckedChange={(checked) => {
+                    const next = checked === true;
+                    setScheduledPublish(next);
+                    form.setValue(
+                      "availableFrom",
+                      next ? toDatetimeLocal(new Date().toISOString()) : "",
+                      { shouldDirty: true },
+                    );
+                  }}
+                />
+                {t("schedulePublicationLabel")}
+              </Label>
+              {scheduledPublish && (
+                <FormField
+                  control={form.control}
+                  name="availableFrom"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("publishAtLabel")}</FormLabel>
+                      <FormControl>
+                        <DateTimeInput
+                          value={field.value}
+                          onChange={(value) => {
+                            setScheduledPublish(Boolean(value));
+                            form.setValue("availableFrom", value, { shouldDirty: true });
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+            </div>
+          )}
         </form>
       </Form>
     </SidePanelEditor>
