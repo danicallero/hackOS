@@ -502,19 +502,18 @@ The shell includes the CLI-only `system:superadmin` setup and management flow.
 It calls the official server-side scripts in the API image, so grants and
 revocations remain audited and the last active superadmin cannot be removed.
 The interactive shell supports arrows, Enter or right-arrow to select,
-left-arrow/Escape/`b` to go back, and `q` to quit. Service actions use Space
+left-arrow/Escape/`b` to go back exactly one menu level, and `q` to quit. Service actions use Space
 to select multiple services and Enter to confirm. Status includes a short
 reason for stopped one-shot or failed containers. The log view supports
 multi-select filters (`error`, `warning`, `request`, `health`) and optional
 custom text search, with refresh/follow/filter/service navigation and an export
 command for saving remote logs locally. Selected event categories are combined;
-custom text narrows the result further. Start also offers per-service
-start/recreate, image release information, and local rebuild instructions.
+custom text narrows the result further.
 The home screen is task-led: **Overview**, **Operate installed services**,
 **View logs**, **Images and releases**, **Manage superadmins**, and **Help**.
-The service screen contains only start, stop, recreate and stop-all actions;
+The service screen contains only direct start, stop, recreate and stop-all actions;
 it never accesses the registry. The release screen separates inspection,
-published-image browsing and deployment. Published images are grouped by
+published-image browsing, deployment and local rebuild instructions. Published images are grouped by
 canonical SHA and sorted newest first using their OCI publication time; the
 same row shows the channel and API/web availability. Selecting a SHA first
 shows that list, then asks for the chosen tag and target unit. Deployment
@@ -528,7 +527,7 @@ deployment** submenu and to the CLI:
 
 | Operation | Registry/GitHub access | Effect |
 |---|---|---|
-| `start`, `stop`, `recreate`, `shutdown` | None | Operate only on containers and images already present on the host. `start` never pulls. |
+| `start`, `stop`, `recreate`, `shutdown` | None | Operate only on containers and images already present on the host. `start` unpauses paused containers and starts existing stopped containers without pulling or rebuilding (falling back to `--pull never` only if a container was deleted); it never queries GHCR or downloads images. `recreate` explicitly uses Compose's `--pull never`. |
 | `status`, `release` | Local Docker inspection only | Show service state; `release` also shows the deployed image, channel, commit and creation time. |
 | `available` | GHCR package registry | List operator-selectable API/web images by OCI publication date (newest first), distinguishing `staging`, `main` and legacy SHA tags. |
 | `deploy latest` | Resolves the current channel release, then pulls it | Staging deploys the latest successful staging build; production prints the protected workflow command instead of bypassing approval. |
