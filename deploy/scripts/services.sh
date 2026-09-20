@@ -116,7 +116,7 @@ read_shell_input() {
   fi
 
   case "$shell_input" in
-    [Bb]|[Bb][Aa][Cc][Kk])
+    $'\033'*|[Bb]|[Bb][Aa][Cc][Kk])
       shell_input=''
       shell_navigation=back
       ;;
@@ -239,7 +239,7 @@ run_api_script() {
   if compose ps --status running --services api 2>/dev/null | grep -Fxq api; then
     compose exec --no-TTY api node "$@"
   else
-    compose run --quiet-pull --rm --no-deps --entrypoint node api "$@"
+    compose run --pull never --rm --no-deps --entrypoint node api "$@"
   fi
 }
 
@@ -401,7 +401,7 @@ read_navigation_key() {
   case "$key" in
     $'\033')
       sequence=''
-      IFS= read -r -s -n 2 sequence || true
+      read -r -s -t 1 -n 2 sequence 2>/dev/null || true
       case "$sequence" in
         '[A'|OA) navigation_action=up ;;
         '[B'|OB) navigation_action=down ;;
@@ -606,14 +606,15 @@ format_status_stream() {
           else if (exit_code == "0") reason = "stopped cleanly"
           else if (exit_code ~ /^[0-9]+$/) reason = "failed (exit " exit_code ")"
           else reason = "stopped"
-        } else if (tolower(state) ~ /created/) reason = "not started"
+        } else if (tolower(state) ~ /paused/) reason = "paused"
+        else if (tolower(state) ~ /created/) reason = "not started"
         else if (tolower(state) ~ /restarting/) reason = "restarting"
         else if (tolower(health) ~ /unhealthy/) reason = "healthcheck failing"
         else if (tolower(state) ~ /running|up/ && tolower(health) ~ /healthy/) reason = "ready"
         else if (tolower(state) ~ /running|up/) reason = "running"
         colour = ""
         if (lower ~ /exited|dead|removing|failed/) colour = red
-        else if (lower ~ /starting|restarting|created/) colour = yellow
+        else if (lower ~ /starting|restarting|created|paused/) colour = yellow
         else if (lower ~ /running|up|healthy/) colour = green
         printf "%s%s\t%s\t%s\t%s\t%s\t%s%s\n", colour, service, state, health, exit_code, ports, reason, reset
       }
@@ -846,7 +847,7 @@ select_services_multi() {
       ;;
     start)
       title="Choose services to start"
-      subtitle="Select stopped or healthy services to bring up · Space toggles"
+      subtitle="Starts existing stopped containers only · Space toggles"
       scope_label="All runtime services"
       candidates=("${runtime_services[@]}")
       default_all=false
@@ -1234,6 +1235,15 @@ show_log_view() {
       refresh) ;;
       follow)
         follow_log_view
+        case "$log_view_navigation" in
+          back) log_view_navigation=refresh ;;
+          filter|services|quit) return 0 ;;
+          export)
+            print_log_export_command
+            [[ "$log_view_navigation" == quit ]] && return 0
+            log_view_navigation=refresh
+            ;;
+        esac
         ;;
       filter|services|export|back|quit)
         if [[ "$log_view_navigation" == export ]]; then
@@ -1266,91 +1276,11 @@ logs_shell() {
       case "$log_view_navigation" in
         quit) shell_quit=true; return 0 ;;
         services) break ;;
-        filter) continue ;;
-        back) return 0 ;;
+        # The log view is a child of the filter screen. Both Tab and ←/Esc
+        # return there; a second ←/Esc returns to service choice.
+        filter|back) continue ;;
       esac
     done
-  done
-}
-
-recreate_selected_services() {
-  local confirmation recreate_command=()
-
-  clear_shell
-  printf '%s\n\n' "${c_cyan}${c_bold}hackOS ${environment} · recreate services${c_reset}"
-  printf '%s\n' "${c_dim}The selected containers will be recreated with their current immutable image tags.${c_reset}"
-  print_service_releases "${selected_services[@]}"
-  printf '\n%s\n' "${c_yellow}This restarts: ${selected_services[*]}.${c_reset}"
-  read_shell_input "Type RECREATE to continue (b back, q quit): "
-  case "$shell_navigation" in
-    back) return 0 ;;
-    quit) shell_quit=true; return 0 ;;
-  esac
-  confirmation="$shell_input"
-  if [[ "$confirmation" != RECREATE ]]; then
-    printf '%s\n' "${c_dim}Recreation cancelled; no container was changed.${c_reset}"
-    pause_shell
-    return 0
-  fi
-  recreate_command=(recreate)
-  recreate_command+=("${selected_services[@]}")
-  printf '\n'
-  run_child "${recreate_command[@]}"
-  pause_shell
-}
-
-start_runtime_shell() {
-  local choices=(
-    "Start selected runtime services"
-    "Recreate selected runtime services"
-    "Show image releases"
-    "Local rebuild instructions"
-  )
-  local start_command=() release_command=()
-
-  while [[ "$shell_quit" != true ]]; do
-    if ! menu_select "Start runtime" "Select a focused action · ←/Esc returns" "${choices[@]}"; then
-      shell_quit=true
-      return 0
-    fi
-    case "$menu_navigation" in
-      back) return 0 ;;
-      quit) shell_quit=true; return 0 ;;
-      select)
-        case "$menu_choice" in
-          0)
-            select_services_multi start
-            case "$service_selection_navigation" in
-              quit) shell_quit=true; return 0 ;;
-              select)
-                start_command=(start "${selected_services[@]}")
-                run_action "start · ${selected_services[*]}" "${start_command[@]}"
-                ;;
-            esac
-            ;;
-          1)
-            select_services_multi recreate
-            case "$service_selection_navigation" in
-              quit) shell_quit=true; return 0 ;;
-              select) recreate_selected_services ;;
-            esac
-            ;;
-          2)
-            select_services_multi release
-            case "$service_selection_navigation" in
-              quit) shell_quit=true; return 0 ;;
-              select)
-                release_command=(release "${selected_services[@]}")
-                run_action "image releases · ${selected_services[*]}" "${release_command[@]}"
-                ;;
-            esac
-            ;;
-          3)
-            print_local_build_help
-            ;;
-        esac
-        ;;
-    esac
   done
 }
 
@@ -1361,6 +1291,8 @@ superadmin_count() {
   fi
   if [[ "$listing" =~ ^([0-9]+)[[:space:]]+account ]]; then
     printf '%s\n' "${BASH_REMATCH[1]}"
+  elif [[ "$listing" =~ [Nn]o[[:space:]]+account ]]; then
+    printf '0\n'
   else
     return 1
   fi
@@ -1414,7 +1346,8 @@ superadmin_shell() {
   local confirmation_status
 
   while [[ "$shell_quit" != true ]]; do
-    if ! menu_select "Superadmin management" "Audited account access · b returns to service operations" "${choices[@]}"; then
+    if ! menu_select "Superadmin management" "Audited account access · ←/Esc/b returns to main menu" "${choices[@]}"; then
+      shell_quit=true
       return 0
     fi
     case "$menu_navigation" in
@@ -1428,7 +1361,7 @@ superadmin_shell() {
       select)
         case "$menu_choice" in
           0)
-            run_action_without_pause "superadmins" superadmin list
+            run_action "superadmins" superadmin list
             ;;
           1)
             read_shell_input "New account email (b back, q quit): "
@@ -1614,7 +1547,13 @@ github_api() {
 canonical_release_tag() {
   local tag="$1"
   case "$tag" in
-    sha-[0-9a-f]*) [[ "$tag" =~ ^sha-[0-9a-f]{40}$ ]] && printf '%s\n' "$tag" ;;
+    [0-9a-f]*)
+      if [[ "$tag" =~ ^[0-9a-f]{40}$ ]]; then
+        printf 'sha-%s\n' "$tag"
+      elif [[ "$tag" =~ ^sha-[0-9a-f]{40}$ ]]; then
+        printf '%s\n' "$tag"
+      fi
+      ;;
     staging-sha-[0-9a-f]*)
       tag="sha-${tag#staging-sha-}"
       [[ "$tag" =~ ^sha-[0-9a-f]{40}$ ]] && printf '%s\n' "$tag"
@@ -1687,10 +1626,11 @@ latest_staging_tag() {
 }
 
 resolve_release_tag() {
-  local requested="$1" api_changed="$2" web_changed="$3" commit
+  local requested="$1" api_changed="$2" web_changed="$3" commit canonical
   if [[ "$requested" != latest ]]; then
-    [[ "$requested" =~ ^sha-[0-9a-f]{40}$ ]] || die "release must be latest or sha-<40 lowercase hex characters>"
-    printf '%s\n' "$requested"
+    canonical="$(canonical_release_tag "$requested" || true)"
+    [[ -n "$canonical" ]] || die "release must be latest, sha-<40 lowercase hex>, or a 40-character git commit hash"
+    printf '%s\n' "$canonical"
     return 0
   fi
   if [[ "$environment" == production ]]; then
@@ -1751,14 +1691,30 @@ deploy_release() {
 deploy_target_shell() {
   local requested="$1" tag option api_changed web_changed
   local choices=("API + worker" "Web" "API + worker and web")
-  if ! menu_select "Choose deployment target" "Only the selected unit is pulled and recreated" "${choices[@]}"; then return 0; fi
+  if ! menu_select "Choose deployment target" "Only the selected unit is pulled and recreated" "${choices[@]}"; then
+    shell_quit=true
+    return 0
+  fi
+  case "$menu_navigation" in
+    back) return 0 ;;
+    quit) shell_quit=true; return 0 ;;
+  esac
   case "$menu_choice" in
     0) option=--api; api_changed=true; web_changed=false ;;
     1) option=--web; api_changed=false; web_changed=true ;;
     2) option=--both; api_changed=true; web_changed=true ;;
+    *) return 0 ;;
   esac
-  tag="$(resolve_release_tag "$requested" "$api_changed" "$web_changed")"
-  validate_published_release "$tag" "$api_changed" "$web_changed"
+  if ! tag="$(resolve_release_tag "$requested" "$api_changed" "$web_changed" 2>/dev/null)"; then
+    printf '%s\n' "${c_red}Could not resolve release tag: ${requested}${c_reset}"
+    pause_shell
+    return 0
+  fi
+  if ! validate_published_release "$tag" "$api_changed" "$web_changed" 2>/dev/null; then
+    printf '%s\n' "${c_red}Release ${tag} is not published in GHCR for the selected units.${c_reset}"
+    pause_shell
+    return 0
+  fi
   clear_shell
   printf '%s\n\n' "${c_cyan}${c_bold}Confirm deployment${c_reset}"
   printf 'Environment: %s\nRelease:     %s\nAPI/worker:  %s\nWeb:         %s\n\n' \
@@ -1769,7 +1725,10 @@ deploy_target_shell() {
     printf '%s\n' "This pulls the selected immutable image and recreates only the selected services."
   fi
   read_shell_input "Type DEPLOY to continue (b back, q quit): "
-  [[ "$shell_navigation" == value ]] || return 0
+  case "$shell_navigation" in
+    back) return 0 ;;
+    quit) shell_quit=true; return 0 ;;
+  esac
   if [[ "$shell_input" == DEPLOY ]]; then
     run_action "deploy $tag" deploy "$tag" "$option"
   else
@@ -1779,51 +1738,101 @@ deploy_target_shell() {
 }
 
 release_shell() {
-  local choices=("Inspect deployed images" "Browse published images" "Deploy latest published image" "Deploy a selected SHA")
-  if ! menu_select "Images and releases" "Inspection is local · deployments are explicit" "${choices[@]}"; then return 0; fi
-  case "$menu_choice" in
-    0) run_action "deployed images" release ;;
-    1) run_action "published images" available ;;
-    2) deploy_target_shell latest ;;
-    3)
-      run_action "published images" available
-      read_shell_input "Release tag (sha-<40 hex>, b back, q quit): "
-      [[ "$shell_navigation" == value ]] || return 0
-      deploy_target_shell "$shell_input"
-      ;;
-  esac
+  local choices=(
+    "Inspect deployed images"
+    "Browse published images"
+    "Deploy latest published image"
+    "Deploy a selected SHA"
+    "Local rebuild instructions"
+  )
+  while [[ "$shell_quit" != true ]]; do
+    if ! menu_select "Images and releases" "Inspection is local · deployments are explicit" "${choices[@]}"; then
+      shell_quit=true
+      return 0
+    fi
+    case "$menu_navigation" in
+      back) return 0 ;;
+      quit) shell_quit=true; return 0 ;;
+      select)
+        case "$menu_choice" in
+          0) run_action "deployed images" release ;;
+          1) run_action "published images" available ;;
+          2) deploy_target_shell latest ;;
+          3)
+            clear_shell
+            printf '%s\n' "${c_cyan}${c_bold}hackOS ${environment} · select release${c_reset}"
+            printf '%s\n\n' "${c_dim}Published releases in GHCR (newest first):${c_reset}"
+            published_releases || printf '%s\n' "${c_red}Could not fetch published releases from GHCR.${c_reset}"
+            printf '\n'
+            read_shell_input "Release tag to deploy (sha-<40 hex>, commit, b back, q quit): "
+            [[ "$shell_navigation" == quit ]] && { shell_quit=true; return 0; }
+            [[ "$shell_navigation" == value && -n "$shell_input" ]] && deploy_target_shell "$shell_input"
+            ;;
+          4) print_local_build_help ;;
+        esac
+        ;;
+    esac
+  done
 }
 
 service_operations_shell() {
   local choices=("Start installed services" "Stop services" "Recreate installed services" "Stop all services")
-  local stop_command=()
+  local start_command=() stop_command=() recreate_command=()
   local confirmation
-  if ! menu_select "Operate installed services" "These actions never query GHCR or pull images" "${choices[@]}"; then return 0; fi
-  case "$menu_choice" in
-    0) start_runtime_shell ;;
-    1)
-      select_services_multi stop
-      [[ "$service_selection_navigation" == select ]] || return 0
-      stop_command=(stop "${selected_services[@]}")
-      run_action "stop · ${selected_services[*]}" "${stop_command[@]}"
-      ;;
-    2)
-      select_services_multi recreate
-      [[ "$service_selection_navigation" == select ]] || return 0
-      run_action "recreate · ${selected_services[*]}" recreate "${selected_services[@]}"
-      ;;
-    3)
-      read_shell_input "Type STOP to stop all ${environment} services (b back, q quit): "
-      [[ "$shell_navigation" == value ]] || return 0
-      confirmation="$shell_input"
-      if [[ "$confirmation" == STOP ]]; then
-        run_action "stop all services" shutdown
-      else
-        printf '%s\n' "${c_dim}Stop cancelled; persistent data was not changed.${c_reset}"
-        pause_shell
-      fi
-      ;;
-  esac
+  while [[ "$shell_quit" != true ]]; do
+    if ! menu_select "Operate installed services" "These actions never query GHCR or pull images" "${choices[@]}"; then
+      shell_quit=true
+      return 0
+    fi
+    case "$menu_navigation" in
+      back) return 0 ;;
+      quit) shell_quit=true; return 0 ;;
+      select)
+        case "$menu_choice" in
+          0)
+            select_services_multi start
+            case "$service_selection_navigation" in
+              quit) shell_quit=true; return 0 ;;
+              select)
+                start_command=(start "${selected_services[@]}")
+                run_action "start · ${selected_services[*]}" "${start_command[@]}"
+                ;;
+            esac
+            ;;
+          1)
+            select_services_multi stop
+            case "$service_selection_navigation" in
+              quit) shell_quit=true; return 0 ;;
+              select)
+                stop_command=(stop "${selected_services[@]}")
+                run_action "stop · ${selected_services[*]}" "${stop_command[@]}"
+                ;;
+            esac
+            ;;
+          2)
+            select_services_multi recreate
+            case "$service_selection_navigation" in
+              quit) shell_quit=true; return 0 ;;
+              select)
+                recreate_command=(recreate "${selected_services[@]}")
+                run_action "recreate · ${selected_services[*]}" "${recreate_command[@]}"
+                ;;
+            esac
+            ;;
+          3)
+            read_shell_input "Type STOP to stop all ${environment} services (b back, q quit): "
+            [[ "$shell_navigation" == quit ]] && { shell_quit=true; return 0; }
+            if [[ "$shell_navigation" == value && "$shell_input" == STOP ]]; then
+              run_action "stop all services" shutdown
+            elif [[ "$shell_navigation" == value ]]; then
+              printf '%s\n' "${c_dim}Stop cancelled; persistent data was not changed.${c_reset}"
+              pause_shell
+            fi
+            ;;
+        esac
+        ;;
+    esac
+  done
 }
 
 interactive_shell() {
@@ -1969,10 +1978,13 @@ case "$action" in
   start)
     validate_services "$@"
     lock_mutation
-    if (($# == 0)); then
-      compose up --detach --no-build --wait --wait-timeout 120 "${runtime_services[@]}"
-    else
-      compose up --detach --no-build --wait --wait-timeout 120 "$@"
+    start_targets=("${runtime_services[@]}")
+    if (($# > 0)); then
+      start_targets=("$@")
+    fi
+    compose unpause "${start_targets[@]}" 2>/dev/null || true
+    if ! compose start "${start_targets[@]}" 2>/dev/null; then
+      compose up --detach --no-build --pull never "${start_targets[@]}"
     fi
     compose ps --all
     ;;
@@ -1984,7 +1996,7 @@ case "$action" in
     if (($# > 0)); then
       recreate_services=("$@")
     fi
-    compose up --detach --no-build --force-recreate --wait --wait-timeout 120 "${recreate_services[@]}"
+    compose up --detach --no-build --pull never --force-recreate --wait --wait-timeout 120 "${recreate_services[@]}"
     compose ps --all
     ;;
 
@@ -1996,6 +2008,7 @@ case "$action" in
     else
       compose stop "$@"
     fi
+    compose ps --all
     ;;
 
   shutdown)
@@ -2003,6 +2016,7 @@ case "$action" in
     lock_mutation
     echo "Stopping $project_name; persistent data is retained."
     compose stop
+    compose ps --all
     ;;
 
   release)
