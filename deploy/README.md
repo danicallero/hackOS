@@ -397,6 +397,12 @@ mutable branch tag. The optional third and fourth arguments select whether to
 update API and web respectively, for example
 `incus-deploy.sh staging sha-<commit> false true` for a web-only update.
 
+The operator shell reads that same state file before every Compose command.
+Consequently, `start` and `recreate` keep the independently deployed API and
+web image tags; they never revert either service to the legacy `IMAGE_TAG` in
+the host environment file. `deploy/test-services-image-tags.sh` is run in CI
+to prevent a regression in that release-tag resolution.
+
 ### Rollback
 
 To return to the previous version, dispatch the relevant workflow with the

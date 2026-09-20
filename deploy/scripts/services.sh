@@ -199,6 +199,7 @@ project_name="hackos-$environment"
 config_file="${HACKOS_CONFIG_FILE:-/etc/hackos/hackos.env}"
 secrets_file="${HACKOS_SECRETS_FILE:-/etc/hackos/hackos.secrets}"
 lock_file="${HACKOS_LOCK_FILE:-$app_dir/.deploy.lock}"
+image_state_file="${HACKOS_IMAGE_STATE_FILE:-$app_dir/.image-tags}"
 
 [[ -f "$compose_file" ]] || die "Compose file is missing: $compose_file"
 command -v docker >/dev/null 2>&1 || die "Docker is not available"
@@ -225,6 +226,46 @@ elif [[ -f "$config_file" ]]; then
   require_private_file "$config_file"
 else
   die "environment file is missing: $config_file"
+fi
+
+# Deployments can update API and web independently. Compose's legacy IMAGE_TAG
+# remains in the host configuration, while .image-tags records the actually
+# deployed tag for each service. Reuse those tags for every operator action so
+# a start or recreate cannot silently downgrade one service to IMAGE_TAG.
+image_state_value() {
+  local key="$1"
+
+  [[ -r "$image_state_file" ]] || return 0
+  awk -v key="$key" '
+    /^[[:space:]]*(#|$)/ { next }
+    {
+      line = $0
+      sub(/^[[:space:]]*/, "", line)
+      split(line, fields, "=")
+      if (fields[1] == key) {
+        sub(/^[^=]*=/, "", line)
+        value = line
+      }
+    }
+    END {
+      value = value ? value : ""
+      value = value ~ /^".*"$/ ? substr(value, 2, length(value) - 2) : value
+      print value
+    }
+  ' "$image_state_file"
+}
+
+valid_image_tag() {
+  [[ "$1" =~ ^sha-[0-9a-f]{40}$ ]]
+}
+
+api_image_tag="$(image_state_value API_IMAGE_TAG)"
+web_image_tag="$(image_state_value WEB_IMAGE_TAG)"
+if valid_image_tag "$api_image_tag"; then
+  export API_IMAGE_TAG="$api_image_tag"
+fi
+if valid_image_tag "$web_image_tag"; then
+  export WEB_IMAGE_TAG="$web_image_tag"
 fi
 
 compose() {
