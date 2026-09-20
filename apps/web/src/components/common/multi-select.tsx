@@ -86,7 +86,7 @@ export function MultiSelect({
       collisionPadding={8}
       {...contentProps}
       id={listboxId}
-      className="bg-popover text-popover-foreground z-50 flex max-h-(--radix-popover-content-available-height) w-(--radix-popover-trigger-width) flex-col rounded-md border shadow-md outline-hidden"
+      className="pointer-events-auto bg-popover text-popover-foreground z-50 flex max-h-(--radix-popover-content-available-height) w-(--radix-popover-trigger-width) flex-col rounded-md border shadow-md outline-hidden"
     >
       <Command>
         <CommandInput placeholder={searchPlaceholder ?? t("genericSearchPlaceholder")} />

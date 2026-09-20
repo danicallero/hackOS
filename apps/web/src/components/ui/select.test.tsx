@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./select";
+import { Sheet, SheetContent } from "./sheet";
 
 vi.mock("@/lib/i18n", () => ({
   useLocale: () => ({ t: (key: string) => key }),
@@ -70,6 +71,24 @@ function NestedSelect() {
   );
 }
 
+function NestedSidePanelSelect() {
+  return (
+    <Sheet open modal={false}>
+      <SheetContent showCloseButton={false}>
+        <Select defaultValue="hidden">
+          <SelectTrigger aria-label="Visibility">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="hidden">Hidden</SelectItem>
+            <SelectItem value="visible">Visible</SelectItem>
+          </SelectContent>
+        </Select>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 describe("Select nested in an overlay", () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -97,11 +116,14 @@ describe("Select nested in an overlay", () => {
     await act(async () => user.click(trigger));
 
     const dialogContent = document.querySelector('[data-slot="dialog-content"]');
+    const portalContainer = document.querySelector('[data-slot="dialog-portal-container"]');
     const selectContent = document.querySelector('[data-slot="select-content"]');
 
     expect(dialogContent).not.toBeNull();
+    expect(portalContainer).not.toBeNull();
     expect(selectContent).not.toBeNull();
-    expect(dialogContent?.contains(selectContent)).toBe(true);
+    expect(portalContainer?.contains(selectContent)).toBe(true);
+    expect(selectContent?.className).toContain("pointer-events-auto");
     expect(dialogContent?.contains(document.activeElement)).toBe(true);
     expect(trigger.style.pointerEvents).toBe("auto");
 
@@ -109,5 +131,24 @@ describe("Select nested in an overlay", () => {
 
     expect(document.querySelector('[data-slot="dialog-content"]')).not.toBeNull();
     expect(document.querySelector('[data-slot="select-content"][data-state="open"]')).toBeNull();
+  });
+
+  it("renders a side-panel select in its dedicated overlay layer", async () => {
+    act(() => root.render(<NestedSidePanelSelect />));
+
+    const user = userEvent.setup();
+    const trigger = document.querySelector('[data-slot="select-trigger"]') as HTMLButtonElement;
+
+    await act(async () => user.click(trigger));
+
+    const sheetContent = document.querySelector('[data-slot="sheet-content"]');
+    const portalContainer = document.querySelector('[data-slot="sheet-portal-container"]');
+    const selectContent = document.querySelector('[data-slot="select-content"]');
+
+    expect(sheetContent).not.toBeNull();
+    expect(portalContainer).not.toBeNull();
+    expect(selectContent).not.toBeNull();
+    expect(portalContainer?.contains(selectContent)).toBe(true);
+    expect(sheetContent?.contains(selectContent)).toBe(true);
   });
 });

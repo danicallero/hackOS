@@ -62,7 +62,7 @@ function SheetContent({
   const { t } = useLocale()
   function isToastTarget(target: EventTarget | null) {
     return (
-      target instanceof Element &&
+        target instanceof Element &&
       Boolean(target.closest("[data-sileo-viewport], [data-hackos-toast-close]"))
     )
   }
@@ -72,7 +72,7 @@ function SheetContent({
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(
-          "fixed z-50 flex flex-col gap-4 border-border/60 bg-popover/96 shadow-overlay backdrop-blur-md transition ease-out data-[state=closed]:animate-out data-[state=closed]:duration-200 data-[state=open]:animate-in data-[state=open]:duration-300 motion-reduce:transition-none",
+          "fixed z-50 flex flex-col gap-4 border-border/60 bg-popover/96 shadow-overlay transition ease-out data-[state=closed]:animate-out data-[state=closed]:duration-200 data-[state=open]:animate-in data-[state=open]:duration-300 motion-reduce:transition-none",
           side === "right" &&
             "inset-y-0 right-0 h-full w-[min(32rem,calc(100vw-1rem))] border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:inset-y-3 sm:right-3 sm:h-[calc(100dvh-1.5rem)] sm:rounded-overlay sm:border",
           side === "left" &&
@@ -100,18 +100,14 @@ function SheetContent({
         <div
           data-slot="sheet-portal-container"
           className="pointer-events-none fixed inset-0 z-50"
-          aria-hidden="true"
-        >
-          <div className="pointer-events-auto flex flex-col h-full">
-            {children}
-            {showCloseButton && (
-              <SheetPrimitive.Close className={cn(dialogIconButtonClass, "absolute top-3 right-3 z-10")} title={t("close")}>
-                <XIcon className="size-4" />
-                <span className="sr-only">{t("close")}</span>
-              </SheetPrimitive.Close>
-            )}
-          </div>
-        </div>
+        />
+        {children}
+        {showCloseButton && (
+          <SheetPrimitive.Close className={cn(dialogIconButtonClass, "absolute top-3 right-3 z-10")} title={t("close")}>
+            <XIcon className="size-4" />
+            <span className="sr-only">{t("close")}</span>
+          </SheetPrimitive.Close>
+        )}
       </SheetPrimitive.Content>
     </SheetPortal>
   )
