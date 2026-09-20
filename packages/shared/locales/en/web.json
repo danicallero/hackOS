@@ -642,6 +642,8 @@
   "requireStaffDietaryDesc": "Shows the dietary-restrictions field to invited staff (optional to fill in).",
   "expire": "Expire",
   "inviteExpired": "Invite expired.",
+  "inviteStatus": "Status",
+  "inviteStatusUsed": "Used",
   "noActiveInvitations": "No active invitations",
   "noEnterpriseInviteLinks": "There are no invite links for this enterprise yet.",
   "enterpriseInviteLinks": "Enterprise invite links",

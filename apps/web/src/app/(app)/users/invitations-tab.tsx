@@ -10,10 +10,17 @@ import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { ApiError, api } from "@/lib/api";
 import { shortDateTimeFmt } from "@/lib/datetime";
-import { useLocale } from "@/lib/i18n";
+import { type Translate, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type {
   EnterpriseInviteLink,
@@ -31,6 +38,7 @@ type Redemption = {
   redeemedIp: string | null;
   redeemedUserAgent: string | null;
 };
+type InviteStatus = "active" | "expired" | "used" | "withdrawn" | "exhausted";
 type Record = {
   key: string;
   id: number;
@@ -41,12 +49,36 @@ type Record = {
   roles: number[];
   max: number | null;
   used: number;
+  status: InviteStatus;
   expires: string | null;
+  usedAt: string | null;
+  usedByName: string | null;
+  usedByEmail: string | null;
   created: string;
   createdBy: string | null;
   redemptions: Redemption[];
   token: string | null;
 };
+
+const STATUS_TONE = {
+  active: "success",
+  expired: "warning",
+  used: "neutral",
+  withdrawn: "neutral",
+  exhausted: "warning",
+} as const;
+
+const STATUS_LABEL_KEY = {
+  active: "linkStatusActive",
+  expired: "linkStatusExpired",
+  used: "inviteStatusUsed",
+  withdrawn: "linkStatusWithdrawn",
+  exhausted: "linkStatusExhausted",
+} as const;
+
+function statusLabel(status: InviteStatus, t: Translate): string {
+  return t(STATUS_LABEL_KEY[status]);
+}
 
 /** The persistent invitation workspace (#777): one composer, one list, one inspector. */
 export function InvitationsScreen() {
@@ -56,6 +88,7 @@ export function InvitationsScreen() {
   const [links, setLinks] = useState<UserInviteLink[]>([]);
   const [enterpriseLinks, setEnterpriseLinks] = useState<EnterpriseInviteLink[]>([]);
   const [roles, setRoles] = useState<RoleSummary[]>([]);
+  const [statusFilter, setStatusFilter] = useState<InviteStatus | "all">("active");
   const [selected, setSelected] = useState<Record | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +100,7 @@ export function InvitationsScreen() {
     setError(null);
     try {
       const [nextEmails, nextLinks, nextEnterpriseLinks] = await Promise.all([
-        api.get<InviteListItem[]>("/api/invites"),
+        api.get<InviteListItem[]>("/api/invites", { query: { status: "all" } }),
         api.get<UserInviteLink[]>("/api/invites/user-links"),
         api.get<EnterpriseInviteLink[]>("/api/invites/enterprise-links"),
       ]);
@@ -106,7 +139,11 @@ export function InvitationsScreen() {
           roles: item.roleIds,
           max: 1,
           used: 0,
+          status: item.status,
           expires: item.expiresAt,
+          usedAt: item.usedAt,
+          usedByName: item.usedByName,
+          usedByEmail: item.usedByEmail,
           created: item.createdAt,
           createdBy: null,
           redemptions: [],
@@ -122,7 +159,11 @@ export function InvitationsScreen() {
           roles: item.roleIds,
           max: item.maxRedeems,
           used: item.redeemedCount,
+          status: item.status,
           expires: item.expiresAt,
+          usedAt: null,
+          usedByName: null,
+          usedByEmail: null,
           created: item.createdAt,
           createdBy: item.createdByName,
           redemptions: item.redemptions,
@@ -138,7 +179,11 @@ export function InvitationsScreen() {
           roles: [],
           max: item.maxRedeems,
           used: item.redeemedCount,
+          status: item.status,
           expires: item.expiresAt,
+          usedAt: null,
+          usedByName: null,
+          usedByEmail: null,
           created: item.createdAt,
           createdBy: item.createdByName,
           redemptions: item.redemptions,
@@ -146,6 +191,11 @@ export function InvitationsScreen() {
         })),
       ].sort((a, b) => b.created.localeCompare(a.created)),
     [emails, links, enterpriseLinks],
+  );
+
+  const visibleRows = useMemo(
+    () => (statusFilter === "all" ? rows : rows.filter((row) => row.status === statusFilter)),
+    [rows, statusFilter],
   );
 
   const columns: Column<Record>[] = [
@@ -167,6 +217,13 @@ export function InvitationsScreen() {
           {row.enterprise ??
             (row.roles.length ? `${row.roles.length} ${t("rolesTitle").toLowerCase()}` : "—")}
         </span>
+      ),
+    },
+    {
+      id: "status",
+      header: t("inviteStatus"),
+      cell: (row) => (
+        <StatusBadge tone={STATUS_TONE[row.status]}>{statusLabel(row.status, t)}</StatusBadge>
       ),
     },
     {
@@ -259,9 +316,28 @@ export function InvitationsScreen() {
         title={t("invitationManagement")}
         actions={<InviteUserDialog onChanged={load} />}
       />
+      <Select
+        value={statusFilter}
+        onValueChange={(value) => {
+          setStatusFilter(value as InviteStatus | "all");
+          setSelected(null);
+        }}
+      >
+        <SelectTrigger aria-label={t("filterByStatus")}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="active">{t("linkStatusActive")}</SelectItem>
+          <SelectItem value="expired">{t("linkStatusExpired")}</SelectItem>
+          <SelectItem value="used">{t("inviteStatusUsed")}</SelectItem>
+          <SelectItem value="withdrawn">{t("linkStatusWithdrawn")}</SelectItem>
+          <SelectItem value="exhausted">{t("linkStatusExhausted")}</SelectItem>
+          <SelectItem value="all">{t("allStatuses")}</SelectItem>
+        </SelectContent>
+      </Select>
       <DataTable
         columns={columns}
-        data={rows}
+        data={visibleRows}
         getRowId={(row) => row.key}
         getRowLabel={(row) => row.label}
         onRowClick={setSelected}
@@ -280,7 +356,7 @@ export function InvitationsScreen() {
         footer={
           selected ? (
             <div className="flex flex-wrap gap-2">
-              {selected.source === "email" && selected.token && (
+              {selected.source === "email" && selected.status === "active" && selected.token && (
                 <Button
                   variant="outline"
                   onClick={() =>
@@ -290,25 +366,27 @@ export function InvitationsScreen() {
                   <CopyIcon className="size-4" aria-hidden="true" /> {t("copyInviteLink")}
                 </Button>
               )}
-              {selected.source === "email" && (
+              {selected.source === "email" && selected.status === "active" && (
                 <Button variant="outline" disabled={resending} onClick={() => void resend()}>
                   {t("resendEmail")}
                 </Button>
               )}
-              <AlertModal
-                trigger={
-                  <Button variant="destructive">
-                    <BanIcon className="size-4" aria-hidden="true" /> {t("expire")}
-                  </Button>
-                }
-                title={t("withdrawLinkTitle")}
-                description={t("withdrawLinkDesc")}
-                cancelLabel={t("cancel")}
-                confirmLabel={t("expire")}
-                destructive
-                pending={expiring}
-                onConfirm={() => void expire()}
-              />
+              {selected.status === "active" && (
+                <AlertModal
+                  trigger={
+                    <Button variant="destructive">
+                      <BanIcon className="size-4" aria-hidden="true" /> {t("expire")}
+                    </Button>
+                  }
+                  title={t("withdrawLinkTitle")}
+                  description={t("withdrawLinkDesc")}
+                  cancelLabel={t("cancel")}
+                  confirmLabel={t("expire")}
+                  destructive
+                  pending={expiring}
+                  onConfirm={() => void expire()}
+                />
+              )}
             </div>
           ) : undefined
         }
@@ -319,6 +397,14 @@ export function InvitationsScreen() {
               <div>
                 <dt className="text-muted-foreground">{t("colType")}</dt>
                 <dd>{selected.source === "email" ? t("email") : t("link")}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">{t("inviteStatus")}</dt>
+                <dd className="mt-1">
+                  <StatusBadge tone={STATUS_TONE[selected.status]}>
+                    {statusLabel(selected.status, t)}
+                  </StatusBadge>
+                </dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">{t("rolesTitle")}</dt>
@@ -356,6 +442,19 @@ export function InvitationsScreen() {
                     </p>
                     <time className="text-muted-foreground text-xs">
                       {dateFmt.format(new Date(selected.expires))}
+                    </time>
+                  </li>
+                )}
+                {selected.usedAt && (
+                  <li className="relative border-l pb-5 pl-5 before:absolute before:-left-1.25 before:top-1 before:size-2 before:rounded-full before:bg-muted-foreground">
+                    <p className="font-medium">
+                      {selected.usedByName ?? selected.usedByEmail ?? t("inviteStatusUsed")}
+                    </p>
+                    {selected.usedByName && selected.usedByEmail && (
+                      <p className="text-muted-foreground text-xs">{selected.usedByEmail}</p>
+                    )}
+                    <time className="text-muted-foreground text-xs">
+                      {dateFmt.format(new Date(selected.usedAt))}
                     </time>
                   </li>
                 )}

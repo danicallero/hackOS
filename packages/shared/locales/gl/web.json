@@ -642,6 +642,8 @@
   "requireStaffDietaryDesc": "Mostra o campo de restricións alimenticias ao persoal convidado (opcional).",
   "expire": "Caducar",
   "inviteExpired": "Convite caducado.",
+  "inviteStatus": "Estado",
+  "inviteStatusUsed": "Usado",
   "noActiveInvitations": "Non hai convites activos",
   "noEnterpriseInviteLinks": "Aínda non hai ligazóns de acceso para esta empresa.",
   "enterpriseInviteLinks": "Ligazóns de acceso da empresa",

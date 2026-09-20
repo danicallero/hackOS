@@ -379,6 +379,55 @@ describe("GET /api/invites — list active invites", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual([]);
   });
+
+  it("filters the invite audit trail by expired, used, and withdrawn state", async () => {
+    const a = await getApp();
+    const actor = await inviter();
+    const { pool } = await import("../../src/db/pool.js");
+    const acceptedUser = await createUser({
+      email: "accepted@example.com",
+      name: "Accepted",
+      surname: "Person",
+    });
+    const expired = await createInvite(a, actor, { email: "expired@example.com", kind: "staff" });
+    const used = await createInvite(a, actor, { email: "used@example.com", kind: "staff" });
+    const withdrawn = await createInvite(a, actor, {
+      email: "withdrawn@example.com",
+      kind: "staff",
+    });
+
+    await pool.query(
+      `UPDATE email_verification_tokens SET expires_at = now() - interval '1 hour' WHERE id = $1`,
+      [expired.id],
+    );
+    await pool.query(
+      `UPDATE email_verification_tokens SET used_at = now(), user_id = $2 WHERE id = $1`,
+      [used.id, acceptedUser],
+    );
+    await pool.query(`UPDATE email_verification_tokens SET used_at = now() WHERE id = $1`, [
+      withdrawn.id,
+    ]);
+
+    for (const [status, email] of [
+      ["expired", "expired@example.com"],
+      ["used", "used@example.com"],
+      ["withdrawn", "withdrawn@example.com"],
+    ]) {
+      const res = await a.inject({
+        method: "GET",
+        url: `/api/invites?status=${status}`,
+        headers: asUser(actor),
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual([
+        expect.objectContaining({
+          email,
+          status,
+          ...(status === "used" ? { usedByEmail: "accepted@example.com" } : {}),
+        }),
+      ]);
+    }
+  });
 });
 
 describe("H9/H10 invite acceptance", () => {
