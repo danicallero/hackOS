@@ -387,7 +387,6 @@ describe("GET /api/invites — list active invites", () => {
     const acceptedUser = await createUser({
       email: "accepted@example.com",
       name: "Accepted",
-      surname: "Person",
     });
     const expired = await createInvite(a, actor, { email: "expired@example.com", kind: "staff" });
     const used = await createInvite(a, actor, { email: "used@example.com", kind: "staff" });
