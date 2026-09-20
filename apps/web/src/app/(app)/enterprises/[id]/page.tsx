@@ -10,7 +10,6 @@ import { EVENTS } from "@hackos/shared/events";
 import { Building2Icon } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { Spinner } from "@/components/common/spinner";
@@ -81,7 +80,6 @@ export default function EnterpriseDetailPage() {
   if (status === "error" || !enterprise) {
     return (
       <div className="space-y-6">
-        {canManage && <BackLink href="/enterprises" label={t("backToEnterprises")} />}
         <EmptyState
           icon={Building2Icon}
           title={t("enterpriseNotFoundTitle")}
@@ -94,9 +92,6 @@ export default function EnterpriseDetailPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        context={
-          canManage ? <BackLink href="/enterprises" label={t("backToEnterprises")} /> : undefined
-        }
         leading={
           <Avatar size="lg">
             {enterprise.logo_url ? (

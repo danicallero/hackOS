@@ -4,7 +4,6 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { TrophyIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { AccessDenied } from "@/components/common/access-denied";
-import { BackLink } from "@/components/common/back-link";
 import { PageHeader } from "@/components/common/page-header";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
@@ -22,7 +21,6 @@ export default function NewChallengePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        context={<BackLink href="/challenges" label={t("backToChallenges")} />}
         title={t("newChallenge")}
         description={t("newChallengeDescription")}
         leading={<TrophyIcon className="text-muted-foreground size-6" aria-hidden="true" />}

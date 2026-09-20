@@ -89,7 +89,7 @@ interface DataTableProps<T> {
   onSelectionChange?: (ids: Set<string>) => void;
   /**
    * Opt in to this table's search/sort/page and window scroll position
-   * surviving a trip to a detail page and back (BackLink's router.back()).
+   * surviving a trip to a detail page and back in browser history.
    * Must be unique per table instance on the page (e.g. "audit-list").
    */
   stateKey?: string;
