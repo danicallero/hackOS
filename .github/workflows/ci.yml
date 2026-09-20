@@ -30,6 +30,9 @@ jobs:
       - name: Run lint
         run: pnpm lint
 
+      - name: Test deployment script release-tag handling
+        run: bash deploy/test-services-image-tags.sh
+
   typecheck:
     name: typecheck
     runs-on: ubuntu-latest
