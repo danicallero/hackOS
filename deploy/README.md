@@ -375,12 +375,18 @@ Both workflows check the tag and select the exact commit encoded in
 and executes the deployment with `incus exec`; the staging workflow uses the
 equivalent SSH transfer on the ARM64 host. The host-local environment files
 are validated without printing values, a `flock` lock prevents concurrent
-deployments, pinned images are pulled, the optional R2 backup and `migrate`
-run only for an API-image change, and healthchecks gate each changed unit.
+deployments, selected images are pulled with Compose's `always` policy and
+their OCI revision label must match the requested commit, the optional R2
+backup and `migrate` run only for an API-image change, and healthchecks gate
+each changed unit.
 Neither workflow decrypts SOPS, receives application secrets from Actions, or
 exposes Docker Remote API. Any staging tunnel or proxy remains a separate
 ingress service and must be routed to the new published ports when replacing
 an existing platform.
+
+The operator shell takes the same host lock before it invokes the deployment
+script, then passes its lock ownership through explicitly. This keeps a real
+second deployment out while allowing the selected deployment to proceed.
 
 For an operator-run redeploy, the host script can resolve the exact currently
 configured immutable tag itself. It also remembers the independent API/web
@@ -401,7 +407,10 @@ The operator shell reads that same state file before every Compose command.
 Consequently, `start` and `recreate` keep the independently deployed API and
 web image tags; they never revert either service to the legacy `IMAGE_TAG` in
 the host environment file. `deploy/test-services-image-tags.sh` is run in CI
-to prevent a regression in that release-tag resolution.
+to prevent a regression in that release-tag resolution and in accepting the
+resolved `sha-<commit>` form used by the interactive latest-release flow.
+`deploy/test-shell-syntax.sh` also verifies every deployment shell entry point
+with its declared interpreter.
 
 ### Rollback
 
@@ -520,11 +529,16 @@ The home screen is task-led: **Overview**, **Operate installed services**,
 The service screen contains only direct start, stop, recreate and stop-all actions;
 it never accesses the registry. The release screen separates inspection,
 published-image browsing, deployment and local rebuild instructions. Published images are grouped by
-canonical SHA and sorted newest first using their OCI publication time; the
-same row shows the channel and API/web availability. Selecting a SHA first
-shows that list, then asks for the chosen tag and target unit. Deployment
+canonical SHA; each row shows the channel and API/web availability. `Deploy
+latest` resolves the newest published commit on the selected channel without
+enumerating per-image metadata first. Selecting a SHA first shows that list,
+then asks for the chosen tag and target unit. Deployment
 resolves and displays the immutable SHA, and requires typing `DEPLOY` before
-pulling or replacing anything.
+pulling or replacing anything. Lifecycle actions identify whether they are
+starting existing containers or recreating installed images, then explicitly
+say when they are waiting for health checks. Deployments announce each phase:
+configuration, GHCR refresh, image-revision verification, dependencies,
+migrations, and the selected service replacement.
 
 ### Lifecycle and release operations are deliberately separate
 
@@ -535,7 +549,7 @@ deployment** submenu and to the CLI:
 |---|---|---|
 | `start`, `stop`, `recreate`, `shutdown` | None | Operate only on containers and images already present on the host. `start` unpauses paused containers and starts existing stopped containers without pulling or rebuilding (falling back to `--pull never` only if a container was deleted); it never queries GHCR or downloads images. `recreate` explicitly uses Compose's `--pull never`. |
 | `status`, `release` | Local Docker inspection only | Show service state; `release` also shows the deployed image, channel, commit and creation time. |
-| `available` | GHCR package registry | List operator-selectable API/web images by OCI publication date (newest first), distinguishing `staging`, `main` and legacy SHA tags. |
+| `available` | GHCR package registry | List operator-selectable API/web images without serial per-image metadata requests, distinguishing `staging`, `main` and legacy SHA tags. |
 | `deploy latest` | Resolves the current channel release, then pulls it | Staging deploys the latest successful staging build; production prints the protected workflow command instead of bypassing approval. |
 | `deploy sha-<commit>` | Validates the immutable SHA release, then pulls it | Deploy or roll back the selected API, web, or both units. |
 

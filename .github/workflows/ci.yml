@@ -33,6 +33,9 @@ jobs:
       - name: Test deployment script release-tag handling
         run: bash deploy/test-services-image-tags.sh
 
+      - name: Validate deployment shell syntax
+        run: bash deploy/test-shell-syntax.sh
+
   typecheck:
     name: typecheck
     runs-on: ubuntu-latest

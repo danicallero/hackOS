@@ -114,11 +114,13 @@ if ! command -v flock >/dev/null 2>&1; then
   exit 1
 fi
 
-mkdir -p "$app_dir"
-exec 9>"$lock_file"
-if ! flock -n 9; then
-  echo "ERROR: another hackOS deployment is already running" >&2
-  exit 1
+if [[ "${HACKOS_LOCK_HELD:-false}" != true ]]; then
+  mkdir -p "$app_dir"
+  exec 9>"$lock_file"
+  if ! flock -n 9; then
+    echo "ERROR: another hackOS deployment is already running" >&2
+    exit 1
+  fi
 fi
 
 export COMPOSE_PROJECT_NAME="$project_name"
@@ -282,6 +284,30 @@ run_compose() {
   echo "OK: $description"
 }
 
+phase() {
+  printf '\n==> %s\n' "$1"
+}
+
+verify_pulled_image_revision() {
+  local service="$1" tag="$2" image expected_revision revision
+
+  case "$service" in
+    api) image="ghcr.io/danicallero/hackos-api:$tag" ;;
+    web) image="ghcr.io/danicallero/hackos-web:$tag" ;;
+    *)
+      echo "ERROR: cannot verify unknown image service: $service" >&2
+      exit 1
+      ;;
+  esac
+  expected_revision="${tag#sha-}"
+  revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image" 2>/dev/null || true)"
+  if [[ "$revision" != "$expected_revision" ]]; then
+    echo "ERROR: pulled $service image does not match requested release $tag" >&2
+    exit 1
+  fi
+  echo "OK: pulled $service image revision matches $tag"
+}
+
 if [[ ! -x "$validator_file" ]]; then
   echo "ERROR: deployment environment validator is missing or not executable" >&2
   exit 1
@@ -354,12 +380,22 @@ wait_for_health() {
 }
 
 echo "Deploying hackOS $environment ($image_tag)"
+phase "Checking deployment configuration"
 run_compose "validate Compose" config --quiet
-run_compose "pull pinned images" pull
+phase "Refreshing selected immutable images from GHCR"
+run_compose "pull pinned images" pull --policy always
+if [[ "$deploy_api" == true ]]; then
+  verify_pulled_image_revision api "$api_image_tag"
+fi
+if [[ "$deploy_web" == true ]]; then
+  verify_pulled_image_revision web "$web_image_tag"
+fi
+phase "Starting database, queue, and object storage"
 run_compose "start datastores" up --detach postgres valkey minio
 wait_for_health postgres
 wait_for_health valkey
 wait_for_health minio
+phase "Checking object storage"
 run_compose "initialize object storage" run --rm --no-deps minio-init
 if [[ "$deploy_api" == true && "$(env_value R2_BACKUPS_ENABLED)" == true ]]; then
   if [[ ! -x "$backup_file" ]]; then
@@ -370,7 +406,9 @@ if [[ "$deploy_api" == true && "$(env_value R2_BACKUPS_ENABLED)" == true ]]; the
   HACKOS_LOCK_HELD=true "$backup_file" "$environment"
 fi
 if [[ "$deploy_api" == true ]]; then
+  phase "Applying database migrations"
   run_compose "migrate database" run --rm --no-deps migrate
+  phase "Recreating API and worker"
   run_compose "update api and worker" up --detach --no-deps --force-recreate api worker
   wait_for_health api
   wait_for_health worker
@@ -378,6 +416,7 @@ else
   echo "SKIP: API and worker unchanged"
 fi
 if [[ "$deploy_web" == true ]]; then
+  phase "Recreating web"
   run_compose "update web" up --detach --no-deps --force-recreate web
   wait_for_health web
 else
