@@ -222,7 +222,7 @@ export interface Invite {
   token: string | null;
 }
 
-/** GET /api/invites — active invitation list item. */
+/** GET /api/invites — account invitation list item, including audit states. */
 export interface InviteListItem {
   id: number;
   email: string;
@@ -230,6 +230,10 @@ export interface InviteListItem {
   enterpriseId: number | null;
   roleIds: number[];
   expiresAt: string;
+  usedAt: string | null;
+  usedByName: string | null;
+  usedByEmail: string | null;
+  status: "active" | "expired" | "used" | "withdrawn";
   createdAt: string;
   token: string;
 }

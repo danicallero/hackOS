@@ -68,8 +68,10 @@ other module's exported function instead), and, if it does background work, a
 Better Auth session lifecycle (`/api/auth/*`, pass-through, exempt from the
 route-policy ledger by design), the caller's own profile (`GET/PATCH
 /api/me`), staff user management, secondary-email verification (H6),
-invitations including reusable enterprise and account links (H9/H10/H43), and the
-hierarchical role model: a global reorderable role hierarchy with a tri-state
+invitations including reusable enterprise and account links (H9/H10/H43). Email
+invitation listing retains terminal expired, used, and withdrawn records, including
+the redeemed account and timestamp for used invitations, and the
+hierarchical role model is a global reorderable role hierarchy with a tri-state
 (ALLOW/DENY/INHERIT) per capability, resolved over each user's own assigned
 roles, plus the `ADMIN_ALL` wildcard's "at least one active holder" invariant
 (`role-authority.ts`, replacing the retired `permission-graph.ts`). Account
