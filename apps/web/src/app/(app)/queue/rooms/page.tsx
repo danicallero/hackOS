@@ -309,7 +309,7 @@ export default function QueueRoomsPage() {
     <div className="space-y-6">
       <PageHeader
         title={t("judgingSettingsTitle")}
-        actions={
+        primaryAction={
           tab === "rooms" ? (
             <Button onClick={openCreateModal}>
               <PlusIcon className="size-4" />

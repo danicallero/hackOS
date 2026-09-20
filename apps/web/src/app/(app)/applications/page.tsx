@@ -121,7 +121,7 @@ export default function ApplicationsPage() {
     <div className="space-y-6">
       <PageHeader
         title={t("applications")}
-        actions={
+        primaryAction={
           canManage ? (
             <Button asChild>
               <Link href="/applications/new">

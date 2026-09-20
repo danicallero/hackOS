@@ -166,7 +166,7 @@ export default function ChallengesPage() {
     <div className="space-y-6">
       <PageHeader
         title={canAdmin ? t("challenges") : t("myChallenges")}
-        actions={
+        primaryAction={
           canAdmin ? (
             <Button onClick={() => router.push("/challenges/new")}>
               <PlusIcon className="size-4" />

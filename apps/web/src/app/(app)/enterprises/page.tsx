@@ -10,15 +10,14 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
-import { DateTimeInput } from "@/components/common/datetime-input";
 import { PageHeader } from "@/components/common/page-header";
+import { PublicationControls } from "@/components/common/publication-controls";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
   FormControl,
@@ -29,14 +28,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api, apiUpload } from "@/lib/api";
@@ -304,7 +295,7 @@ export default function EnterprisesPage() {
         title={t("enterprises")}
         description={t("enterprisesDesc")}
         primaryAction={
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
+          <Button onClick={() => setCreateOpen(true)}>
             <PlusIcon className="size-4" />
             {t("newEnterprise")}
           </Button>
@@ -600,77 +591,39 @@ function CreateEnterpriseModal({
               </FormItem>
             )}
           />
-          <FormField
-            control={form.control}
-            name="visibility"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("colVisibility")}</FormLabel>
-                <Select
-                  onValueChange={(next) => {
-                    field.onChange(next);
-                    if (next === "visible") {
-                      setScheduledPublish(false);
-                      form.setValue("availableFrom", "", { shouldDirty: true });
-                    }
-                  }}
-                  value={field.value}
-                >
-                  <FormControl>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="hidden">{t("hiddenOption")}</SelectItem>
-                    <SelectItem value="visible">{t("visibleLabel")}</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
+          <PublicationControls
+            id="enterprise-publication"
+            visibility={visibility}
+            hiddenValue="hidden"
+            publishedValue="visible"
+            hiddenLabel={t("hiddenOption")}
+            publishedLabel={t("visibleLabel")}
+            visibilityLabel={t("colVisibility")}
+            scheduleLabel={t("schedulePublicationLabel")}
+            publishAtLabel={t("publishAtLabel")}
+            scheduled={scheduledPublish}
+            publishAt={form.watch("availableFrom")}
+            onVisibilityChange={(next) => {
+              form.setValue("visibility", next, { shouldDirty: true });
+              if (next === "visible") {
+                setScheduledPublish(false);
+                form.setValue("availableFrom", "", { shouldDirty: true });
+              }
+            }}
+            onScheduledChange={(next) => {
+              setScheduledPublish(next);
+              form.setValue(
+                "availableFrom",
+                next ? toDatetimeLocal(new Date().toISOString()) : "",
+                {
+                  shouldDirty: true,
+                },
+              );
+            }}
+            onPublishAtChange={(value) =>
+              form.setValue("availableFrom", value, { shouldDirty: true })
+            }
           />
-          {visibility === "hidden" && (
-            <div className="space-y-3">
-              <Label htmlFor="enterprise-scheduled-publish" className="flex items-center gap-2">
-                <Checkbox
-                  id="enterprise-scheduled-publish"
-                  checked={scheduledPublish}
-                  onCheckedChange={(checked) => {
-                    const next = checked === true;
-                    setScheduledPublish(next);
-                    form.setValue(
-                      "availableFrom",
-                      next ? toDatetimeLocal(new Date().toISOString()) : "",
-                      { shouldDirty: true },
-                    );
-                  }}
-                />
-                {t("schedulePublicationLabel")}
-              </Label>
-              {scheduledPublish && (
-                <FormField
-                  control={form.control}
-                  name="availableFrom"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("publishAtLabel")}</FormLabel>
-                      <FormControl>
-                        <DateTimeInput
-                          value={field.value}
-                          onChange={(value) => {
-                            setScheduledPublish(Boolean(value));
-                            form.setValue("availableFrom", value, { shouldDirty: true });
-                          }}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
-            </div>
-          )}
         </form>
       </Form>
     </SidePanelEditor>

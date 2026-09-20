@@ -216,7 +216,7 @@ export default function AnnouncementsPage() {
     <div className="space-y-6">
       <PageHeader
         title={t("announcements")}
-        actions={
+        primaryAction={
           <Button onClick={() => setCreateOpen(true)}>
             <PlusIcon className="size-4" />
             {t("newAnnouncement")}
