@@ -15,7 +15,7 @@ import { z } from "zod";
 import { AlertModal } from "@/components/common/alert-modal";
 import type { Column } from "@/components/common/data-table";
 import { DataTable } from "@/components/common/data-table";
-import { Modal } from "@/components/common/modal";
+import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import {
@@ -243,7 +243,7 @@ export function IntolerancesManager() {
       />
 
       {/* Create / edit */}
-      <Modal
+      <SidePanelEditor
         open={formOpen}
         onOpenChange={(o) => !o && setEditing(undefined)}
         icon={UtensilsCrossedIcon}
@@ -306,7 +306,7 @@ export function IntolerancesManager() {
             </div>
           </form>
         </Form>
-      </Modal>
+      </SidePanelEditor>
 
       {/* Delete confirm */}
       <AlertModal

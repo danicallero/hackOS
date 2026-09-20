@@ -13,10 +13,10 @@ import { FolderGitIcon, MailIcon, TrophyIcon, UserPlusIcon, UsersIcon } from "lu
 import { useCallback, useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
-import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { SectionCard } from "@/components/common/section-card";
+import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { ProjectDescriptionLinks } from "@/components/projects/project-description-links";
@@ -86,7 +86,7 @@ export default function MyProjectPage() {
     <div className="space-y-6">
       <PageHeader
         title={t("myProject")}
-        actions={
+        primaryAction={
           canCreate ? <ProjectFormDialog mode={{ kind: "self" }} onSaved={load} /> : undefined
         }
       />
@@ -198,7 +198,7 @@ function InviteMemberDialog({ repoId, onInvited }: { repoId: number; onInvited: 
   }
 
   return (
-    <Modal
+    <SidePanelEditor
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
@@ -228,7 +228,7 @@ function InviteMemberDialog({ repoId, onInvited }: { repoId: number; onInvited: 
           onChange={(e) => setEmail(e.target.value)}
         />
       </div>
-    </Modal>
+    </SidePanelEditor>
   );
 }
 

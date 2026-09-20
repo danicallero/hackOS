@@ -1,10 +1,5 @@
 "use client";
 
-// Enterprises directory (H43/H44): admins with sponsors:manage list every
-// sponsor enterprise and create new ones. An enterprise is created up-front so
-// it can be referenced when inviting a sponsor rep, who auto-links to it on
-// acceptance. Row click drills into the edit page.
-
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,8 +10,8 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
-import { DateTimeInput } from "@/components/common/datetime-input";
 import { PageHeader } from "@/components/common/page-header";
+import { PublicationControls } from "@/components/common/publication-controls";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -33,17 +28,10 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api, apiUpload } from "@/lib/api";
-import { formatScheduledDateTime, fromDatetimeLocal } from "@/lib/datetime";
+import { formatScheduledDateTime, fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
@@ -56,9 +44,7 @@ import {
   visibilityTone,
 } from "./shared";
 
-// Optional URL: allow blank, otherwise must be a valid URL.
 const optionalUrl = z.string().url("Enter a valid URL").or(z.literal(""));
-// Optional positive integer typed as text so the input can be cleared.
 const optionalPositiveInt = z
   .string()
   .refine((v) => v === "" || (/^\d+$/.test(v) && Number(v) > 0), "Must be a positive number");
@@ -309,7 +295,7 @@ export default function EnterprisesPage() {
         title={t("enterprises")}
         description={t("enterprisesDesc")}
         primaryAction={
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
+          <Button onClick={() => setCreateOpen(true)}>
             <PlusIcon className="size-4" />
             {t("newEnterprise")}
           </Button>
@@ -406,6 +392,8 @@ function CreateEnterpriseModal({
   const darkLogoInputRef = useRef<HTMLInputElement>(null);
   const [defaultLogo, setDefaultLogo] = useState<File | null>(null);
   const [darkLogo, setDarkLogo] = useState<File | null>(null);
+  const [scheduledPublish, setScheduledPublish] = useState(false);
+  const visibility = form.watch("visibility");
 
   // Reset the form each time the modal opens so stale input never lingers.
   useEffect(() => {
@@ -413,6 +401,7 @@ function CreateEnterpriseModal({
       reset();
       setDefaultLogo(null);
       setDarkLogo(null);
+      setScheduledPublish(false);
     }
   }, [open, reset]);
 
@@ -490,46 +479,6 @@ function CreateEnterpriseModal({
               </FormItem>
             )}
           />
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={form.formState.isSubmitting}
-              onClick={() => defaultLogoInputRef.current?.click()}
-            >
-              <UploadIcon aria-hidden="true" />
-              {defaultLogo ? defaultLogo.name : t("uploadLogo")}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={form.formState.isSubmitting}
-              onClick={() => darkLogoInputRef.current?.click()}
-            >
-              <UploadIcon aria-hidden="true" />
-              {darkLogo ? darkLogo.name : t("uploadDarkLogo")}
-            </Button>
-            <input
-              ref={defaultLogoInputRef}
-              type="file"
-              accept={LOGO_ACCEPT}
-              className="hidden"
-              onChange={(event) => {
-                selectLogo(event.target.files?.[0], "default");
-                event.target.value = "";
-              }}
-            />
-            <input
-              ref={darkLogoInputRef}
-              type="file"
-              accept={LOGO_ACCEPT}
-              className="hidden"
-              onChange={(event) => {
-                selectLogo(event.target.files?.[0], "negative");
-                event.target.value = "";
-              }}
-            />
-          </div>
           <FormField
             control={form.control}
             name="website"
@@ -570,6 +519,51 @@ function CreateEnterpriseModal({
               </FormItem>
             )}
           />
+          <div className="space-y-2">
+            <p className="text-sm font-medium">{t("logoTitle")}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={form.formState.isSubmitting}
+                onClick={() => defaultLogoInputRef.current?.click()}
+              >
+                <UploadIcon aria-hidden="true" />
+                {defaultLogo ? defaultLogo.name : t("uploadLogo")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={form.formState.isSubmitting}
+                onClick={() => darkLogoInputRef.current?.click()}
+              >
+                <UploadIcon aria-hidden="true" />
+                {darkLogo ? darkLogo.name : t("uploadDarkLogo")}
+              </Button>
+            </div>
+            <input
+              ref={defaultLogoInputRef}
+              type="file"
+              accept={LOGO_ACCEPT}
+              className="sr-only"
+              aria-label={t("uploadLogo")}
+              onChange={(event) => {
+                selectLogo(event.target.files?.[0], "default");
+                event.target.value = "";
+              }}
+            />
+            <input
+              ref={darkLogoInputRef}
+              type="file"
+              accept={LOGO_ACCEPT}
+              className="sr-only"
+              aria-label={t("uploadDarkLogo")}
+              onChange={(event) => {
+                selectLogo(event.target.files?.[0], "negative");
+                event.target.value = "";
+              }}
+            />
+          </div>
           <FormField
             control={form.control}
             name="description"
@@ -597,45 +591,38 @@ function CreateEnterpriseModal({
               </FormItem>
             )}
           />
-          <FormField
-            control={form.control}
-            name="visibility"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("colVisibility")}</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="hidden">{t("hiddenOption")}</SelectItem>
-                    <SelectItem value="visible">{t("visibleLabel")}</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="availableFrom"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("revealFromLabel")}</FormLabel>
-                <FormControl>
-                  <DateTimeInput
-                    value={field.value}
-                    onChange={(value) =>
-                      form.setValue("availableFrom", value, { shouldDirty: true })
-                    }
-                    nullOption={{ label: t("immediate") }}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
+          <PublicationControls
+            id="enterprise-publication"
+            visibility={visibility}
+            hiddenValue="hidden"
+            publishedValue="visible"
+            hiddenLabel={t("hiddenOption")}
+            publishedLabel={t("visibleLabel")}
+            visibilityLabel={t("colVisibility")}
+            scheduleLabel={t("schedulePublicationLabel")}
+            publishAtLabel={t("publishAtLabel")}
+            scheduled={scheduledPublish}
+            publishAt={form.watch("availableFrom")}
+            onVisibilityChange={(next) => {
+              form.setValue("visibility", next, { shouldDirty: true });
+              if (next === "visible") {
+                setScheduledPublish(false);
+                form.setValue("availableFrom", "", { shouldDirty: true });
+              }
+            }}
+            onScheduledChange={(next) => {
+              setScheduledPublish(next);
+              form.setValue(
+                "availableFrom",
+                next ? toDatetimeLocal(new Date().toISOString()) : "",
+                {
+                  shouldDirty: true,
+                },
+              );
+            }}
+            onPublishAtChange={(value) =>
+              form.setValue("availableFrom", value, { shouldDirty: true })
+            }
           />
         </form>
       </Form>

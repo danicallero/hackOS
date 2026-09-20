@@ -12,8 +12,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { DateTimeInput } from "@/components/common/datetime-input";
 import { EmptyState } from "@/components/common/empty-state";
+import { PublicationControls } from "@/components/common/publication-controls";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
@@ -33,13 +33,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api, apiUpload } from "@/lib/api";
@@ -443,10 +436,15 @@ export function EditCard({
     defaultValues: toFormValues(enterprise),
   });
   const { reset } = form;
+  const [scheduledPublish, setScheduledPublish] = useState(
+    enterprise.visibility === "hidden" && Boolean(enterprise.available_from),
+  );
+  const visibility = form.watch("visibility");
 
   // Re-sync when the underlying record changes (e.g. after a logo upload reload).
   useEffect(() => {
     reset(toFormValues(enterprise));
+    setScheduledPublish(enterprise.visibility === "hidden" && Boolean(enterprise.available_from));
   }, [enterprise, reset]);
 
   async function onSubmit(values: EditValues) {
@@ -574,45 +572,38 @@ export function EditCard({
                   )}
                 />
               </div>
-              <FormField
-                control={form.control}
-                name="visibility"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("colVisibility")}</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="hidden">{t("hiddenOption")}</SelectItem>
-                        <SelectItem value="visible">{t("visibleLabel")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="availableFrom"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("revealFromLabel")}</FormLabel>
-                    <FormControl>
-                      <DateTimeInput
-                        value={field.value}
-                        onChange={(value) =>
-                          form.setValue("availableFrom", value, { shouldDirty: true })
-                        }
-                        nullOption={{ label: t("immediate") }}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+              <PublicationControls
+                id="enterprise-publication"
+                visibility={visibility}
+                hiddenValue="hidden"
+                publishedValue="visible"
+                hiddenLabel={t("hiddenOption")}
+                publishedLabel={t("visibleLabel")}
+                visibilityLabel={t("colVisibility")}
+                scheduleLabel={t("schedulePublicationLabel")}
+                publishAtLabel={t("publishAtLabel")}
+                scheduled={scheduledPublish}
+                publishAt={form.watch("availableFrom")}
+                onVisibilityChange={(next) => {
+                  form.setValue("visibility", next, { shouldDirty: true });
+                  if (next === "visible") {
+                    setScheduledPublish(false);
+                    form.setValue("availableFrom", "", { shouldDirty: true });
+                  }
+                }}
+                onScheduledChange={(next) => {
+                  setScheduledPublish(next);
+                  form.setValue(
+                    "availableFrom",
+                    next ? toDatetimeLocal(new Date().toISOString()) : "",
+                    {
+                      shouldDirty: true,
+                    },
+                  );
+                }}
+                onPublishAtChange={(value) =>
+                  form.setValue("availableFrom", value, { shouldDirty: true })
+                }
               />
             </>
           )}

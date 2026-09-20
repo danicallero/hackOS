@@ -17,9 +17,9 @@ import { z } from "zod";
 import { ActionGroup } from "@/components/common/action-group";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
-import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
+import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
 import type { UserOption } from "@/components/common/user-picker";
@@ -572,7 +572,7 @@ export default function PermissionsPage() {
         onOpenChange={setAllRulesOpen}
         onSelectRule={(rule) => selectRuleRole(rule.roleId)}
       />
-      <Modal
+      <SidePanelEditor
         open={createOpen}
         onOpenChange={setCreateOpen}
         icon={KeyRoundIcon}
@@ -669,7 +669,7 @@ export default function PermissionsPage() {
             )}
           </form>
         </Form>
-      </Modal>
+      </SidePanelEditor>
     </div>
   );
 }
