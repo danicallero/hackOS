@@ -5,8 +5,8 @@ import { useEffect, useRef } from "react";
 /**
  * Restores the window scroll position saved under `key` once `ready` (e.g.
  * the list has finished loading), and keeps saving the current position
- * while the page is visited — so a later BackLink return lands where the
- * user left off instead of at the top. Pass `key: null` to disable (no-op).
+ * while the page is visited — so a browser return lands where the user left
+ * off instead of at the top. Pass `key: null` to disable (no-op).
  */
 export function useScrollRestoration(key: string | null, ready: boolean): void {
   const restored = useRef(false);

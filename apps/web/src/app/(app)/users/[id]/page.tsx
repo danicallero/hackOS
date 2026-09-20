@@ -4,7 +4,6 @@ import { EVENTS } from "@hackos/shared/events";
 import { ChevronDownIcon, UsersIcon } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
 import { TabBar } from "@/components/common/tab-bar";
@@ -90,7 +89,6 @@ export default function UserProfilePage() {
   if (status === "error" || !user) {
     return (
       <div className="space-y-6">
-        <BackLink href="/users" label={t("backToUsers")} />
         <EmptyState
           icon={UsersIcon}
           title={t("userNotFoundTitle")}
@@ -102,7 +100,7 @@ export default function UserProfilePage() {
 
   return (
     <div className="space-y-6">
-      <ProfileHeader user={user} context={<BackLink href="/users" label={t("backToUsers")} />} />
+      <ProfileHeader user={user} />
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabBar aria-label={t("profileSections")} className="w-full justify-start">

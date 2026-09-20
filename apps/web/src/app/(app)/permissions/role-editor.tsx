@@ -516,11 +516,8 @@ export function RoleEditor({
 }
 
 /**
- * Same back-navigation idea as `BackLink` but wired to an in-page state
- * transition rather than route navigation — the mobile drill-down never
- * changes route, only `?role=`/`tab` state, so `BackLink`'s
- * `router.back()`/`history`-depth logic (built for actual page-to-page nav,
- * see `components/common/back-link.tsx`) doesn't apply here.
+ * This changes only `?role=`/`tab` state rather than routes, so its in-page
+ * return behavior stays separate from browser navigation.
  */
 export function DrilldownBackButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (

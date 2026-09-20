@@ -13,7 +13,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { AccessDenied } from "@/components/common/access-denied";
-import { BackLink } from "@/components/common/back-link";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { MultiSelect } from "@/components/common/multi-select";
 import { PageHeader } from "@/components/common/page-header";
@@ -137,10 +136,7 @@ export default function NewApplicationFormPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        context={<BackLink href="/applications" label={t("backToApplications")} />}
-        title={t("newApplicationForm")}
-      />
+      <PageHeader title={t("newApplicationForm")} />
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onCreate)}>

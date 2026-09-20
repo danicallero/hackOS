@@ -15,7 +15,6 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
-import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
@@ -169,9 +168,6 @@ export default function ProjectDetailPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        // The parent crumb is the way back; a second "Projects" button next to
-        // it said the same thing twice (issue #297).
-        context={<BackLink href="/projects" label={t("projects")} />}
         title={repo.name}
         actions={
           /* H18: metadata edit (name, description, links). */

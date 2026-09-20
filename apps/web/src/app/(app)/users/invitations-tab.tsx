@@ -3,7 +3,6 @@
 import { BanIcon, CopyIcon, LinkIcon, MailIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
-import { BackLink } from "@/components/common/back-link";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
@@ -257,7 +256,6 @@ export function InvitationsScreen() {
   return (
     <div className="space-y-6">
       <PageHeader
-        context={<BackLink href="/users" label={t("users")} />}
         title={t("invitationManagement")}
         actions={<InviteUserDialog onChanged={load} />}
       />
