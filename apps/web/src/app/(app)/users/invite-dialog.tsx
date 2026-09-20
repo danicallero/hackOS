@@ -1,7 +1,7 @@
 "use client";
 
 import { CopyIcon, LinkIcon, MailIcon, UserPlusIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { MultiSelect } from "@/components/common/multi-select";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
@@ -25,6 +25,26 @@ type Method = "email" | "link";
 type Uses = "unlimited" | "limited";
 type Expiration = "week" | "custom" | "never";
 
+function OptionLoadError({
+  id,
+  message,
+  onRetry,
+}: {
+  id: string;
+  message: string;
+  onRetry: () => void;
+}) {
+  const { t } = useLocale();
+  return (
+    <div id={id} className="flex items-center justify-between gap-3" role="alert">
+      <p className="text-destructive text-sm">{message}</p>
+      <Button type="button" size="sm" variant="outline" onClick={onRetry}>
+        {t("retry")}
+      </Button>
+    </div>
+  );
+}
+
 export function InviteUserDialog({ onChanged }: { onChanged?: () => void | Promise<void> }) {
   const { t } = useLocale();
   const copy = useCopyToClipboard();
@@ -41,34 +61,52 @@ export function InviteUserDialog({ onChanged }: { onChanged?: () => void | Promi
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
   const [roles, setRoles] = useState<RoleSummary[]>([]);
   const [rolesLoading, setRolesLoading] = useState(false);
-  const [rolesError, setRolesError] = useState(false);
+  const [rolesError, setRolesError] = useState<string | null>(null);
+  const [enterprisesLoading, setEnterprisesLoading] = useState(false);
+  const [enterprisesError, setEnterprisesError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<{ email?: string; url?: string; summary: string } | null>(
     null,
   );
   const [error, setError] = useState<string | null>(null);
 
+  const loadRoles = useCallback(async () => {
+    setRolesLoading(true);
+    setRolesError(null);
+    try {
+      const roleData = await api.get<RoleSummary[]>("/api/roles");
+      setRoles(
+        roleData.filter((role) => !role.isProtected && role.name.toLowerCase() !== "sponsor"),
+      );
+    } catch (cause) {
+      setRoles([]);
+      setRolesError(cause instanceof ApiError ? cause.message : t("couldNotLoadRoles"));
+    } finally {
+      setRolesLoading(false);
+    }
+  }, [t]);
+
+  const loadEnterprises = useCallback(async () => {
+    setEnterprisesLoading(true);
+    setEnterprisesError(null);
+    try {
+      const data = await api.get<{ enterprises: EnterpriseSummary[] }>(
+        "/api/invites/enterprise-options",
+      );
+      setEnterprises(data.enterprises);
+    } catch (cause) {
+      setEnterprises([]);
+      setEnterprisesError(cause instanceof ApiError ? cause.message : t("couldNotLoadEnterprises"));
+    } finally {
+      setEnterprisesLoading(false);
+    }
+  }, [t]);
+
   useEffect(() => {
     if (!open) return;
-    setRolesLoading(true);
-    setRolesError(false);
-    void api
-      .get<{ enterprises: EnterpriseSummary[] }>("/api/invites/enterprise-options")
-      .then((enterpriseData) => setEnterprises(enterpriseData.enterprises))
-      .catch(() => setEnterprises([]));
-    void api
-      .get<RoleSummary[]>("/api/roles")
-      .then((roleData) => {
-        setRoles(
-          roleData.filter((role) => !role.isProtected && role.name.toLowerCase() !== "sponsor"),
-        );
-      })
-      .catch(() => {
-        setRoles([]);
-        setRolesError(true);
-      })
-      .finally(() => setRolesLoading(false));
-  }, [open]);
+    void loadRoles();
+    void loadEnterprises();
+  }, [loadEnterprises, loadRoles, open]);
 
   function reset() {
     setMethod("email");
@@ -234,16 +272,18 @@ export function InviteUserDialog({ onChanged }: { onChanged?: () => void | Promi
                 options={roles.map((role) => ({ value: String(role.id), label: role.name }))}
                 value={roleIds}
                 onChange={setRoleIds}
-                disabled={rolesLoading || rolesError}
+                disabled={rolesLoading || rolesError !== null}
                 aria-describedby={rolesError ? "invite-roles-error" : undefined}
                 placeholder={t("selectRolesPlaceholder")}
                 searchPlaceholder={t("searchRolesPlaceholder")}
                 emptyText={t("noRolesYet")}
               />
               {rolesError && (
-                <p id="invite-roles-error" className="text-destructive text-sm" role="alert">
-                  {t("couldNotLoadRoles")}
-                </p>
+                <OptionLoadError
+                  id="invite-roles-error"
+                  message={rolesError}
+                  onRetry={() => void loadRoles()}
+                />
               )}
             </div>
             <div className={fieldClass}>
@@ -256,10 +296,19 @@ export function InviteUserDialog({ onChanged }: { onChanged?: () => void | Promi
                 onChange={(value) => setEnterpriseId(value)}
                 getId={(enterprise) => enterprise.id}
                 getLabel={(enterprise) => enterprise.name}
+                disabled={enterprisesLoading || enterprisesError !== null}
+                aria-describedby={enterprisesError ? "invite-enterprises-error" : undefined}
                 placeholder={t("selectEnterprisePlaceholder")}
               />
               {enterpriseId && (
                 <p className="text-muted-foreground text-xs">{t("sponsorRoleAutomatic")}</p>
+              )}
+              {enterprisesError && (
+                <OptionLoadError
+                  id="invite-enterprises-error"
+                  message={enterprisesError}
+                  onRetry={() => void loadEnterprises()}
+                />
               )}
             </div>
             <div className="space-y-3">
