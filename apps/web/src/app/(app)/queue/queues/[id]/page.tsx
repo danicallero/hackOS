@@ -21,7 +21,6 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { type DragEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
-import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { MultiSelect } from "@/components/common/multi-select";
 import { PageHeader } from "@/components/common/page-header";
@@ -139,7 +138,6 @@ export default function QueueDetailPage() {
   if (status === "error" || !queue) {
     return (
       <div className="space-y-6">
-        <BackLink href="/queue?tab=queues" label={t("queueOperations")} />
         <EmptyState icon={LayersIcon} title={t("queueNotFound")} />
       </div>
     );
@@ -265,11 +263,7 @@ export default function QueueDetailPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        context={<BackLink href="/queue?tab=queues" label={t("queueOperations")} />}
-        title={queue.group.display_name}
-        meta={queue.group.enterprise_name}
-      />
+      <PageHeader title={queue.group.display_name} meta={queue.group.enterprise_name} />
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <SectionCard

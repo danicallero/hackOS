@@ -5,7 +5,6 @@ import { EVENTS } from "@hackos/shared/events";
 import { TrophyIcon } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { Spinner } from "@/components/common/spinner";
@@ -85,7 +84,6 @@ export default function ChallengeDetailPage() {
   if (status === "error" || !challenge) {
     return (
       <div className="space-y-6">
-        <BackLink href="/challenges" label={t("backToChallenges")} />
         <EmptyState
           icon={TrophyIcon}
           title={t("challengeNotFoundTitle")}
@@ -98,7 +96,6 @@ export default function ChallengeDetailPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        context={<BackLink href="/challenges" label={t("backToChallenges")} />}
         title={textForDisplay(challenge.title)}
         state={
           <div className="flex flex-wrap items-center gap-2">

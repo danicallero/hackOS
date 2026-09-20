@@ -8,10 +8,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { AlertModal } from "@/components/common/alert-modal";
-import { DateTimeInput } from "@/components/common/datetime-input";
 import { DevpostTagsField } from "@/components/common/devpost-tags-field";
 import { DurationInput } from "@/components/common/duration-input";
 import { EmptyState } from "@/components/common/empty-state";
+import { PublicationControls } from "@/components/common/publication-controls";
 import {
   JudgingPanelBuilder,
   MultilingualInput,
@@ -43,7 +43,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
@@ -140,10 +139,15 @@ export function EditCard({
     defaultValues: toFormValues(challenge),
   });
   const [saveError, setSaveError] = useState(false);
+  const [scheduledPublish, setScheduledPublish] = useState(
+    challenge.visibility === "hidden" && Boolean(challenge.available_from),
+  );
   const { reset } = form;
+  const visibility = form.watch("visibility");
 
   useEffect(() => {
     reset(toFormValues(challenge));
+    setScheduledPublish(challenge.visibility === "hidden" && Boolean(challenge.available_from));
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Resync local edit state from the freshly reloaded challenge after a save.
     setSaveError(false);
     setPrizes(asPrizes(challenge.prizes));
@@ -381,46 +385,39 @@ export function EditCard({
           <TabsContent value="publish" className="space-y-6 pt-4">
             <SectionCard title={t("publicationTitle")}>
               <div className="space-y-5">
-                <FormField
-                  control={form.control}
-                  name="visibility"
-                  render={({ field }) => (
-                    <FormItem>
-                      <div className="flex items-center justify-between gap-4 rounded-md border p-3">
-                        <FormLabel>{t("visibleLabel")}</FormLabel>
-                        <FormControl>
-                          <Switch
-                            checked={field.value === "visible"}
-                            disabled={!canAdmin}
-                            onCheckedChange={(checked) =>
-                              field.onChange(checked ? "visible" : "hidden")
-                            }
-                          />
-                        </FormControl>
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="availableFrom"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("publishDate")}</FormLabel>
-                      <FormControl>
-                        <DateTimeInput
-                          value={field.value}
-                          disabled={!canAdmin}
-                          onChange={(value) =>
-                            form.setValue("availableFrom", value, { shouldDirty: true })
-                          }
-                          nullOption={{ label: t("immediate") }}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+                <PublicationControls
+                  id="challenge-publication"
+                  visibility={visibility}
+                  hiddenValue="hidden"
+                  publishedValue="visible"
+                  hiddenLabel={t("hiddenOption")}
+                  publishedLabel={t("visibleLabel")}
+                  visibilityLabel={t("colVisibility")}
+                  scheduleLabel={t("schedulePublicationLabel")}
+                  publishAtLabel={t("publishAtLabel")}
+                  scheduled={scheduledPublish}
+                  publishAt={form.watch("availableFrom")}
+                  disabled={!canAdmin}
+                  onVisibilityChange={(next) => {
+                    form.setValue("visibility", next, { shouldDirty: true });
+                    if (next === "visible") {
+                      setScheduledPublish(false);
+                      form.setValue("availableFrom", "", { shouldDirty: true });
+                    }
+                  }}
+                  onScheduledChange={(next) => {
+                    setScheduledPublish(next);
+                    form.setValue(
+                      "availableFrom",
+                      next ? toDatetimeLocal(new Date().toISOString()) : "",
+                      {
+                        shouldDirty: true,
+                      },
+                    );
+                  }}
+                  onPublishAtChange={(value) =>
+                    form.setValue("availableFrom", value, { shouldDirty: true })
+                  }
                 />
               </div>
             </SectionCard>

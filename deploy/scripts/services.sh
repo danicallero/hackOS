@@ -83,7 +83,11 @@ clear_shell() {
 pause_shell() {
   local pause_tty_state
 
-  printf '%s' "${c_dim}Press any key to return · ←/Esc also returns.${c_reset}"
+  if [[ "${last_child_succeeded:-true}" == true ]]; then
+    printf '%s' "${c_green}Action complete.${c_reset} ${c_dim}Press any key to return · ←/Esc also returns.${c_reset}"
+  else
+    printf '%s' "${c_red}Action failed.${c_reset} ${c_dim}Press any key to return · ←/Esc also returns.${c_reset}"
+  fi
   if [[ -t 0 ]]; then
     pause_tty_state="$(stty -g 2>/dev/null || true)"
     if [[ -n "$pause_tty_state" ]]; then
@@ -199,6 +203,7 @@ project_name="hackos-$environment"
 config_file="${HACKOS_CONFIG_FILE:-/etc/hackos/hackos.env}"
 secrets_file="${HACKOS_SECRETS_FILE:-/etc/hackos/hackos.secrets}"
 lock_file="${HACKOS_LOCK_FILE:-$app_dir/.deploy.lock}"
+image_state_file="${HACKOS_IMAGE_STATE_FILE:-$app_dir/.image-tags}"
 
 [[ -f "$compose_file" ]] || die "Compose file is missing: $compose_file"
 command -v docker >/dev/null 2>&1 || die "Docker is not available"
@@ -225,6 +230,46 @@ elif [[ -f "$config_file" ]]; then
   require_private_file "$config_file"
 else
   die "environment file is missing: $config_file"
+fi
+
+# Deployments can update API and web independently. Compose's legacy IMAGE_TAG
+# remains in the host configuration, while .image-tags records the actually
+# deployed tag for each service. Reuse those tags for every operator action so
+# a start or recreate cannot silently downgrade one service to IMAGE_TAG.
+image_state_value() {
+  local key="$1"
+
+  [[ -r "$image_state_file" ]] || return 0
+  awk -v key="$key" '
+    /^[[:space:]]*(#|$)/ { next }
+    {
+      line = $0
+      sub(/^[[:space:]]*/, "", line)
+      split(line, fields, "=")
+      if (fields[1] == key) {
+        sub(/^[^=]*=/, "", line)
+        value = line
+      }
+    }
+    END {
+      value = value ? value : ""
+      value = value ~ /^".*"$/ ? substr(value, 2, length(value) - 2) : value
+      print value
+    }
+  ' "$image_state_file"
+}
+
+valid_image_tag() {
+  [[ "$1" =~ ^sha-[0-9a-f]{40}$ ]]
+}
+
+api_image_tag="$(image_state_value API_IMAGE_TAG)"
+web_image_tag="$(image_state_value WEB_IMAGE_TAG)"
+if valid_image_tag "$api_image_tag"; then
+  export API_IMAGE_TAG="$api_image_tag"
+fi
+if valid_image_tag "$web_image_tag"; then
+  export WEB_IMAGE_TAG="$web_image_tag"
 fi
 
 compose() {
@@ -547,11 +592,13 @@ report_child_failure() {
 
 run_child() {
   local status
+  last_child_succeeded=true
   if "$0" "$environment" "$@"; then
     return 0
   else
     status=$?
   fi
+  last_child_succeeded=false
   report_child_failure "$status"
   return 0
 }
@@ -560,11 +607,13 @@ run_child_with_secret() {
   local secret="$1"
   shift
   local status
+  last_child_succeeded=true
   if printf '%s\n' "$secret" | "$0" "$environment" "$@"; then
     return 0
   else
     status=$?
   fi
+  last_child_succeeded=false
   report_child_failure "$status"
   return 0
 }
@@ -619,6 +668,30 @@ format_status_stream() {
         printf "%s%s\t%s\t%s\t%s\t%s\t%s%s\n", colour, service, state, health, exit_code, ports, reason, reset
       }
     '
+}
+
+show_status() {
+  local status_args=(ps --all --format "$service_status_format")
+  if (($# > 0)); then
+    status_args+=("$@")
+  fi
+  compose "${status_args[@]}" | format_status_stream
+}
+
+run_compose_quiet() {
+  local description="$1"
+  shift
+  local output_file
+  output_file="$(mktemp)"
+  if compose "$@" >"$output_file" 2>&1; then
+    rm -f "$output_file"
+    printf '✓ %s\n' "$description"
+    return 0
+  fi
+  printf 'Unable to %s.\n' "$description" >&2
+  tail -n 20 "$output_file" >&2
+  rm -f "$output_file"
+  return 1
 }
 
 format_log_stream() {
@@ -984,9 +1057,9 @@ print_service_releases() {
       printf '%s\n' "${c_yellow}${service}: no container/image found${c_reset}"
       continue
     fi
-    revision="$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' "$image" 2>/dev/null || true)"
-    channel="$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.ref.name\" }}' "$image" 2>/dev/null || true)"
-    created="$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.created\" }}' "$image" 2>/dev/null || true)"
+    revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image" 2>/dev/null || true)"
+    channel="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.ref.name" }}' "$image" 2>/dev/null || true)"
+    created="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.created" }}' "$image" 2>/dev/null || true)"
     [[ -n "$created" && "$created" != '<no value>' ]] || created="$(docker image inspect --format '{{.Created}}' "$image" 2>/dev/null || true)"
     if [[ -z "$revision" || "$revision" == '<no value>' ]]; then
       printf '%s\n' "${c_yellow}${service}: ${image} · revision unavailable${c_reset}"
@@ -1490,53 +1563,6 @@ ghcr_tags() {
     die "could not list GHCR tags for $package"
 }
 
-ghcr_created_at() {
-  local package="$1" tag="$2" token
-  require_registry_tools
-  token="$(
-    curl --fail --silent --show-error --get 'https://ghcr.io/token' \
-      --data-urlencode 'service=ghcr.io' \
-      --data-urlencode "scope=repository:${github_owner}/${package}:pull" |
-      python3 -c 'import json, sys; print(json.load(sys.stdin)["token"])'
-  )" || die "could not obtain a read-only GHCR token for $package"
-  GHCR_TOKEN="$token" python3 - "$github_owner" "$package" "$tag" <<'PY'
-import json
-import os
-import sys
-from urllib.request import Request, urlopen
-
-owner, package, tag = sys.argv[1:]
-base = f"https://ghcr.io/v2/{owner}/{package}"
-headers = {
-    "Authorization": f"Bearer {os.environ['GHCR_TOKEN']}",
-    "Accept": "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json",
-}
-
-def get_json(url, accept=None):
-    request_headers = dict(headers)
-    if accept:
-        request_headers["Accept"] = accept
-    with urlopen(Request(url, headers=request_headers), timeout=20) as response:
-        return json.load(response)
-
-index = get_json(f"{base}/manifests/{tag}")
-manifests = index.get("manifests", [index])
-manifest = next(
-    (item for item in manifests if item.get("platform", {}).get("os") == "linux" and item.get("platform", {}).get("architecture") == "arm64"),
-    next((item for item in manifests if item.get("platform", {}).get("os") == "linux"), None),
-)
-if not manifest:
-    raise SystemExit("no Linux image manifest found")
-image = get_json(
-    f"{base}/manifests/{manifest['digest']}",
-    "application/vnd.oci.image.manifest.v1+json",
-)
-config = get_json(f"{base}/blobs/{image['config']['digest']}")
-labels = config.get("config", {}).get("Labels", {}) or {}
-print(labels.get("org.opencontainers.image.created") or config.get("created") or "unknown")
-PY
-}
-
 github_api() {
   require_registry_tools
   curl --fail --silent --show-error \
@@ -1547,12 +1573,11 @@ github_api() {
 canonical_release_tag() {
   local tag="$1"
   case "$tag" in
+    sha-[0-9a-f]*)
+      [[ "$tag" =~ ^sha-[0-9a-f]{40}$ ]] && printf '%s\n' "$tag"
+      ;;
     [0-9a-f]*)
-      if [[ "$tag" =~ ^[0-9a-f]{40}$ ]]; then
-        printf 'sha-%s\n' "$tag"
-      elif [[ "$tag" =~ ^sha-[0-9a-f]{40}$ ]]; then
-        printf '%s\n' "$tag"
-      fi
+      [[ "$tag" =~ ^[0-9a-f]{40}$ ]] && printf 'sha-%s\n' "$tag"
       ;;
     staging-sha-[0-9a-f]*)
       tag="sha-${tag#staging-sha-}"
@@ -1566,7 +1591,7 @@ canonical_release_tag() {
 }
 
 published_releases() {
-  local tag release_tag channel created
+  local tag release_tag channel
   local -A api_tags=() web_tags=() all_tags=() channels=()
 
   while IFS= read -r tag; do
@@ -1594,18 +1619,14 @@ published_releases() {
     fi
   done < <(ghcr_tags hackos-web)
 
-  printf '%-25s %-10s %-52s %-5s %-5s\n' 'PUBLISHED (UTC)' 'CHANNEL' 'TAG' 'API' 'WEB'
+  printf '%s\n' 'Available immutable images. Deploy latest resolves the newest published staging commit.'
+  printf '%-10s %-52s %-5s %-5s\n' 'CHANNEL' 'TAG' 'API' 'WEB'
   for tag in "${!all_tags[@]}"; do
     channel="${channels[$tag]:-legacy}"
-    if [[ -n "${api_tags[$tag]:-}" ]]; then
-      created="$(ghcr_created_at hackos-api "$tag")"
-    else
-      created="$(ghcr_created_at hackos-web "$tag")"
-    fi
-    printf '%s\t%-25s %-10s %-52s %-5s %-5s\n' \
-      "$created" "$created" "$channel" "$tag" \
+    printf '%-10s %-52s %-5s %-5s\n' \
+      "$channel" "$tag" \
       "${api_tags[$tag]:-no}" "${web_tags[$tag]:-no}"
-  done | sort -r | cut -f2-
+  done | sort -k2,2r
 }
 
 latest_staging_tag() {
@@ -1685,7 +1706,7 @@ deploy_release() {
     return 0
   fi
   lock_mutation
-  "$app_dir/deploy.sh" staging "$tag" "$api_changed" "$web_changed"
+  HACKOS_LOCK_HELD=true "$app_dir/deploy.sh" staging "$tag" "$api_changed" "$web_changed"
 }
 
 deploy_target_shell() {
@@ -1761,7 +1782,7 @@ release_shell() {
           3)
             clear_shell
             printf '%s\n' "${c_cyan}${c_bold}hackOS ${environment} · select release${c_reset}"
-            printf '%s\n\n' "${c_dim}Published releases in GHCR (newest first):${c_reset}"
+            printf '%s\n\n' "${c_dim}Available immutable releases in GHCR:${c_reset}"
             published_releases || printf '%s\n' "${c_red}Could not fetch published releases from GHCR.${c_reset}"
             printf '\n'
             read_shell_input "Release tag to deploy (sha-<40 hex>, commit, b back, q quit): "
@@ -1887,11 +1908,7 @@ terminal_setup
 case "$action" in
   status)
     validate_services "$@"
-    status_args=(ps --all --format "$service_status_format")
-    if (($# > 0)); then
-      status_args+=("$@")
-    fi
-    if compose "${status_args[@]}" | format_status_stream; then
+    if show_status "$@"; then
       :
     else
       status=$?
@@ -1982,11 +1999,15 @@ case "$action" in
     if (($# > 0)); then
       start_targets=("$@")
     fi
+    printf 'Starting %s from installed containers. No registry access.\n' "${start_targets[*]}"
     compose unpause "${start_targets[@]}" 2>/dev/null || true
-    if ! compose start "${start_targets[@]}" 2>/dev/null; then
-      compose up --detach --no-build --pull never "${start_targets[@]}"
+    if compose start "${start_targets[@]}" >/dev/null 2>&1; then
+      printf '✓ Existing containers started.\n'
+    else
+      printf 'Creating any missing containers from installed images.\n'
+      run_compose_quiet "start selected services" up --detach --no-build --pull never "${start_targets[@]}"
     fi
-    compose ps --all
+    show_status
     ;;
 
   recreate)
@@ -1996,27 +2017,29 @@ case "$action" in
     if (($# > 0)); then
       recreate_services=("$@")
     fi
-    compose up --detach --no-build --pull never --force-recreate --wait --wait-timeout 120 "${recreate_services[@]}"
-    compose ps --all
+    printf 'Recreating %s with installed image tags. No registry access.\n' "${recreate_services[*]}"
+    printf 'Waiting for configured health checks (up to 2 minutes).\n'
+    run_compose_quiet "recreate selected services" up --detach --no-build --pull never --force-recreate --wait --wait-timeout 120 "${recreate_services[@]}"
+    show_status
     ;;
 
   stop)
     validate_services "$@"
     lock_mutation
     if (($# == 0)); then
-      compose stop
+      run_compose_quiet "stop all services" stop
     else
-      compose stop "$@"
+      run_compose_quiet "stop selected services" stop "$@"
     fi
-    compose ps --all
+    show_status
     ;;
 
   shutdown)
     (($# == 0)) || usage
     lock_mutation
-    echo "Stopping $project_name; persistent data is retained."
-    compose stop
-    compose ps --all
+    echo "Stopping $project_name. Persistent data is retained."
+    run_compose_quiet "stop all services" stop
+    show_status
     ;;
 
   release)

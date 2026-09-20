@@ -22,7 +22,6 @@ import { EVENTS } from "@hackos/shared/events";
 import { ClipboardListIcon, LockIcon, UsersIcon } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { SaveStatus } from "@/components/common/save-status";
@@ -171,7 +170,6 @@ export default function ApplicationDetailPage() {
   if (state === "error") {
     return (
       <div className="space-y-6">
-        <BackLink href="/applications" label={t("backToApplications")} />
         <EmptyState
           icon={ClipboardListIcon}
           title={t("formNotFound")}
@@ -186,7 +184,6 @@ export default function ApplicationDetailPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        context={<BackLink href="/applications" label={t("backToApplications")} />}
         title={form ? form.name : t("applicationNumber", { id })}
         state={
           form && w ? (

@@ -95,6 +95,7 @@ async function inviteRequirements(
 const INVITE_TTL_HOURS = 24 * 7;
 
 const inviteKind = z.enum(["staff", "sponsor", "participant"]);
+const inviteListStatus = z.enum(["active", "expired", "used", "withdrawn"]);
 
 const inviteResponse = z.object({
   id: z.number(),
@@ -108,6 +109,11 @@ const inviteResponse = z.object({
   // token returned to the admin so the link can also be handed over manually
   token: z.string().nullable(),
 });
+
+function statusForInvite(row: TokenRow): z.infer<typeof inviteListStatus> {
+  if (row.used_at !== null) return row.user_id === null ? "withdrawn" : "used";
+  return row.expires_at <= new Date() ? "expired" : "active";
+}
 
 interface TokenRow {
   id: number;
@@ -265,7 +271,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
     },
   );
 
-  // ── list active invites (H9/H10 — admin overview) ────────────────────────
+  // ── list invites, including their terminal audit states (H9/H10) ─────────
 
   api.get(
     "/api/invites",
@@ -273,6 +279,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
       preHandler: manage,
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
+        querystring: z.object({ status: inviteListStatus.or(z.literal("all")).default("active") }),
         response: {
           200: z.array(
             z.object({
@@ -282,31 +289,54 @@ export function registerInviteRoutes(app: FastifyInstance): void {
               enterpriseId: z.number().nullable(),
               roleIds: z.array(z.number()),
               expiresAt: z.string(),
+              usedAt: z.string().nullable(),
+              usedByName: z.string().nullable(),
+              usedByEmail: z.string().nullable(),
+              status: inviteListStatus,
               createdAt: z.string(),
               token: z.string(),
             }),
           ),
         },
+        summary: "List account invitations",
+        description:
+          "Lists active, expired, used, or withdrawn email invitations. Used invitations include their redemption time and resulting account for traceability (H9, H10).",
       },
     },
-    async () => {
+    async (req) => {
+      const { status } = req.query;
       const { rows } = await pool.query(
-        `SELECT * FROM email_verification_tokens
-         WHERE type IN ('sponsor_invite', 'account_claim')
-           AND used_at IS NULL
-           AND expires_at > now()
-         ORDER BY created_at DESC`,
+        `SELECT t.*, NULLIF(BTRIM(CONCAT_WS(' ', used_by.name, used_by.surname)), '') AS used_by_name,
+                used_by.email AS used_by_email
+           FROM email_verification_tokens t
+           LEFT JOIN users used_by ON used_by.id = t.user_id
+          WHERE t.type IN ('sponsor_invite', 'account_claim')
+            AND (
+              $1 = 'all'
+              OR ($1 = 'active' AND t.used_at IS NULL AND t.expires_at > now())
+              OR ($1 = 'expired' AND t.used_at IS NULL AND t.expires_at <= now())
+              OR ($1 = 'used' AND t.used_at IS NOT NULL AND t.user_id IS NOT NULL)
+              OR ($1 = 'withdrawn' AND t.used_at IS NOT NULL AND t.user_id IS NULL)
+            )
+         ORDER BY t.created_at DESC`,
+        [status],
       );
-      return rows.map((row: TokenRow) => ({
-        id: row.id,
-        email: row.email,
-        kind: (row.kind ?? "staff") as z.infer<typeof inviteKind>,
-        enterpriseId: row.enterprise_id,
-        roleIds: row.role_ids,
-        expiresAt: row.expires_at.toISOString(),
-        createdAt: row.created_at.toISOString(),
-        token: row.token,
-      }));
+      return rows.map(
+        (row: TokenRow & { used_by_name: string | null; used_by_email: string | null }) => ({
+          id: row.id,
+          email: row.email,
+          kind: (row.kind ?? "staff") as z.infer<typeof inviteKind>,
+          enterpriseId: row.enterprise_id,
+          roleIds: row.role_ids,
+          expiresAt: row.expires_at.toISOString(),
+          usedAt: row.used_at?.toISOString() ?? null,
+          usedByName: row.used_by_name,
+          usedByEmail: row.used_by_email,
+          status: statusForInvite(row),
+          createdAt: row.created_at.toISOString(),
+          token: row.token,
+        }),
+      );
     },
   );
 

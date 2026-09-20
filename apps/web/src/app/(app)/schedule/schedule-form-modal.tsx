@@ -9,6 +9,7 @@ import { ACTIVITY_KINDS, isMealActivityKind } from "@hackos/shared/activity-kind
 import { CalendarDaysIcon, ChevronDownIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { DateTimeInput } from "@/components/common/datetime-input";
+import { PublicationControls } from "@/components/common/publication-controls";
 import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
@@ -28,7 +29,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
-import { getTimeZoneLabel, toDatetimeLocal } from "@/lib/datetime";
+import { toDatetimeLocal } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import {
   logisticsApi,
@@ -397,22 +398,37 @@ export function ScheduleFormModal({
         )}
 
         {hasAudience && (
-          <Field id="schedule-visibility" label={t("colVisibility")}>
-            <Select
-              value={values.visibility}
-              onValueChange={(visibility) =>
-                setValues((v) => ({ ...v, visibility: visibility as "shown" | "hidden" }))
-              }
-            >
-              <SelectTrigger id="schedule-visibility" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="hidden">{t("hiddenOption")}</SelectItem>
-                <SelectItem value="shown">{t("shownOption")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
+          <PublicationControls
+            id="schedule-publication"
+            visibility={values.visibility}
+            hiddenValue="hidden"
+            publishedValue="shown"
+            hiddenLabel={t("hiddenOption")}
+            publishedLabel={t("shownOption")}
+            visibilityLabel={t("colVisibility")}
+            scheduleLabel={t("schedulePublicationLabel")}
+            publishAtLabel={t("publishAtLabel")}
+            scheduled={scheduledPublish}
+            publishAt={values.publishAt ?? ""}
+            onVisibilityChange={(visibility) => {
+              setValues((v) => ({
+                ...v,
+                visibility,
+                publishAt: visibility === "shown" ? null : v.publishAt,
+              }));
+              if (visibility === "shown") setScheduledPublish(false);
+            }}
+            onScheduledChange={(scheduled) => {
+              setScheduledPublish(scheduled);
+              setValues((v) => ({
+                ...v,
+                publishAt: scheduled ? toDatetimeLocal(new Date().toISOString()) : null,
+              }));
+            }}
+            onPublishAtChange={(publishAt) =>
+              setValues((v) => ({ ...v, publishAt: publishAt || null }))
+            }
+          />
         )}
 
         {/*
@@ -509,41 +525,6 @@ export function ScheduleFormModal({
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent className="space-y-5 pt-3">
-            {hasAudience && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="schedule-publication-toggle"
-                    checked={scheduledPublish}
-                    onCheckedChange={(checked) => {
-                      const next = checked === true;
-                      setScheduledPublish(next);
-                      setValues((v) => ({
-                        ...v,
-                        publishAt: next ? toDatetimeLocal(new Date().toISOString()) : null,
-                      }));
-                    }}
-                  />
-                  <Label htmlFor="schedule-publication-toggle" className="font-normal">
-                    {t("schedulePublicationLabel")}
-                  </Label>
-                </div>
-                {scheduledPublish && (
-                  <Field id="schedule-publish-at" label={t("publishAtLabel")}>
-                    <DateTimeInput
-                      id="schedule-publish-at"
-                      value={values.publishAt ?? ""}
-                      onChange={(publishAt) =>
-                        setValues((v) => ({ ...v, publishAt: publishAt || null }))
-                      }
-                    />
-                    <p className="text-muted-foreground text-sm text-pretty">
-                      {t("publishDestinationsHint", { timezone: getTimeZoneLabel() })}
-                    </p>
-                  </Field>
-                )}
-              </div>
-            )}
             <Field id="schedule-notes" label={t("internalNotesLabel")}>
               <Textarea
                 id="schedule-notes"

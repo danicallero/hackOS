@@ -11,7 +11,6 @@ import { ArrowLeftIcon, ClipboardListIcon, LockIcon, SendIcon, UsersIcon } from 
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
@@ -160,7 +159,6 @@ export default function ReviewDetailPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        context={<BackLink href="/queue/reviews" label={t("backToReviews")} />}
         title={project.name}
         description={textForDisplay(challenge.title)}
         state={

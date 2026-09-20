@@ -133,7 +133,7 @@ export default function AuditPage() {
   }, [canRead]);
 
   // Debounce the filter bar, and reset to page 1 on any change — but not on
-  // mount, where `filters` may be a restored value (BackLink round-trip) and
+  // mount, where `filters` may be a restored value from browser navigation and
   // the matching `offset` was restored right alongside it.
   const filtersMounted = useRef(false);
   useEffect(() => {

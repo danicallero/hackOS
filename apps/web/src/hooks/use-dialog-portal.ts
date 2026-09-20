@@ -10,10 +10,25 @@ import {
 } from "react";
 
 export const OVERLAY_CONTAINER_SELECTOR =
-  '[data-slot="dialog-content"], [data-slot="sheet-content"], [data-slot="alert-dialog-content"], [data-slot="popover-content"], [data-slot="dropdown-menu-content"], [data-slot="select-content"]';
+  '[data-slot="popover-content"], [data-slot="dropdown-menu-content"], [data-slot="select-content"], [data-slot="alert-dialog-content"], [data-slot="dialog-content"], [data-slot="sheet-content"]';
 
 export function getOverlayContainer(anchor: HTMLElement | null) {
-  return anchor?.closest<HTMLElement>(OVERLAY_CONTAINER_SELECTOR) ?? null;
+  const overlay = anchor?.closest<HTMLElement>(OVERLAY_CONTAINER_SELECTOR);
+  if (!overlay) return null;
+
+  // Dialog and sheet panels are flex containers. A portaled overlay rendered
+  // directly in either would become another flex item, so use their dedicated
+  // child layer instead. It stays inside Radix's active modal scope while
+  // remaining outside the panel's scrolling content.
+  if (overlay.dataset.slot === "dialog-content" || overlay.dataset.slot === "sheet-content") {
+    return (
+      overlay.querySelector<HTMLElement>(
+        ':scope > [data-slot="dialog-portal-container"], :scope > [data-slot="sheet-portal-container"]',
+      ) ?? overlay
+    );
+  }
+
+  return overlay;
 }
 
 export interface OverlayPortalContextValue {

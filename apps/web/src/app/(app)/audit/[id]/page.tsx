@@ -10,7 +10,6 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
-import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
@@ -67,7 +66,6 @@ export default function AuditEntryPage() {
   if (state === "error" || !row) {
     return (
       <div className="space-y-6">
-        <BackLink href="/audit" label={t("backToAuditLog")} />
         <EmptyState icon={ScrollTextIcon} title={t("auditEntryNotFound")} description={errorMsg} />
       </div>
     );
@@ -81,7 +79,6 @@ export default function AuditEntryPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        context={<BackLink href="/audit" label={t("backToAuditLog")} />}
         title={getActionLabel(row.action, t)}
         meta={
           <span className="text-muted-foreground text-xs">

@@ -76,9 +76,7 @@ function DialogContent({
     return (
       target instanceof Element &&
       Boolean(
-        target.closest(
-          "[data-dialog-floating], [data-sileo-viewport], [data-hackos-toast-close]",
-        ),
+        target.closest("[data-dialog-floating], [data-sileo-viewport], [data-hackos-toast-close]"),
       )
     )
   }
@@ -97,7 +95,7 @@ function DialogContent({
         data-slot="dialog-content"
         className={cn(
           overlayVariants({ elevation: "modal" }),
-          "fixed top-[50%] left-[50%] z-50 flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] flex-col gap-4 overflow-hidden border-border/60 bg-popover/96 p-6 backdrop-blur-md duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 motion-reduce:transition-none sm:max-w-lg",
+          "fixed top-[50%] left-[50%] z-50 flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] flex-col gap-4 overflow-hidden border-border/60 bg-popover/96 p-6 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 motion-reduce:transition-none sm:max-w-lg",
           className
         )}
         onInteractOutside={(event) => {
@@ -114,6 +112,10 @@ function DialogContent({
         }}
         {...props}
       >
+        <div
+          data-slot="dialog-portal-container"
+          className="pointer-events-none fixed inset-0 z-50"
+        />
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close
