@@ -19,24 +19,17 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { ClipboardListIcon, HammerIcon, LockIcon, Trash2Icon, UsersIcon } from "lucide-react";
+import { ClipboardListIcon, LockIcon, UsersIcon } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
-import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
 import { SaveStatus } from "@/components/common/save-status";
 import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { TabBar } from "@/components/common/tab-bar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
@@ -233,23 +226,6 @@ export default function ApplicationDetailPage() {
             </span>
           ) : undefined
         }
-        secondaryActions={
-          canManage ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <IconButton variant="outline" size="icon-sm" label={t("applicationActions")}>
-                  <HammerIcon />
-                </IconButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
-                  <Trash2Icon />
-                  {t("deleteApplication")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : undefined
-        }
       />
 
       <AlertModal
@@ -282,8 +258,8 @@ export default function ApplicationDetailPage() {
               {form ? (
                 <>
                   <MetadataCard form={form} onSaved={loadForm} onDirtyChange={setMetadataDirty} />
-                  <ApplicationDangerZone onDelete={() => setDeleteOpen(true)} />
                   <QuestionsCard form={form} onSaved={loadForm} onDirtyChange={setQuestionsDirty} />
+                  <ApplicationDangerZone onDelete={() => setDeleteOpen(true)} />
                 </>
               ) : (
                 <EmptyState
