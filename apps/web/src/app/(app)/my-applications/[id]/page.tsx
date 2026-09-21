@@ -21,6 +21,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
+import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
@@ -80,6 +81,7 @@ export default function MyApplicationDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [acting, setActing] = useState(false);
   const [releaseOpen, setReleaseOpen] = useState(false);
+  const [submissionNoticeOpen, setSubmissionNoticeOpen] = useState(false);
   const [privacyNotice, setPrivacyNotice] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -322,6 +324,7 @@ export default function MyApplicationDetailPage() {
       setFieldErrors({});
       setSaveState("saved");
       setActionError(null);
+      setSubmissionNoticeOpen(true);
       toast.success(t("applicationSubmitted"));
     } catch (err) {
       setSaveState("error");
@@ -642,6 +645,20 @@ export default function MyApplicationDetailPage() {
       >
         <p className="text-muted-foreground text-pretty text-sm">{t("releaseCantBeUndone")}</p>
       </AlertModal>
+
+      <Modal
+        open={submissionNoticeOpen}
+        onOpenChange={setSubmissionNoticeOpen}
+        title={t("applicationSubmissionNoticeTitle")}
+        footer={<Button onClick={() => setSubmissionNoticeOpen(false)}>{t("close")}</Button>}
+      >
+        <div className="space-y-3">
+          <p className="text-pretty text-sm">{t("applicationSubmissionNoticeDecision")}</p>
+          <p className="text-muted-foreground text-pretty text-sm">
+            {t("applicationSubmissionNoticeSpam")}
+          </p>
+        </div>
+      </Modal>
     </div>
   );
 }
