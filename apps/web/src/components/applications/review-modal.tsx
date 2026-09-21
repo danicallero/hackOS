@@ -1289,7 +1289,7 @@ export function ReviewModal({
       size="xl"
       floatingFocus={desktopFloating && (canScore || files.length > 0)}
       className={cn(
-        "max-h-[90vh] sm:max-w-4xl 2xl:h-[min(90vh,54rem)] 2xl:transition-[left]",
+        "max-h-[90vh] overflow-visible sm:max-w-4xl 2xl:h-[min(90vh,54rem)] 2xl:transition-[left]",
         files.length > 0 &&
           (fileViewerSide === "left"
             ? "2xl:left-[calc(50%+15.5rem)]"
@@ -2122,11 +2122,10 @@ function DecisionMenu({
   const sentActions = ["accepted", "rejected", "confirmed", "declined", "expired"].includes(status);
   const hasAvailableActions = reviewActions || outboxActions || sentActions;
 
-  // H12/H14: the decision control lives against the modal's trailing edge. Reverse
-  // Radix's submenu direction so the options open into the dialog instead of
-  // being clipped by its rounded panel. Keep the visible copy LTR.
+  // H12/H14: keep the submenu and its chevron on the same (trailing) side of
+  // the decision menu. Radix flips it automatically when the viewport is tight.
   return (
-    <DropdownMenu dir="rtl">
+    <DropdownMenu dir="ltr">
       <DropdownMenuTrigger asChild>
         <button
           type="button"
@@ -2216,7 +2215,7 @@ function DecisionMenu({
           <>
             <DropdownMenuSeparator />
             <DropdownMenuSub>
-              <DropdownMenuSubTrigger disabled={busy} arrow="left">
+              <DropdownMenuSubTrigger disabled={busy}>
                 <FilePenLineIcon />
                 {t("returnToDraft")}
               </DropdownMenuSubTrigger>

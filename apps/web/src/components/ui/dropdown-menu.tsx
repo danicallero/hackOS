@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, CircleIcon } from "lucide-react"
+import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react"
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui"
 
 import {
@@ -244,15 +244,10 @@ function DropdownMenuSubTrigger({
   className,
   inset,
   children,
-  arrow = "right",
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.SubTrigger> & {
   inset?: boolean
-  /** Direction the submenu indicator points toward. */
-  arrow?: "left" | "right"
 }) {
-  const ArrowIcon = arrow === "left" ? ChevronLeftIcon : ChevronRightIcon
-
   return (
     <DropdownMenuPrimitive.SubTrigger
       data-slot="dropdown-menu-sub-trigger"
@@ -264,7 +259,7 @@ function DropdownMenuSubTrigger({
       {...props}
     >
       {children}
-      <ArrowIcon
+      <ChevronRightIcon
         aria-hidden="true"
         className="ml-auto size-3.5 text-muted-foreground/75"
         strokeWidth={1.75}
