@@ -628,21 +628,22 @@ describe("applications CRUD (H11)", () => {
     expect(ok.statusCode).toBe(201);
   });
 
-  it("blocks deleting a form that already has responses", async () => {
+  it("deletes a form that already has responses", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
     const appId = await createApplication();
     const applicant = await createUser();
-    const { createResponse } = await import("./fixtures.js");
-    await createResponse(applicant, appId, { status: "review" });
+    const responseId = await createResponse(applicant, appId, { status: "review" });
 
     const res = await a.inject({
       method: "DELETE",
       url: `/api/applications/${appId}`,
       headers: asUser(manager),
     });
-    expect(res.statusCode).toBe(409);
-    expect(res.json().error.details.code).toBe("has_responses");
+    expect(res.statusCode).toBe(204);
+    expect(
+      (await pool.query(`SELECT 1 FROM application_responses WHERE id = $1`, [responseId])).rows,
+    ).toHaveLength(0);
   });
 
   it("H11: sections group template fields and round-trip through create/update/read", async () => {
