@@ -36,6 +36,9 @@ jobs:
       - name: Validate deployment shell syntax
         run: bash deploy/test-shell-syntax.sh
 
+      - name: Validate combined production environment contract
+        run: bash deploy/test-combined-env.sh
+
   typecheck:
     name: typecheck
     runs-on: ubuntu-latest

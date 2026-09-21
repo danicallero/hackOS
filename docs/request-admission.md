@@ -138,10 +138,8 @@ change the mirrored qualification limit in the same review:
 ```sh
 # edit deploy/docker-compose.yml (and qualification when the service is mirrored)
 docker compose --env-file /etc/hackos/hackos.env \
-  --env-file /etc/hackos/hackos.secrets \
   -f deploy/docker-compose.yml up -d --force-recreate <service>
 docker compose --env-file /etc/hackos/hackos.env \
-  --env-file /etc/hackos/hackos.secrets \
   -f deploy/docker-compose.yml ps <service>
 ```
 

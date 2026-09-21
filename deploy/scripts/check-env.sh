@@ -5,8 +5,7 @@
 #   ./deploy/scripts/check-env.sh [config-file] [secrets-file] [image-tag]
 #     [api-image-tag] [web-image-tag]
 #
-# A single chmod-600 combined file is accepted for compatibility with the
-# current production host. The canonical contract remains two files.
+# Production uses one file; staging uses the existing pair.
 
 set -euo pipefail
 
@@ -73,7 +72,7 @@ value_in_file() {
   ' "$file"
 }
 
-# Match Docker Compose's two-file precedence: the secrets file is loaded last.
+# The second file wins when the split contract is used.
 value() {
   local key="$1"
   local result=""

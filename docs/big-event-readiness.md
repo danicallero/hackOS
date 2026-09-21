@@ -158,10 +158,8 @@ that service and verify its health:
 ```sh
 # edit deploy/docker-compose.yml (and qualification if the mirroring value changes)
 docker compose --env-file /etc/hackos/hackos.env \
-  --env-file /etc/hackos/hackos.secrets \
   -f deploy/docker-compose.yml up -d --force-recreate <service>
 docker compose --env-file /etc/hackos/hackos.env \
-  --env-file /etc/hackos/hackos.secrets \
   -f deploy/docker-compose.yml ps <service>
 ```
 
@@ -171,9 +169,11 @@ after every limit edit.
 
 ## Pre-event checklist
 
-1. **Set the two host env files** (`/etc/hackos/hackos.env` and
-   `/etc/hackos/hackos.secrets`) a few days before the event, not on the day —
-   so a boot-time zod validation failure surfaces early.
+1. **Set the host env files** according to the environment a few days before
+   the event, not on the day — production uses the combined
+   `/etc/hackos/hackos.env` (mode `0600`), while staging keeps
+   `/etc/hackos/hackos.env` plus `/etc/hackos/hackos.secrets` — so a boot-time
+   zod validation failure surfaces early.
 2. **Load-test the hot paths**, not the whole API surface — the two places
    that take Postgres row locks and see real event-day bursts:
    - Badge scanning (`idempotencyGuard`-guarded scan routes) — simulate the

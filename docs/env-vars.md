@@ -2,44 +2,54 @@
 
 Staging on an ARM64 host and production in a Linux/x86_64 LXC use
 [`deploy/docker-compose.yml`](../deploy/docker-compose.yml) as one Compose
-application. The canonical contract receives a configuration file first and a
-secrets file second:
+application. The environment-file contract is intentionally different:
+
+- **Production:** one combined `/etc/hackos/hackos.env`, mode `0600`.
+- **Staging:** the existing pair `/etc/hackos/hackos.env` and
+  `/etc/hackos/hackos.secrets`; the second file has precedence and is mode
+  `0600`.
+
+Production usage:
 
 ```sh
 docker compose \
   --env-file /etc/hackos/hackos.env \
-  --env-file /etc/hackos/hackos.secrets \
   -f deploy/docker-compose.yml config
 ```
 
-El segundo fichero tiene precedencia. Ninguno de los dos se copia a las
-imágenes. [`deploy/.env.example`](../deploy/.env.example) sólo contiene
-configuración no secreta. Por compatibilidad con el LXC preparado localmente,
-`check-env.sh` y el despliegue aceptan un único `/etc/hackos/hackos.env` con
-permisos `0600`; no es una segunda plantilla ni sustituye al contrato canónico.
-El despliegue no busca `.env` ni `.env.<environment>` dentro de `/opt/hackos`.
+El fichero de producción contiene configuración y secretos y debe tener
+permisos `0600`; no se copia a las imágenes. Staging conserva la separación
+actual porque su workflow ya entrega el fichero de configuración y el de
+secretos por separado. El despliegue no busca `.env` ni `.env.<environment>`
+dentro de `/opt/hackos`.
 
-La plantilla no secreta está en
-[`deploy/.env.example`](../deploy/.env.example) y la plantilla de nombres de
-secretos en [`deploy/.secrets.example`](../deploy/.secrets.example).
-Los valores reales se generan y cargan fuera del repositorio. El fichero raíz
+La plantilla combinada de producción está en
+[`deploy/.env.example`](../deploy/.env.example). Staging usa
+[`deploy/.staging.env.example`](../deploy/.staging.env.example) junto con
+[`deploy/.secrets.example`](../deploy/.secrets.example). Los valores reales se
+generan y cargan fuera del repositorio. El fichero raíz
 [`.env.example`](../.env.example) es sólo para overrides del API local y
 [`apps/mobile/.env.example`](../apps/mobile/.env.example) contiene únicamente
 valores públicos compilados en la app móvil.
 
-## Los dos ficheros del host
+## Ficheros del host
 
-No hay un único `.env` de producción. Crear y mantener siempre estos dos
-ficheros separados:
+En producción, crear y mantener un único fichero combinado:
 
-| Fichero | Debe contener | No debe contener |
+| Fichero | Debe contener | Protección |
 |---|---|---|
-| `/etc/hackos/hackos.env` | `IMAGE_TAG`, dominios/CORS, puertos, `POSTGRES_USER`, `POSTGRES_DB`, `MINIO_ROOT_USER`, `S3_ACCESS_KEY`, bucket/URL S3, correo, logs, R2 y metadatos Wallet. | Contraseñas, tokens, claves privadas o PEM. |
-| `/etc/hackos/hackos.secrets` (`0600`) | `POSTGRES_PASSWORD`, `VALKEY_PASSWORD`, `MINIO_ROOT_PASSWORD`, `BETTER_AUTH_SECRET`, `S3_SECRET_KEY`, credenciales SMTP/R2/traducción/fixtures y PEM Wallet. | Tags, dominios, puertos, identificadores o cualquier configuración no secreta. |
+| `/etc/hackos/hackos.env` | `IMAGE_TAG`, dominios/CORS, puertos, identificadores, credenciales, correo, R2, fixtures y PEM Wallet. | `0600`; nunca se imprime ni se versiona. |
 
-`IMAGE_REPO` y `WEB_IMAGE_REPO` no pertenecen a ninguno: son referencias
-fijas de Compose. Las plantillas enlazadas arriba son la lista completa y la
-tabla siguiente especifica cada variable individualmente.
+En staging, mantener la pareja existente:
+
+| Fichero | Contenido | Protección |
+|---|---|---|
+| `/etc/hackos/hackos.env` | Configuración no secreta, tags y dominios. | No contiene secretos reales. |
+| `/etc/hackos/hackos.secrets` | Contraseñas, tokens, credenciales y PEM. | `0600`; nunca se imprime ni se versiona. |
+
+`IMAGE_REPO` y `WEB_IMAGE_REPO` no pertenecen al fichero: son referencias fijas
+de Compose. La plantilla enlazada arriba es la lista completa y la tabla
+siguiente especifica cada variable individualmente.
 
 ## Reglas del contrato
 
@@ -59,7 +69,7 @@ tabla siguiente especifica cada variable individualmente.
 | `MINIO_ROOT_USER`, `S3_ACCESS_KEY` | configuración | sí | Identificador administrativo de MinIO y nombre de la cuenta de aplicación; sus contraseñas pertenecen al fichero de secretos. |
 | `S3_BUCKET` | configuración | no | Bucket creado por `minio-init`, por defecto `hackos`. |
 | `S3_REGION` | configuración | no | Región S3 para el cliente SDK; por defecto `us-east-1`. |
-| `S3_PUBLIC_URL` | configuration | required in production | Public HTTPS object URL served by the environment's object-storage ingress; Compose does not publish MinIO. |
+| `S3_PUBLIC_URL` | configuration | required in production | Public HTTPS object URL served by the environment's object-storage ingress; Compose publishes only the MinIO S3 API, never its console. |
 | `R2_BACKUPS_ENABLED` | configuración | no | `false` por defecto; con `true`, el despliegue ejecuta `backup-r2.sh` antes de `migrate`. |
 | `R2_BACKUP_FREQUENCY` | configuración | no | Frecuencia del timer gestionado por infraestructura: `disabled` (por defecto), `daily`, `weekly` o `monthly`. Requiere `R2_BACKUPS_ENABLED=true` salvo `disabled`. |
 | `R2_ENDPOINT`, `R2_BUCKET`, `R2_PREFIX` | configuración | si R2 está activo | Endpoint S3-compatible HTTPS, bucket privado y prefijo para las copias. |
@@ -137,11 +147,11 @@ en ningún contenedor de aplicación.
 
 En producción, el API guarda los objetos en el MinIO privado mediante
 `S3_ENDPOINT=http://minio:9000` y devuelve URLs públicas con
-`S3_PUBLIC_URL=https://s3.example.org/hackos/`. Therefore, a logo with key
+`S3_PUBLIC_URL=https://32.hackudc.com/hackos/`. Por ejemplo, un logo con la clave
 `enterprises/42/logo-default.png` se sirve en:
 
 ```text
-https://s3.example.org/hackos/enterprises/42/logo-default.png
+https://32.hackudc.com/hackos/enterprises/42/logo-default.png
 ```
 
 `minio-init` permite lectura anónima sólo bajo `enterprises/`, que contiene
@@ -150,18 +160,27 @@ API autorizado. No se debe convertir todo el bucket en anónimo porque eso
 expondría ficheros de solicitudes.
 
 El ingress externo debe publicar únicamente la API S3 de MinIO para
-`s3.example.org`; the MinIO console is never published. Conceptually, Caddy
+`32.hackudc.com`; la consola de MinIO no se publica. Conceptualmente, Caddy
 debe hacer:
 
 ```caddyfile
-s3.example.org {
-    reverse_proxy <endpoint-de-la-api-s3-de-minio-alcanzable-desde-caddy>:9000
+32.hackudc.com {
+    @public-logos {
+        path /hackos/enterprises /hackos/enterprises/*
+        method GET HEAD
+    }
+    handle @public-logos {
+        reverse_proxy <ip-incus-del-lxc-hackos>:9000
+    }
+    respond 403
 }
 ```
 
-The Compose runtime keeps MinIO without `ports:`. `S3_PUBLIC_URL` does not
-create the route by itself: a reviewed tunnel/proxy must route that hostname to
-the `minio:9000` S3 API, never to the console. Until that route and DNS exist,
+The Compose runtime publishes only MinIO's S3 API through
+`S3_PUBLISH_PORT`; the console remains disabled. `S3_PUBLIC_URL` does not
+create the route by itself: Caddy must route only `/hackos/enterprises/` to
+the LXC's `hackos:9000` S3 API, never to the console or other bucket prefixes.
+Until that route and DNS exist,
 logo URLs are well-formed but not browser-reachable. `EDGE_NETWORK_NAME` and
 `EDGE_NETWORK_EXTERNAL` provide the optional Docker-network connection for a
 host-level tunnel; infrastructure still owns its hostname routes.
@@ -275,12 +294,13 @@ su salud:
 ```sh
 # editar deploy/docker-compose.yml y la qualification si el servicio se refleja allí
 docker compose --env-file /etc/hackos/hackos.env \
-  --env-file /etc/hackos/hackos.secrets \
   -f deploy/docker-compose.yml up -d --force-recreate <service>
 docker compose --env-file /etc/hackos/hackos.env \
-  --env-file /etc/hackos/hackos.secrets \
   -f deploy/docker-compose.yml ps <service>
 ```
+
+En staging, añade `--env-file /etc/hackos/hackos.secrets` después del fichero
+de configuración en ambos comandos.
 
 Después vuelve a ejecutar `deploy/qualification/validate-compose.mjs` y la
 qualification completa antes de desplegar el cambio.

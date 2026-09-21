@@ -61,10 +61,7 @@ if [[ ! -f "$compose_file" ]]; then
   exit 1
 fi
 
-# Prefer the canonical two-file contract. The existing production host currently
-# provides one chmod-600 combined file, so accept that shape explicitly until
-# the host-side integration is published. Do not silently accept a lone
-# plaintext configuration file.
+# Production uses one file; staging uses the existing pair.
 compose_env_files=()
 env_files=()
 validator_config="$config_file"

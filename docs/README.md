@@ -134,7 +134,8 @@ Frontend (web & mobile):
 
 Deployment:
 
-- [Environment variables per service](./env-vars.md) — the two host env files
+- [Environment variables per service](./env-vars.md) — production combined env
+  and staging split env files
   and the exact least-privilege variables delivered to each Compose service.
 - [Deployment runbook](../deploy/README.md) — GHCR build tags, protected
   workflows, host transfer/exec, health gates and rollback limits.
