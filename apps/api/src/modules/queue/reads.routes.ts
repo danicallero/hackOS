@@ -32,25 +32,8 @@ import {
   roomPace,
   roomView,
 } from "./reads.js";
-import {
-  challengeIdParam,
-  idParam,
-  repoIdParam,
-  roomIdParam,
-  tvConfigBody,
-  tvModeBody,
-  tvSlotBody,
-  tvSlotPatchBody,
-} from "./schemas.js";
-import {
-  clearTvOverride,
-  listTvSlots,
-  resolveTvState,
-  setTvLanguage,
-  setTvMode,
-  tvVenueConfig,
-} from "./tv.js";
-import { createTvSlot, deleteTvSlot, updateTvSlot } from "./tv-slots.js";
+import { challengeIdParam, repoIdParam, roomIdParam, tvConfigBody, tvModeBody } from "./schemas.js";
+import { clearTvMode, resolveTvState, setTvLanguage, setTvMode, tvVenueConfig } from "./tv.js";
 
 const tvControlPolicy = {
   kind: "capability" as const,
@@ -335,7 +318,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "What the venue screens are currently showing.",
         description:
-          "Public feed for the TV wall. Returns the resolved display state: an operator override if one is live and unexpired, otherwise the timetable slot covering now (latest-starting slot wins on overlap), otherwise the default rooms view. `source` says which of the three applied, and `slot.items` carries the rotation entries a slot cycles through.",
+          "Public feed for the TV wall. Returns the mode selected manually by an operator, or the default rooms view when there is no selection.",
       },
     },
     async () => resolveTvState(),
@@ -347,13 +330,13 @@ export function registerReadsRoutes(app: FastifyInstance): void {
       preHandler: requireCapability(CAPABILITIES.TV_CONTROL),
       config: { routeAccessPolicy: tvControlPolicy },
       schema: {
-        summary: "Broadcast a mode to every screen, overriding the timetable.",
+        summary: "Show a mode on every screen now.",
         description:
-          "Sets the operator override, which wins over any running timetable slot until it is cleared or its optional expiresAt passes.",
+          "Sets the current display mode for every venue screen until an operator changes or clears it.",
         body: tvModeBody,
       },
     },
-    async (req) => setTvMode(req.body.mode, req.body.payload, req.body.expiresAt ?? null),
+    async (req) => setTvMode(req.body.mode, req.body.payload),
   );
 
   typed.delete(
@@ -362,12 +345,11 @@ export function registerReadsRoutes(app: FastifyInstance): void {
       preHandler: requireCapability(CAPABILITIES.TV_CONTROL),
       config: { routeAccessPolicy: tvControlPolicy },
       schema: {
-        summary: "Clear the operator override and go back to the timetable.",
-        description:
-          "Drops the manual broadcast so screens follow the active timetable slot or default rooms view.",
+        summary: "Reset the screens to the default rooms view.",
+        description: "Clears the manual display selection and returns every screen to rooms.",
       },
     },
-    async () => clearTvOverride(),
+    async () => clearTvMode(),
   );
 
   typed.get(
@@ -396,67 +378,5 @@ export function registerReadsRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => setTvLanguage(req.body.language, req.userId),
-  );
-
-  typed.get(
-    "/api/tv/slots",
-    {
-      preHandler: requireCapability(CAPABILITIES.TV_CONTROL),
-      config: { routeAccessPolicy: tvControlPolicy },
-      schema: {
-        summary: "List the TV timetable.",
-        description:
-          "Every scheduled slot in start order. Slots may overlap; the latest-starting slot covering now wins.",
-      },
-    },
-    async () => ({ items: await listTvSlots() }),
-  );
-
-  typed.post(
-    "/api/tv/slots",
-    {
-      preHandler: requireCapability(CAPABILITIES.TV_CONTROL),
-      config: { routeAccessPolicy: tvControlPolicy },
-      schema: {
-        summary: "Add a slot to the TV timetable.",
-        description:
-          "Schedules a display mode for an absolute time window; several items rotate by their configured dwell.",
-        body: tvSlotBody,
-      },
-    },
-    async (req) => createTvSlot(req.body, req.userId),
-  );
-
-  typed.patch(
-    "/api/tv/slots/:id",
-    {
-      preHandler: requireCapability(CAPABILITIES.TV_CONTROL),
-      config: { routeAccessPolicy: tvControlPolicy },
-      schema: {
-        summary: "Edit a TV timetable slot.",
-        description:
-          "Updates a slot and republishes the resolved public display state immediately when it is active.",
-        params: idParam,
-        body: tvSlotPatchBody,
-      },
-    },
-    async (req) => updateTvSlot(req.params.id, req.body, req.userId),
-  );
-
-  typed.delete(
-    "/api/tv/slots/:id",
-    {
-      preHandler: requireCapability(CAPABILITIES.TV_CONTROL),
-      config: { routeAccessPolicy: tvControlPolicy },
-      schema: {
-        summary: "Remove a TV timetable slot.",
-        description: "Deletes the slot and falls through to the next applicable timetable state.",
-        params: idParam,
-      },
-    },
-    async (req) => {
-      await deleteTvSlot(req.params.id, req.userId);
-      return { ok: true };
-    },
   );
 }

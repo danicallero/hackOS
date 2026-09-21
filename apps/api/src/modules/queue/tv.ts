@@ -5,127 +5,64 @@ import { broadcast } from "../../lib/sse.js";
 import { valkey } from "../../lib/valkey.js";
 
 /**
- * H42: what the venue's screens are showing. Two layers:
- *
- *  - the **timetable** (`tv_slots`, migration 0403) — absolute time windows in
- *    Postgres saying what to show when, so the fleet follows the event without
- *    anyone at the control page;
- *  - the **override** — one operator broadcast, ephemeral display state, so it
- *    stays in Valkey exactly as it always has.
- *
- * `resolveTvState()` composes them. Nothing else in the codebase should read
- * either layer directly.
+ * H42: what the venue's screens are showing. An operator selects one mode for
+ * the whole fleet; the selection stays in Valkey and can be reset to rooms.
  */
 const TV_MODE_KEY = "tv:mode";
-/** Last state the scheduler actually published, so a tick only broadcasts on change. */
-const TV_EFFECTIVE_KEY = "tv:effective";
 
 export type TvModeName = "rooms" | "schedule" | "sponsors" | "wifi" | "live";
 
-/** One operator broadcast. Wins over the timetable until cleared or expired. */
+/** One operator-selected display mode. */
 export interface TvMode {
   mode: TvModeName;
   payload: unknown;
-  /** ISO timestamp; past this point tv-scheduler.ts drops the override automatically. */
-  expiresAt: string | null;
-  /** Null only for the untouched default — nothing has ever been broadcast this run. */
+  /** Null only for the default rooms display, before an operator selects a mode. */
   broadcastAt: string | null;
-}
-
-/** One thing a slot shows. `seconds` only matters when a slot has several. */
-export interface TvSlotItem {
-  mode: TvModeName;
-  payload: unknown;
-  seconds: number | null;
-}
-
-export interface TvSlot {
-  id: number;
-  label: string | null;
-  startsAt: string;
-  endsAt: string;
-  items: TvSlotItem[];
 }
 
 /** What the screens should be showing right now, and why. */
 export interface TvState extends TvMode {
-  source: "override" | "slot" | "default";
-  /** Present when source === "slot"; `items` drives client-side rotation. */
-  slot: TvSlot | null;
+  source: "manual" | "default";
 }
 
 const TV_MODE_NAMES: readonly TvModeName[] = ["rooms", "schedule", "sponsors", "wifi", "live"];
 
-/** Older Valkey overrides may survive a deploy. Timer safely becomes live;
- * retired announcement overrides are ignored so they cannot strand the wall
- * on a mode the display no longer renders. */
-function normalizeLegacyTvMode(mode: unknown): TvModeName | null {
-  if (mode === "timer") return "live";
-  return TV_MODE_NAMES.includes(mode as TvModeName) ? (mode as TvModeName) : null;
+function isTvModeName(value: unknown): value is TvModeName {
+  return TV_MODE_NAMES.includes(value as TvModeName);
+}
+
+/** Valkey is disposable, so stale or malformed selections are discarded rather
+ * than translated into a current mode. */
+function isTvOverride(value: unknown): value is TvMode {
+  if (!value || typeof value !== "object") return false;
+  const override = value as Record<string, unknown>;
+  return (
+    isTvModeName(override.mode) && "payload" in override && typeof override.broadcastAt === "string"
+  );
 }
 
 const DEFAULT_MODE: TvMode = {
   mode: "rooms",
   payload: null,
-  expiresAt: null,
   broadcastAt: null,
 };
 
-/** The raw override layer, with no timetable applied. */
-export async function getTvOverride(): Promise<TvMode | null> {
-  let raw: string | null;
+/** The raw manually selected mode. */
+export async function getTvMode(): Promise<TvMode | null> {
   try {
-    raw = await valkey.get(TV_MODE_KEY);
+    const raw = await valkey.get(TV_MODE_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (isTvOverride(parsed)) return parsed;
+
+    await valkey.del(TV_MODE_KEY);
+    return null;
   } catch (err) {
-    // The override is ephemeral. A broker outage must not block the public TV
-    // read; continue with the durable timetable/default projection (#535).
-    console.warn("[tv] Valkey override unavailable; using timetable/default", err);
+    // The selection is ephemeral. A broker outage must not block the public TV
+    // read; continue with the default rooms projection (#535).
+    console.warn("[tv] Valkey mode unavailable; using default rooms", err);
     return null;
   }
-  if (!raw) return null;
-  // Older payloads (pre issue #193) lack expiresAt/broadcastAt — default them.
-  const parsed = JSON.parse(raw) as Partial<TvMode>;
-  const mode = normalizeLegacyTvMode(parsed.mode);
-  if (!mode) return null;
-  return { ...DEFAULT_MODE, ...parsed, mode };
-}
-
-function overrideIsLive(override: TvMode | null, now: number): override is TvMode {
-  if (!override) return false;
-  return !override.expiresAt || new Date(override.expiresAt).getTime() > now;
-}
-
-export function rowToSlot(row: Record<string, unknown>): TvSlot {
-  return {
-    id: Number(row.id),
-    label: (row.label as string | null) ?? null,
-    startsAt: (row.starts_at as Date).toISOString(),
-    endsAt: (row.ends_at as Date).toISOString(),
-    items: row.items as TvSlotItem[],
-  };
-}
-
-/**
- * The slot covering `now`. Slots may overlap; the latest-starting one wins, so
- * a short window (an opening ceremony) beats the all-day one it sits inside.
- */
-export async function currentTvSlot(at: Date = new Date()): Promise<TvSlot | null> {
-  const { rows } = await pool.query(
-    `SELECT id, label, starts_at, ends_at, items
-       FROM tv_slots
-      WHERE starts_at <= $1 AND ends_at > $1
-      ORDER BY starts_at DESC, id DESC
-      LIMIT 1`,
-    [at],
-  );
-  return rows[0] ? rowToSlot(rows[0]) : null;
-}
-
-export async function listTvSlots(): Promise<TvSlot[]> {
-  const { rows } = await pool.query(
-    `SELECT id, label, starts_at, ends_at, items FROM tv_slots ORDER BY starts_at ASC, id ASC`,
-  );
-  return rows.map(rowToSlot);
 }
 
 export type TvLanguage = "es" | "gl" | "en";
@@ -161,7 +98,7 @@ export async function tvVenueConfig(): Promise<TvVenueConfig> {
  * The wall's language is an operator setting, not a signed-in caller's own
  * preference — a staff session cookie in the kiosk browser must never change
  * what a public screen shows. Persisted so it survives control-page reloads
- * and a scheduled slot with nobody at the control page.
+ * even when nobody is at the control page.
  */
 export async function setTvLanguage(
   language: TvLanguage | null,
@@ -192,54 +129,25 @@ export async function setTvLanguage(
   return config;
 }
 
-/** Override → covering slot → default. */
-export async function resolveTvState(at: Date = new Date()): Promise<TvState> {
-  const override = await getTvOverride();
-  if (overrideIsLive(override, at.getTime())) {
-    return { ...override, source: "override", slot: null };
-  }
-
-  const slot = await currentTvSlot(at);
-  // A slot always has at least one item (CHECK in 0403); an empty one would
-  // mean hand-edited data, and falling through to the default beats a blank
-  // screen in the venue.
-  const first = slot?.items[0];
-  if (slot && first) {
-    return {
-      mode: first.mode,
-      payload: first.payload ?? null,
-      expiresAt: null,
-      // The slot's own start is when this became what the screens show.
-      broadcastAt: slot.startsAt,
-      source: "slot",
-      slot,
-    };
-  }
-
-  return { ...DEFAULT_MODE, source: "default", slot: null };
+/** Manual selection → default rooms. */
+export async function resolveTvState(): Promise<TvState> {
+  const selected = await getTvMode();
+  if (selected) return { ...selected, source: "manual" };
+  return { ...DEFAULT_MODE, source: "default" };
 }
 
-export async function setTvMode(
-  mode: TvModeName,
-  payload: unknown,
-  expiresAt: string | null = null,
-): Promise<TvState> {
+export async function setTvMode(mode: TvModeName, payload: unknown): Promise<TvState> {
   const value: TvMode = {
     mode,
     payload: payload ?? null,
-    expiresAt,
     broadcastAt: new Date().toISOString(),
   };
   await valkey.set(TV_MODE_KEY, JSON.stringify(value));
   return publishTvState();
 }
 
-/**
- * Drops the operator override so the timetable takes back over ("back to
- * schedule"). With no slot covering now this lands on the default mode, which
- * is the same place the old revert-to-rooms behaviour ended up.
- */
-export async function clearTvOverride(): Promise<TvState> {
+/** Clears the operator's selection and restores the default rooms display. */
+export async function clearTvMode(): Promise<TvState> {
   await valkey.del(TV_MODE_KEY);
   return publishTvState();
 }
@@ -247,33 +155,6 @@ export async function clearTvOverride(): Promise<TvState> {
 /** Resolves the current state and broadcasts it to the fleet unconditionally. */
 export async function publishTvState(): Promise<TvState> {
   const state = await resolveTvState();
-  await valkey.set(TV_EFFECTIVE_KEY, stateFingerprint(state));
   await broadcast(SSE_TOPICS.TV, EVENTS.TV_MODE_CHANGED, state);
   return state;
-}
-
-/**
- * What the screens actually render, so a scheduler tick can tell "nothing
- * changed" from "a slot boundary just passed". Deliberately excludes
- * broadcastAt-style bookkeeping that doesn't alter the picture.
- */
-function stateFingerprint(state: TvState): string {
-  return JSON.stringify({
-    source: state.source,
-    mode: state.mode,
-    payload: state.payload,
-    slotId: state.slot?.id ?? null,
-    slotItems: state.slot?.items ?? null,
-  });
-}
-
-/** Broadcasts only if what the screens should show has actually changed. */
-export async function publishTvStateIfChanged(): Promise<{ changed: boolean; state: TvState }> {
-  const state = await resolveTvState();
-  const fingerprint = stateFingerprint(state);
-  const previous = await valkey.get(TV_EFFECTIVE_KEY);
-  if (previous === fingerprint) return { changed: false, state };
-  await valkey.set(TV_EFFECTIVE_KEY, fingerprint);
-  await broadcast(SSE_TOPICS.TV, EVENTS.TV_MODE_CHANGED, state);
-  return { changed: true, state };
 }

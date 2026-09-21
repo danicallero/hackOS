@@ -35,8 +35,6 @@ vi.mock("@/lib/tv", () => ({
   DEFAULT_ROTATION_SECONDS: 30,
   getTvState: () => pending,
   getTvVenueConfig: () => pending,
-  msUntilNextRotation: () => Number.POSITIVE_INFINITY,
-  rotationIndexAt: () => 0,
 }));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =

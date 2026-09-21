@@ -115,7 +115,18 @@ async function loadRole(db: pg.Pool | pg.PoolClient, roleId: number) {
     [roleId],
   );
   const members = await db.query(
-    `SELECT user_id FROM user_roles WHERE role_id = $1 ORDER BY user_id`,
+    // Review-fixture accounts deliberately keep their role assignments so the
+    // Store-review scenario remains self-contained, but they are not real
+    // members to administer. Match the user directory boundary here so the
+    // permissions UI never falls back to a bare "User N" for a fixture id.
+    `SELECT ur.user_id
+       FROM user_roles ur
+       JOIN users u ON u.id = ur.user_id
+      WHERE ur.role_id = $1
+        AND u.account_state = 'active'
+        AND u.anonymized_at IS NULL
+        AND u.is_test_account = false
+      ORDER BY ur.user_id`,
     [roleId],
   );
   return {
@@ -221,7 +232,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List roles by position",
         description:
-          "Lists every non-deleted role highest-position first (H8). Invitation managers get this same read access to choose deferred role pre-assignments; only PERMISSIONS_MANAGE can mutate. Pass includeDeleted=true (PERMISSIONS_MANAGE only) to ALSO list soft-deleted roles, scoped to is_seeded=true ones only — the trash/restore panel only ever offers back roles from the seeded default catalogue (0801/0805), never a custom role an admin created and later deleted. Non-deleted roles in the response are unaffected by this scoping.",
+          "Lists every non-deleted role highest-position first (H8). Each role's memberIds contains active, non-anonymized real accounts only; synthetic Store-review fixtures are excluded. Invitation managers get this same read access to choose deferred role pre-assignments; only PERMISSIONS_MANAGE can mutate. Pass includeDeleted=true (PERMISSIONS_MANAGE only) to ALSO list soft-deleted roles, scoped to is_seeded=true ones only — the trash/restore panel only ever offers back roles from the seeded default catalogue (0801/0805), never a custom role an admin created and later deleted. Non-deleted roles in the response are unaffected by this scoping.",
         querystring: z.object({ includeDeleted: z.coerce.boolean().default(false) }),
         response: { 200: z.array(roleResponse) },
       },
