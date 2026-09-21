@@ -223,12 +223,12 @@ export function MetadataCard({
               defaultOpen
               className="lg:col-span-2"
             >
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-2 md:items-start">
                 <FormField
                   control={rhf.control}
                   name="name"
                   render={({ field }) => (
-                    <FormItem>
+                    <FormItem className="md:grid-rows-[1rem_auto_auto]">
                       <FormLabel>{t("name")}</FormLabel>
                       <FormControl>
                         <Input {...field} />
@@ -241,7 +241,7 @@ export function MetadataCard({
                   control={rhf.control}
                   name="description"
                   render={({ field }) => (
-                    <FormItem>
+                    <FormItem className="md:grid-rows-[1rem_auto_auto]">
                       <FormLabel>{t("descriptionLabel")}</FormLabel>
                       <FormControl>
                         <Textarea
