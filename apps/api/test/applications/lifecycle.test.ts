@@ -188,6 +188,66 @@ describe("review + decide (H13, H14)", () => {
     expect((await getResponse(responseId)).confirmation_token_id).not.toBeNull();
   });
 
+  it("returns a confirmed applicant to draft: auto-accept keeps their role, plain draft revokes it", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { userId, responseId } = await toAcceptedSent(appId);
+    const firstToken = await latestConfirmationToken(userId);
+    expect(
+      (
+        await a.inject({
+          method: "POST",
+          url: "/api/applications/confirm",
+          payload: { token: firstToken },
+        })
+      ).statusCode,
+    ).toBe(200);
+    const kept = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/return-to-draft`,
+      headers: { ...asUser(decider), "idempotency-key": "confirmed-draft-auto-1" },
+      payload: { allow_resubmit_after_close: true, auto_accept_on_resubmit: true },
+    });
+    expect(kept.statusCode).toBe(200);
+    expect(
+      (
+        await pool.query(
+          `SELECT 1 FROM user_roles WHERE user_id = $1 AND source = 'application_confirmed'`,
+          [userId],
+        )
+      ).rows.length,
+    ).toBeGreaterThan(0);
+    await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/response/submit`,
+      headers: asUser(userId),
+      payload: { food_intolerances: [], shirt_size: "L" },
+    });
+    expect((await getResponse(responseId)).status).toBe("accepted");
+
+    const secondToken = await latestConfirmationToken(userId);
+    await a.inject({
+      method: "POST",
+      url: "/api/applications/confirm",
+      payload: { token: secondToken },
+    });
+    const revoked = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/return-to-draft`,
+      headers: { ...asUser(decider), "idempotency-key": "confirmed-draft-plain-1" },
+      payload: { allow_resubmit_after_close: true, auto_accept_on_resubmit: false },
+    });
+    expect(revoked.statusCode).toBe(200);
+    expect(
+      (
+        await pool.query(
+          `SELECT 1 FROM user_roles WHERE user_id = $1 AND source = 'application_confirmed'`,
+          [userId],
+        )
+      ).rows,
+    ).toHaveLength(0);
+  });
+
   it("per-reviewer rows are independent; staff notes are shared", async () => {
     const a = await getApp();
     const appId = await createApplication();

@@ -2209,7 +2209,7 @@ function DecisionMenu({
             </DropdownMenuItem>
           </>
         )}
-        {status !== "confirmed" && status !== "draft" && (
+        {status !== "draft" && (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuSub>

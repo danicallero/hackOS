@@ -328,7 +328,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Return a response to the applicant as a draft",
         description:
-          "Returns a non-confirmed response to its owner for editing (H12, H14). The decision-maker can permit this specific draft to submit after the form closes and can make its next valid submission automatically accepted with a new confirmation email. An Idempotency-Key prevents duplicate state changes.",
+          "Returns a response to its owner for editing (H12, H14). A confirmed response keeps its application-granted role only when auto-accept is enabled; without auto-accept, that role and live ticket access are revoked until it is reviewed and confirmed again. The decision-maker can permit this specific draft to submit after the form closes and can make its next valid submission automatically accepted with a new confirmation email. An Idempotency-Key prevents duplicate state changes.",
         params: responseIdParamSchema,
         body: returnToDraftSchema,
       },

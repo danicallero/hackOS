@@ -723,20 +723,21 @@ export async function submitResponse(
   });
 }
 
-/** H12/H14: give a non-confirmed applicant their response back for revision. */
+/** H12/H14: give an applicant their response back for revision. A confirmed
+ * applicant keeps their application-granted role only when the next submit is
+ * configured for auto-accept; otherwise the role and live ticket access are
+ * revoked until a later review/confirmation restores them. */
 export async function returnToDraft(
   actorId: number,
   responseId: number,
   input: { allow_resubmit_after_close: boolean; auto_accept_on_resubmit: boolean },
 ): Promise<ResponseRow> {
-  return withTransaction(async (client) => {
+  let voidedPassIds: number[] = [];
+  const result = await withTransaction(async (client) => {
+    await lockRoleGraph(client);
     const response = await lockResponse(client, responseId, actorId);
-    if (response.status === "confirmed") {
-      throw new ConflictError("A confirmed response cannot be returned to draft", {
-        status: response.status,
-      });
-    }
-    if (response.status === "draft") return response;
+    if (response.status === "draft") return { response, userId: response.user_id };
+    const wasConfirmed = response.status === "confirmed";
     if (response.confirmation_token_id) {
       await invalidateConfirmationToken(client, response.confirmation_token_id);
     }
@@ -748,16 +749,31 @@ export async function returnToDraft(
         WHERE id = $1 RETURNING *`,
       [responseId, input.allow_resubmit_after_close, input.auto_accept_on_resubmit],
     );
+    if (wasConfirmed && !input.auto_accept_on_resubmit) {
+      await revokeApplicationGrantedRoles(
+        client,
+        response.user_id,
+        response.application_id,
+        actorId,
+      );
+      voidedPassIds = (await reconcileTicketAccess(client, response.user_id)).voidedPassIds;
+    }
     await audit(client, {
       actorId,
       entityType: "application_response",
       entityId: responseId,
       action: "returned_to_draft",
       before: { status: response.status },
-      after: { status: "draft", ...input },
+      after: {
+        status: "draft",
+        ...input,
+        ...(wasConfirmed && !input.auto_accept_on_resubmit ? { applicationRoleRevoked: true } : {}),
+      },
     });
-    return rows[0] as ResponseRow;
+    return { response: rows[0] as ResponseRow, userId: response.user_id };
   });
+  if (voidedPassIds.length > 0) await pushTicketVoid(result.userId, voidedPassIds);
+  return result.response;
 }
 
 // ── review (H13) ─────────────────────────────────────────────────────────────
