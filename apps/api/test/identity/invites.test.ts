@@ -430,6 +430,43 @@ describe("GET /api/invites — list active invites", () => {
 });
 
 describe("H9/H10 invite acceptance", () => {
+  it("applies role-assignment grant rules for roles assigned by an invite", async () => {
+    const a = await getApp();
+    const actor = await inviter();
+    const { pool } = await import("../../src/db/pool.js");
+    const { createRole } = await import("../helpers.js");
+    const invitedRole = await createRole([], { name: "invite-source-role" });
+    const impliedRole = await createRole([], { name: "invite-implied-role" });
+    await pool.query(
+      `INSERT INTO role_grant_rules (role_id, source_role_id, action)
+       VALUES ($1, $2, 'grant')`,
+      [impliedRole, invitedRole],
+    );
+    const invite = await createInvite(a, actor, {
+      email: "role-rule-invite@example.com",
+      kind: "staff",
+      roleIds: [invitedRole],
+    });
+
+    const accepted = await a.inject({
+      method: "POST",
+      url: "/api/invites/accept",
+      payload: { ...ACCEPT_BASE, token: invite.token },
+    });
+    expect(accepted.statusCode).toBe(201);
+
+    const { rows } = await pool.query<{ role_id: number; source: string }>(
+      `SELECT role_id, source FROM user_roles
+        WHERE user_id = $1
+        ORDER BY role_id`,
+      [accepted.json().userId],
+    );
+    expect(rows).toEqual([
+      { role_id: invitedRole, source: "invite" },
+      { role_id: impliedRole, source: `role_assigned:${invitedRole}` },
+    ]);
+  });
+
   it("staff acceptance creates a verified Better Auth account the person can sign in with", async () => {
     const a = await getApp();
     const actor = await inviter();
