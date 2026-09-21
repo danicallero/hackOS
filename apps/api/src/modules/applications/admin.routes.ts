@@ -89,6 +89,16 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     CAPABILITIES.APPLICATIONS_REVIEW,
     CAPABILITIES.APPLICATIONS_DECIDE,
   ] as const;
+  const hasReturnedDraftAccess = async (applicationId: number, userId: number | null) => {
+    if (userId == null) return false;
+    const { rows } = await pool.query(
+      `SELECT 1 FROM application_responses
+        WHERE application_id = $1 AND user_id = $2 AND status = 'draft'
+          AND allow_resubmit_after_close = true`,
+      [applicationId, userId],
+    );
+    return rows.length > 0;
+  };
 
   // H8/H11: grants_role_ids is a correlated-subquery column, not a stored
   // one — it aggregates application_grants_roles per form so callers get a
@@ -140,7 +150,16 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     async (req) => {
       const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications`);
       const invited = req.userId ? await isInvitedParticipant(pool, req.userId) : false;
-      const open = rows.filter((a) => isWindowOpen(a) || invited);
+      const open = [];
+      for (const form of rows) {
+        if (
+          isWindowOpen(form) ||
+          invited ||
+          (await hasReturnedDraftAccess(Number(form.id), req.userId))
+        ) {
+          open.push(form);
+        }
+      }
       return { applications: open };
     },
   );
@@ -164,7 +183,9 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       if (!found) throw new NotFoundError("Application not open");
       if (!isWindowOpen(found)) {
         const invited = req.userId ? await isInvitedParticipant(pool, req.userId) : false;
-        if (!invited) throw new NotFoundError("Application not open");
+        if (!invited && !(await hasReturnedDraftAccess(req.params.id, req.userId))) {
+          throw new NotFoundError("Application not open");
+        }
       }
       return found;
     },
@@ -418,39 +439,62 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Delete an application form",
         description:
-          "Hard-deletes a form (H11). 409 if it already has responses — close its window (set `close_at`) instead of deleting once people have applied.",
+          "Hard-deletes a form and its response records, review rows, form versions, and confirmation tokens (H11). Anonymous retention records deliberately block deletion because they are an irreversible audit boundary.",
         params: idParamSchema,
       },
     },
     async (req, reply) => {
-      const { rows: anonymousRefs } = await pool.query(
-        `SELECT 1 FROM anonymous_participant_fields WHERE application_id = $1 LIMIT 1`,
-        [req.params.id],
-      );
-      if (anonymousRefs.length > 0) {
-        throw new ConflictError(
-          "Cannot delete a form referenced by an anonymous audit record; deactivate it instead",
-          { code: "anonymous_audit_references" },
+      await withTransaction(async (client) => {
+        const { rows: appRows } = await client.query(
+          `SELECT id FROM applications WHERE id = $1 FOR UPDATE`,
+          [req.params.id],
         );
-      }
-      const { rows: refs } = await pool.query(
-        `SELECT 1 FROM application_responses WHERE application_id = $1 LIMIT 1`,
-        [req.params.id],
-      );
-      if (refs.length > 0) {
-        throw new ConflictError("Cannot delete a form that already has responses; deactivate it", {
-          code: "has_responses",
+        if (!appRows[0]) throw new NotFoundError("Application not found");
+        const { rows: anonymousRefs } = await client.query(
+          `SELECT 1 FROM anonymous_participant_fields WHERE application_id = $1 LIMIT 1`,
+          [req.params.id],
+        );
+        if (anonymousRefs.length > 0) {
+          throw new ConflictError(
+            "Cannot delete a form referenced by an anonymous audit record; deactivate it instead",
+            { code: "anonymous_audit_references" },
+          );
+        }
+        const { rows: responseRows } = await client.query(
+          `SELECT id, confirmation_token_id FROM application_responses WHERE application_id = $1 FOR UPDATE`,
+          [req.params.id],
+        );
+        const responseIds = responseRows.map((row) => Number(row.id));
+        if (responseIds.length > 0) {
+          await client.query(`DELETE FROM applicant_reviews WHERE response_id = ANY($1::int[])`, [
+            responseIds,
+          ]);
+          // A referral can point at a response from this form; clear it before
+          // removing the target response without touching the other form.
+          await client.query(
+            `UPDATE application_responses SET referrer_application_id = NULL WHERE referrer_application_id = ANY($1::int[])`,
+            [responseIds],
+          );
+          await client.query(`DELETE FROM application_responses WHERE id = ANY($1::int[])`, [
+            responseIds,
+          ]);
+          const tokenIds = responseRows
+            .map((row) => row.confirmation_token_id as number | null)
+            .filter((value): value is number => value != null);
+          if (tokenIds.length > 0) {
+            await client.query(`DELETE FROM email_verification_tokens WHERE id = ANY($1::int[])`, [
+              tokenIds,
+            ]);
+          }
+        }
+        await client.query(`DELETE FROM applications WHERE id = $1`, [req.params.id]);
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "application",
+          entityId: req.params.id,
+          action: "deleted",
+          after: { deletedResponses: responseIds.length },
         });
-      }
-      const { rowCount } = await pool.query(`DELETE FROM applications WHERE id = $1`, [
-        req.params.id,
-      ]);
-      if (rowCount === 0) throw new NotFoundError("Application not found");
-      await audit(pool, {
-        actorId: req.userId,
-        entityType: "application",
-        entityId: req.params.id,
-        action: "deleted",
       });
       reply.code(204);
       return null;

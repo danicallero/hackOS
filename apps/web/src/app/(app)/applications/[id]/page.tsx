@@ -19,16 +19,24 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { ClipboardListIcon, LockIcon, UsersIcon } from "lucide-react";
-import { useParams } from "next/navigation";
+import { ClipboardListIcon, HammerIcon, LockIcon, Trash2Icon, UsersIcon } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
+import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
 import { SaveStatus } from "@/components/common/save-status";
 import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { TabBar } from "@/components/common/tab-bar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
@@ -53,6 +61,7 @@ import { ResponsesTab } from "./responses-tab";
 export default function ApplicationDetailPage() {
   const { t } = useLocale();
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const id = Number(params.id);
 
   const canManage = useCan(CAPABILITIES.APPLICATIONS_MANAGE);
@@ -77,6 +86,8 @@ export default function ApplicationDetailPage() {
   const [stats, setStats] = useState<ApplicationStats | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const loadedFormIdRef = useRef<number | null>(null);
 
   // The builder (Form settings + Questions) is the only tab with local
@@ -181,6 +192,19 @@ export default function ApplicationDetailPage() {
 
   const w = form ? windowState(form, t) : null;
 
+  async function deleteForm() {
+    setDeleting(true);
+    try {
+      await api.delete(`/api/applications/${id}`);
+      router.push("/applications");
+    } catch (err) {
+      setErrorMsg(err instanceof ApiError ? err.message : t("couldNotDeleteApplication"));
+      setDeleteOpen(false);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -209,6 +233,35 @@ export default function ApplicationDetailPage() {
             </span>
           ) : undefined
         }
+        secondaryActions={
+          canManage ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <IconButton variant="outline" size="icon-sm" label={t("applicationActions")}>
+                  <HammerIcon />
+                </IconButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
+                  <Trash2Icon />
+                  {t("deleteApplication")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : undefined
+        }
+      />
+
+      <AlertModal
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title={t("deleteApplication")}
+        description={t("deleteApplicationWarning")}
+        cancelLabel={t("cancel")}
+        confirmLabel={t("deleteAction")}
+        destructive
+        pending={deleting}
+        onConfirm={() => void deleteForm()}
       />
 
       {canStats && stats?.counts_by_status && <StatsStrip stats={stats} />}
