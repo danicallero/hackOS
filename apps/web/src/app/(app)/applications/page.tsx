@@ -9,6 +9,7 @@ import { EVENTS } from "@hackos/shared/events";
 import { ClipboardListIcon, PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ApplicationExportPanel } from "@/components/applications/application-export-panel";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -23,6 +24,7 @@ import { type ApplicationForm, fmtDateTime, grantedRoleNameLabel, windowState } 
 export default function ApplicationsPage() {
   const { t } = useLocale();
   const canManage = useCan(CAPABILITIES.APPLICATIONS_MANAGE);
+  const canExport = useCan(CAPABILITIES.EXPORTS_RUN);
   const [forms, setForms] = useState<ApplicationForm[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -121,6 +123,7 @@ export default function ApplicationsPage() {
     <div className="space-y-6">
       <PageHeader
         title={t("applications")}
+        secondaryActions={canExport ? <ApplicationExportPanel /> : undefined}
         primaryAction={
           canManage ? (
             <Button asChild>

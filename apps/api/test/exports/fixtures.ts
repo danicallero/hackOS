@@ -101,11 +101,15 @@ export async function joinJudgingSession(judgeId: number, entryId: number): Prom
 }
 
 export async function createActivity(
-  opts: { category?: string; name?: string } = {},
+  opts: { category?: string; name?: string; requiresScan?: boolean } = {},
 ): Promise<number> {
   const { rows } = await pool.query(
-    `INSERT INTO activities (name, category) VALUES ($1, $2) RETURNING id`,
-    [opts.name ?? `Activity ${crypto.randomUUID().slice(0, 8)}`, opts.category ?? "general"],
+    `INSERT INTO activities (name, category, requires_scan) VALUES ($1, $2, $3) RETURNING id`,
+    [
+      opts.name ?? `Activity ${crypto.randomUUID().slice(0, 8)}`,
+      opts.category ?? "general",
+      opts.requiresScan ?? false,
+    ],
   );
   return rows[0].id;
 }
