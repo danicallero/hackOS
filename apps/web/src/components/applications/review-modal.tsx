@@ -2122,8 +2122,11 @@ function DecisionMenu({
   const sentActions = ["accepted", "rejected", "confirmed", "declined", "expired"].includes(status);
   const hasAvailableActions = reviewActions || outboxActions || sentActions;
 
+  // H12/H14: the decision control lives against the modal's trailing edge. Reverse
+  // Radix's submenu direction so the options open into the dialog instead of
+  // being clipped by its rounded panel. Keep the visible copy LTR.
   return (
-    <DropdownMenu>
+    <DropdownMenu dir="rtl">
       <DropdownMenuTrigger asChild>
         <button
           type="button"
@@ -2135,7 +2138,7 @@ function DecisionMenu({
           <GavelIcon />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-52">
+      <DropdownMenuContent align="end" className="min-w-52" style={{ direction: "ltr" }}>
         <DropdownMenuLabel>{t("decisionLabel")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {!hasAvailableActions && (
@@ -2213,12 +2216,17 @@ function DecisionMenu({
           <>
             <DropdownMenuSeparator />
             <DropdownMenuSub>
-              <DropdownMenuSubTrigger disabled={busy}>
+              <DropdownMenuSubTrigger disabled={busy} className="[&>svg:last-child]:rotate-180">
                 <FilePenLineIcon />
                 {t("returnToDraft")}
               </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
+              <DropdownMenuSubContent
+                align="start"
+                className="w-72 max-w-[calc(100vw-2rem)]"
+                style={{ direction: "ltr" }}
+              >
                 <DropdownMenuItem
+                  className="whitespace-normal leading-snug"
                   onSelect={() =>
                     void run(
                       t("returnedToDraft"),
@@ -2235,6 +2243,7 @@ function DecisionMenu({
                   {t("returnToDraftOpen")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
+                  className="whitespace-normal leading-snug"
                   onSelect={() =>
                     void run(
                       t("returnedToDraft"),
@@ -2251,6 +2260,7 @@ function DecisionMenu({
                   {t("returnToDraftLate")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
+                  className="whitespace-normal leading-snug"
                   onSelect={() =>
                     void run(
                       t("returnedToDraft"),

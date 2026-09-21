@@ -54,7 +54,7 @@ import {
   windowState,
 } from "../lib";
 
-import { MetadataCard } from "./metadata-card";
+import { ApplicationDangerZone, MetadataCard } from "./metadata-card";
 import { QuestionsCard } from "./questions-card";
 import { ResponsesTab } from "./responses-tab";
 
@@ -282,6 +282,7 @@ export default function ApplicationDetailPage() {
               {form ? (
                 <>
                   <MetadataCard form={form} onSaved={loadForm} onDirtyChange={setMetadataDirty} />
+                  <ApplicationDangerZone onDelete={() => setDeleteOpen(true)} />
                   <QuestionsCard form={form} onSaved={loadForm} onDirtyChange={setQuestionsDirty} />
                 </>
               ) : (
