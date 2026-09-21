@@ -3,7 +3,17 @@
 // Form metadata editor (H11): trilingual name/description, window, limits.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { InfoIcon, SettingsIcon } from "lucide-react";
+import {
+  CalendarClockIcon,
+  ChevronDownIcon,
+  InfoIcon,
+  type LucideIcon,
+  SettingsIcon,
+  ShieldCheckIcon,
+  Trash2Icon,
+  TriangleAlertIcon,
+  UsersIcon,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -14,10 +24,11 @@ import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -31,6 +42,7 @@ import { useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
 import { toast } from "@/lib/toast";
 import type { RoleSummary } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { type ApplicationForm, fromLocalInput, toLocalInput } from "../lib";
 
 // Runtime validator is built inside the component with useMemo so its error
@@ -46,6 +58,52 @@ type MetaValues = {
   ask_food_intolerances: boolean;
   grants_role_ids: string[];
 };
+
+function SettingsGroup({
+  icon: Icon,
+  title,
+  defaultOpen = false,
+  className,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  defaultOpen?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className={cn("rounded-xl border bg-muted/20", className)}
+    >
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="flex min-h-14 w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        >
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-background text-muted-foreground shadow-xs">
+            <Icon aria-hidden="true" className="size-4" />
+          </span>
+          <span className="min-w-0 flex-1 text-sm font-semibold text-foreground">{title}</span>
+          <ChevronDownIcon
+            aria-hidden="true"
+            className={cn(
+              "size-4 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none",
+              open && "rotate-180",
+            )}
+          />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="border-border border-t px-4 py-4">
+        {children}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 export function MetadataCard({
   form,
@@ -137,116 +195,80 @@ export function MetadataCard({
     }
   }
 
+  const currentSaveState: SaveState = rhf.formState.isSubmitting
+    ? "saving"
+    : saveState === "error"
+      ? "error"
+      : rhf.formState.isDirty
+        ? "unsaved"
+        : "saved";
+
   return (
     <Form {...rhf}>
       <form onSubmit={rhf.handleSubmit(onSubmit)}>
         <SectionCard
           icon={SettingsIcon}
           title={t("formSettings")}
+          state={<SaveStatus state={currentSaveState} />}
+          bodyClassName="p-4 sm:p-5"
+          footerClassName="sticky bottom-0 z-10 border-t bg-card/95 pt-4"
           footer={
-            <>
-              <SaveStatus
-                state={
-                  rhf.formState.isSubmitting
-                    ? "saving"
-                    : saveState === "error"
-                      ? "error"
-                      : rhf.formState.isDirty
-                        ? "unsaved"
-                        : "saved"
-                }
-                className="mr-auto"
-              />
-              <SubmitButton pending={rhf.formState.isSubmitting}>{t("saveSettings")}</SubmitButton>
-            </>
+            <SubmitButton pending={rhf.formState.isSubmitting}>{t("saveSettings")}</SubmitButton>
           }
         >
-          <div className="grid gap-x-8 gap-y-6 lg:grid-cols-2">
-            <div className="space-y-4">
-              <h3 className="text-balance text-sm font-semibold">{t("builderBasics")}</h3>
-              <FormField
-                control={rhf.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("name")}</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={rhf.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("descriptionLabel")}</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        rows={2}
-                        placeholder={t("shownToApplicantsPlaceholder")}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            <div className="space-y-4">
-              <h3 className="border-t pt-4 text-balance text-sm font-semibold lg:border-t-0 lg:pt-0">
-                {t("builderLogistics")}
-              </h3>
-              <FormField
-                control={rhf.control}
-                name="ask_shirt_size"
-                render={({ field }) => (
-                  <FormItem className="flex items-center justify-between gap-4 rounded-md border p-3">
-                    <div className="space-y-0.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <FormLabel className="font-normal">{t("askShirtSizeLabel")}</FormLabel>
-                        {field.value && (
-                          <StatusBadge tone="neutral" dot={false}>
-                            {t("requiredAtSubmitBadge")}
-                          </StatusBadge>
-                        )}
-                      </div>
-                      <FormDescription>{t("askShirtSizeDesc")}</FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch checked={field.value} onCheckedChange={field.onChange} />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={rhf.control}
-                name="ask_food_intolerances"
-                render={({ field }) => (
-                  <FormItem className="flex items-center justify-between gap-4 rounded-md border p-3">
-                    <div className="space-y-0.5">
-                      <FormLabel className="font-normal">{t("askFoodIntolerancesLabel")}</FormLabel>
-                      <FormDescription>{t("askFoodIntolerancesDesc")}</FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch checked={field.value} onCheckedChange={field.onChange} />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-            </div>
-            <div className="space-y-4 lg:col-span-2">
-              <h3 className="border-t pt-4 text-balance text-sm font-semibold">
-                {t("builderAvailability")}
-              </h3>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 lg:grid-cols-2">
+            <SettingsGroup
+              icon={InfoIcon}
+              title={t("builderBasics")}
+              defaultOpen
+              className="lg:col-span-2"
+            >
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField
+                  control={rhf.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("name")}</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={rhf.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("descriptionLabel")}</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          rows={2}
+                          placeholder={t("shownToApplicantsPlaceholder")}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </SettingsGroup>
+
+            <SettingsGroup
+              icon={CalendarClockIcon}
+              title={t("builderAvailability")}
+              defaultOpen
+              className="lg:col-span-2"
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
                 <FormField
                   control={rhf.control}
                   name="open_at"
                   render={({ field }) => (
-                    <FormItem className="lg:col-span-2">
+                    <FormItem>
                       <FormLabel>{t("colOpens")}</FormLabel>
                       <FormControl>
                         <DateTimeInput
@@ -263,7 +285,7 @@ export function MetadataCard({
                   control={rhf.control}
                   name="close_at"
                   render={({ field }) => (
-                    <FormItem className="lg:col-span-2">
+                    <FormItem>
                       <FormLabel>{t("colCloses")}</FormLabel>
                       <FormControl>
                         <DateTimeInput
@@ -280,7 +302,7 @@ export function MetadataCard({
                   control={rhf.control}
                   name="capacity"
                   render={({ field }) => (
-                    <FormItem className="lg:col-span-2">
+                    <FormItem>
                       <FormLabel>{t("colQuota")}</FormLabel>
                       <FormControl>
                         <Input
@@ -290,7 +312,6 @@ export function MetadataCard({
                           {...field}
                         />
                       </FormControl>
-                      <FormDescription>{t("optionalCapDesc")}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -299,22 +320,63 @@ export function MetadataCard({
                   control={rhf.control}
                   name="confirmation_window_hours"
                   render={({ field }) => (
-                    <FormItem className="lg:col-span-2">
+                    <FormItem>
                       <FormLabel>{t("confirmWindowLabel")}</FormLabel>
                       <FormControl>
                         <Input type="number" min={1} {...field} />
                       </FormControl>
-                      <FormDescription>{t("confirmWindowDesc")}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
-            </div>
-            <div className="space-y-4 lg:col-span-2">
-              <h3 className="border-t pt-4 text-balance text-sm font-semibold">
-                {t("builderReview")}
-              </h3>
+            </SettingsGroup>
+
+            <SettingsGroup
+              icon={UsersIcon}
+              title={t("builderLogistics")}
+              defaultOpen={form.ask_shirt_size || form.ask_food_intolerances}
+            >
+              <div className="space-y-3">
+                <FormField
+                  control={rhf.control}
+                  name="ask_shirt_size"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between gap-4 rounded-lg border bg-background/70 p-3">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <FormLabel className="font-normal">{t("askShirtSizeLabel")}</FormLabel>
+                        {field.value && (
+                          <StatusBadge tone="neutral" dot={false}>
+                            {t("requiredAtSubmitBadge")}
+                          </StatusBadge>
+                        )}
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={rhf.control}
+                  name="ask_food_intolerances"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between gap-4 rounded-lg border bg-background/70 p-3">
+                      <FormLabel className="font-normal">{t("askFoodIntolerancesLabel")}</FormLabel>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </SettingsGroup>
+
+            <SettingsGroup
+              icon={ShieldCheckIcon}
+              title={t("builderAccess")}
+              defaultOpen={form.has_confirmed_responses || form.grants_role_ids.length > 0}
+            >
               <FormField
                 control={rhf.control}
                 name="grants_role_ids"
@@ -334,7 +396,6 @@ export function MetadataCard({
                         emptyText={t("noRolesYet")}
                       />
                     </FormControl>
-                    <FormDescription>{t("grantsRolesDesc")}</FormDescription>
                     {form.has_confirmed_responses && (
                       <Alert>
                         <InfoIcon aria-hidden="true" />
@@ -345,10 +406,42 @@ export function MetadataCard({
                   </FormItem>
                 )}
               />
-            </div>
+            </SettingsGroup>
           </div>
         </SectionCard>
       </form>
     </Form>
+  );
+}
+
+export function ApplicationDangerZone({ onDelete }: { onDelete: () => void }) {
+  const { t } = useLocale();
+
+  return (
+    <SectionCard
+      leading={
+        <TriangleAlertIcon aria-hidden="true" className="text-destructive mt-0.5 size-5 shrink-0" />
+      }
+      title={t("dangerZone")}
+      className="border-destructive/30"
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <h3 className="text-sm font-semibold text-foreground">{t("deleteApplicationForm")}</h3>
+          <p className="text-muted-foreground text-pretty text-sm">
+            {t("deleteApplicationFormDesc")}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="text-destructive sm:shrink-0"
+          onClick={onDelete}
+        >
+          <Trash2Icon aria-hidden="true" />
+          {t("deleteApplication")}
+        </Button>
+      </div>
+    </SectionCard>
   );
 }
