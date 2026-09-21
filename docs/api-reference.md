@@ -156,8 +156,8 @@ presenting → completed/disqualified`. It also supports `returned_to_queue`,
 entry per repo per challenge and a hard
 guarantee that a team is never called into two rooms while a member is
 occupied elsewhere. Rooms, the auto-call pump tick, judge evaluation (1:1
-with a queue entry), and the data behind the venue TV screens (mode
-precedence: operator override → scheduled `tv_slots` → default rooms) all
+with a queue entry), and the data behind the venue TV screens (manual mode
+selection → default rooms) all
 live here. Every queue action writes exactly one history row and emits
 exactly one broadcast (`plan/07` invariant 5).
 

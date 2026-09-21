@@ -2,8 +2,8 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
-import { AuthAlert, AuthButton, AuthHeader, AuthScreen } from "@/components/auth-ui";
-import { forceLocalSignOut, signOut } from "@/lib/auth-client";
+import { AuthButton, AuthHeader, AuthScreen } from "@/components/auth-ui";
+import { forceLocalSignOut } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
 
@@ -21,8 +21,6 @@ export function SessionState({
 }) {
   const { t } = useLocale();
   const router = useRouter();
-  const [signingOut, setSigningOut] = useState(false);
-  const [signOutError, setSignOutError] = useState<Error | null>(null);
   const [showOfflineAction, setShowOfflineAction] = useState(false);
 
   useEffect(() => {
@@ -42,19 +40,6 @@ export function SessionState({
   function returnToSignIn() {
     forceLocalSignOut();
     router.replace("/(auth)/sign-in");
-  }
-
-  async function endSession() {
-    setSigningOut(true);
-    setSignOutError(null);
-    try {
-      const result = await signOut();
-      if (result.error) throw new Error(result.error.message || t("signOutError"));
-    } catch (cause) {
-      setSignOutError(cause instanceof Error ? cause : new Error(t("signOutError")));
-    } finally {
-      setSigningOut(false);
-    }
   }
 
   if (loading) {
@@ -101,25 +86,8 @@ export function SessionState({
         description={t("sessionRecoveryDescription")}
       />
       <View style={{ gap: 12 }}>
-        {signOutError ? <AuthAlert message={t("signOutError")} /> : null}
         <AuthButton label={t("retry")} onPress={onRetry} />
         {offlineAction}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ busy: signingOut, disabled: signingOut }}
-          disabled={signingOut}
-          onPress={() => void endSession()}
-          style={({ pressed }) => ({
-            alignItems: "center",
-            justifyContent: "center",
-            minHeight: 44,
-            opacity: signingOut ? 0.45 : pressed ? 0.6 : 1,
-          })}
-        >
-          <Text style={{ color: colors.interactiveText, fontSize: 15, fontWeight: "600" }}>
-            {t("signOut")}
-          </Text>
-        </Pressable>
         <Pressable
           accessibilityLabel={t("backToSignIn")}
           accessibilityRole="link"

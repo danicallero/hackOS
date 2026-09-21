@@ -897,16 +897,6 @@ Table time_logs {
   user_id integer
 }
 
-Table tv_slots {
-  created_at "timestamp with time zone" [not null, default: `now()`]
-  ends_at "timestamp with time zone" [not null]
-  id bigint [pk, not null, default: `nextval('tv_slots_id_seq'::regclass)`]
-  items jsonb [not null]
-  label text
-  starts_at "timestamp with time zone" [not null]
-  updated_at "timestamp with time zone" [not null, default: `now()`]
-}
-
 Table universities {
   created_at "timestamp with time zone" [not null, default: `now()`]
   id integer [pk, increment, not null]

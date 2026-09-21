@@ -59,8 +59,7 @@ export const EVENTS = {
   QUEUE_REVIEW_CHANGED: "queue.review.changed", // H36 collaborative review save
   QUEUE_NOTIFY_ENTER: "queue.entry.notify_enter", // H31
   QUEUE_TEAM_CALLED: "queue.entry.team_called", // H29/H38, operator-facing echo of a "called" transition
-  TV_MODE_CHANGED: "tv.mode.changed", // H42, also fired when a timetable slot takes over
-  TV_SCHEDULE_CHANGED: "tv.schedule.changed", // H42: the tv_slots timetable was edited
+  TV_MODE_CHANGED: "tv.mode.changed", // H42: operator-selected current TV display
   TV_CONFIG_CHANGED: "tv.config.changed", // H42: venue TV config (display language) was edited
   CONTENT_SCHEDULE_CHANGED: "content.schedule.changed", // H47 operational content event
   CONTENT_ANNOUNCEMENT: "content.announcement", // H50 operational content event

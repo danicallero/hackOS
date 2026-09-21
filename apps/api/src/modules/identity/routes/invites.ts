@@ -23,7 +23,7 @@ import {
   lockRoleGraph,
   requireWildcardInviteAuthority,
 } from "../invite-role-authority.js";
-import { applyRoleGrantRule } from "../role-grants.js";
+import { applyRoleAssignmentGrantRules, applyRoleGrantRule } from "../role-grants.js";
 import {
   enterpriseInviteClaimUrl,
   enterpriseInviteLinkIsExpired,
@@ -903,6 +903,11 @@ export function registerInviteRoutes(app: FastifyInstance): void {
              ON CONFLICT DO NOTHING`,
             [userId, roleId],
           );
+          // A deferred invite assignment is still a role assignment. Apply
+          // the same H8 implication rules as the direct role-management
+          // route so roles granted by an invite can grant their own related
+          // roles in this transaction and audit trail.
+          await applyRoleAssignmentGrantRules(client, userId, roleId, null);
         }
 
         // Every invite kind follows the same role-derived entitlement rule.

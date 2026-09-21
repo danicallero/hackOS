@@ -3,24 +3,41 @@
 import { X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useSyncExternalStore } from "react";
 import { IconButton } from "@/components/common/icon-button";
 import { useLocale } from "@/lib/i18n";
 
 const STORAGE_KEY = "hackos.cookie-notice.dismissed";
 
+function subscribeToDismissal(onStoreChange: () => void) {
+  window.addEventListener("storage", onStoreChange);
+  return () => window.removeEventListener("storage", onStoreChange);
+}
+
+function getDismissalSnapshot() {
+  return window.localStorage.getItem(STORAGE_KEY) === "true";
+}
+
+// During hydration, keep the server's visible notice until React can read the
+// browser-only preference. This avoids rendering different trees on either side.
+function getServerDismissalSnapshot() {
+  return false;
+}
+
 export function CookieNotice() {
   const { t } = useLocale();
-  const [isVisible, setIsVisible] = useState(
-    () => typeof window !== "undefined" && window.localStorage.getItem(STORAGE_KEY) !== "true",
+  const isDismissed = useSyncExternalStore(
+    subscribeToDismissal,
+    getDismissalSnapshot,
+    getServerDismissalSnapshot,
   );
 
   function dismiss() {
     window.localStorage.setItem(STORAGE_KEY, "true");
-    setIsVisible(false);
+    window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY, newValue: "true" }));
   }
 
-  if (!isVisible) {
+  if (isDismissed) {
     return null;
   }
 

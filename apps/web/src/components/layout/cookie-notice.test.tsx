@@ -1,6 +1,7 @@
 import userEvent from "@testing-library/user-event";
 import { act, type ComponentProps, createElement } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot, hydrateRoot, type Root } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -111,5 +112,20 @@ describe("CookieNotice", () => {
 
     expect(container.querySelector("aside")).toBeNull();
     expect(window.localStorage.getItem("hackos.cookie-notice.dismissed")).toBe("true");
+  });
+
+  it("uses the server snapshot during hydration before applying a saved dismissal", () => {
+    window.localStorage.setItem("hackos.cookie-notice.dismissed", "true");
+    const serverMarkup = renderToString(<CookieNotice />);
+
+    expect(serverMarkup).toContain("cookie-notice-title");
+
+    act(() => root.unmount());
+    container.innerHTML = serverMarkup;
+    act(() => {
+      root = hydrateRoot(container, <CookieNotice />);
+    });
+
+    expect(container.querySelector("aside")).toBeNull();
   });
 });

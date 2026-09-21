@@ -369,7 +369,7 @@ export interface MyQueueEntry {
 export const getRoomView = (roomId: number, signal?: AbortSignal) =>
   api.get<RoomView>(`/api/queue/rooms/${roomId}/view`, { signal });
 export const getAllRoomViews = () => api.get<RoomView[]>("/api/tv/rooms");
-// TV display state, the timetable and the live-screen config live in lib/tv.ts.
+// TV display state and the live-screen config live in lib/tv.ts.
 export const getChallengeProgress = (challengeId: number, signal?: AbortSignal) =>
   api.get<ChallengeProgress>(`/api/queue/challenges/${challengeId}/progress`, { signal });
 export const getRoomPace = (roomId: number, signal?: AbortSignal) =>

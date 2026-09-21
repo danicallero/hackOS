@@ -1,6 +1,7 @@
 import { inferAdditionalFields } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import { API_URL } from "./env";
+import { notifySignOut } from "./sign-out-events";
 
 /**
  * Better Auth browser client. Points at the same Better Auth instance the API
@@ -27,4 +28,15 @@ export const authClient = createAuthClient({
   ],
 });
 
-export const { signIn, signUp, signOut } = authClient;
+export const { signIn, signUp } = authClient;
+
+/**
+ * End the browser-state identity boundary as soon as Better Auth confirms the
+ * sign-out. A profile request started under the old cookie can otherwise
+ * complete after sign-out and briefly restore the previous account.
+ */
+export async function signOut(...args: Parameters<typeof authClient.signOut>) {
+  const result = await authClient.signOut(...args);
+  if (!result.error) notifySignOut();
+  return result;
+}
