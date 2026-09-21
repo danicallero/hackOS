@@ -61,6 +61,8 @@ export interface ResponseRow {
   declined_at: Date | null;
   decision_sent_at: Date | null;
   submitted_at: Date | null;
+  allow_resubmit_after_close: boolean;
+  auto_accept_on_resubmit: boolean;
   created_at: Date;
   updated_at: Date;
 }
@@ -517,6 +519,9 @@ export async function saveDraft(
         status: existing.status,
       });
     }
+    if (!isWindowOpen(app) && !invited && !existing.allow_resubmit_after_close) {
+      throw new ConflictError("Applications are closed for this form", { applicationId });
+    }
     if (existing.application_form_version_id == null) {
       throw new ConflictError("This draft has no immutable form version and must be restarted", {
         code: "form_version_required",
@@ -548,7 +553,7 @@ export async function submitResponse(
 ): Promise<{ response: ResponseRow; privacyNotice: string }> {
   return withTransaction(async (client) => {
     await lockRoleGraph(client);
-    const app = await requireApplication(client, applicationId);
+    let app = await requireApplication(client, applicationId);
 
     const { rows: userRows } = await client.query(
       `SELECT email_verified, language FROM users
@@ -570,10 +575,14 @@ export async function submitResponse(
     );
     const existing = rows[0] as ResponseRow | undefined;
     if (!existing) throw new NotFoundError("Draft not found — save a draft first");
+    const invited = await isInvitedParticipant(client, userId);
     if (existing.status !== "draft") {
       throw new ConflictError("This application has already been submitted", {
         status: existing.status,
       });
+    }
+    if (!isWindowOpen(app) && !invited && !existing.allow_resubmit_after_close) {
+      throw new ConflictError("Applications are closed for this form", { applicationId });
     }
 
     const versionRows = await client.query<ApplicationFormVersion>(
@@ -592,8 +601,6 @@ export async function submitResponse(
     const merged = { ...existing.responses, ...(input.responses ?? {}) };
     const shirtSize = input.shirt_size ?? (merged.shirt_size as string | undefined);
     if (input.shirt_size) merged.shirt_size = input.shirt_size;
-
-    const invited = await isInvitedParticipant(client, userId);
 
     // Invited participants already gave shirt & food at invite accept; skip
     // the required check and preserve existing values when not re-submitted.
@@ -653,14 +660,30 @@ export async function submitResponse(
       [userId, foodIntolerances, foodNotes, shirtSize ?? null, dni],
     );
 
+    const autoAccept = !invited && existing.auto_accept_on_resubmit;
+    if (autoAccept) {
+      const { rows: appRows } = await client.query(
+        `SELECT * FROM applications WHERE id = $1 FOR UPDATE`,
+        [applicationId],
+      );
+      app = appRows[0] as ApplicationRow;
+      if (app.capacity != null) await assertCapacityAvailable(client, applicationId, app.capacity);
+    }
+    const nextStatus = invited ? "confirmed" : autoAccept ? "accepted_internal" : "review";
     const updated = await client.query(
       `UPDATE application_responses
        SET responses = $3::jsonb,
            status = $4,
-           submitted_at = now()
+           submitted_at = now(),
+           allow_resubmit_after_close = false,
+           auto_accept_on_resubmit = false
        WHERE id = $1 AND user_id = $2 RETURNING *`,
-      [existing.id, userId, JSON.stringify(storedResponses), invited ? "confirmed" : "review"],
+      [existing.id, userId, JSON.stringify(storedResponses), nextStatus],
     );
+
+    if (autoAccept) {
+      await sendOne(client, userId, updated.rows[0] as ResponseRow, app);
+    }
 
     if (invited) {
       // Auto-confirm: reconcile the role-derived ticket, stamp confirmed_at,
@@ -687,14 +710,70 @@ export async function submitResponse(
       entityId: existing.id,
       action: "submitted",
       source: "web",
-      after: { status: invited ? "confirmed" : "review" },
+      after: { status: invited ? "confirmed" : autoAccept ? "accepted" : "review" },
     });
 
     return {
-      response: { ...updated.rows[0], status: invited ? "confirmed" : "review" },
+      response: {
+        ...updated.rows[0],
+        status: invited ? "confirmed" : autoAccept ? "accepted" : "review",
+      },
       privacyNotice: privacyNotice(userRows[0].language),
     };
   });
+}
+
+/** H12/H14: give an applicant their response back for revision. A confirmed
+ * applicant keeps their application-granted role only when the next submit is
+ * configured for auto-accept; otherwise the role and live ticket access are
+ * revoked until a later review/confirmation restores them. */
+export async function returnToDraft(
+  actorId: number,
+  responseId: number,
+  input: { allow_resubmit_after_close: boolean; auto_accept_on_resubmit: boolean },
+): Promise<ResponseRow> {
+  let voidedPassIds: number[] = [];
+  const result = await withTransaction(async (client) => {
+    await lockRoleGraph(client);
+    const response = await lockResponse(client, responseId, actorId);
+    if (response.status === "draft") return { response, userId: response.user_id };
+    const wasConfirmed = response.status === "confirmed";
+    if (response.confirmation_token_id) {
+      await invalidateConfirmationToken(client, response.confirmation_token_id);
+    }
+    const { rows } = await client.query(
+      `UPDATE application_responses
+          SET status = 'draft', decision_sent_at = NULL, confirmation_token_id = NULL,
+              confirmed_at = NULL, declined_at = NULL, submitted_at = NULL,
+              allow_resubmit_after_close = $2, auto_accept_on_resubmit = $3
+        WHERE id = $1 RETURNING *`,
+      [responseId, input.allow_resubmit_after_close, input.auto_accept_on_resubmit],
+    );
+    if (wasConfirmed && !input.auto_accept_on_resubmit) {
+      await revokeApplicationGrantedRoles(
+        client,
+        response.user_id,
+        response.application_id,
+        actorId,
+      );
+      voidedPassIds = (await reconcileTicketAccess(client, response.user_id)).voidedPassIds;
+    }
+    await audit(client, {
+      actorId,
+      entityType: "application_response",
+      entityId: responseId,
+      action: "returned_to_draft",
+      before: { status: response.status },
+      after: {
+        status: "draft",
+        ...input,
+        ...(wasConfirmed && !input.auto_accept_on_resubmit ? { applicationRoleRevoked: true } : {}),
+      },
+    });
+    return { response: rows[0] as ResponseRow, userId: response.user_id };
+  });
+  if (voidedPassIds.length > 0) await pushTicketVoid(result.userId, voidedPassIds);
+  return result.response;
 }
 
 // ── review (H13) ─────────────────────────────────────────────────────────────

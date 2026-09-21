@@ -2,6 +2,7 @@ import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
+import { pool } from "../../src/db/pool.js";
 import {
   asUser,
   buildTestApp,
@@ -10,7 +11,12 @@ import {
   createUserWithCapabilities,
   truncateAll,
 } from "../helpers.js";
-import { createApplication, markInvitedParticipant, sampleTemplate } from "./fixtures.js";
+import {
+  createApplication,
+  createResponse,
+  markInvitedParticipant,
+  sampleTemplate,
+} from "./fixtures.js";
 
 /** H11 (APPLICATIONS_MANAGE): CRUD of application forms + public read of open ones. */
 
@@ -54,6 +60,30 @@ async function giveManagerTopPosition(userId: number): Promise<void> {
 }
 
 describe("applications CRUD (H11)", () => {
+  it("deletes a form with its response and review data", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    const applicant = await createUser();
+    const id = await createApplication();
+    const responseId = await createResponse(applicant, id, { status: "review" });
+    await pool.query(
+      `INSERT INTO applicant_reviews (response_id, author_id, score) VALUES ($1, $2, 4)`,
+      [responseId, manager],
+    );
+    const deleted = await a.inject({
+      method: "DELETE",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+    });
+    expect(deleted.statusCode).toBe(204);
+    expect(
+      (await pool.query(`SELECT 1 FROM application_responses WHERE id = $1`, [responseId])).rows,
+    ).toHaveLength(0);
+    expect(
+      (await pool.query(`SELECT 1 FROM applicant_reviews WHERE response_id = $1`, [responseId]))
+        .rows,
+    ).toHaveLength(0);
+  });
   it("requires APPLICATIONS_MANAGE to create", async () => {
     const a = await getApp();
     const pleb = await createUser();
@@ -598,21 +628,22 @@ describe("applications CRUD (H11)", () => {
     expect(ok.statusCode).toBe(201);
   });
 
-  it("blocks deleting a form that already has responses", async () => {
+  it("deletes a form that already has responses", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
     const appId = await createApplication();
     const applicant = await createUser();
-    const { createResponse } = await import("./fixtures.js");
-    await createResponse(applicant, appId, { status: "review" });
+    const responseId = await createResponse(applicant, appId, { status: "review" });
 
     const res = await a.inject({
       method: "DELETE",
       url: `/api/applications/${appId}`,
       headers: asUser(manager),
     });
-    expect(res.statusCode).toBe(409);
-    expect(res.json().error.details.code).toBe("has_responses");
+    expect(res.statusCode).toBe(204);
+    expect(
+      (await pool.query(`SELECT 1 FROM application_responses WHERE id = $1`, [responseId])).rows,
+    ).toHaveLength(0);
   });
 
   it("H11: sections group template fields and round-trip through create/update/read", async () => {

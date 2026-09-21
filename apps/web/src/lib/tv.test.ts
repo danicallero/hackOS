@@ -4,27 +4,17 @@ import {
   bestSponsorColumns,
   DEFAULT_LIVE_CONFIG,
   liveConfigFrom,
-  msUntilNextRotation,
   resolveTimer,
-  rotationIndexAt,
   TV_CONTROL_MODES,
-  type TvSlotItem,
   upcomingWindow,
   wifiJoinCode,
 } from "./tv";
 
 /** TV display logic (H41/H42) — the parts a projector can't be unit-tested on. */
 
-const item = (mode: TvSlotItem["mode"], seconds: number | null = null): TvSlotItem => ({
-  mode,
-  payload: null,
-  seconds,
-});
-
 describe("TV control modes", () => {
-  it("keeps legacy standalone announcements and timers out of operator controls", () => {
-    expect(TV_CONTROL_MODES).not.toContain("announcement");
-    expect(TV_CONTROL_MODES).not.toContain("timer");
+  it("contains exactly the current runtime modes", () => {
+    expect(TV_CONTROL_MODES).toEqual(["live", "rooms", "schedule", "sponsors", "wifi"]);
   });
 });
 
@@ -103,55 +93,6 @@ describe("resolveTimer", () => {
     expect(resolveTimer(liveConfigFrom({ timer: { target: "hackingEndsAt" } }), null)).toEqual({
       kind: "phase",
     });
-  });
-});
-
-describe("rotationIndexAt", () => {
-  const items = [item("live", 60), item("sponsors", 20)];
-
-  it("stays put for a slot with a single item", () => {
-    expect(rotationIndexAt([item("live")], 999_999)).toBe(0);
-    expect(rotationIndexAt([], 10)).toBe(0);
-  });
-
-  it("advances at each dwell boundary and wraps", () => {
-    expect(rotationIndexAt(items, 0)).toBe(0);
-    expect(rotationIndexAt(items, 59_999)).toBe(0);
-    expect(rotationIndexAt(items, 60_000)).toBe(1);
-    expect(rotationIndexAt(items, 79_999)).toBe(1);
-    // 80s is a full cycle: back to the first entry.
-    expect(rotationIndexAt(items, 80_000)).toBe(0);
-    expect(rotationIndexAt(items, 140_000)).toBe(1);
-  });
-
-  it("holds the first entry for a screen switched on before the slot starts", () => {
-    expect(rotationIndexAt(items, -5_000)).toBe(0);
-  });
-
-  it("uses the default dwell when a slot item has none", () => {
-    const untimed = [item("live"), item("sponsors")];
-    expect(rotationIndexAt(untimed, 29_000)).toBe(0);
-    expect(rotationIndexAt(untimed, 31_000)).toBe(1);
-  });
-});
-
-describe("msUntilNextRotation", () => {
-  const items = [item("live", 60), item("sponsors", 20)];
-
-  it("never schedules a flip for a static slot", () => {
-    expect(msUntilNextRotation([item("live")], 1000)).toBe(Number.POSITIVE_INFINITY);
-  });
-
-  it("reports the time left on the current entry", () => {
-    expect(msUntilNextRotation(items, 0)).toBe(60_000);
-    expect(msUntilNextRotation(items, 59_000)).toBe(1_000);
-    expect(msUntilNextRotation(items, 60_000)).toBe(20_000);
-    // Wrapped into the next cycle.
-    expect(msUntilNextRotation(items, 80_000)).toBe(60_000);
-  });
-
-  it("waits for the slot to start when it hasn't yet", () => {
-    expect(msUntilNextRotation(items, -5_000)).toBe(5_000);
   });
 });
 

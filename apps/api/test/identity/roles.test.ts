@@ -353,6 +353,30 @@ describe("H8 canonical event-access projection", () => {
 });
 
 describe("H8 roles CRUD and assignment API", () => {
+  it("does not expose synthetic Store-review accounts as role members", async () => {
+    const a = await getApp();
+    const actor = await manager();
+    const roleId = await createRole([], { name: "fixture-hidden-members" });
+    const realUser = await createUser();
+    const fixtureUser = await createUser();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [fixtureUser]);
+    await pool.query(
+      `INSERT INTO user_roles (user_id, role_id)
+       VALUES ($1, $3), ($2, $3)`,
+      [realUser, fixtureUser, roleId],
+    );
+
+    const response = await a.inject({
+      method: "GET",
+      url: "/api/roles",
+      headers: asUser(actor),
+    });
+    expect(response.statusCode).toBe(200);
+    const role = response.json().find((item: { id: number }) => item.id === roleId);
+    expect(role.memberIds).toEqual([realUser]);
+  });
+
   it("creates, edits capabilities, reorders, and deletes a role with audit rows", async () => {
     const a = await getApp();
     // Also holds ACCREDIT_SCAN itself: the H8 capability-possession guard

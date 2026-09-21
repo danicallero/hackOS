@@ -8,7 +8,6 @@ import { scheduleQueuePump } from "./pump.js";
 import { registerReadsRoutes } from "./reads.routes.js";
 import { registerQueueResetRoutes } from "./reset.routes.js";
 import { registerRoomsRoutes } from "./rooms.routes.js";
-import { scheduleTvScheduler } from "./tv-scheduler.js";
 
 /**
  * WS-B2 — queue & judging core (H29-H42). Routes are split by surface:
@@ -28,6 +27,5 @@ export async function registerQueueModule(app: FastifyInstance): Promise<void> {
 
   if (!config.isTest) {
     await scheduleQueuePump();
-    await scheduleTvScheduler();
   }
 }

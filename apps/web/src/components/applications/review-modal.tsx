@@ -13,6 +13,7 @@ import {
   CircleCheckIcon,
   DownloadIcon,
   ExternalLinkIcon,
+  FilePenLineIcon,
   FileTextIcon,
   GavelIcon,
   GripVerticalIcon,
@@ -65,6 +66,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
@@ -1285,7 +1289,7 @@ export function ReviewModal({
       size="xl"
       floatingFocus={desktopFloating && (canScore || files.length > 0)}
       className={cn(
-        "max-h-[90vh] sm:max-w-4xl 2xl:h-[min(90vh,54rem)] 2xl:transition-[left]",
+        "max-h-[90vh] overflow-visible sm:max-w-4xl 2xl:h-[min(90vh,54rem)] 2xl:transition-[left]",
         files.length > 0 &&
           (fileViewerSide === "left"
             ? "2xl:left-[calc(50%+15.5rem)]"
@@ -2118,8 +2122,10 @@ function DecisionMenu({
   const sentActions = ["accepted", "rejected", "confirmed", "declined", "expired"].includes(status);
   const hasAvailableActions = reviewActions || outboxActions || sentActions;
 
+  // H12/H14: keep the submenu and its chevron on the same (trailing) side of
+  // the decision menu. Radix flips it automatically when the viewport is tight.
   return (
-    <DropdownMenu>
+    <DropdownMenu dir="ltr">
       <DropdownMenuTrigger asChild>
         <button
           type="button"
@@ -2131,7 +2137,7 @@ function DecisionMenu({
           <GavelIcon />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-52">
+      <DropdownMenuContent align="end" className="min-w-52" style={{ direction: "ltr" }}>
         <DropdownMenuLabel>{t("decisionLabel")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {!hasAvailableActions && (
@@ -2203,6 +2209,74 @@ function DecisionMenu({
             >
               {t("backToReview")}
             </DropdownMenuItem>
+          </>
+        )}
+        {status !== "draft" && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger disabled={busy}>
+                <FilePenLineIcon />
+                {t("returnToDraft")}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent
+                align="start"
+                className="w-72 max-w-[calc(100vw-2rem)]"
+                style={{ direction: "ltr" }}
+              >
+                <DropdownMenuItem
+                  className="whitespace-normal leading-snug"
+                  onSelect={() =>
+                    void run(
+                      t("returnedToDraft"),
+                      () =>
+                        api.post(
+                          `/api/responses/${responseId}/return-to-draft`,
+                          { allow_resubmit_after_close: false, auto_accept_on_resubmit: false },
+                          { headers: { "Idempotency-Key": crypto.randomUUID() } },
+                        ),
+                      { refresh: false, nextStatus: "draft" },
+                    )
+                  }
+                >
+                  {t("returnToDraftOpen")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="whitespace-normal leading-snug"
+                  onSelect={() =>
+                    void run(
+                      t("returnedToDraft"),
+                      () =>
+                        api.post(
+                          `/api/responses/${responseId}/return-to-draft`,
+                          { allow_resubmit_after_close: true, auto_accept_on_resubmit: false },
+                          { headers: { "Idempotency-Key": crypto.randomUUID() } },
+                        ),
+                      { refresh: false, nextStatus: "draft" },
+                    )
+                  }
+                >
+                  {t("returnToDraftLate")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="whitespace-normal leading-snug"
+                  onSelect={() =>
+                    void run(
+                      t("returnedToDraft"),
+                      () =>
+                        api.post(
+                          `/api/responses/${responseId}/return-to-draft`,
+                          { allow_resubmit_after_close: true, auto_accept_on_resubmit: true },
+                          { headers: { "Idempotency-Key": crypto.randomUUID() } },
+                        ),
+                      { refresh: false, nextStatus: "draft" },
+                    )
+                  }
+                >
+                  {t("returnToDraftAutoAccept")}
+                </DropdownMenuItem>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
           </>
         )}
         {sentActions && (

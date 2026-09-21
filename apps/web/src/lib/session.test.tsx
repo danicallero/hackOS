@@ -16,6 +16,7 @@ vi.mock("./api", () => ({
 
 import { api } from "./api";
 import { SessionProvider, useSessionContext } from "./session";
+import { notifySignOut } from "./sign-out-events";
 import type { Me } from "./types";
 
 const profile = {
@@ -110,5 +111,35 @@ describe("web session refresh", () => {
       await Promise.resolve();
     });
     expect(container.querySelector('[data-testid="status"]')?.textContent).toBe("authenticated");
+  });
+
+  it("does not restore account A when sign-out wins a delayed profile request", async () => {
+    let resolveRequest!: (value: Me) => void;
+    vi.mocked(api.get).mockReturnValueOnce(
+      new Promise<Me>((resolve) => {
+        resolveRequest = resolve;
+      }),
+    );
+
+    await act(async () => {
+      root.render(
+        <SessionProvider>
+          <Probe />
+        </SessionProvider>,
+      );
+      await Promise.resolve();
+    });
+    expect(container.querySelector('[data-testid="status"]')?.textContent).toBe("loading");
+
+    act(() => notifySignOut());
+    expect(container.querySelector('[data-testid="status"]')?.textContent).toBe("unauthenticated");
+    expect(container.querySelector('[data-testid="owner"]')?.textContent).toBe("none");
+
+    await act(async () => {
+      resolveRequest(profile);
+      await Promise.resolve();
+    });
+    expect(container.querySelector('[data-testid="status"]')?.textContent).toBe("unauthenticated");
+    expect(container.querySelector('[data-testid="owner"]')?.textContent).toBe("none");
   });
 });

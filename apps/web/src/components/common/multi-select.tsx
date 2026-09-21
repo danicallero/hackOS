@@ -49,6 +49,7 @@ export function MultiSelect({
   "aria-labelledby": ariaLabelledBy,
   "aria-describedby": ariaDescribedBy,
   "aria-invalid": ariaInvalid,
+  maxVisibleBadges,
 }: {
   options: MultiSelectOption[];
   /** Selected option values. */
@@ -69,6 +70,8 @@ export function MultiSelect({
   "aria-labelledby"?: string;
   "aria-describedby"?: string;
   "aria-invalid"?: React.AriaAttributes["aria-invalid"];
+  /** Keep large selections compact while the trigger still announces the full count. */
+  maxVisibleBadges?: number;
 }) {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
@@ -78,6 +81,8 @@ export function MultiSelect({
   const toggle = (v: string) =>
     onChange(selected.has(v) ? value.filter((x) => x !== v) : [...value, v]);
   const labelOf = (v: string) => options.find((o) => o.value === v)?.label ?? v;
+  const visibleValues = maxVisibleBadges ? value.slice(0, maxVisibleBadges) : value;
+  const hiddenValueCount = value.length - visibleValues.length;
 
   const content = (
     <PopoverPrimitive.Content
@@ -138,7 +143,7 @@ export function MultiSelect({
               the middle of the box instead of leaving it left-aligned. */}
           {value.length > 0 && (
             <span className="pointer-events-none relative z-10 flex min-w-0 flex-wrap gap-1 pr-9">
-              {value.map((v) => (
+              {visibleValues.map((v) => (
                 <Badge key={v} variant="secondary" className="gap-1">
                   {labelOf(v)}
                   <IconButton
@@ -153,6 +158,7 @@ export function MultiSelect({
                   </IconButton>
                 </Badge>
               ))}
+              {hiddenValueCount > 0 && <Badge variant="secondary">+{hiddenValueCount}</Badge>}
             </span>
           )}
           <PopoverPrimitive.Trigger asChild>

@@ -11,7 +11,6 @@ import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -26,7 +25,7 @@ import { isLanguage, languageName, useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import {
-  clearTvOverride,
+  clearTvMode,
   DEFAULT_LIVE_CONFIG,
   getTvState,
   getTvVenueConfig,
@@ -41,7 +40,6 @@ import {
 import type { Language } from "@/lib/types";
 import { LiveModePreview } from "./live-preview";
 import { LiveSettings } from "./live-settings";
-import { Timetable } from "./timetable";
 
 function buildModes(
   t: ReturnType<typeof useLocale>["t"],
@@ -55,10 +53,6 @@ function buildModes(
   ];
 }
 
-type ExpiryOption = "none" | "15" | "30" | "60";
-
-const EXPIRABLE_MODES: TvControlMode[] = ["wifi"];
-
 function isTvControlMode(mode: string): mode is TvControlMode {
   return (TV_CONTROL_MODES as readonly string[]).includes(mode);
 }
@@ -70,9 +64,7 @@ export default function TvControlPage() {
   const [current, setCurrent] = useState<TvState | null>(null);
   const [mode, setMode] = useState<TvControlMode>("live");
   const [liveConfig, setLiveConfig] = useState<LiveScreenConfig>(DEFAULT_LIVE_CONFIG);
-  const [expiryOption, setExpiryOption] = useState<ExpiryOption>("none");
   const [busy, setBusy] = useState(false);
-  const [timetableKey, setTimetableKey] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tvLanguage, setTvLanguageState] = useState<Language | null>(null);
   const [languageBusy, setLanguageBusy] = useState(false);
@@ -84,8 +76,7 @@ export default function TvControlPage() {
       setCurrent(next);
       setTvLanguageState(venue.language);
       setLoadError(null);
-      // Only seed the draft from reality on first load — later live updates
-      // (another admin changing the mode, or a timetable slot taking over)
+      // Only seed the draft from reality on first load — later operator updates
       // must not clobber an in-progress edit.
       if (!initializedRef.current) {
         initializedRef.current = true;
@@ -108,15 +99,12 @@ export default function TvControlPage() {
     if (canControl) void load();
   }, [canControl, load]);
 
-  // Authenticated tv-topic stream so this page (and other operators watching
-  // it) picks up mode/timetable/language changes broadcast by anyone, not
-  // just this tab's own PATCH response. The public wall gets the same
-  // broadcast via its own payload-free /api/tv/stream mirror.
+  // Authenticated TV stream keeps every operator's control page in sync. The
+  // public wall gets the same invalidation through its payload-free mirror.
   const { connected } = useEventSource("/api/events/stream?topic=tv", {
-    events: [EVENTS.TV_MODE_CHANGED, EVENTS.TV_SCHEDULE_CHANGED, EVENTS.TV_CONFIG_CHANGED],
-    onEvent: (event) => {
+    events: [EVENTS.TV_MODE_CHANGED, EVENTS.TV_CONFIG_CHANGED],
+    onEvent: () => {
       void load();
-      if (event.type === EVENTS.TV_SCHEDULE_CHANGED) setTimetableKey((key) => key + 1);
     },
     enabled: canControl,
   });
@@ -134,17 +122,11 @@ export default function TvControlPage() {
     }
   }
 
-  function expiresAtFor(option: ExpiryOption): string | null {
-    if (option === "none") return null;
-    return new Date(Date.now() + Number(option) * 60_000).toISOString();
-  }
-
   async function broadcast() {
     const payload = mode === "live" ? liveConfig : null;
-    const expiresAt = EXPIRABLE_MODES.includes(mode) ? expiresAtFor(expiryOption) : null;
     setBusy(true);
     try {
-      const next = await setTvMode(mode, payload, expiresAt);
+      const next = await setTvMode(mode, payload);
       setCurrent(next);
       toast.success(t("tvDisplaysUpdated"));
     } catch (err) {
@@ -158,13 +140,13 @@ export default function TvControlPage() {
     void broadcast();
   }
 
-  async function backToSchedule() {
+  async function resetToRooms() {
     setBusy(true);
     try {
-      const next = await clearTvOverride();
+      const next = await clearTvMode();
       setCurrent(next);
       if (isTvControlMode(next.mode)) setMode(next.mode);
-      toast.success(t("backOnTimetable"));
+      toast.success(t("tvDisplayReset"));
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateTvDisplays"));
     } finally {
@@ -186,7 +168,7 @@ export default function TvControlPage() {
       (mode === "live" &&
         JSON.stringify(liveConfig) !== JSON.stringify(liveConfigFrom(current.payload)))
     : false;
-  const isOverridden = current?.source === "override";
+  const isManuallySelected = current?.source === "manual";
 
   return (
     <div className="space-y-6">
@@ -211,9 +193,9 @@ export default function TvControlPage() {
             : t("loadingCurrentMode")
         }
         action={
-          isOverridden ? (
-            <Button variant="outline" disabled={busy} onClick={() => void backToSchedule()}>
-              {t("backToSchedule")}
+          isManuallySelected ? (
+            <Button variant="outline" disabled={busy} onClick={() => void resetToRooms()}>
+              {t("resetTvDisplay")}
             </Button>
           ) : undefined
         }
@@ -241,38 +223,17 @@ export default function TvControlPage() {
                   {connected ? t("tvFeedConnected") : t("tvFeedReconnecting")}
                 </span>
               </div>
-              {/* Why the screens show what they show: an operator broadcast, the
-                timetable, or neither. */}
               <div>
-                {current?.source === "override" && (
-                  <StatusBadge tone="warning">{t("sourceOverride")}</StatusBadge>
-                )}
-                {current?.source === "slot" && (
-                  <StatusBadge tone="success">
-                    {current.slot?.label
-                      ? t("sourceSlotNamed", { label: current.slot.label })
-                      : t("sourceSlot")}
-                  </StatusBadge>
+                {current?.source === "manual" && (
+                  <StatusBadge tone="success">{t("sourceManual")}</StatusBadge>
                 )}
                 {current?.source === "default" && (
                   <StatusBadge tone="neutral">{t("sourceDefault")}</StatusBadge>
                 )}
               </div>
-              {current?.slot && current.source === "slot" && (
-                <p className="text-muted-foreground">
-                  {t("slotEndsAt", { time: formatScheduledDateTime(current.slot.endsAt) })}
-                </p>
-              )}
-              {current?.broadcastAt && current.source === "override" && (
+              {current?.broadcastAt && current.source === "manual" && (
                 <p className="text-muted-foreground">
                   {t("lastBroadcastAt", { time: formatScheduledDateTime(current.broadcastAt) })}
-                </p>
-              )}
-              {current?.source === "override" && (
-                <p className="text-muted-foreground">
-                  {current.expiresAt
-                    ? t("autoRevertsAt", { time: formatScheduledDateTime(current.expiresAt) })
-                    : t("noAutoRevert")}
                 </p>
               )}
             </div>
@@ -323,26 +284,6 @@ export default function TvControlPage() {
             <LiveModePreview config={liveConfig} />
           </div>
         )}
-        {EXPIRABLE_MODES.includes(mode) && (
-          <div className="grid gap-2 pt-2 sm:max-w-xs">
-            <Label htmlFor="expiry-option">{t("autoRevertLabel")}</Label>
-            <Select
-              value={expiryOption}
-              onValueChange={(value) => setExpiryOption(value as ExpiryOption)}
-            >
-              <SelectTrigger id="expiry-option">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">{t("autoRevertNone")}</SelectItem>
-                <SelectItem value="15">{t("autoRevertMinutes", { count: 15 })}</SelectItem>
-                <SelectItem value="30">{t("autoRevertMinutes", { count: 30 })}</SelectItem>
-                <SelectItem value="60">{t("autoRevertMinutes", { count: 60 })}</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-muted-foreground text-sm">{t("autoRevertHint")}</p>
-          </div>
-        )}
       </SectionCard>
 
       <SectionCard
@@ -372,10 +313,6 @@ export default function TvControlPage() {
           </Select>
         </div>
       </SectionCard>
-
-      {/* Remounted (not just refetched) when another admin edits the
-          timetable, so an open editor never sits on a stale slot. */}
-      <Timetable key={timetableKey} modes={MODES} onChanged={load} />
     </div>
   );
 }

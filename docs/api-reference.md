@@ -49,7 +49,7 @@ registerModules(app)
 ├─ applications   (WS-A2 · H11-H15, H27)
 ├─ challenges     (WS-G  · H44)
 ├─ event          (WS-G  · H45, H47)
-├─ exports        (WS-F  · H54)
+├─ exports        (WS-F  · H54, H56)
 ├─ identity       (WS-A1 · H1-H10)
 ├─ logistics      (WS-C  · H22-H27)
 ├─ notifications  (WS-F  · H50-H53)
@@ -123,7 +123,14 @@ and per-response accept/reject decisions, the three confirm/decline paths
 template `file` fields proxied through an owner-or-staff check (never a
 presigned URL), and the pre-event stats panel (H27). Draft preparation and
 uploads remain available before verification; submitting or confirming a
-place does not. The confirmation-window expirer (`applications/expirer.ts`)
+place does not. Decision-makers can return a response to its owner as a draft.
+A confirmed response keeps its application-granted role and live ticket access
+only when auto-accept is enabled; otherwise those are revoked until a later
+review and confirmation. The decision-maker can optionally allow that one
+response to resubmit after the form window closes and auto-accept that next
+submission with a fresh confirmation email. Form deletion removes its responses, reviews,
+versions, grants and confirmation tokens transactionally; anonymous-retention
+records remain a deliberate deletion boundary. The confirmation-window expirer (`applications/expirer.ts`)
 is a background tick, not a request path.
 
 ### projects (H16–H17, H21)
@@ -149,8 +156,8 @@ presenting → completed/disqualified`. It also supports `returned_to_queue`,
 entry per repo per challenge and a hard
 guarantee that a team is never called into two rooms while a member is
 occupied elsewhere. Rooms, the auto-call pump tick, judge evaluation (1:1
-with a queue entry), and the data behind the venue TV screens (mode
-precedence: operator override → scheduled `tv_slots` → default rooms) all
+with a queue entry), and the data behind the venue TV screens (manual mode
+selection → default rooms) all
 live here. Every queue action writes exactly one history row and emits
 exactly one broadcast (`plan/07` invariant 5).
 
@@ -266,12 +273,46 @@ mirrored from `queue_settings`), venue name/GPS, Wi-Fi credentials
 configurable back-field list and per-field visibility. See
 [`event-config-wallet.md`](./event-config-wallet.md).
 
-### exports (H54)
-Two distinct things share this module: operational CSV exports (attendance,
-meals, applications, staff scan stats) gated by `exports:run`, and the GDPR-
-style data-subject request workflow (export or deletion, the latter also
-requiring `ADMIN_ALL`) with a background worker that builds the bundle and a
-proxied, owner-or-staff download route.
+### exports (H54, H56)
+The export centre brings together the operational CSVs, the configurable batch
+application export, activity attendance, presence-register data and the
+existing statistics/judging downloads. Operational CSV exports (attendance,
+meals, applications, staff scan stats and activity attendance) remain gated by
+`exports:run`; raw presence-register data remains gated by `logistics:stats`:
+
+- `GET /api/exports/applications/catalog` returns profile fields, response
+  metadata, and fields from current plus immutable historical form versions.
+- `POST /api/exports/applications.zip` accepts a multi-select `statuses` list,
+  an ordered `fields` list (`profile`, `metadata`, or a form `answer`), and a
+  document scope of `none`, `all`, or `shared`.
+- `GET /api/exports/activities/catalog` lists all meal and `requires_scan`
+  activities with their schedule and live attendance counts.
+- `POST /api/exports/activities.csv` accepts `activity_ids`, `mode=people|scans`
+  and a language. `people` returns one row per person and activity, including
+  repeat count and first/last attendance; `scans` returns the raw activity
+  register with operator, notes and source identifiers.
+- `GET /api/exports/presence-log.csv` exports the raw in/out presence register
+  with subject contact fields, operator and notes. The existing
+  `/api/presence/hours/export.csv` remains the reduced/full hours export.
+
+The ZIP always contains the selected CSV columns. `documents=all` includes
+every saved file found in each response's immutable form snapshot;
+`documents=shared` additionally requires the field's
+`shareable_with_sponsors` policy and the applicant's explicit
+`<fieldKey>__shared_with_sponsors` consent. Missing storage objects are
+omitted, audited against their response, and reported in the
+`x-export-file-failures` header. Batch exports exclude inactive, anonymized,
+and synthetic test accounts, just like the other operational exports. The
+GDPR-style data-subject request workflow (export or deletion, the latter also
+requiring `ADMIN_ALL`) remains asynchronous and uses its existing proxied,
+owner-or-staff download route.
+
+The web export centre is the inventory for these datasets: applications and
+their document privacy modes, selected activity attendance, hours and raw
+presence signals, attendance/meals/staff summary CSVs, authorized aggregate
+statistics, and contextual judging queue/evaluation/review exports. A link to
+the relevant workspace is kept for exports whose filters are already owned by
+that workspace.
 
 ## Cross-cutting conventions
 

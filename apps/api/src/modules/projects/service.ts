@@ -27,7 +27,7 @@ import { writeQueueHistory } from "../queue/history.js";
 import { notifyChallengeQueueChanged, repoMemberIds } from "../queue/notify.js";
 import { compactQueueGroupPositions, nextBottomPosition } from "../queue/ordering.js";
 import { type RepositoryAccessScope, repositoryIdsForScope } from "./access.js";
-import { buildImportPlan, type ImportPlan, type PlannedRepo } from "./plan.js";
+import { buildImportPlan, type ImportPlan } from "./plan.js";
 import { reconcileDevpostParticipantsForUser } from "./reconciliation.js";
 
 const CLAIM_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -38,57 +38,6 @@ export async function previewImport(
   participantsCsv: string,
 ): Promise<ImportPlan> {
   return buildImportPlan(pool, projectsCsv, participantsCsv);
-}
-
-async function upsertRepo(
-  client: Queryable,
-  repo: PlannedRepo,
-): Promise<{ id: number; wasInsert: boolean }> {
-  if (repo.url) {
-    const { rows } = await client.query(
-      `INSERT INTO repos (name, description, devpost_url, demo_url, github_url)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (devpost_url) WHERE devpost_url IS NOT NULL DO UPDATE
-         SET name = EXCLUDED.name,
-             description = EXCLUDED.description,
-             demo_url = EXCLUDED.demo_url,
-             github_url = COALESCE(EXCLUDED.github_url, repos.github_url),
-             updated_at = now()
-         WHERE repos.is_test_account = false
-       RETURNING id, (xmax = 0) AS was_insert`,
-      [repo.title, repo.description, repo.url, repo.demoUrl, repo.githubUrl],
-    );
-    if (!rows[0]) throw new ConflictError("Import cannot overwrite a review-fixture project");
-    return { id: rows[0].id, wasInsert: rows[0].was_insert };
-  }
-
-  // No Project Url in this row — best-effort dedupe by name among repos
-  // that also have no devpost_url (see 0300 migration DELTA note: this
-  // case can't use the unique-index upsert, so a second re-import of a
-  // URL-less project will only match if the title is identical). Native
-  // repos (H18) are excluded: an import must never overwrite a hand-made
-  // project that happens to share a title.
-  const existing = await client.query(
-    `SELECT id FROM repos
-      WHERE devpost_url IS NULL AND source = 'devpost' AND is_test_account = false AND name = $1
-      LIMIT 1`,
-    [repo.title],
-  );
-  if (existing.rows[0]) {
-    await client.query(
-      `UPDATE repos SET description = $2, demo_url = $3,
-              github_url = COALESCE($4, github_url), updated_at = now()
-       WHERE id = $1`,
-      [existing.rows[0].id, repo.description, repo.demoUrl, repo.githubUrl],
-    );
-    return { id: existing.rows[0].id, wasInsert: false };
-  }
-  const inserted = await client.query(
-    `INSERT INTO repos (name, description, devpost_url, demo_url, github_url)
-     VALUES ($1, $2, NULL, $3, $4) RETURNING id`,
-    [repo.title, repo.description, repo.demoUrl, repo.githubUrl],
-  );
-  return { id: inserted.rows[0].id, wasInsert: true };
 }
 
 export interface ConfirmImportResult {
@@ -129,73 +78,186 @@ export async function confirmImport(
     let reposUpdated = 0;
     let participantsMatched = 0;
     let participantsUnmatched = 0;
-    const prizeNamesSeen = new Set<string>();
-    const repoResults: ConfirmImportResult["repos"] = [];
+    const repoIds = new Map<number, number>();
+    const repoActions = new Map<number, "create" | "update">();
+    const reposWithUrl = plan.repos
+      .map((repo, ordinal) => ({ ordinal, ...repo }))
+      .filter((repo) => repo.url !== null);
+    if (reposWithUrl.length > 0) {
+      const { rows } = await client.query(
+        `WITH incoming AS (
+           SELECT * FROM jsonb_to_recordset($1::jsonb)
+             AS v(ordinal int, name text, description text, devpost_url text, demo_url text, github_url text)
+         )
+         INSERT INTO repos (name, description, devpost_url, demo_url, github_url)
+         SELECT name, description, devpost_url, demo_url, github_url FROM incoming
+         ON CONFLICT (devpost_url) WHERE devpost_url IS NOT NULL DO UPDATE
+           SET name = EXCLUDED.name,
+               description = EXCLUDED.description,
+               demo_url = EXCLUDED.demo_url,
+               github_url = COALESCE(EXCLUDED.github_url, repos.github_url),
+               updated_at = now()
+           WHERE repos.is_test_account = false
+         RETURNING id, devpost_url, (xmax = 0) AS was_insert`,
+        [
+          JSON.stringify(
+            reposWithUrl.map((repo) => ({
+              ordinal: repo.ordinal,
+              name: repo.title,
+              description: repo.description,
+              devpost_url: repo.url,
+              demo_url: repo.demoUrl,
+              github_url: repo.githubUrl,
+            })),
+          ),
+        ],
+      );
+      const idsByUrl = new Map<string, { id: number; wasInsert: boolean }>();
+      for (const row of rows as Array<{ id: number; devpost_url: string; was_insert: boolean }>) {
+        idsByUrl.set(row.devpost_url, { id: row.id, wasInsert: row.was_insert });
+      }
+      for (const repo of reposWithUrl) {
+        const result = idsByUrl.get(repo.url as string);
+        if (!result) throw new ConflictError("Import cannot overwrite a review-fixture project");
+        repoIds.set(repo.ordinal, result.id);
+        repoActions.set(repo.ordinal, result.wasInsert ? "create" : "update");
+      }
+    }
 
-    for (const repo of plan.repos) {
-      const { id: repoId, wasInsert } = await upsertRepo(client, repo);
-      if (wasInsert) reposCreated++;
+    // URL-less Devpost rows retain their documented name-based dedupe, but do
+    // it in two set-based statements instead of a select/update/insert per row.
+    const reposWithoutUrl = plan.repos
+      .map((repo, ordinal) => ({ ordinal, ...repo }))
+      .filter((repo) => repo.url === null);
+    if (reposWithoutUrl.length > 0) {
+      const input = JSON.stringify(
+        reposWithoutUrl.map((repo) => ({
+          ordinal: repo.ordinal,
+          name: repo.title,
+          description: repo.description,
+          demo_url: repo.demoUrl,
+          github_url: repo.githubUrl,
+        })),
+      );
+      const updated = await client.query(
+        `WITH incoming AS (
+           SELECT * FROM jsonb_to_recordset($1::jsonb)
+             AS v(ordinal int, name text, description text, demo_url text, github_url text)
+         )
+         UPDATE repos AS r SET description = i.description, demo_url = i.demo_url,
+             github_url = COALESCE(i.github_url, r.github_url), updated_at = now()
+         FROM incoming i
+         WHERE r.devpost_url IS NULL AND r.source = 'devpost' AND r.is_test_account = false
+           AND r.name = i.name
+         RETURNING r.id, i.ordinal`,
+        [input],
+      );
+      for (const row of updated.rows as Array<{ id: number; ordinal: number }>) {
+        repoIds.set(row.ordinal, row.id);
+        repoActions.set(row.ordinal, "update");
+      }
+      const inserted = await client.query(
+        `WITH incoming AS (
+           SELECT * FROM jsonb_to_recordset($1::jsonb)
+             AS v(ordinal int, name text, description text, demo_url text, github_url text)
+         )
+         INSERT INTO repos (name, description, demo_url, github_url)
+         SELECT i.name, i.description, i.demo_url, i.github_url
+         FROM incoming i
+         WHERE NOT EXISTS (
+           SELECT 1 FROM repos r WHERE r.devpost_url IS NULL AND r.source = 'devpost'
+             AND r.is_test_account = false AND r.name = i.name
+         )
+         RETURNING id, name`,
+        [input],
+      );
+      const insertedByName = new Map<string, number>();
+      for (const row of inserted.rows as Array<{ id: number; name: string }>)
+        insertedByName.set(row.name, row.id);
+      for (const repo of reposWithoutUrl) {
+        if (repoIds.has(repo.ordinal)) continue;
+        const id = insertedByName.get(repo.title);
+        if (!id) throw new ConflictError("Import could not create a URL-less project");
+        repoIds.set(repo.ordinal, id);
+        repoActions.set(repo.ordinal, "create");
+      }
+    }
+
+    const repoResults = plan.repos.map((repo, ordinal) => {
+      const action = repoActions.get(ordinal);
+      const id = repoIds.get(ordinal);
+      if (!action || !id) throw new ConflictError("Import could not resolve a project");
+      if (action === "create") reposCreated++;
       else reposUpdated++;
-      repoResults.push({ id: repoId, title: repo.title, action: wasInsert ? "create" : "update" });
+      return { id, title: repo.title, action };
+    });
 
-      for (const prizeName of new Set(repo.prizes)) {
-        prizeNamesSeen.add(prizeName);
-        await client.query(
-          `INSERT INTO devpost_prizes (name, last_batch) VALUES ($1, $2)
-           ON CONFLICT (name) DO UPDATE SET last_batch = EXCLUDED.last_batch`,
-          [prizeName, batchId],
-        );
-        await client.query(
-          `INSERT INTO repo_devpost_prizes (repo_id, prize) VALUES ($1, $2)
-           ON CONFLICT (repo_id, prize) DO NOTHING`,
-          [repoId, prizeName],
-        );
-      }
+    const prizeNamesSeen = new Set(plan.prizes.map((prize) => prize.name));
+    if (prizeNamesSeen.size > 0) {
+      await client.query(
+        `INSERT INTO devpost_prizes (name, last_batch)
+         SELECT name, $2 FROM unnest($1::text[]) AS name
+         ON CONFLICT (name) DO UPDATE SET last_batch = EXCLUDED.last_batch`,
+        [[...prizeNamesSeen], batchId],
+      );
+    }
 
-      for (const member of repo.members) {
-        await client.query(
-          `INSERT INTO devpost_participants
+    const prizeRows = plan.repos.flatMap((repo, ordinal) =>
+      [...new Set(repo.prizes)].map((prize) => ({ repo_id: repoIds.get(ordinal), prize })),
+    );
+    if (prizeRows.length > 0) {
+      await client.query(
+        `INSERT INTO repo_devpost_prizes (repo_id, prize)
+         SELECT repo_id, prize FROM jsonb_to_recordset($1::jsonb) AS v(repo_id int, prize text)
+         ON CONFLICT (repo_id, prize) DO NOTHING`,
+        [JSON.stringify(prizeRows)],
+      );
+    }
+
+    const participantRows = plan.repos.flatMap((repo, ordinal) =>
+      repo.members.map((member) => ({
+        repo_id: repoIds.get(ordinal),
+        email: member.email,
+        name: member.firstName,
+        surname: member.lastName,
+        devpost_username: member.username,
+        user_id: member.matchedUserId,
+      })),
+    );
+    if (participantRows.length > 0) {
+      const { rows } = await client.query(
+        `WITH incoming AS (
+           SELECT * FROM jsonb_to_recordset($1::jsonb) AS v(
+             repo_id int, email text, name text, surname text, devpost_username text, user_id int
+           )
+         ), upserted AS (
+           INSERT INTO devpost_participants
              (repo_id, email, name, surname, devpost_username, user_id, import_batch, merge_status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7,
-                   CASE WHEN $6::int IS NOT NULL THEN 'auto_matched' ELSE 'unmatched' END)
+           SELECT repo_id, email, name, surname, devpost_username, user_id, $2,
+             CASE WHEN user_id IS NOT NULL THEN 'auto_matched' ELSE 'unmatched' END
+           FROM incoming
            ON CONFLICT (repo_id, email) DO UPDATE SET
-             name = EXCLUDED.name,
-             surname = EXCLUDED.surname,
-             devpost_username = EXCLUDED.devpost_username,
-             import_batch = EXCLUDED.import_batch,
-             -- a manual link (H17) is never clobbered by a later re-import
+             name = EXCLUDED.name, surname = EXCLUDED.surname,
+             devpost_username = EXCLUDED.devpost_username, import_batch = EXCLUDED.import_batch,
              user_id = CASE WHEN devpost_participants.merge_status = 'manually_linked'
-                            THEN devpost_participants.user_id ELSE EXCLUDED.user_id END,
+               THEN devpost_participants.user_id ELSE EXCLUDED.user_id END,
              merge_status = CASE WHEN devpost_participants.merge_status = 'manually_linked'
-                                 THEN devpost_participants.merge_status ELSE EXCLUDED.merge_status END`,
-          [
-            repoId,
-            member.email,
-            member.firstName,
-            member.lastName,
-            member.username,
-            member.matchedUserId,
-            batchId,
-          ],
-        );
-
-        const { rows } = await client.query(
-          `SELECT user_id FROM devpost_participants WHERE repo_id = $1 AND email = $2`,
-          [repoId, member.email],
-        );
-        const finalUserId: number | null = rows[0]?.user_id ?? null;
-        if (finalUserId) {
-          participantsMatched++;
-          await client.query(
-            `INSERT INTO submissions (repo_id, user_id, imported_from, external_id)
-             VALUES ($1, $2, 'devpost', $3)
-             ON CONFLICT (repo_id, user_id) DO NOTHING`,
-            [repoId, finalUserId, member.username],
-          );
-        } else {
-          participantsUnmatched++;
-        }
-      }
+               THEN devpost_participants.merge_status ELSE EXCLUDED.merge_status END
+           RETURNING repo_id, email, user_id
+         ), inserted_submissions AS (
+           INSERT INTO submissions (repo_id, user_id, imported_from, external_id)
+           SELECT u.repo_id, u.user_id, 'devpost', i.devpost_username
+           FROM upserted u JOIN incoming i USING (repo_id, email)
+           WHERE u.user_id IS NOT NULL
+           ON CONFLICT (repo_id, user_id) DO NOTHING
+         )
+         SELECT count(*) FILTER (WHERE user_id IS NOT NULL)::int AS matched,
+                count(*) FILTER (WHERE user_id IS NULL)::int AS unmatched
+         FROM upserted`,
+        [JSON.stringify(participantRows), batchId],
+      );
+      participantsMatched = rows[0].matched;
+      participantsUnmatched = rows[0].unmatched;
     }
 
     // H17: surface how many of the prizes this import saw still have no
