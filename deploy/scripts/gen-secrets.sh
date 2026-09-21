@@ -1,10 +1,13 @@
 #!/usr/bin/env sh
-# Generate the secret env file for the multi-architecture Compose runtime.
+# Generate the secret portion for a multi-architecture Compose runtime.
 #
-#   ./deploy/scripts/gen-secrets.sh > /etc/hackos/hackos.secrets
+# The canonical host contract is one file. Start from deploy/.env.example,
+# replace its CHANGE_ME values, and keep the resulting /etc/hackos/hackos.env
+# at mode 600. This helper remains for operators migrating a legacy split-file
+# host and therefore still emits only secret keys.
 #
-# The output is intentionally limited to secrets. Configure domains, image tag,
-# mail provider and other non-secret values in /etc/hackos/hackos.env.
+# The output is intentionally limited to secrets. It must not be committed or
+# printed into logs.
 
 set -eu
 
