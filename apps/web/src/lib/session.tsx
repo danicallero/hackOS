@@ -14,6 +14,7 @@ import {
 import { useEventSource } from "../hooks/use-event-source";
 import { ApiError, api } from "./api";
 import { setServerStateIdentity } from "./server-state";
+import { registerSignOutListener } from "./sign-out-events";
 import type { Me } from "./types";
 
 type SessionStatus = "loading" | "authenticated" | "unauthenticated";
@@ -42,6 +43,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const meRef = useRef<Me | null>(null);
   const requestId = useRef(0);
   const inFlight = useRef<Promise<void> | null>(null);
+
+  const clear = useCallback(() => {
+    // Ignore an old-cookie response that was already in flight when the
+    // browser session ended. The following login starts from no identity.
+    requestId.current += 1;
+    inFlight.current = null;
+    setServerStateIdentity(null);
+    meRef.current = null;
+    setMe(null);
+    setStatus("unauthenticated");
+    setError(null);
+  }, []);
 
   const refresh = useCallback(async () => {
     if (inFlight.current) return inFlight.current;
@@ -93,6 +106,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [refresh]);
+
+  useEffect(() => registerSignOutListener(clear), [clear]);
 
   // Judge assignments are enterprise mutations. Refresh the caller's
   // association facts as soon as that topic changes so the judging workspace

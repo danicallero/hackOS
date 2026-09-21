@@ -300,10 +300,11 @@ distributed to other Expo Router apps without importing hackOS code.
   immediately and lands on sign-in. Server-side session revocation then runs
   as a best-effort, fire-and-forget `POST /api/auth/sign-out` with the
   pre-captured cookie; a failed revoke never blocks, retries, or surfaces an
-  error (#757). If the UI-level sign-out attempt itself fails, the recovery,
-  account, and pending-removal surfaces expose `Back to sign in`; that action
-  clears the local session synchronously and replaces the route without
-  waiting for SecureStore or the server.
+  error (#757). Recovery, account, and pending-removal surfaces expose `Back
+  to sign in`; that action clears the local session synchronously and replaces
+  the route without waiting for SecureStore or the server. The session-recovery
+  surface deliberately has no second sign-out control: it would perform the
+  same local escape and make environment-switch recovery ambiguous.
 - `app/(auth)/forgot-password.tsx` and `reset-password.tsx` share the same
   leading, task-first composition. Their primary actions remain discoverable,
   invalid values are explained beside the relevant field, and focus moves to
@@ -322,7 +323,8 @@ distributed to other Expo Router apps without importing hackOS code.
   Auth session has its own cached `/api/me` profile, a "Continue offline"
   action appears after a further short grace period and restores only that
   session-bound profile; it never searches or restores another account's
-  cache. A persistent recovery error still shows retry and sign-out actions.
+  cache. A persistent recovery error still shows retry and one local
+  `Back to sign in` action.
 
 ## Participant screens
 
