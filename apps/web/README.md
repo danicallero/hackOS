@@ -29,10 +29,11 @@ backend, one workstream at a time.
 not a second session or reconnect system. `SessionProvider` sets its identity
 boundary; each resource key then has one in-flight request and a short-lived
 cached response. Callers pass `AbortSignal` through to API reads and invalidate
-the exact key after a successful mutation or matching SSE signal. An identity
-change aborts and drops every old entry, and `useLiveQuery` retains its bounded
-one-trailing-refetch behavior for SSE bursts. The cache is only a browser
-deduplication layer: API reads remain the authoritative Postgres projection.
+the exact key after a successful mutation or matching SSE signal. A confirmed
+sign-out, like an identity change, drops every old entry and ignores a late
+old-cookie profile response; `useLiveQuery` retains its bounded one-trailing-
+refetch behavior for SSE bursts. The cache is only a browser deduplication
+layer: API reads remain the authoritative Postgres projection.
 
 ## Toasts
 

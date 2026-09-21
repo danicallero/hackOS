@@ -273,6 +273,13 @@ in the stories and `plan/07-datos-relevantes-ers.md`:
   failure rolls the *entire* batch back — no half-imported state to reconcile,
   which is exactly what a DLQ would otherwise exist to clean up.
 
+  The write phase is set-based: each repository class, prize catalogue,
+  repository-prize relation, and participant/submission relation is sent as a
+  staged JSON row set and applied with a bounded number of SQL statements.
+  Participant conflict handling still derives the final `user_id` from the
+  stored row, so an H17 `manually_linked` identity is retained on re-import
+  before the corresponding submission is ensured.
+
   | Entity | Idempotency key | On conflict |
   |---|---|---|
   | `repos` | `devpost_url` (partial unique) | update name/description/demo |
