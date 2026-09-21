@@ -15,29 +15,20 @@ Announcements are a content layer managed from **Programme → Announcements**:
 they can reserve space inside the current view or temporarily occupy the full
 screen without becoming a manually selectable TV mode.
 
-## What's on screen: three layers
+## What's on screen now
 
 `GET /api/tv/mode` (public, no auth — the wall polls it) returns the resolved
-state. `resolveTvState()` in `queue/tv.ts` picks the first that applies:
+state. `resolveTvState()` in `queue/tv.ts` uses the operator's current
+selection when there is one, and otherwise returns the rooms view:
 
-| Precedence | Layer | Where it lives | `source` |
-| --- | --- | --- | --- |
-| 1 | **Operator override** — a manual broadcast from `/tv/control` | Valkey `tv:mode` (ephemeral display state) | `"override"` |
-| 2 | **Timetable slot** covering `now` | Postgres `tv_slots` (migration 0403) | `"slot"` |
-| 3 | **Default** — the judging rooms grid | constant | `"default"` |
+| State | Where it lives | `source` |
+| --- | --- | --- |
+| **Manual selection** — a mode chosen from `/tv/control` | Valkey `tv:mode` (ephemeral display state) | `"manual"` |
+| **Default** — the judging rooms grid | constant | `"default"` |
 
-Slots may overlap; **the covering slot with the latest `starts_at` wins**, so a
-short "opening ceremony" window naturally beats the all-day window it sits
-inside. An override holds until it is cleared (`DELETE /api/tv/mode`, the
-control page's *Back to schedule*) or until its optional `expiresAt` passes,
-at which point the timetable takes back over — landing on whatever slot is
-running *at that moment*, not on whatever was showing before.
-
-The `tv-scheduler` worker (5 s tick, see
-[background workers](./background-workers.md)) drops due overrides and
-broadcasts `tv.mode.changed` when — and only when — the resolved state
-actually changes, so slot boundaries reach the fleet with nobody at a keyboard
-and a quiet tick doesn't wake every screen.
+A selection stays visible until somebody selects another mode or resets it
+with `DELETE /api/tv/mode`. Resetting returns every screen to rooms. There is
+no TV timetable, rotation, or scheduler.
 
 ### Public realtime boundary
 
@@ -54,14 +45,6 @@ project links, or cross-room operator diagnostics. Raw `tv.mode.changed` and
 queue events remain on authenticated operational channels, so opening a venue
 screen cannot grant judging access.
 
-### Rotation inside a slot
-
-A slot's `items` is an ordered list of `{ mode, payload, seconds }`. One entry
-renders statically; several make the display cycle them on each entry's dwell.
-Cycling is client-side (`useRotatedState` in `tv-display.tsx`) and is driven
-off the **slot's own `startsAt`**, so screens switched on hours apart still
-flip at the same instant, and rotation generates no SSE traffic.
-
 ## Modes
 
 | Mode | Shows |
@@ -72,10 +55,10 @@ flip at the same instant, and rotation generates no SSE traffic.
 | `sponsors` | Event name and sponsor logo wall, without a redundant “Sponsors” wordmark |
 | `wifi` | Full-screen network name + password |
 
-The former `announcement` and `timer` modes are normalised out of stored
-timetable JSON by migration 0602. A legacy timer becomes `live`; a legacy
-announcement item is removed, with `live` used when that would empty a slot.
-The countdown remains available as a block of the `live` composition.
+Only the five modes above are valid in a Valkey selection. Migration 0404
+removes the retired timetable and its stored entries. A stale or malformed
+Valkey payload is discarded on read; it is never translated into a current
+mode. The countdown remains available as a block of the `live` composition.
 
 ### Announcements on screens
 
@@ -87,7 +70,7 @@ announcements overlap, the newest visible announcement for each placement is
 the deterministic winner.
 
 - `fullscreen` occupies the TV frame above the current base mode, while the
-  underlying override/timetable continues to resolve normally.
+  underlying manual selection continues unchanged.
 - `embedded` reserves layout space: below the reduced sponsor grid on `live`,
   as an announcement card in the room grid, and as a compact non-covering band
   on schedule, sponsors, and Wi-Fi views.
@@ -213,24 +196,20 @@ fewer than two (`bestSponsorColumns`).
 
 ## Control panel
 
-`/tv/control` (capability `TV_CONTROL`) has four parts:
+`/tv/control` (capability `TV_CONTROL`) has three parts:
 
-1. **Current broadcast** — live preview, SSE connection state, and *why* the
-   screens show what they show (override / timetable slot / default), with
-   **Back to schedule** when an override is live.
-2. **Display mode** — the manual broadcast for live, rooms, schedule, sponsors,
+1. **Current display** — live preview, SSE connection state, and the current
+   manual/default state, with **Reset to rooms** when a mode is selected.
+2. **Display mode** — choose what is visible now: live, rooms, schedule, sponsors,
    and Wi-Fi. Wi-Fi has no credential editor; it reads event configuration.
    Announcements and standalone countdowns are not selectable modes.
 3. **Display language** — sets the wall's fixed render language (or clears the
-   override back to the default), independent of mode/timetable state.
-4. **Screen timetable** — slot CRUD. Slot mutations are audited (H53) and
-   broadcast `tv.schedule.changed`; editing the running slot changes the wall
-   immediately rather than at the next tick.
+   language override back to the default), independent of the selected mode.
 
 ## Related
 
-- Events: `TV_MODE_CHANGED`, `TV_SCHEDULE_CHANGED`, `TV_CONFIG_CHANGED` in
-  `packages/shared/src/events.ts`, all on the `tv` SSE topic.
+- Events: `TV_MODE_CHANGED` and `TV_CONFIG_CHANGED` in
+  `packages/shared/src/events.ts`, both on the `tv` SSE topic.
 - [Design rulebook](./DESIGN.md) — TV surface rules.
 - [Event config & Wallet pass](./event-config-wallet.md) — the `event_config`
   singleton the Wi-Fi fields join.

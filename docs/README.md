@@ -81,9 +81,9 @@ Architecture & modules:
   Android-symbol map, `pnpm check:copy`) that keep the API, web and mobile from
   drifting apart.
 - [TV screens](./tv-screens.md) — what the venue's screens show and why: the
-  override / timetable / default precedence, the combined live screen and its
-  payload, slot rotation, venue Wi-Fi, and how each mode adapts to any screen
-  size or aspect ratio.
+  manual-selection / default precedence, the combined live screen and its
+  payload, venue Wi-Fi, and how each mode adapts to any screen size or aspect
+  ratio.
 - [Generated API route-policy ledger](./access-control-route-ledger.md) — the
   complete sorted runtime declaration inventory and public/token allowlist
   snapshot; regenerate it with `pnpm --filter @hackos/api route-policy:audit`.
