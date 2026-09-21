@@ -20,6 +20,7 @@ import {
   idParamSchema,
   listResponsesQuerySchema,
   responseIdParamSchema,
+  returnToDraftSchema,
   revertDecisionSchema,
   reviewUpsertSchema,
   saveDraftSchema,
@@ -41,6 +42,7 @@ import {
   listUserResponsesForStaff,
   reAccept,
   resendDecision,
+  returnToDraft,
   revertDecision,
   revokeSpot,
   sendDecision,
@@ -318,6 +320,22 @@ export function registerReviewRoutes(app: FastifyInstance): void {
   );
 
   // ── H14: revert a decision to review, or flip an unsent internal decision ────
+  r.post(
+    "/api/responses/:responseId/return-to-draft",
+    {
+      preHandler: [requireCapability(CAPABILITIES.APPLICATIONS_DECIDE), idempotencyGuard],
+      config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
+      schema: {
+        summary: "Return a response to the applicant as a draft",
+        description:
+          "Returns a non-confirmed response to its owner for editing (H12, H14). The decision-maker can permit this specific draft to submit after the form closes and can make its next valid submission automatically accepted with a new confirmation email. An Idempotency-Key prevents duplicate state changes.",
+        params: responseIdParamSchema,
+        body: returnToDraftSchema,
+      },
+    },
+    async (req) => returnToDraft(req.userId as number, req.params.responseId, req.body),
+  );
+
   r.post(
     "/api/responses/:responseId/revert-decision",
     {

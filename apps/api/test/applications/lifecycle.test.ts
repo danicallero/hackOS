@@ -142,6 +142,52 @@ describe("review + decide (H13, H14)", () => {
     expect((await getResponse(responseId)).status).toBe("accepted_internal");
   });
 
+  it("returns a response to a closed-form draft and can auto-accept its resubmission", async () => {
+    const a = await getApp();
+    const appId = await createApplication({
+      close_at: new Date(Date.now() + 60_000).toISOString(),
+    });
+    const { userId, responseId } = await submittedApplicant(appId);
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/decide`,
+      headers: asUser(decider),
+      payload: { decision: "rejected" },
+    });
+    const returned = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/return-to-draft`,
+      headers: { ...asUser(decider), "idempotency-key": "return-to-draft-1" },
+      payload: { allow_resubmit_after_close: true, auto_accept_on_resubmit: true },
+    });
+    expect(returned.statusCode).toBe(200);
+    expect((await getResponse(responseId)).status).toBe("draft");
+    await pool.query(
+      `UPDATE applications SET close_at = now() - interval '1 minute' WHERE id = $1`,
+      [appId],
+    );
+
+    // A returned draft remains discoverable to its owner after the form closes.
+    expect(
+      (
+        await a.inject({
+          method: "GET",
+          url: `/api/public/applications/${appId}`,
+          headers: asUser(userId),
+        })
+      ).statusCode,
+    ).toBe(200);
+    const resubmitted = await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/response/submit`,
+      headers: asUser(userId),
+      payload: { food_intolerances: [], shirt_size: "M" },
+    });
+    expect(resubmitted.statusCode).toBe(200);
+    expect((await getResponse(responseId)).status).toBe("accepted");
+    expect((await getResponse(responseId)).confirmation_token_id).not.toBeNull();
+  });
+
   it("per-reviewer rows are independent; staff notes are shared", async () => {
     const a = await getApp();
     const appId = await createApplication();

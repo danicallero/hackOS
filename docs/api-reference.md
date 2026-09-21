@@ -123,7 +123,12 @@ and per-response accept/reject decisions, the three confirm/decline paths
 template `file` fields proxied through an owner-or-staff check (never a
 presigned URL), and the pre-event stats panel (H27). Draft preparation and
 uploads remain available before verification; submitting or confirming a
-place does not. The confirmation-window expirer (`applications/expirer.ts`)
+place does not. Decision-makers can return any non-confirmed response to its
+owner as a draft, optionally allowing that one response to resubmit after the
+form window closes and optionally auto-accepting that next submission with a
+fresh confirmation email. Form deletion removes its responses, reviews,
+versions, grants and confirmation tokens transactionally; anonymous-retention
+records remain a deliberate deletion boundary. The confirmation-window expirer (`applications/expirer.ts`)
 is a background tick, not a request path.
 
 ### projects (H16–H17, H21)

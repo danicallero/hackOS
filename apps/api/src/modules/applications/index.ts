@@ -13,8 +13,8 @@ import { registerUploadRoutes } from "./upload.routes.js";
 /**
  * WS-A2: inscripción / applications (H11-H15, H27, H56). Routes plus the spot
  * confirmation expirer (plan/07 §5.2). The application state machine
- * (draft -> submitted -> review -> accepted|rejected; accepted -> confirmed|
- * declined|expired) lives in service.ts.
+ * (draft -> review -> accepted|rejected; accepted -> confirmed|declined|
+ * expired, plus an auditable decision-maker return to draft) lives in service.ts.
  */
 export async function registerApplicationsModule(app: FastifyInstance): Promise<void> {
   registerAdminRoutes(app);

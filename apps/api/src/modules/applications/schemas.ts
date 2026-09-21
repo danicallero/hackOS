@@ -304,3 +304,11 @@ export const batchRevertDecisionSchema = batchIdsSchema.extend({
 export const revertDecisionSchema = z.object({
   decision: z.enum(["accepted", "rejected", "review"]),
 });
+
+/** H12/H14: return one response to its owner for revision. */
+export const returnToDraftSchema = z.object({
+  /** Applies only to this returned draft, never reopens the whole form. */
+  allow_resubmit_after_close: z.boolean().default(false),
+  /** On the next valid submit, send a fresh acceptance + confirmation link. */
+  auto_accept_on_resubmit: z.boolean().default(false),
+});

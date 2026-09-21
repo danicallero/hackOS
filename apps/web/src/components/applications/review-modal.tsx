@@ -13,6 +13,7 @@ import {
   CircleCheckIcon,
   DownloadIcon,
   ExternalLinkIcon,
+  FilePenLineIcon,
   FileTextIcon,
   GavelIcon,
   GripVerticalIcon,
@@ -65,6 +66,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
@@ -2203,6 +2207,67 @@ function DecisionMenu({
             >
               {t("backToReview")}
             </DropdownMenuItem>
+          </>
+        )}
+        {status !== "confirmed" && status !== "draft" && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger disabled={busy}>
+                <FilePenLineIcon />
+                {t("returnToDraft")}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <DropdownMenuItem
+                  onSelect={() =>
+                    void run(
+                      t("returnedToDraft"),
+                      () =>
+                        api.post(
+                          `/api/responses/${responseId}/return-to-draft`,
+                          { allow_resubmit_after_close: false, auto_accept_on_resubmit: false },
+                          { headers: { "Idempotency-Key": crypto.randomUUID() } },
+                        ),
+                      { refresh: false, nextStatus: "draft" },
+                    )
+                  }
+                >
+                  {t("returnToDraftOpen")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() =>
+                    void run(
+                      t("returnedToDraft"),
+                      () =>
+                        api.post(
+                          `/api/responses/${responseId}/return-to-draft`,
+                          { allow_resubmit_after_close: true, auto_accept_on_resubmit: false },
+                          { headers: { "Idempotency-Key": crypto.randomUUID() } },
+                        ),
+                      { refresh: false, nextStatus: "draft" },
+                    )
+                  }
+                >
+                  {t("returnToDraftLate")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() =>
+                    void run(
+                      t("returnedToDraft"),
+                      () =>
+                        api.post(
+                          `/api/responses/${responseId}/return-to-draft`,
+                          { allow_resubmit_after_close: true, auto_accept_on_resubmit: true },
+                          { headers: { "Idempotency-Key": crypto.randomUUID() } },
+                        ),
+                      { refresh: false, nextStatus: "draft" },
+                    )
+                  }
+                >
+                  {t("returnToDraftAutoAccept")}
+                </DropdownMenuItem>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
           </>
         )}
         {sentActions && (
