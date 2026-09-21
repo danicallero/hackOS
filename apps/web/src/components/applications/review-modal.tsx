@@ -2216,7 +2216,7 @@ function DecisionMenu({
           <>
             <DropdownMenuSeparator />
             <DropdownMenuSub>
-              <DropdownMenuSubTrigger disabled={busy} className="[&>svg:last-child]:rotate-180">
+              <DropdownMenuSubTrigger disabled={busy} arrow="left">
                 <FilePenLineIcon />
                 {t("returnToDraft")}
               </DropdownMenuSubTrigger>
