@@ -319,4 +319,51 @@ describe("POST /api/devpost/imports/confirm (H16)", () => {
     expect(row.rows[0].merge_status).toBe("manually_linked");
     expect(row.rows[0].user_id).toBe(daveAccount);
   });
+
+  it("imports a large batch with the same bounded set-based writes", async () => {
+    const server = await getApp();
+    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
+    const projectRows = Array.from(
+      { length: 120 },
+      (_, index) =>
+        `"Batch ${index}","https://devpost.com/software/batch-${index}","Description ${index}","","","Prize ${index % 3}","","batch-${index}@example.test","",""`,
+    );
+    const participantRows = Array.from(
+      { length: 120 },
+      (_, index) =>
+        `"Batch","Member","batch-${index}@example.test","batch${index}","Batch ${index}"`,
+    );
+    const res = await server.inject({
+      method: "POST",
+      url: "/api/devpost/imports/confirm",
+      headers: asUser(operator),
+      payload: {
+        projectsCsv: [
+          `"Project Title","Submission Url","About The Project","Try it out Links","Video Demo Link","Opt-In Prizes","Built With","Team Member 1 Email","Team Member 2 Email","Team Member 3 Email"`,
+          ...projectRows,
+        ].join("\n"),
+        participantsCsv: [
+          `"First Name","Last Name","Email","Username","Project Title"`,
+          ...participantRows,
+        ].join("\n"),
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().counts).toMatchObject({
+      reposCreated: 120,
+      participantsMatched: 0,
+      participantsUnmatched: 120,
+      prizesSeen: 3,
+    });
+    const { pool } = await import("../../src/db/pool.js");
+    const [{ rows: repos }, { rows: participants }, { rows: prizes }] = await Promise.all([
+      pool.query(`SELECT count(*)::int AS n FROM repos`),
+      pool.query(`SELECT count(*)::int AS n FROM devpost_participants`),
+      pool.query(`SELECT count(*)::int AS n FROM repo_devpost_prizes`),
+    ]);
+    expect(repos[0].n).toBe(120);
+    expect(participants[0].n).toBe(120);
+    expect(prizes[0].n).toBe(120);
+  });
 });
