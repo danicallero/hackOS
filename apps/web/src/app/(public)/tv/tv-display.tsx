@@ -22,8 +22,6 @@ import {
   getTvState,
   getTvVenueConfig,
   liveConfigFrom,
-  msUntilNextRotation,
-  rotationIndexAt,
   type TvState,
   type TvVenueConfig,
 } from "@/lib/tv";
@@ -799,7 +797,7 @@ function SponsorsView({
 
 /**
  * Full-screen Wi-Fi. Reads the venue's configured credentials first so a
- * scheduled slot can show this with nobody at the control page. Credentials
+ * manual selection can show this with nobody at the control page. Credentials
  * only ever come from the event's venue configuration.
  *
  * Two ways in, side by side and given equal weight: scan the code, or read
@@ -903,44 +901,6 @@ function FullscreenAnnouncement({
   );
 }
 
-/**
- * What a rotating slot is showing right now. Driven off the slot's own start
- * time so every screen in the venue flips together, whenever each was
- * switched on, and re-armed for the exact moment of the next flip instead of
- * polling.
- */
-function useRotatedState(state: TvState): { mode: TvState["mode"]; payload: unknown } {
-  const items = state.slot?.items ?? [];
-  const startedAt = state.slot ? new Date(state.slot.startsAt).getTime() : 0;
-  const [index, setIndex] = useState(() => rotationIndexAt(items, Date.now() - startedAt));
-
-  const slotKey = `${state.slot?.id ?? "none"}:${items.length}`;
-  /* Live carousel: rotation must not restart on every render when backend sends
-     fresh items array. slotKey includes items.length (slot identity), but not
-     the full items array since it's a fresh reference each render.
-     biome-ignore lint/correctness/useExhaustiveDependencies: items is fresh each render */
-  useEffect(() => {
-    if (items.length <= 1) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setIndex(0);
-      return;
-    }
-    let timeout: ReturnType<typeof setTimeout>;
-    const tick = () => {
-      const elapsed = Date.now() - startedAt;
-      setIndex(rotationIndexAt(items, elapsed));
-      const wait = msUntilNextRotation(items, elapsed);
-      timeout = setTimeout(tick, Number.isFinite(wait) ? Math.max(250, wait) : 60_000);
-    };
-    tick();
-    return () => clearTimeout(timeout);
-  }, [slotKey, startedAt]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const active = items[index];
-  if (items.length <= 1 || !active) return { mode: state.mode, payload: state.payload };
-  return { mode: active.mode, payload: active.payload };
-}
-
 /** `activeAnnouncement` derives its pick purely from `Date.now()`, so nothing
  * re-renders the screen when a rotation boundary passes on its own — this
  * forces one on a fixed cadence well below the rotation interval. */
@@ -1037,12 +997,10 @@ function TvView({ data, error }: { data: TvData | null; error: string | null }) 
   const fallbackState: TvState = {
     mode: "rooms",
     payload: null,
-    expiresAt: null,
     broadcastAt: null,
     source: "default",
-    slot: null,
   };
-  const { mode, payload } = useRotatedState(data?.state ?? fallbackState);
+  const { mode, payload } = data?.state ?? fallbackState;
   useAnnouncementRotationTick();
 
   if (!data && !error)
@@ -1060,7 +1018,7 @@ function TvView({ data, error }: { data: TvData | null; error: string | null }) 
     );
 
   // This is a content layer, not a competing TV mode: it has priority over
-  // whatever the timetable is currently showing and disappears at the
+  // the selected base mode and disappears at the
   // announcement's own expiry (or when it is deleted).
   const fullscreenAnnouncement = activeAnnouncement(data.announcements, "fullscreen");
   if (fullscreenAnnouncement) {
@@ -1097,7 +1055,7 @@ function TvView({ data, error }: { data: TvData | null; error: string | null }) 
     );
   if (mode === "wifi")
     return <WifiView venue={data.venue} event={data.event} announcement={embeddedAnnouncement} />;
-  // Legacy announcement/timer values resolve safely to the rooms display until
-  // the control/API cleanup removes them from the persisted mode enum.
-  return <RoomsView rooms={data.rooms} event={data.event} announcement={embeddedAnnouncement} />;
+  if (mode === "rooms")
+    return <RoomsView rooms={data.rooms} event={data.event} announcement={embeddedAnnouncement} />;
+  return null;
 }

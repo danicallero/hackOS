@@ -7,7 +7,7 @@ import { idempotencyGuard } from "../../lib/idempotency.js";
 import { broadcast } from "../../lib/sse.js";
 import { resetJudgingData } from "./reset.js";
 import { judgingDataResetBody } from "./schemas.js";
-import { clearTvOverride } from "./tv.js";
+import { clearTvMode } from "./tv.js";
 
 /** Super-admin-only panic reset for the project/import/queue/judging slice. */
 export function registerQueueResetRoutes(app: FastifyInstance): void {
@@ -40,11 +40,11 @@ export function registerQueueResetRoutes(app: FastifyInstance): void {
       ]);
 
       // A stale operator TV override can contain a project/team payload. Hand
-      // screens back to the timetable/default projection after the reset.
+      // screens back to their default rooms display after the reset.
       try {
-        await clearTvOverride();
+        await clearTvMode();
       } catch (err) {
-        req.log.error({ err }, "queue-reset: could not clear the TV override");
+        req.log.error({ err }, "queue-reset: could not clear the TV mode");
       }
 
       return result;

@@ -17,9 +17,8 @@ import type { LiveScreenConfig, TimerTarget } from "@/lib/tv";
 
 /**
  * Editor for the combined live screen's blocks (H42). The same control edits
- * an operator broadcast and a timetable slot, because both carry the identical
- * payload — an organiser shouldn't have to learn two versions of the same
- * screen.
+ * the operator's selected live mode, so the wall has one direct, editable
+ * configuration.
  */
 
 const TIMER_TARGET_KEYS = {

@@ -3,51 +3,23 @@ import { api } from "@/lib/api";
 import type { Language } from "@/lib/types";
 
 /**
- * TV display model (H41/H42): what the venue screens show, the timetable that
- * drives it, and the pure logic the screens run on (rotation, which part of
- * the agenda is "upcoming", what the countdown counts to). Kept out of the
- * components so the state machines are unit-tested rather than eyeballed on a
- * projector.
+ * TV display model (H41/H42): the mode currently selected for every venue
+ * screen and the pure logic its views use. Kept out of components so the
+ * state machines are unit-tested rather than eyeballed on a projector.
  */
 
-export type TvModeName =
-  | "rooms"
-  | "schedule"
-  | "sponsors"
-  | "announcement"
-  | "wifi"
-  | "timer"
-  | "live";
+export type TvModeName = "rooms" | "schedule" | "sponsors" | "wifi" | "live";
 
-/** Modes organisers may schedule or broadcast from the TV control surface.
- * Legacy announcement/timer states remain renderable by the public TV while
- * their independent controls are retired. */
+/** Modes organisers may select from the TV control surface. */
 export const TV_CONTROL_MODES = ["live", "rooms", "schedule", "sponsors", "wifi"] as const;
 export type TvControlMode = (typeof TV_CONTROL_MODES)[number];
-
-export interface TvSlotItem {
-  mode: TvModeName;
-  payload: unknown;
-  /** Dwell time when a slot rotates; null falls back to DEFAULT_ROTATION_SECONDS. */
-  seconds: number | null;
-}
-
-export interface TvSlot {
-  id: number;
-  label: string | null;
-  startsAt: string;
-  endsAt: string;
-  items: TvSlotItem[];
-}
 
 /** The resolved state of the fleet: what to show, and why. */
 export interface TvState {
   mode: TvModeName;
   payload: unknown;
-  expiresAt: string | null;
   broadcastAt: string | null;
-  source: "override" | "slot" | "default";
-  slot: TvSlot | null;
+  source: "manual" | "default";
 }
 
 export interface TvVenueConfig {
@@ -58,29 +30,14 @@ export interface TvVenueConfig {
 
 // ── api ──────────────────────────────────────────────────────────────────
 export const getTvState = () => api.get<TvState>("/api/tv/mode");
-export const setTvMode = (
-  mode: TvModeName,
-  payload: unknown = null,
-  expiresAt: string | null = null,
-) => api.patch<TvState>("/api/tv/mode", { mode, payload, expiresAt });
-/** "Back to schedule": drops the override so the timetable takes over again. */
-export const clearTvOverride = () => api.delete<TvState>("/api/tv/mode");
+export const setTvMode = (mode: TvModeName, payload: unknown = null) =>
+  api.patch<TvState>("/api/tv/mode", { mode, payload });
+/** Clears the manual selection and restores the rooms display. */
+export const clearTvMode = () => api.delete<TvState>("/api/tv/mode");
 export const getTvVenueConfig = () => api.get<TvVenueConfig>("/api/tv/config");
 /** Sets the wall's fixed display language; null clears the override. */
 export const setTvLanguage = (language: Language | null) =>
   api.patch<TvVenueConfig>("/api/tv/config", { language });
-
-export interface TvSlotInput {
-  label?: string | null;
-  startsAt: string;
-  endsAt: string;
-  items: Array<{ mode: TvModeName; payload?: unknown; seconds?: number | null }>;
-}
-export const listTvSlots = () => api.get<{ items: TvSlot[] }>("/api/tv/slots");
-export const createTvSlot = (body: TvSlotInput) => api.post<TvSlot>("/api/tv/slots", { ...body });
-export const updateTvSlot = (id: number, body: Partial<TvSlotInput>) =>
-  api.patch<TvSlot>(`/api/tv/slots/${id}`, { ...body });
-export const deleteTvSlot = (id: number) => api.delete<{ ok: true }>(`/api/tv/slots/${id}`);
 
 // ── live screen configuration ────────────────────────────────────────────
 
@@ -130,9 +87,9 @@ function text(value: unknown): string | null {
 
 /**
  * A broadcast payload is `unknown` by the time it reaches a screen — it may
- * come from an operator broadcast, a timetable slot, or an older version of
- * either. Every block falls back to its default rather than disappearing, so
- * a malformed payload never leaves a blank wall.
+ * comes from the operator's selected mode. Every block falls back to its
+ * default rather than disappearing, so a malformed payload never leaves a
+ * blank wall.
  */
 export function liveConfigFrom(payload: unknown): LiveScreenConfig {
   if (!isRecord(payload)) return DEFAULT_LIVE_CONFIG;
@@ -184,43 +141,7 @@ export function resolveTimer(config: LiveScreenConfig, event: PublicEvent | null
   return { kind: "fixed", endsAt: value, label };
 }
 
-// ── rotation ─────────────────────────────────────────────────────────────
-
 export const DEFAULT_ROTATION_SECONDS = 30;
-
-const dwellMs = (item: TvSlotItem) => Math.max(1, item.seconds ?? DEFAULT_ROTATION_SECONDS) * 1000;
-
-/**
- * Which entry of a rotating slot is on screen `elapsedMs` into the slot.
- * Driven off the slot's own start rather than page load, so every screen in
- * the venue flips at the same moment even if they were switched on hours
- * apart.
- */
-export function rotationIndexAt(items: TvSlotItem[], elapsedMs: number): number {
-  if (items.length <= 1) return 0;
-  const cycle = items.reduce((total, item) => total + dwellMs(item), 0);
-  if (cycle <= 0) return 0;
-  // A screen opened before the slot began sits on the first entry.
-  let offset = elapsedMs <= 0 ? 0 : elapsedMs % cycle;
-  for (let index = 0; index < items.length; index += 1) {
-    offset -= dwellMs(items[index]);
-    if (offset < 0) return index;
-  }
-  return items.length - 1;
-}
-
-/** Milliseconds until the rotation moves on, for scheduling the next flip. */
-export function msUntilNextRotation(items: TvSlotItem[], elapsedMs: number): number {
-  if (items.length <= 1) return Number.POSITIVE_INFINITY;
-  const cycle = items.reduce((total, item) => total + dwellMs(item), 0);
-  let offset = elapsedMs <= 0 ? 0 : elapsedMs % cycle;
-  if (elapsedMs < 0) return -elapsedMs;
-  for (const item of items) {
-    offset -= dwellMs(item);
-    if (offset < 0) return -offset;
-  }
-  return cycle;
-}
 
 // ── schedule window ──────────────────────────────────────────────────────
 
