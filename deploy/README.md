@@ -30,38 +30,44 @@ usan las redes necesarias para resolver (`postgres:5432`, `valkey:6379`,
 Por defecto todas las redes son del proyecto; el perfil opcional de ingress
 compartido se describe más abajo.
 
-Sólo se publican dos puertos HTTP del host. En producción el proxy está en otro LXC,
-por lo que la configuración canónica usa `0.0.0.0`; si el proxy comparte host,
-se puede fijar `PUBLISH_BIND_ADDRESS=127.0.0.1`.
+Se publican dos puertos HTTP y un puerto S3 del host. En producción el proxy
+está en otro LXC, por lo que la configuración canónica usa `0.0.0.0`; si el
+proxy comparte host, se puede fijar `PUBLISH_BIND_ADDRESS=127.0.0.1`.
 
 | Servicio | Puerto del contenedor | Publicación | Uso |
 |---|---:|---|---|
 | `api` | `3000` | `${PUBLISH_BIND_ADDRESS}:${API_PUBLISH_PORT}:3000` | Proxy → HTTP + SSE |
 | `web` | `3001` | `${PUBLISH_BIND_ADDRESS}:${WEB_PUBLISH_PORT}:3001` | Proxy → Next.js |
+| `minio` | `9000` | `${PUBLISH_BIND_ADDRESS}:${S3_PUBLISH_PORT}:9000` | Proxy → S3 API |
 
-PostgreSQL, Valkey y MinIO no tienen `ports:`. Su consola MinIO también queda
-apagada. Caddy termina TLS y puede usar, por ejemplo, la IP Incus del LXC
-`hackos`:
+PostgreSQL y Valkey no tienen `ports:`. La consola MinIO también queda apagada
+y no se publica. Caddy termina TLS y puede usar, por ejemplo, la IP Incus del
+LXC `hackos`:
 
 ```caddyfile
-api.example.org {
+api.hackudc.com {
     reverse_proxy <ip-incus-del-lxc-hackos>:3000
 }
 
-example.org {
+os.hackudc.com {
     reverse_proxy <ip-incus-del-lxc-hackos>:3001
 }
 
-# S3_PUBLIC_URL=https://s3.example.org/hackos/
-s3.example.org {
-    reverse_proxy <endpoint-de-la-api-s3-de-minio-alcanzable-desde-caddy>:9000
+s3.hackudc.com {
+    @public-logos {
+        path /hackos/enterprises /hackos/enterprises/*
+        method GET HEAD
+    }
+    handle @public-logos {
+        reverse_proxy <ip-incus-del-lxc-hackos>:9000
+    }
+    respond 403
 }
 ```
 
 La tercera ruta sólo puede apuntar a la API S3 de MinIO, nunca a la consola
-(9001). El Compose mantiene MinIO sin puerto de host; por ello, si Caddy vive
-en otro LXC, infraestructura debe habilitar el camino privado/revisado hasta
-`minio:9000` antes del primer despliegue. `S3_PUBLIC_URL` no abre ese camino.
+(9001), y debe permitir únicamente `/hackos/enterprises/`. `S3_PUBLIC_URL` no
+crea el registro DNS ni la ruta en Caddy.
 El acceso anónimo se limita al prefijo `enterprises/`; las subidas bajo
 `uploads/` siguen siendo privadas y pasan por el API.
 
@@ -87,24 +93,34 @@ containers are recreated.
 
 ## Configuración y secretos
 
-Cada host mantiene dos ficheros planos fuera del repositorio:
+Producción mantiene un único fichero plano fuera del repositorio:
 
 | Fichero | Contenido | Plantilla |
 |---|---|---|
-| `/etc/hackos/hackos.env` | Sólo configuración no secreta: imagen, dominios, puertos, nombres de cuentas, S3 público, correo, logs, R2 y metadatos Wallet. | [`deploy/.env.example`](./.env.example) |
-| `/etc/hackos/hackos.secrets` | Sólo credenciales y material privado: contraseñas, claves S3/R2/SMTP, `BETTER_AUTH_SECRET`, claves de traducción, fixtures y PEM Wallet. Permisos `0600`. | [`deploy/.secrets.example`](./.secrets.example) |
+| `/etc/hackos/hackos.env` (`0600`) | Toda la configuración y los secretos del runtime: imagen, dominios, puertos, credenciales, correo, R2, fixtures y material Wallet. | [`deploy/.env.example`](./.env.example) |
 
-No se permite duplicar una clave entre los dos ficheros. La plantilla de
-secretos contiene nombres y valores vacíos; nunca se usa como fichero real ni
-se copia al repositorio.
+No se debe duplicar una clave. La plantilla contiene nombres y valores de
+ejemplo, nunca secretos reales; el fichero real se crea y edita fuera del
+repositorio.
 
-El contrato canónico es siempre esta pareja. El despliegue acepta además, de
-forma explícita y temporal, un único `/etc/hackos/hackos.env` con permisos
-`0600`: es la compatibilidad necesaria para el LXC preparado localmente. No se
-acepta un fichero de secretos sin configuración, no busca `.env` junto al
-Compose y no se mantienen plantillas duplicadas por instancia.
+Staging conserva la pareja `/etc/hackos/hackos.env` +
+`/etc/hackos/hackos.secrets`; el segundo fichero tiene precedencia y debe tener
+permisos `0600`. Usa [`.staging.env.example`](./.staging.env.example) y
+[`.secrets.example`](./.secrets.example) como plantillas. No se acepta un
+fichero de secretos sin configuración, no se busca `.env` junto al Compose y no
+se mantienen plantillas duplicadas por instancia.
 
-Docker Compose acepta varios `--env-file`; el segundo tiene precedencia:
+Uso canónico en producción:
+
+```sh
+CONFIG=/etc/hackos/hackos.env
+COMPOSE="docker compose --env-file $CONFIG -f deploy/docker-compose.yml"
+
+./deploy/scripts/check-env.sh "$CONFIG"
+$COMPOSE config >/dev/null
+```
+
+En staging, conserva los dos ficheros:
 
 ```sh
 CONFIG=/etc/hackos/hackos.env
@@ -115,7 +131,7 @@ COMPOSE="docker compose --env-file $CONFIG --env-file $SECRETS -f deploy/docker-
 $COMPOSE config >/dev/null
 ```
 
-El fichero de secretos debe contener, como mínimo, estas claves:
+El fichero combinado debe contener, como mínimo, estas claves:
 
 ```text
 POSTGRES_PASSWORD
@@ -126,18 +142,18 @@ S3_SECRET_KEY
 ```
 
 `POSTGRES_USER`, `POSTGRES_DB`, `MINIO_ROOT_USER` y `S3_ACCESS_KEY` son
-identificadores de configuración y viven en `hackos.env`; no se generan ni se
-guardan como secretos. `S3_SECRET_KEY` sí permanece en `hackos.secrets`.
+identificadores de configuración. En producción, las contraseñas también viven
+en el fichero único; en staging permanecen en `hackos.secrets`.
 
 Para correo, `MAIL_PROVIDER=smtp` requiere `SMTP_HOST`. En producción se puede
 usar Amazon SES a través de su endpoint SMTP; `SMTP_USER` y `SMTP_PASS` se
-guardan en el fichero de secretos cuando el relay requiere autenticación. Las
+guardan en el fichero combinado cuando el relay requiere autenticación. Las
 claves de firma de Apple/Google son opcionales, pero cada bloque configurado
 debe estar completo. `check-env.sh` no imprime valores secretos.
 
 Los backups opcionales de Cloudflare R2 usan `R2_ENDPOINT`, `R2_BUCKET` y
-`R2_PREFIX` en la configuración, y `R2_ACCESS_KEY_ID`/
-`R2_SECRET_ACCESS_KEY` en el fichero de secretos. El helper exige
+`R2_PREFIX`, y `R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY` en el fichero
+combinado. El helper exige
 `R2_BACKUPS_ENABLED=true` antes de transmitir nada.
 
 La pareja `MINIO_ROOT_*` sólo se entrega a `minio` y `minio-init`. El helper
@@ -153,15 +169,24 @@ then explicitly recreate affected services:
 
 ```sh
 sudoedit /etc/hackos/hackos.env
-sudoedit /etc/hackos/hackos.secrets
-/opt/hackos/check-env.sh /etc/hackos/hackos.env /etc/hackos/hackos.secrets
+/opt/hackos/check-env.sh /etc/hackos/hackos.env
 ```
 
-For the temporary combined-file layout, edit and validate that one `0600` file
-instead. `check-env.sh` validates keys, domains, tags, credential blocks, and
-permissions without printing secret values:
+`check-env.sh` validates keys, domains, tags, credential blocks, and permissions
+without printing secret values:
 
 ```sh
+docker compose --env-file /etc/hackos/hackos.env \
+  -f /opt/hackos/docker-compose.yml \
+  up -d --no-build --force-recreate --wait --wait-timeout 120 api worker web
+```
+
+En staging, añade el fichero de secretos existente a los dos comandos:
+
+```sh
+sudoedit /etc/hackos/hackos.env
+sudoedit /etc/hackos/hackos.secrets
+/opt/hackos/check-env.sh /etc/hackos/hackos.env /etc/hackos/hackos.secrets
 docker compose --env-file /etc/hackos/hackos.env \
   --env-file /etc/hackos/hackos.secrets \
   -f /opt/hackos/docker-compose.yml \
@@ -302,10 +327,8 @@ en el mismo cambio y vuelve a ejecutar el validador:
 ```sh
 # editar deploy/docker-compose.yml (y qualification si corresponde)
 docker compose --env-file /etc/hackos/hackos.env \
-  --env-file /etc/hackos/hackos.secrets \
   -f deploy/docker-compose.yml up -d --force-recreate <service>
 docker compose --env-file /etc/hackos/hackos.env \
-  --env-file /etc/hackos/hackos.secrets \
   -f deploy/docker-compose.yml ps <service>
 ```
 
@@ -370,6 +393,16 @@ does not provide that runner, so enabling and registering it is a prerequisite
 outside this repository. The staging job uses a GitHub-hosted runner plus a
 private overlay network instead.
 
+Production can also avoid that GitHub Actions dependency entirely. The
+infrastructure repository installs a five-minute systemd timer in the existing
+`hackos` LXC; it checks the latest GitHub Release and the two public GHCR
+packages, then invokes `/opt/hackos/incus-deploy.sh` with the exact `sha-<commit>` tag
+for whichever unit is available. The timer does not clone this repository,
+accept mutable tags, or bypass the deployment lock, migration, backup and
+healthcheck steps. GitHub Actions remains useful for the initial file transfer,
+manual rollback and staging, but it is not required for normal production
+rollouts.
+
 Both workflows check the tag and select the exact commit encoded in
 `sha-<commit>`. The production workflow transfers files with `incus file push`
 and executes the deployment with `incus exec`; the staging workflow uses the
@@ -429,12 +462,11 @@ conserva el proyecto existente y no elimina volúmenes.
 
 ```sh
 CONFIG=/etc/hackos/hackos.env
-SECRETS=/etc/hackos/hackos.secrets
 RELEASE=sha-<40-lowercase-hex>
 export IMAGE_TAG="$RELEASE" API_IMAGE_TAG="$RELEASE" WEB_IMAGE_TAG="$RELEASE"
-COMPOSE=(docker compose --env-file "$CONFIG" --env-file "$SECRETS" -f deploy/docker-compose.yml)
+COMPOSE=(docker compose --env-file "$CONFIG" -f deploy/docker-compose.yml)
 
-./deploy/scripts/check-env.sh "$CONFIG" "$SECRETS"
+./deploy/scripts/check-env.sh "$CONFIG"
 "${COMPOSE[@]}" config >/dev/null
 
 # 1. Descargar todas las imágenes; no hay build en ningún paso.
@@ -660,7 +692,7 @@ R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
 R2_BUCKET=hackos-backups
 R2_PREFIX=hackos
 
-# /etc/hackos/hackos.secrets (chmod 600)
+# /etc/hackos/hackos.env (chmod 600)
 R2_ACCESS_KEY_ID=...
 R2_SECRET_ACCESS_KEY=...
 ```
@@ -687,7 +719,9 @@ configuración de infraestructura, no por un despliegue de aplicación.
 ## Archivos canónicos
 
 - [`docker-compose.yml`](./docker-compose.yml): runtime único.
-- [`.env.example`](./.env.example): plantilla de configuración no secreta.
+- [`.env.example`](./.env.example): plantilla combinada de producción.
+- [`.staging.env.example`](./.staging.env.example): configuración no secreta de staging.
+- [`.secrets.example`](./.secrets.example): secretos separados de staging.
 - [`scripts/check-env.sh`](./scripts/check-env.sh): validación previa sin
   revelar secretos.
 - [`scripts/backup-r2.sh`](./scripts/backup-r2.sh): backup opt-in de PostgreSQL

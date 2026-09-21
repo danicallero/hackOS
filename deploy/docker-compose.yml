@@ -1,7 +1,12 @@
 # hackOS — canonical multi-architecture Compose runtime.
 #
-# This file only consumes pre-built images. Run it with the host configuration
-# file first and the separate, chmod 600 secrets file second:
+# This file only consumes pre-built images.
+# Production uses one environment file (mode 600):
+#
+#   docker compose --env-file /etc/hackos/hackos.env \
+#     -f deploy/docker-compose.yml up -d
+#
+# Staging keeps the two existing files:
 #
 #   docker compose --env-file /etc/hackos/hackos.env \
 #     --env-file /etc/hackos/hackos.secrets \
@@ -9,9 +14,8 @@
 #
 # The private and egress bridge networks are created by Compose. PostgreSQL
 # and MinIO bind their state below HACKOS_DATA_DIR (the production LXC mounts
-# its persistent volume at /mnt/data). The external proxy reaches only the HTTP ports
-# published by api and web; MinIO has no published port and uses the optional
-# edge network only when a reviewed object-storage ingress needs it.
+# its persistent volume at /mnt/data). The proxy reaches api, web and the S3
+# API. The MinIO console is disabled.
 # Set PUBLISH_BIND_ADDRESS=127.0.0.1 when the proxy runs on the same host; the
 # proxy LXC normally needs 0.0.0.0.
 #

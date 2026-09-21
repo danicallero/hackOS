@@ -147,14 +147,15 @@ explicit `migrate` process succeeds.
   bucket idempotently and sets prefix policy: **`enterprises/` is anonymously
   readable** (sponsor logos, H44), **`uploads/` is private** (application files,
   H12, served only through the API's owner-or-staff proxied-download route).
-- **Network:** private Compose network, no host ports, `minio:9000`. When the
-  optional shared ingress network is enabled for a host-level tunnel, MinIO
-  joins that network as well so the S3 hostname can resolve `minio:9000`; the
+- **Network:** private Compose network plus the published host S3 API port
+  (`S3_PUBLISH_PORT` → `minio:9000`). When the optional shared ingress network
+  is enabled for a host-level tunnel, MinIO joins that network as well; the
   console remains off (`MINIO_BROWSER=off`).
 - **Public read path:** production sets
-  `S3_PUBLIC_URL=https://s3.example.org/hackos/`. An external ingress must route
-  that hostname to MinIO's S3 API, never to the console. MinIO has no host port
-  in this Compose project; private uploads remain behind the API and the
+  `S3_PUBLIC_URL=https://s3.hackudc.com/hackos/`. An external ingress must route
+  that hostname only to `/hackos/enterprises/` on MinIO's S3 API, never to the
+  console or other bucket prefixes. Only the S3 API host port is published;
+  private uploads remain behind the API and the
   `enterprises/` prefix is initialized for public logo reads by the storage
   helper.
 - **State:** the `HACKOS_DATA_DIR/minio` bind mount (normally `/mnt/data/minio`) —
@@ -175,20 +176,21 @@ Compose creates two project-private bridge networks:
 | Purpose | Network | Host exposure |
 |---|---|---|
 | Inter-service traffic and datastore access | `private` | None by default |
-| Provider egress and web publishing | `egress` | API and web published ports |
+| Provider egress and web publishing | `egress` | API, web and S3 API published ports |
 
 Datastores, migration and storage bootstrap join `private`. API and worker join
 both networks; web joins `egress`. Service discovery uses the fixed names
-`postgres`, `valkey` and `minio`. PostgreSQL, Valkey and MinIO publish no host
-ports. API and web are reachable through their configured host ports, where the
-external proxy can terminate TLS and apply the host policy.
+`postgres`, `valkey` and `minio`. PostgreSQL and Valkey publish no host ports;
+MinIO publishes only its S3 API. API, web and S3 are reachable through their
+configured host ports, where the external proxy can terminate TLS and apply the
+host policy.
 
 The `private` bridge is marked `internal`; the separate `egress` bridge provides
 NAT for API, worker and web. This does not create an ingress path to a container
 without a published port.
 
 The `enterprises/` logo prefix is initialized for public reads, and production
-uses `https://s3.example.org/hackos/` as `S3_PUBLIC_URL`. The external ingress
+uses `https://s3.hackudc.com/hackos/` as `S3_PUBLIC_URL`. The external ingress
 must provide the route to MinIO's S3 API; the private `uploads/` prefix is
 served through the API.
 
@@ -445,10 +447,11 @@ For a host-level tunnel that resolves Docker service names, the optional
 database and queue store remain private. The default production profile leaves
 this network Compose-owned and uses published ports instead.
 
-The deploy operator supplies `/etc/hackos/hackos.env` and
-`/etc/hackos/hackos.secrets` (or the explicitly supported single chmod-600
-combined file), validates them with `deploy/scripts/check-env.sh`, and keeps
-the runtime under `/opt/hackos`. The LXC must mount the persistent Incus
+Production supplies the single chmod-600 file `/etc/hackos/hackos.env`.
+Staging keeps the existing pair `/etc/hackos/hackos.env` and
+`/etc/hackos/hackos.secrets`, validates the selected contract with
+`deploy/scripts/check-env.sh`, and keeps the runtime under `/opt/hackos`. The
+LXC must mount the persistent Incus
 volume at `/mnt/data`; the deploy script refuses a production run without that
 mount. It pulls the pinned images, runs `minio-init`, optionally backs up to
 R2, runs `migrate`, then recreates API, worker and web. Compose healthchecks are
