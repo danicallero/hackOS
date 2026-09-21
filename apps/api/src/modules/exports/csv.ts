@@ -1,3 +1,4 @@
+import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { pool } from "../../db/pool.js";
 import { recordsToCsv, toCsv } from "../../lib/csv.js";
 import { staffScanRanking } from "../logistics/scan-log.js";
@@ -38,9 +39,10 @@ export async function exportMealsCsv(): Promise<string> {
        FROM activity_logs al
        JOIN activities a ON a.id = al.activity_id
        JOIN users u ON u.id = al.user_id
-      WHERE a.category = 'meal'
+      WHERE a.category = ANY($1::text[])
         AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
       ORDER BY al.logged_at`,
+    [[...MEAL_ACTIVITY_KINDS]],
   );
   const header = [
     "user_id",

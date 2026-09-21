@@ -22,7 +22,7 @@ export async function registerModules(app: FastifyInstance): Promise<void> {
   await registerApplicationsModule(app); // WS-A2 (H11-H15, H27)
   await registerChallengesModule(app); // WS-G  (H44)
   await registerEventModule(app); // WS-G  (H45, H47)
-  await registerExportsModule(app); // WS-F  (H54)
+  await registerExportsModule(app); // WS-F  (H54, H56)
   await registerIdentityModule(app); // WS-A1 (H1-H10)
   await registerLogisticsModule(app); // WS-C  (H22-H27)
   await registerNotificationsModule(app); // WS-F  (H50-H53)
