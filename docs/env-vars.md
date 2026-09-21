@@ -147,11 +147,11 @@ en ningún contenedor de aplicación.
 
 En producción, el API guarda los objetos en el MinIO privado mediante
 `S3_ENDPOINT=http://minio:9000` y devuelve URLs públicas con
-`S3_PUBLIC_URL=https://32.hackudc.com/hackos/`. Por ejemplo, un logo con la clave
+`S3_PUBLIC_URL=https://s3.hackudc.com/hackos/`. Por ejemplo, un logo con la clave
 `enterprises/42/logo-default.png` se sirve en:
 
 ```text
-https://32.hackudc.com/hackos/enterprises/42/logo-default.png
+https://s3.hackudc.com/hackos/enterprises/42/logo-default.png
 ```
 
 `minio-init` permite lectura anónima sólo bajo `enterprises/`, que contiene
@@ -160,11 +160,11 @@ API autorizado. No se debe convertir todo el bucket en anónimo porque eso
 expondría ficheros de solicitudes.
 
 El ingress externo debe publicar únicamente la API S3 de MinIO para
-`32.hackudc.com`; la consola de MinIO no se publica. Conceptualmente, Caddy
+`s3.hackudc.com`; la consola de MinIO no se publica. Conceptualmente, Caddy
 debe hacer:
 
 ```caddyfile
-32.hackudc.com {
+s3.hackudc.com {
     @public-logos {
         path /hackos/enterprises /hackos/enterprises/*
         method GET HEAD

@@ -53,7 +53,7 @@ os.hackudc.com {
     reverse_proxy <ip-incus-del-lxc-hackos>:3001
 }
 
-32.hackudc.com {
+s3.hackudc.com {
     @public-logos {
         path /hackos/enterprises /hackos/enterprises/*
         method GET HEAD
