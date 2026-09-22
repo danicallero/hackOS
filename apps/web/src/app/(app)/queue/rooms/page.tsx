@@ -276,10 +276,6 @@ export default function QueueRoomsPage() {
     });
   }, [query, rooms, statusFilter]);
 
-  const activeCount = useMemo(
-    () => rooms.filter((room) => room.status === "active").length,
-    [rooms],
-  );
   const hasFilters = Boolean(query.trim()) || statusFilter !== "all";
   const emptyAction = hasFilters ? (
     <Button
@@ -320,16 +316,8 @@ export default function QueueRoomsPage() {
 
       {tab === "rooms" && (
         <Surface padding="none" className="overflow-hidden">
-          <div className="flex flex-wrap items-center gap-4 border-b p-4">
-            <div className="min-w-0">
-              <h2 className="type-section-title text-balance">{t("roomQueues")}</h2>
-              {!loading && !loadError && rooms.length > 0 && (
-                <p className="type-meta tabular-nums">
-                  {t("roomsSummary", { active: activeCount, total: rooms.length })}
-                </p>
-              )}
-            </div>
-            <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
+          <div className="flex flex-wrap items-center justify-end gap-2 border-b p-4">
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
               <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
                 <SearchIcon
                   className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
