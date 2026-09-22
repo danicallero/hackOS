@@ -8,12 +8,10 @@ import {
   DownloadIcon,
   LayoutDashboardIcon,
   RefreshCwIcon,
-  ShieldCheckIcon,
   SoupIcon,
   TrophyIcon,
   UsersIcon,
 } from "lucide-react";
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -23,6 +21,7 @@ import { SectionCard } from "@/components/common/section-card";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { TabBar } from "@/components/common/tab-bar";
+import { StatisticsExportPanel } from "@/components/exports/statistics-export-panel";
 import type { PublicEvent } from "@/components/public/public-types";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
@@ -44,7 +43,6 @@ import {
   type DataPhase,
   defaultDataPhase,
   errorMessage,
-  exportUrl,
   FRESHNESS_LABEL_KEYS,
   type FreshnessKind,
   type StatisticsScope,
@@ -226,16 +224,18 @@ export default function LogisticsStatsPage() {
           title={t("logisticsStats")}
           className="sm:flex-col sm:items-stretch xl:flex-row xl:items-start"
           secondaryActions={
-            <StatisticsToolbar
-              activePhase={activePhase}
-              canGeneralStats={canGeneralStats}
-              canExport={canExport}
-              editMode={editMode}
-              scopes={scopes}
-              selectedScopeKeys={selectedScopeKeys}
-              onScopeChange={setSelectedScopeKeys}
-              onEditModeChange={setEditMode}
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <StatisticsToolbar
+                activePhase={activePhase}
+                canGeneralStats={canGeneralStats}
+                editMode={editMode}
+                scopes={scopes}
+                selectedScopeKeys={selectedScopeKeys}
+                onScopeChange={setSelectedScopeKeys}
+                onEditModeChange={setEditMode}
+              />
+              {canExport && <StatisticsExportPanel />}
+            </div>
           }
         />
         <TabsContent value="before" className="mt-4">
@@ -266,7 +266,6 @@ export default function LogisticsStatsPage() {
 function StatisticsToolbar({
   activePhase,
   canGeneralStats,
-  canExport,
   editMode,
   scopes,
   selectedScopeKeys,
@@ -275,7 +274,6 @@ function StatisticsToolbar({
 }: {
   activePhase: DataPhase;
   canGeneralStats: boolean;
-  canExport: boolean;
   editMode: boolean;
   scopes: StatisticsScope[];
   selectedScopeKeys: string[];
@@ -288,9 +286,6 @@ function StatisticsToolbar({
     label: scope.name,
     description: scope.kind === "application" ? t("applicationScopeLabel") : t("roleScopeLabel"),
   }));
-  const exportPath = exportUrl("/api/exports/statistics.csv", {
-    scopes: selectedScopeKeys.join(","),
-  });
   return (
     <div className="flex w-full flex-wrap items-center gap-2 xl:w-auto">
       <TabBar aria-label={t("eventPhaseLabel")} className="w-fit">
@@ -315,30 +310,15 @@ function StatisticsToolbar({
           : t("singleStatisticsScope")}
       </span>
       {activePhase === "before" && (
-        <>
-          {canExport && selectedScopeKeys.length > 0 ? (
-            <Button asChild variant="outline" size="sm">
-              <a href={`${API_URL}${exportPath}`}>
-                <DownloadIcon className="size-4" aria-hidden="true" />
-                {t("exportThisData")}
-              </a>
-            </Button>
-          ) : (
-            <Button variant="outline" size="sm" disabled>
-              <DownloadIcon className="size-4" aria-hidden="true" />
-              {t("exportThisData")}
-            </Button>
-          )}
-          <Button
-            variant={editMode ? "secondary" : "outline"}
-            size="sm"
-            aria-pressed={editMode}
-            onClick={() => onEditModeChange(!editMode)}
-          >
-            <LayoutDashboardIcon className="size-4" aria-hidden="true" />
-            {editMode ? t("finishCustomizePanel") : t("customizePanel")}
-          </Button>
-        </>
+        <Button
+          variant={editMode ? "secondary" : "outline"}
+          size="sm"
+          aria-pressed={editMode}
+          onClick={() => onEditModeChange(!editMode)}
+        >
+          <LayoutDashboardIcon className="size-4" aria-hidden="true" />
+          {editMode ? t("finishCustomizePanel") : t("customizePanel")}
+        </Button>
       )}
     </div>
   );
@@ -643,25 +623,6 @@ function AfterPanel({
           error={error ? { message: error, onRetry } : undefined}
           empty={{ icon: UsersIcon, title: t("noAttendanceData") }}
         />
-      </SectionCard>
-      <SectionCard title={t("exportsAndPrivacy")} icon={ShieldCheckIcon}>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline">
-            <a href={`${API_URL}/api/exports/meals.csv`}>
-              <DownloadIcon className="size-4" aria-hidden="true" />
-              {t("exportMeals")}
-            </a>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/judging">{t("evaluationsAndQueueExports")}</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/users">{t("privacyOperations")}</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/audit">{t("auditLog")}</Link>
-          </Button>
-        </div>
       </SectionCard>
     </div>
   );

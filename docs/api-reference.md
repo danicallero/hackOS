@@ -307,12 +307,12 @@ GDPR-style data-subject request workflow (export or deletion, the latter also
 requiring `ADMIN_ALL`) remains asynchronous and uses its existing proxied,
 owner-or-staff download route.
 
-The web export centre is the inventory for these datasets: applications and
-their document privacy modes, selected activity attendance, hours and raw
-presence signals, attendance/meals/staff summary CSVs, authorized aggregate
-statistics, and contextual judging queue/evaluation/review exports. A link to
-the relevant workspace is kept for exports whose filters are already owned by
-that workspace.
+The web exposes each export beside the data it belongs to: configurable
+application exports in Applications, attendance and presence exports in their
+Logistics workspaces, aggregate statistics in Statistics, judging exports in
+the judging queue, and a role-filterable user roster in Users. Each opens in
+the shared editor side panel so scope and output columns are chosen before the
+download begins; there is no standalone export-centre route.
 
 ## Cross-cutting conventions
 

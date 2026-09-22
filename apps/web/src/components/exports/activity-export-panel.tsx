@@ -1,9 +1,10 @@
 "use client";
 
-import { DownloadIcon, RefreshCwIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { CalendarCheckIcon, DownloadIcon, RefreshCwIcon } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { MultiSelect } from "@/components/common/multi-select";
-import { SectionCard } from "@/components/common/section-card";
+import { SidePanelEditor } from "@/components/common/side-panel-editor";
+import { ExportSensitivityBadge } from "@/components/exports/export-sensitivity-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -59,7 +60,7 @@ async function downloadActivityExport(
   URL.revokeObjectURL(url);
 }
 
-export function ActivityExportPanel() {
+export function ActivityExportPanel({ trigger }: { trigger?: ReactNode }) {
   const { language, t } = useLocale();
   const [activities, setActivities] = useState<ActivityExportOption[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -127,17 +128,34 @@ export function ActivityExportPanel() {
   };
 
   return (
-    <SectionCard
+    <SidePanelEditor
+      trigger={
+        trigger ?? (
+          <Button variant="outline">
+            <CalendarCheckIcon aria-hidden="true" />
+            {t("export")}
+          </Button>
+        )
+      }
       title={t("activityAttendanceExport")}
-      description={t("activityAttendanceExportDesc")}
-      icon={DownloadIcon}
-      action={
+      icon={CalendarCheckIcon}
+      footer={
+        <Button
+          onClick={() => void exportData()}
+          disabled={loading || exporting || selectedIds.length === 0}
+        >
+          <DownloadIcon aria-hidden="true" />
+          {exporting ? t("loading") : t("export")}
+        </Button>
+      }
+    >
+      <div className="flex justify-end">
         <Button variant="ghost" size="sm" onClick={() => void load()} disabled={loading}>
           <RefreshCwIcon aria-hidden="true" />
           {t("refresh")}
         </Button>
-      }
-    >
+      </div>
+      <ExportSensitivityBadge />
       {error && (
         <Alert variant="destructive">
           <AlertTitle>{t("activityExportFailed")}</AlertTitle>
@@ -179,7 +197,6 @@ export function ActivityExportPanel() {
           searchPlaceholder={t("searchActivitiesToExport")}
           emptyText={t("noActivitiesToExport")}
           aria-label={t("selectActivitiesToExport")}
-          maxVisibleBadges={4}
         />
         <p className="text-muted-foreground text-xs" role="status" aria-live="polite">
           {t("activitiesSelected", { count: selectedIds.length })}
@@ -217,19 +234,6 @@ export function ActivityExportPanel() {
           ))}
         </div>
       </fieldset>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-        <p className="text-muted-foreground max-w-xl text-sm text-pretty">
-          {t("activityExportPrivacyNote")}
-        </p>
-        <Button
-          onClick={() => void exportData()}
-          disabled={loading || exporting || selectedIds.length === 0}
-        >
-          <DownloadIcon aria-hidden="true" />
-          {exporting ? t("loading") : t("downloadActivityExport")}
-        </Button>
-      </div>
-    </SectionCard>
+    </SidePanelEditor>
   );
 }

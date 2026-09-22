@@ -16,6 +16,7 @@ import { type Column, DataTable } from "@/components/common/data-table";
 import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
+import { UserRosterExportPanel } from "@/components/exports/user-roster-export-panel";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -477,6 +478,9 @@ export default function UsersPage() {
         description={total > users.length ? t("showingFirst", { shown: users.length }) : undefined}
         actions={
           <>
+            <CapabilityGate capability={CAPABILITIES.EXPORTS_RUN}>
+              <UserRosterExportPanel users={filteredUsers} />
+            </CapabilityGate>
             <CapabilityGate capability={CAPABILITIES.INVITES_MANAGE}>
               <Button asChild variant="outline">
                 <Link href="/users/invites">{t("invitationManagement")}</Link>
