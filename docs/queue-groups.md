@@ -24,6 +24,10 @@ split "which enterprise a room belongs to" off from "which queue it serves".
 > can be pooled into an enterprise while serving none of its queues — the
 > enterprise may hold more rooms than it currently needs.
 
+The Rooms admin page uses the room name and optional location as its human-facing
+fields. The numeric room id is only the stable internal identifier; rooms do not
+carry a separate public slug.
+
 ## Why
 
 A room used to judge exactly one challenge (`room_challenges`, unique per room

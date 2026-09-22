@@ -101,14 +101,19 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN),
       config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
-      schema: { body: createRoomBody },
+      schema: {
+        body: createRoomBody,
+        summary: "Create a judging room",
+        description:
+          "Creates a named judging room in the paused state. Location is optional; the room's numeric id is its stable internal identifier.",
+      },
     },
     async (req, reply) => {
-      const { name, slug, location } = req.body;
+      const { name, location } = req.body;
       const room = await withTransaction(async (client) => {
         const { rows } = await client.query(
-          `INSERT INTO rooms (name, slug, location) VALUES ($1, $2, $3) RETURNING *`,
-          [name, slug, location ?? null],
+          `INSERT INTO rooms (name, location) VALUES ($1, $2) RETURNING *`,
+          [name, location ?? null],
         );
         // A room is not eligible for auto-fill until a judge/operator explicitly
         // resumes it from the judging panel.
@@ -132,25 +137,36 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
           policy: "room-list",
         },
       },
+      schema: {
+        summary: "List judging rooms",
+        description:
+          "Lists the rooms visible to the caller, including their operational status and the enterprise room pool they belong to when assigned.",
+      },
     },
     async (req) => {
       const roomIds = await accessibleRoomIds(req);
       if (roomIds === null) {
         const { rows } = await pool.query(
-          `SELECT rooms.*, CASE WHEN rqs.is_paused THEN 'paused' ELSE 'active' END AS status
-         FROM rooms
-         LEFT JOIN room_queue_state rqs ON rqs.room_id = rooms.id
-         ORDER BY rooms.id ASC`,
+          `SELECT rooms.*, re.enterprise_id, e.name AS enterprise_name,
+                  CASE WHEN rqs.is_paused THEN 'paused' ELSE 'active' END AS status
+             FROM rooms
+             LEFT JOIN room_queue_state rqs ON rqs.room_id = rooms.id
+             LEFT JOIN room_enterprises re ON re.room_id = rooms.id
+             LEFT JOIN enterprises e ON e.id = re.enterprise_id
+            ORDER BY rooms.id ASC`,
         );
         return rows;
       }
 
       const { rows } = await pool.query(
-        `SELECT rooms.*, CASE WHEN rqs.is_paused THEN 'paused' ELSE 'active' END AS status
-       FROM rooms
-       LEFT JOIN room_queue_state rqs ON rqs.room_id = rooms.id
-       WHERE rooms.id = ANY($1)
-       ORDER BY rooms.id ASC`,
+        `SELECT rooms.*, re.enterprise_id, e.name AS enterprise_name,
+                CASE WHEN rqs.is_paused THEN 'paused' ELSE 'active' END AS status
+           FROM rooms
+           LEFT JOIN room_queue_state rqs ON rqs.room_id = rooms.id
+           LEFT JOIN room_enterprises re ON re.room_id = rooms.id
+           LEFT JOIN enterprises e ON e.id = re.enterprise_id
+          WHERE rooms.id = ANY($1)
+          ORDER BY rooms.id ASC`,
         [roomIds],
       );
       return rows;
@@ -171,7 +187,11 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "roomId" },
         },
       },
-      schema: { params: roomIdParam },
+      schema: {
+        params: roomIdParam,
+        summary: "Read a judging room",
+        description: "Returns one room and its current queue-control state.",
+      },
     },
     async (req) => {
       const room = (await pool.query(`SELECT * FROM rooms WHERE id = $1`, [req.params.roomId]))
@@ -189,7 +209,13 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN),
       config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
-      schema: { params: roomIdParam, body: updateRoomBody },
+      schema: {
+        params: roomIdParam,
+        body: updateRoomBody,
+        summary: "Update a judging room",
+        description:
+          "Updates the room's name, optional location, or legacy status field. The numeric room id remains unchanged.",
+      },
     },
     async (req) => {
       const fields = req.body;
@@ -201,11 +227,10 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
         if (!existing) throw new NotFoundError("Room not found");
         await assertFixtureQueueScope(client, userId, "room", req.params.roomId);
         const { rows } = await client.query(
-          `UPDATE rooms SET name = $1, slug = $2, location = $3, status = $4 WHERE id = $5 RETURNING *`,
+          `UPDATE rooms SET name = $1, location = $2, status = $3 WHERE id = $4 RETURNING *`,
           [
             fields.name ?? existing.name,
-            fields.slug ?? existing.slug,
-            fields.location ?? existing.location,
+            fields.location === undefined ? existing.location : fields.location,
             fields.status ?? existing.status,
             req.params.roomId,
           ],

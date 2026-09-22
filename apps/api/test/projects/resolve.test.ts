@@ -265,7 +265,7 @@ describe("POST /api/devpost/imports/link-secondary (H16/H17)", () => {
     expect(myQueue.json()).toMatchObject([{ repoId, challengeId, status: "waiting" }]);
 
     const room = await pool.query(
-      `INSERT INTO rooms (name, slug, status) VALUES ('Judge room', 'judge-room', 'active') RETURNING id`,
+      `INSERT INTO rooms (name, status) VALUES ('Judge room', 'active') RETURNING id`,
     );
     const roomId = room.rows[0].id;
     await pool.query(`INSERT INTO room_queue_state (room_id) VALUES ($1)`, [roomId]);

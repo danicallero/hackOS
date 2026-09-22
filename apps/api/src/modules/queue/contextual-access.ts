@@ -253,7 +253,20 @@ export async function accessibleRoomIds(req: FastifyRequest): Promise<number[] |
 
 export const requireRoomListAccess: preHandlerHookHandler = async (req) => {
   const roomIds = await accessibleRoomIds(req);
-  if (roomIds !== null && roomIds.length === 0) denied("queue rooms");
+  if (roomIds !== null && roomIds.length === 0) {
+    // Global queue admins/operators still need to reach the empty-state
+    // administration screen so they can create the first room. Contextual
+    // callers with no relationship remain denied rather than receiving an
+    // indistinguishable empty list.
+    const context = getRequestAuthorizationContext(req);
+    if (
+      (await userHasCapability(context, CAPABILITIES.QUEUE_ADMIN)) ||
+      (await userHasCapability(context, CAPABILITIES.QUEUE_OPERATE))
+    ) {
+      return;
+    }
+    denied("queue rooms");
+  }
 };
 
 /** H40: export requires the export capability plus global or target relationship scope. */

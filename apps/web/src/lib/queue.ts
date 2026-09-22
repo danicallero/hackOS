@@ -52,9 +52,11 @@ export interface QueueEntry {
 export interface Room {
   id: number;
   name: string;
-  slug: string;
   location: string | null;
   status: string;
+  /** Present on the room list projection; omitted by room-scoped reads. */
+  enterprise_id?: number | null;
+  enterprise_name?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -448,14 +450,13 @@ export const pauseRoom = (roomId: number, idempotencyKey?: string) =>
 export const resumeRoom = (roomId: number, idempotencyKey?: string) =>
   api.post(`/api/queue/rooms/${roomId}/resume`, {}, idem(idempotencyKey));
 export const createRoom = (
-  body: { name: string; slug: string; location?: string | null },
+  body: { name: string; location?: string | null },
   idempotencyKey?: string,
 ) => api.post<Room>("/api/queue/rooms", body, idem(idempotencyKey));
 export const updateRoom = (
   roomId: number,
-  body: Partial<Pick<Room, "name" | "slug" | "location" | "status">>,
+  body: Partial<Pick<Room, "name" | "location" | "status">>,
 ) => api.patch<Room>(`/api/queue/rooms/${roomId}`, body);
-export const deleteRoom = (roomId: number) => api.delete(`/api/queue/rooms/${roomId}`);
 export const updateRoomState = (
   roomId: number,
   body: { maxInWaitingArea?: number; desiredMinutesPerTeam?: number },
