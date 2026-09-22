@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { Spinner } from "@/components/common/spinner";
 import { TabBar } from "@/components/common/tab-bar";
+import { JudgingExportPanel } from "@/components/exports/judging-export-panel";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
@@ -28,6 +29,7 @@ export default function QueueOperationsPage() {
   const { t } = useLocale();
   const { can, me } = useSessionContext();
   const canAdmin = can(CAPABILITIES.QUEUE_ADMIN);
+  const canExport = can(CAPABILITIES.JUDGING_EXPORT);
   const { canViewRooms, canUse, defaultTab } = queueOperationsAccess({
     canOperate: can(CAPABILITIES.QUEUE_OPERATE),
     canAdmin,
@@ -151,23 +153,26 @@ export default function QueueOperationsPage() {
           ) : undefined
         }
         secondaryActions={
-          tab === "rooms" ? (
-            <div className="flex h-[var(--control-height-compact)] items-center">
-              <label
-                className="text-muted-foreground flex items-center gap-2 text-sm"
-                htmlFor="arrival-hints"
-                title={t("arrivalHintsDescription")}
-              >
-                <Switch
-                  size="sm"
-                  id="arrival-hints"
-                  checked={arrivalHints}
-                  onCheckedChange={toggleArrivalHints}
-                />
-                {t("arrivalHints")}
-              </label>
-            </div>
-          ) : undefined
+          <div className="flex flex-wrap items-center gap-2">
+            {tab === "rooms" && (
+              <div className="flex h-[var(--control-height-compact)] items-center">
+                <label
+                  className="text-muted-foreground flex items-center gap-2 text-sm"
+                  htmlFor="arrival-hints"
+                  title={t("arrivalHintsDescription")}
+                >
+                  <Switch
+                    size="sm"
+                    id="arrival-hints"
+                    checked={arrivalHints}
+                    onCheckedChange={toggleArrivalHints}
+                  />
+                  {t("arrivalHints")}
+                </label>
+              </div>
+            )}
+            {canExport && <JudgingExportPanel />}
+          </div>
         }
       />
 

@@ -1,16 +1,16 @@
 "use client";
 
-import { Clock3Icon, DownloadIcon, ExternalLinkIcon } from "lucide-react";
-import Link from "next/link";
-import { useMemo, useState } from "react";
-import { SectionCard } from "@/components/common/section-card";
+import { DownloadIcon } from "lucide-react";
+import { type ReactNode, useMemo, useState } from "react";
+import { SidePanelEditor } from "@/components/common/side-panel-editor";
+import { ExportSensitivityBadge } from "@/components/exports/export-sensitivity-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 
-export function PresenceExportPanel() {
+export function PresenceExportPanel({ trigger }: { trigger?: ReactNode }) {
   const { t } = useLocale();
   const [minHours, setMinHours] = useState("");
 
@@ -24,10 +24,17 @@ export function PresenceExportPanel() {
   );
 
   return (
-    <SectionCard
+    <SidePanelEditor
+      trigger={
+        trigger ?? (
+          <Button variant="outline">
+            <DownloadIcon aria-hidden="true" />
+            {t("export")}
+          </Button>
+        )
+      }
       title={t("presenceExportTitle")}
-      description={t("presenceExportDesc")}
-      icon={Clock3Icon}
+      footer={null}
     >
       <div className="flex flex-wrap items-end gap-3">
         <div className="w-32 space-y-1.5">
@@ -42,38 +49,38 @@ export function PresenceExportPanel() {
             placeholder="0"
           />
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline">
+      </div>
+      <div className="border-t border-border pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border py-3 first:pt-0">
+          <span className="text-sm font-medium">{t("presenceHoursSummary")}</span>
+          <Button asChild variant="outline" size="sm">
             <a href={hoursUrl("reduced")}>
               <DownloadIcon aria-hidden="true" />
-              {t("exportHoursReduced")}
+              {t("export")}
             </a>
           </Button>
-          <Button asChild variant="outline">
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border py-3">
+          <span className="text-sm font-medium">{t("presenceHoursDetailed")}</span>
+          <Button asChild variant="outline" size="sm">
             <a href={hoursUrl("full")}>
               <DownloadIcon aria-hidden="true" />
-              {t("exportHoursDetailed")}
+              {t("export")}
             </a>
           </Button>
-          <Button asChild variant="outline">
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3">
+          <span className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-medium">
+            {t("exportPresenceRegister")} <ExportSensitivityBadge />
+          </span>
+          <Button asChild variant="outline" size="sm">
             <a href={`${API_URL}/api/exports/presence-log.csv`}>
               <DownloadIcon aria-hidden="true" />
-              {t("exportPresenceRegister")}
+              {t("export")}
             </a>
           </Button>
         </div>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-        <p className="text-muted-foreground max-w-2xl text-sm text-pretty">
-          {t("presenceExportPrivacyNote")}
-        </p>
-        <Button asChild variant="ghost">
-          <Link href="/logistics/presence">
-            <ExternalLinkIcon aria-hidden="true" />
-            {t("openPresenceWorkspace")}
-          </Link>
-        </Button>
-      </div>
-    </SectionCard>
+    </SidePanelEditor>
   );
 }

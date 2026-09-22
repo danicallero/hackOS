@@ -9,6 +9,7 @@ import { AccessDenied } from "@/components/common/access-denied";
 import { PageHeader } from "@/components/common/page-header";
 import { StatCard } from "@/components/common/stat-card";
 import { TabBar } from "@/components/common/tab-bar";
+import { PresenceExportPanel } from "@/components/exports/presence-export-panel";
 import { Tabs, TabsTrigger } from "@/components/ui/tabs";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { useLocale } from "@/lib/i18n";
@@ -39,6 +40,7 @@ export default function PresencePage() {
   const searchParams = useSearchParams();
   const canAccredit = useCan(CAPABILITIES.ACCREDIT_SCAN);
   const canPresence = useCan(CAPABILITIES.PRESENCE_SCAN);
+  const canStats = useCan(CAPABILITIES.LOGISTICS_STATS);
   const { tab, setTab } = useUrlTab<PresenceTab>({
     values: PRESENCE_TABS,
     defaultValue: "scan",
@@ -96,13 +98,16 @@ export default function PresencePage() {
     [pathname, router, searchParams],
   );
 
-  if (!canAccredit && !canPresence) {
+  if (!canAccredit && !canPresence && !canStats) {
     return <AccessDenied ask={t("presenceDeniedDesc")} />;
   }
 
   return (
     <div className="space-y-6" data-wide>
-      <PageHeader title={t("accreditationAndPresence")} />
+      <PageHeader
+        title={t("accreditationAndPresence")}
+        secondaryActions={canStats ? <PresenceExportPanel /> : undefined}
+      />
       <Tabs value={tab} onValueChange={(value) => setTab(value)}>
         <TabBar aria-label={t("presenceSections")} className="w-full justify-start">
           <TabsTrigger value="scan">{t("presenceScanTab")}</TabsTrigger>
@@ -132,7 +137,7 @@ export default function PresencePage() {
         </div>
       )}
 
-      {tab === "scan" && (
+      {tab === "scan" && (canAccredit || canPresence) && (
         <ScanTab
           canAccredit={canAccredit}
           canPresence={canPresence}

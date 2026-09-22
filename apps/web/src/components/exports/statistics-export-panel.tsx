@@ -1,10 +1,9 @@
 "use client";
 
-import { BarChart3Icon, DownloadIcon, ExternalLinkIcon } from "lucide-react";
-import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { DownloadIcon } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { MultiSelect } from "@/components/common/multi-select";
-import { SectionCard } from "@/components/common/section-card";
+import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -18,7 +17,7 @@ interface StatisticsScope {
   name: string;
 }
 
-export function StatisticsExportPanel({ canExport }: { canExport: boolean }) {
+export function StatisticsExportPanel({ trigger }: { trigger?: ReactNode }) {
   const { t } = useLocale();
   const [scopes, setScopes] = useState<StatisticsScope[]>([]);
   const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
@@ -63,10 +62,31 @@ export function StatisticsExportPanel({ canExport }: { canExport: boolean }) {
   const href = `${API_URL}/api/exports/statistics.csv?scopes=${encodeURIComponent(selectedScopes.join(","))}`;
 
   return (
-    <SectionCard
+    <SidePanelEditor
+      trigger={
+        trigger ?? (
+          <Button variant="outline">
+            <DownloadIcon aria-hidden="true" />
+            {t("export")}
+          </Button>
+        )
+      }
       title={t("statisticsExportTitle")}
-      description={t("statisticsExportDesc")}
-      icon={BarChart3Icon}
+      footer={
+        selectedScopes.length > 0 ? (
+          <Button asChild disabled={loading}>
+            <a href={href}>
+              <DownloadIcon aria-hidden="true" />
+              {t("export")}
+            </a>
+          </Button>
+        ) : (
+          <Button disabled>
+            <DownloadIcon aria-hidden="true" />
+            {t("export")}
+          </Button>
+        )
+      }
     >
       {error && (
         <Alert variant="destructive">
@@ -86,29 +106,11 @@ export function StatisticsExportPanel({ canExport }: { canExport: boolean }) {
           searchPlaceholder={t("searchStatisticsScopes")}
           emptyText={t("noStatisticsScopes")}
           aria-label={t("selectStatisticsScopes")}
-          maxVisibleBadges={4}
         />
         <p className="text-muted-foreground text-xs" role="status" aria-live="polite">
           {t("statisticsScopesSelected", { count: selectedScopes.length })}
         </p>
       </div>
-      <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
-        {canExport && selectedScopes.length > 0 ? (
-          <Button asChild>
-            <a href={href}>
-              <DownloadIcon aria-hidden="true" />
-              {t("exportStatistics")}
-            </a>
-          </Button>
-        ) : (
-          <Button asChild variant="outline">
-            <Link href="/logistics/stats">
-              <ExternalLinkIcon aria-hidden="true" />
-              {t("openStatisticsWorkspace")}
-            </Link>
-          </Button>
-        )}
-      </div>
-    </SectionCard>
+    </SidePanelEditor>
   );
 }
