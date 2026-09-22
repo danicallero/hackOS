@@ -18,7 +18,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Surface } from "@/components/ui/surface";
 import { Tabs, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
@@ -315,34 +314,32 @@ export default function QueueRoomsPage() {
       </Tabs>
 
       {tab === "rooms" && (
-        <Surface padding="none" className="overflow-hidden">
-          <div className="flex flex-wrap items-center justify-end gap-2 border-b p-4">
-            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-              <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
-                <SearchIcon
-                  className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
-                  aria-hidden="true"
-                />
-                <Input
-                  type="search"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={t("filterRoomsPlaceholder")}
-                  aria-label={t("filterRooms")}
-                  className="pl-9"
-                />
-              </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-40" aria-label={t("statusColumn")}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t("allRoomStatuses")}</SelectItem>
-                  <SelectItem value="active">{t("roomStatusActive")}</SelectItem>
-                  <SelectItem value="paused">{t("roomStatusPaused")}</SelectItem>
-                </SelectContent>
-              </Select>
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="relative w-full max-w-md">
+              <SearchIcon
+                className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+                aria-hidden="true"
+              />
+              <Input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t("filterRoomsPlaceholder")}
+                aria-label={t("filterRooms")}
+                className="pl-9"
+              />
             </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-40" aria-label={t("statusColumn")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("allRoomStatuses")}</SelectItem>
+                <SelectItem value="active">{t("roomStatusActive")}</SelectItem>
+                <SelectItem value="paused">{t("roomStatusPaused")}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <RoomsTable
@@ -361,7 +358,7 @@ export default function QueueRoomsPage() {
             onSave={saveInlineRoom}
             onOpenEdit={openEditPanel}
           />
-        </Surface>
+        </div>
       )}
 
       {tab === "window" && <JudgingWindowTab />}
