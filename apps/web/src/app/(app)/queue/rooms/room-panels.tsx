@@ -3,15 +3,9 @@
 // Queue admin surface for rooms and assignments (H46).
 
 import { useEffect, useState } from "react";
+import { EntityCombobox } from "@/components/common/entity-combobox";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import type { RoomAssignments } from "@/lib/queue";
@@ -31,6 +25,7 @@ export function AssignmentsEditor({
   roomId,
   assignments,
   enterprises,
+  inDialog = false,
   onSetEnterprise,
   onClearEnterprise,
 }: {
@@ -39,6 +34,7 @@ export function AssignmentsEditor({
   enterprises: EnterpriseSummary[];
   onSetEnterprise: (enterpriseId: number) => Promise<void>;
   onClearEnterprise: () => Promise<void>;
+  inDialog?: boolean;
 }) {
   const { t } = useLocale();
   const assigned = assignments?.enterprise ?? null;
@@ -46,22 +42,20 @@ export function AssignmentsEditor({
 
   const [enterpriseId, setEnterpriseId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const assignedEnterpriseId = assignments?.enterprise?.enterprise_id ?? 0;
 
   useEffect(() => {
-    const next = assignments?.enterprise?.enterprise_id ?? enterprises[0]?.id ?? 0;
     // Auto-derive the selected enterprise from async-loaded assignments data.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setEnterpriseId(next ? String(next) : "");
-  }, [assignments?.enterprise, enterprises]);
+    setEnterpriseId(assignedEnterpriseId ? String(assignedEnterpriseId) : "");
+  }, [assignedEnterpriseId]);
 
   const canPickEnterprise = enterprises.length > 0;
 
   return (
     <div className="space-y-5">
       <div className="space-y-2">
-        <Label htmlFor={canPickEnterprise ? `room-enterprise-${roomId}` : undefined}>
-          {t("roomEnterpriseLabel")}
-        </Label>
+        <Label id={`room-enterprise-label-${roomId}`}>{t("roomEnterpriseLabel")}</Label>
         {assigned ? (
           <p className="text-sm font-medium">{assigned.enterprise_name}</p>
         ) : (
@@ -70,21 +64,21 @@ export function AssignmentsEditor({
         <div className="flex flex-col gap-2 sm:flex-row">
           {canPickEnterprise && (
             <>
-              <Select value={enterpriseId || undefined} onValueChange={setEnterpriseId}>
-                <SelectTrigger
-                  id={`room-enterprise-${roomId}`}
-                  className="w-full min-w-0 sm:flex-1"
-                >
-                  <SelectValue placeholder={t("selectRoomEnterprisePlaceholder")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {enterprises.map((enterprise) => (
-                    <SelectItem key={enterprise.id} value={String(enterprise.id)}>
-                      {enterprise.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <EntityCombobox
+                id={`room-enterprise-${roomId}`}
+                options={enterprises}
+                value={enterpriseId}
+                onChange={setEnterpriseId}
+                getId={(enterprise) => enterprise.id}
+                getLabel={(enterprise) => enterprise.name}
+                placeholder={t("selectRoomEnterprisePlaceholder")}
+                searchPlaceholder={t("searchEnterprisesPlaceholder")}
+                emptyText={t("noMatchingResultsPeriod")}
+                aria-labelledby={`room-enterprise-label-${roomId}`}
+                inDialog={inDialog}
+                disabled={busy !== null}
+                className="w-full min-w-0 sm:flex-1"
+              />
               <Button
                 className="shrink-0"
                 disabled={busy !== null || !enterpriseId}

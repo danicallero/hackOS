@@ -1,24 +1,16 @@
 "use client";
 
-// Queue admin surface for rooms and assignments (H46).
+// Queue admin surface for rooms and assignments (H29, H46).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import { Building2Icon, PlusIcon } from "lucide-react";
+import { PlusIcon, SearchIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
-import { AlertModal } from "@/components/common/alert-modal";
-import { ContextualError } from "@/components/common/contextual-error";
-import { type Column, DataTable } from "@/components/common/data-table";
-import { EmptyState } from "@/components/common/empty-state";
-import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
-import { SectionCard } from "@/components/common/section-card";
-import { StatusBadge } from "@/components/common/status-badge";
 import { TabBar } from "@/components/common/tab-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -26,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Surface } from "@/components/ui/surface";
 import { Tabs, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError } from "@/lib/api";
@@ -33,7 +26,6 @@ import { useLocale } from "@/lib/i18n";
 import {
   assignRoomEnterprise,
   createRoom,
-  deleteRoom,
   getRoomAssignments,
   listEnterprises,
   listRooms,
@@ -47,31 +39,16 @@ import { toast } from "@/lib/toast";
 import type { EnterpriseSummary } from "@/lib/types";
 import { useUrlTab } from "@/lib/url-tab";
 import { JudgingWindowTab } from "./judging-window-tab";
-import { AssignmentsEditor } from "./room-panels";
+import { RoomFormPanel, type RoomFormValues } from "./room-form-panel";
+import { type RoomPatch, RoomsTable } from "./rooms-table";
 
 const JUDGING_SETTINGS_TABS = ["rooms", "window"] as const;
 type JudgingSettingsTab = (typeof JUDGING_SETTINGS_TABS)[number];
 
-type RoomEditor = {
-  name: string;
-  slug: string;
-  location: string;
-};
-
-function emptyRoomEditor(): RoomEditor {
-  return { name: "", slug: "", location: "" };
-}
-
 export default function QueueRoomsPage() {
   const { t } = useLocale();
   const { can } = useSessionContext();
-  // Admin-only (H46): a sponsor rep manages their queue group's challenges
-  // and judges from the enterprise workspace, but never which rooms serve
-  // it or a room's own settings.
   const canAdmin = can(CAPABILITIES.QUEUE_ADMIN);
-  // Rooms and the judging window share one QUEUE_ADMIN-gated "Judging
-  // settings" surface (H39, H46) — merged the same way meals/activities and
-  // accreditation/presence share one station page.
   const { tab, setTab } = useUrlTab<JudgingSettingsTab>({
     values: JUDGING_SETTINGS_TABS,
     defaultValue: "rooms",
@@ -84,11 +61,11 @@ export default function QueueRoomsPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
   const [roomDetailsError, setRoomDetailsError] = useState<string | null>(null);
-  const [modalMode, setModalMode] = useState<"create" | "edit" | null>(null);
-  const [createDraft, setCreateDraft] = useState<RoomEditor>(emptyRoomEditor());
-  const [roomDraft, setRoomDraft] = useState<RoomEditor>(emptyRoomEditor());
-  const [saving, setSaving] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [panelMode, setPanelMode] = useState<"create" | "edit" | null>(null);
+  const [draftOpen, setDraftOpen] = useState(false);
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const selectedRoom = useMemo(
     () => rooms.find((room) => room.id === selectedRoomId) ?? null,
@@ -108,7 +85,6 @@ export default function QueueRoomsPage() {
       hasLoadedRef.current = true;
       setRooms(roomRows);
       setEnterprises(enterpriseRows);
-      setCreateDraft((draft) => (draft.name ? draft : { ...emptyRoomEditor() }));
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) {
         setLoadError(null);
@@ -138,43 +114,22 @@ export default function QueueRoomsPage() {
     [t],
   );
 
-  const openCreateModal = () => {
-    setSelectedRoomId(null);
-    setCreateDraft(emptyRoomEditor());
-    setModalMode("create");
-  };
-
-  const openManageModal = (roomId: number) => {
-    setSelectedRoomId(roomId);
-    setRoomDetailsError(null);
-    setModalMode("edit");
-  };
-
-  const closeModal = () => {
-    setModalMode(null);
-    setSelectedRoomId(null);
-    setRoomDetailsError(null);
-  };
-
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
 
   useEffect(() => {
-    if (!selectedRoomId) return;
+    if (panelMode !== "edit" || selectedRoomId === null) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadRoomDetails(selectedRoomId);
-  }, [loadRoomDetails, selectedRoomId]);
+  }, [loadRoomDetails, panelMode, selectedRoomId]);
 
-  // Soft, in-place refresh instead of a hard reload when another admin
-  // edits rooms/assignments elsewhere — but never while the room editor
-  // modal is open, since `load` recomputing `selectedRoom` would reseed
-  // `roomDraft` (name/slug/location) and discard an in-progress edit.
+  // A live refresh should never reset the editor's in-progress name/location.
   const editingRef = useRef(false);
   useEffect(() => {
-    editingRef.current = modalMode === "edit";
-  }, [modalMode]);
+    editingRef.current = panelMode === "edit";
+  }, [panelMode]);
 
   const liveRefresh = useAutoRefresh("/api/queue/stream", [
     EVENTS.QUEUE_ENTRY_CHANGED,
@@ -189,135 +144,172 @@ export default function QueueRoomsPage() {
     }
     if (editingRef.current) return;
     void load();
-    if (selectedRoomId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      void loadRoomDetails(selectedRoomId);
-    }
-  }, [liveRefresh, load, loadRoomDetails, selectedRoomId]);
+  }, [liveRefresh, load]);
 
-  useEffect(() => {
-    if (!selectedRoom) return;
-    // Sync editable draft form to the currently-selected room; resets any unsaved edits when selection changes.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setRoomDraft({
-      name: selectedRoom.name,
-      slug: selectedRoom.slug,
-      location: selectedRoom.location ?? "",
-    });
-  }, [selectedRoom]);
+  const openCreatePanel = () => {
+    setDraftOpen(false);
+    setSelectedRoomId(null);
+    setRoomDetailsError(null);
+    setPanelMode("create");
+  };
 
-  const roomStatusLabel = (status: string) =>
-    status === "active"
-      ? t("roomStatusActive")
-      : status === "paused"
-        ? t("roomStatusPaused")
-        : status;
+  const openEditPanel = (roomId: number) => {
+    setSelectedRoomId(roomId);
+    setRoomDetailsError(null);
+    setPanelMode("edit");
+  };
 
-  const filteredRooms = useMemo(
-    () => (statusFilter === "all" ? rooms : rooms.filter((room) => room.status === statusFilter)),
-    [rooms, statusFilter],
+  const closePanel = () => {
+    setPanelMode(null);
+    setSelectedRoomId(null);
+    setRoomDetailsError(null);
+  };
+
+  const saveInlineRoom = useCallback(
+    async (room: Room, patch: RoomPatch): Promise<boolean> => {
+      if (patch.name !== undefined && !patch.name.trim()) {
+        toast.error(t("roomNameRequired"));
+        return false;
+      }
+      try {
+        const updated = await updateRoom(room.id, patch);
+        setRooms((current) =>
+          current.map((currentRoom) =>
+            currentRoom.id === room.id ? { ...currentRoom, ...updated } : currentRoom,
+          ),
+        );
+        return true;
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateRoom"));
+        return false;
+      }
+    },
+    [t],
   );
+
+  const createRoomFromDraft = async (name: string, location: string) => {
+    setDraftSaving(true);
+    try {
+      const created = await createRoom({ name, location: location || null }, crypto.randomUUID());
+      toast.success(t("roomCreated"));
+      setDraftOpen(false);
+      await load();
+      setSelectedRoomId(created.id);
+      setPanelMode("edit");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateRoom"));
+    } finally {
+      setDraftSaving(false);
+    }
+  };
+
+  const submitRoomPanel = async (values: RoomFormValues) => {
+    if (panelMode === "create") {
+      const created = await createRoom(
+        { name: values.name, location: values.location || null },
+        crypto.randomUUID(),
+      );
+      let assignmentError: string | null = null;
+      if (values.enterpriseId) {
+        try {
+          await assignRoomEnterprise(created.id, Number(values.enterpriseId), crypto.randomUUID());
+        } catch (err) {
+          assignmentError = err instanceof ApiError ? err.message : t("couldNotAssignEnterprise");
+        }
+      }
+      toast.success(t("roomCreated"));
+      closePanel();
+      await load();
+      if (assignmentError) toast.error(assignmentError);
+      return;
+    }
+
+    if (!selectedRoom) return;
+    const updated = await updateRoom(selectedRoom.id, {
+      name: values.name,
+      location: values.location || null,
+    });
+    setRooms((current) =>
+      current.map((room) => (room.id === selectedRoom.id ? { ...room, ...updated } : room)),
+    );
+    toast.success(t("roomUpdated"));
+    closePanel();
+  };
+
+  const setRoomEnterprise = async (enterpriseId: number) => {
+    if (!selectedRoom) return;
+    await assignRoomEnterprise(selectedRoom.id, enterpriseId, crypto.randomUUID());
+    const enterprise = enterprises.find((item) => item.id === enterpriseId);
+    setRooms((current) =>
+      current.map((room) =>
+        room.id === selectedRoom.id
+          ? { ...room, enterprise_id: enterpriseId, enterprise_name: enterprise?.name ?? null }
+          : room,
+      ),
+    );
+    await loadRoomDetails(selectedRoom.id);
+  };
+
+  const clearRoomEnterprise = async () => {
+    if (!selectedRoom) return;
+    await removeRoomEnterprise(selectedRoom.id);
+    setRooms((current) =>
+      current.map((room) =>
+        room.id === selectedRoom.id
+          ? { ...room, enterprise_id: null, enterprise_name: null }
+          : room,
+      ),
+    );
+    await loadRoomDetails(selectedRoom.id);
+  };
+
+  const filteredRooms = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return rooms.filter((room) => {
+      const matchesStatus = statusFilter === "all" || room.status === statusFilter;
+      const matchesQuery =
+        !normalizedQuery ||
+        `${room.name} ${room.location ?? ""} ${room.enterprise_name ?? ""} ${room.id}`
+          .toLowerCase()
+          .includes(normalizedQuery);
+      return matchesStatus && matchesQuery;
+    });
+  }, [query, rooms, statusFilter]);
+
   const activeCount = useMemo(
     () => rooms.filter((room) => room.status === "active").length,
     [rooms],
   );
+  const hasFilters = Boolean(query.trim()) || statusFilter !== "all";
+  const emptyAction = hasFilters ? (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => {
+        setQuery("");
+        setStatusFilter("all");
+      }}
+    >
+      {t("clearFilters")}
+    </Button>
+  ) : (
+    <div className="flex flex-wrap justify-center gap-2">
+      <Button variant="outline" size="sm" onClick={() => setDraftOpen(true)}>
+        <PlusIcon className="size-4" aria-hidden="true" />
+        {t("addRoomHere")}
+      </Button>
+      <Button size="sm" onClick={openCreatePanel}>
+        <PlusIcon className="size-4" aria-hidden="true" />
+        {t("createRoom")}
+      </Button>
+    </div>
+  );
 
-  const roomColumns: Column<Room>[] = [
-    {
-      id: "room",
-      header: t("columnRoom"),
-      sortValue: (room) => room.name.toLowerCase(),
-      cell: (room) => (
-        <div>
-          <p className="font-medium">{room.name}</p>
-          <p className="text-muted-foreground text-sm">{room.slug}</p>
-        </div>
-      ),
-    },
-    {
-      id: "location",
-      header: t("locationLabel"),
-      sortValue: (room) => (room.location ?? "").toLowerCase(),
-      cell: (room) =>
-        room.location ? (
-          <span>{room.location}</span>
-        ) : (
-          <span className="text-muted-foreground">{t("noLocationSet")}</span>
-        ),
-    },
-    {
-      id: "status",
-      header: t("statusColumn"),
-      sortValue: (room) => room.status,
-      cell: (room) => (
-        <StatusBadge tone={room.status === "active" ? "success" : "warning"}>
-          {roomStatusLabel(room.status)}
-        </StatusBadge>
-      ),
-    },
-  ];
-
-  if (!canAdmin) {
-    return <AccessDenied ask={t("roomAdminDeniedDesc")} />;
-  }
-
-  const saveCreate = async () => {
-    if (!createDraft.name.trim() || !createDraft.slug.trim()) {
-      toast.error(t("provideNameAndSlug"));
-      return;
-    }
-    setSaving("create");
-    try {
-      await createRoom(
-        {
-          name: createDraft.name.trim(),
-          slug: createDraft.slug.trim(),
-          location: createDraft.location.trim() || null,
-        },
-        crypto.randomUUID(),
-      );
-      toast.success(t("roomCreated"));
-      setCreateDraft(emptyRoomEditor());
-      closeModal();
-      await load();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotCreateRoom"));
-    } finally {
-      setSaving(null);
-    }
-  };
-
-  const saveSelectedRoom = async () => {
-    if (!selectedRoom) return;
-    setSaving(`room-${selectedRoom.id}`);
-    try {
-      await updateRoom(selectedRoom.id, {
-        name: roomDraft.name.trim(),
-        slug: roomDraft.slug.trim(),
-        location: roomDraft.location.trim() || null,
-      });
-      toast.success(t("roomUpdated"));
-      await load();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateRoom"));
-    } finally {
-      setSaving(null);
-    }
-  };
+  if (!canAdmin) return <AccessDenied ask={t("roomAdminDeniedDesc")} />;
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={t("judgingSettingsTitle")}
-        primaryAction={
-          tab === "rooms" ? (
-            <Button onClick={openCreateModal}>
-              <PlusIcon className="size-4" />
-              {t("createRoom")}
-            </Button>
-          ) : undefined
-        }
-      />
+    <div className="space-y-6" data-wide>
+      <PageHeader title={t("judgingSettingsTitle")} />
 
       <Tabs value={tab} onValueChange={(value) => setTab(value)}>
         <TabBar aria-label={t("judgingSettingsTitle")} className="w-full justify-start">
@@ -327,216 +319,93 @@ export default function QueueRoomsPage() {
       </Tabs>
 
       {tab === "rooms" && (
-        <SectionCard
-          title={t("roomQueues")}
-          description={
-            !loading && !loadError && rooms.length > 0
-              ? t("roomsSummary", { active: activeCount, total: rooms.length })
-              : undefined
-          }
-          icon={Building2Icon}
-          bodyClassName="space-y-4"
-        >
-          {!loading && !loadError && rooms.length === 0 ? (
-            <EmptyState
-              icon={Building2Icon}
-              title={t("noRoomsConfigured")}
-              description={t("noRoomsConfiguredDesc")}
-            />
-          ) : (
-            <DataTable
-              columns={roomColumns}
-              data={filteredRooms}
-              getRowId={(room) => String(room.id)}
-              onRowClick={(room) => openManageModal(room.id)}
-              getRowLabel={(room) => room.name}
-              loading={loading && !hasLoadedRef.current}
-              error={loadError ? { message: loadError, onRetry: load } : undefined}
-              searchable={(room) => `${room.name} ${room.slug} ${room.location ?? ""}`}
-              searchPlaceholder={t("filterRoomsPlaceholder")}
-              searchLabel={t("filterRooms")}
-              pageSize={10}
-              toolbar={
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t("allRoomStatuses")}</SelectItem>
-                    <SelectItem value="active">{t("roomStatusActive")}</SelectItem>
-                    <SelectItem value="paused">{t("roomStatusPaused")}</SelectItem>
-                  </SelectContent>
-                </Select>
-              }
-              filteredEmpty={{
-                active: statusFilter !== "all",
-                onClear: () => setStatusFilter("all"),
-                title: t("noMatchingRooms"),
-              }}
-              empty={{
-                icon: Building2Icon,
-                title: t("noRoomsConfigured"),
-                description: t("noRoomsConfiguredDesc"),
-              }}
-            />
-          )}
-        </SectionCard>
+        <Surface padding="none" className="overflow-hidden">
+          <div className="flex flex-wrap items-center gap-4 border-b p-4">
+            <div className="min-w-0">
+              <h2 className="type-section-title text-balance">{t("roomQueues")}</h2>
+              {!loading && !loadError && rooms.length > 0 && (
+                <p className="type-meta tabular-nums">
+                  {t("roomsSummary", { active: activeCount, total: rooms.length })}
+                </p>
+              )}
+            </div>
+            <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
+              <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
+                <SearchIcon
+                  className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+                  aria-hidden="true"
+                />
+                <Input
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={t("filterRoomsPlaceholder")}
+                  aria-label={t("filterRooms")}
+                  className="pl-9"
+                />
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-40" aria-label={t("statusColumn")}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("allRoomStatuses")}</SelectItem>
+                  <SelectItem value="active">{t("roomStatusActive")}</SelectItem>
+                  <SelectItem value="paused">{t("roomStatusPaused")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <RoomsTable
+            rooms={filteredRooms}
+            loading={loading && !hasLoadedRef.current}
+            error={loadError}
+            onRetry={() => void load()}
+            emptyTitle={hasFilters ? t("noMatchingRooms") : t("noRoomsConfigured")}
+            emptyDescription={hasFilters ? undefined : t("noRoomsConfiguredDesc")}
+            emptyAction={emptyAction}
+            draftOpen={draftOpen}
+            draftSaving={draftSaving}
+            onDraftOpen={() => setDraftOpen(true)}
+            onDraftCancel={() => setDraftOpen(false)}
+            onDraftCreate={(name, location) => void createRoomFromDraft(name, location)}
+            onSave={saveInlineRoom}
+            onOpenEdit={openEditPanel}
+          />
+        </Surface>
       )}
 
       {tab === "window" && <JudgingWindowTab />}
 
-      <Modal
-        open={modalMode !== null}
-        onOpenChange={(open) => {
-          if (!open) closeModal();
-        }}
-        title={modalMode === "create" ? t("createRoom") : (selectedRoom?.name ?? t("roomFallback"))}
-        description={modalMode === "create" ? undefined : (selectedRoom?.slug ?? undefined)}
-        size="xl"
-        footer={
-          modalMode === "create" ? (
-            <>
-              <Button variant="outline" onClick={closeModal}>
-                {t("cancel")}
-              </Button>
-              <Button disabled={saving === "create"} onClick={() => void saveCreate()}>
-                {t("createRoom")}
-              </Button>
-            </>
-          ) : (
-            <div className="flex w-full flex-wrap items-center justify-between gap-2">
-              <AlertModal
-                title={t("deleteRoomConfirmTitle")}
-                description={t("deleteRoomConfirmDesc")}
-                cancelLabel={t("cancel")}
-                confirmLabel={t("deleteRoom")}
-                destructive
-                pending={saving === `room-${selectedRoom?.id}`}
-                trigger={
-                  <Button variant="destructive" disabled={saving === `room-${selectedRoom?.id}`}>
-                    {t("deleteRoom")}
-                  </Button>
-                }
-                onConfirm={async () => {
-                  if (!selectedRoom) return;
-                  setSaving(`room-${selectedRoom.id}`);
-                  try {
-                    await deleteRoom(selectedRoom.id);
-                    toast.success(t("roomDeleted"));
-                    closeModal();
-                    await load();
-                  } catch (err) {
-                    toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteRoom"));
-                  } finally {
-                    setSaving(null);
-                  }
-                }}
-              />
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  disabled={saving === `room-${selectedRoom?.id}`}
-                  onClick={closeModal}
-                >
-                  {t("cancel")}
-                </Button>
-                <Button
-                  disabled={saving === `room-${selectedRoom?.id}`}
-                  onClick={() => void saveSelectedRoom()}
-                >
-                  {t("saveRoom")}
-                </Button>
-              </div>
-            </div>
-          )
-        }
-      >
-        {modalMode === "create" && (
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="room-create-name">{t("name")}</Label>
-              <Input
-                id="room-create-name"
-                value={createDraft.name}
-                onChange={(e) => setCreateDraft((d) => ({ ...d, name: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="room-create-slug">{t("slugLabel")}</Label>
-              <Input
-                id="room-create-slug"
-                value={createDraft.slug}
-                onChange={(e) => setCreateDraft((d) => ({ ...d, slug: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-2 lg:col-span-2">
-              <Label htmlFor="room-create-location">{t("locationLabel")}</Label>
-              <Input
-                id="room-create-location"
-                value={createDraft.location}
-                onChange={(e) => setCreateDraft((d) => ({ ...d, location: e.target.value }))}
-              />
-            </div>
-          </div>
-        )}
-        {modalMode === "edit" && selectedRoom && (
-          <div className="space-y-5">
-            {roomDetailsError && (
-              <ContextualError
-                message={roomDetailsError}
-                onRetry={() => void loadRoomDetails(selectedRoom.id)}
-              />
-            )}
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor={`room-${selectedRoom.id}-name`}>{t("name")}</Label>
-                <Input
-                  id={`room-${selectedRoom.id}-name`}
-                  value={roomDraft.name}
-                  onChange={(e) =>
-                    setRoomDraft((current) => ({ ...current, name: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor={`room-${selectedRoom.id}-slug`}>{t("slugLabel")}</Label>
-                <Input
-                  id={`room-${selectedRoom.id}-slug`}
-                  value={roomDraft.slug}
-                  onChange={(e) =>
-                    setRoomDraft((current) => ({ ...current, slug: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-2 lg:col-span-2">
-                <Label htmlFor={`room-${selectedRoom.id}-location`}>{t("locationLabel")}</Label>
-                <Input
-                  id={`room-${selectedRoom.id}-location`}
-                  value={roomDraft.location}
-                  onChange={(e) =>
-                    setRoomDraft((current) => ({ ...current, location: e.target.value }))
-                  }
-                />
-              </div>
-            </div>
-            <SectionCard title={t("assignments")}>
-              <AssignmentsEditor
-                roomId={selectedRoom.id}
-                assignments={selectedRoomAssignments}
-                enterprises={enterprises}
-                onSetEnterprise={async (enterpriseId) => {
-                  await assignRoomEnterprise(selectedRoom.id, enterpriseId, crypto.randomUUID());
-                  await loadRoomDetails(selectedRoom.id);
-                }}
-                onClearEnterprise={async () => {
-                  await removeRoomEnterprise(selectedRoom.id);
-                  await loadRoomDetails(selectedRoom.id);
-                }}
-              />
-            </SectionCard>
-          </div>
-        )}
-      </Modal>
+      {tab === "rooms" && (
+        <div className="pointer-events-none sticky bottom-6 z-20 flex h-0 items-end justify-end">
+          <Button className="pointer-events-auto shadow-floating" onClick={openCreatePanel}>
+            <PlusIcon className="size-4" aria-hidden="true" />
+            {t("createRoom")}
+          </Button>
+        </div>
+      )}
+
+      {panelMode && (
+        <RoomFormPanel
+          open
+          mode={panelMode}
+          room={selectedRoom}
+          assignments={selectedRoomAssignments}
+          enterprises={enterprises}
+          detailsError={roomDetailsError}
+          onRetryDetails={() => {
+            if (selectedRoom) void loadRoomDetails(selectedRoom.id);
+          }}
+          onOpenChange={(open) => {
+            if (!open) closePanel();
+          }}
+          onSubmit={submitRoomPanel}
+          onSetEnterprise={setRoomEnterprise}
+          onClearEnterprise={clearRoomEnterprise}
+        />
+      )}
     </div>
   );
 }

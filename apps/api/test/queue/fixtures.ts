@@ -76,8 +76,8 @@ export async function createRoom(
 ): Promise<number> {
   const name = overrides.name ?? `Room ${crypto.randomUUID().slice(0, 8)}`;
   const { rows } = await pool.query(
-    `INSERT INTO rooms (name, slug, status) VALUES ($1, $2, $3) RETURNING id`,
-    [name, `room-${crypto.randomUUID()}`, overrides.status ?? "active"],
+    `INSERT INTO rooms (name, status) VALUES ($1, $2) RETURNING id`,
+    [name, overrides.status ?? "active"],
   );
   const roomId = rows[0].id;
   await pool.query(
