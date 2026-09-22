@@ -318,7 +318,6 @@ export function ApplicationExportPanel({ trigger }: { trigger?: ReactNode }) {
       onOpenChange={onOpenChange}
       trigger={trigger ?? defaultTrigger}
       title={t("applicationExportTitle")}
-      description={t("applicationExportDescription")}
       icon={DownloadIcon}
       className="sm:max-w-2xl"
       footer={
@@ -332,7 +331,7 @@ export function ApplicationExportPanel({ trigger }: { trigger?: ReactNode }) {
             disabled={catalogLoading || !catalog}
           >
             <DownloadIcon aria-hidden="true" />
-            {t("applicationExportDownload")}
+            {t("export")}
           </SubmitButton>
         </>
       }

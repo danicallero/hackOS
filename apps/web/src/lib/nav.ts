@@ -6,7 +6,6 @@ import {
   CalendarDaysIcon,
   ChartColumnIcon,
   ClipboardListIcon,
-  DownloadIcon,
   FileTextIcon,
   FolderGitIcon,
   GavelIcon,
@@ -388,16 +387,6 @@ export const WORKSPACES: Workspace[] = [
     label: "workspaceAccessAudit",
     icon: ShieldCheckIcon,
     items: [
-      {
-        title: "exportsAndPrivacy",
-        href: "/exports",
-        icon: DownloadIcon,
-        anyCapability: [
-          CAPABILITIES.EXPORTS_RUN,
-          CAPABILITIES.LOGISTICS_STATS,
-          CAPABILITIES.JUDGING_EXPORT,
-        ],
-      },
       {
         title: "users",
         href: "/users",

@@ -1,11 +1,10 @@
 "use client";
 
-import { DownloadIcon, ExternalLinkIcon, GavelIcon, RefreshCwIcon } from "lucide-react";
-import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { DownloadIcon, GavelIcon, RefreshCwIcon } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { type Challenge, textForDisplay } from "@/app/(app)/challenges/shared";
 import { EntityCombobox } from "@/components/common/entity-combobox";
-import { SectionCard } from "@/components/common/section-card";
+import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ApiError, api } from "@/lib/api";
@@ -16,7 +15,7 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.message : fallback;
 }
 
-export function JudgingExportPanel() {
+export function JudgingExportPanel({ trigger }: { trigger?: ReactNode }) {
   const { t } = useLocale();
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [selectedChallenge, setSelectedChallenge] = useState("");
@@ -45,17 +44,24 @@ export function JudgingExportPanel() {
   const challengeId = Number(selectedChallenge);
 
   return (
-    <SectionCard
+    <SidePanelEditor
+      trigger={
+        trigger ?? (
+          <Button variant="outline">
+            <GavelIcon aria-hidden="true" />
+            {t("export")}
+          </Button>
+        )
+      }
       title={t("judgingExportTitle")}
-      description={t("judgingExportDesc")}
       icon={GavelIcon}
-      action={
+    >
+      <div className="flex justify-end">
         <Button variant="ghost" size="sm" onClick={() => void load()} disabled={loading}>
           <RefreshCwIcon aria-hidden="true" />
           {t("refresh")}
         </Button>
-      }
-    >
+      </div>
       {error && (
         <Alert variant="destructive">
           <AlertTitle>{t("judgingExportLoadFailed")}</AlertTitle>
@@ -79,30 +85,30 @@ export function JudgingExportPanel() {
           emptyText={t("noChallengesToExport")}
         />
       </div>
-      <div className="flex flex-wrap gap-2 border-t border-border pt-4">
+      <div className="space-y-3 border-t border-border pt-4">
         {challengeId > 0 && (
           <>
-            <Button asChild variant="outline">
-              <a href={`${API_URL}/api/queue/challenges/${challengeId}/export/queue.csv`}>
-                <DownloadIcon aria-hidden="true" />
-                {t("exportQueueCsv")}
-              </a>
-            </Button>
-            <Button asChild variant="outline">
-              <a href={`${API_URL}/api/queue/challenges/${challengeId}/export/evaluations.csv`}>
-                <DownloadIcon aria-hidden="true" />
-                {t("exportEvaluationsCsv")}
-              </a>
-            </Button>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium">{t("judgingQueue")}</span>
+              <Button asChild variant="outline" size="sm">
+                <a href={`${API_URL}/api/queue/challenges/${challengeId}/export/queue.csv`}>
+                  <DownloadIcon aria-hidden="true" />
+                  {t("export")}
+                </a>
+              </Button>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium">{t("judgingEvaluations")}</span>
+              <Button asChild variant="outline" size="sm">
+                <a href={`${API_URL}/api/queue/challenges/${challengeId}/export/evaluations.csv`}>
+                  <DownloadIcon aria-hidden="true" />
+                  {t("export")}
+                </a>
+              </Button>
+            </div>
           </>
         )}
-        <Button asChild variant="ghost">
-          <Link href="/queue/reviews">
-            <ExternalLinkIcon aria-hidden="true" />
-            {t("openReviewsExport")}
-          </Link>
-        </Button>
       </div>
-    </SectionCard>
+    </SidePanelEditor>
   );
 }
