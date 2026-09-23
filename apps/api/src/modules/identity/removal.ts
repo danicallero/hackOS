@@ -1010,6 +1010,15 @@ function ageFromDate(value: unknown, asOf: Date): number | null {
   return age >= 0 && age <= 150 ? age : null;
 }
 
+/** A birth year intentionally has no day/month precision. Age therefore uses
+ * the event year, matching the aggregate application-statistics transform. */
+function ageFromBirthYear(value: unknown, asOf: Date): number | null {
+  const year = numericValue(value);
+  if (year == null) return null;
+  const age = asOf.getUTCFullYear() - year;
+  return age >= 0 && age <= 150 ? age : null;
+}
+
 async function applicationUniversityValue(
   client: pg.PoolClient,
   value: unknown,
@@ -1067,6 +1076,10 @@ async function sanitizeAnonymousAuditValue(
 
   if (field.kind === "date" && dimension === "age") {
     return ageFromDate(value, asOf);
+  }
+
+  if (field.kind === "birth_year" && dimension === "age") {
+    return ageFromBirthYear(value, asOf);
   }
 
   if (typeof value === "number") {

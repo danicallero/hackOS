@@ -455,3 +455,63 @@ viewport anchor instead of leaving the user several cards below it after the
 layout contracts. Expanded cards expose a sticky, explicitly labelled collapse
 action; opening remains a native button interaction, and drag/reorder controls
 remain independently keyboard accessible.
+
+### Follow-up: field creation and visual hierarchy (H11, user-requested)
+
+The builder mixed the language of questions and fields, and every newly
+created item started as generic short text. It also treated its main creation
+action like a supporting control and buried “required” among destructive and
+duplicate actions.
+
+- The section now reads **Form fields**. Every entry point opens one **Add
+  field** menu, where the author chooses the answer format before creating it.
+  It works at the form level and inside a section, and choice fields start
+  with their first option ready to edit.
+- The main creation control is primary; Preview and Add section remain
+  supporting actions. The same interaction is available in the empty state
+  and at the end of the form, so a long form never requires returning to the
+  header to add another field.
+- An active field groups its visible label, answer type and required state in
+  one labelled row. Duplicate, deletion, translations and technical settings
+  remain available without competing with those core choices.
+- Section and validation containers use the shared border-only surface rhythm
+  rather than primary-accent rails, tinted nested cards or dashed boxes, which
+  keeps the editor quieter and makes the active field the clear focus.
+
+### Configuration-flow layout audit (H11, user-requested)
+
+Scope: create-form page, form settings, fields/sections builder, and preview.
+The audit applies the surface hierarchy in `docs/DESIGN.md`: a page-level
+section may frame a task, but controls and subordinate groups use spacing and
+dividers rather than recursively becoming cards.
+
+| Finding | Locations | Resolution |
+| --- | --- | --- |
+| Settings groups were cards inside the form-settings card, then logistics switches became cards inside those cards. | `new/page.tsx`, `metadata-card.tsx` | Settings groups are now divider-led disclosures; logistics is a simple labelled row. |
+| A section was a tinted, accented card containing individually-carded fields. | `questions-card.tsx` | A section is now a heading/editor followed by a divider and field surfaces; only a field remains a bounded, movable record. |
+| Translations, advanced settings, file restrictions and response validation all introduced another framed box inside one field. | `questions-card.tsx` | They use a single top divider and progressive disclosure, with no nested surface styling. |
+| Active-field chrome created another elevated card inside the field itself. | `questions-card.tsx` | The sticky editing header is now a quiet divider on the existing field surface, without radius, border frame or shadow. |
+| Exact birth-date input stored more personal data than the age reporting need. | API schema, applicant control, statistics transform | New forms offer **Birth year** instead of a date field. It stores a bounded whole-number year, computes age from the event year, and still reads historical full-date responses. |
+
+### Follow-up: basic authoring mode (H11, user-requested)
+
+The audit showed that reducing border treatment alone did not remove the
+underlying complexity: an author still met logistics, access, retention,
+statistics, translations and file policy while trying to make a basic form.
+
+- Creating a form now asks only for its name and opening window. Capacity,
+  confirmation window, logistics and role grants remain available after
+  creation under one closed **Advanced form options** disclosure.
+- A field opens with only its label, answer type and required state. Its
+  translations, stable key, validation, retention, statistics and file policy
+  now live behind one closed **Advanced** disclosure.
+- Existing form configuration and templates remain unchanged; this is a
+  progressive-disclosure change, not a loss of administrative capability.
+
+### Captured states
+
+![Empty form builder](./images/form-builder-empty.png)
+
+![Field-type selection](./images/form-builder-field-menu.png)
+
+![Birth-year field configuration](./images/form-builder-birth-year.png)

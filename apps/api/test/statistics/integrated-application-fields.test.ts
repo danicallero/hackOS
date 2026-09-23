@@ -35,6 +35,55 @@ afterAll(async () => {
 });
 
 describe("application fields integrated into Logistics", () => {
+  it("derives age from a birth year using the event year", async () => {
+    const viewer = await createUserWithCapabilities([CAPABILITIES.LOGISTICS_STATS]);
+    const applicant = await createUser();
+    await pool.query(
+      `INSERT INTO event_config (id, event_starts_at)
+       VALUES (1, '2030-06-01T09:00:00Z')
+       ON CONFLICT (id) DO UPDATE SET event_starts_at = EXCLUDED.event_starts_at`,
+    );
+    const template = [
+      {
+        key: "birth_year",
+        kind: "birth_year",
+        label: { en: "Birth year", es: "Año de nacimiento", gl: "Ano de nacemento" },
+        statistics: { enabled: true, visualization: "bar", transformation: "age" },
+      },
+    ];
+    const application = await pool.query<{ id: number }>(
+      `INSERT INTO applications (name, template)
+       VALUES ('Participants', $1::jsonb) RETURNING id`,
+      [JSON.stringify(template)],
+    );
+    const applicationId = application.rows[0]?.id;
+    if (!applicationId) throw new Error("Application fixture was not created");
+    const formVersionId = await ensureApplicationFormVersion(applicationId);
+    await pool.query(
+      `INSERT INTO application_responses
+         (user_id, application_id, application_form_version_id, status, responses, submitted_at)
+       VALUES ($1, $2, $3, 'review', '{"birth_year":2000}'::jsonb, now())`,
+      [applicant, applicationId, formVersionId],
+    );
+
+    const query = await app.inject({
+      method: "POST",
+      url: "/api/statistics/query",
+      headers: asUser(viewer),
+      payload: { scopes: [`application:${applicationId}`] },
+    });
+
+    expect(query.statusCode).toBe(200);
+    expect(query.json().field_distributions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          field: expect.objectContaining({ key: "birth_year" }),
+          buckets: [{ value: "30", n: 1 }],
+        }),
+      ]),
+    );
+  });
+
   it("resolves application and role scope ACLs with one bounded set query", async () => {
     const reader = await createUser();
     const readerRole = await createRole();

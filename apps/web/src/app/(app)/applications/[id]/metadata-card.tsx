@@ -12,7 +12,6 @@ import {
   ShieldCheckIcon,
   Trash2Icon,
   TriangleAlertIcon,
-  UsersIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -75,15 +74,11 @@ function SettingsGroup({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <Collapsible
-      open={open}
-      onOpenChange={setOpen}
-      className={cn("rounded-xl border bg-muted/20", className)}
-    >
+    <Collapsible open={open} onOpenChange={setOpen} className={cn("border-t", className)}>
       <CollapsibleTrigger asChild>
         <button
           type="button"
-          className="flex min-h-14 w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          className="flex min-h-14 w-full items-center gap-3 px-1 py-3 text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
         >
           <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-background text-muted-foreground shadow-xs">
             <Icon aria-hidden="true" className="size-4" />
@@ -98,9 +93,7 @@ function SettingsGroup({
           />
         </button>
       </CollapsibleTrigger>
-      <CollapsibleContent className="border-border border-t px-4 py-4">
-        {children}
-      </CollapsibleContent>
+      <CollapsibleContent className="pb-5">{children}</CollapsibleContent>
     </Collapsible>
   );
 }
@@ -333,79 +326,82 @@ export function MetadataCard({
             </SettingsGroup>
 
             <SettingsGroup
-              icon={UsersIcon}
-              title={t("builderLogistics")}
-              defaultOpen={form.ask_shirt_size || form.ask_food_intolerances}
-            >
-              <div className="space-y-3">
-                <FormField
-                  control={rhf.control}
-                  name="ask_shirt_size"
-                  render={({ field }) => (
-                    <FormItem className="flex items-center justify-between gap-4 rounded-lg border bg-background/70 p-3">
-                      <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <FormLabel className="font-normal">{t("askShirtSizeLabel")}</FormLabel>
-                        {field.value && (
-                          <StatusBadge tone="neutral" dot={false}>
-                            {t("requiredAtSubmitBadge")}
-                          </StatusBadge>
-                        )}
-                      </div>
-                      <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={rhf.control}
-                  name="ask_food_intolerances"
-                  render={({ field }) => (
-                    <FormItem className="flex items-center justify-between gap-4 rounded-lg border bg-background/70 p-3">
-                      <FormLabel className="font-normal">{t("askFoodIntolerancesLabel")}</FormLabel>
-                      <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </SettingsGroup>
-
-            <SettingsGroup
               icon={ShieldCheckIcon}
-              title={t("builderAccess")}
-              defaultOpen={form.has_confirmed_responses || form.grants_role_ids.length > 0}
+              title={t("advancedFormOptions")}
+              className="lg:col-span-2"
             >
-              <FormField
-                control={rhf.control}
-                name="grants_role_ids"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("grantsRolesLabel")}</FormLabel>
-                    <FormControl>
-                      <MultiSelect
-                        options={roles.map((role) => ({
-                          value: String(role.id),
-                          label: role.name,
-                        }))}
-                        value={field.value}
-                        onChange={field.onChange}
-                        placeholder={t("grantsRolesPlaceholder")}
-                        searchPlaceholder={t("searchRolesPlaceholder")}
-                        emptyText={t("noRolesYet")}
-                      />
-                    </FormControl>
-                    {form.has_confirmed_responses && (
-                      <Alert>
-                        <InfoIcon aria-hidden="true" />
-                        <AlertDescription>{t("grantsRolesNotRetroactiveNotice")}</AlertDescription>
-                      </Alert>
+              <div className="grid gap-6 lg:grid-cols-2">
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium">{t("builderLogistics")}</h3>
+                  <FormField
+                    control={rhf.control}
+                    name="ask_shirt_size"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between gap-4">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <FormLabel className="font-normal">{t("askShirtSizeLabel")}</FormLabel>
+                          {field.value && (
+                            <StatusBadge tone="neutral" dot={false}>
+                              {t("requiredAtSubmitBadge")}
+                            </StatusBadge>
+                          )}
+                        </div>
+                        <FormControl>
+                          <Switch checked={field.value} onCheckedChange={field.onChange} />
+                        </FormControl>
+                      </FormItem>
                     )}
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                  />
+                  <FormField
+                    control={rhf.control}
+                    name="ask_food_intolerances"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between gap-4">
+                        <FormLabel className="font-normal">
+                          {t("askFoodIntolerancesLabel")}
+                        </FormLabel>
+                        <FormControl>
+                          <Switch checked={field.value} onCheckedChange={field.onChange} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium">{t("builderAccess")}</h3>
+                  <FormField
+                    control={rhf.control}
+                    name="grants_role_ids"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t("grantsRolesLabel")}</FormLabel>
+                        <FormControl>
+                          <MultiSelect
+                            options={roles.map((role) => ({
+                              value: String(role.id),
+                              label: role.name,
+                            }))}
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder={t("grantsRolesPlaceholder")}
+                            searchPlaceholder={t("searchRolesPlaceholder")}
+                            emptyText={t("noRolesYet")}
+                          />
+                        </FormControl>
+                        {form.has_confirmed_responses && (
+                          <Alert>
+                            <InfoIcon aria-hidden="true" />
+                            <AlertDescription>
+                              {t("grantsRolesNotRetroactiveNotice")}
+                            </AlertDescription>
+                          </Alert>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
             </SettingsGroup>
           </div>
         </SectionCard>

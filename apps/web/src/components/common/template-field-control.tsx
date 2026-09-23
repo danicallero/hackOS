@@ -243,6 +243,27 @@ export function TemplateFieldControl({
         />
       );
       break;
+    case "birth_year":
+      control = (
+        <Input
+          id={id}
+          name={field.key}
+          type="number"
+          inputMode="numeric"
+          min={1900}
+          max={new Date().getFullYear()}
+          step={1}
+          placeholder={t("birthYearPlaceholder")}
+          value={typeof value === "number" ? value : ""}
+          onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))}
+          disabled={disabled}
+          aria-labelledby={labelId}
+          aria-describedby={describedBy}
+          aria-invalid={hasError || undefined}
+          aria-required={field.required || undefined}
+        />
+      );
+      break;
     case "number":
       control = (
         <Input

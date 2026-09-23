@@ -1354,6 +1354,13 @@ describe("self-service account removal (H54)", () => {
         anonymous_audit_dimension: "age",
       },
       {
+        key: "birth_year",
+        kind: "birth_year",
+        label: { en: "Birth year" },
+        retention_mode: "anonymous_audit",
+        anonymous_audit_dimension: "age",
+      },
+      {
         key: "gender",
         kind: "select",
         label: { en: "Gender" },
@@ -1405,6 +1412,7 @@ describe("self-service account removal (H54)", () => {
         formVersionId,
         JSON.stringify({
           dob: "2000-01-01",
+          birth_year: 2001,
           gender: "nonbinary",
           degree: "Computer Science",
           graduation_year: 2024,
@@ -1495,6 +1503,12 @@ describe("self-service account removal (H54)", () => {
       [anonymous[0].id],
     );
     expect(anonymousFields).toEqual([
+      {
+        field_key: "birth_year",
+        anonymous_audit_dimension: "age",
+        field_kind: "birth_year",
+        value: new Date().getUTCFullYear() - 2001,
+      },
       {
         field_key: "degree",
         anonymous_audit_dimension: "degree",
