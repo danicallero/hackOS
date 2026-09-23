@@ -3,8 +3,8 @@
 // One control for a single application-template field, shared by the applicant
 // form (my-applications) and staff response editing (applications). Owns the
 // type contracts the API's validateResponses enforces: number for
-// "number"/"university", string for text/file, string[] for multiselect,
-// boolean for checkbox.
+// "number"/"birth_year"/"university", string for text/file, string[] for
+// multiselect, boolean for checkbox.
 
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { FileLink } from "@/components/common/file-link";
@@ -52,6 +52,7 @@ export interface TemplateFieldLike {
 }
 
 const NONE = "__none__";
+const MAXIMUM_BIRTH_AGE = 120;
 
 /** Stable ids let labels, validation messages, and focus recovery share one contract. */
 export function templateFieldId(fieldKey: string, applicationId?: number): string {
@@ -250,7 +251,7 @@ export function TemplateFieldControl({
           name={field.key}
           type="number"
           inputMode="numeric"
-          min={1900}
+          min={new Date().getFullYear() - MAXIMUM_BIRTH_AGE}
           max={new Date().getFullYear()}
           step={1}
           placeholder={t("birthYearPlaceholder")}
