@@ -491,7 +491,7 @@ dividers rather than recursively becoming cards.
 | A section was a tinted, accented card containing individually-carded fields. | `questions-card.tsx` | A section is now a heading/editor followed by a divider and field surfaces; only a field remains a bounded, movable record. |
 | Translations, advanced settings, file restrictions and response validation all introduced another framed box inside one field. | `questions-card.tsx` | They use a single top divider and progressive disclosure, with no nested surface styling. |
 | Active-field chrome created another elevated card inside the field itself. | `questions-card.tsx` | The sticky editing header is now a quiet divider on the existing field surface, without radius, border frame or shadow. |
-| Exact birth-date input stored more personal data than the age reporting need. | API schema, applicant control, statistics transform | New forms offer **Birth year** instead of a date field. It stores a bounded whole-number year, computes age from the event year, and still reads historical full-date responses. |
+| Exact birth-date input stored more personal data than the age reporting need. | API schema, applicant control, statistics transform | New forms offer **Birth year** instead of a date field. It stores a whole-number year for a plausible current age (0–120), computes age from the event year, and still reads historical full-date responses. |
 
 ### Follow-up: basic authoring mode (H11, user-requested)
 
