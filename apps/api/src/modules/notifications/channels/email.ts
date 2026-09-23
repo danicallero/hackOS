@@ -25,6 +25,7 @@ export interface MailConfig {
   fromAddress: string;
   fromName: string;
   smtpHost: string;
+  smtpTlsServername?: string;
   smtpPort: number;
   smtpUser?: string;
   smtpPass?: string;
@@ -38,6 +39,7 @@ export function mailConfigFromEnv(): MailConfig {
     fromAddress: config.MAIL_FROM_ADDRESS,
     fromName: config.MAIL_FROM_NAME,
     smtpHost: config.SMTP_HOST,
+    smtpTlsServername: config.SMTP_TLS_SERVERNAME,
     smtpPort: config.SMTP_PORT,
     smtpUser: config.SMTP_USER,
     smtpPass: config.SMTP_PASS,
