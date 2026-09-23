@@ -145,9 +145,12 @@ S3_SECRET_KEY
 identificadores de configuración. En producción, las contraseñas también viven
 en el fichero único; en staging permanecen en `hackos.secrets`.
 
-Para correo, `MAIL_PROVIDER=smtp` requiere `SMTP_HOST`. En producción se puede
-usar Amazon SES a través de su endpoint SMTP; `SMTP_USER` y `SMTP_PASS` se
-guardan en el fichero combinado cuando el relay requiere autenticación. Las
+Para correo, `MAIL_PROVIDER=smtp` requiere `SMTP_HOST`. En producción, el
+modo por defecto es STARTTLS en 587 y `SMTP_REQUIRE_TLS=true` rechaza una
+conexión sin cifrar. Para un relay SMTPS, usa `SMTP_PORT=465` y
+`SMTP_SECURE=true`. Se puede usar Amazon SES a través de su endpoint SMTP;
+`SMTP_USER` y `SMTP_PASS` se guardan en el fichero combinado cuando el relay
+requiere autenticación. Las
 claves de firma de Apple/Google son opcionales, pero cada bloque configurado
 debe estar completo. `check-env.sh` no imprime valores secretos.
 
