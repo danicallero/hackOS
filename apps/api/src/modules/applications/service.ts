@@ -246,6 +246,16 @@ export function validateResponses(
       case "number":
         if (typeof value !== "number") errors[field.key] = "must be a number";
         break;
+      case "birth_year":
+        if (
+          typeof value !== "number" ||
+          !Number.isInteger(value) ||
+          value < 1900 ||
+          value > new Date().getFullYear()
+        ) {
+          errors[field.key] = "must be a birth year";
+        }
+        break;
       case "checkbox":
         if (typeof value !== "boolean") errors[field.key] = "must be a boolean";
         else if (field.required && value !== true) errors[field.key] = "required";

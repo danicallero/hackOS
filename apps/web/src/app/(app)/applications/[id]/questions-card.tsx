@@ -60,6 +60,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -83,6 +84,7 @@ import type { Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
   type ApplicationForm,
+  BUILDER_FIELD_KINDS,
   FIELD_KINDS,
   FILE_KIND,
   type FieldKind,
@@ -134,14 +136,15 @@ function withIds<T>(items: T[]): (T & { _id: string })[] {
   return items.map((item) => ({ ...item, _id: mkId() }));
 }
 
-export function newField(index: number): EditableField {
+export function newField(index: number, kind: FieldKind = "text"): EditableField {
   return {
     _id: mkId(),
     key: `field_${index + 1}`,
     label: { ...EMPTY_I18N },
-    kind: "text",
+    kind,
     required: false,
     retention_mode: "none",
+    ...(OPTION_KINDS.includes(kind) ? { options: [{ value: "", label: { ...EMPTY_I18N } }] } : {}),
   };
 }
 
@@ -294,16 +297,16 @@ export function QuestionsCard({
     setActiveFieldId((prev) => (prev === id ? null : prev));
   };
 
-  const add = () => {
+  const add = (kind: FieldKind = "text") => {
     setSaveState("unsaved");
-    const field = newField(fields.length);
+    const field = newField(fields.length, kind);
     setFields((prev) => [...prev, field]);
     setActiveFieldId(field._id);
   };
 
-  const addToSection = (sectionKey: string) => {
+  const addToSection = (sectionKey: string, kind: FieldKind = "text") => {
     setSaveState("unsaved");
-    const field = { ...newField(fields.length), section_key: sectionKey };
+    const field = { ...newField(fields.length, kind), section_key: sectionKey };
     setFields((prev) => [...prev, field]);
     setActiveFieldId(field._id);
   };
@@ -522,7 +525,7 @@ export function QuestionsCard({
   return (
     <SectionCard
       icon={ListChecksIcon}
-      title={t("questions")}
+      title={t("formFields")}
       action={
         <div className="flex gap-2">
           <Button
@@ -539,10 +542,7 @@ export function QuestionsCard({
             <PlusIcon />
             {t("addSection")}
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={add}>
-            <PlusIcon />
-            {t("addQuestion")}
-          </Button>
+          <AddFieldMenu onSelect={add} size="sm" />
           <FormPreviewModal
             open={preview}
             onOpenChange={setPreview}
@@ -596,12 +596,7 @@ export function QuestionsCard({
           icon={ListChecksIcon}
           title={t("noQuestionsYet")}
           description={t("noQuestionsYetDesc")}
-          action={
-            <Button type="button" variant="outline" size="sm" onClick={add}>
-              <PlusIcon />
-              {t("addQuestion")}
-            </Button>
-          }
+          action={<AddFieldMenu onSelect={add} size="sm" />}
         />
       ) : (
         <DndContext
@@ -671,7 +666,7 @@ export function QuestionsCard({
                   return (
                     <SortableSection key={section._id} id={section._id}>
                       {(sectionDrag) => (
-                        <div className="border-border bg-muted/20 border-l-primary space-y-4 rounded-lg border border-l-4 p-4">
+                        <section className="border-border space-y-4 border-t pt-6">
                           <SectionEditor
                             section={section}
                             index={sectionIdx}
@@ -726,17 +721,13 @@ export function QuestionsCard({
                           >
                             {dragging && blockFields.length === 0 && <EmptyBlockHint />}
                           </DroppableBlock>
-                          <Button
-                            type="button"
-                            variant="ghost"
+                          <AddFieldMenu
+                            onSelect={(kind) => addToSection(section.key, kind)}
                             size="sm"
-                            onClick={() => addToSection(section.key)}
+                            variant="ghost"
                             className="text-muted-foreground"
-                          >
-                            <PlusIcon className="size-3.5" />
-                            {t("addQuestion")}
-                          </Button>
-                        </div>
+                          />
+                        </section>
                       )}
                     </SortableSection>
                   );
@@ -747,10 +738,7 @@ export function QuestionsCard({
               )}
 
               <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" onClick={add} className="flex-1">
-                  <PlusIcon />
-                  {t("addQuestion")}
-                </Button>
+                <AddFieldMenu onSelect={add} className="flex-1" />
                 <Button type="button" variant="outline" onClick={addSection} className="flex-1">
                   <PlusIcon />
                   {t("addSection")}
@@ -798,6 +786,7 @@ export function fieldKindLabel(kind: FieldKind, t: Translate): string {
     select: t("fieldKindSelect"),
     multiselect: t("fieldKindMultiselect"),
     checkbox: t("fieldKindCheckbox"),
+    birth_year: t("fieldKindBirthYear"),
     date: t("fieldKindDate"),
     number: t("fieldKindNumber"),
     file: t("fieldKindFile"),
@@ -812,6 +801,7 @@ const FIELD_KIND_ICON: Record<FieldKind, LucideIcon> = {
   select: CircleDotIcon,
   multiselect: ListChecksIcon,
   checkbox: SquareCheckIcon,
+  birth_year: CalendarIcon,
   date: CalendarIcon,
   number: HashIcon,
   file: PaperclipIcon,
@@ -867,6 +857,41 @@ function FieldKindIcon({ kind, className }: { kind: FieldKind; className?: strin
   return <Icon className={className} aria-hidden="true" />;
 }
 
+/** Choosing the answer format before creating the field avoids a blank,
+ * generic question card and makes the next configuration step self-evident. */
+function AddFieldMenu({
+  onSelect,
+  size = "default",
+  variant = "default",
+  className,
+}: {
+  onSelect: (kind: FieldKind) => void;
+  size?: "sm" | "default";
+  variant?: "default" | "outline" | "ghost";
+  className?: string;
+}) {
+  const { t } = useLocale();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" size={size} variant={variant} className={className}>
+          <PlusIcon />
+          {t("addField")}
+          <ChevronDownIcon className="size-3.5" aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {BUILDER_FIELD_KINDS.map((kind) => (
+          <DropdownMenuItem key={kind} onSelect={() => onSelect(kind)}>
+            <FieldKindIcon kind={kind} className="text-muted-foreground size-4" />
+            {fieldKindLabel(kind, t)}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function FieldEditor({
   field,
   index,
@@ -917,8 +942,7 @@ export function FieldEditor({
       ref={active ? expandedHeaderRef : undefined}
       className={cn(
         "flex items-center gap-1",
-        active &&
-          "bg-card sticky top-2 z-10 -mx-2 -mt-2 rounded-control border px-2 py-1 shadow-sm",
+        active && "bg-card sticky top-2 z-10 -mx-2 -mt-2 border-b px-2 py-1",
       )}
     >
       {dragHandle}
@@ -972,11 +996,7 @@ export function FieldEditor({
 
   if (!active) {
     return (
-      <Surface
-        ref={cardRef}
-        padding="compact"
-        className="hover:border-primary/40 space-y-3 transition-colors"
-      >
+      <Surface ref={cardRef} padding="compact" className="hover:border-primary/40 space-y-3">
         {topRow}
         <button
           type="button"
@@ -1022,29 +1042,45 @@ export function FieldEditor({
     >
       {topRow}
 
-      <div className="grid gap-3 @lg:grid-cols-[minmax(0,1fr)_12rem]">
-        <Input
-          aria-label={t("primaryApplicantLabel")}
-          placeholder={t("primaryApplicantLabel")}
-          value={field.label[primaryLocale]}
-          onChange={(e) => setLabel(primaryLocale, e.target.value)}
-          className="text-base font-medium"
-        />
-        <Select value={field.kind} onValueChange={(v) => onKind(v as FieldKind)}>
-          <SelectTrigger aria-label={t("kindLabel")} className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {FIELD_KINDS.map((k) => (
-              <SelectItem key={k} value={k}>
-                <span className="flex items-center gap-2">
-                  <FieldKindIcon kind={k} className="text-muted-foreground size-4 shrink-0" />
-                  {fieldKindLabel(k, t)}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="grid gap-3 @lg:grid-cols-[minmax(0,1fr)_12rem_9rem]">
+        <div className="space-y-1.5">
+          <Label htmlFor={`field-label-${uid}`}>{t("primaryApplicantLabel")}</Label>
+          <Input
+            id={`field-label-${uid}`}
+            placeholder={t("primaryApplicantLabel")}
+            value={field.label[primaryLocale]}
+            onChange={(e) => setLabel(primaryLocale, e.target.value)}
+            className="text-base font-medium"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`field-kind-${uid}`}>{t("kindLabel")}</Label>
+          <Select value={field.kind} onValueChange={(v) => onKind(v as FieldKind)}>
+            <SelectTrigger id={`field-kind-${uid}`} className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {FIELD_KINDS.map((k) => (
+                <SelectItem key={k} value={k}>
+                  <span className="flex items-center gap-2">
+                    <FieldKindIcon kind={k} className="text-muted-foreground size-4 shrink-0" />
+                    {fieldKindLabel(k, t)}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`required-${uid}`}>{t("required")}</Label>
+          <div className="flex items-center py-2">
+            <Switch
+              id={`required-${uid}`}
+              checked={field.required}
+              onCheckedChange={(required) => onChange({ required })}
+            />
+          </div>
+        </div>
       </div>
 
       {TYPED_KINDS.has(field.kind) && field.placeholder !== undefined && (
@@ -1077,13 +1113,9 @@ export function FieldEditor({
         <AnswerPreviewControl field={field} locale={primaryLocale} />
       )}
 
-      {field.validation && canValidate && (
-        <ValidationEditor field={field} primaryLocale={primaryLocale} onChange={setValidation} />
-      )}
-
-      <details className="rounded-lg border p-4">
+      <details className="border-t pt-4">
         <summary className="cursor-pointer text-sm font-medium">
-          {t("translationsAndSettings")}
+          {t("advancedFieldSettings")}
         </summary>
         <div className="mt-4 space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
@@ -1145,13 +1177,14 @@ export function FieldEditor({
             </p>
           </div>
         </div>
-      </details>
-
-      <details className="rounded-lg border p-4">
-        <summary className="cursor-pointer text-sm font-medium">
-          {t("advancedFieldSettings")}
-        </summary>
-        <div className="mt-4 space-y-4">
+        <div className="mt-4 space-y-4 border-t pt-4">
+          {field.validation && canValidate && (
+            <ValidationEditor
+              field={field}
+              primaryLocale={primaryLocale}
+              onChange={setValidation}
+            />
+          )}
           <div className="space-y-1.5">
             <Label htmlFor={`retention-mode-${uid}`}>{t("anonymousAuditRetentionLabel")}</Label>
             <Select
@@ -1321,16 +1354,16 @@ export function FieldEditor({
             </div>
           )}
         </div>
-      </details>
 
-      {field.kind === FILE_KIND && (
-        <details className="rounded-lg border p-4">
-          <summary className="cursor-pointer text-sm font-medium">{t("fileRestrictions")}</summary>
-          <div className="mt-3">
-            <FileRestrictionsEditor field={field} onChange={onChange} />
+        {field.kind === FILE_KIND && (
+          <div className="border-t pt-4">
+            <p className="text-sm font-medium">{t("fileRestrictions")}</p>
+            <div className="mt-3">
+              <FileRestrictionsEditor field={field} onChange={onChange} />
+            </div>
           </div>
-        </details>
-      )}
+        )}
+      </details>
 
       <Separator />
 
@@ -1354,15 +1387,6 @@ export function FieldEditor({
         >
           <Trash2Icon className="size-4" aria-hidden="true" />
         </IconButton>
-        <Separator orientation="vertical" className="mx-1 h-[var(--control-height-tiny)]" />
-        <Switch
-          checked={field.required}
-          onCheckedChange={(v) => onChange({ required: v })}
-          id={`required-${uid}`}
-        />
-        <Label htmlFor={`required-${uid}`} className="text-sm">
-          {t("required")}
-        </Label>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <IconButton
@@ -1637,7 +1661,7 @@ function ValidationEditor({
   }
 
   return (
-    <div className="border-border bg-muted/20 space-y-3 rounded-md border border-dashed p-3">
+    <div className="space-y-3 border-t pt-4">
       <div className="grid grid-cols-2 gap-3">
         {numberField(t("minValueLabel"), "min")}
         {numberField(t("maxValueLabel"), "max")}
@@ -1690,7 +1714,6 @@ export function SectionEditor({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-1">
         {dragHandle}
-        <span className="text-muted-foreground text-xs font-medium">#{index + 1}</span>
         <div className="ml-auto flex items-center gap-1">
           <IconButton
             type="button"
@@ -1742,7 +1765,7 @@ export function SectionEditor({
         />
       </div>
 
-      <details className="rounded-lg border p-4">
+      <details className="border-t pt-4">
         <summary className="cursor-pointer text-sm font-medium">
           {t("translationsAndSettings")}
         </summary>

@@ -24,12 +24,27 @@ export const FIELD_KINDS = [
   "select",
   "multiselect",
   "checkbox",
+  "birth_year",
   "date",
   "number",
   "file",
   "university",
 ] as const;
 export type FieldKind = (typeof FIELD_KINDS)[number];
+
+/** Date fields remain renderable for historical templates, but collecting an
+ * exact date of birth is no longer offered when authoring a form. */
+export const BUILDER_FIELD_KINDS = [
+  "text",
+  "textarea",
+  "select",
+  "multiselect",
+  "checkbox",
+  "birth_year",
+  "number",
+  "file",
+  "university",
+] as const satisfies FieldKind[];
 
 /** Kinds that require a non-empty options array (server refine). */
 export const OPTION_KINDS: FieldKind[] = ["select", "multiselect"];

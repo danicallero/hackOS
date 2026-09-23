@@ -501,8 +501,9 @@ async function numericAggregateBuckets(
 
 /**
  * Derived panels are aggregated in SQL. In particular, age never crosses the
- * API boundary as a date of birth. The event start is a stable reference for
- * the event; a missing schedule falls back to the database date only for old
+ * API boundary as a date of birth. New templates collect only a birth year;
+ * legacy full-date answers remain readable. The event start is a stable
+ * reference; a missing schedule falls back to the database date only for old
  * deployments that predate event timing configuration.
  */
 async function transformedDistributionBuckets(
@@ -512,21 +513,25 @@ async function transformedDistributionBuckets(
 ): Promise<Array<{ value: string; n: number }>> {
   if (statistics.transformation === "age") {
     const { rows } = await pool.query(
-      `SELECT extract(year FROM age(
-                COALESCE(
+      `WITH reference AS (
+         SELECT COALESCE(
                   (ec.event_starts_at AT TIME ZONE ec.timezone)::date,
                   (ec.hacking_starts_at AT TIME ZONE ec.timezone)::date,
                   CURRENT_DATE
-                ),
-                CASE WHEN r.responses ->> $2 ~ '^\\d{4}-\\d{2}-\\d{2}$'
-                     THEN (r.responses ->> $2)::date END
-              ))::int AS value,
+                ) AS event_date
+           FROM event_config ec WHERE ec.id = 1
+       )
+       SELECT CASE
+                WHEN r.responses ->> $2 ~ '^\\d{4}$'
+                  THEN extract(year FROM reference.event_date)::int - (r.responses ->> $2)::int
+                ELSE extract(year FROM age(reference.event_date, (r.responses ->> $2)::date))::int
+              END AS value,
               count(*)::int AS n
          FROM application_responses r
          JOIN users u ON u.id = r.user_id
-         CROSS JOIN (SELECT event_starts_at, hacking_starts_at, timezone FROM event_config WHERE id = 1) ec
+         CROSS JOIN reference
         WHERE r.application_id = $1
-          AND r.responses ->> $2 ~ '^\\d{4}-\\d{2}-\\d{2}$'
+          AND (r.responses ->> $2 ~ '^\\d{4}$' OR r.responses ->> $2 ~ '^\\d{4}-\\d{2}-\\d{2}$')
           AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
         GROUP BY value ORDER BY value`,
       [applicationId, key],
