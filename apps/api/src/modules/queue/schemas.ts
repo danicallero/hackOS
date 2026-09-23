@@ -8,14 +8,12 @@ export const challengeIdParam = z.object({ challengeId: z.coerce.number().int().
 export const entryIdParam = z.object({ entryId: z.coerce.number().int().positive() });
 export const createRoomBody = z.object({
   name: z.string().min(1),
-  slug: z.string().min(1),
-  location: z.string().optional(),
+  location: z.string().nullish(),
 });
 
 export const updateRoomBody = z.object({
   name: z.string().min(1).optional(),
-  slug: z.string().min(1).optional(),
-  location: z.string().optional(),
+  location: z.string().nullish(),
   status: z.enum(["active", "paused"]).optional(),
 });
 

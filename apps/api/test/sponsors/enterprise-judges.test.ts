@@ -275,9 +275,7 @@ describe("enterprise judge roster", () => {
     const a = await getApp();
     const { enterpriseId, rep, challengeId } = await createEnterpriseWithChallenge("AccessCo");
     const judge = await createUser();
-    const room = await pool.query(
-      `INSERT INTO rooms (name, slug) VALUES ('Sala roster', 'sala-roster') RETURNING id`,
-    );
+    const room = await pool.query(`INSERT INTO rooms (name) VALUES ('Sala roster') RETURNING id`);
     const roomId = Number(room.rows[0].id);
     await pool.query(`INSERT INTO room_enterprises (room_id, enterprise_id) VALUES ($1, $2)`, [
       roomId,

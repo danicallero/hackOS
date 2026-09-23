@@ -453,8 +453,8 @@ async function prepareFixture(options: Options): Promise<Fixture> {
     );
 
     const roomRows = await client.query<{ id: number }>(
-      `INSERT INTO rooms (name, slug, status)
-       SELECT 'Event-day Room ' || n, 'event-day-room-' || n, 'active'
+      `INSERT INTO rooms (name, status)
+       SELECT 'Event-day Room ' || n, 'active'
          FROM generate_series(1, $1::int) AS n RETURNING id`,
       [options.rooms],
     );

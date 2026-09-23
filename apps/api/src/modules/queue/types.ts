@@ -20,7 +20,6 @@ export interface QueueEntryRow {
 export interface RoomRow {
   id: number;
   name: string;
-  slug: string;
   location: string | null;
   status: string;
   created_at: string;

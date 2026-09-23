@@ -45,12 +45,22 @@ afterAll(async () => {
 });
 
 describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
+  it("lets a global queue admin open the empty room list", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/queue/rooms",
+      headers: asUser(adminId),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+  });
+
   it("creates an operationally paused room; operators can read but not create", async () => {
     const forbidden = await app.inject({
       method: "POST",
       url: "/api/queue/rooms",
       headers: asUser(operatorId),
-      payload: { name: "Sala 1", slug: "sala-1" },
+      payload: { name: "Sala 1" },
     });
     expect(forbidden.statusCode).toBe(403);
 
@@ -58,7 +68,7 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
       method: "POST",
       url: "/api/queue/rooms",
       headers: asUser(adminId),
-      payload: { name: "Sala 1", slug: "sala-1", location: "planta 2" },
+      payload: { name: "Sala 1", location: "planta 2" },
     });
     expect(res.statusCode).toBe(201);
     const roomId = res.json().id;
@@ -79,7 +89,7 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
       method: "POST",
       url: "/api/queue/rooms",
       headers: asUser(adminId),
-      payload: { name: "Paused room", slug: "paused-room" },
+      payload: { name: "Paused room" },
     });
     const roomId = created.json().id;
     const challengeId = await createChallenge();
@@ -118,7 +128,7 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
       method: "POST",
       url: "/api/queue/rooms",
       headers: asUser(adminId),
-      payload: { name: "Sala 2", slug: "sala-2" },
+      payload: { name: "Sala 2" },
     });
     const roomId = created.json().id;
 
@@ -147,7 +157,7 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
       method: "POST",
       url: "/api/queue/rooms",
       headers: asUser(adminId),
-      payload: { name: "Sala 3", slug: "sala-3" },
+      payload: { name: "Sala 3" },
     });
     const roomId = created.json().id;
     const challengeId = await createChallenge();
@@ -191,7 +201,7 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
       method: "POST",
       url: "/api/queue/rooms",
       headers: asUser(adminId),
-      payload: { name: "Sala única", slug: "sala-unica" },
+      payload: { name: "Sala única" },
     });
     const roomId = created.json().id;
     const firstChallengeId = await createChallenge();
@@ -238,7 +248,7 @@ describe("rooms CRUD + assignments (QUEUE_ADMIN)", () => {
       method: "POST",
       url: "/api/queue/rooms",
       headers: asUser(adminId),
-      payload: { name: "Sala ambigua", slug: "sala-ambigua" },
+      payload: { name: "Sala ambigua" },
     });
     const roomId = created.json().id;
     const { enterpriseId: multiEnterpriseId } = await createEnterpriseChallenges(2);

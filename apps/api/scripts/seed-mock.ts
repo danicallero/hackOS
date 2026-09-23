@@ -911,13 +911,21 @@ async function seedProjects(): Promise<void> {
     challengeIds.push(created.rows[0].id);
   }
 
-  const room = await client.query(
-    `INSERT INTO rooms (name, slug, location, status)
-     VALUES ('Main Hall', 'main-hall', 'CITIC Building, Ground Floor', 'active')
-     ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
-     RETURNING id`,
+  const existingRoom = await client.query<{ id: number }>(
+    `SELECT id FROM rooms WHERE name = $1 ORDER BY id LIMIT 1`,
+    ["Main Hall"],
   );
-  const roomId = room.rows[0].id;
+  let roomId = existingRoom.rows[0]?.id;
+  if (!roomId) {
+    const createdRoom = await client.query<{ id: number }>(
+      `INSERT INTO rooms (name, location, status)
+       VALUES ($1, $2, 'active')
+       RETURNING id`,
+      ["Main Hall", "CITIC Building, Ground Floor"],
+    );
+    roomId = createdRoom.rows[0]?.id;
+  }
+  if (!roomId) throw new Error("Could not create the mock room");
   await client.query(`INSERT INTO room_queue_state (room_id) VALUES ($1) ON CONFLICT DO NOTHING`, [
     roomId,
   ]);

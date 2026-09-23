@@ -213,8 +213,10 @@ Table application_grants_roles {
 }
 
 Table application_responses {
+  allow_resubmit_after_close boolean [not null, default: `false`]
   application_form_version_id bigint [not null]
   application_id integer [not null]
+  auto_accept_on_resubmit boolean [not null, default: `false`]
   confirmation_token_id integer
   confirmed_at "timestamp with time zone"
   created_at "timestamp with time zone" [not null, default: `now()`]
@@ -776,7 +778,6 @@ Table rooms {
   id integer [pk, increment, not null]
   location text
   name text [not null]
-  slug text [unique, not null]
   status text [not null, default: `'paused'::text`]
   updated_at "timestamp with time zone" [not null, default: `now()`]
 }

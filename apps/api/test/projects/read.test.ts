@@ -546,9 +546,7 @@ describe("GET /api/me/projects (participant self-view)", () => {
     const { pool } = await import("../../src/db/pool.js");
     const beans = (await pool.query(`SELECT id FROM repos WHERE name = 'Neural Beans'`)).rows[0].id;
     const challengeId = await createChallenge("Beans queue", []);
-    const room = await pool.query(
-      `INSERT INTO rooms (name, slug) VALUES ('Beans room', 'beans-room') RETURNING id`,
-    );
+    const room = await pool.query(`INSERT INTO rooms (name) VALUES ('Beans room') RETURNING id`);
     const roomId = room.rows[0].id;
     await pool.query(
       `INSERT INTO room_enterprises (room_id, enterprise_id)
