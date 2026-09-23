@@ -123,6 +123,7 @@ mail_provider="${mail_provider:-smtp}"
 mail_from="$(require_value MAIL_FROM_ADDRESS)"
 smtp_secure="$(value SMTP_SECURE)"
 smtp_secure="${smtp_secure:-false}"
+smtp_tls_servername="$(value SMTP_TLS_SERVERNAME)"
 smtp_require_tls="$(value SMTP_REQUIRE_TLS)"
 smtp_require_tls="${smtp_require_tls:-true}"
 
@@ -144,6 +145,9 @@ esac
 
 [[ "$mail_provider" == smtp ]] || die 'MAIL_PROVIDER must be smtp'
 require_value SMTP_HOST >/dev/null
+if [[ -n "$smtp_tls_servername" && ! "$smtp_tls_servername" =~ ^[A-Za-z0-9.-]+$ ]]; then
+  die 'SMTP_TLS_SERVERNAME must be a hostname, without a scheme or path'
+fi
 case "$smtp_secure" in
   true|false) ;;
   *) die 'SMTP_SECURE must be true or false' ;;

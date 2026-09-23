@@ -30,4 +30,17 @@ describe("SMTP transport security", () => {
       auth: undefined,
     });
   });
+
+  it("uses an explicit TLS server name for a private relay address", () => {
+    expect(
+      smtpTransportOptions({
+        ...baseMail,
+        smtpHost: "10.33.66.156",
+        smtpTlsServername: "mail.gpul.org",
+      }),
+    ).toMatchObject({
+      host: "10.33.66.156",
+      tls: { servername: "mail.gpul.org" },
+    });
+  });
 });

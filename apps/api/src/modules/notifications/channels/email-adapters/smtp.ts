@@ -15,6 +15,9 @@ export function smtpTransportOptions(mail: MailConfig) {
     // `requireTLS` only applies to STARTTLS. Supplying it for SMTPS is
     // harmless, but omitting it keeps the selected protocol unambiguous.
     ...(mail.smtpSecure ? {} : { requireTLS: mail.smtpRequireTls }),
+    // Keep certificate validation tied to the public mail hostname when the
+    // TCP connection must target a private relay address.
+    ...(mail.smtpTlsServername ? { tls: { servername: mail.smtpTlsServername } } : {}),
     auth: mail.smtpUser ? { user: mail.smtpUser, pass: mail.smtpPass } : undefined,
   };
 }

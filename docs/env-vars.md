@@ -78,6 +78,7 @@ siguiente especifica cada variable individualmente.
 | `MAIL_FROM_ADDRESS` | configuración | sí | Remitente de los correos. |
 | `MAIL_FROM_NAME` | configuración | no | Nombre del remitente, por defecto `hackOS`. |
 | `SMTP_HOST`, `SMTP_PORT` | configuración | sí para SMTP | Host y puerto del relay SMTP. Por defecto usa `587` con STARTTLS; Amazon SES se configura aquí mediante su interfaz SMTP. |
+| `SMTP_TLS_SERVERNAME` | configuración | no | Nombre del certificado TLS cuando `SMTP_HOST` es una IP privada o un nombre interno; mantiene la validación del certificado del relay. |
 | `SMTP_USER`, `SMTP_PASS` | secreto | no | Credenciales opcionales del relay SMTP; se dejan vacías si el relay no autentica. |
 | `SMTP_SECURE` | configuración | no | `false` (por defecto) para STARTTLS en 587; `true` para SMTPS, que inicia TLS al conectar (normalmente en 465). |
 | `SMTP_REQUIRE_TLS` | configuración | no | `true` en producción por defecto: rechaza un relay STARTTLS que no pueda cifrar la conexión. No aplica cuando `SMTP_SECURE=true`. |
@@ -213,7 +214,7 @@ El API no recibe variables de correo ni la cuenta root de MinIO.
 |---|---|
 | Proceso | `NODE_ENV=production`, `WORKERS_INLINE=false`, `LOG_LEVEL`, `LOG_EXPO_PUSH_TICKETS`, `LOG_EXPO_PUSH_UNSAFE_DEBUG` |
 | Pool y outbox | `DB_POOL_MAX`, `DB_IDLE_TIMEOUT_MS`, `DB_CONNECTION_TIMEOUT_MS`, `DB_STATEMENT_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`, `NOTIFICATION_OUTBOX_BATCH_SIZE` |
-| Correo | `MAIL_PROVIDER`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `SMTP_REQUIRE_TLS` |
+| Correo | `MAIL_PROVIDER`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`, `SMTP_HOST`, `SMTP_TLS_SERVERNAME`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `SMTP_REQUIRE_TLS` |
 | Wallet | El mismo bloque de Wallet que usa API, porque el worker empuja sincronizaciones de pases. |
 
 El worker no recibe `CORS_ORIGINS`, límites SSE, rate limits de scanner,
