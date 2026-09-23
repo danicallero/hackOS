@@ -28,6 +28,8 @@ export interface MailConfig {
   smtpPort: number;
   smtpUser?: string;
   smtpPass?: string;
+  smtpSecure: boolean;
+  smtpRequireTls: boolean;
 }
 
 export function mailConfigFromEnv(): MailConfig {
@@ -39,6 +41,8 @@ export function mailConfigFromEnv(): MailConfig {
     smtpPort: config.SMTP_PORT,
     smtpUser: config.SMTP_USER,
     smtpPass: config.SMTP_PASS,
+    smtpSecure: config.smtpSecure,
+    smtpRequireTls: config.smtpRequireTls,
   };
 }
 

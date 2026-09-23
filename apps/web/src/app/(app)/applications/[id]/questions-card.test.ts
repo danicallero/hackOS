@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { serializeApplicationField } from "./questions-card";
+import { newField, serializeApplicationField } from "./questions-card";
 
 describe("application question serialization", () => {
+  it("creates the selected choice field ready for its first option", () => {
+    expect(newField(2, "select")).toMatchObject({
+      key: "field_3",
+      kind: "select",
+      required: false,
+      options: [{ value: "", label: { en: "", es: "", gl: "" } }],
+    });
+  });
+
   it("preserves the Logistics statistics integration configuration", () => {
     expect(
       serializeApplicationField({

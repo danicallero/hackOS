@@ -80,6 +80,8 @@ x-mail-env: &mail-env
   SMTP_PORT: "${SMTP_PORT:-587}"
   SMTP_USER: "${SMTP_USER:-}"
   SMTP_PASS: "${SMTP_PASS:-}"
+  SMTP_SECURE: "${SMTP_SECURE:-false}"
+  SMTP_REQUIRE_TLS: "${SMTP_REQUIRE_TLS:-true}"
 
 x-api-env: &api-env
   <<: [*database-env, *valkey-env, *auth-env, *storage-env, *wallet-env]

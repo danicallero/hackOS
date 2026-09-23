@@ -62,8 +62,8 @@ async function createOwnedChallenge(ownerUserId: number, title: string): Promise
 
 async function createRoom(name: string): Promise<number> {
   const { rows } = await pool.query(
-    `INSERT INTO rooms (name, slug, status) VALUES ($1, $2, 'active') RETURNING id`,
-    [name, `room-${crypto.randomUUID()}`],
+    `INSERT INTO rooms (name, status) VALUES ($1, 'active') RETURNING id`,
+    [name],
   );
   return rows[0].id;
 }

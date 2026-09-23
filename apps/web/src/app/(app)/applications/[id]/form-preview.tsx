@@ -154,14 +154,22 @@ export function AnswerPreviewControl({
     <Input
       id={fieldId}
       disabled
-      type={f.kind === "number" ? "number" : f.kind === "date" ? "date" : "text"}
+      type={
+        f.kind === "number" || f.kind === "birth_year"
+          ? "number"
+          : f.kind === "date"
+            ? "date"
+            : "text"
+      }
       placeholder={
         customPlaceholder ||
         (f.kind === "file"
           ? t("fieldKindFile")
-          : f.kind === "university"
-            ? t("universityPickerPlaceholder")
-            : undefined)
+          : f.kind === "birth_year"
+            ? t("birthYearPlaceholder")
+            : f.kind === "university"
+              ? t("universityPickerPlaceholder")
+              : undefined)
       }
     />
   );

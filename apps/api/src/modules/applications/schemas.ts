@@ -14,6 +14,7 @@ export const FIELD_KINDS = [
   "select",
   "multiselect",
   "checkbox",
+  "birth_year",
   "date",
   "number",
   "file",

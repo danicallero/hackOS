@@ -41,6 +41,7 @@ export function fieldErrorsFromApi(
           if (message === "required") return [key, t("fieldRequired")];
           if (message === "invalid option") return [key, t("fieldInvalidOption")];
           if (message === "must be a number") return [key, t("fieldMustBeNumber")];
+          if (message === "must be a birth year") return [key, t("fieldMustBeBirthYear")];
           if (message === "must be a boolean") return [key, t("fieldMustBeBoolean")];
           if (message === "must be an array") return [key, t("fieldMustBeArray")];
           if (message === "must be a string") return [key, t("fieldMustBeString")];

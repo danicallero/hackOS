@@ -67,11 +67,8 @@ async function groupOf(challengeId: number): Promise<number> {
   return rows[0].queue_group_id;
 }
 
-async function seedRoom(slug: string): Promise<number> {
-  const { rows } = await pool.query(`INSERT INTO rooms (name, slug) VALUES ($1, $2) RETURNING id`, [
-    slug,
-    slug,
-  ]);
+async function seedRoom(name: string): Promise<number> {
+  const { rows } = await pool.query(`INSERT INTO rooms (name) VALUES ($1) RETURNING id`, [name]);
   return Number(rows[0].id);
 }
 
