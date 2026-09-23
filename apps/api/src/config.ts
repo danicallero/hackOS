@@ -86,6 +86,16 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().default(1025),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
+  /** `true` selects implicit TLS (SMTPS, normally port 465); otherwise use STARTTLS. */
+  SMTP_SECURE: z
+    .string()
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === "true")),
+  /** Fail closed when a STARTTLS relay does not offer a TLS upgrade. */
+  SMTP_REQUIRE_TLS: z
+    .string()
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === "true")),
 
   /**
    * Run BullMQ workers inside the API process. Default on for dev/test;
@@ -301,6 +311,11 @@ export const config = {
   logExpoPushTickets: parsed.LOG_EXPO_PUSH_TICKETS ?? false,
   logExpoPushTokens: parsed.LOG_EXPO_PUSH_TOKENS ?? false,
   logExpoPushUnsafeDebug: parsed.LOG_EXPO_PUSH_UNSAFE_DEBUG ?? false,
+  smtpSecure: parsed.SMTP_SECURE ?? false,
+  // Local Mailpit does not advertise STARTTLS; deployed relays must do so
+  // unless they use implicit TLS (SMTPS) instead.
+  smtpRequireTls:
+    parsed.SMTP_REQUIRE_TLS ?? (parsed.NODE_ENV === "production" && !parsed.SMTP_SECURE),
   dbPoolMax:
     parsed.DB_POOL_MAX ??
     (parsed.NODE_ENV === "test" ? 5 : parsed.NODE_ENV === "production" ? 24 : 20),
