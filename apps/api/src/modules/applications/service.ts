@@ -173,6 +173,13 @@ function isEmpty(value: unknown): boolean {
   return false;
 }
 
+/** Birth years describe living applicants; keep the accepted age range realistic. */
+const MAXIMUM_BIRTH_AGE = 120;
+
+function minimumBirthYear(now = new Date()): number {
+  return now.getFullYear() - MAXIMUM_BIRTH_AGE;
+}
+
 /**
  * Pull the national-ID answer out of a response object regardless of the exact
  * key casing the form template used ("dni", "DNI", "Dni"…). Returns a trimmed
@@ -250,7 +257,7 @@ export function validateResponses(
         if (
           typeof value !== "number" ||
           !Number.isInteger(value) ||
-          value < 1900 ||
+          value < minimumBirthYear() ||
           value > new Date().getFullYear()
         ) {
           errors[field.key] = "must be a birth year";

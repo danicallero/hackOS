@@ -292,6 +292,51 @@ describe("application responses (H12)", () => {
     expect(ok.statusCode).toBe(200);
   });
 
+  it("H12: accepts only reasonable birth years at submit", async () => {
+    const a = await getApp();
+    const appId = await createApplication({
+      template: [
+        {
+          key: "birth_year",
+          label: { en: "Birth year", es: "Año de nacimiento", gl: "Ano de nacemento" },
+          kind: "birth_year",
+          required: true,
+        },
+      ],
+    });
+    const user = await createUser({ emailVerified: true });
+    const currentYear = new Date().getFullYear();
+
+    await saveDraft(a, appId, user, { birth_year: currentYear - 121 });
+    const tooOld = await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/response/submit`,
+      headers: asUser(user),
+      payload: { food_intolerances: [], shirt_size: "M" },
+    });
+    expect(tooOld.statusCode).toBe(400);
+    expect(tooOld.json().error.details.fields.birth_year).toBe("must be a birth year");
+
+    await saveDraft(a, appId, user, { birth_year: currentYear + 1 });
+    const future = await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/response/submit`,
+      headers: asUser(user),
+      payload: { food_intolerances: [], shirt_size: "M" },
+    });
+    expect(future.statusCode).toBe(400);
+    expect(future.json().error.details.fields.birth_year).toBe("must be a birth year");
+
+    await saveDraft(a, appId, user, { birth_year: currentYear - 120 });
+    const boundary = await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/response/submit`,
+      headers: asUser(user),
+      payload: { food_intolerances: [], shirt_size: "M" },
+    });
+    expect(boundary.statusCode).toBe(200);
+  });
+
   it("H11: enforces a text field's contains/email/url validation condition", async () => {
     const a = await getApp();
     const appId = await createApplication({
