@@ -29,6 +29,17 @@ export function validateFieldOnBlur(
 ): string | null {
   const empty = value == null || value === "" || (Array.isArray(value) && value.length === 0);
   if (empty) return field.required ? t("fieldRequired") : null;
+  if (field.kind === "birth_year") {
+    const currentYear = new Date().getFullYear();
+    if (
+      typeof value !== "number" ||
+      !Number.isInteger(value) ||
+      value < currentYear - 120 ||
+      value > currentYear
+    ) {
+      return t("fieldMustBeBirthYear");
+    }
+  }
   const rule = field.validation;
   let code: string | null = null;
   if ((field.kind === "text" || field.kind === "textarea") && typeof value === "string" && rule) {
