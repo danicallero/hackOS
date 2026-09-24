@@ -380,15 +380,29 @@ echo "Deploying hackOS $environment ($image_tag)"
 phase "Checking deployment configuration"
 run_compose "validate Compose" config --quiet
 phase "Refreshing selected immutable images from GHCR"
-pull_output="$(mktemp)"
-if ! compose pull --policy always >"$pull_output" 2>&1; then
-  echo "ERROR: pull pinned images failed" >&2
-  cat "$pull_output" >&2
-  rm -f "$pull_output"
-  exit 1
+pull_targets=()
+if [[ "$deploy_api" == true ]]; then
+  # These three services share the immutable API image. Do not refresh the
+  # infrastructure images here: staging keeps its healthy datastore images and
+  # a registry outage there must not block an application-only release.
+  pull_targets+=(api worker migrate)
 fi
-rm -f "$pull_output"
-echo "OK: pull pinned images"
+if [[ "$deploy_web" == true ]]; then
+  pull_targets+=(web)
+fi
+if ((${#pull_targets[@]})); then
+  pull_output="$(mktemp)"
+  if ! compose pull --policy always "${pull_targets[@]}" >"$pull_output" 2>&1; then
+    echo "ERROR: pull pinned images failed" >&2
+    cat "$pull_output" >&2
+    rm -f "$pull_output"
+    exit 1
+  fi
+  rm -f "$pull_output"
+  echo "OK: pull pinned images"
+else
+  echo "OK: no application images selected for refresh"
+fi
 if [[ "$deploy_api" == true ]]; then
   verify_pulled_image_revision api "$api_image_tag"
 fi
