@@ -18,7 +18,6 @@ interface Options {
   t: Translate;
   setResponse: React.Dispatch<React.SetStateAction<MyResponseDetail | null>>;
   setValues: React.Dispatch<React.SetStateAction<Record<string, unknown>>>;
-  setFieldErrors: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   setSaving: React.Dispatch<React.SetStateAction<boolean>>;
   setSaveState: React.Dispatch<React.SetStateAction<SaveState>>;
   setActionError: React.Dispatch<React.SetStateAction<ActionError | null>>;
@@ -37,7 +36,6 @@ export function useApplicationDraft({
   t,
   setResponse,
   setValues,
-  setFieldErrors,
   setSaving,
   setSaveState,
   setActionError,
@@ -52,7 +50,6 @@ export function useApplicationDraft({
       });
       setResponse(saved);
       setValues(saved.responses ?? {});
-      setFieldErrors({});
       setSaveState("saved");
       toast.success(t("draftSaved"));
     } catch (error) {
@@ -63,17 +60,7 @@ export function useApplicationDraft({
     } finally {
       setSaving(false);
     }
-  }, [
-    applicationId,
-    setActionError,
-    setFieldErrors,
-    setResponse,
-    setSaveState,
-    setSaving,
-    setValues,
-    t,
-    values,
-  ]);
+  }, [applicationId, setActionError, setResponse, setSaveState, setSaving, setValues, t, values]);
 
   useEffect(() => {
     if (!formOpen || response || responseError) return;

@@ -26,14 +26,28 @@ export interface CityValue {
 interface Feature {
   properties?: { name?: string; city?: string; country?: string; state?: string };
 }
+
+function formatLocation({ city, province, country }: CityValue) {
+  return [city, province, country].filter(Boolean).join(", ");
+}
+
 export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: Props) {
   const { t, language } = useLocale();
   const listId = useId();
   const [options, setOptions] = useState<CityValue[]>([]);
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(() => formatLocation(value));
+
+  // A draft may update outside this picker (for example after autosave
+  // completes). Keep its single-line label in sync without replacing a search
+  // the participant is actively typing.
   useEffect(() => {
-    const query = value.city.trim();
-    if (query.length < 2) {
+    if (!open) setQuery(formatLocation(value));
+  }, [value, open]);
+
+  useEffect(() => {
+    const search = query.trim();
+    if (!open || search.length < 2) {
       setOptions([]);
       return;
     }
@@ -41,7 +55,7 @@ export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: P
     const timer = setTimeout(async () => {
       try {
         const response = await fetch(
-          `https://photon.komoot.io/api/?limit=6&lang=${language}&q=${encodeURIComponent(query)}`,
+          `https://photon.komoot.io/api/?limit=6&lang=${language}&q=${encodeURIComponent(search)}`,
         );
         const body = (await response.json()) as { features?: Feature[] };
         if (active)
@@ -73,23 +87,27 @@ export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: P
       active = false;
       clearTimeout(timer);
     };
-  }, [value.city, language]);
+  }, [query, language, open]);
   return (
     <div className="relative">
       <div className="relative">
         <MapPinIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
         <Input
           id={id}
-          value={value.city}
+          value={query}
           disabled={disabled}
           onChange={(event) => {
-            onChange({ ...value, city: event.target.value });
+            setQuery(event.target.value);
             setOpen(true);
           }}
-          onFocus={() => setOpen(true)}
+          onFocus={(event) => {
+            event.currentTarget.select();
+            setOpen(true);
+          }}
           onBlur={() => {
             window.setTimeout(() => {
               setOpen(false);
+              setQuery(formatLocation(value));
               onBlur?.();
             }, 150);
           }}
@@ -101,37 +119,22 @@ export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: P
           {...aria}
         />
       </div>
-      <div className="mt-2 grid gap-2 sm:grid-cols-2">
-        <Input
-          value={value.province}
-          disabled={disabled}
-          onChange={(event) => onChange({ ...value, province: event.target.value })}
-          onBlur={onBlur}
-          placeholder={t("provincePlaceholder")}
-          aria-label={t("province")}
-        />
-        <Input
-          value={value.country}
-          disabled={disabled}
-          onChange={(event) => onChange({ ...value, country: event.target.value })}
-          onBlur={onBlur}
-          placeholder={t("countryPlaceholder")}
-          aria-label={t("countryPlaceholder")}
-        />
-      </div>
       {open && options.length > 0 && (
         <div
           id={listId}
+          role="listbox"
           className="bg-popover absolute z-50 mt-1 w-full overflow-hidden rounded-md border shadow-md"
         >
           {options.map((city) => (
             <button
               key={`${city.city}-${city.province}-${city.country}`}
               type="button"
+              role="option"
               className="hover:bg-muted w-full px-3 py-2 text-left text-sm"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => {
                 onChange(city);
+                setQuery(formatLocation(city));
                 setOpen(false);
                 onBlur?.();
               }}

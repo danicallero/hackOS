@@ -286,7 +286,6 @@ export default function MyApplicationDetailPage() {
     t,
     setResponse,
     setValues,
-    setFieldErrors,
     setSaving,
     setSaveState,
     setActionError,
