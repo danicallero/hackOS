@@ -116,7 +116,7 @@ jobs:
             --health-interval 5s \
             --health-timeout 5s \
             --health-retries 12 \
-            quay.io/minio/minio:latest \
+            minio/minio:latest \
             server /data --console-address ":9001"
 
       - name: Set up workspace
@@ -147,7 +147,7 @@ jobs:
           docker run --rm --network host --entrypoint /bin/sh
           -e MINIO_ROOT_USER=hackos
           -e MINIO_ROOT_PASSWORD=hackos-secret
-          quay.io/minio/mc:latest
+          minio/mc:latest
           -c 'mc alias set local http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" && mc mb --ignore-existing local/hackos'
 
       - name: Run API integration tests
