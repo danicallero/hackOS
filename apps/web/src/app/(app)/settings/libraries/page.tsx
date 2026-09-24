@@ -11,6 +11,7 @@ import { TabBar } from "@/components/common/tab-bar";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useLocale } from "@/lib/i18n";
 import { useUrlTab } from "@/lib/url-tab";
+import { DegreesManager } from "./degrees-manager";
 import { IntolerancesManager } from "./intolerances-manager";
 import { ShirtSizesManager } from "./shirt-sizes-manager";
 import { UniversitiesManager } from "./universities-manager";
@@ -18,7 +19,7 @@ import { UniversitiesManager } from "./universities-manager";
 export default function LibrariesSettingsPage() {
   const { t } = useLocale();
   const { tab, setTab } = useUrlTab({
-    values: ["intolerances", "shirt-sizes", "universities"] as const,
+    values: ["intolerances", "shirt-sizes", "universities", "degrees"] as const,
     defaultValue: "intolerances",
   });
   return (
@@ -30,6 +31,7 @@ export default function LibrariesSettingsPage() {
           <TabsTrigger value="intolerances">{t("foodIntolerances")}</TabsTrigger>
           <TabsTrigger value="shirt-sizes">{t("shirtSizesGroup")}</TabsTrigger>
           <TabsTrigger value="universities">{t("universitiesTab")}</TabsTrigger>
+          <TabsTrigger value="degrees">{t("degreesTab")}</TabsTrigger>
         </TabBar>
         <TabsContent value="intolerances" className="pt-2">
           <IntolerancesManager />
@@ -39,6 +41,9 @@ export default function LibrariesSettingsPage() {
         </TabsContent>
         <TabsContent value="universities" className="pt-2">
           <UniversitiesManager />
+        </TabsContent>
+        <TabsContent value="degrees" className="pt-2">
+          <DegreesManager />
         </TabsContent>
       </Tabs>
     </div>

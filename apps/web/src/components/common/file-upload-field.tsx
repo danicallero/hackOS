@@ -20,6 +20,7 @@ export function FileUploadField({
   fieldKey,
   value,
   onChange,
+  onBlur,
   allowedTypes,
   maxSizeMb,
   disabled,
@@ -36,6 +37,7 @@ export function FileUploadField({
   /** The stored object URL, or "" when nothing is uploaded yet. */
   value: string;
   onChange: (url: string) => void;
+  onBlur?: () => void;
   /** File extensions accepted (e.g. [".pdf", ".png"]); unset allows any type. */
   allowedTypes?: string[];
   /** Max upload size in MB; defaults to 10. */
@@ -88,6 +90,7 @@ export function FileUploadField({
       );
       // Store the private object key; reads resolve to a presigned URL on demand.
       onChange(payload.key);
+      onBlur?.();
       setUploadError(null);
     } catch {
       const message = t("uploadFailed");

@@ -292,6 +292,14 @@ export function validateResponses(
           errors[field.key] = "must be a university id";
         }
         break;
+      case "degree":
+        if (typeof value !== "number" && !(typeof value === "string" && /^\d+$/.test(value))) {
+          errors[field.key] = "must be a degree id";
+        }
+        break;
+      case "city":
+        if (typeof value !== "string") errors[field.key] = "must be a string";
+        break;
       default:
         if (typeof value !== "string") errors[field.key] = "must be a string";
     }

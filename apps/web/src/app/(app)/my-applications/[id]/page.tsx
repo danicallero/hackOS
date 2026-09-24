@@ -35,7 +35,7 @@ import { Section } from "@/components/ui/surface";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
-import { validationErrorSummary } from "@/lib/application-validation";
+import { validateFieldOnBlur, validationErrorSummary } from "@/lib/application-validation";
 import { pickText, useLocale } from "@/lib/i18n";
 import { withReturnPath } from "@/lib/return-path";
 import type { SaveState } from "@/lib/save-state";
@@ -68,7 +68,7 @@ export default function MyApplicationDetailPage() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const me = useMe();
-  const lang: Language = (me?.language as Language) ?? "es";
+  const lang: Language = language;
 
   const [form, setForm] = useState<PublicForm | null>(null);
   const [response, setResponse] = useState<MyResponseDetail | null>(null);
@@ -98,6 +98,10 @@ export default function MyApplicationDetailPage() {
   const formRef = useRef<PublicForm | null>(null);
   const responseRef = useRef<MyResponseDetail | null>(null);
   const intolerancesRef = useRef<IntoleranceOption[]>([]);
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
 
   const load = useCallback(async () => {
     if (!hasLoadedRef.current) setLoading(true);
@@ -134,19 +138,19 @@ export default function MyApplicationDetailPage() {
       formRes.status === "rejected" && !isNotFoundError(formRes.reason)
         ? formRes.reason instanceof ApiError
           ? formRes.reason.message
-          : t("couldNotLoadApplication")
+          : tRef.current("couldNotLoadApplication")
         : null;
     const nextResponseError =
       respRes.status === "rejected" && !isNotFoundError(respRes.reason)
         ? respRes.reason instanceof ApiError
           ? respRes.reason.message
-          : t("couldNotLoadApplication")
+          : tRef.current("couldNotLoadApplication")
         : null;
     const nextIntolerancesError =
       intolRes.status === "rejected"
         ? intolRes.reason instanceof ApiError
           ? intolRes.reason.message
-          : t("couldNotLoadApplication")
+          : tRef.current("couldNotLoadApplication")
         : null;
     setFormError(nextFormError);
     setResponseError(nextResponseError);
@@ -188,7 +192,7 @@ export default function MyApplicationDetailPage() {
       respRes.status === "fulfilled" ||
       intolRes.status === "fulfilled";
     setLoading(false);
-  }, [id, me, t]);
+  }, [id, me]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetching application data from API (external-system sync)
@@ -247,6 +251,16 @@ export default function MyApplicationDetailPage() {
     setValues((prev) => ({ ...prev, [key]: value }));
   }
 
+  function validateOnBlur(field: (typeof template)[number]) {
+    const message = validateFieldOnBlur(field, values[field.key], t, lang);
+    setFieldErrors((current) => {
+      const next = { ...current };
+      if (message) next[field.key] = message;
+      else delete next[field.key];
+      return next;
+    });
+  }
+
   function checkRequired(): boolean {
     const missing = missingRequiredFields(template, values);
     const errors = Object.fromEntries(missing.map((key) => [key, t("fieldRequired")]));
@@ -260,7 +274,7 @@ export default function MyApplicationDetailPage() {
     return missing.length === 0;
   }
 
-  async function handleSaveDraft() {
+  const handleSaveDraft = useCallback(async () => {
     setSaving(true);
     setSaveState("saving");
     setActionError(null);
@@ -284,7 +298,41 @@ export default function MyApplicationDetailPage() {
     } finally {
       setSaving(false);
     }
-  }
+  }, [id, t, values]);
+
+  // Starting a form creates its draft before a file field can be used. The
+  // endpoint is idempotent and preserves any existing answer set.
+  useEffect(() => {
+    if (!form || response || responseError) return;
+    let active = true;
+    void api
+      .put<MyResponseDetail>(`/api/applications/${id}/response`, { responses: {} })
+      .then((draft) => {
+        if (!active) return;
+        setResponse(draft);
+        responseRef.current = draft;
+      })
+      .catch((error) => {
+        if (active)
+          setActionError({
+            action: "save",
+            message: error instanceof ApiError ? error.message : tRef.current("couldNotSaveDraft"),
+          });
+      });
+    return () => {
+      active = false;
+    };
+  }, [form, response, responseError, id]);
+
+  // Autosave after a short pause. Keep manual Save for an explicit retry, but
+  // never make a locale change or server refresh overwrite local input.
+  useEffect(() => {
+    if (!editable || !response || saveState !== "unsaved") return;
+    const timer = window.setTimeout(() => {
+      void handleSaveDraft();
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [editable, response, saveState, handleSaveDraft]);
 
   async function handleSubmit() {
     if (!checkRequired()) {
@@ -607,6 +655,7 @@ export default function MyApplicationDetailPage() {
                     applicationId={id}
                     value={values[field.key] as FieldValue}
                     onChange={(v) => setValue(field.key, v)}
+                    onBlur={() => validateOnBlur(field)}
                     disabled={!editable}
                     lang={lang}
                     error={fieldErrors[field.key]}
