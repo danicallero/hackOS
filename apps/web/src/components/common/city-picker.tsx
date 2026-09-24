@@ -55,7 +55,15 @@ export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: P
                   country: p.country ?? "",
                 };
               })
-              .filter((city) => city.city.length > 0),
+              // Suggestions must be complete location records: the selected
+              // object is persisted as city/province/country, not flattened
+              // into an ambiguous display string.
+              .filter(
+                (city) =>
+                  city.city.trim().length > 0 &&
+                  city.province.trim().length > 0 &&
+                  city.country.trim().length > 0,
+              ),
           );
       } catch {
         if (active) setOptions([]);

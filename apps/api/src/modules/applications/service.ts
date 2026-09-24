@@ -306,8 +306,11 @@ export function validateResponses(
           value === null ||
           Array.isArray(value) ||
           typeof location.city !== "string" ||
+          location.city.trim() === "" ||
           typeof location.province !== "string" ||
-          typeof location.country !== "string"
+          location.province.trim() === "" ||
+          typeof location.country !== "string" ||
+          location.country.trim() === ""
         ) {
           errors[field.key] = "must include city, province, and country";
         }
