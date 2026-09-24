@@ -380,7 +380,15 @@ echo "Deploying hackOS $environment ($image_tag)"
 phase "Checking deployment configuration"
 run_compose "validate Compose" config --quiet
 phase "Refreshing selected immutable images from GHCR"
-run_compose "pull pinned images" pull --policy always
+pull_output="$(mktemp)"
+if ! compose pull --policy always >"$pull_output" 2>&1; then
+  echo "ERROR: pull pinned images failed" >&2
+  cat "$pull_output" >&2
+  rm -f "$pull_output"
+  exit 1
+fi
+rm -f "$pull_output"
+echo "OK: pull pinned images"
 if [[ "$deploy_api" == true ]]; then
   verify_pulled_image_revision api "$api_image_tag"
 fi

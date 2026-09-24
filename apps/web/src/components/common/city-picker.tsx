@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import { useLocale } from "@/lib/i18n";
 
 type Props = {
-  value: string;
-  onChange: (value: string) => void;
+  value: CityValue;
+  onChange: (value: CityValue) => void;
   onBlur?: () => void;
   disabled?: boolean;
   id?: string;
@@ -18,16 +18,21 @@ type Props = {
   "aria-invalid"?: React.AriaAttributes["aria-invalid"];
   "aria-required"?: React.AriaAttributes["aria-required"];
 };
+export interface CityValue {
+  city: string;
+  province: string;
+  country: string;
+}
 interface Feature {
   properties?: { name?: string; city?: string; country?: string; state?: string };
 }
 export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: Props) {
   const { t, language } = useLocale();
   const listId = useId();
-  const [options, setOptions] = useState<string[]>([]);
+  const [options, setOptions] = useState<CityValue[]>([]);
   const [open, setOpen] = useState(false);
   useEffect(() => {
-    const query = value.trim();
+    const query = value.city.trim();
     if (query.length < 2) {
       setOptions([]);
       return;
@@ -42,11 +47,15 @@ export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: P
         if (active)
           setOptions(
             (body.features ?? [])
-              .map((feature) => {
+              .map((feature): CityValue => {
                 const p = feature.properties ?? {};
-                return [p.name ?? p.city, p.state, p.country].filter(Boolean).join(", ");
+                return {
+                  city: p.city ?? p.name ?? "",
+                  province: p.state ?? "",
+                  country: p.country ?? "",
+                };
               })
-              .filter(Boolean),
+              .filter((city) => city.city.length > 0),
           );
       } catch {
         if (active) setOptions([]);
@@ -56,17 +65,17 @@ export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: P
       active = false;
       clearTimeout(timer);
     };
-  }, [value, language]);
+  }, [value.city, language]);
   return (
     <div className="relative">
       <div className="relative">
         <MapPinIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
         <Input
           id={id}
-          value={value}
+          value={value.city}
           disabled={disabled}
           onChange={(event) => {
-            onChange(event.target.value);
+            onChange({ ...value, city: event.target.value });
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
@@ -84,6 +93,24 @@ export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: P
           {...aria}
         />
       </div>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        <Input
+          value={value.province}
+          disabled={disabled}
+          onChange={(event) => onChange({ ...value, province: event.target.value })}
+          onBlur={onBlur}
+          placeholder={t("provincePlaceholder")}
+          aria-label={t("province")}
+        />
+        <Input
+          value={value.country}
+          disabled={disabled}
+          onChange={(event) => onChange({ ...value, country: event.target.value })}
+          onBlur={onBlur}
+          placeholder={t("countryPlaceholder")}
+          aria-label={t("countryPlaceholder")}
+        />
+      </div>
       {open && options.length > 0 && (
         <div
           id={listId}
@@ -91,7 +118,7 @@ export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: P
         >
           {options.map((city) => (
             <button
-              key={city}
+              key={`${city.city}-${city.province}-${city.country}`}
               type="button"
               className="hover:bg-muted w-full px-3 py-2 text-left text-sm"
               onMouseDown={(event) => event.preventDefault()}
@@ -101,7 +128,7 @@ export function CityPicker({ value, onChange, onBlur, id, disabled, ...aria }: P
                 onBlur?.();
               }}
             >
-              {city}
+              {[city.city, city.province, city.country].filter(Boolean).join(", ")}
             </button>
           ))}
         </div>
