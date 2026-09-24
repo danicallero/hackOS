@@ -431,13 +431,8 @@ export function ScheduleFormModal({
           />
         )}
 
-        {/*
-          Each field renders a native date + time input (see DateTimeInput).
-          The side panel is ≤32rem (512px), so three columns can't fit
-          without clipping — use `sm:grid-cols-3` so the fields stack when
-          the panel is narrower than 640px (H59 follow-up, #490).
-        */}
-        <div className="grid gap-3 sm:grid-cols-3">
+        {/* Date/time controls keep their own rows in the narrow side panel. */}
+        <div className="grid gap-3">
           <Field id="schedule-starts" label={t("colStarts")} className="min-w-0">
             <DateTimeInput
               id="schedule-starts"

@@ -11,6 +11,7 @@ import { PasswordInput } from "@/components/common/password-input";
 import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -35,6 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useVerificationResend } from "@/hooks/use-verification-resend";
 import { signUp } from "@/lib/auth-client";
 import { LANGS, languageName, type Translate, useLocale } from "@/lib/i18n";
 import { safeReturnPath, withReturnPath } from "@/lib/return-path";
@@ -88,6 +90,13 @@ function SignUpInner() {
   const rawNext = useSearchParams().get("next");
   const next = safeReturnPath(rawNext, "");
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
+  const verificationCallbackURL = next
+    ? `/verify-email?verified=1&next=${encodeURIComponent(next)}`
+    : undefined;
+  const { cooldown, resend, resending } = useVerificationResend(
+    submittedEmail ?? "",
+    verificationCallbackURL,
+  );
   const schema = useMemo(() => signupSchema(t), [t]);
   const form = useForm<Values>({
     resolver: zodResolver(schema),
@@ -125,7 +134,7 @@ function SignUpInner() {
       language: values.language,
       // Carried through to the verification email's redirect (H188): the API
       // decodes this back into `next` on /verify-email.
-      ...(next ? { callbackURL: `/verify-email?verified=1&next=${encodeURIComponent(next)}` } : {}),
+      ...(verificationCallbackURL ? { callbackURL: verificationCallbackURL } : {}),
     });
     if (error && error.status !== 200) {
       form.setError("root", { message: localizedSignUpError(error, t) });
@@ -148,15 +157,16 @@ function SignUpInner() {
           <p>{t("checkSpamFolder")}</p>
           <p>
             {t("didntGetIt")}{" "}
-            <Link
-              href={withReturnPath(
-                `/verify-email?email=${encodeURIComponent(submittedEmail)}`,
-                next || null,
-              )}
-              className="text-foreground underline underline-offset-4"
+            <Button
+              type="button"
+              variant="link"
+              size="xs"
+              className="h-auto px-0 align-baseline"
+              disabled={cooldown > 0 || resending}
+              onClick={() => void resend()}
             >
-              {t("resendVerification")}
-            </Link>
+              {cooldown > 0 ? t("resendIn", { seconds: cooldown }) : t("resendVerification")}
+            </Button>
           </p>
         </CardContent>
       </Card>
