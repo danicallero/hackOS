@@ -108,7 +108,7 @@ jobs:
       - name: Start LocalStack S3
         run: |
           docker run --detach --name hackos-ci-localstack \
-            --publish 9000:9000 \
+            --publish 9000:4566 \
             --env SERVICES=s3 \
             --env EAGER_SERVICE_LOADING=1 \
             --env AWS_DEFAULT_REGION=us-east-1 \
