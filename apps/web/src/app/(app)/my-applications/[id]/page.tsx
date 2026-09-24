@@ -62,6 +62,7 @@ import {
 } from "../lib";
 import { ApplicationTimeline, ReadOnlyAnswers } from "./application-sections";
 import { ApplicationStatusActions } from "./application-status-actions";
+import { useApplicationDraft } from "./use-application-draft";
 
 export default function MyApplicationDetailPage() {
   const { t, language } = useLocale();
@@ -274,65 +275,22 @@ export default function MyApplicationDetailPage() {
     return missing.length === 0;
   }
 
-  const handleSaveDraft = useCallback(async () => {
-    setSaving(true);
-    setSaveState("saving");
-    setActionError(null);
-    try {
-      const saved = await api.put<MyResponseDetail>(`/api/applications/${id}/response`, {
-        responses: values,
-      });
-      setResponse(saved);
-      setValues(saved.responses ?? {});
-      setFieldErrors({});
-      setSaveState("saved");
-      setActionError(null);
-      toast.success(t("draftSaved"));
-    } catch (err) {
-      setSaveState("error");
-      setActionError({
-        action: "save",
-        message: err instanceof ApiError ? err.message : t("couldNotSaveDraft"),
-      });
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveDraft"));
-    } finally {
-      setSaving(false);
-    }
-  }, [id, t, values]);
-
-  // Starting a form creates its draft before a file field can be used. The
-  // endpoint is idempotent and preserves any existing answer set.
-  useEffect(() => {
-    if (!form || response || responseError) return;
-    let active = true;
-    void api
-      .put<MyResponseDetail>(`/api/applications/${id}/response`, { responses: {} })
-      .then((draft) => {
-        if (!active) return;
-        setResponse(draft);
-        responseRef.current = draft;
-      })
-      .catch((error) => {
-        if (active)
-          setActionError({
-            action: "save",
-            message: error instanceof ApiError ? error.message : tRef.current("couldNotSaveDraft"),
-          });
-      });
-    return () => {
-      active = false;
-    };
-  }, [form, response, responseError, id]);
-
-  // Autosave after a short pause. Keep manual Save for an explicit retry, but
-  // never make a locale change or server refresh overwrite local input.
-  useEffect(() => {
-    if (!editable || !response || saveState !== "unsaved") return;
-    const timer = window.setTimeout(() => {
-      void handleSaveDraft();
-    }, 700);
-    return () => window.clearTimeout(timer);
-  }, [editable, response, saveState, handleSaveDraft]);
+  const handleSaveDraft = useApplicationDraft({
+    applicationId: id,
+    formOpen: Boolean(form),
+    response,
+    responseError,
+    editable,
+    values,
+    saveState,
+    t,
+    setResponse,
+    setValues,
+    setFieldErrors,
+    setSaving,
+    setSaveState,
+    setActionError,
+  });
 
   async function handleSubmit() {
     if (!checkRequired()) {
