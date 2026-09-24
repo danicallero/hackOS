@@ -83,6 +83,8 @@ const envSchema = z.object({
   MAIL_FROM_ADDRESS: z.string().default("noreply@hackos.local"),
   MAIL_FROM_NAME: z.string().default("hackOS"),
   SMTP_HOST: z.string().default("localhost"),
+  /** TLS server name when the relay is reached through a private IP. */
+  SMTP_TLS_SERVERNAME: z.string().optional(),
   SMTP_PORT: z.coerce.number().default(1025),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),

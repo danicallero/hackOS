@@ -149,6 +149,8 @@ Para correo, `MAIL_PROVIDER=smtp` requiere `SMTP_HOST`. En producción, el
 modo por defecto es STARTTLS en 587 y `SMTP_REQUIRE_TLS=true` rechaza una
 conexión sin cifrar. Para un relay SMTPS, usa `SMTP_PORT=465` y
 `SMTP_SECURE=true`. Se puede usar Amazon SES a través de su endpoint SMTP;
+si el relay se alcanza por una IP privada, configura `SMTP_TLS_SERVERNAME`
+con el nombre incluido en su certificado para conservar la verificación TLS.
 `SMTP_USER` y `SMTP_PASS` se guardan en el fichero combinado cuando el relay
 requiere autenticación. Las
 claves de firma de Apple/Google son opcionales, pero cada bloque configurado
