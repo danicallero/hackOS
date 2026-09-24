@@ -44,4 +44,22 @@ describe("application validation errors", () => {
       "Name: fieldRequired\nAge: fieldMustBeNumber\nconsent: fieldMustBeBoolean",
     );
   });
+
+  it("uses the semantic default for URL validation failures", () => {
+    const urlField = {
+      key: "portfolio",
+      kind: "text",
+      label: { en: "Portfolio", es: "Portfolio", gl: "Portfolio" },
+      validation: { text_condition: "url" },
+    };
+    const error = new ApiError(400, "validation_error", "Invalid response", {
+      fields: { portfolio: "invalid format" },
+    });
+
+    expect(fieldErrorsFromApi(error, translate, [urlField], "en")).toEqual({
+      portfolio: "invalidUrl",
+    });
+    expect(validateFieldOnBlur(urlField, "not-a-url", translate, "en")).toBe("invalidUrl");
+    expect(validateFieldOnBlur(urlField, "example.org", translate, "en")).toBeNull();
+  });
 });

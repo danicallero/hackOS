@@ -1292,6 +1292,7 @@
   "fieldMustBeArray": "Selecciona una o más opciones.",
   "fieldMustBeString": "Introduce un texto.",
   "fieldMustBeUniversity": "Selecciona una universidad válida.",
+  "fieldMustBeCity": "Selecciona una ciudad, provincia y país.",
   "tooShort": "Es demasiado corto.",
   "tooLong": "Es demasiado largo.",
   "invalidFormat": "El formato no es válido.",
