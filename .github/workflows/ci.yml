@@ -105,47 +105,57 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
 
-      - name: Start LocalStack S3
+      - name: Start MinIO
         run: |
-          docker run --detach --name hackos-ci-localstack \
-            --publish 9000:4566 \
-            --env SERVICES=s3 \
-            --env EAGER_SERVICE_LOADING=1 \
-            --env AWS_DEFAULT_REGION=us-east-1 \
-            localstack/localstack:latest
+          docker run --detach --name hackos-ci-minio \
+            --publish 9000:9000 \
+            --publish 9001:9001 \
+            --env MINIO_ROOT_USER=hackos \
+            --env MINIO_ROOT_PASSWORD=hackos-secret \
+            --health-cmd "mc ready local" \
+            --health-interval 5s \
+            --health-timeout 5s \
+            --health-retries 12 \
+            quay.io/minio/minio:latest \
+            server /data --console-address ":9001"
 
       - name: Set up workspace
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: Wait for LocalStack S3
+      - name: Wait for MinIO
         shell: bash
         run: |
           set -euo pipefail
           for attempt in {1..60}; do
-            if curl --fail --silent --show-error http://127.0.0.1:9000/_localstack/health \
-              | grep -Eq '"s3"[[:space:]]*:[[:space:]]*"(available|running)"'; then
+            status="$(docker inspect --format '{{.State.Health.Status}}' hackos-ci-minio)"
+            case "$status" in
+              healthy)
                 exit 0
-            fi
+                ;;
+              unhealthy)
+                docker logs hackos-ci-minio
+                exit 1
+                ;;
+            esac
             sleep 1
           done
-          docker logs hackos-ci-localstack
+          docker logs hackos-ci-minio
           exit 1
 
-      - name: Create S3 test bucket
+      - name: Create MinIO test bucket
         run: >-
-          docker run --rm --network host
-          -e AWS_ACCESS_KEY_ID=hackos
-          -e AWS_SECRET_ACCESS_KEY=hackos-secret
-          -e AWS_DEFAULT_REGION=us-east-1
-          amazon/aws-cli:latest
-          --endpoint-url http://127.0.0.1:9000 s3api create-bucket --bucket hackos
+          docker run --rm --network host --entrypoint /bin/sh
+          -e MINIO_ROOT_USER=hackos
+          -e MINIO_ROOT_PASSWORD=hackos-secret
+          quay.io/minio/mc:latest
+          -c 'mc alias set local http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" && mc mb --ignore-existing local/hackos'
 
       - name: Run API integration tests
         run: pnpm --filter @hackos/api test
 
-      - name: Stop LocalStack
+      - name: Stop MinIO
         if: always()
-        run: docker rm --force hackos-ci-localstack || true
+        run: docker rm --force hackos-ci-minio || true
 
   web-test:
     name: web unit tests
