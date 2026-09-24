@@ -335,10 +335,6 @@ export default function MyApplicationDetailPage() {
       toast.success(t("applicationSubmitted"));
     } catch (err) {
       setSaveState("error");
-      setActionError({
-        action: "submit",
-        message: err instanceof ApiError ? err.message : t("couldNotSubmitApplication"),
-      });
       if (err instanceof ApiError) {
         const nextErrors = fieldErrorsFromApi(err, t, template, lang);
         setFieldErrors(nextErrors);
@@ -349,6 +345,7 @@ export default function MyApplicationDetailPage() {
           });
         }
         const summary = validationErrorSummary(nextErrors, template, lang);
+        const isTemplateValidation = err.code === "validation_error";
         showErrorToast(
           err,
           t("couldNotSubmitApplication"),
@@ -358,16 +355,26 @@ export default function MyApplicationDetailPage() {
                 duration: 12_000,
                 autopilot: { expand: 0, collapse: 0 },
               }
-            : undefined,
+            : !isTemplateValidation
+              ? {
+                  description: err.message,
+                  duration: 12_000,
+                  autopilot: { expand: 0, collapse: 0 },
+                  action: { label: t("retry"), onClick: () => void handleSubmit() },
+                }
+              : undefined,
         );
+        if (!isTemplateValidation) {
+          setActionError({ action: "submit", message: err.message });
+        }
       } else {
+        setActionError({ action: "submit", message: t("couldNotSubmitApplication") });
         showErrorToast(err, t("couldNotSubmitApplication"));
       }
     } finally {
       setSubmitting(false);
     }
   }
-
   async function handleConfirm() {
     if (!response) return;
     setActing(true);

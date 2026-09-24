@@ -66,6 +66,21 @@ export interface TemplateFieldLike {
 const NONE = "__none__";
 const MAXIMUM_BIRTH_AGE = 120;
 
+/**
+ * Template URL validation accepts a hostname without a protocol. Browsers,
+ * however, interpret that form as an internal relative path, so add HTTPS
+ * before rendering a submitted answer as a link.
+ */
+export function externalUrlHref(value: string): string | null {
+  const candidate = /^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`;
+  try {
+    const url = new URL(candidate);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Stable ids let labels, validation messages, and focus recovery share one contract. */
 export function templateFieldId(fieldKey: string, applicationId?: number): string {
   const scope = applicationId == null ? "staff" : `application-${applicationId}`;
@@ -126,11 +141,12 @@ export function TemplateFieldControl({
   const helpId = `${id}-help`;
   const hasError = Boolean(error);
   const externalUrl = typeof value === "string" ? value.trim() : "";
+  const externalUrlHrefValue = externalUrl ? externalUrlHref(externalUrl) : null;
   const isReadOnlyUrl =
     disabled &&
     (field.kind === "text" || field.kind === "textarea") &&
     field.validation?.text_condition === "url" &&
-    externalUrl.length > 0;
+    externalUrlHrefValue !== null;
   const describedBy =
     [helpText ? helpId : null, hasError ? errorId : null].filter(Boolean).join(" ") || undefined;
 
@@ -139,7 +155,7 @@ export function TemplateFieldControl({
     case "textarea":
       control = isReadOnlyUrl ? (
         <a
-          href={externalUrl}
+          href={externalUrlHrefValue}
           target="_blank"
           rel="noreferrer"
           className="text-primary block break-all text-sm underline underline-offset-4"
@@ -413,7 +429,7 @@ export function TemplateFieldControl({
     default:
       control = isReadOnlyUrl ? (
         <a
-          href={externalUrl}
+          href={externalUrlHrefValue}
           target="_blank"
           rel="noreferrer"
           className="text-primary block break-all text-sm underline underline-offset-4"
