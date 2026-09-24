@@ -48,7 +48,14 @@ export function useApplicationDraft({
       const saved = await api.put<MyResponseDetail>(`/api/applications/${applicationId}/response`, {
         responses: values,
       });
-      setResponse(saved);
+      // PUT returns the response row only; retain the immutable template
+      // resolved by GET so an autosave cannot make the page fall back to a
+      // newer public form version.
+      setResponse((previous) =>
+        previous?.template
+          ? { ...saved, template: previous.template, sections: previous.sections }
+          : saved,
+      );
       setValues(saved.responses ?? {});
       setSaveState("saved");
       toast.success(t("draftSaved"));
