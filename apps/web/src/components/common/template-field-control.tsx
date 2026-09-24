@@ -3,7 +3,8 @@
 // One control for a single application-template field, shared by the applicant
 // form (my-applications) and staff response editing (applications). Owns the
 // type contracts the API's validateResponses enforces: number for
-// "number"/"birth_year"/"university"/"degree", string for text/file/city, string[] for
+// "number"/"birth_year"/"university"/"degree", string for text/file, a
+// city/province/country object for city, string[] for
 // multiselect, boolean for checkbox.
 
 import { CityPicker } from "@/components/common/city-picker";
@@ -29,7 +30,14 @@ import type { I18nText } from "@/lib/i18n";
 import { pickText, useLocale } from "@/lib/i18n";
 import type { Language } from "@/lib/types";
 
-export type FieldValue = string | number | boolean | string[] | null | undefined;
+export type FieldValue =
+  | string
+  | number
+  | boolean
+  | string[]
+  | { city: string; province: string; country: string }
+  | null
+  | undefined;
 
 /** Structural shape shared by both modules' local TemplateField types. */
 export interface TemplateFieldLike {
@@ -365,7 +373,15 @@ export function TemplateFieldControl({
     case "city":
       control = (
         <CityPicker
-          value={typeof value === "string" ? value : ""}
+          value={
+            typeof value === "object" && value !== null && !Array.isArray(value)
+              ? {
+                  city: typeof value.city === "string" ? value.city : "",
+                  province: typeof value.province === "string" ? value.province : "",
+                  country: typeof value.country === "string" ? value.country : "",
+                }
+              : { city: "", province: "", country: "" }
+          }
           onChange={onChange}
           onBlur={onBlur}
           disabled={disabled}

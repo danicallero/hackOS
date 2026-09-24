@@ -297,9 +297,25 @@ export function validateResponses(
           errors[field.key] = "must be a degree id";
         }
         break;
-      case "city":
-        if (typeof value !== "string") errors[field.key] = "must be a string";
+      case "city": {
+        // A city answer is deliberately structured so city/province/country
+        // survive separately for exports and application review.
+        const location = value as Record<string, unknown>;
+        if (
+          typeof value !== "object" ||
+          value === null ||
+          Array.isArray(value) ||
+          typeof location.city !== "string" ||
+          location.city.trim() === "" ||
+          typeof location.province !== "string" ||
+          location.province.trim() === "" ||
+          typeof location.country !== "string" ||
+          location.country.trim() === ""
+        ) {
+          errors[field.key] = "must include city, province, and country";
+        }
         break;
+      }
       default:
         if (typeof value !== "string") errors[field.key] = "must be a string";
     }
