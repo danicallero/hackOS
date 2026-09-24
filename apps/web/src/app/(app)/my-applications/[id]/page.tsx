@@ -222,15 +222,17 @@ export default function MyApplicationDetailPage() {
 
   // Mirror the API's enrichment so shirt-size + dietary fields render in the form
   // (participant/mentor) rather than being pulled silently from the profile (H12).
-  const template = form
-    ? enrichTemplate(
-        form.ask_shirt_size,
-        form.ask_food_intolerances,
-        form.template,
-        intolerances,
-        shirtSizes,
-      )
-    : [];
+  const responseTemplate = response?.template ?? form?.template;
+  const template =
+    form && responseTemplate
+      ? enrichTemplate(
+          form.ask_shirt_size,
+          form.ask_food_intolerances,
+          responseTemplate,
+          intolerances,
+          shirtSizes,
+        )
+      : [];
   const status = confirmationExpired ? "expired" : response?.status; // already masked by the API
   const timelineResponse =
     confirmationExpired && response ? { ...response, status: "expired" } : response;
@@ -580,7 +582,7 @@ export default function MyApplicationDetailPage() {
           groupFieldsBySections(
             template,
             withLogisticsSection(
-              form?.sections ?? [],
+              response?.sections ?? form?.sections ?? [],
               Boolean(form?.ask_shirt_size || form?.ask_food_intolerances),
             ),
           ).map((group, i) => (

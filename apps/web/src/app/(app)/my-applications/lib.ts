@@ -122,6 +122,9 @@ export interface MyResponseDetail {
   submitted_at: string | null;
   created_at: string;
   updated_at: string;
+  /** Immutable form snapshot the response is validated against. */
+  template?: TemplateField[];
+  sections?: FormSection[];
 }
 
 /** A single response value, keyed by field.key in the responses object. */
