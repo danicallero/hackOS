@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ApplicationExportPanel } from "@/components/applications/application-export-panel";
 import { ReviewModal } from "@/components/applications/review-modal";
 import { AlertModal } from "@/components/common/alert-modal";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -409,6 +410,17 @@ export function ResponsesTab({
           </SelectContent>
         </Select>
         <div className="ml-auto flex items-center gap-2">
+          {canExportFiles && (
+            <ApplicationExportPanel
+              applicationId={id}
+              trigger={
+                <Button variant="outline" size="sm">
+                  <DownloadIcon aria-hidden="true" />
+                  {t("export")}
+                </Button>
+              }
+            />
+          )}
           {canExportFiles && fileFields.length > 0 && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

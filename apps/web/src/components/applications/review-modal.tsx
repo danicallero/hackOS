@@ -172,6 +172,11 @@ function fieldValueText(
   value: unknown,
   lang: Language,
   t: Translate,
+  libraryValues: {
+    universities: Map<number, string>;
+    degrees: Map<number, string>;
+    intolerances: Map<number, string>;
+  },
 ): string {
   if (value == null || value === "") return "";
   switch (field.kind) {
@@ -184,12 +189,26 @@ function fieldValueText(
       return values
         .map((v) => {
           const opt = field.options?.find((o) => o.value === v);
-          return opt ? pickText(opt.label, lang) : String(v);
+          if (opt) return pickText(opt.label, lang);
+          if (field.key === "food_intolerances") {
+            return libraryValues.intolerances.get(Number(v)) ?? String(v);
+          }
+          return String(v);
         })
         .join(", ");
     }
     case "checkbox":
       return value === true ? t("yesLabel") : t("noLabel");
+    case "university":
+    case "degree": {
+      const id = typeof value === "number" ? value : Number(value);
+      if (!Number.isInteger(id) || id <= 0) return String(value);
+      return (
+        (field.kind === "university"
+          ? libraryValues.universities.get(id)
+          : libraryValues.degrees.get(id)) ?? String(value)
+      );
+    }
     default:
       return typeof value === "object" ? JSON.stringify(value) : String(value);
   }
@@ -200,36 +219,71 @@ function csvCell(value: string): string {
   return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
-/** Downloads every answer for one applicant as a CSV file (section, field,
- *  value), grouped the same way the read-only view shows them. */
+/** Downloads one response as a single wide CSV row, matching the application
+ * export and user-roster convention: fields are columns and people are rows. */
 function exportAnswers(
   response: ResponseRow,
   answerFields: TemplateField[],
-  answerSections: FormSection[],
   answerValues: Record<string, unknown>,
   lang: Language,
   t: Translate,
-) {
-  const rows: string[][] = [
-    ["Section", "Field", "Value"],
-    ["", "Name", response.name ?? ""],
-    ["", "Email", response.email],
+): Promise<void> {
+  const idsFor = (kind: "university" | "degree") => [
+    ...new Set(
+      answerFields.flatMap((field) => {
+        if (field.kind !== kind) return [];
+        const id = Number(answerValues[field.key]);
+        return Number.isInteger(id) && id > 0 ? [id] : [];
+      }),
+    ),
   ];
-  for (const group of groupFieldsBySections(answerFields, answerSections)) {
-    const sectionTitle = group.section ? pickText(group.section.title, lang) : "";
-    for (const field of group.fields) {
-      const text = fieldValueText(field, answerValues[field.key], lang, t);
-      rows.push([sectionTitle, pickText(field.label, lang), text]);
+  const loadNames = async (path: string, key: "universities" | "degrees", ids: number[]) => {
+    if (ids.length === 0) return new Map<number, string>();
+    try {
+      const response = await api.get<Record<typeof key, Array<{ id: number; name: string }>>>(
+        path,
+        {
+          query: { ids: ids.join(",") },
+        },
+      );
+      return new Map(response[key].map(({ id, name }) => [id, name]));
+    } catch {
+      return new Map<number, string>();
     }
-  }
-  const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${(response.name ?? response.email).replace(/[^a-z0-9]+/gi, "-")}-answers.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
+  };
+  return Promise.all([
+    loadNames("/api/public/universities", "universities", idsFor("university")),
+    loadNames("/api/public/degrees", "degrees", idsFor("degree")),
+    api
+      .get<{ intolerances: Intolerance[] }>("/api/public/food-intolerances")
+      .then(
+        ({ intolerances }) =>
+          new Map(
+            intolerances.map((intolerance) => [intolerance.id, pickText(intolerance.label, lang)]),
+          ),
+      )
+      .catch(() => new Map<number, string>()),
+  ]).then(([universities, degrees, intolerances]) => {
+    const libraryValues = { universities, degrees, intolerances };
+    const rows: string[][] = [
+      ["Name", "Email", ...answerFields.map((field) => pickText(field.label, lang))],
+      [
+        response.name ?? "",
+        response.email,
+        ...answerFields.map((field) =>
+          fieldValueText(field, answerValues[field.key], lang, t, libraryValues),
+        ),
+      ],
+    ];
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${(response.name ?? response.email).replace(/[^a-z0-9]+/gi, "-")}-answers.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  });
 }
 
 interface ApplicationFile {
@@ -1363,9 +1417,7 @@ export function ReviewModal({
               <button
                 type="button"
                 className={dialogIconButtonClass}
-                onClick={() =>
-                  exportAnswers(response, answerFields, answerSections, answerValues, lang, t)
-                }
+                onClick={() => void exportAnswers(response, answerFields, answerValues, lang, t)}
                 aria-label={t("exportAnswers")}
                 title={t("exportAnswers")}
               >

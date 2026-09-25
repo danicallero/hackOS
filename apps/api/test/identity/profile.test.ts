@@ -1981,12 +1981,13 @@ describe("staff user routes (H7)", () => {
     const { pool } = await import("../../src/db/pool.js");
     await createUser({ name: "Ada", email: "ada@example.test" });
     const graceId = await createUser({ name: "Grace", email: "grace@example.test" });
-    await pool.query(`UPDATE users SET surname = $2, dni = $3, badge_id = $4 WHERE id = $1`, [
-      graceId,
-      "Hopper",
-      "87654321X",
-      "BADGE-GRACE",
-    ]);
+    await pool.query(
+      `UPDATE users
+          SET surname = $2, dni = $3, badge_id = $4,
+              food_intolerances = ARRAY[7]::integer[], food_intolerance_notes = 'Peanut'
+        WHERE id = $1`,
+      [graceId, "Hopper", "87654321X", "BADGE-GRACE"],
+    );
     const reader = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
     const pleb = await createUser();
 
@@ -1998,6 +1999,10 @@ describe("staff user routes (H7)", () => {
     expect(all.statusCode).toBe(200);
     expect(all.json().total).toBeGreaterThanOrEqual(3);
     expect(Array.isArray(all.json().users)).toBe(true);
+    expect(all.json().users.find((user: { id: number }) => user.id === graceId)).toMatchObject({
+      foodIntolerances: [7],
+      foodIntoleranceNotes: "Peanut",
+    });
 
     async function search(q: string) {
       const res = await a.inject({
