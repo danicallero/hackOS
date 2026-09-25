@@ -48,29 +48,23 @@ stays on-screen for the rest of its window.
 
 ### Targeting
 
-Delivery reaches one of three mutually exclusive audiences, resolved by
+Delivery reaches one of three mutually exclusive targets, resolved by
 `resolveRecipients` in `announcements-service.ts`:
 
-- **Everyone** (default): `audiences = []` and no `announcement_recipients`
-  rows.
-- **Audience tags**: `audiences` (`text[]`, values `sponsor | participant |
-  mentor | staff`) — the first three reuse schedule's H59 vocabulary
-  (`docs/schedule-categories.md` doesn't cover this; see
-  `apps/web/src/app/(app)/schedule/schedule-model.ts`'s `SCHEDULE_AUDIENCES`);
-  `staff` is announcement-specific and means "holds at least one capability"
-  — the same definition `getEffectiveCapabilities` uses, read from the
-  `user_effective_capabilities` view (H8's tri-state role resolution,
-  `db/migrations/0800`) (unlike schedule, where staff always sees everything
-  and is never a *stored* tag — here it has to be storable since it's a
-  delivery target, not a visibility rule). `sponsor` implies `participant`,
-  matching schedule's own rule. Resolved in one SQL query against `sponsors`,
-  `user_effective_capabilities`, and `user_effective_role_name` (H8: a user's
-  mentor/participant attendee type is matched by the seeded Mentor/
-  Participant role's own NAME — no separate `badge_category` column, retired
-  entirely; see `docs/audits/access-control-audit-plan.md`) — no per-user
-  round-trips.
+- **Everyone** (default): no `roleIds`, no `intoleranceIds`, and no
+  `announcement_recipients` rows.
+- **Roles, optionally narrowed by food intolerances**: `roleIds` selects the
+  current holders of one or more active H8 roles; `intoleranceIds` further
+  narrows that set to people whose `users.food_intolerances` overlaps the
+  selected dictionary IDs. Either filter can stand alone. Both are resolved in
+  one query at fan-out time, so scheduled notices follow current role
+  assignments and dietary declarations rather than a stale recipient snapshot.
+  The role picker gets its minimal catalogue from
+  `GET /api/announcements/targeting-options`, scoped to
+  `ANNOUNCEMENTS_MANAGE` rather than `PERMISSIONS_MANAGE`; intolerance choices
+  come from the existing public food-intolerance dictionary.
 - **Specific recipients**: an explicit list in the `announcement_recipients`
-  join table (`announcement_id, user_id`). Rejected together with `audiences`
+  join table (`announcement_id, user_id`). Rejected together with role/dietary filters
   (choose one), and rejected together with a non-`none` `screen_placement` —
   the TV wall is anonymous, so "screen-placed and only visible to some
   accounts" isn't a real state.
@@ -94,8 +88,7 @@ to announcements). `channels` is stored as plain `text[]` rather than an
 array of the `notification_channel` enum: node-postgres has no array parser
 for custom enum OIDs out of the box (only `text[]` and other built-in array
 types deserialize to a JS array automatically), so a `CHECK` constraint
-(`announcements_channels_valid`) plus Zod enforce the allowed values instead
-— the same pattern `audiences` already uses.
+(`announcements_channels_valid`) plus Zod enforce the allowed values instead.
 
 ## The generic notify pipeline (H51/H52/H53)
 
@@ -214,7 +207,7 @@ preserved as a normal translation entry rather than lost, and the new
 canonical text (in the editor's own language) is dropped from the i18n map so
 it isn't duplicated in both places — mirrored onto the linked `activities`
 row the same way. This only fires when the request actually includes `title`
-(the full edit form always does; a partial patch — reschedule, audience
+(the full edit form always does; a partial patch — reschedule, recipient
 toggle, drag-to-a-new-day — never touches language anchoring). `createScheduleItem`
 sets `primary_language` the same way, from the author's own account language
 at creation (`getUserLanguage`). Every translate call passes `source: "auto"`
@@ -287,9 +280,9 @@ through `resolveActivityText` (`lib/scanner-types.ts`, mirroring
 `apps/web/src/app/(app)/announcements/` — a list page
 (`page.tsx`) that opens `AnnouncementFormModal`
 (`announcement-form.tsx`) for both create and edit, mirroring the schedule
-module's modal pattern (progressive sections, a 3-way targeting selector
-instead of two independently-toggleable blocks so the audience/specific-user
-exclusivity is visible in the UI, channel checkboxes, and a publication
+module's modal pattern (progressive sections, a 3-way targeting selector for
+everyone, role/dietary filters, or specific people so exclusivity is visible
+in the UI, channel checkboxes, and a publication
 section whose fields change shape depending on `screenPlacement`/targeting
 mode). There are no dedicated `/announcements/new` or `/announcements/[id]`
 routes.

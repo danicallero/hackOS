@@ -1,6 +1,6 @@
 "use client";
 
-// H50 announcement administration: create/edit/delete, audience, publish/expiry
+// H50 announcement administration: create/edit/delete, recipients, publish/expiry
 // window and current/scheduled/expired status. Gated by announcements:manage;
 // consumes the CRUD API in apps/api/src/modules/notifications/routes/announcements.ts.
 

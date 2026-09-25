@@ -1,14 +1,5 @@
 import { apiFetch } from "./api";
 
-/** Sponsor/participant/mentor (H59 vocabulary) plus staff — anyone holding at least one capability — for H50 announcement targeting. */
-export type AnnouncementAudience = "sponsor" | "participant" | "mentor" | "staff";
-export const ANNOUNCEMENT_AUDIENCES: AnnouncementAudience[] = [
-  "sponsor",
-  "participant",
-  "mentor",
-  "staff",
-];
-
 export type AnnouncementChannel = "in_app" | "email" | "push";
 export const ANNOUNCEMENT_CHANNELS: AnnouncementChannel[] = ["in_app", "email", "push"];
 
@@ -44,7 +35,8 @@ export interface AdminAnnouncement {
   publish_at: string | null;
   expires_at: string | null;
   fanned_out_at: string | null;
-  audiences: AnnouncementAudience[];
+  role_ids: number[];
+  intolerance_ids: number[];
   channels: AnnouncementChannel[];
   created_at: string;
   /** Only present on the single-announcement GET. */
@@ -59,7 +51,8 @@ export interface AnnouncementInput {
   screenPlacement: AnnouncementScreenPlacement;
   publishAt: string | null;
   expiresAt: string | null;
-  audiences: AnnouncementAudience[];
+  roleIds: number[];
+  intoleranceIds: number[];
   channels: AnnouncementChannel[];
   recipientUserIds: number[];
 }
@@ -104,6 +97,21 @@ export async function fetchAnnouncementRecipientCandidates(
     `/api/announcements/recipient-candidates?q=${encodeURIComponent(q)}&limit=${limit}`,
   );
   return response.users;
+}
+
+export async function fetchAnnouncementTargetingOptions(): Promise<{
+  roles: Array<{ id: number; name: string }>;
+}> {
+  return apiFetch("/api/announcements/targeting-options");
+}
+
+export async function fetchFoodIntolerances(): Promise<
+  Array<{ id: number; label: Record<string, string> }>
+> {
+  const response = await apiFetch<{
+    intolerances: Array<{ id: number; label: Record<string, string> }>;
+  }>("/api/public/food-intolerances");
+  return response.intolerances;
 }
 
 /** Whether the deployment has a translation provider configured — hide/disable the action when false. */

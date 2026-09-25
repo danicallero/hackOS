@@ -5,11 +5,12 @@ import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
 import { runAnnouncementsPublisherOnce } from "../../src/modules/notifications/announcements-publisher.js";
 import {
+  assignRole,
   asUser,
   buildTestApp,
+  createRole,
   createUser,
   createUserWithCapabilities,
-  grantAttendeeRole,
 } from "../helpers.js";
 import { resetNotificationsState } from "./notif-helpers.js";
 
@@ -375,7 +376,7 @@ describe("visibility window (H50 vigencia — DELTA expires_at)", () => {
 });
 
 describe("announcement delivery controls", () => {
-  it("does not accept an audience field and reaches every account when delivery is selected", async () => {
+  it("does not accept a retired audience field and reaches every account when delivery is selected", async () => {
     const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
     const firstUserId = await createUser();
     const secondUserId = await createUser();
@@ -403,78 +404,44 @@ describe("announcement delivery controls", () => {
   });
 });
 
-async function makeAttendee(role: "participant" | "mentor"): Promise<number> {
-  const userId = await createUser();
-  await grantAttendeeRole(userId, role);
-  return userId;
-}
-
-async function makeSponsor(): Promise<number> {
-  const userId = await createUser();
-  const { rows } = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [
-    `ent-${crypto.randomUUID()}`,
-  ]);
-  await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
-    rows[0].id,
-    userId,
-  ]);
-  return userId;
-}
-
-describe("audience and recipient targeting (H50, DELTA 0722)", () => {
-  it("an audience-tagged announcement only reaches matching accounts (sponsor implies participant)", async () => {
+describe("role, dietary, and recipient targeting (H50, DELTA 0601)", () => {
+  it("reaches current holders of selected roles, narrowed by declared food intolerances", async () => {
     const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
-    const mentorId = await makeAttendee("mentor");
-    const participantId = await makeAttendee("participant");
-    const sponsorId = await makeSponsor();
-    await createUser(); // unaffiliated account, should never be reached
+    const roleId = await createRole([], { name: "Meal crew" });
+    const matchingId = await createUser();
+    const noIntoleranceId = await createUser();
+    const differentRoleId = await createUser();
+    await assignRole(matchingId, roleId);
+    await assignRole(noIntoleranceId, roleId);
+    const otherRoleId = await createRole([], { name: "Other crew" });
+    await assignRole(differentRoleId, otherRoleId);
+    const { rows } = await pool.query<{ id: number }>(
+      `INSERT INTO food_intolerances (label) VALUES ('{"es":"Gluten","gl":"Gluten","en":"Gluten"}') RETURNING id`,
+    );
+    const intoleranceId = rows[0]?.id;
+    await pool.query(`UPDATE users SET food_intolerances = ARRAY[$2] WHERE id = $1`, [
+      matchingId,
+      intoleranceId,
+    ]);
 
     const res = await app.inject({
-      method: "POST",
-      url: "/api/announcements",
-      headers: asUser(adminId),
-      payload: { title: "mentors only", body: "b", notifyUsers: true, audiences: ["mentor"] },
-    });
-    expect(res.statusCode).toBe(201);
-
-    const userIds = [...new Set((await outboxRowsFor()).map((r) => r.user_id))];
-    expect(userIds).toEqual([mentorId]);
-    expect(userIds).not.toContain(participantId);
-    expect(userIds).not.toContain(sponsorId);
-
-    const participantAudience = await app.inject({
       method: "POST",
       url: "/api/announcements",
       headers: asUser(adminId),
       payload: {
-        title: "participants and sponsors",
+        title: "meal change",
         body: "b",
         notifyUsers: true,
-        audiences: ["participant"],
+        roleIds: [roleId],
+        intoleranceIds: [intoleranceId],
       },
-    });
-    expect(participantAudience.statusCode).toBe(201);
-    const secondRoundUserIds = [
-      ...new Set((await outboxRowsFor()).map((r) => r.user_id).filter((id) => id !== mentorId)),
-    ];
-    expect(secondRoundUserIds.sort()).toEqual([participantId, sponsorId].sort());
-  });
-
-  it("a staff-audience announcement reaches every capability holder, including via a nested group", async () => {
-    const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
-    const staffId = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
-    await makeAttendee("participant"); // plain participant, not staff
-
-    const res = await app.inject({
-      method: "POST",
-      url: "/api/announcements",
-      headers: asUser(adminId),
-      payload: { title: "staff only", body: "b", notifyUsers: true, audiences: ["staff"] },
     });
     expect(res.statusCode).toBe(201);
 
-    const userIds = [...new Set((await outboxRowsFor()).map((r) => r.user_id))].sort();
-    expect(userIds).toEqual([adminId, staffId].sort());
+    const userIds = [...new Set((await outboxRowsFor()).map((r) => r.user_id))];
+    expect(userIds).toEqual([matchingId]);
+    expect(userIds).not.toContain(noIntoleranceId);
+    expect(userIds).not.toContain(differentRoleId);
   });
 
   it("a specific-recipient announcement only reaches the listed accounts", async () => {
@@ -499,7 +466,7 @@ describe("audience and recipient targeting (H50, DELTA 0722)", () => {
     expect(userIds).toEqual([targetId]);
   });
 
-  it("rejects an audience together with specific recipients", async () => {
+  it("rejects role or dietary targeting together with specific recipients", async () => {
     const adminId = await createUserWithCapabilities([CAPABILITIES.ANNOUNCEMENTS_MANAGE]);
     const targetId = await createUser();
 
@@ -511,7 +478,7 @@ describe("audience and recipient targeting (H50, DELTA 0722)", () => {
         title: "both",
         body: "b",
         notifyUsers: true,
-        audiences: ["mentor"],
+        roleIds: [await createRole([], { name: "Target" })],
         recipientUserIds: [targetId],
       },
     });
