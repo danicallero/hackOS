@@ -3,6 +3,7 @@
 import { ChevronDownIcon, MegaphoneIcon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { DateTimeInput } from "@/components/common/datetime-input";
+import { MultiSelect } from "@/components/common/multi-select";
 import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -21,31 +22,15 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal, getTimeZoneLabel } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
-import type {
-  Announcement,
-  AnnouncementAudience,
-  AnnouncementInput,
-  NotificationChannel,
-} from "@/lib/notifications";
+import type { Announcement, AnnouncementInput, NotificationChannel } from "@/lib/notifications";
 import { notificationsApi } from "@/lib/notifications";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
-const AUDIENCES: AnnouncementAudience[] = ["sponsor", "participant", "mentor", "staff"];
 const CHANNELS: NotificationChannel[] = ["in_app", "email", "push"];
-
-function audienceLabel(audience: AnnouncementAudience, t: Translate): string {
-  const map: Record<AnnouncementAudience, string> = {
-    sponsor: t("audienceSponsor"),
-    participant: t("audienceParticipant"),
-    mentor: t("audienceMentor"),
-    staff: t("audienceStaff"),
-  };
-  return map[audience];
-}
 
 function channelLabel(channel: NotificationChannel, t: Translate): string {
   const map: Record<NotificationChannel, string> = {
@@ -56,11 +41,11 @@ function channelLabel(channel: NotificationChannel, t: Translate): string {
   return map[channel];
 }
 
-type TargetingMode = "everyone" | "audience" | "specific";
+type TargetingMode = "everyone" | "roles" | "specific";
 
 function targetingModeOf(values: AnnouncementInput): TargetingMode {
   if (values.recipientUserIds.length > 0) return "specific";
-  if (values.audiences.length > 0) return "audience";
+  if (values.roleIds.length > 0 || values.intoleranceIds.length > 0) return "roles";
   return "everyone";
 }
 
@@ -76,7 +61,8 @@ export const EMPTY_ANNOUNCEMENT_FORM: AnnouncementInput = {
   screenPlacement: "none",
   publishAt: null,
   expiresAt: null,
-  audiences: [],
+  roleIds: [],
+  intoleranceIds: [],
   channels: ["in_app", "email", "push"],
   recipientUserIds: [],
 };
@@ -94,7 +80,8 @@ export function announcementToForm(a: Announcement): AnnouncementInput {
     screenPlacement: a.screen_placement,
     publishAt: a.publish_at,
     expiresAt: a.expires_at,
-    audiences: a.audiences ?? [],
+    roleIds: a.role_ids ?? [],
+    intoleranceIds: a.intolerance_ids ?? [],
     channels: a.channels ?? ["in_app", "email", "push"],
     recipientUserIds: (a.recipients ?? []).map((r) => r.id),
   };
@@ -102,7 +89,7 @@ export function announcementToForm(a: Announcement): AnnouncementInput {
 
 /**
  * Form modal for creating or editing announcements.
- * Handles trilingual content, scheduling, channel delivery, and audience targeting.
+ * Handles trilingual content, scheduling, channel delivery, and recipient targeting.
  * Must be used with a `key` prop that changes when the entity changes (create vs. edit with different IDs) to reset form state on remount.
  */
 export function AnnouncementFormModal({
@@ -123,11 +110,15 @@ export function AnnouncementFormModal({
   submitLabel: string;
   onSubmit: (values: AnnouncementInput) => Promise<void>;
 }) {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const [values, setValues] = useState(initial);
   const [recipients, setRecipients] = useState<UserOption[]>(initialRecipients ?? []);
-  // Tracked as its own state rather than derived from audiences/recipientUserIds:
-  // picking "By audience" or "Specific people" starts with an empty
+  const [roles, setRoles] = useState<Array<{ id: number; name: string }>>([]);
+  const [intolerances, setIntolerances] = useState<
+    Array<{ id: number; label: Record<string, string> | unknown }>
+  >([]);
+  // Tracked as its own state rather than derived from role/intolerance filters:
+  // picking "By role" or "Specific people" starts with an empty
   // selection, and a purely-derived mode would immediately snap back to
   // "everyone" the moment those arrays are empty, making the mode
   // unselectable in the first place.
@@ -156,6 +147,27 @@ export function AnnouncementFormModal({
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      notificationsApi.targetingOptions(),
+      api.get<{ intolerances: Array<{ id: number; label: Record<string, string> | unknown }> }>(
+        "/api/public/food-intolerances",
+      ),
+    ])
+      .then(([options, dictionary]) => {
+        if (cancelled) return;
+        setRoles(options.roles);
+        setIntolerances(dictionary.intolerances);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error(t("couldNotLoadAnnouncementTargeting"));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [t]);
 
   /**
    * Staff can write the primary content in whichever of the three languages
@@ -215,19 +227,11 @@ export function AnnouncementFormModal({
     setTargetingModeState(mode);
     setValues((v) => ({
       ...v,
-      audiences: mode === "audience" ? v.audiences : [],
+      roleIds: mode === "roles" ? v.roleIds : [],
+      intoleranceIds: mode === "roles" ? v.intoleranceIds : [],
       recipientUserIds: mode === "specific" ? v.recipientUserIds : [],
     }));
     if (mode !== "specific") setRecipients([]);
-  }
-
-  function toggleAudience(audience: AnnouncementAudience, checked: boolean) {
-    setValues((v) => {
-      const current = new Set(v.audiences);
-      if (checked) current.add(audience);
-      else current.delete(audience);
-      return { ...v, audiences: Array.from(current) };
-    });
   }
 
   function toggleChannel(channel: NotificationChannel, checked: boolean) {
@@ -554,7 +558,7 @@ export function AnnouncementFormModal({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="everyone">{t("announcementTargetingEveryone")}</SelectItem>
-                      <SelectItem value="audience">{t("announcementTargetingAudience")}</SelectItem>
+                      <SelectItem value="roles">{t("announcementTargetingRoles")}</SelectItem>
                       <SelectItem value="specific" disabled={!canTargetSpecific}>
                         {t("announcementTargetingSpecific")}
                       </SelectItem>
@@ -567,23 +571,50 @@ export function AnnouncementFormModal({
                   )}
                 </Field>
 
-                {targetingMode === "audience" && (
-                  <div className="flex flex-wrap gap-4">
-                    {AUDIENCES.map((audience) => (
-                      <div key={audience} className="flex items-center gap-2">
-                        <Checkbox
-                          id={`announcement-audience-${audience}`}
-                          checked={values.audiences.includes(audience)}
-                          onCheckedChange={(checked) => toggleAudience(audience, checked === true)}
-                        />
-                        <Label
-                          htmlFor={`announcement-audience-${audience}`}
-                          className="font-normal"
-                        >
-                          {audienceLabel(audience, t)}
-                        </Label>
-                      </div>
-                    ))}
+                {targetingMode === "roles" && (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field id="announcement-role-picker" label={t("announcementRolesLabel")}>
+                      <MultiSelect
+                        id="announcement-role-picker"
+                        options={roles.map((role) => ({
+                          value: String(role.id),
+                          label: role.name,
+                        }))}
+                        value={values.roleIds.map(String)}
+                        onChange={(roleIds) =>
+                          setValues((v) => ({ ...v, roleIds: roleIds.map(Number) }))
+                        }
+                        placeholder={t("announcementRolesPlaceholder")}
+                        searchPlaceholder={t("searchRoles")}
+                        emptyText={t("noRoles")}
+                        inDialog
+                        maxVisibleBadges={2}
+                      />
+                    </Field>
+                    <Field id="announcement-intolerance-picker" label={t("foodIntolerances")}>
+                      <MultiSelect
+                        id="announcement-intolerance-picker"
+                        options={intolerances.map((intolerance) => ({
+                          value: String(intolerance.id),
+                          label:
+                            typeof intolerance.label === "object" && intolerance.label
+                              ? ((intolerance.label as Record<string, string>)[language] ??
+                                (intolerance.label as Record<string, string>).es ??
+                                (intolerance.label as Record<string, string>).en ??
+                                String(intolerance.id))
+                              : String(intolerance.id),
+                        }))}
+                        value={values.intoleranceIds.map(String)}
+                        onChange={(intoleranceIds) =>
+                          setValues((v) => ({ ...v, intoleranceIds: intoleranceIds.map(Number) }))
+                        }
+                        placeholder={t("selectIntolerances")}
+                        searchPlaceholder={t("searchIntolerances")}
+                        emptyText={t("noIntolerances")}
+                        inDialog
+                        maxVisibleBadges={2}
+                      />
+                    </Field>
                   </div>
                 )}
 

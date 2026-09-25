@@ -20,6 +20,7 @@ import {
   listAnnouncementRecipientCandidates,
   listAnnouncementsAdmin,
   listAnnouncementsPublic,
+  listAnnouncementTargetingOptions,
   markAnnouncementRead,
   updateAnnouncement,
 } from "../announcements-service.js";
@@ -53,6 +54,20 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
     kind: "capability",
     capability: CAPABILITIES.ANNOUNCEMENTS_MANAGE,
   } as const satisfies RouteAccessPolicy;
+
+  typedApp.get(
+    "/api/announcements/targeting-options",
+    {
+      ...routeAccess(manage),
+      preHandler: requireCapability(CAPABILITIES.ANNOUNCEMENTS_MANAGE),
+      schema: {
+        summary: "List announcement targeting options",
+        description:
+          "Lists active roles for the H50 role picker. It is scoped to ANNOUNCEMENTS_MANAGE, so sending an announcement does not require the broader permission-management capability. Food-intolerance choices use the existing public dictionary endpoint.",
+      },
+    },
+    async () => listAnnouncementTargetingOptions(pool),
+  );
 
   typedApp.get(
     "/api/announcements/public",
@@ -154,7 +169,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Get announcement details",
         description:
-          "Fetches a single H50 announcement including its full translations, delivery settings, audience/recipient targeting and publication window.",
+          "Fetches a single H50 announcement including its full translations, delivery settings, recipient targeting and publication window.",
         params: announcementIdParamsSchema,
       },
     },
@@ -173,7 +188,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Create announcement",
         description:
-          "Creates an auditable announcement with one or more optional complete es/gl/en translations, a screen placement, and delivery settings. At least one complete language is enough; when the others are blank, that language becomes the canonical fallback for recipients. notifyUsers fans out through the chosen channels (candidates only — each still filtered by the recipient's own H51 preferences), addressed either to everyone (default), an audience of sponsor/participant/mentor tags, or an explicit recipient list — audience tags and an explicit recipient list are mutually exclusive, and a screen-placed announcement can't target specific recipients. A notify-only announcement (screenPlacement 'none') fires once at publishAt and can't have an expiresAt; screen-placed announcements keep the publishAt/expiresAt visibility window unchanged.",
+          "Creates an auditable announcement with one or more optional complete es/gl/en translations, a screen placement, and delivery settings. At least one complete language is enough; when the others are blank, that language becomes the canonical fallback for recipients. notifyUsers fans out through the chosen channels (candidates only — each still filtered by the recipient's own H51 preferences), addressed to everyone (default), current holders of selected roles optionally narrowed to one or more food intolerances, or an explicit recipient list — role/dietary targeting and an explicit recipient list are mutually exclusive, and a screen-placed announcement can't target specific recipients. A notify-only announcement (screenPlacement 'none') fires once at publishAt and can't have an expiresAt; screen-placed announcements keep the publishAt/expiresAt visibility window unchanged.",
         body: announcementBodySchema,
       },
     },
@@ -188,7 +203,8 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
           screenPlacement: body.screenPlacement,
           publishAt: body.publishAt ?? null,
           expiresAt: body.expiresAt ?? null,
-          audiences: body.audiences,
+          roleIds: body.roleIds,
+          intoleranceIds: body.intoleranceIds,
           channels: body.channels,
           recipientUserIds: body.recipientUserIds,
         });
@@ -216,7 +232,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update announcement",
         description:
-          "Updates an auditable announcement's translations, delivery opt-in, channels, audience/recipient targeting, screen placement or publication window (see the create route for the targeting/channel/window rules, which apply identically here). One complete language is enough when the other translations are blank, and becomes the canonical fallback for recipients without a matching translation. A notification fan-out occurs at most once when notifyUsers is enabled and the announcement becomes visible.",
+          "Updates an auditable announcement's translations, delivery opt-in, channels, recipient targeting, screen placement or publication window (see the create route for the targeting/channel/window rules, which apply identically here). One complete language is enough when the other translations are blank, and becomes the canonical fallback for recipients without a matching translation. A notification fan-out occurs at most once when notifyUsers is enabled and the announcement becomes visible.",
         params: announcementIdParamsSchema,
         body: announcementUpdateBodySchema,
       },
@@ -236,7 +252,8 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
             screenPlacement: body.screenPlacement,
             publishAt: body.publishAt,
             expiresAt: body.expiresAt,
-            audiences: body.audiences,
+            roleIds: body.roleIds,
+            intoleranceIds: body.intoleranceIds,
             channels: body.channels,
             recipientUserIds: body.recipientUserIds,
           },
