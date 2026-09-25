@@ -39,7 +39,7 @@ import { validateFieldOnBlur, validationErrorSummary } from "@/lib/application-v
 import { pickText, useLocale } from "@/lib/i18n";
 import { withReturnPath } from "@/lib/return-path";
 import type { SaveState } from "@/lib/save-state";
-import { useMe } from "@/lib/session";
+import { useSessionContext } from "@/lib/session";
 import { showErrorToast, toast } from "@/lib/toast";
 import type { Language } from "@/lib/types";
 import {
@@ -68,9 +68,8 @@ export default function MyApplicationDetailPage() {
   const { t, language } = useLocale();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
-  const me = useMe();
+  const { me, refresh } = useSessionContext();
   const lang: Language = language;
-
   const [form, setForm] = useState<PublicForm | null>(null);
   const [response, setResponse] = useState<MyResponseDetail | null>(null);
   const [intolerances, setIntolerances] = useState<IntoleranceOption[]>([]);
@@ -327,6 +326,7 @@ export default function MyApplicationDetailPage() {
       );
       setResponse(res.response);
       setValues(res.response.responses ?? {});
+      await refresh();
       setPrivacyNotice(res.privacy_notice);
       setFieldErrors({});
       setSaveState("saved");

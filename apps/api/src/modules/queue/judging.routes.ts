@@ -268,7 +268,8 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
       },
       schema: { querystring: reviewsQuery },
     },
-    async (req) => {
+    async (req, reply) => {
+      reply.header("cache-control", "private, no-store");
       const scope = await resolveReviewScope(getRequestAuthorizationContext(req));
       return { reviews: await listReviews(scope, req.query) };
     },
@@ -295,11 +296,13 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
           "Project details, the queue name, every challenge the project applied to in that queue, the judging panel questions with the answers recorded for this entry, and the evaluation's edit history. Global queue administrators reach any entry in their fixture boundary; a sponsor rep only entries of their own enterprise's challenges (403 otherwise).",
       },
     },
-    async (req) =>
-      getReviewDetail(
+    async (req, reply) => {
+      reply.header("cache-control", "private, no-store");
+      return getReviewDetail(
         await resolveReviewScope(getRequestAuthorizationContext(req)),
         req.params.entryId,
-      ),
+      );
+    },
   );
 
   // Correcting an evaluation from the overview: same validation and versioning

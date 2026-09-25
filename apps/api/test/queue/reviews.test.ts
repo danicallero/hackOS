@@ -189,6 +189,50 @@ describe("GET /api/queue/reviews (confidentiality)", () => {
     });
   });
 
+  it("opens the most recently updated review for a shared queue", async () => {
+    const server = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.QUEUE_ADMIN]);
+    const { challengeIds } = await createEnterpriseChallenges(2, [SCALE_CRITERIA, SCALE_CRITERIA]);
+    const [challengeA, challengeB] = challengeIds as [number, number];
+    await mergeChallengesIntoOneGroup(challengeIds);
+
+    const entryA = await createEntry(challengeA, null, "Shared project", "submitted", 3);
+    const { rows: repoRows } = await pool.query<{ repo_id: number }>(
+      `SELECT repo_id FROM queue_entries WHERE id = $1`,
+      [entryA],
+    );
+    const entryB = await pool.query<{ id: number }>(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status)
+       VALUES ($1, $2, 'completed') RETURNING id`,
+      [challengeB, repoRows[0]!.repo_id],
+    );
+    await pool.query(
+      `INSERT INTO attempt_review (attempt_id, scores, status)
+       VALUES ($1, $2::jsonb, 'submitted')`,
+      [entryB.rows[0]!.id, JSON.stringify({ score: 9 })],
+    );
+
+    const listed = await server.inject({
+      method: "GET",
+      url: "/api/queue/reviews",
+      headers: asUser(admin),
+    });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.headers["cache-control"]).toBe("private, no-store");
+    expect(listed.json().reviews).toEqual([
+      expect.objectContaining({ entryId: entryB.rows[0]!.id, nota: 9 }),
+    ]);
+
+    const detail = await server.inject({
+      method: "GET",
+      url: `/api/queue/reviews/${entryB.rows[0]!.id}`,
+      headers: asUser(admin),
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.headers["cache-control"]).toBe("private, no-store");
+    expect(detail.json().review.scores).toEqual({ score: 9 });
+  });
+
   it("keeps a synthetic QUEUE_ADMIN inside the synthetic review graph", async () => {
     const server = await getApp();
     const fixtureAdmin = await createUserWithCapabilities([
