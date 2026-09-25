@@ -419,7 +419,8 @@ describe("role, dietary, and recipient targeting (H50, DELTA 0601)", () => {
       `INSERT INTO food_intolerances (label) VALUES ('{"es":"Gluten","gl":"Gluten","en":"Gluten"}') RETURNING id`,
     );
     const intoleranceId = rows[0]?.id;
-    await pool.query(`UPDATE users SET food_intolerances = ARRAY[$2] WHERE id = $1`, [
+    expect(intoleranceId).toBeDefined();
+    await pool.query(`UPDATE users SET food_intolerances = ARRAY[$2::int] WHERE id = $1`, [
       matchingId,
       intoleranceId,
     ]);
