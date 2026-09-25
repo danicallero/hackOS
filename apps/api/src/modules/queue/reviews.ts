@@ -180,10 +180,11 @@ export async function listReviews(
                 AND u.is_test_account = $1
             WHERE v.attempt_id = qe.id
          ) judges ON true
-         ${where}
+        ${where}
         ORDER BY qe.repo_id, qgc_label.queue_group_id,
                  CASE WHEN ar.status IS NULL THEN 1 ELSE 0 END,
-                 qe.id
+                 ar.updated_at DESC NULLS LAST,
+                 qe.id DESC
      ) listed
       ORDER BY listed.challenge_title, listed.repo_name`,
     params,

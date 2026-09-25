@@ -646,7 +646,7 @@ export interface ReviewDetail {
 }
 
 export const getReviewDetail = (entryId: number) =>
-  api.get<ReviewDetail>(`/api/queue/reviews/${entryId}`);
+  api.get<ReviewDetail>(`/api/queue/reviews/${entryId}`, { cache: "no-store" });
 export const saveReviewFromOverview = (entryId: number, body: Record<string, unknown>) =>
   api.patch<AttemptReview>(`/api/queue/reviews/${entryId}`, body);
 export const messageReviewTeam = (entryId: number, message: string) =>

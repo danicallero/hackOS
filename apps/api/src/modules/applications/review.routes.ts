@@ -384,7 +384,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Get response detail",
         description:
-          "Full staff-facing detail for one response, including its available next actions given its current status.",
+          "Full staff-facing detail for one response, including the current form template used by answer editing and its available next actions given its current status.",
         params: responseIdParamSchema,
       },
     },
@@ -405,7 +405,8 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       config: capability(CAPABILITIES.APPLICATIONS_EDIT_RESPONSE),
       schema: {
         summary: "Edit a response's form data",
-        description: "Staff correction of a response's submitted form answers.",
+        description:
+          "Staff correction of a response's submitted form answers. Validation uses the form's current field types and rules, matching the editor staff see.",
         params: responseIdParamSchema,
         body: saveDraftSchema,
       },

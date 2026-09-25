@@ -124,6 +124,35 @@ describe("staff edit response", () => {
     expect(JSON.parse(res.body).error.message).toBe("Response fails template validation");
   });
 
+  it("validates a legacy response against the current field type staff edit", async () => {
+    const applicant = await createUser({ emailVerified: true });
+    const legacyTemplate: TemplateField[] = [
+      { key: "origin", label: { en: "Origin", es: "", gl: "" }, kind: "text", required: true },
+    ];
+    const currentTemplate: TemplateField[] = [
+      { key: "origin", label: { en: "Origin", es: "", gl: "" }, kind: "number", required: true },
+    ];
+    const appId = await createApplication({ type: "participant", template: legacyTemplate });
+    const responseId = await createResponse(applicant, appId, {
+      status: "review",
+      responses: { origin: "A Coru\u00f1a" },
+    });
+
+    // The response deliberately remains attached to its text-field snapshot,
+    // while the staff editor now renders the field as a number.
+    await pool.query(`UPDATE applications SET template = $2::jsonb WHERE id = $1`, [
+      appId,
+      JSON.stringify(currentTemplate),
+    ]);
+
+    const edited = await editAnswers(responseId, { origin: 15001 });
+    expect(edited.statusCode).toBe(200);
+    expect(JSON.parse(edited.body).responses).toEqual({ origin: 15001 });
+
+    const invalid = await editAnswers(responseId, { origin: "A Coru\u00f1a" });
+    expect(invalid.statusCode).toBe(400);
+  });
+
   it("rejects an editor without APPLICATIONS_EDIT_RESPONSE", async () => {
     const outsider = await createUser();
     const applicant = await createUser({ emailVerified: true });

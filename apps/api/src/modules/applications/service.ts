@@ -1788,15 +1788,12 @@ export async function getResponseDetail(
               WHERE agr.application_id = a.id
               ORDER BY r2.position DESC
               LIMIT 1) AS granted_role_name,
-            fv.template,
-            fv.sections,
+            a.template,
+            a.sections,
             a.ask_shirt_size, a.ask_food_intolerances
      FROM application_responses r
      JOIN users u ON u.id = r.user_id
      JOIN applications a ON a.id = r.application_id
-     JOIN application_form_versions fv
-       ON fv.id = r.application_form_version_id
-      AND fv.application_id = r.application_id
      WHERE r.id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL
        AND u.is_test_account = false`,
     [responseId],
@@ -1877,21 +1874,18 @@ export async function editResponse(
 ): Promise<ResponseRow> {
   return withTransaction(async (client) => {
     const response = await lockResponse(client, responseId, actorId);
-    const { rows: versionRows } = await client.query(
-      `SELECT fv.template
-         FROM application_form_versions fv
-        WHERE fv.id = $1 AND fv.application_id = $2`,
-      [response.application_form_version_id, response.application_id],
+    const { rows: applicationRows } = await client.query<{ template: TemplateField[] }>(
+      `SELECT template
+         FROM applications
+        WHERE id = $1
+        FOR SHARE`,
+      [response.application_id],
     );
-    if (!versionRows[0]) {
-      throw new ConflictError("This response is missing its immutable form version", {
-        code: "form_version_required",
-      });
-    }
-    // Validate ONLY against the form template the staff answer-edit form
-    // actually renders. Shirt size and dietary data live on the user row
-    // (managed from the profile / logistics), not this form.
-    validateResponses(versionRows[0].template, responses);
+    if (!applicationRows[0]) throw new NotFoundError("Application not found");
+    // Staff correction renders the current form, not the response's immutable
+    // submission snapshot. Match its field kinds and validation rules exactly;
+    // shirt size and dietary data remain on the user row.
+    validateResponses(applicationRows[0].template, responses);
     const storedResponses = stripDietaryResponses(responses);
 
     const updated = await client.query(
