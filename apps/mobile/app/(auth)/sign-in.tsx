@@ -10,6 +10,7 @@ import {
 import { AuthAlert, AuthButton, AuthHeader, AuthScreen } from "@/components/auth-ui";
 import { apiFetch } from "@/lib/api";
 import { useApiMode } from "@/lib/api-mode";
+import { appVersionLabel } from "@/lib/app-version";
 import { signIn, signOut } from "@/lib/auth-client";
 import { EVENT_WEBSITE_DISPLAY, EVENT_WEBSITE_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
@@ -240,13 +241,13 @@ export default function SignInScreen() {
             </Pressable>
           </View>
           <Pressable
-            accessibilityLabel="v1.0.1"
+            accessibilityLabel={appVersionLabel}
             hitSlop={10}
             onPress={revealDeveloperMode}
             style={({ pressed }) => ({ marginTop: 2, opacity: pressed ? 0.6 : 1, padding: 4 })}
           >
             <Text style={{ color: colors.tertiaryLabel, fontSize: 12, lineHeight: 18 }}>
-              v1.0.1
+              {appVersionLabel}
             </Text>
           </Pressable>
         </View>
