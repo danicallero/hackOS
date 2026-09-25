@@ -268,10 +268,25 @@ export WEB_IMAGE_TAG="$web_image_tag"
 run_compose() {
   local description="$1"
   shift
-  local output_file
+  local output_file line secret
   output_file="$(mktemp)"
 
   if ! compose "$@" >"$output_file" 2>&1; then
+    # Compose's MinIO helper is the only source of the concrete bootstrap
+    # error (credentials, bucket, policy, or network). Keep that diagnostic in
+    # CI while replacing every configured storage credential before logging.
+    echo "---- $description diagnostic (last 80 lines) ----" >&2
+    while IFS= read -r line; do
+      for secret in \
+        "$(env_value MINIO_ROOT_USER)" \
+        "$(env_value MINIO_ROOT_PASSWORD)" \
+        "$(env_value S3_ACCESS_KEY)" \
+        "$(env_value S3_SECRET_KEY)"; do
+        [[ -n "$secret" ]] && line="${line//"$secret"/[REDACTED]}"
+      done
+      echo "$line" >&2
+    done < <(tail -n 80 "$output_file")
+    echo "---- end $description diagnostic ----" >&2
     rm -f "$output_file"
     echo "ERROR: $description failed" >&2
     return 1
