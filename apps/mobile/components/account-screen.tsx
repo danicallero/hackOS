@@ -22,6 +22,7 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { apiFetch } from "@/lib/api";
 import { useApiMode } from "@/lib/api-mode";
+import { appVersionLabel } from "@/lib/app-version";
 import { forceLocalSignOut, signOut } from "@/lib/auth-client";
 import { haptic } from "@/lib/haptics";
 import { type Lang, useLocale } from "@/lib/i18n";
@@ -446,11 +447,11 @@ export default function AccountScreen() {
           />
         </Section>
         <Pressable
-          accessibilityLabel="v1.0.1"
+          accessibilityLabel={appVersionLabel}
           onPress={revealDeveloperMode}
           style={{ alignSelf: "center", padding: 8 }}
         >
-          <Text style={{ color: colors.tertiaryLabel, fontSize: 12 }}>v1.0.1</Text>
+          <Text style={{ color: colors.tertiaryLabel, fontSize: 12 }}>{appVersionLabel}</Text>
         </Pressable>
       </ScrollView>
       <AndroidStatusBarScrim />
