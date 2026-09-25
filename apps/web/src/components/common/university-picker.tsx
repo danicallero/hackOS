@@ -219,7 +219,18 @@ export function UniversityPicker({
           ) : null}
           <CommandGroup>
             {options.map((u) => (
-              <CommandItem key={u.id} value={String(u.id)} onSelect={() => select(u)}>
+              <CommandItem
+                key={u.id}
+                value={String(u.id)}
+                // Keep the combobox focus inside a modal while a pointer
+                // selects an option. Without this Safari treats the click as
+                // an outside interaction and dismisses the list before cmdk
+                // can emit its selection; keyboard selection is unaffected.
+                onPointerDown={(event) => {
+                  if (inDialog) event.preventDefault();
+                }}
+                onSelect={() => select(u)}
+              >
                 <CheckIcon
                   aria-hidden="true"
                   className={cn("size-4", String(u.id) === value ? "opacity-100" : "opacity-0")}
