@@ -14,16 +14,11 @@ import type { Language } from "./translate/index.js";
  * new columns from migration 0600 — the boceto only had a start, and nothing
  * tracked whether the per-user fan-out had already run for a given row.
  *
- * DELTA(H50, 0722): audience/recipient targeting and a per-announcement
- * channel candidate set. `audiences` (sponsor/participant/mentor, reusing
- * H59's vocabulary) and explicit `recipientUserIds` are mutually exclusive —
- * a non-empty recipient list wins if both are ever present, but the API
- * layer rejects that combination outright (assertTargetingExclusivity).
- * Empty audiences AND no recipients means "everyone", unchanged from before.
+ * DELTA(H50, 0601): role/intolerance targeting and a per-announcement channel
+ * candidate set. Current holders of `roleIds`, optionally narrowed by
+ * `intoleranceIds`, and explicit `recipientUserIds` are mutually exclusive.
+ * Empty role/intolerance filters AND no recipients means "everyone".
  */
-
-export const ANNOUNCEMENT_AUDIENCES = ["sponsor", "participant", "mentor", "staff"] as const;
-export type AnnouncementAudience = (typeof ANNOUNCEMENT_AUDIENCES)[number];
 
 export interface AnnouncementInput {
   title: string;
@@ -33,7 +28,8 @@ export interface AnnouncementInput {
   screenPlacement: ScreenPlacement;
   publishAt: string | null;
   expiresAt: string | null;
-  audiences: AnnouncementAudience[];
+  roleIds: number[];
+  intoleranceIds: number[];
   channels: NotificationChannel[];
   recipientUserIds: number[];
 }
@@ -93,7 +89,8 @@ export interface Announcement {
   publish_at: string | null;
   expires_at: string | null;
   fanned_out_at: string | null;
-  audiences: AnnouncementAudience[];
+  role_ids: number[];
+  intolerance_ids: number[];
   channels: NotificationChannel[];
   created_at: string;
 }
@@ -124,21 +121,49 @@ function assertVisibilityWindow(
   }
 }
 
-/** Audience-tag broadcast and an explicit recipient list are mutually exclusive targeting modes. */
+/** Role/dietary filters and an explicit recipient list are mutually exclusive targeting modes. */
 function assertTargetingExclusivity(
   screenPlacement: ScreenPlacement,
-  audiences: AnnouncementAudience[],
+  roleIds: number[],
+  intoleranceIds: number[],
   recipientUserIds: number[],
 ): void {
-  if (audiences.length > 0 && recipientUserIds.length > 0) {
+  if ((roleIds.length > 0 || intoleranceIds.length > 0) && recipientUserIds.length > 0) {
     throw new BadRequestError(
-      "Choose either an audience or specific recipients for an announcement, not both",
+      "Choose either role/dietary targeting or specific recipients for an announcement, not both",
     );
   }
   if (screenPlacement !== "none" && recipientUserIds.length > 0) {
     throw new BadRequestError(
       "A screen-placed announcement can't be targeted to specific recipients — the TV feed is anonymous",
     );
+  }
+}
+
+async function assertTargetingFilters(
+  db: Queryable,
+  roleIds: number[],
+  intoleranceIds: number[],
+): Promise<void> {
+  const uniqueRoleIds = [...new Set(roleIds)];
+  const uniqueIntoleranceIds = [...new Set(intoleranceIds)];
+  if (uniqueRoleIds.length > 0) {
+    const { rows } = await db.query<{ count: number }>(
+      `SELECT count(*)::int AS count FROM roles WHERE id = ANY($1::int[]) AND deleted_at IS NULL`,
+      [uniqueRoleIds],
+    );
+    if (rows[0]?.count !== uniqueRoleIds.length) {
+      throw new BadRequestError("Choose roles that are still active");
+    }
+  }
+  if (uniqueIntoleranceIds.length > 0) {
+    const { rows } = await db.query<{ count: number }>(
+      `SELECT count(*)::int AS count FROM food_intolerances WHERE id = ANY($1::int[])`,
+      [uniqueIntoleranceIds],
+    );
+    if (rows[0]?.count !== uniqueIntoleranceIds.length) {
+      throw new BadRequestError("Choose food intolerances from the current dictionary");
+    }
   }
 }
 
@@ -263,6 +288,20 @@ export interface AnnouncementRecipient {
   email: string;
 }
 
+export interface AnnouncementTargetingOptions {
+  roles: Array<{ id: number; name: string }>;
+}
+
+/** Role catalogue scoped to announcement managers, avoiding the broader role-management read grant. */
+export async function listAnnouncementTargetingOptions(
+  db: Queryable,
+): Promise<AnnouncementTargetingOptions> {
+  const { rows } = await db.query<{ id: number; name: string }>(
+    `SELECT id, name FROM roles WHERE deleted_at IS NULL ORDER BY position DESC, name ASC`,
+  );
+  return { roles: rows.map((row) => ({ id: Number(row.id), name: row.name })) };
+}
+
 /** Display-friendly recipient list for the admin edit UI (id-only version above drives targeting logic). */
 export async function getAnnouncementRecipients(
   db: Queryable,
@@ -329,11 +368,17 @@ export async function createAnnouncement(
     input.publishAt,
     input.expiresAt,
   );
-  assertTargetingExclusivity(input.screenPlacement, input.audiences, input.recipientUserIds);
+  assertTargetingExclusivity(
+    input.screenPlacement,
+    input.roleIds,
+    input.intoleranceIds,
+    input.recipientUserIds,
+  );
+  await assertTargetingFilters(db, input.roleIds, input.intoleranceIds);
   const { rows } = await db.query(
     `INSERT INTO announcements
-       (author_id, title, body, translations, notify_users, screen_placement, publish_at, expires_at, audiences, channels)
-     VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10)
+       (author_id, title, body, translations, notify_users, screen_placement, publish_at, expires_at, role_ids, intolerance_ids, channels)
+     VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11)
      RETURNING *`,
     [
       authorId,
@@ -344,7 +389,8 @@ export async function createAnnouncement(
       input.screenPlacement,
       input.publishAt,
       input.expiresAt,
-      input.audiences,
+      [...new Set(input.roleIds)],
+      [...new Set(input.intoleranceIds)],
       input.channels,
     ],
   );
@@ -390,7 +436,8 @@ export async function updateAnnouncement(
     screenPlacement: input.screenPlacement ?? existing.screen_placement,
     publishAt: input.publishAt !== undefined ? input.publishAt : existing.publish_at,
     expiresAt: input.expiresAt !== undefined ? input.expiresAt : existing.expires_at,
-    audiences: input.audiences ?? existing.audiences,
+    roleIds: input.roleIds ?? existing.role_ids ?? [],
+    intoleranceIds: input.intoleranceIds ?? existing.intolerance_ids ?? [],
     channels: input.channels ?? existing.channels,
     recipientUserIds: existingRecipientIds,
   };
@@ -400,11 +447,18 @@ export async function updateAnnouncement(
     merged.publishAt,
     merged.expiresAt,
   );
-  assertTargetingExclusivity(merged.screenPlacement, merged.audiences, merged.recipientUserIds);
+  assertTargetingExclusivity(
+    merged.screenPlacement,
+    merged.roleIds,
+    merged.intoleranceIds,
+    merged.recipientUserIds,
+  );
+  await assertTargetingFilters(db, merged.roleIds, merged.intoleranceIds);
   const { rows } = await db.query(
     `UPDATE announcements
      SET title = $2, body = $3, translations = $4::jsonb, notify_users = $5,
-         screen_placement = $6, publish_at = $7, expires_at = $8, audiences = $9, channels = $10
+         screen_placement = $6, publish_at = $7, expires_at = $8,
+         role_ids = $9, intolerance_ids = $10, channels = $11
      WHERE id = $1
      RETURNING *`,
     [
@@ -416,7 +470,8 @@ export async function updateAnnouncement(
       merged.screenPlacement,
       merged.publishAt,
       merged.expiresAt,
-      merged.audiences,
+      [...new Set(merged.roleIds)],
+      [...new Set(merged.intoleranceIds)],
       merged.channels,
     ],
   );
@@ -519,17 +574,12 @@ export async function markAnnouncementRead(
 
 /**
  * Resolves who an announcement reaches: an explicit recipient list wins if
- * set; otherwise audience tags (sponsor/participant/mentor, same vocabulary
- * and "sponsor implies participant" rule as H59's schedule audiences — see
- * identity/role.ts's mentorOrParticipantType/computeMembershipFlags, whose
- * bulk-query equivalent (user_effective_role_name, matched by the seeded
- * Mentor/Participant role's own name) is joined directly here to avoid an
- * N+1 per user); otherwise everyone, unchanged from before this feature
- * existed.
+ * set; otherwise current holders of selected roles, optionally narrowed by
+ * declared food intolerances; otherwise everyone.
  */
 async function resolveRecipients(
   db: Queryable,
-  announcement: Pick<Announcement, "id" | "audiences" | "author_id">,
+  announcement: Pick<Announcement, "id" | "role_ids" | "intolerance_ids" | "author_id">,
 ): Promise<Array<{ id: number; language: string | null }>> {
   const fixtureMarker = await announcementFixtureMarker(
     db,
@@ -548,7 +598,7 @@ async function resolveRecipients(
     return rows as Array<{ id: number; language: string | null }>;
   }
 
-  if (announcement.audiences.length === 0) {
+  if (announcement.role_ids.length === 0 && announcement.intolerance_ids.length === 0) {
     const { rows } = await db.query(
       `SELECT id, language FROM users
         WHERE account_state = 'active' AND anonymized_at IS NULL
@@ -559,34 +609,15 @@ async function resolveRecipients(
   }
 
   const { rows } = await db.query(
-    `WITH staff AS (
-       -- "holds at least one capability" — same definition
-       -- getEffectiveCapabilities uses.
-       SELECT DISTINCT user_id FROM user_effective_capabilities
-     ),
-     attendee AS (
-       -- H8 full-replacement: matched by the seeded role's own name — no
-       -- separate badge_category column — see identity/role.ts's
-       -- ATTENDEE_ROLE_NAMES.
-       SELECT user_id,
-              CASE role_name WHEN 'Mentor' THEN 'mentor' WHEN 'Participant' THEN 'participant' END AS type
-       FROM user_effective_role_name
-       WHERE role_name IN ('Mentor', 'Participant')
-     ),
-     sponsor AS (
-       SELECT DISTINCT user_id FROM sponsors WHERE user_id IS NOT NULL
-     )
-     SELECT u.id, u.language
+    `SELECT DISTINCT u.id, u.language
      FROM users u
-     LEFT JOIN attendee at ON at.user_id = u.id
-     LEFT JOIN sponsor sp ON sp.user_id = u.id
-     LEFT JOIN staff st ON st.user_id = u.id
+     LEFT JOIN user_roles ur ON ur.user_id = u.id
+     LEFT JOIN roles r ON r.id = ur.role_id AND r.deleted_at IS NULL
      WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
-       AND u.is_test_account = $2
-       AND (at.type = ANY($1::text[])
-        OR (sp.user_id IS NOT NULL AND ($1::text[] && ARRAY['sponsor', 'participant']::text[]))
-        OR (st.user_id IS NOT NULL AND 'staff' = ANY($1::text[])))`,
-    [announcement.audiences, fixtureMarker],
+       AND u.is_test_account = $3
+       AND ($1::int[] = '{}'::int[] OR r.id = ANY($1::int[]))
+       AND ($2::int[] = '{}'::int[] OR u.food_intolerances && $2::int[])`,
+    [announcement.role_ids, announcement.intolerance_ids, fixtureMarker],
   );
   return rows as Array<{ id: number; language: string | null }>;
 }

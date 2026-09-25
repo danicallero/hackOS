@@ -8,37 +8,21 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import {
   type AdminAnnouncement,
-  ANNOUNCEMENT_AUDIENCES,
   ANNOUNCEMENT_CHANNELS,
   ANNOUNCEMENT_SCREEN_PLACEMENTS,
-  type AnnouncementAudience,
   type AnnouncementChannel,
   type AnnouncementInput,
   type AnnouncementLanguage,
   type AnnouncementRecipient,
   type AnnouncementScreenPlacement,
   fetchAnnouncementRecipientCandidates,
+  fetchAnnouncementTargetingOptions,
+  fetchFoodIntolerances,
   fetchTranslateAvailability,
   translateAnnouncement,
 } from "@/lib/announcements-admin";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
-
-function audienceLabel(
-  audience: AnnouncementAudience,
-  t: ReturnType<typeof useLocale>["t"],
-): string {
-  switch (audience) {
-    case "sponsor":
-      return t("scheduleAudienceSponsor");
-    case "participant":
-      return t("scheduleAudienceParticipant");
-    case "mentor":
-      return t("scheduleAudienceMentor");
-    case "staff":
-      return t("scheduleAudienceStaff");
-  }
-}
 
 function channelLabel(channel: AnnouncementChannel, t: ReturnType<typeof useLocale>["t"]): string {
   switch (channel) {
@@ -65,14 +49,14 @@ function placementLabel(
   }
 }
 
-type TargetingMode = "everyone" | "audience" | "specific";
+type TargetingMode = "everyone" | "roles" | "specific";
 
 function targetingLabel(mode: TargetingMode, t: ReturnType<typeof useLocale>["t"]): string {
   switch (mode) {
     case "everyone":
       return t("announcementTargetingEveryone");
-    case "audience":
-      return t("announcementTargetingAudience");
+    case "roles":
+      return t("announcementTargetingRoles");
     case "specific":
       return t("announcementTargetingSpecific");
   }
@@ -91,7 +75,8 @@ function emptyForm(): AnnouncementInput {
     screenPlacement: "none",
     publishAt: null,
     expiresAt: null,
-    audiences: [],
+    roleIds: [],
+    intoleranceIds: [],
     channels: ["in_app", "email", "push"],
     recipientUserIds: [],
   };
@@ -110,7 +95,8 @@ export function announcementToForm(a: AdminAnnouncement): AnnouncementInput {
     screenPlacement: a.screen_placement,
     publishAt: a.publish_at,
     expiresAt: a.expires_at,
-    audiences: a.audiences ?? [],
+    roleIds: a.role_ids ?? [],
+    intoleranceIds: a.intolerance_ids ?? [],
     channels: a.channels ?? ["in_app", "email", "push"],
     recipientUserIds: (a.recipients ?? []).map((r) => r.id),
   };
@@ -118,12 +104,12 @@ export function announcementToForm(a: AdminAnnouncement): AnnouncementInput {
 
 function targetingModeOf(values: AnnouncementInput): TargetingMode {
   if (values.recipientUserIds.length > 0) return "specific";
-  if (values.audiences.length > 0) return "audience";
+  if (values.roleIds.length > 0 || values.intoleranceIds.length > 0) return "roles";
   return "everyone";
 }
 
 /**
- * Admin create/edit form (H50, DELTA 0722) — same field set and validation
+ * Admin create/edit form (H50, DELTA 0601) — same field set and validation
  * as the web app's AnnouncementFormModal, not a reduced mobile form (mirrors
  * ScheduleFormModal's own precedent for this app).
  */
@@ -143,11 +129,15 @@ export function AnnouncementFormModal({
   announcementId?: number;
   onSubmit: (values: AnnouncementInput) => Promise<void>;
 }) {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const insets = useSafeAreaInsets();
   const sheetTopInset = process.env.EXPO_OS === "android" ? insets.top : 0;
   const [values, setValues] = useState<AnnouncementInput>(initial ?? emptyForm());
   const [recipients, setRecipients] = useState<AnnouncementRecipient[]>(initialRecipients ?? []);
+  const [roles, setRoles] = useState<Array<{ id: number; name: string }>>([]);
+  const [intolerances, setIntolerances] = useState<
+    Array<{ id: number; label: Record<string, string> }>
+  >([]);
   const [targetingMode, setTargetingModeState] = useState<TargetingMode>(
     targetingModeOf(initial ?? emptyForm()),
   );
@@ -199,6 +189,23 @@ export function AnnouncementFormModal({
     };
   }, [visible]);
 
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    void Promise.all([fetchAnnouncementTargetingOptions(), fetchFoodIntolerances()])
+      .then(([options, dictionary]) => {
+        if (cancelled) return;
+        setRoles(options.roles);
+        setIntolerances(dictionary);
+      })
+      .catch(() => {
+        if (!cancelled) setError(t("couldNotLoadAnnouncementTargeting"));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [t, visible]);
+
   /**
    * Staff can write the primary content in whichever of the three languages
    * comes naturally — this picks the first non-empty language as the source
@@ -242,7 +249,8 @@ export function AnnouncementFormModal({
     setTargetingModeState(mode);
     setValues((current) => ({
       ...current,
-      audiences: mode === "audience" ? current.audiences : [],
+      roleIds: mode === "roles" ? current.roleIds : [],
+      intoleranceIds: mode === "roles" ? current.intoleranceIds : [],
       recipientUserIds: mode === "specific" ? current.recipientUserIds : [],
     }));
     if (mode !== "specific") setRecipients([]);
@@ -577,15 +585,13 @@ export function AnnouncementFormModal({
 
               <Section title={t("announcementTargetingLabel")}>
                 <MenuView
-                  actions={(["everyone", "audience", "specific"] as TargetingMode[]).map(
-                    (mode) => ({
-                      id: mode,
-                      title: targetingLabel(mode, t),
-                      attributes:
-                        mode === "specific" && !canTargetSpecific ? { disabled: true } : undefined,
-                      state: targetingMode === mode ? ("on" as const) : ("off" as const),
-                    }),
-                  )}
+                  actions={(["everyone", "roles", "specific"] as TargetingMode[]).map((mode) => ({
+                    id: mode,
+                    title: targetingLabel(mode, t),
+                    attributes:
+                      mode === "specific" && !canTargetSpecific ? { disabled: true } : undefined,
+                    state: targetingMode === mode ? ("on" as const) : ("off" as const),
+                  }))}
                   onPressAction={({ nativeEvent }) =>
                     setTargetingMode(nativeEvent.event as TargetingMode)
                   }
@@ -620,24 +626,68 @@ export function AnnouncementFormModal({
                 ) : null}
               </Section>
 
-              {targetingMode === "audience" ? (
+              {targetingMode === "roles" ? (
                 <Section>
-                  {ANNOUNCEMENT_AUDIENCES.map((audience, index) => (
-                    <View key={audience}>
+                  <Text
+                    style={{
+                      color: colors.secondaryLabel,
+                      fontSize: 13,
+                      padding: 16,
+                      paddingBottom: 8,
+                    }}
+                  >
+                    {t("announcementRolesLabel")}
+                  </Text>
+                  {roles.map((role, index) => (
+                    <View key={role.id}>
                       {index > 0 ? (
                         <View
                           style={{ backgroundColor: colors.separator, height: 0.5, marginLeft: 16 }}
                         />
                       ) : null}
                       <ToggleRow
-                        label={audienceLabel(audience, t)}
-                        value={values.audiences.includes(audience)}
+                        label={role.name}
+                        value={values.roleIds.includes(role.id)}
                         onChange={(checked) =>
                           setValues((current) => ({
                             ...current,
-                            audiences: checked
-                              ? [...current.audiences, audience]
-                              : current.audiences.filter((a) => a !== audience),
+                            roleIds: checked
+                              ? [...current.roleIds, role.id]
+                              : current.roleIds.filter((id) => id !== role.id),
+                          }))
+                        }
+                      />
+                    </View>
+                  ))}
+                  <Text
+                    style={{
+                      color: colors.secondaryLabel,
+                      fontSize: 13,
+                      padding: 16,
+                      paddingBottom: 8,
+                    }}
+                  >
+                    {t("foodIntolerances")}
+                  </Text>
+                  {intolerances.map((intolerance) => (
+                    <View key={intolerance.id}>
+                      <View
+                        style={{ backgroundColor: colors.separator, height: 0.5, marginLeft: 16 }}
+                      />
+                      <ToggleRow
+                        label={
+                          intolerance.label[language] ??
+                          intolerance.label.es ??
+                          intolerance.label.en ??
+                          String(intolerance.id)
+                        }
+                        value={values.intoleranceIds.includes(intolerance.id)}
+                        onChange={(checked) =>
+                          setValues((current) => ({
+                            ...current,
+                            intoleranceIds: checked
+                              ? [...current.intoleranceIds, intolerance.id]
+                              : current.intoleranceIds.filter((id) => id !== intolerance.id),
                           }))
                         }
                       />

@@ -35,7 +35,7 @@ import { Section } from "@/components/ui/surface";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
-import { validationErrorSummary } from "@/lib/application-validation";
+import { validateFieldOnBlur, validationErrorSummary } from "@/lib/application-validation";
 import { pickText, useLocale } from "@/lib/i18n";
 import { withReturnPath } from "@/lib/return-path";
 import type { SaveState } from "@/lib/save-state";
@@ -62,13 +62,14 @@ import {
 } from "../lib";
 import { ApplicationTimeline, ReadOnlyAnswers } from "./application-sections";
 import { ApplicationStatusActions } from "./application-status-actions";
+import { useApplicationDraft } from "./use-application-draft";
 
 export default function MyApplicationDetailPage() {
   const { t, language } = useLocale();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const me = useMe();
-  const lang: Language = (me?.language as Language) ?? "es";
+  const lang: Language = language;
 
   const [form, setForm] = useState<PublicForm | null>(null);
   const [response, setResponse] = useState<MyResponseDetail | null>(null);
@@ -98,6 +99,10 @@ export default function MyApplicationDetailPage() {
   const formRef = useRef<PublicForm | null>(null);
   const responseRef = useRef<MyResponseDetail | null>(null);
   const intolerancesRef = useRef<IntoleranceOption[]>([]);
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
 
   const load = useCallback(async () => {
     if (!hasLoadedRef.current) setLoading(true);
@@ -134,19 +139,19 @@ export default function MyApplicationDetailPage() {
       formRes.status === "rejected" && !isNotFoundError(formRes.reason)
         ? formRes.reason instanceof ApiError
           ? formRes.reason.message
-          : t("couldNotLoadApplication")
+          : tRef.current("couldNotLoadApplication")
         : null;
     const nextResponseError =
       respRes.status === "rejected" && !isNotFoundError(respRes.reason)
         ? respRes.reason instanceof ApiError
           ? respRes.reason.message
-          : t("couldNotLoadApplication")
+          : tRef.current("couldNotLoadApplication")
         : null;
     const nextIntolerancesError =
       intolRes.status === "rejected"
         ? intolRes.reason instanceof ApiError
           ? intolRes.reason.message
-          : t("couldNotLoadApplication")
+          : tRef.current("couldNotLoadApplication")
         : null;
     setFormError(nextFormError);
     setResponseError(nextResponseError);
@@ -188,7 +193,7 @@ export default function MyApplicationDetailPage() {
       respRes.status === "fulfilled" ||
       intolRes.status === "fulfilled";
     setLoading(false);
-  }, [id, me, t]);
+  }, [id, me]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetching application data from API (external-system sync)
@@ -217,15 +222,17 @@ export default function MyApplicationDetailPage() {
 
   // Mirror the API's enrichment so shirt-size + dietary fields render in the form
   // (participant/mentor) rather than being pulled silently from the profile (H12).
-  const template = form
-    ? enrichTemplate(
-        form.ask_shirt_size,
-        form.ask_food_intolerances,
-        form.template,
-        intolerances,
-        shirtSizes,
-      )
-    : [];
+  const responseTemplate = response?.template ?? form?.template;
+  const template =
+    form && responseTemplate
+      ? enrichTemplate(
+          form.ask_shirt_size,
+          form.ask_food_intolerances,
+          responseTemplate,
+          intolerances,
+          shirtSizes,
+        )
+      : [];
   const status = confirmationExpired ? "expired" : response?.status; // already masked by the API
   const timelineResponse =
     confirmationExpired && response ? { ...response, status: "expired" } : response;
@@ -247,6 +254,16 @@ export default function MyApplicationDetailPage() {
     setValues((prev) => ({ ...prev, [key]: value }));
   }
 
+  function validateOnBlur(field: (typeof template)[number]) {
+    const message = validateFieldOnBlur(field, values[field.key], t, lang);
+    setFieldErrors((current) => {
+      const next = { ...current };
+      if (message) next[field.key] = message;
+      else delete next[field.key];
+      return next;
+    });
+  }
+
   function checkRequired(): boolean {
     const missing = missingRequiredFields(template, values);
     const errors = Object.fromEntries(missing.map((key) => [key, t("fieldRequired")]));
@@ -260,31 +277,21 @@ export default function MyApplicationDetailPage() {
     return missing.length === 0;
   }
 
-  async function handleSaveDraft() {
-    setSaving(true);
-    setSaveState("saving");
-    setActionError(null);
-    try {
-      const saved = await api.put<MyResponseDetail>(`/api/applications/${id}/response`, {
-        responses: values,
-      });
-      setResponse(saved);
-      setValues(saved.responses ?? {});
-      setFieldErrors({});
-      setSaveState("saved");
-      setActionError(null);
-      toast.success(t("draftSaved"));
-    } catch (err) {
-      setSaveState("error");
-      setActionError({
-        action: "save",
-        message: err instanceof ApiError ? err.message : t("couldNotSaveDraft"),
-      });
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveDraft"));
-    } finally {
-      setSaving(false);
-    }
-  }
+  const handleSaveDraft = useApplicationDraft({
+    applicationId: id,
+    formOpen: Boolean(form),
+    response,
+    responseError,
+    editable,
+    values,
+    saveState,
+    t,
+    setResponse,
+    setValues,
+    setSaving,
+    setSaveState,
+    setActionError,
+  });
 
   async function handleSubmit() {
     if (!checkRequired()) {
@@ -328,10 +335,6 @@ export default function MyApplicationDetailPage() {
       toast.success(t("applicationSubmitted"));
     } catch (err) {
       setSaveState("error");
-      setActionError({
-        action: "submit",
-        message: err instanceof ApiError ? err.message : t("couldNotSubmitApplication"),
-      });
       if (err instanceof ApiError) {
         const nextErrors = fieldErrorsFromApi(err, t, template, lang);
         setFieldErrors(nextErrors);
@@ -342,6 +345,7 @@ export default function MyApplicationDetailPage() {
           });
         }
         const summary = validationErrorSummary(nextErrors, template, lang);
+        const isTemplateValidation = err.code === "validation_error";
         showErrorToast(
           err,
           t("couldNotSubmitApplication"),
@@ -351,16 +355,26 @@ export default function MyApplicationDetailPage() {
                 duration: 12_000,
                 autopilot: { expand: 0, collapse: 0 },
               }
-            : undefined,
+            : !isTemplateValidation
+              ? {
+                  description: err.message,
+                  duration: 12_000,
+                  autopilot: { expand: 0, collapse: 0 },
+                  action: { label: t("retry"), onClick: () => void handleSubmit() },
+                }
+              : undefined,
         );
+        if (!isTemplateValidation) {
+          setActionError({ action: "submit", message: err.message });
+        }
       } else {
+        setActionError({ action: "submit", message: t("couldNotSubmitApplication") });
         showErrorToast(err, t("couldNotSubmitApplication"));
       }
     } finally {
       setSubmitting(false);
     }
   }
-
   async function handleConfirm() {
     if (!response) return;
     setActing(true);
@@ -575,7 +589,7 @@ export default function MyApplicationDetailPage() {
           groupFieldsBySections(
             template,
             withLogisticsSection(
-              form?.sections ?? [],
+              response?.sections ?? form?.sections ?? [],
               Boolean(form?.ask_shirt_size || form?.ask_food_intolerances),
             ),
           ).map((group, i) => (
@@ -607,6 +621,7 @@ export default function MyApplicationDetailPage() {
                     applicationId={id}
                     value={values[field.key] as FieldValue}
                     onChange={(v) => setValue(field.key, v)}
+                    onBlur={() => validateOnBlur(field)}
                     disabled={!editable}
                     lang={lang}
                     error={fieldErrors[field.key]}

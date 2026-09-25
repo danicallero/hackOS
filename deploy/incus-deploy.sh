@@ -268,10 +268,25 @@ export WEB_IMAGE_TAG="$web_image_tag"
 run_compose() {
   local description="$1"
   shift
-  local output_file
+  local output_file line secret
   output_file="$(mktemp)"
 
   if ! compose "$@" >"$output_file" 2>&1; then
+    # Compose's MinIO helper is the only source of the concrete bootstrap
+    # error (credentials, bucket, policy, or network). Keep that diagnostic in
+    # CI while replacing every configured storage credential before logging.
+    echo "---- $description diagnostic (last 80 lines) ----" >&2
+    while IFS= read -r line; do
+      for secret in \
+        "$(env_value MINIO_ROOT_USER)" \
+        "$(env_value MINIO_ROOT_PASSWORD)" \
+        "$(env_value S3_ACCESS_KEY)" \
+        "$(env_value S3_SECRET_KEY)"; do
+        [[ -n "$secret" ]] && line="${line//"$secret"/[REDACTED]}"
+      done
+      echo "$line" >&2
+    done < <(tail -n 80 "$output_file")
+    echo "---- end $description diagnostic ----" >&2
     rm -f "$output_file"
     echo "ERROR: $description failed" >&2
     return 1
@@ -380,7 +395,29 @@ echo "Deploying hackOS $environment ($image_tag)"
 phase "Checking deployment configuration"
 run_compose "validate Compose" config --quiet
 phase "Refreshing selected immutable images from GHCR"
-run_compose "pull pinned images" pull --policy always
+pull_targets=()
+if [[ "$deploy_api" == true ]]; then
+  # These three services share the immutable API image. Do not refresh the
+  # infrastructure images here: staging keeps its healthy datastore images and
+  # a registry outage there must not block an application-only release.
+  pull_targets+=(api worker migrate)
+fi
+if [[ "$deploy_web" == true ]]; then
+  pull_targets+=(web)
+fi
+if ((${#pull_targets[@]})); then
+  pull_output="$(mktemp)"
+  if ! compose pull --policy always "${pull_targets[@]}" >"$pull_output" 2>&1; then
+    echo "ERROR: pull pinned images failed" >&2
+    cat "$pull_output" >&2
+    rm -f "$pull_output"
+    exit 1
+  fi
+  rm -f "$pull_output"
+  echo "OK: pull pinned images"
+else
+  echo "OK: no application images selected for refresh"
+fi
 if [[ "$deploy_api" == true ]]; then
   verify_pulled_image_revision api "$api_image_tag"
 fi

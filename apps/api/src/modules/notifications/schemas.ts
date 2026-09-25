@@ -30,8 +30,6 @@ export const notificationIdParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
 });
 
-export const announcementAudienceSchema = z.enum(["sponsor", "participant", "mentor", "staff"]);
-
 const announcementBodyObjectSchema = z.object({
   title: z.string().min(1).max(200),
   body: z.string().min(1),
@@ -47,9 +45,11 @@ const announcementBodyObjectSchema = z.object({
   screenPlacement: z.enum(["none", "embedded", "fullscreen"]).optional().default("none"),
   publishAt: z.iso.datetime({ offset: true }).nullable().optional(),
   expiresAt: z.iso.datetime({ offset: true }).nullable().optional(),
-  /** Sponsor/participant/mentor tags (H59 vocabulary). Empty + no recipients = everyone. */
-  audiences: z.array(announcementAudienceSchema).max(4).optional().default([]),
-  /** Mutually exclusive with `audiences` — see the refine below. */
+  /** Current holders of these roles. Empty + no dietary filter + no recipients = everyone. */
+  roleIds: z.array(z.number().int().positive()).max(100).optional().default([]),
+  /** Optional dietary filter, combined with roleIds when both are present. */
+  intoleranceIds: z.array(z.number().int().positive()).max(100).optional().default([]),
+  /** Mutually exclusive with role/intolerance targeting — see the refine below. */
   recipientUserIds: z.array(z.number().int().positive()).optional().default([]),
   channels: z
     .array(notificationChannelSchema)
@@ -60,9 +60,10 @@ const announcementBodyObjectSchema = z.object({
 
 /** Cross-field rules shared by create (full payload) and update (partial payload). */
 const targetingExclusivityRefine = (v: {
-  audiences?: string[];
+  roleIds?: number[];
+  intoleranceIds?: number[];
   recipientUserIds?: number[];
-}): boolean => !(v.audiences?.length && v.recipientUserIds?.length);
+}): boolean => !((v.roleIds?.length || v.intoleranceIds?.length) && v.recipientUserIds?.length);
 const notifyOnlyNoExpiryRefine = (v: {
   screenPlacement?: "none" | "embedded" | "fullscreen";
   notifyUsers?: boolean;
@@ -76,7 +77,7 @@ const screenNoSpecificRecipientsRefine = (v: {
 export const announcementBodySchema = announcementBodyObjectSchema
   .strict()
   .refine(targetingExclusivityRefine, {
-    message: "Choose either an audience or specific recipients, not both",
+    message: "Choose either role/dietary targeting or specific recipients, not both",
     path: ["recipientUserIds"],
   })
   .refine(notifyOnlyNoExpiryRefine, {
@@ -92,7 +93,7 @@ export const announcementUpdateBodySchema = announcementBodyObjectSchema
   .partial()
   .strict()
   .refine(targetingExclusivityRefine, {
-    message: "Choose either an audience or specific recipients, not both",
+    message: "Choose either role/dietary targeting or specific recipients, not both",
     path: ["recipientUserIds"],
   })
   .refine(notifyOnlyNoExpiryRefine, {

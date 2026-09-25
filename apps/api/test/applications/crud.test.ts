@@ -134,6 +134,55 @@ describe("applications CRUD (H11)", () => {
     expect(list.json().applications).toHaveLength(1);
   });
 
+  it("moves drafts to an updated form version", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    const applicant = await createUser();
+    const id = await createApplication();
+
+    const draft = await a.inject({
+      method: "PUT",
+      url: `/api/applications/${id}/response`,
+      headers: asUser(applicant),
+      payload: { responses: { motivation: "draft answer" } },
+    });
+    expect(draft.statusCode).toBe(200);
+
+    const updatedTemplate = [
+      ...sampleTemplate(),
+      {
+        key: "portfolio_file",
+        label: { es: "Archivo", gl: "Ficheiro", en: "File" },
+        kind: "file",
+        required: false,
+      },
+    ];
+    const update = await a.inject({
+      method: "PATCH",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+      payload: { template: updatedTemplate },
+    });
+    expect(update.statusCode).toBe(200);
+
+    const mine = await a.inject({
+      method: "GET",
+      url: `/api/applications/${id}/response`,
+      headers: asUser(applicant),
+    });
+    expect(mine.statusCode).toBe(200);
+    expect(mine.json().template).toContainEqual(expect.objectContaining({ key: "portfolio_file" }));
+
+    const { rows } = await pool.query<{ version: number }>(
+      `SELECT fv.version
+         FROM application_responses r
+         JOIN application_form_versions fv ON fv.id = r.application_form_version_id
+        WHERE r.id = $1`,
+      [draft.json().id],
+    );
+    expect(rows[0]?.version).toBe(2);
+  });
+
   it("stores explicit anonymous retention in immutable form versions and protects it by capability", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);

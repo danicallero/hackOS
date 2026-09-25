@@ -3,10 +3,13 @@
 // One control for a single application-template field, shared by the applicant
 // form (my-applications) and staff response editing (applications). Owns the
 // type contracts the API's validateResponses enforces: number for
-// "number"/"birth_year"/"university", string for text/file, string[] for
+// "number"/"birth_year"/"university"/"degree", string for text/file, a
+// city/province/country object for city, string[] for
 // multiselect, boolean for checkbox.
 
+import { CityPicker } from "@/components/common/city-picker";
 import { DateTimeInput } from "@/components/common/datetime-input";
+import { DegreePicker } from "@/components/common/degree-picker";
 import { FileLink } from "@/components/common/file-link";
 import { FileUploadField } from "@/components/common/file-upload-field";
 import { LinkifiedText } from "@/components/common/linkified-text";
@@ -27,7 +30,14 @@ import type { I18nText } from "@/lib/i18n";
 import { pickText, useLocale } from "@/lib/i18n";
 import type { Language } from "@/lib/types";
 
-export type FieldValue = string | number | boolean | string[] | null | undefined;
+export type FieldValue =
+  | string
+  | number
+  | boolean
+  | string[]
+  | { city: string; province: string; country: string }
+  | null
+  | undefined;
 
 /** Structural shape shared by both modules' local TemplateField types. */
 export interface TemplateFieldLike {
@@ -48,11 +58,28 @@ export interface TemplateFieldLike {
   placeholder?: I18nText;
   validation?: {
     text_condition?: string;
+    min_length?: number;
+    max_length?: number;
   };
 }
 
 const NONE = "__none__";
 const MAXIMUM_BIRTH_AGE = 120;
+
+/**
+ * Template URL validation accepts a hostname without a protocol. Browsers,
+ * however, interpret that form as an internal relative path, so add HTTPS
+ * before rendering a submitted answer as a link.
+ */
+export function externalUrlHref(value: string): string | null {
+  const candidate = /^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`;
+  try {
+    const url = new URL(candidate);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Stable ids let labels, validation messages, and focus recovery share one contract. */
 export function templateFieldId(fieldKey: string, applicationId?: number): string {
@@ -73,6 +100,7 @@ export function TemplateFieldControl({
   sharedWithSponsors,
   onSharedWithSponsorsChange,
   onExternalLinkClick,
+  onBlur,
 }: {
   field: TemplateFieldLike;
   value: FieldValue;
@@ -97,6 +125,7 @@ export function TemplateFieldControl({
   onSharedWithSponsorsChange?: (value: boolean) => void;
   /** Called when a read-only URL answer is opened in a new tab. */
   onExternalLinkClick?: () => void;
+  onBlur?: () => void;
 }) {
   const { t } = useLocale();
   const label = pickText(field.label, lang);
@@ -112,11 +141,12 @@ export function TemplateFieldControl({
   const helpId = `${id}-help`;
   const hasError = Boolean(error);
   const externalUrl = typeof value === "string" ? value.trim() : "";
+  const externalUrlHrefValue = externalUrl ? externalUrlHref(externalUrl) : null;
   const isReadOnlyUrl =
     disabled &&
     (field.kind === "text" || field.kind === "textarea") &&
     field.validation?.text_condition === "url" &&
-    externalUrl.length > 0;
+    externalUrlHrefValue !== null;
   const describedBy =
     [helpText ? helpId : null, hasError ? errorId : null].filter(Boolean).join(" ") || undefined;
 
@@ -125,7 +155,7 @@ export function TemplateFieldControl({
     case "textarea":
       control = isReadOnlyUrl ? (
         <a
-          href={externalUrl}
+          href={externalUrlHrefValue}
           target="_blank"
           rel="noreferrer"
           className="text-primary block break-all text-sm underline underline-offset-4"
@@ -141,6 +171,7 @@ export function TemplateFieldControl({
           placeholder={customPlaceholder || undefined}
           value={typeof value === "string" ? value : ""}
           onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
           disabled={disabled}
           aria-labelledby={labelId}
           aria-describedby={describedBy}
@@ -155,6 +186,7 @@ export function TemplateFieldControl({
         <Select
           value={current}
           onValueChange={(v) => onChange(v === NONE ? "" : v)}
+          onOpenChange={(open) => !open && onBlur?.()}
           disabled={disabled}
         >
           <SelectTrigger
@@ -185,6 +217,7 @@ export function TemplateFieldControl({
           options={options}
           value={Array.isArray(value) ? (value as string[]) : []}
           onChange={(v) => onChange(v)}
+          onBlur={onBlur}
           disabled={disabled}
           inDialog={inDialog}
           id={id}
@@ -206,6 +239,7 @@ export function TemplateFieldControl({
             name={field.key}
             checked={value === true}
             onCheckedChange={(c) => onChange(c === true)}
+            onBlur={onBlur}
             disabled={disabled}
             aria-labelledby={labelId}
             aria-describedby={describedBy}
@@ -236,6 +270,7 @@ export function TemplateFieldControl({
           name={field.key}
           value={typeof value === "string" ? value.slice(0, 10) : ""}
           onChange={(v) => onChange(v)}
+          onBlur={onBlur}
           disabled={disabled}
           aria-labelledby={labelId}
           aria-describedby={describedBy}
@@ -257,6 +292,7 @@ export function TemplateFieldControl({
           placeholder={t("birthYearPlaceholder")}
           value={typeof value === "number" ? value : ""}
           onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))}
+          onBlur={onBlur}
           disabled={disabled}
           aria-labelledby={labelId}
           aria-describedby={describedBy}
@@ -275,6 +311,7 @@ export function TemplateFieldControl({
           placeholder={customPlaceholder || undefined}
           value={typeof value === "number" ? value : ""}
           onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))}
+          onBlur={onBlur}
           disabled={disabled}
           aria-labelledby={labelId}
           aria-describedby={describedBy}
@@ -294,6 +331,7 @@ export function TemplateFieldControl({
               fieldKey={field.key}
               value={typeof value === "string" ? value : ""}
               onChange={(url) => onChange(url)}
+              onBlur={onBlur}
               allowedTypes={field.allowed_file_types}
               maxSizeMb={field.max_file_size_mb}
               disabled={disabled}
@@ -332,6 +370,45 @@ export function TemplateFieldControl({
       );
       break;
     }
+    case "degree":
+      control = (
+        <DegreePicker
+          value={value != null && value !== "" ? String(value) : ""}
+          onChange={(v) => onChange(v ? Number(v) : null)}
+          onBlur={onBlur}
+          disabled={disabled}
+          inDialog={inDialog}
+          id={id}
+          aria-labelledby={labelId}
+          aria-describedby={describedBy}
+          aria-invalid={hasError || undefined}
+          aria-required={field.required || undefined}
+        />
+      );
+      break;
+    case "city":
+      control = (
+        <CityPicker
+          value={
+            typeof value === "object" && value !== null && !Array.isArray(value)
+              ? {
+                  city: typeof value.city === "string" ? value.city : "",
+                  province: typeof value.province === "string" ? value.province : "",
+                  country: typeof value.country === "string" ? value.country : "",
+                }
+              : { city: "", province: "", country: "" }
+          }
+          onChange={onChange}
+          onBlur={onBlur}
+          disabled={disabled}
+          id={id}
+          aria-labelledby={labelId}
+          aria-describedby={describedBy}
+          aria-invalid={hasError || undefined}
+          aria-required={field.required || undefined}
+        />
+      );
+      break;
     case "university":
       // The API stores/validates a university as a numeric id; the picker works
       // in string ids — convert on the way in and out.
@@ -352,7 +429,7 @@ export function TemplateFieldControl({
     default:
       control = isReadOnlyUrl ? (
         <a
-          href={externalUrl}
+          href={externalUrlHrefValue}
           target="_blank"
           rel="noreferrer"
           className="text-primary block break-all text-sm underline underline-offset-4"
@@ -368,6 +445,7 @@ export function TemplateFieldControl({
           placeholder={customPlaceholder || undefined}
           value={typeof value === "string" ? value : ""}
           onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
           disabled={disabled}
           aria-labelledby={labelId}
           aria-describedby={describedBy}
@@ -399,6 +477,12 @@ export function TemplateFieldControl({
           <LinkifiedText text={helpText} />
         </p>
       )}
+      {(field.kind === "text" || field.kind === "textarea") &&
+        field.validation?.max_length != null && (
+          <p className="text-muted-foreground text-xs tabular-nums">
+            {typeof value === "string" ? value.length : 0} / {field.validation.max_length}
+          </p>
+        )}
       {error && (
         <p id={errorId} role="alert" className="text-destructive text-sm">
           {error}

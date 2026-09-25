@@ -5,7 +5,7 @@ capability-driven tabs, participant-facing screens, authenticated realtime,
 and offline SQLite scanners for accreditation, badge rotation, presence,
 meals, and registrable activities.
 
-**Developer API mode.** Seven taps on the understated `v1.0.1` footer in Account
+**Developer API mode.** Seven taps on the understated installed-version footer in Account
 or Sign in reveals a confirmation that switches between production
 (`api.hackudc.com`) and development (`api.dani.md`). The choice is persisted
 in SecureStore. A switch must first close the old server session; it then

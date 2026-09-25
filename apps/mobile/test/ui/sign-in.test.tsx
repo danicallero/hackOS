@@ -12,6 +12,7 @@ jest.mock("expo-router", () => ({
   useLocalSearchParams: () => mockSearchParams,
   useRouter: () => ({ push: jest.fn(), replace: mockReplace, setParams: mockSetParams }),
 }));
+jest.mock("expo-application", () => ({ nativeApplicationVersion: "1.0.2" }));
 
 jest.mock("@/lib/api", () => ({ apiFetch: jest.fn() }));
 jest.mock("@/lib/me-context", () => ({
@@ -200,7 +201,7 @@ describe("native sign-in UI contract", () => {
     const user = userEvent.setup();
     await renderMobile(<SignInScreen />);
 
-    const version = screen.getByLabelText("v1.0.1");
+    const version = screen.getByLabelText("v1.0.2");
     for (let index = 0; index < 7; index += 1) await user.press(version);
 
     expect(alert).toHaveBeenCalledWith("API mode", "Switch to development?", [

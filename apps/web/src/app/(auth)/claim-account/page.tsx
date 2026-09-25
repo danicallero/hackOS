@@ -38,17 +38,23 @@ import { withReturnPath } from "@/lib/return-path";
 import type { Intolerance, InviteLookup, Language } from "@/lib/types";
 
 function claimSchema(t: Translate) {
-  return z.object({
-    email: z.string().email(t("validEmail")).or(z.literal("")),
-    name: z.string().min(1, t("required")).max(200),
-    surname: z.string().min(1, t("required")).max(200),
-    password: z.string().min(8, t("atLeastEight")),
-    language: z.enum(["en", "es", "gl"]),
-    shirtSize: z.string(),
-    foodIntolerances: z.array(z.string()),
-    // Optional free-text dietary notes (M1.3). Optional here and everywhere else.
-    foodIntoleranceNotes: z.string().max(2000),
-  });
+  return z
+    .object({
+      email: z.string().email(t("validEmail")).or(z.literal("")),
+      name: z.string().min(1, t("required")).max(200),
+      surname: z.string().min(1, t("required")).max(200),
+      password: z.string().min(8, t("atLeastEight")),
+      confirmPassword: z.string(),
+      language: z.enum(["en", "es", "gl"]),
+      shirtSize: z.string(),
+      foodIntolerances: z.array(z.string()),
+      // Optional free-text dietary notes (M1.3). Optional here and everywhere else.
+      foodIntoleranceNotes: z.string().max(2000),
+    })
+    .refine((values) => values.password === values.confirmPassword, {
+      message: t("passwordsDontMatch"),
+      path: ["confirmPassword"],
+    });
 }
 type Values = z.infer<ReturnType<typeof claimSchema>>;
 const NONE = "__none__";
@@ -94,6 +100,7 @@ function ClaimInner() {
       name: "",
       surname: "",
       password: "",
+      confirmPassword: "",
       language: "es",
       shirtSize: NONE,
       foodIntolerances: [],
@@ -292,6 +299,19 @@ function ClaimInner() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>{t("password")}</FormLabel>
+                  <FormControl>
+                    <PasswordInput autoComplete="new-password" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="confirmPassword"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("confirmPassword")}</FormLabel>
                   <FormControl>
                     <PasswordInput autoComplete="new-password" {...field} />
                   </FormControl>

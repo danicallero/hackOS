@@ -24,6 +24,8 @@ export const FIELD_KINDS = [
   "number",
   "file",
   "university",
+  "degree",
+  "city",
 ] as const;
 export type FieldKind = (typeof FIELD_KINDS)[number];
 
@@ -120,10 +122,20 @@ export interface MyResponseDetail {
   submitted_at: string | null;
   created_at: string;
   updated_at: string;
+  /** Immutable form snapshot the response is validated against. */
+  template?: TemplateField[];
+  sections?: FormSection[];
 }
 
 /** A single response value, keyed by field.key in the responses object. */
-export type FieldValue = string | number | boolean | string[] | null | undefined;
+export type FieldValue =
+  | string
+  | number
+  | boolean
+  | string[]
+  | { city: string; province: string; country: string }
+  | null
+  | undefined;
 
 export function isNotFoundError(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404;

@@ -29,6 +29,8 @@ export const FIELD_KINDS = [
   "number",
   "file",
   "university",
+  "degree",
+  "city",
 ] as const;
 export type FieldKind = (typeof FIELD_KINDS)[number];
 
@@ -44,6 +46,8 @@ export const BUILDER_FIELD_KINDS = [
   "number",
   "file",
   "university",
+  "degree",
+  "city",
 ] as const satisfies FieldKind[];
 
 /** Kinds that require a non-empty options array (server refine). */

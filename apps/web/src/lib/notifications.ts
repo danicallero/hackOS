@@ -8,7 +8,6 @@ import { api } from "./api";
 
 export type NotificationChannel = "in_app" | "email" | "push";
 export type AnnouncementScreenPlacement = "none" | "embedded" | "fullscreen";
-export type AnnouncementAudience = "sponsor" | "participant" | "mentor" | "staff";
 export type AnnouncementTranslations = Partial<
   Record<"es" | "gl" | "en", { title: string; body: string }>
 >;
@@ -35,7 +34,8 @@ export interface Announcement {
   publish_at: string | null;
   expires_at: string | null;
   fanned_out_at: string | null;
-  audiences: AnnouncementAudience[];
+  role_ids: number[];
+  intolerance_ids: number[];
   channels: NotificationChannel[];
   created_at: string;
   /** Only populated by the single-announcement GET (edit modal hydration). */
@@ -50,7 +50,8 @@ export interface AnnouncementInput {
   screenPlacement: AnnouncementScreenPlacement;
   publishAt: string | null;
   expiresAt: string | null;
-  audiences: AnnouncementAudience[];
+  roleIds: number[];
+  intoleranceIds: number[];
   channels: NotificationChannel[];
   recipientUserIds: number[];
 }
@@ -128,6 +129,8 @@ export const notificationsApi = {
     api.get<{ users: AnnouncementRecipient[] }>("/api/announcements/recipient-candidates", {
       query: { q, limit },
     }),
+  targetingOptions: () =>
+    api.get<{ roles: Array<{ id: number; name: string }> }>("/api/announcements/targeting-options"),
 
   translateAvailability: () =>
     api.get<{ available: boolean }>("/api/announcements/translate-availability"),

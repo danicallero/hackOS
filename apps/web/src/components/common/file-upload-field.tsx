@@ -11,7 +11,7 @@ import { FileLink } from "@/components/common/file-link";
 import { IconButton } from "@/components/common/icon-button";
 import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
-import { apiUpload } from "@/lib/api";
+import { ApiError, apiUpload } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 
@@ -20,6 +20,7 @@ export function FileUploadField({
   fieldKey,
   value,
   onChange,
+  onBlur,
   allowedTypes,
   maxSizeMb,
   disabled,
@@ -36,6 +37,7 @@ export function FileUploadField({
   /** The stored object URL, or "" when nothing is uploaded yet. */
   value: string;
   onChange: (url: string) => void;
+  onBlur?: () => void;
   /** File extensions accepted (e.g. [".pdf", ".png"]); unset allows any type. */
   allowedTypes?: string[];
   /** Max upload size in MB; defaults to 10. */
@@ -83,14 +85,17 @@ export function FileUploadField({
         {
           loading: { title: t("uploading"), description: file.name },
           success: { title: t("fileUploaded"), description: file.name },
-          error: { title: t("uploadFailed"), description: file.name },
+          error: (error) => ({
+            title: error instanceof ApiError ? error.message : t("uploadFailed"),
+          }),
         },
       );
       // Store the private object key; reads resolve to a presigned URL on demand.
       onChange(payload.key);
+      onBlur?.();
       setUploadError(null);
-    } catch {
-      const message = t("uploadFailed");
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : t("uploadFailed");
       setUploadError(message);
     } finally {
       setUploading(false);

@@ -117,7 +117,8 @@ generated route ledger records the resulting boundary.
 
 ### applications (H11–H15, H27)
 Configurable application forms (`applications` table), an applicant's
-draft/submit flow with a verified-email gate, staff review + scoring, batch
+draft/submit flow with a verified-email gate (a draft is created on entry and
+autosaved from the applicant form), staff review + scoring, batch
 and per-response accept/reject decisions, the three confirm/decline paths
 (email link, authenticated web, admin override — H15), file uploads for
 template `file` fields proxied through an owner-or-staff check (never a
@@ -132,6 +133,11 @@ submission with a fresh confirmation email. Form deletion removes its responses,
 versions, grants and confirmation tokens transactionally; anonymous-retention
 records remain a deliberate deletion boundary. The confirmation-window expirer (`applications/expirer.ts`)
 is a background tick, not a request path.
+
+The form catalogue also supports curated university-degree IDs and public city
+suggestions (Photon/OpenStreetMap); city labels are stored as text while degree
+answers retain the catalogue ID. The degree catalogue follows the university
+catalogue's authenticated-proposal and staff-curation boundary.
 
 ### projects (H16–H17, H21)
 A "project" is a `repos` row; "team" is the set of `submissions (repo_id,

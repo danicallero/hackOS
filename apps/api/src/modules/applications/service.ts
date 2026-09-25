@@ -212,7 +212,6 @@ function checkFieldValidation(field: TemplateField, value: unknown): string | nu
   if ((field.kind === "text" || field.kind === "textarea") && typeof value === "string") {
     if (v.min_length !== undefined && value.length < v.min_length) return "too short";
     if (v.max_length !== undefined && value.length > v.max_length) return "too long";
-    if (v.pattern !== undefined && !new RegExp(v.pattern).test(value)) return "invalid format";
     if (v.text_condition === "contains" && v.text_value && !value.includes(v.text_value)) {
       return "must contain text";
     }
@@ -221,6 +220,7 @@ function checkFieldValidation(field: TemplateField, value: unknown): string | nu
     }
     if (v.text_condition === "email" && !SIMPLE_EMAIL_RE.test(value)) return "invalid email";
     if (v.text_condition === "url" && !SIMPLE_URL_RE.test(value)) return "invalid url";
+    if (v.pattern !== undefined && !new RegExp(v.pattern).test(value)) return "invalid format";
   }
   if (field.kind === "number" && typeof value === "number") {
     if (v.min !== undefined && value < v.min) return "too small";
@@ -292,6 +292,30 @@ export function validateResponses(
           errors[field.key] = "must be a university id";
         }
         break;
+      case "degree":
+        if (typeof value !== "number" && !(typeof value === "string" && /^\d+$/.test(value))) {
+          errors[field.key] = "must be a degree id";
+        }
+        break;
+      case "city": {
+        // A city answer is deliberately structured so city/province/country
+        // survive separately for exports and application review.
+        const location = value as Record<string, unknown>;
+        if (
+          typeof value !== "object" ||
+          value === null ||
+          Array.isArray(value) ||
+          typeof location.city !== "string" ||
+          location.city.trim() === "" ||
+          typeof location.province !== "string" ||
+          location.province.trim() === "" ||
+          typeof location.country !== "string" ||
+          location.country.trim() === ""
+        ) {
+          errors[field.key] = "must include city, province, and country";
+        }
+        break;
+      }
       default:
         if (typeof value !== "string") errors[field.key] = "must be a string";
     }

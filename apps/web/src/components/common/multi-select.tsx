@@ -37,6 +37,7 @@ export function MultiSelect({
   options,
   value,
   onChange,
+  onBlur,
   placeholder,
   searchPlaceholder,
   emptyText,
@@ -55,6 +56,7 @@ export function MultiSelect({
   /** Selected option values. */
   value: string[];
   onChange: (value: string[]) => void;
+  onBlur?: () => void;
   /** Shown in the trigger when nothing is selected. */
   placeholder?: string;
   /** Shown inside the popover's search input. */
@@ -123,7 +125,13 @@ export function MultiSelect({
   );
 
   return (
-    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
+    <PopoverPrimitive.Root
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) onBlur?.();
+      }}
+    >
       {/* Anchored on the whole control, not on the inner trigger button: the
           button is inset by the box's padding (and by any badges), so anchoring
           to it would leave the popover narrower than, and offset from, the

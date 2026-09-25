@@ -387,10 +387,11 @@ export function registerAdminRoutes(app: FastifyInstance): void {
         if (grantsChanged) await replaceGrantedRoles(client, req.params.id, nextRoleIds);
 
         if (schemaChanged) {
-          await client.query(
+          const { rows: versionRows } = await client.query<{ id: number }>(
             `INSERT INTO application_form_versions
                (application_id, version, template, sections, created_by)
-             VALUES ($1, $2, $3::jsonb, $4::jsonb, $5)`,
+             VALUES ($1, $2, $3::jsonb, $4::jsonb, $5)
+             RETURNING id`,
             [
               req.params.id,
               nextVersion,
@@ -398,6 +399,17 @@ export function registerAdminRoutes(app: FastifyInstance): void {
               JSON.stringify(nextSections),
               req.userId,
             ],
+          );
+          const formVersion = versionRows[0];
+          if (!formVersion) throw new Error("Application form version could not be created");
+          // Submitted responses must retain the version they were evaluated
+          // against. Drafts, however, are still being edited and must track
+          // the new form so visible fields and upload validation agree.
+          await client.query(
+            `UPDATE application_responses
+                SET application_form_version_id = $1
+              WHERE application_id = $2 AND status = 'draft'`,
+            [formVersion.id, req.params.id],
           );
         }
         await audit(client, {

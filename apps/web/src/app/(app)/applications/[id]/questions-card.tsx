@@ -37,6 +37,7 @@ import {
   HashIcon,
   ListChecksIcon,
   type LucideIcon,
+  MapPinIcon,
   MoreVerticalIcon,
   PaperclipIcon,
   PlusIcon,
@@ -791,6 +792,8 @@ export function fieldKindLabel(kind: FieldKind, t: Translate): string {
     number: t("fieldKindNumber"),
     file: t("fieldKindFile"),
     university: t("fieldKindUniversity"),
+    degree: t("fieldKindDegree"),
+    city: t("fieldKindCity"),
   };
   return map[kind];
 }
@@ -806,6 +809,8 @@ const FIELD_KIND_ICON: Record<FieldKind, LucideIcon> = {
   number: HashIcon,
   file: PaperclipIcon,
   university: GraduationCapIcon,
+  degree: GraduationCapIcon,
+  city: MapPinIcon,
 };
 
 /** Kinds where a response-validation rule (length/pattern/range/selection

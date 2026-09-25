@@ -6,9 +6,76 @@ export interface ValidationField {
   key: string;
   label: I18nText;
   validation?: {
+    min_length?: number;
+    max_length?: number;
+    pattern?: string;
+    text_condition?: string;
+    text_value?: string;
+    min?: number;
+    max?: number;
+    min_selected?: number;
+    max_selected?: number;
     error_message?: I18nText;
   };
 }
+
+/** Mirrors the server's H11 rules so users get feedback on blur, without
+ * making an incomplete draft invalid while they are typing. */
+export function validateFieldOnBlur(
+  field: ValidationField & { kind?: string; required?: boolean },
+  value: unknown,
+  t: Translate,
+  lang: Language,
+): string | null {
+  const empty = value == null || value === "" || (Array.isArray(value) && value.length === 0);
+  if (empty) return field.required ? t("fieldRequired") : null;
+  if (field.kind === "birth_year") {
+    const currentYear = new Date().getFullYear();
+    if (
+      typeof value !== "number" ||
+      !Number.isInteger(value) ||
+      value < currentYear - 120 ||
+      value > currentYear
+    ) {
+      return t("fieldMustBeBirthYear");
+    }
+  }
+  const rule = field.validation;
+  let code: string | null = null;
+  if ((field.kind === "text" || field.kind === "textarea") && typeof value === "string" && rule) {
+    if (rule.min_length != null && value.length < rule.min_length) code = "too short";
+    else if (rule.max_length != null && value.length > rule.max_length) code = "too long";
+    else if (rule.text_condition === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))
+      code = "invalid email";
+    else if (rule.text_condition === "url" && !SIMPLE_URL_RE.test(value)) code = "invalid url";
+    else if (rule.pattern) {
+      try {
+        if (!new RegExp(rule.pattern).test(value)) code = "invalid format";
+      } catch {
+        code = "invalid format";
+      }
+    } else if (rule.text_condition === "contains" && !value.includes(rule.text_value ?? ""))
+      code = "must contain text";
+    else if (rule.text_condition === "not_contains" && value.includes(rule.text_value ?? ""))
+      code = "must not contain text";
+  } else if (field.kind === "number" && typeof value === "number" && rule) {
+    if (rule.min != null && value < rule.min) code = "too small";
+    else if (rule.max != null && value > rule.max) code = "too large";
+  } else if (field.kind === "multiselect" && Array.isArray(value) && rule) {
+    if (rule.min_selected != null && value.length < rule.min_selected) code = "too few selected";
+    else if (rule.max_selected != null && value.length > rule.max_selected)
+      code = "too many selected";
+  }
+  if (!code) return null;
+  const custom = field.validation?.error_message
+    ? pickText(field.validation.error_message, lang)
+    : "";
+  return custom || t(validationMessageKey(code, field));
+}
+
+// Keep client feedback aligned with the permissive URL shape accepted by the
+// API: a scheme is optional, but the value must still be domain-shaped.
+const SIMPLE_URL_RE = /^(https?:\/\/)?[^\s/$.?#][^\s]*\.[^\s]{2,}$/i;
 
 /** Generic fallback copy per server validation-rule error code (H11). */
 const VALIDATION_ERROR_KEYS: Record<string, MessageKey> = {
@@ -24,6 +91,16 @@ const VALIDATION_ERROR_KEYS: Record<string, MessageKey> = {
   "invalid email": "invalidEmail",
   "invalid url": "invalidUrl",
 };
+
+function validationMessageKey(message: string, field?: ValidationField): MessageKey {
+  if (message === "invalid format" && field?.validation?.text_condition === "email") {
+    return "invalidEmail";
+  }
+  if (message === "invalid format" && field?.validation?.text_condition === "url") {
+    return "invalidUrl";
+  }
+  return VALIDATION_ERROR_KEYS[message] ?? "fieldInvalid";
+}
 
 /** Extract and localize the per-field errors returned by template validation. */
 export function fieldErrorsFromApi(
@@ -46,14 +123,17 @@ export function fieldErrorsFromApi(
           if (message === "must be an array") return [key, t("fieldMustBeArray")];
           if (message === "must be a string") return [key, t("fieldMustBeString")];
           if (message === "must be a university id") return [key, t("fieldMustBeUniversity")];
-          const validationKey = VALIDATION_ERROR_KEYS[message];
-          if (validationKey) {
+          if (message === "must be a degree id") return [key, t("fieldMustBeDegree")];
+          if (message === "must include city, province, and country") {
+            return [key, t("fieldMustBeCity")];
+          }
+          if (VALIDATION_ERROR_KEYS[message]) {
             const field = template?.find((candidate) => candidate.key === key);
             const custom =
               field?.validation?.error_message && lang
                 ? pickText(field.validation.error_message, lang)
                 : "";
-            return [key, custom || t(validationKey)];
+            return [key, custom || t(validationMessageKey(message, field))];
           }
           return [key, t("fieldInvalid")];
         }),

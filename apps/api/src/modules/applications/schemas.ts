@@ -19,6 +19,8 @@ export const FIELD_KINDS = [
   "number",
   "file",
   "university",
+  "degree",
+  "city",
 ] as const;
 
 /**
