@@ -153,6 +153,125 @@ describe("batch application export (H56)", () => {
     expect(Object.keys(entries)).toEqual(["applications.csv"]);
   });
 
+  it("exports names rather than IDs for university and degree library answers", async () => {
+    const staff = await createUserWithCapabilities([CAPABILITIES.EXPORTS_RUN]);
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows: universities } = await pool.query<{ id: number }>(
+      `INSERT INTO universities (name, proposed_by) VALUES ('Universidade de Exportación', $1)
+       RETURNING id`,
+      [staff],
+    );
+    const { rows: degrees } = await pool.query<{ id: number }>(
+      `INSERT INTO university_degrees (name, proposed_by) VALUES ('Enxeñaría de Exportación', $1)
+       RETURNING id`,
+      [staff],
+    );
+    const { rows: intolerances } = await pool.query<{ id: number }>(
+      `INSERT INTO food_intolerances (label, proposed_by)
+       VALUES ('{"en":"Nuts","es":"Frutos secos","gl":"Froitos secos"}'::jsonb, $1)
+       RETURNING id`,
+      [staff],
+    );
+    const universityId = universities[0]?.id;
+    const degreeId = degrees[0]?.id;
+    const intoleranceId = intolerances[0]?.id;
+    if (!universityId || !degreeId || !intoleranceId) {
+      throw new Error("Failed to seed export library values");
+    }
+    const applicationId = await createApplication({
+      name: "Library form",
+      template: [
+        {
+          key: "university",
+          label: { en: "University", es: "Universidad", gl: "Universidade" },
+          kind: "university",
+          required: false,
+        },
+        {
+          key: "degree",
+          label: { en: "Degree", es: "Titulación", gl: "Titulación" },
+          kind: "degree",
+          required: false,
+        },
+      ],
+    });
+    const applicant = await createUser({ email: "library-answer@test.local" });
+    await pool.query(`UPDATE users SET food_intolerances = ARRAY[$2]::integer[] WHERE id = $1`, [
+      applicant,
+      intoleranceId,
+    ]);
+    await createResponse(applicant, applicationId, {
+      status: "accepted",
+      // Numeric strings are accepted for legacy rows as well as numeric picker values.
+      responses: { university: String(universityId), degree: degreeId },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/exports/applications.zip",
+      headers: { ...asUser(staff), "content-type": "application/json" },
+      payload: {
+        statuses: ["accepted"],
+        fields: [
+          { source: "answer", application_id: applicationId, key: "university" },
+          { source: "answer", application_id: applicationId, key: "degree" },
+          { source: "profile", key: "food_intolerances" },
+        ],
+        documents: "none",
+        language: "gl",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const entries = await readZipEntries(response.rawPayload);
+    const csv = entries["applications.csv"]?.toString();
+    expect(csv).toContain("Universidade de Exportación,Enxeñaría de Exportación,Froitos secos");
+    expect(csv).not.toContain(`${universityId},${degreeId},${intoleranceId}`);
+  });
+
+  it("scopes a form export's catalog and rows to its application", async () => {
+    const staff = await createUserWithCapabilities([CAPABILITIES.EXPORTS_RUN]);
+    const selectedApplicationId = await createApplication({ name: "Selected form" });
+    const otherApplicationId = await createApplication({ name: "Other form" });
+    const selectedApplicant = await createUser({ email: "selected-form@test.local" });
+    const otherApplicant = await createUser({ email: "other-form@test.local" });
+    await createResponse(selectedApplicant, selectedApplicationId, {
+      status: "confirmed",
+      responses: { motivation: "selected answer" },
+    });
+    await createResponse(otherApplicant, otherApplicationId, {
+      status: "confirmed",
+      responses: { motivation: "other answer" },
+    });
+
+    const catalog = await app.inject({
+      method: "GET",
+      url: `/api/exports/applications/catalog?application_id=${selectedApplicationId}`,
+      headers: asUser(staff),
+    });
+    expect(catalog.statusCode).toBe(200);
+    expect(catalog.json().applications).toEqual([
+      expect.objectContaining({ id: selectedApplicationId, name: "Selected form" }),
+    ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/exports/applications.zip",
+      headers: { ...asUser(staff), "content-type": "application/json" },
+      payload: {
+        statuses: ["confirmed"],
+        application_ids: [selectedApplicationId],
+        fields: [{ source: "answer", application_id: selectedApplicationId, key: "motivation" }],
+        documents: "none",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const entries = await readZipEntries(response.rawPayload);
+    const csv = entries["applications.csv"]?.toString();
+    expect(csv).toContain("selected answer");
+    expect(csv).not.toContain("other answer");
+  });
+
   it("exports every saved file or only shareable files with explicit applicant consent", async () => {
     const staff = await createUserWithCapabilities([CAPABILITIES.EXPORTS_RUN]);
     const applicationId = await createApplication({

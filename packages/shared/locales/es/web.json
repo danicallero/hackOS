@@ -2195,6 +2195,7 @@
   "declineOverride": "Rechazar (anular)",
   "editInProfileLink": "Editar en el perfil del solicitante",
   "dietaryRestrictions": "Restricciones dietéticas",
+  "userRosterDietaryOnly": "Solo usuarios con datos dietéticos",
   "duplicateKey": "Clave duplicada \"{key}\".",
   "duplicateOption": "\"{key}\" tiene una opción duplicada \"{value}\".",
   "editAnswers": "Editar respuestas",

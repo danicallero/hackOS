@@ -240,6 +240,8 @@ describe("RoleEditor members panel", () => {
       visibleRoleName: null,
       language: "en",
       shirtSize: null,
+      foodIntolerances: [],
+      foodIntoleranceNotes: null,
       applicationStatus: null,
       confirmedSpot: false,
       isTestAccount: false,

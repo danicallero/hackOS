@@ -11,7 +11,11 @@ import { BadRequestError } from "../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { getObject, objectExists } from "../../lib/storage.js";
 import type { TemplateField } from "../applications/schemas.js";
-import { APPLICATION_EXPORT_STATUSES, applicationExportBody } from "./schemas.js";
+import {
+  APPLICATION_EXPORT_STATUSES,
+  applicationExportBody,
+  applicationExportCatalogQuery,
+} from "./schemas.js";
 
 type ExportLanguage = "es" | "gl" | "en";
 type ExportDocumentScope = "none" | "all" | "shared";
@@ -88,6 +92,11 @@ interface DocumentCandidate {
   applicationId: number;
   fieldKey: string;
   archivePath: string;
+}
+
+interface LibraryValues {
+  universities: Map<number, string>;
+  degrees: Map<number, string>;
 }
 
 interface ExportFailure {
@@ -182,6 +191,7 @@ interface ApplicationExportField {
 interface ApplicationExportRequest {
   statuses: ApplicationExportStatus[];
   fields: ApplicationExportField[];
+  application_ids?: number[];
   documents: ExportDocumentScope;
   language: ExportLanguage;
 }
@@ -289,11 +299,21 @@ function optionLabel(field: TemplateField, value: unknown, language: ExportLangu
     .join(", ");
 }
 
+function libraryId(value: unknown): number | null {
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) return value;
+  if (typeof value === "string" && /^\d+$/.test(value)) {
+    const id = Number(value);
+    return Number.isSafeInteger(id) && id > 0 ? id : null;
+  }
+  return null;
+}
+
 function formatAnswer(
   row: ApplicationExportRow,
   field: TemplateField,
   language: ExportLanguage,
   documents: ExportDocumentScope,
+  libraryValues: LibraryValues,
 ): unknown {
   const value = row.responses[field.key];
   if (value === null || value === undefined) return "";
@@ -311,6 +331,15 @@ function formatAnswer(
   if (field.kind === "select" || field.kind === "multiselect") {
     return optionLabel(field, value, language);
   }
+  if (field.kind === "university" || field.kind === "degree") {
+    const id = libraryId(value);
+    if (id === null) return String(value);
+    return (
+      (field.kind === "university"
+        ? libraryValues.universities.get(id)
+        : libraryValues.degrees.get(id)) ?? String(value)
+    );
+  }
   if (field.kind === "checkbox" && typeof value === "boolean") {
     return value
       ? { en: "Yes", es: "Sí", gl: "Si" }[language]
@@ -320,9 +349,54 @@ function formatAnswer(
   return value;
 }
 
-async function loadApplicationDefinitions(): Promise<ApplicationDefinition[]> {
+async function loadLibraryValues(
+  rows: ApplicationExportRow[],
+  fields: NormalizedField[],
+): Promise<LibraryValues> {
+  const universityIds = new Set<number>();
+  const degreeIds = new Set<number>();
+
+  for (const row of rows) {
+    for (const field of fields) {
+      if (field.source !== "answer") continue;
+      const definition = fieldFromResponse(row, field.key) ?? field.definition;
+      if (!definition) continue;
+      const id = libraryId(row.responses[field.key]);
+      if (id === null) continue;
+      if (definition.kind === "university") universityIds.add(id);
+      if (definition.kind === "degree") degreeIds.add(id);
+    }
+  }
+
+  const [universities, degrees] = await Promise.all([
+    universityIds.size
+      ? pool.query<{ id: number; name: string }>(
+          "SELECT id, name FROM universities WHERE id = ANY($1::integer[])",
+          [[...universityIds]],
+        )
+      : Promise.resolve({ rows: [] as Array<{ id: number; name: string }> }),
+    degreeIds.size
+      ? pool.query<{ id: number; name: string }>(
+          "SELECT id, name FROM university_degrees WHERE id = ANY($1::integer[])",
+          [[...degreeIds]],
+        )
+      : Promise.resolve({ rows: [] as Array<{ id: number; name: string }> }),
+  ]);
+
+  return {
+    universities: new Map(universities.rows.map(({ id, name }) => [id, name])),
+    degrees: new Map(degrees.rows.map(({ id, name }) => [id, name])),
+  };
+}
+
+async function loadApplicationDefinitions(
+  applicationIds?: number[],
+): Promise<ApplicationDefinition[]> {
   const { rows: applications } = await pool.query<{ id: number; name: string; template: unknown }>(
-    `SELECT id, name, template FROM applications ORDER BY id`,
+    `SELECT id, name, template FROM applications
+      WHERE ($1::integer[] IS NULL OR id = ANY($1))
+      ORDER BY id`,
+    [applicationIds ?? null],
   );
   const definitions = applications.map((application) => ({
     id: application.id,
@@ -430,6 +504,7 @@ function normalizeFields(
 async function loadApplicationRows(
   statuses: readonly string[],
   language: ExportLanguage,
+  applicationIds?: number[],
 ): Promise<ApplicationExportRow[]> {
   const { rows } = await pool.query<ApplicationExportRow>(
     `SELECT r.id AS response_id,
@@ -472,27 +547,29 @@ async function loadApplicationRows(
        JOIN application_form_versions fv ON fv.id = r.application_form_version_id
        JOIN users u ON u.id = r.user_id
       WHERE r.status = ANY($1::app_response_status[])
+        AND ($3::integer[] IS NULL OR r.application_id = ANY($3))
         AND u.account_state = 'active'
         AND u.anonymized_at IS NULL
         AND u.is_test_account = false
       ORDER BY r.id`,
-    [statuses, language],
+    [statuses, language, applicationIds ?? null],
   );
   return rows;
 }
 
-function buildRows(
+async function buildRows(
   rows: ApplicationExportRow[],
   fields: NormalizedField[],
   language: ExportLanguage,
   documents: ExportDocumentScope,
-): unknown[][] {
+): Promise<unknown[][]> {
+  const libraryValues = await loadLibraryValues(rows, fields);
   return rows.map((row) =>
     fields.map((field) => {
       if (field.source === "profile") return fieldValueForProfile(row, field.key);
       if (field.source === "metadata") return fieldValueForMetadata(row, field.key);
       const definition = fieldFromResponse(row, field.key) ?? field.definition;
-      return definition ? formatAnswer(row, definition, language, documents) : "";
+      return definition ? formatAnswer(row, definition, language, documents, libraryValues) : "";
     }),
   );
 }
@@ -546,11 +623,13 @@ export function registerApplicationBatchExportRoutes(app: FastifyInstance): void
       schema: {
         summary: "List fields available to the batch application export",
         description:
-          "Returns profile, response metadata, and every field from the current or immutable historical form versions. The endpoint is gated by exports:run because it exposes the export shape, including fields whose files may be shareable with sponsors (H54/H56).",
+          "Returns profile, response metadata, and every field from the current or immutable historical form versions. Pass application_id to list one form's columns. The endpoint is gated by exports:run because it exposes the export shape, including fields whose files may be shareable with sponsors (H54/H56).",
+        querystring: applicationExportCatalogQuery,
       },
     },
-    async (_req, reply) => {
-      const applications = await loadApplicationDefinitions();
+    async (req, reply) => {
+      const applicationIds = req.query.application_id ? [req.query.application_id] : undefined;
+      const applications = await loadApplicationDefinitions(applicationIds);
       return reply.send({
         profile: PROFILE_FIELDS,
         metadata: METADATA_FIELDS,
@@ -571,7 +650,7 @@ export function registerApplicationBatchExportRoutes(app: FastifyInstance): void
       schema: {
         summary: "Export selected application responses and documents",
         description:
-          "Streams a ZIP containing applications.csv with the requested statuses and columns. `documents=all` includes every saved file from each response's immutable form snapshot. `documents=shared` includes only file fields marked shareable_with_sponsors where the applicant explicitly consented with the corresponding sponsor-share response value (H13/H14/H54/H56). Missing objects are omitted, audited per response, and reported in x-export-file-failures.",
+          "Streams a ZIP containing applications.csv with the requested statuses and columns. Library-backed university and degree answers are exported as their catalogue names, not stored IDs. `documents=all` includes every saved file from each response's immutable form snapshot. `documents=shared` includes only file fields marked shareable_with_sponsors where the applicant explicitly consented with the corresponding sponsor-share response value (H13/H14/H54/H56). Missing objects are omitted, audited per response, and reported in x-export-file-failures.",
         body: applicationExportBody,
       },
     },
@@ -586,11 +665,15 @@ export function registerApplicationBatchExportRoutes(app: FastifyInstance): void
       if (uniqueStatuses.some((status) => !APPLICATION_EXPORT_STATUSES.includes(status))) {
         throw new BadRequestError("Unknown application response status");
       }
+      const applicationIds = body.application_ids && [...new Set(body.application_ids)];
+      if (applicationIds && applicationIds.length !== body.application_ids?.length) {
+        throw new BadRequestError("Application selections cannot be duplicated");
+      }
 
-      const applications = await loadApplicationDefinitions();
+      const applications = await loadApplicationDefinitions(applicationIds);
       const fields = normalizeFields(body.fields, applications, body.language);
-      const rows = await loadApplicationRows(uniqueStatuses, body.language);
-      const csvRows = buildRows(rows, fields, body.language, body.documents);
+      const rows = await loadApplicationRows(uniqueStatuses, body.language, applicationIds);
+      const csvRows = await buildRows(rows, fields, body.language, body.documents);
       const headers = fields.map((field) => field.header);
 
       const documents = body.documents === "none" ? [] : documentsForRows(rows, body.documents);
@@ -626,6 +709,7 @@ export function registerApplicationBatchExportRoutes(app: FastifyInstance): void
         action: "export",
         after: {
           statuses: uniqueStatuses,
+          application_ids: applicationIds,
           fields: body.fields,
           documents: body.documents,
           response_count: rows.length,

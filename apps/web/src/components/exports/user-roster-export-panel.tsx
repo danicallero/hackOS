@@ -6,17 +6,21 @@ import { MultiSelect } from "@/components/common/multi-select";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useLocale } from "@/lib/i18n";
-import type { UserListItem } from "@/lib/types";
+import { api } from "@/lib/api";
+import { pickText, useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
+import type { Intolerance, UserListItem } from "@/lib/types";
 
 function csvValue(value: string) {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
 export function UserRosterExportPanel({ users }: { users: UserListItem[] }) {
-  const { t } = useLocale();
+  const { language, t } = useLocale();
   const [roles, setRoles] = useState<string[]>([]);
   const [fields, setFields] = useState(["name", "email", "role"]);
+  const [dietaryOnly, setDietaryOnly] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const options = useMemo(
     () =>
       Array.from(new Set(users.map((user) => user.visibleRoleName).filter(Boolean))).map(
@@ -32,14 +36,39 @@ export function UserRosterExportPanel({ users }: { users: UserListItem[] }) {
       checked ? [...current, field] : current.filter((selected) => selected !== field),
     );
   };
-  const exportRoster = () => {
+  const exportRoster = async () => {
+    setExporting(true);
+    let intoleranceNames = new Map<number, string>();
+    try {
+      const { intolerances } = await api.get<{ intolerances: Intolerance[] }>(
+        "/api/public/food-intolerances",
+      );
+      intoleranceNames = new Map(
+        intolerances.map((intolerance) => [intolerance.id, pickText(intolerance.label, language)]),
+      );
+    } catch {
+      toast.error(t("exportFailed"));
+      setExporting(false);
+      return;
+    }
     const rows = users.filter(
-      (user) => roles.length === 0 || roles.includes(user.visibleRoleName ?? ""),
+      (user) =>
+        (roles.length === 0 || roles.includes(user.visibleRoleName ?? "")) &&
+        (!dietaryOnly ||
+          user.foodIntolerances.length > 0 ||
+          (user.foodIntoleranceNotes?.trim().length ?? 0) > 0),
     );
     const fieldValues = {
       name: (user: UserListItem) => [user.name, user.surname].filter(Boolean).join(" "),
       email: (user: UserListItem) => user.email,
       role: (user: UserListItem) => user.visibleRoleName ?? "",
+      shirtSize: (user: UserListItem) => user.shirtSize ?? "",
+      foodIntolerances: (user: UserListItem) =>
+        user.foodIntolerances
+          .map((id) => intoleranceNames.get(id) ?? String(id))
+          .filter(Boolean)
+          .join(", "),
+      foodIntoleranceNotes: (user: UserListItem) => user.foodIntoleranceNotes ?? "",
     };
     const csv = [
       fields.join(","),
@@ -56,6 +85,7 @@ export function UserRosterExportPanel({ users }: { users: UserListItem[] }) {
     link.download = "user-roster.csv";
     link.click();
     URL.revokeObjectURL(url);
+    setExporting(false);
   };
   return (
     <SidePanelEditor
@@ -68,7 +98,7 @@ export function UserRosterExportPanel({ users }: { users: UserListItem[] }) {
       title={t("exportUsers")}
       icon={UsersIcon}
       footer={
-        <Button onClick={exportRoster}>
+        <Button onClick={() => void exportRoster()} disabled={exporting}>
           <DownloadIcon aria-hidden="true" />
           {t("export")}
         </Button>
@@ -82,6 +112,9 @@ export function UserRosterExportPanel({ users }: { users: UserListItem[] }) {
               ["name", t("name")],
               ["email", t("email")],
               ["role", t("colRole")],
+              ["shirtSize", t("shirtSize")],
+              ["foodIntolerances", t("foodIntolerances")],
+              ["foodIntoleranceNotes", t("otherDietaryNotes")],
             ].map(([field, label]) => (
               <label
                 key={field}
@@ -99,6 +132,17 @@ export function UserRosterExportPanel({ users }: { users: UserListItem[] }) {
             ))}
           </div>
         </fieldset>
+        <label
+          htmlFor="user-roster-dietary-only"
+          className="flex min-h-9 items-center gap-2 rounded-control px-2 py-1.5 hover:bg-muted/50"
+        >
+          <Checkbox
+            id="user-roster-dietary-only"
+            checked={dietaryOnly}
+            onCheckedChange={(checked) => setDietaryOnly(checked === true)}
+          />
+          <span>{t("userRosterDietaryOnly")}</span>
+        </label>
         <div className="space-y-2">
           <label htmlFor="user-roster-roles" className="text-sm font-medium">
             {t("userRosterRoles")}
@@ -114,7 +158,11 @@ export function UserRosterExportPanel({ users }: { users: UserListItem[] }) {
           <p className="text-muted-foreground text-sm">
             {t("peopleCountOther", {
               count: users.filter(
-                (user) => roles.length === 0 || roles.includes(user.visibleRoleName ?? ""),
+                (user) =>
+                  (roles.length === 0 || roles.includes(user.visibleRoleName ?? "")) &&
+                  (!dietaryOnly ||
+                    user.foodIntolerances.length > 0 ||
+                    (user.foodIntoleranceNotes?.trim().length ?? 0) > 0),
               ).length,
             })}
           </p>

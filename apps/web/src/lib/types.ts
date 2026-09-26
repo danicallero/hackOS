@@ -70,6 +70,8 @@ export interface UserListItem {
   visibleRoleName: string | null;
   language: string;
   shirtSize: string | null;
+  foodIntolerances: number[];
+  foodIntoleranceNotes: string | null;
   applicationStatus: string | null;
   confirmedSpot: boolean;
   isTestAccount: boolean;

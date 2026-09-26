@@ -2195,6 +2195,7 @@
   "declineOverride": "Decline (override)",
   "editInProfileLink": "Edit on the applicant's profile",
   "dietaryRestrictions": "Dietary restrictions",
+  "userRosterDietaryOnly": "Only users with dietary data",
   "duplicateKey": "Duplicate key \"{key}\".",
   "duplicateOption": "\"{key}\" has duplicate option \"{value}\".",
   "editAnswers": "Edit answers",
