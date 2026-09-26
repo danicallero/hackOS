@@ -196,10 +196,12 @@ describe("batch application export (H56)", () => {
       ],
     });
     const applicant = await createUser({ email: "library-answer@test.local" });
-    await pool.query(`UPDATE users SET food_intolerances = ARRAY[$2]::integer[] WHERE id = $1`, [
-      applicant,
-      intoleranceId,
-    ]);
+    await pool.query(
+      `UPDATE users
+          SET food_intolerances = ARRAY[$2]::integer[], food_intolerance_notes = 'No marisco'
+        WHERE id = $1`,
+      [applicant, intoleranceId],
+    );
     await createResponse(applicant, applicationId, {
       status: "accepted",
       // Numeric strings are accepted for legacy rows as well as numeric picker values.
@@ -225,7 +227,9 @@ describe("batch application export (H56)", () => {
     expect(response.statusCode).toBe(200);
     const entries = await readZipEntries(response.rawPayload);
     const csv = entries["applications.csv"]?.toString();
-    expect(csv).toContain("Universidade de Exportación,Enxeñaría de Exportación,Froitos secos");
+    expect(csv).toContain(
+      "Universidade de Exportación,Enxeñaría de Exportación,Froitos secos, No marisco",
+    );
     expect(csv).not.toContain(`${universityId},${degreeId},${intoleranceId}`);
   });
 

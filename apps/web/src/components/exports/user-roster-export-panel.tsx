@@ -64,8 +64,13 @@ export function UserRosterExportPanel({ users }: { users: UserListItem[] }) {
       role: (user: UserListItem) => user.visibleRoleName ?? "",
       shirtSize: (user: UserListItem) => user.shirtSize ?? "",
       foodIntolerances: (user: UserListItem) =>
-        user.foodIntolerances
-          .map((id) => intoleranceNames.get(id) ?? String(id))
+        [
+          user.foodIntolerances
+            .map((id) => intoleranceNames.get(id) ?? String(id))
+            .filter(Boolean)
+            .join(", "),
+          user.foodIntoleranceNotes,
+        ]
           .filter(Boolean)
           .join(", "),
       foodIntoleranceNotes: (user: UserListItem) => user.foodIntoleranceNotes ?? "",
