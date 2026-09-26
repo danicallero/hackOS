@@ -109,7 +109,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
                 u.email, u.shirt_size,
                 u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
                 r.status, r.responses,
-                r.staff_notes, r.submitted_at, r.decision_sent_at,
+                u.notes AS staff_notes, r.submitted_at, r.decision_sent_at,
                 r.confirmed_at, r.declined_at, t.expires_at AS confirmation_expires_at,
                 COALESCE(avg(ar.score), NULL) AS avg_score,
                 count(ar.author_id)::int AS review_count,
@@ -131,7 +131,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
            AND u.is_test_account = false
            AND ${filters.join(" AND ")}
          GROUP BY r.id, u.name, u.surname, u.email, u.shirt_size, u.food_intolerances,
-                  u.food_intolerance_notes, u.dietary_data_state,
+                  u.food_intolerance_notes, u.dietary_data_state, u.notes,
                   t.expires_at
          ORDER BY r.id`,
         params,
@@ -173,7 +173,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Set shared staff notes",
         description:
-          "Replaces the shared (non-reviewer-specific) staff notes on one response (H13).",
+          "Replaces the shared profile staff notes for the response owner (H13). The same field appears on the user profile.",
         params: responseIdParamSchema,
         body: staffNotesSchema,
       },

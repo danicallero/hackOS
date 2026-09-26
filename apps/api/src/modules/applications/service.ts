@@ -850,15 +850,12 @@ export async function setStaffNotes(
   staffNotes: string | null,
 ): Promise<void> {
   await withTransaction(async (client) => {
-    await lockResponse(client, responseId, actorId);
-    await client.query(`UPDATE application_responses SET staff_notes = $2 WHERE id = $1`, [
-      responseId,
-      staffNotes,
-    ]);
+    const response = await lockResponse(client, responseId, actorId);
+    await client.query(`UPDATE users SET notes = $2 WHERE id = $1`, [response.user_id, staffNotes]);
     await audit(client, {
       actorId,
-      entityType: "application_response",
-      entityId: responseId,
+      entityType: "user",
+      entityId: response.user_id,
       action: "staff_notes_updated",
     });
   });
@@ -1779,7 +1776,8 @@ export async function getResponseDetail(
   canViewAllReviews: boolean,
 ): Promise<ResponseDetail> {
   const { rows } = await pool.query(
-    `SELECT r.*, NULLIF(concat_ws(' ', u.name, u.surname), '') AS name, u.email, u.shirt_size,
+    `SELECT r.*, u.notes AS staff_notes,
+            NULLIF(concat_ws(' ', u.name, u.surname), '') AS name, u.email, u.shirt_size,
             u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
             a.id AS app_id, a.name AS app_name,
             (SELECT r2.name

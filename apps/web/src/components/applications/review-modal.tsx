@@ -270,9 +270,12 @@ function exportAnswers(
       [
         response.name ?? "",
         response.email,
-        ...answerFields.map((field) =>
-          fieldValueText(field, answerValues[field.key], lang, t, libraryValues),
-        ),
+        ...answerFields.map((field) => {
+          const value = fieldValueText(field, answerValues[field.key], lang, t, libraryValues);
+          return field.key === "food_intolerances"
+            ? [value, answerValues.food_intolerance_notes].filter(Boolean).join(", ")
+            : value;
+        }),
       ],
     ];
     const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
