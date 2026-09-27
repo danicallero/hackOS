@@ -67,8 +67,12 @@ other module's exported function instead), and, if it does background work, a
 ### identity (H1–H10)
 Better Auth session lifecycle (`/api/auth/*`, pass-through, exempt from the
 route-policy ledger by design), the caller's own profile (`GET/PATCH
-/api/me`), staff user management, secondary-email verification (H6),
-invitations including reusable enterprise and account links (H9/H10/H43). Email
+/api/me`), authenticated password change (`POST /api/auth/change-password`),
+staff user management, secondary-email verification (H6),
+invitations including reusable enterprise and account links (H9/H10/H43).
+Changing a password verifies the current credential in Better Auth, then revokes
+all existing sessions and creates a replacement for the browser making the
+request; the password and its hash are never included in audit data. Email
 invitation listing retains terminal expired, used, and withdrawn records, including
 the redeemed account and timestamp for used invitations, and the
 hierarchical role model is a global reorderable role hierarchy with a tri-state
@@ -118,7 +122,8 @@ generated route ledger records the resulting boundary.
 ### applications (H11–H15, H27)
 Configurable application forms (`applications` table), an applicant's
 draft/submit flow with a verified-email gate (a draft is created on entry and
-autosaved from the applicant form), staff review + scoring, batch
+autosaved from the applicant form; a late autosave/read response never
+replaces newer local answers), staff review + scoring, batch
 and per-response accept/reject decisions, the three confirm/decline paths
 (email link, authenticated web, admin override — H15), file uploads for
 template `file` fields proxied through an owner-or-staff check (never a
@@ -137,7 +142,10 @@ is a background tick, not a request path.
 The form catalogue also supports curated university-degree IDs and public city
 suggestions (Photon/OpenStreetMap); city labels are stored as text while degree
 answers retain the catalogue ID. The degree catalogue follows the university
-catalogue's authenticated-proposal and staff-curation boundary.
+catalogue's authenticated-proposal and staff-curation boundary. Staff can merge
+duplicate degree rows transactionally: every answer using the source catalogue
+ID moves to the retained ID before the duplicate is deleted, and the audited
+result reports the number of updated answers (#846).
 
 ### projects (H16–H17, H21)
 A "project" is a `repos` row; "team" is the set of `submissions (repo_id,
