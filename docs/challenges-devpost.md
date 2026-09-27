@@ -93,6 +93,7 @@ challenge content and judging panel under the H44/H45 rules below.
 | `PATCH /api/challenges/:id` | contextual `challenge-edit` | H44 | global admins or the owning sponsor enterprise may edit within the panel/public-field locks; every edit gets a version snapshot + audit |
 | `POST /api/challenges/:id/publish` | `sponsors:manage` OR `queue:admin` | H45 | publish immediately or schedule reveal |
 | `POST /api/challenges/:id/unpublish` | `sponsors:manage` OR `queue:admin` | H45 | hide a mistakenly published challenge |
+| `POST /api/challenges/:id/alerts` | contextual `challenge-edit` | #856 / H51 / H53 | sponsor reps alert only active project/work-group participants for an owned challenge; staff may select all admitted participants; delivery follows preferences and is audited |
 | `GET /api/challenges/:id/panel/preview` | contextual `challenge-access` | H44/H46 | global admins, `SPONSORS_MANAGE`/`QUEUE_ADMIN`/`JUDGE_PANEL`/`QUEUE_OPERATE`, the owning sponsor enterprise, or an assigned judge |
 | `GET /api/challenges/:id/versions` | contextual `challenge-edit` | H44 | global admins or the owning sponsor enterprise may read immutable edit history |
 
