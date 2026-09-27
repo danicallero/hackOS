@@ -166,6 +166,137 @@ describe("POST /api/devpost/imports/preview (H16)", () => {
 });
 
 describe("POST /api/devpost/imports/confirm (H16)", () => {
+  it("links a planned group by its exact valid Devpost URL before considering roster data (#854)", async () => {
+    const server = await getApp();
+    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
+    const owner = await createUser();
+    const { pool } = await import("../../src/db/pool.js");
+    const group = await pool.query(
+      `INSERT INTO planned_work_groups
+         (name, created_by, description, devpost_url, presentation_timing_preference)
+       VALUES ('Exact URL planners', $1, 'Keep this planning record', $2, 'late') RETURNING id`,
+      [owner, "HTTPS://DEVPOST.COM/software/neural-beans/"],
+    );
+
+    const res = await server.inject({
+      method: "POST",
+      url: "/api/devpost/imports/confirm",
+      headers: asUser(operator),
+      payload: payload(),
+    });
+    expect(res.statusCode).toBe(200);
+    const linked = await pool.query(
+      `SELECT g.description, g.presentation_timing_preference, r.name AS repo_name
+       FROM planned_work_groups g JOIN repos r ON r.id = g.linked_repo_id WHERE g.id = $1`,
+      [group.rows[0].id],
+    );
+    expect(linked.rows).toEqual([
+      {
+        description: "Keep this planning record",
+        presentation_timing_preference: "late",
+        repo_name: "Neural Beans",
+      },
+    ]);
+  });
+
+  it("links a URL-less planned group only for a complete roster and intended-challenge match (#854)", async () => {
+    const server = await getApp();
+    const { aliceId, bobId } = await seedMatchableUsers();
+    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
+    const challengeId = await createChallenge("AI Challenge", ["Best AI Hack"]);
+    const { pool } = await import("../../src/db/pool.js");
+    const group = await pool.query(
+      `INSERT INTO planned_work_groups (name, created_by) VALUES ('Roster planners', $1) RETURNING id`,
+      [aliceId],
+    );
+    await pool.query(
+      `INSERT INTO planned_work_group_members (group_id, user_id, status, responded_at)
+       VALUES ($1, $2, 'active', now()), ($1, $3, 'active', now())`,
+      [group.rows[0].id, aliceId, bobId],
+    );
+    await pool.query(
+      `INSERT INTO planned_work_group_challenges (group_id, challenge_id) VALUES ($1, $2)`,
+      [group.rows[0].id, challengeId],
+    );
+    const projects = [
+      '"Project Title","Submission Url","Opt-In Prizes","Team Member 1 Email","Team Member 2 Email"',
+      `"Roster project","","Best AI Hack","${EMAILS.alice}","${EMAILS.bobDevpost}"`,
+    ].join("\n");
+    const participants = [
+      '"First Name","Last Name","Email","Username","Project Title"',
+      `"Alice","Álvarez","${EMAILS.alice}","alice_dev","Roster project"`,
+      `"Bob","Barreiro","${EMAILS.bobDevpost}","bobb","Roster project"`,
+    ].join("\n");
+
+    const res = await server.inject({
+      method: "POST",
+      url: "/api/devpost/imports/confirm",
+      headers: asUser(operator),
+      payload: { projectsCsv: projects, participantsCsv: participants },
+    });
+    expect(res.statusCode).toBe(200);
+    const linked = await pool.query(
+      `SELECT linked_repo_id FROM planned_work_groups WHERE id = $1`,
+      [group.rows[0].id],
+    );
+    expect(linked.rows[0].linked_repo_id).toBe(res.json().repos[0].id);
+    const auditRows = await pool.query(
+      `SELECT action FROM audit_log WHERE entity_type = 'planned_work_group' AND entity_id = $1`,
+      [group.rows[0].id],
+    );
+    expect(auditRows.rows.map((row) => row.action)).toContain(
+      "link_high_confidence_devpost_import",
+    );
+  });
+
+  it("leaves equally confident planned groups unlinked for manual review (#854)", async () => {
+    const server = await getApp();
+    const { aliceId, bobId } = await seedMatchableUsers();
+    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
+    const challengeId = await createChallenge("AI Challenge", ["Best AI Hack"]);
+    const { pool } = await import("../../src/db/pool.js");
+    const groups = await Promise.all(
+      ["First planners", "Second planners"].map(async (name) => {
+        const group = await pool.query(
+          `INSERT INTO planned_work_groups (name, created_by) VALUES ($1, $2) RETURNING id`,
+          [name, aliceId],
+        );
+        await pool.query(
+          `INSERT INTO planned_work_group_members (group_id, user_id, status, responded_at)
+           VALUES ($1, $2, 'active', now()), ($1, $3, 'active', now())`,
+          [group.rows[0].id, aliceId, bobId],
+        );
+        await pool.query(
+          `INSERT INTO planned_work_group_challenges (group_id, challenge_id) VALUES ($1, $2)`,
+          [group.rows[0].id, challengeId],
+        );
+        return group.rows[0].id;
+      }),
+    );
+    const projects = [
+      '"Project Title","Submission Url","Opt-In Prizes","Team Member 1 Email","Team Member 2 Email"',
+      `"Ambiguous project","","Best AI Hack","${EMAILS.alice}","${EMAILS.bobDevpost}"`,
+    ].join("\n");
+    const participants = [
+      '"First Name","Last Name","Email","Username","Project Title"',
+      `"Alice","Álvarez","${EMAILS.alice}","alice_dev","Ambiguous project"`,
+      `"Bob","Barreiro","${EMAILS.bobDevpost}","bobb","Ambiguous project"`,
+    ].join("\n");
+
+    const res = await server.inject({
+      method: "POST",
+      url: "/api/devpost/imports/confirm",
+      headers: asUser(operator),
+      payload: { projectsCsv: projects, participantsCsv: participants },
+    });
+    expect(res.statusCode).toBe(200);
+    const unlinked = await pool.query(
+      `SELECT id FROM planned_work_groups WHERE id = ANY($1::bigint[]) AND linked_repo_id IS NULL`,
+      [groups],
+    );
+    expect(unlinked.rows.map((row) => String(row.id)).sort()).toEqual(groups.sort());
+  });
+
   it("persists selected preview tag mappings atomically with the import", async () => {
     const server = await getApp();
     const aiChallengeId = await createChallenge("AI Challenge", []);

@@ -61,6 +61,7 @@ describe("planned work groups (#852)", () => {
       url: "/api/me/work-groups",
       headers: asUser(invitee),
     });
+    expect(mine.statusCode).toBe(200);
     expect(mine.json().groups[0].members).toHaveLength(2);
     expect(mine.json().groups[0].challenges).toEqual([
       { id: challengeId, title: "Planning challenge" },
