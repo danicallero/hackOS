@@ -8,6 +8,7 @@ import {
   assertFixtureQueueScope,
   isSyntheticOperator,
 } from "../logistics/review-fixture-scope.js";
+import { announceQueueOutcomes, enrollReposInMandatoryChallenges } from "../projects/service.js";
 import { challengePanelLocked } from "../queue/evaluation-lock.js";
 import type { ChallengeAccess } from "./access.js";
 import {
@@ -38,6 +39,7 @@ function snapshotOf(row: Record<string, unknown>) {
     judging_panel_criteria: row.judging_panel_criteria,
     max_presentation_seconds: row.max_presentation_seconds,
     max_in_waiting_area: row.max_in_waiting_area,
+    mandatory: row.mandatory,
     visibility: row.visibility,
     available_from: row.available_from,
   };
@@ -45,16 +47,16 @@ function snapshotOf(row: Record<string, unknown>) {
 
 const EDITABLE_COLUMNS = `id, title, title_i18n, description, description_i18n, criteria,
   criteria_i18n, prizes, devpost_tags, judging_panel_criteria, max_presentation_seconds,
-  max_in_waiting_area, visibility, available_from, created_at, updated_at`;
+  max_in_waiting_area, mandatory, visibility, available_from, created_at, updated_at`;
 
 const EDITABLE_COLUMNS_FROM_CHALLENGE = `c.id, c.title, c.title_i18n, c.description,
   c.description_i18n, c.criteria, c.criteria_i18n, c.prizes, c.devpost_tags, c.judging_panel_criteria,
-  c.max_presentation_seconds, c.max_in_waiting_area, c.visibility, c.available_from,
+  c.max_presentation_seconds, c.max_in_waiting_area, c.mandatory, c.visibility, c.available_from,
   c.created_at, c.updated_at`;
 
 const CREATE_RETURNING_COLUMNS = `id, author, title, title_i18n, description, description_i18n,
   criteria, criteria_i18n, prizes, devpost_tags, judging_panel_criteria, max_presentation_seconds,
-  max_in_waiting_area, visibility, available_from, created_at, updated_at`;
+  max_in_waiting_area, mandatory, visibility, available_from, created_at, updated_at`;
 
 function translationsOf(i18n: unknown, fallback: string | null): TranslationMap {
   const translations: TranslationMap = {};
@@ -206,7 +208,7 @@ async function ensureEnterpriseSponsorAnchor(db: Queryable, enterpriseId: number
 
 /** Admin-created challenge template bound to an enterprise (H43/H44). */
 export async function createChallenge(input: CreateChallengeBody, actorId: number) {
-  return withTransaction(async (client) => {
+  const result = await withTransaction(async (client) => {
     await assertFixtureEnterpriseScope(client, actorId, input.enterpriseId);
     const fixtureMarker = await isSyntheticOperator(client, actorId);
     const authorId = await ensureEnterpriseSponsorAnchor(client, input.enterpriseId);
@@ -223,9 +225,9 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
       `INSERT INTO challenges
          (author, title, title_i18n, description, description_i18n, criteria, criteria_i18n,
           prizes, devpost_tags, judging_panel_criteria, max_presentation_seconds, max_in_waiting_area,
-          visibility, available_from, is_test_account)
+          mandatory, visibility, available_from, is_test_account)
        VALUES ($1, $2, $3::jsonb, $4, $5::jsonb, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12,
-               'hidden', $13, $14)
+               $13, 'hidden', $14, $15)
        RETURNING ${CREATE_RETURNING_COLUMNS}`,
       [
         authorId,
@@ -242,6 +244,7 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
           : JSON.stringify(input.judgingPanelCriteria),
         input.maxPresentationSeconds ?? null,
         input.maxInWaitingArea ?? 2,
+        input.mandatory ?? false,
         input.availableFrom ?? null,
         fixtureMarker,
       ],
@@ -266,8 +269,18 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
       },
     });
 
-    return created;
+    const repoIds = input.mandatory
+      ? (
+          await client.query(`SELECT id FROM repos WHERE is_test_account = $1 ORDER BY id`, [
+            fixtureMarker,
+          ])
+        ).rows.map((row: { id: number }) => Number(row.id))
+      : [];
+    const outcomes = await enrollReposInMandatoryChallenges(client, actorId, repoIds, [created.id]);
+    return { created, outcomes };
   });
+  await announceQueueOutcomes(result.outcomes);
+  return result.created;
 }
 
 /**
@@ -421,7 +434,7 @@ export async function updateChallenge(
     });
   }
 
-  return withTransaction(async (client) => {
+  const result = await withTransaction(async (client) => {
     await assertFixtureQueueScope(client, editorId, "challenge", challengeId);
     const { rows: currentRows } = await client.query(
       `SELECT ${EDITABLE_COLUMNS} FROM challenges WHERE id = $1 FOR UPDATE`,
@@ -503,6 +516,7 @@ export async function updateChallenge(
     if (patch.maxPresentationSeconds !== undefined)
       put("max_presentation_seconds", patch.maxPresentationSeconds);
     if (patch.maxInWaitingArea !== undefined) put("max_in_waiting_area", patch.maxInWaitingArea);
+    if (patch.mandatory !== undefined) put("mandatory", patch.mandatory);
     if (patch.visibility !== undefined) put("visibility", patch.visibility);
     if (patch.availableFrom !== undefined) put("available_from", patch.availableFrom ?? null);
 
@@ -546,8 +560,21 @@ export async function updateChallenge(
       after: { title: after.title, fields: Object.keys(patch) },
     });
 
-    return after;
+    const repoIds =
+      patch.mandatory === true && before.mandatory !== true
+        ? (
+            await client.query(`SELECT id FROM repos WHERE is_test_account = $1 ORDER BY id`, [
+              await isSyntheticOperator(client, editorId),
+            ])
+          ).rows.map((row: { id: number }) => Number(row.id))
+        : [];
+    const outcomes = await enrollReposInMandatoryChallenges(client, editorId, repoIds, [
+      challengeId,
+    ]);
+    return { after, outcomes };
   });
+  await announceQueueOutcomes(result.outcomes);
+  return result.after;
 }
 
 /**

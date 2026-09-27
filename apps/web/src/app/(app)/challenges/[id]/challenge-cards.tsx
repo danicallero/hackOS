@@ -43,6 +43,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError, api } from "@/lib/api";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
@@ -67,6 +68,7 @@ const editSchema = z.object({
   maxInWaitingArea: optionalPositiveInt,
   visibility: z.enum(["visible", "hidden"]),
   availableFrom: z.string(),
+  mandatory: z.boolean(),
 });
 type EditValues = z.infer<typeof editSchema>;
 const CHALLENGE_TABS = ["content", "prizes", "judging", "winners", "publish", "history"] as const;
@@ -79,6 +81,7 @@ function toFormValues(challenge: Challenge): EditValues {
       challenge.max_in_waiting_area != null ? String(challenge.max_in_waiting_area) : "",
     visibility: challenge.visibility,
     availableFrom: toDatetimeLocal(challenge.available_from),
+    mandatory: challenge.mandatory ?? false,
   };
 }
 
@@ -204,6 +207,7 @@ export function EditCard({
           ? {
               visibility: values.visibility,
               availableFrom: fromDatetimeLocal(values.availableFrom),
+              mandatory: values.mandatory,
             }
           : {}),
       });
@@ -276,6 +280,20 @@ export function EditCard({
                   onChange={setCriteriaI18n}
                 />
               </fieldset>
+              {canAdmin && (
+                <FormField
+                  control={form.control}
+                  name="mandatory"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between gap-4 rounded-md border p-4">
+                      <FormLabel>{t("mandatoryChallengeLabel")}</FormLabel>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              )}
             </SectionCard>
             {canAdmin && <BulkEnrollmentCard challengeId={challenge.id} />}
           </TabsContent>

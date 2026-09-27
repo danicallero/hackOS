@@ -24,6 +24,7 @@ export interface Challenge {
   judging_panel_criteria: Question[] | null;
   max_presentation_seconds: number | null;
   max_in_waiting_area: number | null;
+  mandatory?: boolean;
   visibility: Visibility;
   available_from: string | null;
   /** Owning enterprise, joined by the list endpoints. */

@@ -1679,6 +1679,7 @@
   "exportQueueCsv": "Export queue (CSV)",
   "askAdminForExportAccess": "Ask an administrator for export access.",
   "bulkEnrollmentTitle": "Bulk enrollment",
+  "mandatoryChallengeLabel": "Mandatory for every project",
   "bulkEnrollmentDesc": "Enroll or withdraw every existing project from this challenge at once.",
   "bulkAddAllProjects": "Add all projects",
   "bulkRemoveAllProjects": "Remove all projects",

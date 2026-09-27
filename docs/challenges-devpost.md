@@ -67,6 +67,14 @@ Key facts that drive every design decision below:
   `devpost_participants`, and primary/verified-secondary email matches. This
   keeps judging safe while legacy imports are being reconciled and matches the
   membership relation used by queue roster and notification reads.
+- **Mandatory challenges (issue #851) materialize participation in
+  `queue_entries`.** Enabling the audited `challenges.mandatory` setting enters
+  every existing project, while Devpost imports and native projects enter every
+  mandatory challenge in their creation transaction. The `(challenge_id,
+  repo_id)` uniqueness invariant remains the deduplication boundary; shared
+  queue reads continue to render one project line even if more than one of the
+  group's challenges is mandatory. Mandatory entries cannot be withdrawn until
+  the setting is disabled.
 
 ### 1.2 Challenges module (`apps/api/src/modules/challenges/`)
 
