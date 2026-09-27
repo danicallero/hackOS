@@ -11,6 +11,7 @@ import { registerQueueModule } from "./queue/index.js";
 import { registerSponsorsModule } from "./sponsors/index.js";
 import { registerStatisticsModule } from "./statistics/index.js";
 import { registerTelemetryModule } from "./telemetry/index.js";
+import { registerWorkGroupsModule } from "./work-groups/index.js";
 
 /**
  * Module registry. Each domain workstream ships a Fastify plugin under
@@ -31,4 +32,5 @@ export async function registerModules(app: FastifyInstance): Promise<void> {
   await registerSponsorsModule(app); // WS-G  (H43-H45)
   await registerStatisticsModule(app); // H27 generic statistics dashboard
   registerTelemetryModule(app); // H38, H41-H42, #544 browser observations
+  await registerWorkGroupsModule(app); // #852 planned pre-event groups
 }

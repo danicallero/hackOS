@@ -56,6 +56,8 @@ Architecture & modules:
   outbox/object-storage and SSE boundaries.
 - [Challenges & Devpost projects](./challenges-devpost.md) — the `challenges`
   and `projects` modules and the Devpost intake pipeline.
+- [Planned work groups](./work-groups.md) — pre-event participant groups,
+  explicit invitations, intended challenges, and staff/sponsor estimates.
 - [Queue groups (H46)](./queue-groups.md) — the enterprise-scoped grouping
   layer between challenges and the rooms/queues that judge them: why
   `queue_entries.challenge_id` stays untouched, the two database-enforced
