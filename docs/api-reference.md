@@ -184,6 +184,15 @@ enterprise_judges` rather than looking a judge up per room. The roster itself
 is managed on the enterprise (`/api/enterprises/:id/judges`, sponsors module);
 the queue module has no room-scoped judge routes.
 
+Text answers and private judging notes use short-lived, database-clock editing
+leases (`judging_field_leases`) scoped to the queue entry and field. The live
+panel acquires a lease on focus, refreshes it while that field remains active,
+and releases it on blur, an explicit save, or session exit; PostgreSQL expires
+abandoned leases after inactivity. The review save transaction verifies the
+lease owner before changing a text field, so the browser's read-only state is
+not the concurrency boundary. Numeric and choice answers retain the existing
+field-level merge behavior.
+
 ### logistics (H22–H27, H59)
 Accreditation (badge issuance, rotation, revocation), presence (door in/out
 with certainty-window derivation and conflict detection), meal/activity

@@ -588,6 +588,14 @@ export interface JudgingSession {
   surname?: string;
 }
 
+export interface ReviewFieldLease {
+  field: string;
+  judgeId: number;
+  name: string | null;
+  surname: string | null;
+  expiresAt: string;
+}
+
 export interface QueueSearchResult extends QueueEntry {
   has_review: boolean;
   review_status: string | null;
@@ -609,6 +617,12 @@ export const closeSession = (entryId: number) =>
   api.delete(`/api/queue/entries/${entryId}/session`);
 export const getSessions = (entryId: number) =>
   api.get<JudgingSession[]>(`/api/queue/entries/${entryId}/sessions`);
+export const getReviewFieldLeases = (entryId: number) =>
+  api.get<ReviewFieldLease[]>(`/api/queue/entries/${entryId}/review/leases`);
+export const acquireReviewFieldLease = (entryId: number, field: string) =>
+  api.put<ReviewFieldLease>(`/api/queue/entries/${entryId}/review/leases`, { field });
+export const releaseReviewFieldLease = (entryId: number, field: string) =>
+  api.delete(`/api/queue/entries/${entryId}/review/leases`, { body: { field } });
 export const searchTeams = (challengeId: number, q: string) =>
   api.get<QueueSearchResult[]>(`/api/queue/challenges/${challengeId}/search`, { query: { q } });
 

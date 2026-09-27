@@ -823,6 +823,7 @@
   "judgeFallback": "Juez",
   "notesLabel": "Notas",
   "privateJudgingNotes": "Notas privadas de evaluación",
+  "reviewFieldEditingBy": "{judge} está editando este campo.",
   "couldNotLoadReview": "No se ha podido cargar la evaluación.",
   "reviewSubmitted": "Evaluación enviada.",
   "draftSaved": "Borrador guardado.",
