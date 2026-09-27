@@ -1548,6 +1548,55 @@ export async function addRepoChallenge(actorId: number, repoId: number, challeng
   return result;
 }
 
+/** Participant self-service enrollment closes when judging begins. Unlike the
+ * hacking window, this deadline is specifically about changing the judging
+ * lineup and applies equally to imported and native projects. */
+async function assertJudgingHasNotStarted(client: Queryable) {
+  const { rows } = await client.query<{ started: boolean }>(
+    `SELECT COALESCE(schedule_start_at <= now(), false) AS started
+       FROM queue_settings WHERE id = 1 FOR UPDATE`,
+  );
+  if (rows[0]?.started)
+    throw new ForbiddenError("Challenges can no longer be changed after judging starts");
+}
+
+/** H20 participant counterpart to the operator's H21 enrollment action. */
+export async function addMyProjectChallenge(userId: number, repoId: number, challengeId: number) {
+  const result = await withTransaction(async (client) => {
+    await assertFixtureSubjectScope(client, userId, userId);
+    await assertFixtureQueueScope(client, userId, "repo", repoId);
+    if (!(await isActiveProjectMember(client, repoId, userId))) {
+      throw new ForbiddenError("Not a member of this project");
+    }
+    await assertJudgingHasNotStarted(client);
+    const challenge = await client.query(
+      `SELECT id FROM challenges WHERE id = $1 AND visibility = 'visible'`,
+      [challengeId],
+    );
+    if (!challenge.rows[0]) throw new NotFoundError("Challenge not found");
+    const outcome = await enqueueRepoOnChallenge(
+      client,
+      userId,
+      repoId,
+      challengeId,
+      "participant",
+    );
+    if (!outcome) return { repoId, challengeId, entry: null, inserted: false, revived: false };
+    return { repoId, challengeId, ...outcome };
+  });
+  if (result.entry) {
+    await broadcastQueueEvent(
+      pool,
+      "entry",
+      result.entry.id,
+      EVENTS.QUEUE_ENTRY_CHANGED,
+      result.entry,
+    );
+    await notifyChallengeQueueChanged(pool, result.entry.challenge_id);
+  }
+  return result;
+}
+
 /**
  * Transitions one queue entry out of a challenge (waiting/called -> cancelled,
  * anything further along -> disqualified), writing the matching history row
@@ -2563,6 +2612,7 @@ export async function deleteMyProject(userId: number, repoId: number): Promise<{
     await assertFixtureSubjectScope(client, userId, userId);
     await assertQueueRepoScope(client, userId, repoId);
     await assertWithinHackingWindow(client);
+    await assertJudgingHasNotStarted(client);
     if (!(await isActiveProjectMember(client, repoId, userId))) {
       throw new ForbiddenError("Not a member of this project");
     }
@@ -2627,6 +2677,59 @@ export async function deleteMyProject(userId: number, repoId: number): Promise<{
     await notifyChallengeQueueChanged(pool, challengeId);
   }
 
+  return { deleted: true };
+}
+
+/** H18/H21: project editors can remove any project, even after judging has
+ * started. The cascade and subsequent queue invalidations intentionally match
+ * the participant delete path, but no membership/window rule applies. */
+export async function deleteRepo(actorId: number, repoId: number): Promise<{ deleted: true }> {
+  const { queueEntries, memberIds } = await withTransaction(async (client) => {
+    const fixtureMarker = await assertQueueRepoScope(client, actorId, repoId);
+    const repoRes = await client.query(
+      `SELECT id, name, is_test_account FROM repos WHERE id = $1 FOR UPDATE`,
+      [repoId],
+    );
+    const repo = repoRes.rows[0] as
+      | { id: number; name: string; is_test_account: boolean }
+      | undefined;
+    if (!repo) throw new NotFoundError(`Repo ${repoId} not found`);
+    if (fixtureMarker !== (repo.is_test_account === true)) {
+      throw new ConflictError("Queue fixture markers must match", {
+        code: "review_fixture_scope",
+        repoId,
+      });
+    }
+    const deleted = await deleteRepoCascade(client, repoId, repo.is_test_account === true);
+    await audit(client, {
+      actorId,
+      entityType: "repo",
+      entityId: repoId,
+      action: "delete",
+      before: { name: repo.name },
+      source: "admin",
+    });
+    return deleted;
+  });
+  for (const entry of queueEntries) {
+    await broadcastQueueEventWithMarker(entry.fixtureMarker, EVENTS.QUEUE_ENTRY_CHANGED, {
+      id: entry.id,
+      challenge_id: entry.challenge_id,
+      repo_id: entry.repo_id,
+      deleted: true,
+    });
+  }
+  const challengeIds = [...new Set(queueEntries.map((entry) => entry.challenge_id))];
+  await Promise.all(
+    challengeIds.flatMap((challengeId) =>
+      memberIds.map((memberId) =>
+        broadcast(`${SSE_TOPICS.USER_PREFIX}${memberId}`, EVENTS.USER_QUEUE_CHANGED, {
+          challengeId,
+        }),
+      ),
+    ),
+  );
+  for (const challengeId of challengeIds) await notifyChallengeQueueChanged(pool, challengeId);
   return { deleted: true };
 }
 

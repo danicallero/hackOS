@@ -180,6 +180,13 @@ export const updateMyProject = (
   patch: Partial<Pick<NativeProjectInput, "name" | "description" | "githubUrl" | "demoUrl">>,
 ) => api.patch<RepoWithExtras>(`/api/me/projects/${repoId}`, patch);
 
+/** Participant enrollment stays available only until judging starts. */
+export const addMyProjectChallenge = (
+  repoId: number,
+  challengeId: number,
+  idempotencyKey?: string,
+) => api.post(`/api/me/projects/${repoId}/challenges`, { challengeId }, idem(idempotencyKey));
+
 /** POST /api/me/projects/:id/invites — invite a teammate by email. */
 export const inviteProjectMember = (repoId: number, email: string, idempotencyKey?: string) =>
   api.post(`/api/me/projects/${repoId}/invites`, { email }, idem(idempotencyKey));

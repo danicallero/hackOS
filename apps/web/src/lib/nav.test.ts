@@ -87,8 +87,8 @@ describe("dynamic statistics visibility", () => {
 describe("accounts without current role-derived event access", () => {
   const ctx = contextFor([], { isPureApplicant: true });
 
-  it("hides wallet, project, queue and inbox", () => {
-    const hidden = ["/wallet", "/my-project", "/my-queue", "/inbox"];
+  it("hides wallet, projects and inbox", () => {
+    const hidden = ["/wallet", "/my-project", "/inbox"];
     const visible = PERSONAL_NAV.filter((item) => isNavItemVisible(item, ctx)).map(
       (item) => item.href,
     );
@@ -116,8 +116,8 @@ describe("accounts without current role-derived event access", () => {
   });
 });
 
-describe("no project / no queue data yet (issue #424)", () => {
-  it("keeps planned work groups visible but hides My queue when the caller has neither", () => {
+describe("personal projects (issue #424, #852)", () => {
+  it("keeps My projects visible before either a project or queue exists", () => {
     const participant = contextFor([], { hasProject: false, hasQueueItems: false });
     const sponsor = contextFor([], {
       isSponsorRep: true,
@@ -135,7 +135,7 @@ describe("no project / no queue data yet (issue #424)", () => {
     }
   });
 
-  it("keeps My project and My queue once the caller has data, independent of each other", () => {
+  it("keeps My projects visible whether the caller has a project or queue data", () => {
     const onlyProject = contextFor([], { hasProject: true, hasQueueItems: false });
     const onlyQueue = contextFor([], { hasProject: false, hasQueueItems: true });
     expect(
@@ -143,7 +143,7 @@ describe("no project / no queue data yet (issue #424)", () => {
     ).toEqual(expect.arrayContaining(["/my-project"]));
     expect(
       PERSONAL_NAV.filter((item) => isNavItemVisible(item, onlyQueue)).map((i) => i.href),
-    ).toEqual(expect.arrayContaining(["/my-queue"]));
+    ).toEqual(expect.arrayContaining(["/my-project"]));
   });
 });
 
@@ -242,7 +242,6 @@ describe("route stability (deep links, issue #187)", () => {
       "/timetable",
       "/my-applications",
       "/my-project",
-      "/my-queue",
       "/wallet",
       "/inbox",
       "/settings/profile",
@@ -251,9 +250,8 @@ describe("route stability (deep links, issue #187)", () => {
       "/queue",
       "/judging",
       "/queue/rooms",
-      // /logistics/accreditation and /logistics/meals are deliberately gone
-      // from here: accreditation+presence and meals+activities were each
-      // merged into one nav entry (H22, H24-H27), and the old hrefs now
+      // /my-queue, /logistics/accreditation and /logistics/meals are deliberately
+      // gone from here: their content was merged into a single destination and the old hrefs now
       // redirect server-side (see their page.tsx files) instead of being
       // live nav items — deep links still resolve, just not via nav.
       "/logistics/activities",

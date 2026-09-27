@@ -36,6 +36,10 @@ describe("challenge alerts (#856)", () => {
     const plannedOnly = await createUser({ email: "alert-planned@test.local" });
     await pool.query(`UPDATE users SET language = 'es' WHERE id = $1`, [participant]);
     await pool.query(`UPDATE users SET language = 'gl' WHERE id = $1`, [plannedOnly]);
+    await pool.query(
+      `INSERT INTO event_config (id, participants_can_create_projects) VALUES (1, true)
+       ON CONFLICT (id) DO UPDATE SET participants_can_create_projects = true`,
+    );
     await admitParticipant(participant);
     await admitParticipant(plannedOnly);
     const { repoId } = await createRepoWithTeam([participant]);
