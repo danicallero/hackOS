@@ -1,11 +1,11 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { SSE_TOPICS } from "@hackos/shared/events";
+import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
 import { getRequestAuthorizationContext, requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
-import { subscribe } from "../../lib/sse.js";
+import { broadcast, subscribe } from "../../lib/sse.js";
 import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
 import { actor } from "./actor.js";
 import {
@@ -26,6 +26,12 @@ import {
   upsertAttemptReview,
 } from "./judging.js";
 import {
+  acquireReviewFieldLease,
+  listReviewFieldLeases,
+  releaseReviewFieldLease,
+  releaseReviewFieldLeases,
+} from "./review-leases.js";
+import {
   assertEntryInScope,
   exportReviewsCsv,
   getReviewDetail,
@@ -36,6 +42,7 @@ import {
 import {
   challengeIdParam,
   entryIdParam,
+  reviewLeaseBody,
   reviewMessageBody,
   reviewPatchBody,
   reviewsQuery,
@@ -95,7 +102,8 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
       subscribe(`${SSE_TOPICS.QUEUE_REVIEW_PREFIX}${req.params.entryId}`, req, reply),
   );
 
-  // H36: field-level last-write-wins collaborative save; every save versioned.
+  // Issue #850: text answers and notes need a short-lived, server-enforced
+  // editing lease; numeric/select answers retain H36's field-level merge.
   typed.patch(
     "/api/queue/entries/:entryId/review",
     {
@@ -109,7 +117,105 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
       },
       schema: { params: entryIdParam, body: reviewPatchBody },
     },
-    async (req) => upsertAttemptReview(req.params.entryId, actor(req.userId), req.body),
+    async (req) =>
+      upsertAttemptReview(req.params.entryId, actor(req.userId), req.body, {
+        enforceFieldLeases: true,
+      }),
+  );
+
+  typed.get(
+    "/api/queue/entries/:entryId/review/leases",
+    {
+      preHandler: judgePanel,
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "queue-entry-judge",
+          resource: { source: "params", field: "entryId" },
+        },
+      },
+      schema: {
+        params: entryIdParam,
+        summary: "Active text-field editing leases",
+        description:
+          "Lists unexpired editing leases for private notes and text answers on this evaluation. Leases expire automatically after inactivity.",
+      },
+    },
+    async (req) => listReviewFieldLeases(req.params.entryId),
+  );
+
+  typed.put(
+    "/api/queue/entries/:entryId/review/leases",
+    {
+      preHandler: judgePanel,
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "queue-entry-judge",
+          resource: { source: "params", field: "entryId" },
+        },
+      },
+      schema: {
+        params: entryIdParam,
+        body: reviewLeaseBody,
+        summary: "Acquire or refresh a text-field editing lease",
+        description:
+          "Claims one private-notes or text-answer field for this judge for a short lease. A different active owner receives a conflict; abandoned leases expire automatically.",
+      },
+    },
+    async (req) => {
+      const lease = await acquireReviewFieldLease(
+        req.params.entryId,
+        actor(req.userId),
+        req.body.field,
+      );
+      await broadcast(
+        `${SSE_TOPICS.QUEUE_REVIEW_PREFIX}${req.params.entryId}`,
+        EVENTS.QUEUE_REVIEW_CHANGED,
+        {
+          entryId: req.params.entryId,
+        },
+      );
+      return lease;
+    },
+  );
+
+  typed.delete(
+    "/api/queue/entries/:entryId/review/leases",
+    {
+      preHandler: judgePanel,
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "queue-entry-judge",
+          resource: { source: "params", field: "entryId" },
+        },
+      },
+      schema: {
+        params: entryIdParam,
+        body: reviewLeaseBody,
+        summary: "Release a text-field editing lease",
+        description:
+          "Releases the caller's lease for one private-notes or text-answer field. Releasing another judge's lease is a no-op.",
+      },
+    },
+    async (req) => {
+      const released = await releaseReviewFieldLease(
+        req.params.entryId,
+        actor(req.userId),
+        req.body.field,
+      );
+      if (released) {
+        await broadcast(
+          `${SSE_TOPICS.QUEUE_REVIEW_PREFIX}${req.params.entryId}`,
+          EVENTS.QUEUE_REVIEW_CHANGED,
+          {
+            entryId: req.params.entryId,
+          },
+        );
+      }
+      return released;
+    },
   );
 
   typed.get(
@@ -158,7 +264,21 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
       },
       schema: { params: entryIdParam },
     },
-    async (req) => leaveJudgingSession(req.params.entryId, actor(req.userId)),
+    async (req) => {
+      const judgeId = actor(req.userId);
+      const session = await leaveJudgingSession(req.params.entryId, judgeId);
+      const released = await releaseReviewFieldLeases(pool, req.params.entryId, judgeId);
+      if (released.length && !session) {
+        await broadcast(
+          `${SSE_TOPICS.QUEUE_REVIEW_PREFIX}${req.params.entryId}`,
+          EVENTS.QUEUE_REVIEW_CHANGED,
+          {
+            entryId: req.params.entryId,
+          },
+        );
+      }
+      return session;
+    },
   );
 
   typed.get(

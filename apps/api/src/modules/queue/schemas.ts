@@ -97,9 +97,14 @@ export const reviewPatchBody = z.object({
   scores: z.record(z.string(), answerValue).optional(),
   notes: z.string().optional(),
   submit: z.boolean().optional(),
+  releaseLeases: z.boolean().optional(),
 });
 
 export const sessionJoinBody = z.object({ roomId: z.coerce.number().int().positive().optional() });
+
+export const reviewLeaseBody = z.object({
+  field: z.string().min(1).max(256),
+});
 
 export const searchQuery = z.object({ q: z.string().min(1) });
 

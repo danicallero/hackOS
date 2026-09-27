@@ -817,6 +817,7 @@
   "judgeFallback": "Judge",
   "notesLabel": "Notes",
   "privateJudgingNotes": "Private judging notes",
+  "reviewFieldEditingBy": "{judge} is editing this field.",
   "couldNotLoadReview": "Could not load review.",
   "reviewSubmitted": "Review submitted.",
   "draftSaved": "Draft saved.",

@@ -817,6 +817,7 @@
   "judgeFallback": "Xuíz",
   "notesLabel": "Notas",
   "privateJudgingNotes": "Notas privadas de avaliación",
+  "reviewFieldEditingBy": "{judge} está a editar este campo.",
   "couldNotLoadReview": "Non se puido cargar a avaliación.",
   "reviewSubmitted": "Avaliación enviada.",
   "draftSaved": "Borrador gardado.",
