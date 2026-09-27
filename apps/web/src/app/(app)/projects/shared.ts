@@ -141,6 +141,11 @@ export interface PlanPrize {
   mappedChallengeTitle: string | null;
 }
 
+export interface PlanChallenge {
+  id: number;
+  title: string;
+}
+
 /** One row from `csv.ts` DevpostParticipantRow (plan.unassignedParticipants). */
 export interface UnassignedRow {
   email: string;
@@ -153,6 +158,7 @@ export interface UnassignedRow {
 export interface ImportPlanView {
   repos: PlanRepo[];
   prizes: PlanPrize[];
+  challenges: PlanChallenge[];
   unassignedParticipants: UnassignedRow[];
   totals: ImportPlan["totals"];
 }
