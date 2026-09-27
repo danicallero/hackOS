@@ -67,8 +67,12 @@ other module's exported function instead), and, if it does background work, a
 ### identity (H1–H10)
 Better Auth session lifecycle (`/api/auth/*`, pass-through, exempt from the
 route-policy ledger by design), the caller's own profile (`GET/PATCH
-/api/me`), staff user management, secondary-email verification (H6),
-invitations including reusable enterprise and account links (H9/H10/H43). Email
+/api/me`), authenticated password change (`POST /api/auth/change-password`),
+staff user management, secondary-email verification (H6),
+invitations including reusable enterprise and account links (H9/H10/H43).
+Changing a password verifies the current credential in Better Auth, then revokes
+all existing sessions and creates a replacement for the browser making the
+request; the password and its hash are never included in audit data. Email
 invitation listing retains terminal expired, used, and withdrawn records, including
 the redeemed account and timestamp for used invitations, and the
 hierarchical role model is a global reorderable role hierarchy with a tri-state
