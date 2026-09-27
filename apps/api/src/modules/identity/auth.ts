@@ -256,6 +256,9 @@ export const auth = betterAuth({
       "/sign-up/email": { window: 3600, max: 30 },
       "/request-password-reset": { window: 3600, max: 10 },
       "/reset-password": { window: 900, max: 20 },
+      // #847: Requiring the current credential does not remove the need to
+      // bound guessing attempts against an authenticated-but-compromised session.
+      "/change-password": { window: 900, max: 20 },
       "/verify-email": { window: 3600, max: 30 },
     },
   },

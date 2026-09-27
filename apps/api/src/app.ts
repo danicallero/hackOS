@@ -197,6 +197,30 @@ function withAuthDocs(openapiObject: Record<string, unknown>): Record<string, un
     },
   });
 
+  addAuthOperation(paths, "/api/auth/change-password", "post", {
+    tags: ["auth"],
+    summary: "Change password",
+    description:
+      "Change the authenticated user's password after verifying the current password. Revokes every other session and replaces the current session.",
+    security: [{ sessionToken: [] }, { bearerToken: [] }],
+    requestBody: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            required: ["currentPassword", "newPassword", "revokeOtherSessions"],
+            properties: {
+              currentPassword: { type: "string" },
+              newPassword: { type: "string", minLength: 8 },
+              revokeOtherSessions: { type: "boolean", enum: [true] },
+            },
+          },
+        },
+      },
+    },
+  });
+
   addAuthOperation(paths, "/api/auth/verify-email", "get", {
     tags: ["auth"],
     summary: "Verify email",
