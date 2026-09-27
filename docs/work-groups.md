@@ -33,8 +33,19 @@ timing preference, manage invitations and intended challenges, or delete the
 planning record. Deletion cascades only through planning rows and is audited;
 it never deletes a linked `repos` row or queue history.
 
-The linkage boundary is deliberately exact: confirming a Devpost import links
-an otherwise-unlinked planned group only when `planned_work_groups.devpost_url`
-equals the imported repository's canonical `repos.devpost_url`. Assigning that
-same URL later performs the same lookup. There is no name, member, or fuzzy
-matching; #854 can extend the model without changing this safety boundary.
+## Devpost import linkage (#854)
+
+A valid Devpost project URL is the authoritative signal. On import, an
+otherwise-unlinked group links only when its URL and the imported
+`repos.devpost_url` agree after case and trailing-slash normalization; a valid
+stored URL never falls back to inference.
+
+Without a valid URL, the importer may link only when one and only one planned
+group has the complete resolved Devpost roster **and** the exact same non-empty
+set of intended challenges as the imported project's mapped prize challenges.
+Both sides must have exactly one candidate. Missing identities, unmatched
+participants, a challenge mismatch, or any candidate tie leave every group
+unlinked for manual review. Names, titles, partial rosters, and fuzzy URL/slug
+matches are never link signals. These links are audited in the same import
+transaction and do not alter planning metadata, members, preferences, or queue
+history.

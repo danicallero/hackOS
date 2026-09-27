@@ -91,7 +91,11 @@ export async function updateGroup(
     const b = before[0];
     const { rows } = await db.query(
       `UPDATE planned_work_groups SET name=$2,description=$3,github_url=$4,demo_url=$5,devpost_url=$6,presentation_timing_preference=$7,
-       linked_repo_id = CASE WHEN $8::text IS DISTINCT FROM $9::text THEN (SELECT id FROM repos WHERE devpost_url = $8 LIMIT 1) ELSE linked_repo_id END
+       linked_repo_id = CASE WHEN $8::text IS DISTINCT FROM $9::text THEN (
+         SELECT id FROM repos
+         WHERE lower(regexp_replace(devpost_url, '/+$', '')) = lower(regexp_replace($8, '/+$', ''))
+         LIMIT 1
+       ) ELSE linked_repo_id END
        WHERE id=$1
        RETURNING planned_work_groups.id,planned_work_groups.name,planned_work_groups.description,planned_work_groups.github_url,planned_work_groups.demo_url,planned_work_groups.devpost_url,planned_work_groups.presentation_timing_preference,planned_work_groups.linked_repo_id`,
       [
@@ -164,27 +168,121 @@ export async function deleteGroup(userId: number, id: number) {
   });
 }
 
-/** #854 boundary: import and assignment link exact, canonical Devpost URLs only. */
-export async function linkExactDevpostImports(
-  db: Queryable,
-  actorId: number,
-  imports: Array<{ id: number; devpostUrl: string | null }>,
-) {
-  const urls = imports.flatMap((repo) => (repo.devpostUrl ? [repo.devpostUrl] : []));
-  if (!urls.length) return;
-  const { rows } = await db.query(
-    `UPDATE planned_work_groups g SET linked_repo_id = r.id
-     FROM repos r WHERE r.devpost_url = g.devpost_url AND r.devpost_url = ANY($1::text[])
-       AND g.linked_repo_id IS NULL
-     RETURNING g.id, g.name, r.id AS repo_id`,
-    [urls],
+/**
+ * #854 import boundary. A valid Devpost URL wins, but only if it identifies
+ * one unlinked planning group. Without a usable URL, a link needs complete
+ * matched rosters AND exactly the same non-empty challenge set. Candidate
+ * uniqueness on both sides is intentional: any tie stays for manual review.
+ */
+export async function linkDevpostImports(db: Queryable, actorId: number, repoIds: number[]) {
+  if (!repoIds.length) return;
+  const validDevpostUrl =
+    "^https?://([a-z0-9-]+\\.)?devpost\\.com/(software|submissions)/[^/?#]+/?(?:[?#].*)?$";
+  const exact = await db.query(
+    `WITH candidates AS (
+       SELECT g.id AS group_id, r.id AS repo_id
+       FROM planned_work_groups g
+       JOIN repos r ON lower(regexp_replace(g.devpost_url, '/+$', '')) = lower(regexp_replace(r.devpost_url, '/+$', ''))
+       WHERE g.linked_repo_id IS NULL
+         AND r.id = ANY($1::int[])
+         AND g.devpost_url ~* $2
+         AND r.devpost_url ~* $2
+     ), scored_candidates AS (
+       SELECT group_id, repo_id,
+              count(*) OVER (PARTITION BY group_id) AS groups_per_repo,
+              count(*) OVER (PARTITION BY repo_id) AS repos_per_group
+       FROM candidates
+     ), unique_candidates AS (
+       SELECT group_id, repo_id FROM scored_candidates
+       WHERE groups_per_repo = 1 AND repos_per_group = 1
+     )
+     UPDATE planned_work_groups g
+     SET linked_repo_id = c.repo_id
+     FROM unique_candidates c
+     WHERE g.id = c.group_id AND g.linked_repo_id IS NULL
+     RETURNING g.id, c.repo_id`,
+    [repoIds, validDevpostUrl],
   );
-  for (const row of rows)
+  for (const row of exact.rows)
     await audit(db, {
       actorId,
       entityType: "planned_work_group",
       entityId: row.id,
       action: "link_exact_devpost_import",
+      after: { repoId: row.repo_id },
+      source: "admin",
+    });
+
+  const highConfidence = await db.query(
+    `WITH candidates AS (
+       SELECT g.id AS group_id, r.id AS repo_id
+       FROM planned_work_groups g
+       JOIN repos r ON r.id = ANY($1::int[])
+       WHERE g.linked_repo_id IS NULL
+         -- A supplied valid Devpost URL is authoritative; never fall back to inference.
+         AND (g.devpost_url IS NULL OR g.devpost_url !~* $2)
+         -- Each active planner appears in the imported roster exactly once,
+         -- and every imported participant resolved to one active planner.
+         AND EXISTS (SELECT 1 FROM planned_work_group_members m WHERE m.group_id = g.id AND m.status = 'active')
+         AND NOT EXISTS (
+           SELECT 1 FROM planned_work_group_members m
+           WHERE m.group_id = g.id AND m.status = 'active'
+             AND NOT EXISTS (
+               SELECT 1 FROM devpost_participants dp WHERE dp.repo_id = r.id AND dp.user_id = m.user_id
+             )
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM devpost_participants dp
+           WHERE dp.repo_id = r.id AND (
+             dp.user_id IS NULL OR NOT EXISTS (
+               SELECT 1 FROM planned_work_group_members m
+               WHERE m.group_id = g.id AND m.status = 'active' AND m.user_id = dp.user_id
+             )
+           )
+         )
+         -- Intended challenges are a required second signal and must match exactly.
+         AND EXISTS (SELECT 1 FROM planned_work_group_challenges gc WHERE gc.group_id = g.id)
+         AND NOT EXISTS (
+           SELECT 1 FROM planned_work_group_challenges gc
+           WHERE gc.group_id = g.id AND NOT EXISTS (
+             SELECT 1 FROM repo_devpost_prizes rp
+             JOIN challenges c ON c.devpost_tags ? rp.prize
+             WHERE rp.repo_id = r.id AND c.id = gc.challenge_id
+           )
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM repo_devpost_prizes rp
+           JOIN challenges c ON c.devpost_tags ? rp.prize
+           WHERE rp.repo_id = r.id AND NOT EXISTS (
+             SELECT 1 FROM planned_work_group_challenges gc
+             WHERE gc.group_id = g.id AND gc.challenge_id = c.id
+           )
+         )
+     ), scored_candidates AS (
+       SELECT group_id, repo_id,
+              count(*) OVER (PARTITION BY group_id) AS groups_per_repo,
+              count(*) OVER (PARTITION BY repo_id) AS repos_per_group
+       FROM candidates
+     ), unique_candidates AS (
+       SELECT group_id, repo_id FROM scored_candidates
+       WHERE groups_per_repo = 1 AND repos_per_group = 1
+     )
+     UPDATE planned_work_groups g
+     SET linked_repo_id = c.repo_id
+     FROM unique_candidates c
+     WHERE g.id = c.group_id AND g.linked_repo_id IS NULL
+       AND NOT EXISTS (
+         SELECT 1 FROM planned_work_groups already_linked WHERE already_linked.linked_repo_id = c.repo_id
+       )
+     RETURNING g.id, c.repo_id`,
+    [repoIds, validDevpostUrl],
+  );
+  for (const row of highConfidence.rows)
+    await audit(db, {
+      actorId,
+      entityType: "planned_work_group",
+      entityId: row.id,
+      action: "link_high_confidence_devpost_import",
       after: { repoId: row.repo_id },
       source: "admin",
     });
