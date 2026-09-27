@@ -228,7 +228,7 @@ describe("batch application export (H56)", () => {
     const entries = await readZipEntries(response.rawPayload);
     const csv = entries["applications.csv"]?.toString();
     expect(csv).toContain(
-      "Universidade de Exportación,Enxeñaría de Exportación,Froitos secos, No marisco",
+      'Universidade de Exportación,Enxeñaría de Exportación,"Froitos secos, No marisco"',
     );
     expect(csv).not.toContain(`${universityId},${degreeId},${intoleranceId}`);
   });
