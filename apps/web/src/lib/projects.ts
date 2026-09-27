@@ -198,6 +198,21 @@ export const leaveMyProject = (repoId: number, idempotencyKey?: string) =>
 export const deleteMyProject = (repoId: number, idempotencyKey?: string) =>
   api.delete(`/api/me/projects/${repoId}`, idem(idempotencyKey));
 
+export interface PlannedWorkGroup {
+  id: number;
+  name: string;
+  members: Array<{
+    userId: number;
+    name: string | null;
+    surname: string | null;
+    status: "active" | "invited" | "declined";
+  }>;
+  challenges: Array<{ id: number; title: string }>;
+}
+export const myWorkGroups = () => api.get<{ groups: PlannedWorkGroup[] }>("/api/me/work-groups");
+export const createWorkGroup = (name: string, idempotencyKey?: string) =>
+  api.post<PlannedWorkGroup>("/api/me/work-groups", { name }, idem(idempotencyKey));
+
 export const addRepoMember = (repoId: number, userId: number, idempotencyKey?: string) =>
   api.post(`/api/repos/${repoId}/members`, { userId }, idem(idempotencyKey));
 export const removeRepoMember = (repoId: number, userId: number) =>
