@@ -1160,6 +1160,64 @@ type QueueGenerationOutcome = {
   revived: boolean;
 };
 
+type PresentationTimingPreference = "no_preference" | "early" | "middle" | "late";
+
+/**
+ * A planned group's timing is a best-effort input only while a queue is first
+ * populated.  Once it has entries, their order is operational state: a later
+ * generation must append/revive without moving a team an operator has already
+ * ordered.  Keep unlinked groups out of this lookup; linking a Devpost project
+ * to its planned group remains the projects boundary (#854).
+ */
+async function presentationTimingPreferences(
+  client: pg.PoolClient,
+  repoIds: number[],
+): Promise<Map<number, PresentationTimingPreference>> {
+  if (repoIds.length === 0) return new Map();
+  const { rows } = await client.query(
+    `SELECT linked_repo_id, presentation_timing_preference
+       FROM planned_work_groups
+      WHERE linked_repo_id = ANY($1::int[])`,
+    [repoIds],
+  );
+  return new Map(
+    rows.map(
+      (row: {
+        linked_repo_id: number;
+        presentation_timing_preference: PresentationTimingPreference;
+      }) => [Number(row.linked_repo_id), row.presentation_timing_preference],
+    ),
+  );
+}
+
+/**
+ * Preserve the default generation order for teams without a preference, while
+ * placing opted-in teams near the beginning, midpoint, or end of a fresh
+ * queue. Stable ties deliberately make this a soft preference rather than a
+ * scheduling promise.
+ */
+function orderInitialQueueRepos(
+  repoIds: number[],
+  preferences: Map<number, PresentationTimingPreference>,
+): number[] {
+  const lastIndex = Math.max(repoIds.length - 1, 0);
+  return repoIds
+    .map((repoId, index) => {
+      const preference = preferences.get(repoId) ?? "no_preference";
+      const target =
+        preference === "early"
+          ? -1
+          : preference === "middle"
+            ? lastIndex / 2
+            : preference === "late"
+              ? lastIndex + 1
+              : index;
+      return { repoId, index, target };
+    })
+    .sort((left, right) => left.target - right.target || left.index - right.index)
+    .map(({ repoId }) => repoId);
+}
+
 /**
  * Add one repo to one challenge without changing the order of any existing
  * team. A queue reset is the only operation allowed to revive a cancelled
@@ -1339,6 +1397,33 @@ export async function enqueueQueueGroup(
        WHERE qgc.queue_group_id = $1 ORDER BY c.id`,
       [queueGroupId],
     );
+    // The group row lock serializes generation. Read whether this is a fresh
+    // queue before creating entries so a concurrent generation cannot move a
+    // queue that has become operational between this check and insertion.
+    const existingEntries = await client.query(
+      `SELECT 1
+         FROM queue_entries qe
+         JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+        WHERE qgc.queue_group_id = $1
+        LIMIT 1`,
+      [queueGroupId],
+    );
+    const candidates = new Map<number, number[]>();
+    for (const challenge of challenges as Array<{ id: number }>) {
+      const challengeId = Number(challenge.id);
+      const repoIds = await challengePrizeRepoIds(client, challengeId, fixtureMarker);
+      for (const repoId of repoIds) {
+        const challengeIds = candidates.get(repoId) ?? [];
+        challengeIds.push(challengeId);
+        candidates.set(repoId, challengeIds);
+      }
+    }
+    const repoIds = [...candidates.keys()];
+    const orderedRepoIds =
+      existingEntries.rowCount === 0
+        ? orderInitialQueueRepos(repoIds, await presentationTimingPreferences(client, repoIds))
+        : repoIds;
+
     const changed: QueueEntryRow[] = [];
     const perChallenge: Array<{
       challengeId: number;
@@ -1346,14 +1431,23 @@ export async function enqueueQueueGroup(
       revived: number;
       alreadyQueued: number;
     }> = [];
+    const outcomes = new Map<string, QueueGenerationOutcome | null>();
+    for (const repoId of orderedRepoIds) {
+      for (const challengeId of candidates.get(repoId) ?? []) {
+        outcomes.set(
+          `${challengeId}:${repoId}`,
+          await enqueueQueueRepo(client, actorId, repoId, challengeId),
+        );
+      }
+    }
     for (const challenge of challenges as Array<{ id: number }>) {
       const challengeId = Number(challenge.id);
-      const repoIds = await challengePrizeRepoIds(client, challengeId, fixtureMarker);
       let inserted = 0;
       let revived = 0;
       let alreadyQueued = 0;
-      for (const repoId of repoIds) {
-        const outcome = await enqueueQueueRepo(client, actorId, repoId, challengeId);
+      for (const repoId of candidates.keys()) {
+        if (!(candidates.get(repoId) ?? []).includes(challengeId)) continue;
+        const outcome = outcomes.get(`${challengeId}:${repoId}`);
         if (!outcome) {
           alreadyQueued += 1;
           continue;

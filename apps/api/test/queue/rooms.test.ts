@@ -9,6 +9,7 @@ import {
   createEnterpriseChallenges,
   createRepoWithTeam,
   createRoom,
+  mergeChallengesIntoOneGroup,
   queueGroupOf,
 } from "./fixtures.js";
 
@@ -547,6 +548,127 @@ describe("enqueue a challenge (H29 admin)", () => {
     expect(rows.rows).toEqual([
       { challenge_id: ch1, repo_id: r1 },
       { challenge_id: ch2, repo_id: r2 },
+    ]);
+  });
+
+  it("uses linked work-group early, middle and late preferences on first generation", async () => {
+    const challengeId = await createChallenge({ devpostTags: ["Timing"] });
+    const { repoId: late } = await createRepoWithTeam();
+    const { repoId: middle } = await createRepoWithTeam();
+    const { repoId: early } = await createRepoWithTeam();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `INSERT INTO repo_devpost_prizes (repo_id, prize) VALUES ($1, $4), ($2, $4), ($3, $4)`,
+      [late, middle, early, "Timing"],
+    );
+    await pool.query(
+      `INSERT INTO planned_work_groups (name, created_by, linked_repo_id, presentation_timing_preference)
+       VALUES ('late', $1, $2, 'late'), ('middle', $1, $3, 'middle'), ('early', $1, $4, 'early')`,
+      [adminId, late, middle, early],
+    );
+
+    const generated = await app.inject({
+      method: "POST",
+      url: `/api/queue/groups/${await queueGroupOf(challengeId)}/generate`,
+      headers: asUser(adminId),
+    });
+    expect(generated.statusCode).toBe(200);
+    const entries = await pool.query(
+      `SELECT repo_id, position FROM queue_entries WHERE challenge_id = $1 ORDER BY position`,
+      [challengeId],
+    );
+    expect(entries.rows).toEqual([
+      { repo_id: early, position: 1 },
+      { repo_id: middle, position: 2 },
+      { repo_id: late, position: 3 },
+    ]);
+  });
+
+  it("keeps an existing queue's manual order when a new team prefers early", async () => {
+    const challengeId = await createChallenge({ devpostTags: ["Existing order"] });
+    const { repoId: existing } = await createRepoWithTeam();
+    const { repoId: early } = await createRepoWithTeam();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(`INSERT INTO repo_devpost_prizes (repo_id, prize) VALUES ($1, $3), ($2, $3)`, [
+      existing,
+      early,
+      "Existing order",
+    ]);
+    await pool.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status, position) VALUES ($1, $2, 'waiting', 1)`,
+      [challengeId, existing],
+    );
+    await pool.query(
+      `INSERT INTO planned_work_groups (name, created_by, linked_repo_id, presentation_timing_preference)
+       VALUES ('early', $1, $2, 'early')`,
+      [adminId, early],
+    );
+
+    const generated = await app.inject({
+      method: "POST",
+      url: `/api/queue/groups/${await queueGroupOf(challengeId)}/generate`,
+      headers: asUser(adminId),
+    });
+    expect(generated.statusCode).toBe(200);
+    const entries = await pool.query(
+      `SELECT repo_id, position FROM queue_entries WHERE challenge_id = $1 ORDER BY position`,
+      [challengeId],
+    );
+    expect(entries.rows).toEqual([
+      { repo_id: existing, position: 1 },
+      { repo_id: early, position: 2 },
+    ]);
+  });
+
+  it("uses each linked preference once in a shared queue while keeping one visible repo entry", async () => {
+    const { challengeIds } = await createEnterpriseChallenges(2);
+    const [firstChallengeId, secondChallengeId] = challengeIds;
+    const queueGroupId = await mergeChallengesIntoOneGroup(challengeIds);
+    const { repoId: late } = await createRepoWithTeam();
+    const { repoId: early } = await createRepoWithTeam();
+    const { pool } = await import("../../src/db/pool.js");
+    await pool.query(
+      `UPDATE challenges SET devpost_tags = '["Shared timing"]'::jsonb WHERE id = ANY($1)`,
+      [challengeIds],
+    );
+    await pool.query(
+      `INSERT INTO repo_devpost_prizes (repo_id, prize) VALUES ($1, 'Shared timing'), ($2, 'Shared timing')`,
+      [late, early],
+    );
+    await pool.query(
+      `INSERT INTO planned_work_groups (name, created_by, linked_repo_id, presentation_timing_preference)
+       VALUES ('late', $1, $2, 'late'), ('early', $1, $3, 'early')`,
+      [adminId, late, early],
+    );
+
+    const generated = await app.inject({
+      method: "POST",
+      url: `/api/queue/groups/${queueGroupId}/generate`,
+      headers: asUser(adminId),
+    });
+    expect(generated.statusCode).toBe(200);
+    expect(generated.json()).toMatchObject({ inserted: 4 });
+    const visible = await app.inject({
+      method: "GET",
+      url: `/api/queue/groups/${queueGroupId}/queue`,
+      headers: asUser(adminId),
+    });
+    expect(visible.statusCode).toBe(200);
+    expect(visible.json().entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          repo_id: early,
+          queued_challenge_ids: [firstChallengeId, secondChallengeId],
+        }),
+        expect.objectContaining({
+          repo_id: late,
+          queued_challenge_ids: [firstChallengeId, secondChallengeId],
+        }),
+      ]),
+    );
+    expect(visible.json().entries.map((entry: { repo_id: number }) => entry.repo_id)).toEqual([
+      early,
+      late,
     ]);
   });
 
