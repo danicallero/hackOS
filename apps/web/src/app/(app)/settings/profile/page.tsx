@@ -35,6 +35,7 @@ import { toast } from "@/lib/toast";
 import type { Intolerance, Language, Me } from "@/lib/types";
 import { DangerZoneCard } from "./danger-zone";
 import { EmailCard } from "./email-card";
+import { PasswordCard } from "./password-card";
 
 const LANGS: Language[] = ["es", "gl", "en"];
 
@@ -269,6 +270,7 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
         </form>
       </Form>
       <EmailCard />
+      <PasswordCard />
       <DangerZoneCard />
     </div>
   );

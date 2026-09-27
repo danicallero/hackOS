@@ -517,6 +517,63 @@ describe("H5 password reset", () => {
   });
 });
 
+describe("#847 authenticated password change", () => {
+  it("verifies the current password, keeps this browser in a replacement session, and revokes others", async () => {
+    const a = await getApp();
+    await signUp(a);
+    const firstSession = sessionCookie(await signIn(a, SIGNUP.email, SIGNUP.password));
+    const otherSession = sessionCookie(await signIn(a, SIGNUP.email, SIGNUP.password));
+    const newPassword = "new-authenticated-pass-1";
+
+    const changed = await a.inject({
+      method: "POST",
+      url: "/api/auth/change-password",
+      headers: { cookie: firstSession },
+      payload: {
+        currentPassword: SIGNUP.password,
+        newPassword,
+        revokeOtherSessions: true,
+      },
+    });
+    expect(changed.statusCode).toBe(200);
+    const replacementSession = sessionCookie(changed);
+
+    // Better Auth deletes all old sessions, including the initiating one, and
+    // creates a replacement session for the browser that changed the password.
+    for (const cookie of [firstSession, otherSession]) {
+      const me = await a.inject({ method: "GET", url: "/api/me", headers: { cookie } });
+      expect(me.statusCode).toBe(401);
+    }
+    expect(
+      (await a.inject({ method: "GET", url: "/api/me", headers: { cookie: replacementSession } }))
+        .statusCode,
+    ).toBe(200);
+    expect((await signIn(a, SIGNUP.email, SIGNUP.password)).statusCode).toBe(401);
+    expect((await signIn(a, SIGNUP.email, newPassword)).statusCode).toBe(200);
+  });
+
+  it("rejects an incorrect current password without changing the credential", async () => {
+    const a = await getApp();
+    await signUp(a);
+    const cookie = sessionCookie(await signIn(a, SIGNUP.email, SIGNUP.password));
+
+    const changed = await a.inject({
+      method: "POST",
+      url: "/api/auth/change-password",
+      headers: { cookie },
+      payload: {
+        currentPassword: "not-the-current-password",
+        newPassword: "new-authenticated-pass-1",
+        revokeOtherSessions: true,
+      },
+    });
+    expect(changed.statusCode).toBe(400);
+    expect(changed.json().code).toBe("INVALID_PASSWORD");
+    expect((await signIn(a, SIGNUP.email, SIGNUP.password)).statusCode).toBe(200);
+    expect((await signIn(a, SIGNUP.email, "new-authenticated-pass-1")).statusCode).toBe(401);
+  });
+});
+
 describe("H54 pending identity boundary", () => {
   it("allows only recovery/session reads and sign-out around Better Auth generated routes", async () => {
     const a = await getApp();
