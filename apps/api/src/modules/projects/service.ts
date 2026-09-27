@@ -26,6 +26,7 @@ import { assertQueueChallengeScope, assertQueueRepoScope } from "../queue/fixtur
 import { writeQueueHistory } from "../queue/history.js";
 import { notifyChallengeQueueChanged, repoMemberIds } from "../queue/notify.js";
 import { compactQueueGroupPositions, nextBottomPosition } from "../queue/ordering.js";
+import { linkExactDevpostImports } from "../work-groups/service.js";
 import { type RepositoryAccessScope, repositoryIdsForScope } from "./access.js";
 import { buildImportPlan, type ImportPlan } from "./plan.js";
 import { reconcileDevpostParticipantsForUser } from "./reconciliation.js";
@@ -194,6 +195,17 @@ export async function confirmImport(
       else reposUpdated++;
       return { id, title: repo.title, action };
     });
+
+    // #852/#854: a planning group may become this imported project only by
+    // its exact saved Devpost URL. Names and rosters deliberately never match.
+    await linkExactDevpostImports(
+      client,
+      actorId,
+      plan.repos.map((repo, ordinal) => ({
+        id: repoIds.get(ordinal) as number,
+        devpostUrl: repo.url,
+      })),
+    );
 
     const prizeNamesSeen = new Set(plan.prizes.map((prize) => prize.name));
     if (prizeNamesSeen.size > 0) {

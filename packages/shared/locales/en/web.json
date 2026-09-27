@@ -3089,5 +3089,17 @@
   "statisticsAverage": "Average",
   "chartTypeBar": "Bars",
   "chartTypePie": "Pie",
-  "chartTypeLine": "Line"
+  "chartTypeLine": "Line",
+  "workGroupPlanned": "Planned",
+  "workGroupLinked": "Imported project linked",
+  "workGroupLinkedProject": "Imported project",
+  "workGroupDevpostUrl": "Devpost URL",
+  "workGroupTiming": "Presentation timing",
+  "workGroupTimingNone": "No preference",
+  "workGroupTimingEarly": "Early",
+  "workGroupTimingMiddle": "Middle",
+  "workGroupTimingLate": "Late",
+  "deleteWorkGroupCta": "Delete group",
+  "deleteWorkGroupTitle": "Delete this planned group",
+  "deleteWorkGroupDesc": "This permanently removes the planning group, its invitations and intended challenges. An imported project stays intact."
 }

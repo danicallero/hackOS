@@ -12,10 +12,13 @@ import {
 import {
   addChallenge,
   createGroup,
+  deleteGroup,
   estimates,
+  getMine,
   invite,
   listMine,
   removeChallenge,
+  removeMember,
   respond,
   updateGroup,
 } from "./service.js";
@@ -36,6 +39,20 @@ export function registerWorkGroupsRoutes(app: FastifyInstance) {
     },
     async (q) => ({ groups: await listMine(q.userId as number) }),
   );
+  r.get(
+    "/api/me/work-groups/:id",
+    {
+      ...auth,
+      preHandler: requireAuth,
+      schema: {
+        params: groupParams,
+        summary: "Read my planned work group",
+        description:
+          "Returns one planning-stage project view for an invited or active member (#852, #854).",
+      },
+    },
+    async (q) => getMine(q.userId as number, q.params.id),
+  );
   r.post(
     "/api/me/work-groups",
     {
@@ -49,6 +66,20 @@ export function registerWorkGroupsRoutes(app: FastifyInstance) {
       },
     },
     async (q) => createGroup(q.userId as number, q.body.name),
+  );
+  r.delete(
+    "/api/me/work-groups/:id/members/:userId",
+    {
+      ...auth,
+      preHandler: [requireAuth, idempotencyGuard],
+      schema: {
+        params: groupParams.extend({ userId: groupParams.shape.id }),
+        summary: "Remove a work-group member",
+        description:
+          "An active planner may remove another member or pending invite. The last active member must delete the group instead (#852).",
+      },
+    },
+    async (q) => removeMember(q.userId as number, q.params.id, q.params.userId),
   );
   r.patch(
     "/api/me/work-groups/:id",
@@ -123,6 +154,20 @@ export function registerWorkGroupsRoutes(app: FastifyInstance) {
       },
     },
     async (q) => removeChallenge(q.userId as number, q.params.id, q.params.challengeId),
+  );
+  r.delete(
+    "/api/me/work-groups/:id",
+    {
+      ...auth,
+      preHandler: [requireAuth, idempotencyGuard],
+      schema: {
+        params: groupParams,
+        summary: "Delete a planned work group",
+        description:
+          "Deletes planning-only metadata, members and intended challenges in one audited transaction. Linked operational projects are retained (#852, #854).",
+      },
+    },
+    async (q) => deleteGroup(q.userId as number, q.params.id),
   );
   r.get(
     "/api/work-groups/estimates",

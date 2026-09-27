@@ -10,6 +10,7 @@
 
 import { EVENTS } from "@hackos/shared/events";
 import { FolderGitIcon, MailIcon, TrophyIcon, UserPlusIcon, UsersIcon } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
@@ -169,13 +170,18 @@ function WorkGroupsCard({
       ) : (
         <ul className="space-y-2">
           {groups.map((group) => (
-            <li key={group.id} className="rounded-md border p-3">
-              <p className="font-medium">{group.name}</p>
-              <p className="text-sm text-muted-foreground">
-                {t("workGroupMembers", {
-                  count: group.members.filter((member) => member.status === "active").length,
-                })}
-              </p>
+            <li key={group.id}>
+              <Link
+                href={`/my-project/work-groups/${group.id}`}
+                className="block rounded-md border p-3 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <p className="font-medium">{group.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {t("workGroupMembers", {
+                    count: group.members.filter((member) => member.status === "active").length,
+                  })}
+                </p>
+              </Link>
             </li>
           ))}
         </ul>
