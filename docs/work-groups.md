@@ -14,8 +14,12 @@ their own enterprise's challenges; counts include distinct groups and active
 members, never pending or declined invitees.
 
 The stored `presentation_timing_preference` (`no_preference | early | middle |
-late`), nullable `devpost_url`, and nullable unique `linked_repo_id` are stable
-data contracts only: #853 will consume the preference in queue generation,
-#854 will link imports, and #856 can use intended-challenge membership for
-sponsor-scoped recipient resolution. None of that conversion, ordering,
-matching, or notification behavior is implemented by #852.
+late`) is consumed as a soft ordering input when a queue group is first
+generated: linked repos preferring early, middle, or late are placed near that
+part of the initial logical queue. It never overrides an existing queue's
+operational order, manual moves, or queue safety rules; a shared queue still
+shows and calls one logical entry per repo. The nullable `devpost_url` and
+nullable unique `linked_repo_id` remain stable contracts: #854 will link
+imports, and #856 can use intended-challenge membership for sponsor-scoped
+recipient resolution. None of that conversion, Devpost matching, or
+notification behavior is implemented here.
