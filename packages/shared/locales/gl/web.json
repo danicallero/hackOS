@@ -1686,6 +1686,7 @@
   "exportQueueCsv": "Exportar cola (CSV)",
   "askAdminForExportAccess": "Pide a administración acceso de exportación.",
   "bulkEnrollmentTitle": "Inscrición masiva",
+  "mandatoryChallengeLabel": "Obrigatorio para todos os proxectos",
   "bulkEnrollmentDesc": "Apunta ou retira dun golpe todos os proxectos existentes deste reto.",
   "bulkAddAllProjects": "Engadir todos os proxectos",
   "bulkRemoveAllProjects": "Quitar todos os proxectos",

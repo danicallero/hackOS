@@ -30,6 +30,7 @@ export const updateChallengeBody = z
     judgingPanelCriteria: questionnaireSchema.optional(),
     maxPresentationSeconds: z.number().int().positive().nullable().optional(),
     maxInWaitingArea: z.number().int().min(0).nullable().optional(),
+    mandatory: z.boolean().optional(),
     visibility: visibilityEnum.optional(),
     availableFrom: z.coerce.date().nullish(),
   })
@@ -56,6 +57,7 @@ export const CHALLENGE_GENERAL_FIELDS = [
   "devpostTags",
   "visibility",
   "availableFrom",
+  "mandatory",
 ] as const;
 
 /**
@@ -77,6 +79,7 @@ export const createChallengeBody = z
     judgingPanelCriteria: questionnaireSchema.optional(),
     maxPresentationSeconds: z.number().int().positive().nullable().optional(),
     maxInWaitingArea: z.number().int().min(0).nullable().optional(),
+    mandatory: z.boolean().optional(),
     availableFrom: z.coerce.date().nullish(),
   })
   .strict();

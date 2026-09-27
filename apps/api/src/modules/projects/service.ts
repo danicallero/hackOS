@@ -65,7 +65,7 @@ export async function confirmImport(
   projectsCsv: string,
   participantsCsv: string,
 ): Promise<ConfirmImportResult> {
-  return withTransaction(async (client) => {
+  const result = await withTransaction(async (client) => {
     if (await isSyntheticOperator(client, actorId)) {
       throw new ForbiddenError("Review-fixture operators cannot run real Devpost imports", {
         code: "review_fixture_scope",
@@ -284,6 +284,11 @@ export async function confirmImport(
       prizesSeen: prizeNamesSeen.size,
       prizesUnmapped,
     };
+    const mandatoryOutcomes = await enrollReposInMandatoryChallenges(
+      client,
+      actorId,
+      repoResults.map((repo) => repo.id),
+    );
 
     await audit(client, {
       actorId,
@@ -294,8 +299,10 @@ export async function confirmImport(
       source: "admin",
     });
 
-    return { batchId, counts, repos: repoResults };
+    return { batchId, counts, repos: repoResults, mandatoryOutcomes };
   });
+  await announceQueueOutcomes(result.mandatoryOutcomes);
+  return { batchId: result.batchId, counts: result.counts, repos: result.repos };
 }
 
 export interface UnmatchedParticipant {
@@ -1529,6 +1536,7 @@ export async function removeRepoChallenge(actorId: number, repoId: number, chall
         challengeId,
       });
     }
+    await assertChallengeIsOptional(client, challengeId);
     const entryRes = await client.query(
       `SELECT * FROM queue_entries WHERE repo_id = $1 AND challenge_id = $2 FOR UPDATE`,
       [repoId, challengeId],
@@ -1644,6 +1652,7 @@ export async function bulkRemoveRepoChallenge(
     await assertQueueChallengeScope(client, actorId, challengeId);
     const challenge = await client.query(`SELECT id FROM challenges WHERE id = $1`, [challengeId]);
     if (!challenge.rows[0]) throw new NotFoundError(`Challenge ${challengeId} not found`);
+    await assertChallengeIsOptional(client, challengeId);
 
     const entriesRes = await client.query(
       `SELECT * FROM queue_entries WHERE challenge_id = $1 FOR UPDATE`,
@@ -1682,6 +1691,17 @@ export async function bulkRemoveRepoChallenge(
   return { total, removed: updatedEntries.length, alreadySkipped: total - updatedEntries.length };
 }
 
+async function assertChallengeIsOptional(client: Queryable, challengeId: number): Promise<void> {
+  const { rows } = await client.query(`SELECT mandatory FROM challenges WHERE id = $1`, [
+    challengeId,
+  ]);
+  if (rows[0]?.mandatory === true) {
+    throw new ConflictError("Projects cannot be removed from a mandatory challenge", {
+      challengeId,
+    });
+  }
+}
+
 // ── native project lifecycle (H18-H19) ─────────────────────────────────────
 
 export interface NativeRepoInput {
@@ -1707,7 +1727,7 @@ function toEnqueuedChallenge(outcome: EnqueueOutcome): EnqueuedChallenge {
 }
 
 /** Enqueued entries a caller must announce (SSE + notify) after commit. */
-async function announceQueueOutcomes(outcomes: EnqueueOutcome[]): Promise<void> {
+export async function announceQueueOutcomes(outcomes: EnqueueOutcome[]): Promise<void> {
   await Promise.all(
     outcomes.map((outcome) =>
       broadcastQueueEvent(
@@ -1745,6 +1765,50 @@ async function assertChallengesExist(
   const found = new Set(rows.map((r: { id: number }) => r.id));
   const missing = challengeIds.filter((id) => !found.has(id));
   if (missing.length > 0) throw new NotFoundError(`Challenge ${missing.join(", ")} not found`);
+}
+
+/**
+ * Issue #851: mandatory participation is materialized as ordinary queue
+ * entries, so queue generation, participant notifications and operational
+ * participant counts retain one authoritative source. The enqueue primitive
+ * preserves the unique (challenge, repo) entry and revives terminal entries.
+ */
+export async function enrollReposInMandatoryChallenges(
+  client: Queryable,
+  actorId: number,
+  repoIds: number[],
+  onlyChallengeIds?: number[],
+): Promise<EnqueueOutcome[]> {
+  const uniqueRepoIds = [...new Set(repoIds)];
+  if (uniqueRepoIds.length === 0) return [];
+  const fixtureMarker = await isSyntheticOperator(client, actorId);
+  const { rows } = await client.query(
+    `SELECT id, mandatory FROM challenges
+      WHERE is_test_account = $1
+        ${onlyChallengeIds ? "AND id = ANY($2::int[])" : ""}
+      ORDER BY id FOR SHARE`,
+    onlyChallengeIds ? [fixtureMarker, onlyChallengeIds] : [fixtureMarker],
+  );
+  const outcomes: EnqueueOutcome[] = [];
+  for (const row of rows as Array<{ id: number; mandatory: boolean }>) {
+    if (row.mandatory !== true) continue;
+    const challengeId = Number(row.id);
+    let nextPosition = await nextBottomPosition(client, challengeId);
+    const allocatePosition = async () => nextPosition++;
+    for (const repoId of uniqueRepoIds) {
+      const outcome = await enqueueRepoOnChallenge(
+        client,
+        actorId,
+        repoId,
+        challengeId,
+        "mandatory_challenge",
+        fixtureMarker,
+        allocatePosition,
+      );
+      if (outcome) outcomes.push(outcome);
+    }
+  }
+  return outcomes;
 }
 
 async function insertNativeRepo(
@@ -1813,6 +1877,7 @@ export async function createRepoNative(
       );
       if (outcome) enqueued.push(outcome);
     }
+    enqueued.push(...(await enrollReposInMandatoryChallenges(client, actorId, [created.id])));
     await audit(client, {
       actorId,
       entityType: "repo",
@@ -2027,6 +2092,7 @@ export async function createMyProject(
       const outcome = await enqueueRepoOnChallenge(client, userId, created.id, challengeId, "web");
       if (outcome) enqueued.push(outcome);
     }
+    enqueued.push(...(await enrollReposInMandatoryChallenges(client, userId, [created.id])));
     await audit(client, {
       actorId: userId,
       entityType: "repo",
