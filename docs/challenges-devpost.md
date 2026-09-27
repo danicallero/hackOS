@@ -138,8 +138,8 @@ sponsor; no implicit cross-challenge win is created.
 | Method & path | Capability | Story | Behaviour |
 |---|---|---|---|
 | `GET /api/public/challenges` | public | H49 | published + visible + revealed challenges w/ prizes |
-| `POST /api/devpost/imports/preview` | `projects:import` | H16 | pure read-only import plan |
-| `POST /api/devpost/imports/confirm` | `projects:import` + idempotency | H16 | transactional upsert |
+| `POST /api/devpost/imports/preview` | `projects:import` | H16 | pure read-only import plan, including detected tags and internal challenge choices |
+| `POST /api/devpost/imports/confirm` | `projects:import` + idempotency | H16 | transactional upsert and selected preview-tag persistence |
 | `GET /api/devpost/imports/unmatched` | `projects:import` | H17 | participants no email matched |
 | `POST /api/devpost/imports/link` | `projects:import` | H17 | manually link participant → account |
 | `POST /api/devpost/imports/link-secondary` | `projects:import` | H6/H17 | request secondary verification; link activates only after verification |
@@ -253,14 +253,26 @@ Planning (`plan.ts::buildImportPlan`) is **pure and read-only** so `preview` and
    `ON CONFLICT (devpost_url)` upsert always agree on the same row.
 5. For each distinct prize name, look up challenges whose `devpost_tags`
    contains it (`devpost_tags ?| $1::text[]`) and attach the mapped challenge to
-   the plan. **This is the reconciliation:** the importer never duplicates
-   challenge data — it only records the prize string on the repo and resolves the
-   challenge by tag membership at read time.
+   the plan, alongside the internal challenge choices. The operator may choose a
+   destination for each detected tag or explicitly leave it unmapped before
+   confirmation. `confirm` accepts only mappings for tags in that exact export,
+   validates each target again, and appends the selected tags in the same
+   transaction as the import. **This is the reconciliation:** the importer never
+   duplicates challenge data — it only records the prize string on the repo and
+   resolves the challenge by tag membership at read time.
 
 `mapPrizeToChallenge` is the operator action that closes the loop: it appends a
 prize name to a challenge's `devpost_tags` (idempotently) and reports how many
 already-imported repos now resolve to that challenge — **without** creating any
 queue entries (enqueueing is the queue workstream's decision).
+
+### 2.1 Importer → queue boundary (#854)
+
+The importer owns CSV parsing, the preview mapping selector, and persistence of
+`challenges.devpost_tags`. It does **not** create, update, reorder, or broadcast
+`queue_entries`; an unmapped tag remains visible as such after confirmation.
+The queue workstream may consume the persisted tag relation in #854, but must
+own its own enqueue transition, history/audit, idempotency, and SSE contract.
 
 ---
 
@@ -316,7 +328,7 @@ the email out of band. So the boundary is:
 | Handled synchronously (API controller, in-transaction) | Handled asynchronously (worker) |
 |---|---|
 | CSV parse, join, account matching (`preview`) | claim-email delivery via `notification_outbox` |
-| repo/participant/prize/submission upsert (`confirm`) | — |
+| repo/participant/prize/submission upsert and selected tag persistence (`confirm`) | — |
 | manual link, prize→challenge mapping | — |
 | audit + version snapshots | — |
 

@@ -32,6 +32,11 @@ export interface PlannedPrize {
   [k: string]: unknown;
 }
 
+export interface PlannedChallenge {
+  id: number;
+  title: string;
+}
+
 export interface DevpostPrize {
   name: string;
   lastBatch: string | null;
@@ -44,6 +49,7 @@ export interface DevpostPrize {
 export interface ImportPlan {
   repos: PlannedRepo[];
   prizes: PlannedPrize[];
+  challenges: PlannedChallenge[];
   unassignedParticipants: Array<Record<string, unknown>>;
   totals: {
     repos: number;
@@ -104,11 +110,12 @@ export const previewImport = (projectsCsv: string, participantsCsv: string) =>
 export const confirmImport = (
   projectsCsv: string,
   participantsCsv: string,
+  tagMappings: Array<{ tag: string; challengeId: number }>,
   idempotencyKey?: string,
 ) =>
   api.post<ImportPlan & { created?: unknown }>(
     "/api/devpost/imports/confirm",
-    { projectsCsv, participantsCsv },
+    { projectsCsv, participantsCsv, tagMappings },
     idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : undefined,
   );
 

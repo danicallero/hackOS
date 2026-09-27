@@ -5,7 +5,7 @@ import { config } from "../../config.js";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { assertWithinHackingWindow } from "../../lib/hacking-window.js";
 import { broadcast } from "../../lib/sse.js";
 import { enqueueAuthEmail } from "../identity/outbox.js";
@@ -64,6 +64,7 @@ export async function confirmImport(
   actorId: number,
   projectsCsv: string,
   participantsCsv: string,
+  tagMappings: Array<{ tag: string; challengeId: number }> = [],
 ): Promise<ConfirmImportResult> {
   const result = await withTransaction(async (client) => {
     if (await isSyntheticOperator(client, actorId)) {
@@ -73,6 +74,8 @@ export async function confirmImport(
     }
     const plan = await buildImportPlan(client, projectsCsv, participantsCsv);
     const batchId = `dp_${randomUUID()}`;
+
+    await persistPreviewTagMappings(client, actorId, plan, tagMappings);
 
     let reposCreated = 0;
     let reposUpdated = 0;
@@ -303,6 +306,57 @@ export async function confirmImport(
   });
   await announceQueueOutcomes(result.mandatoryOutcomes);
   return { batchId: result.batchId, counts: result.counts, repos: result.repos };
+}
+
+/**
+ * Persists only choices made against the current preview. This is deliberately
+ * part of the import transaction: #854 may later consume the saved tag
+ * relation to create queue entries, but importing/mapping itself never does.
+ */
+async function persistPreviewTagMappings(
+  client: Queryable,
+  actorId: number,
+  plan: ImportPlan,
+  tagMappings: Array<{ tag: string; challengeId: number }>,
+): Promise<void> {
+  const detectedTags = new Set(plan.prizes.map((prize) => prize.name));
+  const mappingByTag = new Map<string, number>();
+  for (const mapping of tagMappings) {
+    if (!detectedTags.has(mapping.tag)) {
+      throw new BadRequestError(`Tag ${mapping.tag} was not detected in this import`);
+    }
+    const prior = mappingByTag.get(mapping.tag);
+    if (prior !== undefined && prior !== mapping.challengeId) {
+      throw new BadRequestError(`Tag ${mapping.tag} has conflicting challenge mappings`);
+    }
+    mappingByTag.set(mapping.tag, mapping.challengeId);
+  }
+  if (mappingByTag.size === 0) return;
+
+  for (const [tag, challengeId] of mappingByTag) {
+    await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
+    const { rows } = await client.query(
+      `SELECT id, devpost_tags FROM challenges
+        WHERE id = $1 AND is_test_account = false FOR UPDATE`,
+      [challengeId],
+    );
+    const challenge = rows[0] as { id: number; devpost_tags: string[] } | undefined;
+    if (!challenge) throw new NotFoundError(`Challenge ${challengeId} not found`);
+    if (!challenge.devpost_tags.includes(tag)) {
+      await client.query(
+        `UPDATE challenges SET devpost_tags = devpost_tags || $2::jsonb WHERE id = $1`,
+        [challengeId, JSON.stringify([tag])],
+      );
+      await audit(client, {
+        actorId,
+        entityType: "challenge",
+        entityId: challengeId,
+        action: "map_devpost_prize",
+        after: { prize: tag, source: "import_preview" },
+        source: "admin",
+      });
+    }
+  }
 }
 
 export interface UnmatchedParticipant {
