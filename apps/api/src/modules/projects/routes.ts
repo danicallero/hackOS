@@ -146,7 +146,12 @@ export function registerProjectRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       // requireCapability guarantees userId is set
-      return confirmImport(req.userId as number, req.body.projectsCsv, req.body.participantsCsv);
+      return confirmImport(
+        req.userId as number,
+        req.body.projectsCsv,
+        req.body.participantsCsv,
+        req.body.tagMappings,
+      );
     },
   );
 

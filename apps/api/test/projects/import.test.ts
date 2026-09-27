@@ -133,6 +133,9 @@ describe("POST /api/devpost/imports/preview (H16)", () => {
     expect(aiPrize.repoCount).toBe(2);
     const otherPrize = preview.prizes.find((p: { name: string }) => p.name === "Most Caffeinated");
     expect(otherPrize.mappedChallengeId).toBeNull();
+    expect(preview.challenges).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: challengeId, title: "AI Challenge" })]),
+    );
 
     // preview is pure: no repos, participants, prizes or submissions written
     const { pool } = await import("../../src/db/pool.js");
@@ -163,6 +166,55 @@ describe("POST /api/devpost/imports/preview (H16)", () => {
 });
 
 describe("POST /api/devpost/imports/confirm (H16)", () => {
+  it("persists selected preview tag mappings atomically with the import", async () => {
+    const server = await getApp();
+    const aiChallengeId = await createChallenge("AI Challenge", []);
+    const coffeeChallengeId = await createChallenge("Coffee Challenge", []);
+    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
+
+    const res = await server.inject({
+      method: "POST",
+      url: "/api/devpost/imports/confirm",
+      headers: asUser(operator),
+      payload: {
+        ...payload(),
+        tagMappings: [
+          { tag: "Best AI Hack", challengeId: aiChallengeId },
+          { tag: "Most Caffeinated", challengeId: coffeeChallengeId },
+        ],
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().counts.prizesUnmapped).toBe(0);
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(
+      `SELECT id, devpost_tags FROM challenges WHERE id = ANY($1::int[]) ORDER BY id`,
+      [[aiChallengeId, coffeeChallengeId]],
+    );
+    expect(rows).toEqual([
+      { id: aiChallengeId, devpost_tags: ["Best AI Hack"] },
+      { id: coffeeChallengeId, devpost_tags: ["Most Caffeinated"] },
+    ]);
+  });
+
+  it("rejects mappings for tags absent from the preview without writing the import", async () => {
+    const server = await getApp();
+    const challengeId = await createChallenge("AI Challenge", []);
+    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
+
+    const res = await server.inject({
+      method: "POST",
+      url: "/api/devpost/imports/confirm",
+      headers: asUser(operator),
+      payload: { ...payload(), tagMappings: [{ tag: "Not exported", challengeId }] },
+    });
+    expect(res.statusCode).toBe(400);
+    const { pool } = await import("../../src/db/pool.js");
+    const repos = await pool.query(`SELECT count(*)::int AS n FROM repos`);
+    expect(repos.rows[0].n).toBe(0);
+  });
+
   it("upserts repos, submissions, participants, prizes and audits the batch", async () => {
     const server = await getApp();
     const { aliceId, bobId } = await seedMatchableUsers();
