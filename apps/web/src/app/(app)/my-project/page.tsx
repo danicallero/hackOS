@@ -28,13 +28,16 @@ import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import {
   acceptProjectInvite,
+  createWorkGroup,
   declineProjectInvite,
   deleteMyProject,
   inviteProjectMember,
   leaveMyProject,
   myPendingInvites,
   myProjects,
+  myWorkGroups,
   type PendingInvite,
+  type PlannedWorkGroup,
 } from "@/lib/projects";
 import { useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
@@ -51,14 +54,20 @@ export default function MyProjectPage() {
   const [projects, setProjects] = useState<ProjectRepo[]>([]);
   const [invites, setInvites] = useState<PendingInvite[]>([]);
   const [canCreate, setCanCreate] = useState(false);
+  const [workGroups, setWorkGroups] = useState<PlannedWorkGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     try {
-      const [projectsRes, invitesRes] = await Promise.all([myProjects(), myPendingInvites()]);
+      const [projectsRes, invitesRes, groupsRes] = await Promise.all([
+        myProjects(),
+        myPendingInvites(),
+        myWorkGroups(),
+      ]);
       setProjects(projectsRes.projects.map(toProjectRepo));
       setCanCreate(projectsRes.canCreate);
       setInvites(invitesRes.invites);
+      setWorkGroups(groupsRes.groups);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : t("couldNotLoadProject"));
     } finally {
@@ -91,6 +100,8 @@ export default function MyProjectPage() {
         }
       />
 
+      <WorkGroupsCard groups={workGroups} onCreated={load} />
+
       {invites.length > 0 && <PendingInvitesCard invites={invites} onChanged={load} />}
 
       {projects.length === 0 ? (
@@ -103,6 +114,73 @@ export default function MyProjectPage() {
         projects.map((repo) => <MyProjectCard key={repo.id} repo={repo} onChanged={load} />)
       )}
     </div>
+  );
+}
+
+function WorkGroupsCard({
+  groups,
+  onCreated,
+}: {
+  groups: PlannedWorkGroup[];
+  onCreated: () => Promise<void>;
+}) {
+  const { t } = useLocale();
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+  async function create() {
+    setSaving(true);
+    try {
+      await createWorkGroup(name.trim(), crypto.randomUUID());
+      setName("");
+      await onCreated();
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : t("couldNotCreateWorkGroup"));
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <SectionCard
+      title={t("plannedWorkGroupsTitle")}
+      icon={UsersIcon}
+      action={
+        <SidePanelEditor
+          trigger={
+            <Button variant="outline" size="sm">
+              {t("createWorkGroup")}
+            </Button>
+          }
+          title={t("createWorkGroup")}
+          footer={
+            <Button disabled={saving || !name.trim()} onClick={create}>
+              {t("createWorkGroup")}
+            </Button>
+          }
+        >
+          <div className="space-y-2">
+            <Label htmlFor="work-group-name">{t("workGroupName")}</Label>
+            <Input id="work-group-name" value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+        </SidePanelEditor>
+      }
+    >
+      {groups.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{t("plannedWorkGroupsEmpty")}</p>
+      ) : (
+        <ul className="space-y-2">
+          {groups.map((group) => (
+            <li key={group.id} className="rounded-md border p-3">
+              <p className="font-medium">{group.name}</p>
+              <p className="text-sm text-muted-foreground">
+                {t("workGroupMembers", {
+                  count: group.members.filter((member) => member.status === "active").length,
+                })}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SectionCard>
   );
 }
 

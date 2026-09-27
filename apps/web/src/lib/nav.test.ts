@@ -117,7 +117,7 @@ describe("accounts without current role-derived event access", () => {
 });
 
 describe("no project / no queue data yet (issue #424)", () => {
-  it("hides My project and My queue when the caller has neither, sponsor or not", () => {
+  it("keeps planned work groups visible but hides My queue when the caller has neither", () => {
     const participant = contextFor([], { hasProject: false, hasQueueItems: false });
     const sponsor = contextFor([], {
       isSponsorRep: true,
@@ -128,7 +128,9 @@ describe("no project / no queue data yet (issue #424)", () => {
       const visible = PERSONAL_NAV.filter((item) => isNavItemVisible(item, ctx)).map(
         (item) => item.href,
       );
-      expect(visible).not.toContain("/my-project");
+      // #852 planning happens before a project exists, so its shared entry
+      // must remain reachable for every admitted participant.
+      expect(visible).toContain("/my-project");
       expect(visible).not.toContain("/my-queue");
     }
   });
