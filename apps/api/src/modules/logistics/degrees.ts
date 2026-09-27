@@ -5,7 +5,7 @@ import { z } from "zod";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
-import { ConflictError, NotFoundError } from "../../lib/errors.js";
+import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { keyByUser, rateLimitGuard } from "../../lib/rate-limit.js";
 import { routeAccessOption as routeAccess } from "../../lib/route-policy.js";
 import { idParamSchema } from "./schemas.js";
@@ -45,6 +45,61 @@ async function create(actorId: number, name: string, suggested = false) {
       after: { name: normalized, suggested },
     });
     return { degree: rows[0], created: true };
+  });
+}
+
+async function normalizeDegree(actorId: number, sourceId: number, targetId: number) {
+  if (sourceId === targetId) {
+    throw new BadRequestError("Choose a different degree to consolidate into");
+  }
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `SELECT ${COLUMNS} FROM university_degrees
+       WHERE id = ANY($1::integer[]) ORDER BY id FOR UPDATE`,
+      [[sourceId, targetId]],
+    );
+    const source = rows.find((row) => row.id === sourceId);
+    const target = rows.find((row) => row.id === targetId);
+    if (!source || !target) throw new NotFoundError("Degree not found");
+
+    const responses = await client.query(
+      `WITH degree_fields AS (
+         SELECT response.id, field->>'key' AS field_key
+           FROM application_responses response
+           JOIN application_form_versions form ON form.id = response.application_form_version_id
+           CROSS JOIN LATERAL jsonb_array_elements(form.template) field
+          WHERE field->>'kind' = 'degree'
+            AND response.responses ? (field->>'key')
+            AND response.responses ->> (field->>'key') = $1::text
+       )
+       UPDATE application_responses response
+          SET responses = jsonb_set(
+            response.responses,
+            ARRAY[degree_fields.field_key],
+            to_jsonb($2::integer),
+            true
+          )
+         FROM degree_fields
+        WHERE response.id = degree_fields.id
+       RETURNING response.id`,
+      [sourceId, targetId],
+    );
+    await client.query("DELETE FROM university_degrees WHERE id = $1", [sourceId]);
+    await audit(client, {
+      actorId,
+      entityType: "university_degree",
+      entityId: targetId,
+      action: "normalized",
+      after: {
+        mergedDegreeId: sourceId,
+        applicationResponsesUpdated: responses.rowCount,
+      },
+    });
+    return {
+      degree: target,
+      mergedDegreeId: sourceId,
+      applicationResponsesUpdated: responses.rowCount,
+    };
   });
 }
 
@@ -131,6 +186,21 @@ export function registerDegreeRoutes(app: FastifyInstance): void {
       reply.code(result.created ? 201 : 200);
       return result.degree;
     },
+  );
+  r.post(
+    "/api/degrees/:id/normalize",
+    {
+      ...manageAccess,
+      preHandler: manage,
+      schema: {
+        summary: "Consolidate duplicate degrees",
+        description:
+          "Staff-only consolidation of two degree catalogue rows. Every affected application response is reassigned to the retained degree before the duplicate row is deleted.",
+        params: idParamSchema,
+        body: z.object({ targetId: z.number().int().positive() }),
+      },
+    },
+    async (req) => normalizeDegree(req.userId as number, req.params.id, req.body.targetId),
   );
   r.patch(
     "/api/degrees/:id",

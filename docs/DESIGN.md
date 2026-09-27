@@ -69,6 +69,11 @@ Style only with semantic tokens (`bg-background`, `text-muted-foreground`,
 `apps/web/src/lib/tones.ts`) — badges, meters, and charts all take a `tone`,
 so a colour means the same thing everywhere.
 
+Status washes are translucent, not solid fills. Text on a warning wash uses
+the foreground appropriate to the rendered surface: dark text in light mode
+and light text in dark mode. Verify normal text against its composited surface
+at WCAG AA (4.5:1 or higher), including nested controls such as banner buttons.
+
 Each row: value → intent → boundary.
 
 | Token group | Value | Intent & boundary |

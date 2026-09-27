@@ -29,11 +29,11 @@ describe("final route-policy ledger", () => {
     // logistics scan+people-finder view.
     // +1 (H44): DELETE /api/challenges/:id, gated like publish/unpublish —
     // capability-only, deliberately not the owner-inclusive edit policy.
-    // +1 (H12): POST /api/universities/:id/normalize, the staff-only
-    // consolidation of duplicate university rows.
+    // +2 (H12, #846): staff-only consolidation of duplicate university and
+    // degree rows.
     // +6 (H27): the generic scope catalog, aggregate query, safe CSV export,
     // and generic scope visibility GET/PUT/DELETE routes.
-    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(206);
+    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(207);
     expect(rows.filter((row) => row.policy.kind === "contextual")).toHaveLength(67);
     expect(app.routePolicyExemptions).toEqual([
       { url: "/api/auth/*", exemption: "better-auth-generated" },

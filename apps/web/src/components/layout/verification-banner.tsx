@@ -30,7 +30,7 @@ export function VerificationBanner() {
       <Button
         size="sm"
         variant="outline"
-        className="border-warning/50 bg-warning/20 text-warning-foreground hover:bg-warning/30 hover:text-warning-foreground"
+        className="border-warning/50 bg-warning/10 text-warning-foreground hover:bg-warning/20 hover:text-warning-foreground"
         disabled={cooldown > 0 || resending}
         onClick={() => void resend()}
       >

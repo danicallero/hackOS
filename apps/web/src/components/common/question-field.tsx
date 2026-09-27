@@ -73,12 +73,21 @@ export function QuestionField({
   question,
   value,
   disabled,
+  readOnly = false,
+  onFocus,
+  onBlur,
+  lockedMessage,
   onChange,
 }: {
   question: Question;
   /** Current answer; use `normalizeAnswers`/`defaultValue` to seed this from storage. */
   value: AnswerValue | undefined;
   disabled: boolean;
+  /** Used by collaborative text fields while another editor owns the lease. */
+  readOnly?: boolean;
+  onFocus?: () => void;
+  onBlur?: () => void;
+  lockedMessage?: string | null;
   onChange: (value: AnswerValue) => void;
 }) {
   const { t } = useLocale();
@@ -93,6 +102,11 @@ export function QuestionField({
         {question.required ? <span className="text-destructive"> *</span> : null}
       </Label>
       {description && <p className="text-muted-foreground text-sm text-pretty">{description}</p>}
+      {lockedMessage && (
+        <p role="status" className="text-muted-foreground text-sm">
+          {lockedMessage}
+        </p>
+      )}
       {question.kind === "scale" && question.min === 0 && question.max === 10 ? (
         <ScaleButtons
           value={typeof value === "number" ? value : null}
@@ -108,6 +122,9 @@ export function QuestionField({
           step={question.kind === "float" ? "0.1" : "1"}
           value={typeof value === "number" ? value : ""}
           disabled={disabled}
+          readOnly={readOnly}
+          onFocus={onFocus}
+          onBlur={onBlur}
           onChange={(event) => onChange(Number(event.target.value))}
         />
       ) : question.kind === "boolean" ? (
@@ -171,6 +188,9 @@ export function QuestionField({
           value={typeof value === "string" ? value : ""}
           maxLength={question.maxLength}
           disabled={disabled}
+          readOnly={readOnly}
+          onFocus={onFocus}
+          onBlur={onBlur}
           onChange={(event) => onChange(event.target.value)}
         />
       ) : (
@@ -179,6 +199,9 @@ export function QuestionField({
           value={typeof value === "string" ? value : ""}
           maxLength={question.maxLength}
           disabled={disabled}
+          readOnly={readOnly}
+          onFocus={onFocus}
+          onBlur={onBlur}
           onChange={(event) => onChange(event.target.value)}
         />
       )}
