@@ -241,7 +241,7 @@ function fieldValueForProfile(row: ApplicationExportRow, key: string): unknown {
     case "shirt_size":
       return row.shirt_size;
     case "food_intolerances":
-      return row.food_intolerances;
+      return [row.food_intolerances, row.food_intolerance_notes].filter(Boolean).join(", ");
     case "food_intolerance_notes":
       return row.food_intolerance_notes;
     case "dietary_data_state":
@@ -536,7 +536,7 @@ async function loadApplicationRows(
             fv.template AS response_template,
             r.status,
             r.responses,
-            r.staff_notes,
+            u.notes AS staff_notes,
             r.created_at,
             r.submitted_at,
             r.decision_sent_at,

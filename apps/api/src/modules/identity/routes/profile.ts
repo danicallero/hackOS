@@ -1391,7 +1391,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       await fetchUser(pool, userId);
 
       const { rows: responseRows } = await pool.query(
-        `SELECT r.*, a.name AS app_name,
+        `SELECT r.*, u.notes AS staff_notes, a.name AS app_name,
                 (SELECT ro.name
                    FROM application_grants_roles agr
                    JOIN roles ro ON ro.id = agr.role_id AND ro.deleted_at IS NULL
@@ -1410,9 +1410,10 @@ export function registerProfileRoutes(app: FastifyInstance): void {
                 ) AS reviews
          FROM application_responses r
          JOIN applications a ON a.id = r.application_id
+         JOIN users u ON u.id = r.user_id
          LEFT JOIN applicant_reviews ar ON ar.response_id = r.id
          WHERE r.user_id = $1
-         GROUP BY r.id, a.id
+         GROUP BY r.id, a.id, u.notes
          ORDER BY r.id DESC`,
         [userId],
       );
