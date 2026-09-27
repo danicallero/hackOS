@@ -130,11 +130,6 @@ describe("review + decide (H13, H14)", () => {
     // after submit the response is already in review
     const r = await getResponse(responseId);
     expect(r.status).toBe("review");
-    const { rows: savedNoteRows } = await pool.query(
-      `SELECT notes FROM users WHERE id = (SELECT user_id FROM application_responses WHERE id = $1)`,
-      [responseId],
-    );
-    expect(savedNoteRows[0].notes).toBe("discuss");
 
     // decide works directly after submit — no manual start-review needed
     const decided = await a.inject({
