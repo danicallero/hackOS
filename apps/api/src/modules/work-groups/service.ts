@@ -24,6 +24,17 @@ async function assertMember(db: Queryable, groupId: number, userId: number) {
   if (!rows[0]) throw new ForbiddenError("Not an active member of this work group");
   return rows[0] as { id: number; created_by: number };
 }
+/** The intended challenge lineup becomes part of the judging contract at the
+ * scheduled start, so participants cannot change it after that point. */
+async function assertJudgingHasNotStarted(db: Queryable) {
+  const { rows } = await db.query<{ started: boolean }>(
+    `SELECT COALESCE(schedule_start_at <= now(), false) AS started
+       FROM queue_settings WHERE id = 1 FOR UPDATE`,
+  );
+  if (rows[0]?.started) {
+    throw new ForbiddenError("Challenges can no longer be changed after judging starts");
+  }
+}
 export async function listMine(userId: number) {
   const { rows } = await pool.query(
     `SELECT g.id, g.name, g.description, g.github_url, g.demo_url, g.devpost_url, g.presentation_timing_preference, g.linked_repo_id, g.created_by, g.created_at, g.updated_at,
@@ -48,6 +59,12 @@ export async function getMine(userId: number, groupId: number) {
 export async function createGroup(userId: number, name: string) {
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
+    const policy = await db.query(
+      `SELECT participants_can_create_projects FROM event_config WHERE id = 1 FOR UPDATE`,
+    );
+    if (policy.rows[0]?.participants_can_create_projects !== true) {
+      throw new ForbiddenError("Participants cannot create projects for this event");
+    }
     const { rows } = await db.query(
       `INSERT INTO planned_work_groups (name,created_by) VALUES ($1,$2) RETURNING id,name,description,github_url,demo_url,devpost_url,presentation_timing_preference,linked_repo_id`,
       [name, userId],
@@ -146,11 +163,15 @@ export async function deleteGroup(userId: number, id: number) {
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
     await assertMember(db, id, userId);
+    await assertJudgingHasNotStarted(db);
     const group = await db.query(
       `SELECT name,linked_repo_id FROM planned_work_groups WHERE id=$1 FOR UPDATE`,
       [id],
     );
     if (!group.rows[0]) throw new NotFoundError("Work group not found");
+    if (group.rows[0].linked_repo_id != null) {
+      throw new ConflictError("A work group linked to a project cannot be deleted");
+    }
     await db.query(`DELETE FROM planned_work_groups WHERE id=$1`, [id]);
     await audit(db, {
       actorId: userId,
@@ -253,6 +274,7 @@ export async function addChallenge(userId: number, id: number, challengeId: numb
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
     await assertMember(db, id, userId);
+    await assertJudgingHasNotStarted(db);
     const c = await db.query(`SELECT id FROM challenges WHERE id=$1`, [challengeId]);
     if (!c.rows[0]) throw new NotFoundError("Challenge not found");
     await db.query(
@@ -274,6 +296,7 @@ export async function removeChallenge(userId: number, id: number, challengeId: n
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
     await assertMember(db, id, userId);
+    await assertJudgingHasNotStarted(db);
     const r = await db.query(
       `DELETE FROM planned_work_group_challenges WHERE group_id=$1 AND challenge_id=$2 RETURNING challenge_id`,
       [id, challengeId],

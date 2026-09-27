@@ -5,7 +5,9 @@ a `repos` row and intended challenges are not `queue_entries`: creating,
 editing, inviting, accepting, declining, or changing intent never starts
 judging or mutates the operational project model.
 
-Participants with current event access use `/api/me/work-groups`. The creator
+Participants with current event access use `/api/me/work-groups`. Creating a
+group, like creating a native project, requires the event's
+`participants_can_create_projects` setting. The creator
 is the first active member; invitations are `invited` until that exact account
 accepts or declines. Every write locks the relevant rows and writes an audit
 row in the same transaction. `GET /api/work-groups/estimates` gives
@@ -26,12 +28,22 @@ notification behavior is implemented here.
 
 ## Participant project-like view (#852, #854)
 
-`/my-project` presents planned groups alongside projects using the same compact
-record language; selecting one opens `/my-project/work-groups/:id`. Active
+`/my-project` is **My projects**: it presents planned groups alongside projects
+in one compact record list. Each record starts with its name and lists the
+challenges it targets. Imported/native projects render the live queue state
+(position, room and status) in those challenge rows; planned groups render the
+same rows as planned until they become operational. The legacy `/my-queue`
+route redirects here, so queue state never becomes a second, competing view.
+Selecting a group opens `/my-project/work-groups/:id`. Active
 members can edit the name, description, Devpost/GitHub/demo URLs and stored
 timing preference, manage invitations and intended challenges, or delete the
 planning record. Deletion cascades only through planning rows and is audited;
 it never deletes a linked `repos` row or queue history.
+
+The challenge lineup and deletion close when the scheduled judging period
+starts. A group linked to an imported project also cannot be deleted. Metadata
+— especially the Devpost URL used for exact linking — remains editable, so an
+import can still reconcile the planned group after that point.
 
 The linkage boundary is deliberately exact: confirming a Devpost import links
 an otherwise-unlinked planned group only when `planned_work_groups.devpost_url`

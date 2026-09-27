@@ -137,7 +137,8 @@ export function registerWorkGroupsRoutes(app: FastifyInstance) {
         params: groupParams,
         body: challengeBody,
         summary: "Add an intended challenge",
-        description: "Records planned interest only; it never creates a queue entry (#852).",
+        description:
+          "Records planned interest only; it never creates a queue entry and is refused once judging has started (#852).",
       },
     },
     async (q) => addChallenge(q.userId as number, q.params.id, q.body.challengeId),
@@ -150,7 +151,7 @@ export function registerWorkGroupsRoutes(app: FastifyInstance) {
       schema: {
         params: groupParams.extend({ challengeId: groupParams.shape.id }),
         summary: "Remove an intended challenge",
-        description: "Removes planned interest only (#852).",
+        description: "Removes planned interest only before judging starts (#852).",
       },
     },
     async (q) => removeChallenge(q.userId as number, q.params.id, q.params.challengeId),
@@ -164,7 +165,7 @@ export function registerWorkGroupsRoutes(app: FastifyInstance) {
         params: groupParams,
         summary: "Delete a planned work group",
         description:
-          "Deletes planning-only metadata, members and intended challenges in one audited transaction. Linked operational projects are retained (#852, #854).",
+          "Deletes planning-only metadata, members and intended challenges in one audited transaction before judging starts. Linked operational projects are retained (#852, #854).",
       },
     },
     async (q) => deleteGroup(q.userId as number, q.params.id),

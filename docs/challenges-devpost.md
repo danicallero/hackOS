@@ -150,12 +150,14 @@ sponsor; no implicit cross-challenge win is created.
 | `GET /api/projects/member-candidates` | `projects:edit` | H21 | minimal account search for team editors |
 | `POST /api/repos` | `projects:edit` + idempotency | H18 | native creation: metadata + members + challenge lineup in one transaction |
 | `PATCH /api/repos/:id` | `projects:edit` | H18 | metadata edit (name, description, links), audited before/after |
+| `DELETE /api/repos/:id` | `projects:edit` + idempotency | H18/H21 | administrator deletion of any project; cascades roster, queue and judging rows transactionally, then invalidates affected queue reads |
 | `POST /api/repos/:id/members` / `DELETE …/members/:userId` | `projects:edit` | H21 | hot-edit manually-added membership |
 | `DELETE /api/repos/:id/devpost-participants/:email` | `projects:edit` | H21 | remove one exact imported roster row |
 | `POST /api/repos/:id/challenges` / `DELETE …/challenges/:challengeId` | `projects:edit` | H21 | enqueue at queue bottom / remove + compact positions |
 | `GET /api/me/projects` | authenticated | H20 | participant self-view: team roster (teammate emails redacted to `null`), challenges, live queue status, plus `canCreate` (H19 policy ∧ admitted participant ∧ hacking window open) |
 | `POST /api/me/projects` | authenticated + idempotency | H19 | participant self-creation, gated by the event policy, admitted-participant eligibility, and the hacking window; a participant may now hold more than one project |
 | `PATCH /api/me/projects/:id` | authenticated | H19/H20 | participant self-edit of their own project's metadata — active members only |
+| `POST /api/me/projects/:id/challenges` | authenticated + idempotency | H20 | active member enrolls the project in one published challenge until judging starts; appends it to that queue |
 | `POST /api/me/projects/:id/invites` | authenticated + idempotency | H19/H20 | active member invites a teammate by email; pending until accepted |
 | `GET /api/me/projects/invites` | authenticated | H19/H20 | pending invites addressed to the caller |
 | `POST /api/me/projects/invites/:id/accept` \| `.../decline` | authenticated + idempotency | H19/H20 | invitee accepts (becomes an active member) or declines (row deleted) their own invite |
