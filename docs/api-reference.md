@@ -122,7 +122,8 @@ generated route ledger records the resulting boundary.
 ### applications (H11–H15, H27)
 Configurable application forms (`applications` table), an applicant's
 draft/submit flow with a verified-email gate (a draft is created on entry and
-autosaved from the applicant form), staff review + scoring, batch
+autosaved from the applicant form; a late autosave/read response never
+replaces newer local answers), staff review + scoring, batch
 and per-response accept/reject decisions, the three confirm/decline paths
 (email link, authenticated web, admin override — H15), file uploads for
 template `file` fields proxied through an owner-or-staff check (never a
