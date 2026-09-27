@@ -137,7 +137,10 @@ is a background tick, not a request path.
 The form catalogue also supports curated university-degree IDs and public city
 suggestions (Photon/OpenStreetMap); city labels are stored as text while degree
 answers retain the catalogue ID. The degree catalogue follows the university
-catalogue's authenticated-proposal and staff-curation boundary.
+catalogue's authenticated-proposal and staff-curation boundary. Staff can merge
+duplicate degree rows transactionally: every answer using the source catalogue
+ID moves to the retained ID before the duplicate is deleted, and the audited
+result reports the number of updated answers (#846).
 
 ### projects (H16–H17, H21)
 A "project" is a `repos` row; "team" is the set of `submissions (repo_id,
