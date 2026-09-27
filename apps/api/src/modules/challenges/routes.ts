@@ -19,6 +19,7 @@ import {
 } from "./access.js";
 import {
   bulkVisibilityBody,
+  challengeAlertBody,
   challengeIdParam,
   createChallengeBody,
   publishChallengeBody,
@@ -36,6 +37,7 @@ import {
   listVersions,
   previewPanel,
   publishChallenge,
+  sendChallengeAlert,
   setChallengesVisibility,
   unpublishChallenge,
   updateChallenge,
@@ -176,6 +178,28 @@ export function registerChallengeRoutes(app: FastifyInstance): void {
         challengeEditAccessFor(req),
       );
     },
+  );
+
+  r.post(
+    "/api/challenges/:id/alerts",
+    {
+      ...access({ kind: "contextual", policy: "challenge-edit", resource: challengeParam }),
+      preHandler: [requireChallengeEdit(challengeParam), idempotencyGuard],
+      schema: {
+        params: challengeIdParam,
+        body: challengeAlertBody,
+        summary: "Send a challenge alert",
+        description:
+          "Sends an auditable alert to active members of projects entered in this challenge and active members of planned work groups that intend it. Sponsor representatives are limited to their enterprise's challenge; staff may instead target all admitted event participants. Delivery respects each recipient's notification preferences (#856, H51, H53).",
+      },
+    },
+    async (req) =>
+      sendChallengeAlert(
+        req.params.id,
+        req.userId as number,
+        req.body,
+        challengeEditAccessFor(req),
+      ),
   );
 
   // Admin bulk visibility flip from the challenges list (H45).

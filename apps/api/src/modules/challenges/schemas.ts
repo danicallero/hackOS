@@ -117,6 +117,21 @@ export const winnerRankParam = z.object({
   rank: z.coerce.number().int().min(1),
 });
 
+/** A direct operational alert, scoped to a challenge or (for staff) all admitted participants. */
+export const challengeAlertBody = z
+  .object({
+    title: i18nTextSchema.refine((value) => Object.values(value).every((text) => text.trim()), {
+      message: "Provide the alert title in English, Spanish, and Galician",
+    }),
+    body: i18nTextSchema.refine((value) => Object.values(value).every((text) => text.trim()), {
+      message: "Provide the alert message in English, Spanish, and Galician",
+    }),
+    target: z.enum(["challenge", "participants"]).default("challenge"),
+  })
+  .strict();
+
+export type ChallengeAlertBody = z.infer<typeof challengeAlertBody>;
+
 export const setWinnerBody = z
   .object({
     repoId: z.number().int().positive(),
