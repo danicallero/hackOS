@@ -34,7 +34,10 @@ export async function listMine(userId: number) {
     LEFT JOIN repos r ON r.id = g.linked_repo_id
     LEFT JOIN planned_work_group_members m ON m.group_id = g.id LEFT JOIN users u ON u.id = m.user_id
     LEFT JOIN planned_work_group_challenges gc ON gc.group_id = g.id LEFT JOIN challenges c ON c.id = gc.challenge_id
-    GROUP BY g.id ORDER BY g.updated_at DESC`,
+    -- #852/#854: linked repo is optional, so g.id does not functionally
+    -- determine r.id for PostgreSQL's aggregate checker. Group it explicitly;
+    -- r.id then determines the remaining projected repo fields.
+    GROUP BY g.id, r.id ORDER BY g.updated_at DESC`,
     [userId],
   );
   return rows;
