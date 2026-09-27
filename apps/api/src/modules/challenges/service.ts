@@ -8,11 +8,13 @@ import {
   assertFixtureQueueScope,
   isSyntheticOperator,
 } from "../logistics/review-fixture-scope.js";
+import { notify } from "../notifications/service.js";
 import { announceQueueOutcomes, enrollReposInMandatoryChallenges } from "../projects/service.js";
 import { challengePanelLocked } from "../queue/evaluation-lock.js";
 import type { ChallengeAccess } from "./access.js";
 import {
   CHALLENGE_GENERAL_FIELDS,
+  type ChallengeAlertBody,
   type CreateChallengeBody,
   type PublishChallengeBody,
   type UpdateChallengeBody,
@@ -108,6 +110,93 @@ export async function getChallenge(challengeId: number, fixtureMarker = false) {
   );
   if (!rows[0]) throw new NotFoundError("Challenge not found", { challengeId });
   return challengeReadModel(rows[0]);
+}
+
+/**
+ * #856: resolve a challenge's active project roster and active planned-work-group
+ * roster together. UNION (not UNION ALL) is intentional: a participant who is
+ * both planning and already entered receives one alert per selected channel.
+ */
+async function alertRecipients(
+  db: Queryable,
+  challengeId: number,
+  target: ChallengeAlertBody["target"],
+  fixtureMarker: boolean,
+): Promise<Array<{ id: number; language: string | null }>> {
+  const sql =
+    target === "participants"
+      ? `SELECT u.id, u.language
+           FROM users u
+          WHERE u.is_test_account = $1
+            AND EXISTS (SELECT 1 FROM user_event_access event_access WHERE event_access.user_id = u.id)
+          ORDER BY u.id
+          FOR SHARE`
+      : `WITH recipients AS (
+           SELECT m.user_id
+             FROM queue_entries qe
+             JOIN submissions m ON m.repo_id = qe.repo_id AND m.status = 'active'
+            WHERE qe.challenge_id = $2
+           UNION
+           SELECT m.user_id
+             FROM planned_work_group_challenges gc
+             JOIN planned_work_group_members m ON m.group_id = gc.group_id AND m.status = 'active'
+            WHERE gc.challenge_id = $2
+         )
+         SELECT u.id, u.language
+           FROM users u JOIN recipients r ON r.user_id = u.id
+          WHERE u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = $1
+          ORDER BY u.id
+          FOR SHARE`;
+  const { rows } = await db.query<{ id: number; language: string | null }>(
+    sql,
+    target === "participants" ? [fixtureMarker] : [fixtureMarker, challengeId],
+  );
+  return rows;
+}
+
+/** Sends an audited #856 operational alert through each recipient's H51 preferences. */
+export async function sendChallengeAlert(
+  challengeId: number,
+  actorId: number,
+  input: ChallengeAlertBody,
+  access: ChallengeAccess,
+): Promise<{ recipients: number }> {
+  if (input.target === "participants" && access !== "admin") {
+    throw new ForbiddenError("Only staff can alert all event participants");
+  }
+  return withTransaction(async (db) => {
+    const fixtureMarker = await isSyntheticOperator(db, actorId);
+    const { rows: challengeRows } = await db.query<{ id: number }>(
+      `SELECT id FROM challenges WHERE id = $1 AND is_test_account = $2 FOR SHARE`,
+      [challengeId, fixtureMarker],
+    );
+    if (!challengeRows[0]) throw new NotFoundError("Challenge not found", { challengeId });
+    const recipients = await alertRecipients(db, challengeId, input.target, fixtureMarker);
+    for (const recipient of recipients) {
+      const language =
+        recipient.language === "es" || recipient.language === "gl" ? recipient.language : "en";
+      await notify(db, {
+        userId: recipient.id,
+        actorId,
+        fixtureMarker,
+        category: "challenge",
+        payload: {
+          subject: input.title[language],
+          body: input.body[language],
+          vars: { challengeId, target: input.target },
+        },
+      });
+    }
+    await audit(db, {
+      actorId,
+      entityType: "challenge",
+      entityId: challengeId,
+      action: "alert.send",
+      after: { target: input.target, recipientCount: recipients.length },
+      source: access === "owner" ? "sponsor" : "staff",
+    });
+    return { recipients: recipients.length };
+  });
 }
 
 export async function listDevpostPrizes(fixtureMarker = false) {

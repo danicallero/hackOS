@@ -4,6 +4,17 @@ import { z } from "zod";
 export const importCsvBodySchema = z.object({
   projectsCsv: z.string().min(1, "projectsCsv is required"),
   participantsCsv: z.string().min(1, "participantsCsv is required"),
+  // Optional because preview is read-only. Confirm validates that each tag
+  // came from this exact export before it mutates challenge tag state.
+  tagMappings: z
+    .array(
+      z.object({
+        tag: z.string().trim().min(1).max(500),
+        challengeId: z.number().int().positive(),
+      }),
+    )
+    .max(500)
+    .default([]),
 });
 export type ImportCsvBody = z.infer<typeof importCsvBodySchema>;
 

@@ -19,6 +19,13 @@ import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { confirmImport, previewImport } from "@/lib/projects";
@@ -207,6 +214,7 @@ export default function ImportProjectsPage() {
   const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<ConfirmResult | null>(null);
   const [detailRepo, setDetailRepo] = useState<PlanRepo | null>(null);
+  const [tagMappings, setTagMappings] = useState<Record<string, string>>({});
   // Stable idempotency key per previewed plan so a retry after a transient
   // error replays instead of double-importing (idempotency.ts contract).
   const idemKey = useRef<string | null>(null);
@@ -224,6 +232,13 @@ export default function ImportProjectsPage() {
         error: { title: t("couldNotPreviewImport") },
       });
       setPlan(toImportPlanView(p));
+      setTagMappings(
+        Object.fromEntries(
+          p.prizes.flatMap((prize) =>
+            prize.mappedChallengeId ? [[prize.name, String(prize.mappedChallengeId)]] : [],
+          ),
+        ),
+      );
       idemKey.current = crypto.randomUUID();
     } catch {
       // The promise toast already reports the failure; keep the wizard editable.
@@ -238,7 +253,14 @@ export default function ImportProjectsPage() {
     setConfirming(true);
     try {
       const res = await toast.promise(
-        confirmImport(projectsCsv, participantsCsv, idemKey.current),
+        confirmImport(
+          projectsCsv,
+          participantsCsv,
+          Object.entries(tagMappings)
+            .filter(([, challengeId]) => challengeId)
+            .map(([tag, challengeId]) => ({ tag, challengeId: Number(challengeId) })),
+          idemKey.current,
+        ),
         {
           loading: { title: t("confirmImport") },
           success: { title: t("importApplied") },
@@ -251,11 +273,12 @@ export default function ImportProjectsPage() {
     } finally {
       setConfirming(false);
     }
-  }, [plan, projectsCsv, participantsCsv, t]);
+  }, [plan, projectsCsv, participantsCsv, t, tagMappings]);
 
   function reset() {
     setPlan(null);
     setResult(null);
+    setTagMappings({});
     idemKey.current = null;
   }
 
@@ -373,7 +396,7 @@ export default function ImportProjectsPage() {
         />
 
         {plan.prizes.length > 0 && (
-          <SectionCard title={t("prizesLabel")} description={t("devpostOptInPrizesDesc")}>
+          <SectionCard title={t("tagMappingTitle")} description={t("tagMappingPreviewDesc")}>
             <div className="flex flex-col gap-2">
               {plan.prizes.map((p) => (
                 <div
@@ -388,11 +411,38 @@ export default function ImportProjectsPage() {
                         : t("projectCountOther", { count: p.repoCount })}
                     </span>
                   </div>
-                  {p.mappedChallengeId ? (
-                    <StatusBadge tone="success">→ {p.mappedChallengeTitle}</StatusBadge>
-                  ) : (
-                    <StatusBadge tone="neutral">{t("unmappedBadge")}</StatusBadge>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {!tagMappings[p.name] && (
+                      <StatusBadge tone="warning">{t("unmappedBadge")}</StatusBadge>
+                    )}
+                    <Select
+                      value={tagMappings[p.name] ?? "unmapped"}
+                      disabled={confirming}
+                      onValueChange={(challengeId) =>
+                        setTagMappings((current) => {
+                          const next = { ...current };
+                          if (challengeId === "unmapped") delete next[p.name];
+                          else next[p.name] = challengeId;
+                          return next;
+                        })
+                      }
+                    >
+                      <SelectTrigger
+                        className="w-56"
+                        aria-label={t("mapTagToChallenge", { tag: p.name })}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unmapped">{t("leaveUnmapped")}</SelectItem>
+                        {plan.challenges.map((challenge) => (
+                          <SelectItem key={challenge.id} value={String(challenge.id)}>
+                            {challenge.title}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               ))}
             </div>

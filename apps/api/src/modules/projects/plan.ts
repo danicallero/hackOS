@@ -49,9 +49,17 @@ export interface PlannedPrize {
   mappedChallengeTitle: string | null;
 }
 
+/** A possible destination for a tag chosen during the import preview. */
+export interface PlannedChallenge {
+  id: number;
+  title: string;
+}
+
 export interface ImportPlan {
   repos: PlannedRepo[];
   prizes: PlannedPrize[];
+  /** Internal challenges available to the import operator for tag mapping. */
+  challenges: PlannedChallenge[];
   /** Participant rows whose project reference didn't resolve to any project row. */
   unassignedParticipants: DevpostParticipantRow[];
   totals: {
@@ -296,10 +304,21 @@ export async function buildImportPlan(
     };
   });
 
+  // The preview owns mapping decisions, so expose the complete internal
+  // destination list here instead of making the client infer it from the
+  // public challenge directory. Confirm validates every selected id again.
+  const { rows: challengeRows } = await db.query(
+    `SELECT id, title FROM challenges
+      WHERE is_test_account = false
+      ORDER BY title ASC, id ASC`,
+  );
+  const challenges = challengeRows as PlannedChallenge[];
+
   const allMembers = repos.flatMap((r) => r.members);
   return {
     repos,
     prizes,
+    challenges,
     unassignedParticipants,
     totals: {
       repos: repos.length,
