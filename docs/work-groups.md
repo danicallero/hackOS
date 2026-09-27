@@ -23,3 +23,18 @@ nullable unique `linked_repo_id` remain stable contracts: #854 will link
 imports, and #856 can use intended-challenge membership for sponsor-scoped
 recipient resolution. None of that conversion, Devpost matching, or
 notification behavior is implemented here.
+
+## Participant project-like view (#852, #854)
+
+`/my-project` presents planned groups alongside projects using the same compact
+record language; selecting one opens `/my-project/work-groups/:id`. Active
+members can edit the name, description, Devpost/GitHub/demo URLs and stored
+timing preference, manage invitations and intended challenges, or delete the
+planning record. Deletion cascades only through planning rows and is audited;
+it never deletes a linked `repos` row or queue history.
+
+The linkage boundary is deliberately exact: confirming a Devpost import links
+an otherwise-unlinked planned group only when `planned_work_groups.devpost_url`
+equals the imported repository's canonical `repos.devpost_url`. Assigning that
+same URL later performs the same lookup. There is no name, member, or fuzzy
+matching; #854 can extend the model without changing this safety boundary.

@@ -72,4 +72,68 @@ describe("planned work groups (#852)", () => {
     });
     expect(queues.json().projects).toEqual([]);
   });
+
+  it("keeps project-like planning edits and deletion transactional (#852, #854)", async () => {
+    const owner = await createUser({ email: "detail-owner@work-group.test" });
+    const invitee = await createUser({ email: "detail-invitee@work-group.test" });
+    await admitParticipant(owner);
+    await admitParticipant(invitee);
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/me/work-groups",
+      headers: { ...asUser(owner), "idempotency-key": "detail-create" },
+      payload: { name: "Before import" },
+    });
+    const id = created.json().id;
+    const edited = await app.inject({
+      method: "PATCH",
+      url: `/api/me/work-groups/${id}`,
+      headers: asUser(owner),
+      payload: {
+        description: "Planning only",
+        githubUrl: "https://github.com/example/team",
+        demoUrl: "https://demo.example/team",
+        devpostUrl: "https://example.devpost.com/software/team",
+        presentationTimingPreference: "early",
+      },
+    });
+    expect(edited.statusCode).toBe(200);
+    expect(edited.json()).toMatchObject({
+      description: "Planning only",
+      presentation_timing_preference: "early",
+    });
+    await app.inject({
+      method: "POST",
+      url: `/api/me/work-groups/${id}/invites`,
+      headers: { ...asUser(owner), "idempotency-key": "detail-invite" },
+      payload: { email: "detail-invitee@work-group.test" },
+    });
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/me/work-groups/${id}/members/${invitee}`,
+          headers: { ...asUser(owner), "idempotency-key": "detail-remove" },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/me/work-groups/${id}`,
+          headers: { ...asUser(owner), "idempotency-key": "detail-delete" },
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/me/work-groups/${id}`,
+          headers: asUser(owner),
+        })
+      ).statusCode,
+    ).toBe(404);
+  });
 });

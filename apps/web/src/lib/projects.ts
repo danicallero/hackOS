@@ -208,6 +208,13 @@ export const deleteMyProject = (repoId: number, idempotencyKey?: string) =>
 export interface PlannedWorkGroup {
   id: number;
   name: string;
+  description: string;
+  github_url: string | null;
+  demo_url: string | null;
+  devpost_url: string | null;
+  presentation_timing_preference: "no_preference" | "early" | "middle" | "late";
+  linked_repo_id: number | null;
+  linkedProject: { id: number; name: string; devpostUrl: string | null } | null;
   members: Array<{
     userId: number;
     name: string | null;
@@ -217,8 +224,45 @@ export interface PlannedWorkGroup {
   challenges: Array<{ id: number; title: string }>;
 }
 export const myWorkGroups = () => api.get<{ groups: PlannedWorkGroup[] }>("/api/me/work-groups");
+export const getMyWorkGroup = (id: number) =>
+  api.get<PlannedWorkGroup>(`/api/me/work-groups/${id}`);
 export const createWorkGroup = (name: string, idempotencyKey?: string) =>
   api.post<PlannedWorkGroup>("/api/me/work-groups", { name }, idem(idempotencyKey));
+export const updateWorkGroup = (
+  id: number,
+  patch: Partial<
+    Pick<
+      PlannedWorkGroup,
+      | "name"
+      | "description"
+      | "github_url"
+      | "demo_url"
+      | "devpost_url"
+      | "presentation_timing_preference"
+    >
+  >,
+) =>
+  api.patch<PlannedWorkGroup>(`/api/me/work-groups/${id}`, {
+    name: patch.name,
+    description: patch.description,
+    githubUrl: patch.github_url,
+    demoUrl: patch.demo_url,
+    devpostUrl: patch.devpost_url,
+    presentationTimingPreference: patch.presentation_timing_preference,
+  });
+export const inviteWorkGroupMember = (id: number, email: string, idempotencyKey?: string) =>
+  api.post(`/api/me/work-groups/${id}/invites`, { email }, idem(idempotencyKey));
+export const removeWorkGroupMember = (id: number, userId: number, idempotencyKey?: string) =>
+  api.delete(`/api/me/work-groups/${id}/members/${userId}`, idem(idempotencyKey));
+export const addWorkGroupChallenge = (id: number, challengeId: number, idempotencyKey?: string) =>
+  api.post(`/api/me/work-groups/${id}/challenges`, { challengeId }, idem(idempotencyKey));
+export const removeWorkGroupChallenge = (
+  id: number,
+  challengeId: number,
+  idempotencyKey?: string,
+) => api.delete(`/api/me/work-groups/${id}/challenges/${challengeId}`, idem(idempotencyKey));
+export const deleteWorkGroup = (id: number, idempotencyKey?: string) =>
+  api.delete(`/api/me/work-groups/${id}`, idem(idempotencyKey));
 
 export const addRepoMember = (repoId: number, userId: number, idempotencyKey?: string) =>
   api.post(`/api/repos/${repoId}/members`, { userId }, idem(idempotencyKey));

@@ -26,10 +26,12 @@ async function assertMember(db: Queryable, groupId: number, userId: number) {
 }
 export async function listMine(userId: number) {
   const { rows } = await pool.query(
-    `SELECT g.id, g.name, g.devpost_url, g.presentation_timing_preference, g.linked_repo_id, g.created_by, g.created_at, g.updated_at,
+    `SELECT g.id, g.name, g.description, g.github_url, g.demo_url, g.devpost_url, g.presentation_timing_preference, g.linked_repo_id, g.created_by, g.created_at, g.updated_at,
+    CASE WHEN r.id IS NULL THEN NULL ELSE jsonb_build_object('id', r.id, 'name', r.name, 'devpostUrl', r.devpost_url) END AS "linkedProject",
     coalesce(json_agg(DISTINCT jsonb_build_object('userId', m.user_id, 'name', u.name, 'surname', u.surname, 'status', m.status, 'invitedBy', m.invited_by, 'respondedAt', m.responded_at)) FILTER (WHERE m.user_id IS NOT NULL), '[]') members,
     coalesce(json_agg(DISTINCT jsonb_build_object('id', c.id, 'title', c.title)) FILTER (WHERE c.id IS NOT NULL), '[]') challenges
     FROM planned_work_groups g JOIN planned_work_group_members mine ON mine.group_id = g.id AND mine.user_id = $1
+    LEFT JOIN repos r ON r.id = g.linked_repo_id
     LEFT JOIN planned_work_group_members m ON m.group_id = g.id LEFT JOIN users u ON u.id = m.user_id
     LEFT JOIN planned_work_group_challenges gc ON gc.group_id = g.id LEFT JOIN challenges c ON c.id = gc.challenge_id
     GROUP BY g.id ORDER BY g.updated_at DESC`,
@@ -37,11 +39,17 @@ export async function listMine(userId: number) {
   );
   return rows;
 }
+export async function getMine(userId: number, groupId: number) {
+  const groups = await listMine(userId);
+  const group = groups.find((candidate) => Number(candidate.id) === groupId);
+  if (!group) throw new NotFoundError("Work group not found");
+  return group;
+}
 export async function createGroup(userId: number, name: string) {
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
     const { rows } = await db.query(
-      `INSERT INTO planned_work_groups (name,created_by) VALUES ($1,$2) RETURNING id,name`,
+      `INSERT INTO planned_work_groups (name,created_by) VALUES ($1,$2) RETURNING id,name,description,github_url,demo_url,devpost_url,presentation_timing_preference,linked_repo_id`,
       [name, userId],
     );
     const group = rows[0];
@@ -63,24 +71,39 @@ export async function createGroup(userId: number, name: string) {
 export async function updateGroup(
   userId: number,
   id: number,
-  input: { name?: string; devpostUrl?: string | null; presentationTimingPreference?: string },
+  input: {
+    name?: string;
+    description?: string;
+    devpostUrl?: string | null;
+    githubUrl?: string | null;
+    demoUrl?: string | null;
+    presentationTimingPreference?: string;
+  },
 ) {
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
     await assertMember(db, id, userId);
     const { rows: before } = await db.query(
-      `SELECT name,devpost_url,presentation_timing_preference FROM planned_work_groups WHERE id=$1 FOR UPDATE`,
+      `SELECT name,description,github_url,demo_url,devpost_url,presentation_timing_preference,linked_repo_id FROM planned_work_groups WHERE id=$1 FOR UPDATE`,
       [id],
     );
     if (!before[0]) throw new NotFoundError("Work group not found");
     const b = before[0];
     const { rows } = await db.query(
-      `UPDATE planned_work_groups SET name=$2,devpost_url=$3,presentation_timing_preference=$4 WHERE id=$1 RETURNING id,name,devpost_url,presentation_timing_preference`,
+      `UPDATE planned_work_groups SET name=$2,description=$3,github_url=$4,demo_url=$5,devpost_url=$6,presentation_timing_preference=$7,
+       linked_repo_id = CASE WHEN $8::text IS DISTINCT FROM $9::text THEN (SELECT id FROM repos WHERE devpost_url = $8 LIMIT 1) ELSE linked_repo_id END
+       WHERE id=$1
+       RETURNING planned_work_groups.id,planned_work_groups.name,planned_work_groups.description,planned_work_groups.github_url,planned_work_groups.demo_url,planned_work_groups.devpost_url,planned_work_groups.presentation_timing_preference,planned_work_groups.linked_repo_id`,
       [
         id,
         input.name ?? b.name,
+        input.description ?? b.description,
+        input.githubUrl === undefined ? b.github_url : input.githubUrl,
+        input.demoUrl === undefined ? b.demo_url : input.demoUrl,
         input.devpostUrl === undefined ? b.devpost_url : input.devpostUrl,
         input.presentationTimingPreference ?? b.presentation_timing_preference,
+        input.devpostUrl === undefined ? b.devpost_url : input.devpostUrl,
+        b.devpost_url,
       ],
     );
     await audit(db, {
@@ -94,6 +117,77 @@ export async function updateGroup(
     });
     return rows[0];
   });
+}
+export async function removeMember(userId: number, id: number, memberId: number) {
+  return withTransaction(async (db) => {
+    await assertParticipant(db, userId);
+    await assertMember(db, id, userId);
+    if (memberId === userId)
+      throw new ConflictError(
+        "Leave a work group by deleting it or asking another active member to remove you",
+      );
+    const removed = await db.query(
+      `DELETE FROM planned_work_group_members WHERE group_id=$1 AND user_id=$2 RETURNING user_id,status`,
+      [id, memberId],
+    );
+    if (!removed.rows[0]) throw new NotFoundError("Work-group member not found");
+    await audit(db, {
+      actorId: userId,
+      entityType: "planned_work_group",
+      entityId: id,
+      action: "member.remove",
+      before: { userId: memberId, status: removed.rows[0].status },
+      source: "participant",
+    });
+    return { removed: true };
+  });
+}
+export async function deleteGroup(userId: number, id: number) {
+  return withTransaction(async (db) => {
+    await assertParticipant(db, userId);
+    await assertMember(db, id, userId);
+    const group = await db.query(
+      `SELECT name,linked_repo_id FROM planned_work_groups WHERE id=$1 FOR UPDATE`,
+      [id],
+    );
+    if (!group.rows[0]) throw new NotFoundError("Work group not found");
+    await db.query(`DELETE FROM planned_work_groups WHERE id=$1`, [id]);
+    await audit(db, {
+      actorId: userId,
+      entityType: "planned_work_group",
+      entityId: id,
+      action: "delete",
+      before: group.rows[0],
+      source: "participant",
+    });
+    return { deleted: true };
+  });
+}
+
+/** #854 boundary: import and assignment link exact, canonical Devpost URLs only. */
+export async function linkExactDevpostImports(
+  db: Queryable,
+  actorId: number,
+  imports: Array<{ id: number; devpostUrl: string | null }>,
+) {
+  const urls = imports.flatMap((repo) => (repo.devpostUrl ? [repo.devpostUrl] : []));
+  if (!urls.length) return;
+  const { rows } = await db.query(
+    `UPDATE planned_work_groups g SET linked_repo_id = r.id
+     FROM repos r WHERE r.devpost_url = g.devpost_url AND r.devpost_url = ANY($1::text[])
+       AND g.linked_repo_id IS NULL
+     RETURNING g.id, g.name, r.id AS repo_id`,
+    [urls],
+  );
+  for (const row of rows)
+    await audit(db, {
+      actorId,
+      entityType: "planned_work_group",
+      entityId: row.id,
+      action: "link_exact_devpost_import",
+      after: { repoId: row.repo_id },
+      source: "admin",
+    });
 }
 export async function invite(userId: number, id: number, email: string) {
   return withTransaction(async (db) => {

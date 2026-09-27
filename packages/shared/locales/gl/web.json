@@ -3089,5 +3089,17 @@
   "statisticsAverage": "Media",
   "chartTypeBar": "Barras",
   "chartTypePie": "Circular",
-  "chartTypeLine": "Liñas"
+  "chartTypeLine": "Liñas",
+  "workGroupPlanned": "Planificado",
+  "workGroupLinked": "Proxecto importado vinculado",
+  "workGroupLinkedProject": "Proxecto importado",
+  "workGroupDevpostUrl": "URL de Devpost",
+  "workGroupTiming": "Quenda de presentación",
+  "workGroupTimingNone": "Sen preferencia",
+  "workGroupTimingEarly": "Cedo",
+  "workGroupTimingMiddle": "Intermedio",
+  "workGroupTimingLate": "Tarde",
+  "deleteWorkGroupCta": "Eliminar grupo",
+  "deleteWorkGroupTitle": "Eliminar este grupo planificado",
+  "deleteWorkGroupDesc": "Elimina permanentemente o grupo de planificación, as súas invitacións e retos previstos. O proxecto importado consérvase."
 }
