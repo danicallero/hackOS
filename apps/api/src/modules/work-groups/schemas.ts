@@ -10,7 +10,10 @@ const devpostProjectUrl = z
   );
 
 export const groupParams = z.object({ id: z.coerce.number().int().positive() });
-export const createGroupBody = z.object({ name: z.string().trim().min(1).max(200) });
+export const createGroupBody = z.object({
+  name: z.string().trim().min(1).max(200),
+  challengeIds: z.array(z.number().int().positive()).max(50).default([]),
+});
 export const updateGroupBody = z
   .object({
     name: z.string().trim().min(1).max(200).optional(),

@@ -220,6 +220,7 @@ export interface PlannedWorkGroup {
   demo_url: string | null;
   devpost_url: string | null;
   presentation_timing_preference: "no_preference" | "early" | "middle" | "late";
+  presentation_timing_editable: boolean;
   linked_repo_id: number | null;
   linkedProject: { id: number; name: string; devpostUrl: string | null } | null;
   members: Array<{
@@ -233,8 +234,12 @@ export interface PlannedWorkGroup {
 export const myWorkGroups = () => api.get<{ groups: PlannedWorkGroup[] }>("/api/me/work-groups");
 export const getMyWorkGroup = (id: number) =>
   api.get<PlannedWorkGroup>(`/api/me/work-groups/${id}`);
-export const createWorkGroup = (name: string, idempotencyKey?: string) =>
-  api.post<PlannedWorkGroup>("/api/me/work-groups", { name }, idem(idempotencyKey));
+export const createWorkGroup = (
+  name: string,
+  challengeIds: number[] = [],
+  idempotencyKey?: string,
+) =>
+  api.post<PlannedWorkGroup>("/api/me/work-groups", { name, challengeIds }, idem(idempotencyKey));
 export const updateWorkGroup = (
   id: number,
   patch: Partial<

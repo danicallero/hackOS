@@ -34,6 +34,7 @@ sending `null` clears a nullable field.
 | `hacking_starts_at`, `hacking_ends_at` | The publicly-"spoken" hacking window; drives the countdown. `CHECK (ends > starts)`. |
 | `show_start_countdown` | Live "hacking starts in" countdown before the start, vs a frozen duration. |
 | `participants_can_create_projects` | H19 policy switch: while `true`, an admitted participant may create another own project (`POST /api/me/projects`); there is no per-participant project-count cap. See `docs/challenges-devpost.md` §1.3. Default `false`. |
+| `participant_self_service_starts_at`, `participant_self_service_ends_at` | H19/H20 participant editing window. Projects inherit the matching hacking start/end when a bound is blank; planned work groups keep their legacy open planning behavior until an organizer sets a custom bound. |
 | `venue_name`, `venue_latitude`, `venue_longitude` | Venue; coordinates are all-or-nothing (`CHECK`) and drive the pass's lock-screen `locations` relevance. |
 | `wifi_ssid`, `wifi_password` | Venue Wi-Fi shown on the TV screens (H42). Served by `GET /api/tv/config`, **never** by `/api/public/event`; an audit entry records that the password changed, not its value. See [TV screens](./tv-screens.md). |
 | `tv_language` | Nullable; the fixed language every venue TV renders in, overriding the default. Set from `/tv/control`'s Display language section (`PATCH /api/tv/config`, `TV_CONTROL`), served by `GET /api/tv/config`. Never a signed-in caller's own language preference. See [TV screens](./tv-screens.md). |

@@ -62,10 +62,10 @@ export function registerWorkGroupsRoutes(app: FastifyInstance) {
         body: createGroupBody,
         summary: "Create a planned work group",
         description:
-          "Creates an auditable pre-event work group for an admitted participant (#852).",
+          "Creates an auditable pre-event work group for an admitted participant, optionally with intended published challenges (#852).",
       },
     },
-    async (q) => createGroup(q.userId as number, q.body.name),
+    async (q) => createGroup(q.userId as number, q.body.name, q.body.challengeIds),
   );
   r.delete(
     "/api/me/work-groups/:id/members/:userId",

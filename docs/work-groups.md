@@ -15,6 +15,11 @@ row in the same transaction. `GET /api/work-groups/estimates` gives
 their own enterprise's challenges; counts include distinct groups and active
 members, never pending or declined invitees.
 
+Participant self-service changes are restricted when Event Settings defines a
+custom participant window. With both bounds blank, groups retain their legacy
+open planning behavior for events that have not configured a schedule; a
+custom bound can close or reopen that editing window.
+
 The stored `presentation_timing_preference` (`no_preference | early | middle |
 late`) is consumed as a soft ordering input when a queue group is first
 generated: linked repos preferring early, middle, or late are placed near that
@@ -52,12 +57,18 @@ otherwise-unlinked group links only when its URL and the imported
 `repos.devpost_url` agree after case and trailing-slash normalization; a valid
 stored URL never falls back to inference.
 
+When an exact URL link is established, active work-group members who are not
+already project members are copied to the imported project as pending
+invitations and notified. Acceptance remains explicit; linking never silently
+adds them as active project members.
+
 Without a valid URL, the importer may link only when one and only one planned
 group has the complete resolved Devpost roster **and** the exact same non-empty
 set of intended challenges as the imported project's mapped prize challenges.
 Both sides must have exactly one candidate. Missing identities, unmatched
 participants, a challenge mismatch, or any candidate tie leave every group
 unlinked for manual review. Names, titles, partial rosters, and fuzzy URL/slug
-matches are never link signals. These links are audited in the same import
-transaction and do not alter planning metadata, members, preferences, or queue
-history.
+matches are never link signals. These links and invitations are audited in the
+same import transaction. The project's presentation timing is read from the
+linked group and remains editable until the first queue entries for that
+project are generated; then it is locked.

@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { addMyProjectChallenge, inviteProjectMember, myProjects } from "@/lib/projects";
-import { toast } from "@/lib/toast";
+import { showErrorToast, toast } from "@/lib/toast";
 import { ProjectFormDialog } from "../../../projects/project-form-dialog";
 import {
   type ChallengeOption,
@@ -60,6 +60,19 @@ export default function MyProjectDetailPage() {
     <div className="space-y-6">
       <PageHeader
         title={project.name}
+        state={
+          project.presentation_timing_preference && (
+            <StatusBadge tone="neutral">
+              {project.presentation_timing_preference === "early"
+                ? t("workGroupTimingEarly")
+                : project.presentation_timing_preference === "middle"
+                  ? t("workGroupTimingMiddle")
+                  : project.presentation_timing_preference === "late"
+                    ? t("workGroupTimingLate")
+                    : t("workGroupTimingNone")}
+            </StatusBadge>
+          )
+        }
         actions={<ProjectFormDialog mode={{ kind: "self-edit", repo: project }} onSaved={load} />}
       />
       <ProjectDescriptionLinks
@@ -194,7 +207,13 @@ function InviteMember({
       setEmail("");
       await onInvited();
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : t("couldNotSendInvite"));
+      if (error instanceof ApiError && (error.status === 404 || error.status === 403)) {
+        showErrorToast(error, t("couldNotInvite"), {
+          description: t("inviteAcceptedParticipantRequired"),
+        });
+      } else {
+        toast.error(error instanceof ApiError ? error.message : t("couldNotSendInvite"));
+      }
     } finally {
       setSaving(false);
     }

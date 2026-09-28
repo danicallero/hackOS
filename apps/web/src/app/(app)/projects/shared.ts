@@ -60,6 +60,7 @@ export interface ProjectRepo {
   prizes: string[];
   unmappedPrizes: string[];
   challenges: RepoChallenge[];
+  presentation_timing_preference?: "no_preference" | "early" | "middle" | "late";
 }
 
 export function toProjectRepo(repo: RepoWithExtras): ProjectRepo {
