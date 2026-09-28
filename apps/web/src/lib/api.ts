@@ -37,18 +37,20 @@ function buildUrl(path: string, query?: RequestOptions["query"]): string {
 }
 
 /**
- * Single entry point for every hackOS API call. Always credentialed (session
- * cookie), always JSON, always surfaces the API's error envelope as ApiError.
+ * Single entry point for every hackOS API call. Public reads omit cookies so
+ * they remain usable from any origin; every other request carries the session
+ * cookie and stays within the deployment's credentialed CORS boundary.
  */
 export async function apiFetch<T = unknown>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const { body, query, headers, ...rest } = options;
+  const { body, query, headers, credentials: requestedCredentials, ...rest } = options;
   const method = rest.method?.toUpperCase() ?? "GET";
   const isMutation = !["GET", "HEAD", "OPTIONS"].includes(method);
+  const isPublicRead = path.startsWith("/api/public/") && (method === "GET" || method === "HEAD");
   const res = await fetch(buildUrl(path, query), {
-    credentials: "include",
+    credentials: isPublicRead ? "omit" : (requestedCredentials ?? "include"),
     headers: {
       ...(body !== undefined ? { "content-type": "application/json" } : {}),
       ...(isMutation && !new Headers(headers).has("Idempotency-Key")

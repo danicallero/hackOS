@@ -23,23 +23,7 @@ describe("logisticsApi.publicSchedule", () => {
     vi.unstubAllGlobals();
   });
 
-  it("omits credentials for the venue TV so a staff session cookie never widens the projection", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      status: 200,
-      ok: true,
-      text: async () => JSON.stringify({ items: [] }),
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    await logisticsApi.publicSchedule({ anonymous: true });
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ credentials: "omit" }),
-    );
-  });
-
-  it("keeps the caller's session by default", async () => {
+  it("omits credentials so a staff session cookie never widens the projection", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       status: 200,
       ok: true,
@@ -51,7 +35,7 @@ describe("logisticsApi.publicSchedule", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.any(String),
-      expect.objectContaining({ credentials: "include" }),
+      expect.objectContaining({ credentials: "omit" }),
     );
   });
 });
