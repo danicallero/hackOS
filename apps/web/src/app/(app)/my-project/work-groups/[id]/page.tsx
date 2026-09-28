@@ -35,7 +35,7 @@ import {
   updateWorkGroup,
 } from "@/lib/projects";
 import { useMe } from "@/lib/session";
-import { toast } from "@/lib/toast";
+import { showErrorToast, toast } from "@/lib/toast";
 import { type ChallengeOption, challengeTitleText } from "../../../projects/shared";
 
 export default function WorkGroupDetailPage() {
@@ -197,9 +197,10 @@ function WorkGroupEditor({
             id="group-timing"
             className="h-9 w-full rounded-md border bg-background px-3 text-sm"
             value={timing}
+            disabled={!group.presentation_timing_editable}
             onChange={(e) => setTiming(e.target.value as typeof timing)}
           >
-            <option value="no_preference">{t("workGroupTimingNone")}</option>
+            <option value="no_preference" aria-label={t("workGroupTimingNone")} />
             <option value="early">{t("workGroupTimingEarly")}</option>
             <option value="middle">{t("workGroupTimingMiddle")}</option>
             <option value="late">{t("workGroupTimingLate")}</option>
@@ -247,7 +248,13 @@ function Members({
       setEmail("");
       await onChanged();
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : t("couldNotSendInvite"));
+      if (error instanceof ApiError && (error.status === 404 || error.status === 403)) {
+        showErrorToast(error, t("couldNotInvite"), {
+          description: t("inviteAcceptedParticipantRequired"),
+        });
+      } else {
+        toast.error(error instanceof ApiError ? error.message : t("couldNotSendInvite"));
+      }
     } finally {
       setBusy(false);
     }

@@ -3,6 +3,7 @@ import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { assertWithinParticipantSelfServiceWindow } from "../../lib/hacking-window.js";
 import { broadcast } from "../../lib/sse.js";
 import { hasEventAccess } from "../identity/role.js";
 import { notify } from "../notifications/service.js";
@@ -40,7 +41,8 @@ export async function listMine(userId: number) {
     `SELECT g.id, g.name, g.description, g.github_url, g.demo_url, g.devpost_url, g.presentation_timing_preference, g.linked_repo_id, g.created_by, g.created_at, g.updated_at,
     CASE WHEN r.id IS NULL THEN NULL ELSE jsonb_build_object('id', r.id, 'name', r.name, 'devpostUrl', r.devpost_url) END AS "linkedProject",
     coalesce(json_agg(DISTINCT jsonb_build_object('userId', m.user_id, 'name', u.name, 'surname', u.surname, 'status', m.status, 'invitedBy', m.invited_by, 'respondedAt', m.responded_at)) FILTER (WHERE m.user_id IS NOT NULL), '[]') members,
-    coalesce(json_agg(DISTINCT jsonb_build_object('id', c.id, 'title', c.title)) FILTER (WHERE c.id IS NOT NULL), '[]') challenges
+    coalesce(json_agg(DISTINCT jsonb_build_object('id', c.id, 'title', c.title)) FILTER (WHERE c.id IS NOT NULL), '[]') challenges,
+    NOT EXISTS (SELECT 1 FROM queue_entries qe WHERE qe.repo_id = g.linked_repo_id) AS presentation_timing_editable
     FROM planned_work_groups g JOIN planned_work_group_members mine ON mine.group_id = g.id AND mine.user_id = $1
     LEFT JOIN repos r ON r.id = g.linked_repo_id
     LEFT JOIN planned_work_group_members m ON m.group_id = g.id LEFT JOIN users u ON u.id = m.user_id
@@ -59,7 +61,7 @@ export async function getMine(userId: number, groupId: number) {
   if (!group) throw new NotFoundError("Work group not found");
   return group;
 }
-export async function createGroup(userId: number, name: string) {
+export async function createGroup(userId: number, name: string, challengeIds: number[] = []) {
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
     const policy = await db.query(
@@ -67,6 +69,17 @@ export async function createGroup(userId: number, name: string) {
     );
     if (policy.rows[0]?.participants_can_create_projects !== true) {
       throw new ForbiddenError("Participants cannot create projects for this event");
+    }
+    await assertWithinParticipantSelfServiceWindow(db);
+    const uniqueChallengeIds = [...new Set(challengeIds)];
+    if (uniqueChallengeIds.length > 0) {
+      const visible = await db.query<{ id: number }>(
+        `SELECT id FROM challenges WHERE id = ANY($1::int[]) AND visibility = 'visible' AND is_test_account = $2`,
+        [uniqueChallengeIds, false],
+      );
+      const found = new Set(visible.rows.map((row) => Number(row.id)));
+      const missing = uniqueChallengeIds.filter((id) => !found.has(id));
+      if (missing.length > 0) throw new NotFoundError(`Challenge ${missing.join(", ")} not found`);
     }
     const { rows } = await db.query(
       `INSERT INTO planned_work_groups (name,created_by) VALUES ($1,$2) RETURNING id,name,description,github_url,demo_url,devpost_url,presentation_timing_preference,linked_repo_id`,
@@ -77,12 +90,18 @@ export async function createGroup(userId: number, name: string) {
       `INSERT INTO planned_work_group_members (group_id,user_id,status,responded_at) VALUES ($1,$2,'active',now())`,
       [group.id, userId],
     );
+    for (const challengeId of uniqueChallengeIds) {
+      await db.query(
+        `INSERT INTO planned_work_group_challenges (group_id,challenge_id) VALUES ($1,$2)`,
+        [group.id, challengeId],
+      );
+    }
     await audit(db, {
       actorId: userId,
       entityType: "planned_work_group",
       entityId: group.id,
       action: "create",
-      after: { name },
+      after: { name, challengeIds: uniqueChallengeIds },
       source: "participant",
     });
     return group;
@@ -103,12 +122,21 @@ export async function updateGroup(
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
     await assertMember(db, id, userId);
+    await assertWithinParticipantSelfServiceWindow(db);
     const { rows: before } = await db.query(
       `SELECT name,description,github_url,demo_url,devpost_url,presentation_timing_preference,linked_repo_id FROM planned_work_groups WHERE id=$1 FOR UPDATE`,
       [id],
     );
     if (!before[0]) throw new NotFoundError("Work group not found");
     const b = before[0];
+    if (input.presentationTimingPreference !== undefined && b.linked_repo_id != null) {
+      const generated = await db.query(`SELECT 1 FROM queue_entries WHERE repo_id = $1 LIMIT 1`, [
+        b.linked_repo_id,
+      ]);
+      if (generated.rows[0]) {
+        throw new ConflictError("Presentation timing cannot be changed after queues are generated");
+      }
+    }
     const { rows } = await db.query(
       `UPDATE planned_work_groups SET name=$2,description=$3,github_url=$4,demo_url=$5,devpost_url=$6,presentation_timing_preference=$7,
        linked_repo_id = CASE WHEN $8::text IS DISTINCT FROM $9::text THEN (
@@ -146,6 +174,7 @@ export async function removeMember(userId: number, id: number, memberId: number)
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
     await assertMember(db, id, userId);
+    await assertWithinParticipantSelfServiceWindow(db);
     if (memberId === userId)
       throw new ConflictError(
         "Leave a work group by deleting it or asking another active member to remove you",
@@ -170,6 +199,7 @@ export async function deleteGroup(userId: number, id: number) {
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
     await assertMember(db, id, userId);
+    await assertWithinParticipantSelfServiceWindow(db);
     await assertJudgingHasNotStarted(db);
     const group = await db.query(
       `SELECT name,linked_repo_id FROM planned_work_groups WHERE id=$1 FOR UPDATE`,
@@ -227,7 +257,7 @@ export async function linkDevpostImports(db: Queryable, actorId: number, repoIds
      RETURNING g.id, c.repo_id`,
     [repoIds, validDevpostUrl],
   );
-  for (const row of exact.rows)
+  for (const row of exact.rows) {
     await audit(db, {
       actorId,
       entityType: "planned_work_group",
@@ -236,6 +266,8 @@ export async function linkDevpostImports(db: Queryable, actorId: number, repoIds
       after: { repoId: row.repo_id },
       source: "admin",
     });
+    await inviteLinkedWorkGroupMembers(db, actorId, Number(row.id), Number(row.repo_id));
+  }
 
   const highConfidence = await db.query(
     `WITH candidates AS (
@@ -301,7 +333,7 @@ export async function linkDevpostImports(db: Queryable, actorId: number, repoIds
      RETURNING g.id, c.repo_id`,
     [repoIds, validDevpostUrl],
   );
-  for (const row of highConfidence.rows)
+  for (const row of highConfidence.rows) {
     await audit(db, {
       actorId,
       entityType: "planned_work_group",
@@ -310,11 +342,69 @@ export async function linkDevpostImports(db: Queryable, actorId: number, repoIds
       after: { repoId: row.repo_id },
       source: "admin",
     });
+    await inviteLinkedWorkGroupMembers(db, actorId, Number(row.id), Number(row.repo_id));
+  }
+}
+
+/** #854: carry the planned roster into the imported project as real pending
+ * invitations. Existing imported/active members are left untouched. */
+async function inviteLinkedWorkGroupMembers(
+  db: Queryable,
+  actorId: number,
+  groupId: number,
+  repoId: number,
+) {
+  const project = await db.query<{ name: string }>(`SELECT name FROM repos WHERE id = $1`, [
+    repoId,
+  ]);
+  if (!project.rows[0]) return;
+  const inserted = await db.query<{ user_id: number }>(
+    `INSERT INTO submissions (repo_id, user_id, imported_from, status, invited_by)
+     SELECT $1, m.user_id, 'manual', 'invited', $2
+       FROM planned_work_group_members m
+       JOIN users u ON u.id = m.user_id
+      WHERE m.group_id = $3 AND m.status = 'active'
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM submissions s WHERE s.repo_id = $1 AND s.user_id = m.user_id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM devpost_participants dp WHERE dp.repo_id = $1 AND dp.user_id = m.user_id
+        )
+     ON CONFLICT (repo_id, user_id) DO NOTHING
+     RETURNING user_id`,
+    [repoId, actorId, groupId],
+  );
+  for (const row of inserted.rows) {
+    await notify(db, {
+      userId: Number(row.user_id),
+      actorId,
+      category: "project",
+      payload: {
+        template: "project.invite",
+        vars: { projectName: project.rows[0].name, inviterName: "" },
+      },
+    });
+    await audit(db, {
+      actorId,
+      entityType: "repo",
+      entityId: repoId,
+      action: "member.invite",
+      after: { invitedUserId: Number(row.user_id), source: "linked_work_group", groupId },
+      source: "admin",
+    });
+  }
 }
 export async function invite(userId: number, id: number, email: string) {
+  const candidate = await pool.query<{ id: number }>(
+    `SELECT id FROM users WHERE lower(email)=lower($1) AND account_state='active' AND anonymized_at IS NULL`,
+    [email],
+  );
+  if (!candidate.rows[0]) throw new NotFoundError("No account for this email");
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
     await assertMember(db, id, userId);
+    await assertWithinParticipantSelfServiceWindow(db);
     const invitee = await db.query(
       `SELECT id FROM users WHERE lower(email)=lower($1) AND account_state='active' AND anonymized_at IS NULL FOR UPDATE`,
       [email],
@@ -355,6 +445,7 @@ export async function invite(userId: number, id: number, email: string) {
 export async function respond(userId: number, id: number, status: "active" | "declined") {
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
+    await assertWithinParticipantSelfServiceWindow(db);
     const result = await db.query(
       `UPDATE planned_work_group_members SET status=$3,responded_at=now() WHERE group_id=$1 AND user_id=$2 AND status='invited' RETURNING user_id`,
       [id, userId, status],
@@ -375,6 +466,7 @@ export async function addChallenge(userId: number, id: number, challengeId: numb
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
     await assertMember(db, id, userId);
+    await assertWithinParticipantSelfServiceWindow(db);
     await assertJudgingHasNotStarted(db);
     const c = await db.query(`SELECT id FROM challenges WHERE id=$1`, [challengeId]);
     if (!c.rows[0]) throw new NotFoundError("Challenge not found");
@@ -397,6 +489,7 @@ export async function removeChallenge(userId: number, id: number, challengeId: n
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
     await assertMember(db, id, userId);
+    await assertWithinParticipantSelfServiceWindow(db);
     await assertJudgingHasNotStarted(db);
     const r = await db.query(
       `DELETE FROM planned_work_group_challenges WHERE group_id=$1 AND challenge_id=$2 RETURNING challenge_id`,

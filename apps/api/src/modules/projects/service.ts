@@ -1148,7 +1148,10 @@ export async function myProjects(userId: number): Promise<RepoWithExtras[]> {
   );
   const fixtureMarker = userRows[0]?.is_test_account === true;
   const { rows } = await pool.query(
-    `SELECT r.id, r.name, r.description, r.github_url, r.devpost_url, r.demo_url, r.source
+    `SELECT r.id, r.name, r.description, r.github_url, r.devpost_url, r.demo_url, r.source,
+            COALESCE((SELECT g.presentation_timing_preference
+                        FROM planned_work_groups g
+                       WHERE g.linked_repo_id = r.id), 'no_preference') AS presentation_timing_preference
      FROM repos r
      WHERE r.is_test_account = $2 AND r.id IN (
        -- H19/H20: a project the caller was merely invited to (status='invited')
@@ -2132,9 +2135,10 @@ export async function canCreateMyProject(userId: number, db: Queryable = pool): 
   const { rows } = await db.query<{ allowed: boolean }>(
     `SELECT (
        ec.participants_can_create_projects IS TRUE
-       AND ec.hacking_starts_at IS NOT NULL
-       AND ec.hacking_ends_at IS NOT NULL
-       AND now() BETWEEN ec.hacking_starts_at AND ec.hacking_ends_at
+       AND COALESCE(ec.participant_self_service_starts_at, ec.hacking_starts_at) IS NOT NULL
+       AND COALESCE(ec.participant_self_service_ends_at, ec.hacking_ends_at) IS NOT NULL
+       AND now() BETWEEN COALESCE(ec.participant_self_service_starts_at, ec.hacking_starts_at)
+                     AND COALESCE(ec.participant_self_service_ends_at, ec.hacking_ends_at)
        AND EXISTS (
          SELECT 1
            FROM users u

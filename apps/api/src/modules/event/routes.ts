@@ -54,6 +54,8 @@ const EVENT_SETTINGS_CAPABILITIES: Record<string, Capability> = {
   hackingEndsAt: CAPABILITIES.EVENT_MANAGE,
   showStartCountdown: CAPABILITIES.EVENT_MANAGE,
   participantsCanCreateProjects: CAPABILITIES.EVENT_MANAGE,
+  participantSelfServiceStartsAt: CAPABILITIES.EVENT_MANAGE,
+  participantSelfServiceEndsAt: CAPABILITIES.EVENT_MANAGE,
   venueName: CAPABILITIES.VENUE_MANAGE,
   venueLatitude: CAPABILITIES.VENUE_MANAGE,
   venueLongitude: CAPABILITIES.VENUE_MANAGE,
@@ -129,6 +131,8 @@ const eventConfigBody = z
     hackingEndsAt: z.coerce.date().nullable().optional(),
     showStartCountdown: z.boolean().optional(),
     participantsCanCreateProjects: z.boolean().optional(),
+    participantSelfServiceStartsAt: z.coerce.date().nullable().optional(),
+    participantSelfServiceEndsAt: z.coerce.date().nullable().optional(),
     presenceAutoEntryAt: z.coerce.date().nullable().optional(),
     presenceCertaintyWindowMinutes: z.number().int().min(15).max(10080).optional(),
     venueName: z.string().nullable().optional(),
@@ -170,6 +174,8 @@ const DEFAULTS = {
   hacking_ends_at: null,
   show_start_countdown: false,
   participants_can_create_projects: false,
+  participant_self_service_starts_at: null,
+  participant_self_service_ends_at: null,
   presence_auto_entry_at: null,
   presence_certainty_window_minutes: 720,
   venue_name: null,
@@ -197,6 +203,8 @@ interface EventConfigRow {
   hacking_ends_at: string | null;
   show_start_countdown: boolean;
   participants_can_create_projects: boolean;
+  participant_self_service_starts_at: string | null;
+  participant_self_service_ends_at: string | null;
   presence_auto_entry_at: string | null;
   presence_certainty_window_minutes: number;
   venue_name: string | null;
@@ -219,6 +227,7 @@ async function readConfig(): Promise<EventConfigRow> {
     `SELECT name, tagline, timezone, event_starts_at, event_ends_at,
             hacking_starts_at, hacking_ends_at,
             show_start_countdown, participants_can_create_projects,
+            participant_self_service_starts_at, participant_self_service_ends_at,
             presence_auto_entry_at, presence_certainty_window_minutes,
             venue_name, venue_latitude, venue_longitude,
             wifi_ssid, wifi_password,
@@ -264,6 +273,8 @@ function toPublic(
     showStartCountdown: row.show_start_countdown,
     // H19: public so participant clients know whether to offer self-creation.
     participantsCanCreateProjects: row.participants_can_create_projects,
+    participantSelfServiceStartsAt: row.participant_self_service_starts_at,
+    participantSelfServiceEndsAt: row.participant_self_service_ends_at,
     presenceAutoEntryAt: row.presence_auto_entry_at,
     presenceCertaintyWindowMinutes: row.presence_certainty_window_minutes,
     judgingStartsAt: judging.judging_starts_at,
@@ -381,6 +392,14 @@ export function registerEventRoutes(app: FastifyInstance): void {
           b.participantsCanCreateProjects === undefined
             ? current.participants_can_create_projects
             : b.participantsCanCreateProjects,
+        participant_self_service_starts_at:
+          b.participantSelfServiceStartsAt === undefined
+            ? current.participant_self_service_starts_at
+            : b.participantSelfServiceStartsAt,
+        participant_self_service_ends_at:
+          b.participantSelfServiceEndsAt === undefined
+            ? current.participant_self_service_ends_at
+            : b.participantSelfServiceEndsAt,
         presence_auto_entry_at:
           b.presenceAutoEntryAt === undefined
             ? current.presence_auto_entry_at
@@ -428,6 +447,16 @@ export function registerEventRoutes(app: FastifyInstance): void {
         throw new BadRequestError("hackingEndsAt must be after hackingStartsAt");
       }
       if (
+        next.participant_self_service_starts_at !== null &&
+        next.participant_self_service_ends_at !== null &&
+        new Date(next.participant_self_service_ends_at).getTime() <=
+          new Date(next.participant_self_service_starts_at).getTime()
+      ) {
+        throw new BadRequestError(
+          "participantSelfServiceEndsAt must be after participantSelfServiceStartsAt",
+        );
+      }
+      if (
         next.event_starts_at !== null &&
         next.event_ends_at !== null &&
         new Date(next.event_ends_at).getTime() <= new Date(next.event_starts_at).getTime()
@@ -443,13 +472,14 @@ export function registerEventRoutes(app: FastifyInstance): void {
             (id, name, tagline, timezone, event_starts_at, event_ends_at,
              hacking_starts_at, hacking_ends_at,
              show_start_countdown, participants_can_create_projects,
+             participant_self_service_starts_at, participant_self_service_ends_at,
              presence_auto_entry_at, presence_certainty_window_minutes,
              venue_name, venue_latitude, venue_longitude,
              wifi_ssid, wifi_password,
              pass_back_fields, pass_field_labels, pass_field_visibility,
              require_sponsor_shirt_size, require_sponsor_dietary,
              require_staff_shirt_size, require_staff_dietary, shirt_sizes)
-         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18::jsonb, $19::jsonb, $20, $21, $22, $23, $24)
+         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20::jsonb, $21::jsonb, $22, $23, $24, $25, $26)
          ON CONFLICT (id) DO UPDATE
             SET name = EXCLUDED.name, tagline = EXCLUDED.tagline, timezone = EXCLUDED.timezone,
                 event_starts_at = EXCLUDED.event_starts_at,
@@ -458,6 +488,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
                 hacking_ends_at = EXCLUDED.hacking_ends_at,
                 show_start_countdown = EXCLUDED.show_start_countdown,
                 participants_can_create_projects = EXCLUDED.participants_can_create_projects,
+                participant_self_service_starts_at = EXCLUDED.participant_self_service_starts_at,
+                participant_self_service_ends_at = EXCLUDED.participant_self_service_ends_at,
                 presence_auto_entry_at = EXCLUDED.presence_auto_entry_at,
                 presence_certainty_window_minutes = EXCLUDED.presence_certainty_window_minutes,
                 venue_name = EXCLUDED.venue_name,
@@ -476,6 +508,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
          RETURNING name, tagline, timezone, event_starts_at, event_ends_at,
                    hacking_starts_at, hacking_ends_at,
                    show_start_countdown, participants_can_create_projects,
+                   participant_self_service_starts_at, participant_self_service_ends_at,
                    presence_auto_entry_at, presence_certainty_window_minutes,
                    venue_name, venue_latitude, venue_longitude,
                    wifi_ssid, wifi_password,
@@ -492,6 +525,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
           next.hacking_ends_at,
           next.show_start_countdown,
           next.participants_can_create_projects,
+          next.participant_self_service_starts_at,
+          next.participant_self_service_ends_at,
           next.presence_auto_entry_at,
           next.presence_certainty_window_minutes,
           next.venue_name,

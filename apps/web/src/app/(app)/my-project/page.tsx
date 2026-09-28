@@ -8,6 +8,7 @@ import { FolderGitIcon, MailIcon, MapPinIcon, UsersIcon } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
+import { MultiSelect, type MultiSelectOption } from "@/components/common/multi-select";
 import { PageHeader } from "@/components/common/page-header";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { SectionCard } from "@/components/common/section-card";
@@ -17,7 +18,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import {
   acceptProjectInvite,
@@ -32,7 +33,12 @@ import {
 import { getMyQueue, type MyQueueEntry } from "@/lib/queue";
 import { toast } from "@/lib/toast";
 import { ProjectFormDialog } from "../projects/project-form-dialog";
-import { challengeTitleText, type ProjectRepo, toProjectRepo } from "../projects/shared";
+import {
+  type ChallengeOption,
+  challengeTitleText,
+  type ProjectRepo,
+  toProjectRepo,
+} from "../projects/shared";
 
 export default function MyProjectPage() {
   const { t } = useLocale();
@@ -132,11 +138,23 @@ function CreateWorkGroup({ onCreated }: { onCreated: () => Promise<void> }) {
   const { t } = useLocale();
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [challengeIds, setChallengeIds] = useState<string[]>([]);
+  const [challenges, setChallenges] = useState<ChallengeOption[]>([]);
+  useEffect(() => {
+    if (!open) return;
+    api
+      .get<{ items: ChallengeOption[] }>("/api/public/challenges")
+      .then((result) => setChallenges(result.items))
+      .catch(() => setChallenges([]));
+  }, [open]);
   async function create() {
     setSaving(true);
     try {
-      await createWorkGroup(name.trim(), crypto.randomUUID());
+      await createWorkGroup(name.trim(), challengeIds.map(Number), crypto.randomUUID());
       setName("");
+      setChallengeIds([]);
+      setOpen(false);
       await onCreated();
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : t("couldNotCreateWorkGroup"));
@@ -146,6 +164,8 @@ function CreateWorkGroup({ onCreated }: { onCreated: () => Promise<void> }) {
   }
   return (
     <SidePanelEditor
+      open={open}
+      onOpenChange={setOpen}
       trigger={<Button variant="outline">{t("createWorkGroup")}</Button>}
       title={t("createWorkGroup")}
       footer={
@@ -162,6 +182,24 @@ function CreateWorkGroup({ onCreated }: { onCreated: () => Promise<void> }) {
           id="work-group-name"
           value={name}
           onChange={(event) => setName(event.target.value)}
+        />
+      </div>
+      <div className="mt-4 space-y-2">
+        <label className="text-sm font-medium" htmlFor="work-group-challenges">
+          {t("challenges")}
+        </label>
+        <MultiSelect
+          inDialog
+          id="work-group-challenges"
+          options={challenges.map(
+            (challenge): MultiSelectOption => ({
+              value: String(challenge.id),
+              label: challengeTitleText(challenge.title),
+            }),
+          )}
+          value={challengeIds}
+          onChange={setChallengeIds}
+          placeholder={t("selectChallengePlaceholder")}
         />
       </div>
     </SidePanelEditor>
