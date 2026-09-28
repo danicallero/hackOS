@@ -133,7 +133,7 @@ src/
                        lives here and each route keeps only its shell
     providers.tsx      theme + session + tooltip + toaster
   lib/
-    api.ts             credentialed fetch wrapper → ApiError
+    api.ts             fetch wrapper: anonymous public reads + credentialed private calls → ApiError
     auth-client.ts     Better Auth browser client
     session.tsx        SessionProvider + useSessionContext/useMe/useCan
     nav.ts             sidebar model: PERSONAL_NAV + capability-gated

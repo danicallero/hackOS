@@ -281,7 +281,9 @@ export async function buildApp(): Promise<App> {
   await app.register(cors, {
     delegator: (req, done) => {
       const path = req.url.split("?", 1)[0] ?? req.url;
-      if (path.startsWith("/api/public/")) {
+      const requestedMethod = req.headers["access-control-request-method"]?.toUpperCase();
+      const method = req.method === "OPTIONS" ? requestedMethod : req.method;
+      if (path.startsWith("/api/public/") && (method === "GET" || method === "HEAD")) {
         done(null, {
           origin: "*",
           credentials: false,

@@ -47,6 +47,21 @@ describe("public content catalog (H48, H49)", () => {
       "https://external-grid.example",
     );
     expect(privateResponse.headers["access-control-allow-credentials"]).toBe("true");
+
+    const authenticatedPublicPreflight = await server.inject({
+      method: "OPTIONS",
+      url: "/api/public/universities/propose",
+      headers: {
+        origin: "https://external-grid.example",
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "content-type",
+      },
+    });
+    expect(authenticatedPublicPreflight.statusCode).toBe(204);
+    expect(authenticatedPublicPreflight.headers["access-control-allow-origin"]).toBe(
+      "https://external-grid.example",
+    );
+    expect(authenticatedPublicPreflight.headers["access-control-allow-credentials"]).toBe("true");
   });
 
   it("lists only visible/published activities, challenges and sponsors without auth", async () => {
