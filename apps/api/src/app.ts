@@ -258,13 +258,13 @@ export async function buildApp(): Promise<App> {
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
-  // In production, restrict CORS to the configured origins (credentials are
-  // sent, so reflecting arbitrary origins would be unsafe). In dev, reflect
-  // any origin for convenience.
+  // Public catalogue routes are deliberately embeddable: they expose no
+  // session-bound data, so any origin may read them without credentials.
+  // Every other route keeps the configured credentialed-origin boundary.
   const corsOrigins = config.CORS_ORIGINS.split(",")
     .map((o) => o.trim())
     .filter(Boolean);
-  await app.register(cors, {
+  const privateCors = {
     origin: config.isProd ? (corsOrigins.length > 0 ? corsOrigins : false) : true,
     credentials: true,
     // @fastify/cors defaults to GET,HEAD,POST only — the web app also uses
@@ -277,6 +277,20 @@ export async function buildApp(): Promise<App> {
     // limit backoff (H3), idempotent-replay signalling, and per-file export
     // failures (H56) the web client surfaces so staff can act on them.
     exposedHeaders: ["retry-after", "idempotency-replayed", "x-export-file-failures"],
+  };
+  await app.register(cors, {
+    delegator: (req, done) => {
+      const path = req.url.split("?", 1)[0] ?? req.url;
+      if (path.startsWith("/api/public/")) {
+        done(null, {
+          origin: "*",
+          credentials: false,
+          methods: ["GET", "HEAD", "OPTIONS"],
+        });
+        return;
+      }
+      done(null, privateCors);
+    },
   });
   // File uploads (H44 sponsor logos) proxied through the API so the browser
   // never needs to reach the object store directly. 5 MB cap on a logo.

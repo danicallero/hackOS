@@ -471,8 +471,11 @@ The load-bearing points are:
   the configured HTTP ports for the external proxy.
 - Containers run unprivileged (`USER node`, `no-new-privileges:true`) under
   `tini` where provided by the image.
-- CORS is locked to `CORS_ORIGINS` in production, and `TRUST_PROXY=true` lets
-  the API record the client address forwarded by Caddy for audit purposes.
+- CORS is locked to `CORS_ORIGINS` in production for session/private routes.
+  Read-only `/api/public/*` routes instead return `Access-Control-Allow-Origin: *`
+  with no credential support, so external event/catalogue embeds can consume
+  them safely. `TRUST_PROXY=true` lets the API record the client address
+  forwarded by Caddy for audit purposes.
 - Secrets live only in the LXC secret file, never in the image or repository.
 - The API and worker receive separate least-privilege environment subsets;
   web receives only public domain values and migrate only migration inputs.
