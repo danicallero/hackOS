@@ -156,6 +156,18 @@ re-introduces the description-restates-the-title pattern.
 Public marketing cards may use more whitespace but keep the same radius and
 colour tokens.
 
+Use `SectionCard variant="plain"` for open page sections: it retains the
+heading, actions and semantic section without a border, background, inset
+padding. A quiet heading hairline anchors the section; lists may use
+hairlines between rows where separate states need clear boundaries.
+The title row reserves the compact-control height, so adjacent plain sections
+align their hairlines even when only one has an action. A multi-record project
+list uses one surface per project to clarify ownership, not nested row cards.
+Choose layout and spacing first; a card needs a
+bounded unit to justify it. Never put a bordered card around every member or
+challenge inside another section. Names, preferences and mandatory flags are
+ordinary text, not status pills; reserve badges for meaningful changing state.
+
 ### Authenticated navigation
 
 **Navigation explains the available work without becoming another dashboard.**

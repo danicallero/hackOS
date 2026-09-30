@@ -785,10 +785,13 @@ interface RepoMember {
 interface RepoChallenge {
   id: number;
   title: string;
+  mandatory: boolean;
   status: string | null;
   position: number | null;
   assignedRoomId: number | null;
   assignedRoomName: string | null;
+  etaMinutes: number | null;
+  rooms: { id: number; name: string; location: string | null }[];
   mappedPrizes: string[];
   source: "queue" | "prize" | "queue_and_prize";
   /** H36 evaluation status — null both when unevaluated AND when the caller
@@ -876,39 +879,79 @@ async function attachMembersAndPrizes(
   const prizeNames = [...new Set(prizesRes.rows.map((r: { prize: string }) => r.prize))];
   const challengesRes = prizeNames.length
     ? await pool.query(
-        `SELECT id, title, devpost_tags FROM challenges
+        `SELECT id, title, mandatory, devpost_tags FROM challenges
           WHERE devpost_tags ?| $1::text[] AND is_test_account = $2`,
         [prizeNames, fixtureMarker],
       )
     : { rows: [] as Array<{ id: number; title: string; devpost_tags: string[] }> };
 
-  const challengesByPrize = new Map<string, Array<{ id: number; title: string }>>();
+  const challengesByPrize = new Map<
+    string,
+    Array<{ id: number; title: string; mandatory: boolean }>
+  >();
   const mappedPrizes = new Set<string>();
   for (const c of challengesRes.rows as Array<{
     id: number;
     title: string;
     devpost_tags: string[];
+    mandatory: boolean;
   }>) {
     for (const tag of c.devpost_tags) {
       if (!prizeNames.includes(tag)) continue;
       const arr = challengesByPrize.get(tag) ?? [];
-      arr.push({ id: c.id, title: c.title });
+      arr.push({ id: c.id, title: c.title, mandatory: c.mandatory });
       challengesByPrize.set(tag, arr);
       mappedPrizes.add(tag);
     }
   }
 
   const queueRes = await pool.query(
-    `SELECT qe.repo_id, qe.challenge_id AS id, c.title, qe.status, qe.position,
+    `WITH waiting AS (
+       SELECT DISTINCT ON (qgc.queue_group_id, e.repo_id)
+              qgc.queue_group_id, e.repo_id, e.position, e.id
+         FROM queue_entries e
+         JOIN queue_group_challenges qgc ON qgc.challenge_id = e.challenge_id
+         JOIN challenges ch ON ch.id = e.challenge_id AND ch.is_test_account = $2
+         JOIN repos repo ON repo.id = e.repo_id AND repo.is_test_account = $2
+        WHERE e.status = 'waiting'
+        ORDER BY qgc.queue_group_id, e.repo_id, e.position ASC NULLS LAST, e.id
+     ), ranked AS (
+       SELECT *, row_number() OVER (PARTITION BY queue_group_id ORDER BY position ASC NULLS LAST, id)::int AS rank
+         FROM waiting
+     )
+     SELECT qe.repo_id, qe.challenge_id AS id, c.title, c.mandatory, qe.status,
+            CASE WHEN qe.status = 'waiting' THEN ranked.rank ELSE NULL END AS position,
+            CASE WHEN qe.status = 'waiting' THEN round(ranked.rank * COALESCE(pace.minutes, 8))::int ELSE NULL END AS eta_minutes,
+            COALESCE(pace.rooms, '[]'::jsonb) AS possible_rooms,
             qe.assigned_room_id, r.name AS assigned_room_name,
             c.judging_panel_criteria, ar.status AS review_status, ar.scores AS review_scores
        FROM queue_entries qe
        JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
        JOIN repos repo ON repo.id = qe.repo_id AND repo.is_test_account = $2
+       JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+       LEFT JOIN ranked ON ranked.queue_group_id = qgc.queue_group_id AND ranked.repo_id = qe.repo_id
+       LEFT JOIN LATERAL (
+         SELECT jsonb_agg(jsonb_build_object('id', rm.id, 'name', rm.name, 'location', rm.location) ORDER BY rm.name) AS rooms,
+                COALESCE(avg(rqs.desired_minutes_per_team) FILTER (WHERE NOT rqs.is_paused), 8) /
+                  greatest(1, count(rqs.room_id) FILTER (WHERE NOT rqs.is_paused)) AS minutes
+           FROM room_queue_groups rqg
+           JOIN rooms rm ON rm.id = rqg.room_id
+           LEFT JOIN room_queue_state rqs ON rqs.room_id = rm.id
+          WHERE rqg.queue_group_id = qgc.queue_group_id
+            AND NOT EXISTS (
+              SELECT 1 FROM room_queue_groups other
+              JOIN queue_group_challenges sibling ON sibling.queue_group_id=other.queue_group_id
+              JOIN challenges ch ON ch.id=sibling.challenge_id
+              WHERE other.room_id=rm.id AND ch.is_test_account IS DISTINCT FROM $2
+            )
+       ) pace ON true
        LEFT JOIN rooms r ON r.id = qe.assigned_room_id
        LEFT JOIN attempt_review ar ON ar.attempt_id = qe.id
       WHERE qe.repo_id = ANY($1::int[])
-        AND qe.status NOT IN ('cancelled', 'disqualified')
+        AND NOT EXISTS (
+          SELECT 1 FROM queue_group_challenges sibling JOIN challenges ch ON ch.id=sibling.challenge_id
+          WHERE sibling.queue_group_id=qgc.queue_group_id AND ch.is_test_account IS DISTINCT FROM $2
+        )
       ORDER BY qe.repo_id, qe.position ASC NULLS LAST, qe.id ASC`,
     [ids, fixtureMarker],
   );
@@ -964,6 +1007,7 @@ async function attachMembersAndPrizes(
   }
 
   const queueChallengesByRepo = new Map<number, RepoChallenge[]>();
+  const withdrawnChallenges = new Set<string>();
   for (const row of queueRes.rows as Array<{
     repo_id: number;
     id: number;
@@ -972,10 +1016,17 @@ async function attachMembersAndPrizes(
     position: number | null;
     assigned_room_id: number | null;
     assigned_room_name: string | null;
+    eta_minutes: number | null;
+    possible_rooms: RepoChallenge["rooms"];
+    mandatory: boolean;
     judging_panel_criteria: unknown;
     review_status: "draft" | "submitted" | null;
     review_scores: Record<string, unknown> | null;
   }>) {
+    if (["cancelled", "disqualified"].includes(row.status)) {
+      withdrawnChallenges.add(`${row.repo_id}:${row.id}`);
+      continue;
+    }
     const canSeeReview = visibleSet === null || visibleSet.has(row.id);
     let nota: number | null = null;
     if (canSeeReview && row.review_scores && Array.isArray(row.judging_panel_criteria)) {
@@ -987,10 +1038,13 @@ async function attachMembersAndPrizes(
     arr.push({
       id: row.id,
       title: row.title,
+      mandatory: row.mandatory,
       status: row.status,
       position: row.position,
       assignedRoomId: row.assigned_room_id,
       assignedRoomName: row.assigned_room_name,
+      etaMinutes: row.eta_minutes,
+      rooms: row.possible_rooms,
       mappedPrizes: [],
       source: "queue",
       reviewStatus: canSeeReview ? (row.review_status ?? null) : null,
@@ -1004,6 +1058,7 @@ async function attachMembersAndPrizes(
     const challengesSeen = new Map<number, RepoChallenge>();
     for (const prize of prizes) {
       for (const c of challengesByPrize.get(prize) ?? []) {
+        if (withdrawnChallenges.has(`${repo.id}:${c.id}`)) continue;
         const existing = challengesSeen.get(c.id);
         if (existing) {
           existing.mappedPrizes.push(prize);
@@ -1012,10 +1067,13 @@ async function attachMembersAndPrizes(
         challengesSeen.set(c.id, {
           id: c.id,
           title: c.title,
+          mandatory: c.mandatory,
           status: null,
           position: null,
           assignedRoomId: null,
           assignedRoomName: null,
+          etaMinutes: null,
+          rooms: [],
           mappedPrizes: [prize],
           source: "prize",
           reviewStatus: null,
@@ -1032,6 +1090,8 @@ async function attachMembersAndPrizes(
           position: c.position,
           assignedRoomId: c.assignedRoomId,
           assignedRoomName: c.assignedRoomName,
+          etaMinutes: c.etaMinutes,
+          rooms: c.rooms,
           source: "queue_and_prize",
           reviewStatus: c.reviewStatus,
           nota: c.nota,
@@ -1609,7 +1669,7 @@ async function terminateQueueEntry(
   client: Queryable,
   entry: { id: number; repo_id: number; status: string },
   actorId: number,
-  options: { challengeId: number; reason: string },
+  options: { challengeId: number; reason: string; source?: "admin" | "participant" },
 ): Promise<Record<string, unknown>> {
   const nextStatus = ["waiting", "called"].includes(entry.status) ? "cancelled" : "disqualified";
   const updated = await client.query(
@@ -1636,13 +1696,24 @@ async function terminateQueueEntry(
     before: { status: entry.status, challengeId: options.challengeId, repoId: entry.repo_id },
     after: { status: nextStatus },
     reason: options.reason,
-    source: "admin",
+    source: options.source ?? "admin",
   });
   return updated.rows[0];
 }
 
-export async function removeRepoChallenge(actorId: number, repoId: number, challengeId: number) {
+export async function removeRepoChallenge(
+  actorId: number,
+  repoId: number,
+  challengeId: number,
+  participant = false,
+) {
   const result = await withTransaction(async (client) => {
+    if (participant) {
+      await client.query(`SELECT id FROM repos WHERE id=$1 FOR UPDATE`, [repoId]);
+      if (!(await isActiveProjectMember(client, repoId, actorId)))
+        throw new ForbiddenError("Not a member of this project");
+      await assertJudgingHasNotStarted(client);
+    }
     const repoMarker = await assertQueueRepoScope(client, actorId, repoId);
     const challengeMarker = await assertQueueChallengeScope(client, actorId, challengeId);
     if (repoMarker !== challengeMarker) {
@@ -1658,25 +1729,53 @@ export async function removeRepoChallenge(actorId: number, repoId: number, chall
       [repoId, challengeId],
     );
     const entry = entryRes.rows[0];
+    if (!entry && participant) {
+      const withdrawn = await client.query(
+        `DELETE FROM repo_devpost_prizes rp USING challenges c
+          WHERE rp.repo_id=$1 AND c.id=$2 AND c.devpost_tags ? rp.prize RETURNING rp.prize`,
+        [repoId, challengeId],
+      );
+      if (!withdrawn.rowCount) throw new NotFoundError("Project is not entered in this challenge");
+      await audit(client, {
+        actorId,
+        entityType: "repo",
+        entityId: repoId,
+        action: "challenge.withdraw",
+        before: { challengeId, prizes: withdrawn.rows },
+        source: "participant",
+      });
+      return { repoId, challengeId, entry: null, removed: true };
+    }
     if (!entry)
       throw new NotFoundError(`Repo ${repoId} is not assigned to challenge ${challengeId}`);
 
     const updatedEntry = await terminateQueueEntry(client, entry, actorId, {
       challengeId,
       reason: "Removed from challenge",
+      source: participant ? "participant" : "admin",
     });
     await compactQueueGroupPositions(client, challengeId);
     return { repoId, challengeId, entry: updatedEntry, removed: true };
   });
-  await broadcastQueueEvent(
-    pool,
-    "entry",
-    Number(result.entry.id),
-    EVENTS.QUEUE_ENTRY_CHANGED,
-    result.entry,
-  );
-  await notifyChallengeQueueChanged(pool, result.challengeId);
+  if (result.entry)
+    await broadcastQueueEvent(
+      pool,
+      "entry",
+      Number(result.entry.id),
+      EVENTS.QUEUE_ENTRY_CHANGED,
+      result.entry,
+    );
+  if (result.entry) await notifyChallengeQueueChanged(pool, result.challengeId);
   return result;
+}
+
+/** H20: participant withdrawal uses the same audited queue transition as H21. */
+export async function removeMyProjectChallenge(
+  userId: number,
+  repoId: number,
+  challengeId: number,
+) {
+  return removeRepoChallenge(userId, repoId, challengeId, true);
 }
 
 export interface BulkAddResult {
@@ -2017,6 +2116,7 @@ export interface UpdateRepoPatch {
   description?: string;
   githubUrl?: string | null;
   demoUrl?: string | null;
+  devpostUrl?: string | null;
 }
 
 /**
@@ -2039,12 +2139,13 @@ async function applyRepoUpdate(
     description: patch.description ?? before.description,
     github_url: patch.githubUrl === undefined ? before.github_url : patch.githubUrl,
     demo_url: patch.demoUrl === undefined ? before.demo_url : patch.demoUrl,
+    devpost_url: patch.devpostUrl === undefined ? before.devpost_url : patch.devpostUrl,
   };
   const { rows } = await client.query(
-    `UPDATE repos SET name = $2, description = $3, github_url = $4, demo_url = $5
+    `UPDATE repos SET name = $2, description = $3, github_url = $4, demo_url = $5, devpost_url=$6
       WHERE id = $1
       RETURNING id, name, description, github_url, devpost_url, demo_url, source`,
-    [repoId, next.name, next.description, next.github_url, next.demo_url],
+    [repoId, next.name, next.description, next.github_url, next.demo_url, next.devpost_url],
   );
   return { before, after: rows[0] as RepoRow };
 }
@@ -2055,7 +2156,28 @@ function repoAuditFields(repo: RepoRow) {
     description: repo.description,
     githubUrl: repo.github_url,
     demoUrl: repo.demo_url,
+    devpostUrl: repo.devpost_url,
   };
+}
+
+/** H20/#854: linked planning edits use the project metadata core and its roster boundary. */
+export async function updateLinkedWorkGroupProject(
+  client: Queryable,
+  userId: number,
+  repoId: number,
+  patch: UpdateRepoPatch,
+) {
+  if (!(await isActiveProjectMember(client, repoId, userId))) return;
+  const { before, after } = await applyRepoUpdate(client, repoId, patch);
+  await audit(client, {
+    actorId: userId,
+    entityType: "repo",
+    entityId: repoId,
+    action: "update_from_work_group",
+    before: repoAuditFields(before),
+    after: repoAuditFields(after),
+    source: "participant",
+  });
 }
 
 /** H18: edit a project's own metadata (title, description, links). Audited. */

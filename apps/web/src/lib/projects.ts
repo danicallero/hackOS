@@ -90,10 +90,13 @@ export interface RepoWithExtras {
   challenges?: Array<{
     id: number;
     title: string;
+    mandatory: boolean;
     status: string | null;
     position: number | null;
     assignedRoomId: number | null;
     assignedRoomName: string | null;
+    etaMinutes: number | null;
+    rooms: { id: number; name: string; location: string | null }[];
     mappedPrizes: string[];
     source: "queue" | "prize" | "queue_and_prize";
     reviewStatus: "draft" | "submitted" | null;
@@ -186,6 +189,11 @@ export const addMyProjectChallenge = (
   challengeId: number,
   idempotencyKey?: string,
 ) => api.post(`/api/me/projects/${repoId}/challenges`, { challengeId }, idem(idempotencyKey));
+export const removeMyProjectChallenge = (
+  repoId: number,
+  challengeId: number,
+  idempotencyKey?: string,
+) => api.delete(`/api/me/projects/${repoId}/challenges/${challengeId}`, idem(idempotencyKey));
 
 /** POST /api/me/projects/:id/invites — invite a teammate by email. */
 export const inviteProjectMember = (repoId: number, email: string, idempotencyKey?: string) =>
@@ -229,9 +237,20 @@ export interface PlannedWorkGroup {
     surname: string | null;
     status: "active" | "invited" | "declined";
   }>;
-  challenges: Array<{ id: number; title: string }>;
+  challenges: Array<{ id: number; title: string; mandatory: boolean }>;
 }
-export const myWorkGroups = () => api.get<{ groups: PlannedWorkGroup[] }>("/api/me/work-groups");
+export const myWorkGroups = () =>
+  api.get<{ groups: PlannedWorkGroup[]; canCreate: boolean }>("/api/me/work-groups");
+export interface ParticipationEstimate {
+  challengeId: number;
+  title: string;
+  groupCount: number;
+  projectCount: number;
+  expectedCount: number;
+  participantCount: number;
+}
+export const workGroupEstimates = () =>
+  api.get<{ estimates: ParticipationEstimate[] }>("/api/work-groups/estimates");
 export const getMyWorkGroup = (id: number) =>
   api.get<PlannedWorkGroup>(`/api/me/work-groups/${id}`);
 export const createWorkGroup = (
@@ -264,6 +283,11 @@ export const updateWorkGroup = (
   });
 export const inviteWorkGroupMember = (id: number, email: string, idempotencyKey?: string) =>
   api.post(`/api/me/work-groups/${id}/invites`, { email }, idem(idempotencyKey));
+export const respondWorkGroupInvite = (
+  id: number,
+  action: "accept" | "decline",
+  idempotencyKey?: string,
+) => api.post(`/api/me/work-groups/${id}/invites/${action}`, {}, idem(idempotencyKey));
 export const removeWorkGroupMember = (id: number, userId: number, idempotencyKey?: string) =>
   api.delete(`/api/me/work-groups/${id}/members/${userId}`, idem(idempotencyKey));
 export const addWorkGroupChallenge = (id: number, challengeId: number, idempotencyKey?: string) =>

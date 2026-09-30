@@ -1,21 +1,32 @@
 "use client";
-
-import { FolderGitIcon, TrophyIcon, UserPlusIcon, UsersIcon } from "lucide-react";
+import { EVENTS } from "@hackos/shared/events";
+import { FolderGitIcon, UserPlusIcon } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
+import { EntityCombobox } from "@/components/common/entity-combobox";
 import { PageHeader } from "@/components/common/page-header";
-import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
-import { StatusBadge } from "@/components/common/status-badge";
+import { PresentationStatus } from "@/components/projects/presentation-status";
 import { ProjectDescriptionLinks } from "@/components/projects/project-description-links";
+import { ProjectNavigation } from "@/components/projects/project-navigation";
+import { WorkGroupEditor } from "@/components/projects/work-group-editor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import { addMyProjectChallenge, inviteProjectMember, myProjects } from "@/lib/projects";
+import {
+  addMyProjectChallenge,
+  inviteProjectMember,
+  myProjects,
+  myWorkGroups,
+  type PlannedWorkGroup,
+  removeMyProjectChallenge,
+} from "@/lib/projects";
 import { showErrorToast, toast } from "@/lib/toast";
 import { ProjectFormDialog } from "../../../projects/project-form-dialog";
 import {
@@ -30,39 +41,55 @@ export default function MyProjectDetailPage() {
   const { t } = useLocale();
   const { id } = useParams<{ id: string }>();
   const [project, setProject] = useState<ProjectRepo | null>(null);
+  const [group, setGroup] = useState<PlannedWorkGroup | null>(null);
   const [challenges, setChallenges] = useState<ChallengeOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [changeError, setChangeError] = useState<string | null>(null);
+  const [removingChallenge, setRemovingChallenge] = useState<number | null>(null);
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
-      const [result, catalogue] = await Promise.all([
+      const [result, catalogue, planned] = await Promise.all([
         myProjects(),
         api.get<{ items: ChallengeOption[] }>("/api/public/challenges"),
+        myWorkGroups(),
       ]);
       setProject(result.projects.map(toProjectRepo).find((item) => item.id === Number(id)) ?? null);
       setChallenges(catalogue.items);
+      setGroup(planned.groups.find((item) => item.linked_repo_id === Number(id)) ?? null);
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : t("couldNotLoadProject"));
+      setLoadError(error instanceof ApiError ? error.message : t("couldNotLoadProject"));
     } finally {
       setLoading(false);
     }
   }, [id, t]);
+  const liveRefresh = useAutoRefresh("/api/events/stream?topic=projects", [EVENTS.DOMAIN_CHANGED]);
+  const queueRefresh = useAutoRefresh("/api/queue/me/stream", [
+    EVENTS.USER_QUEUE_CHANGED,
+    EVENTS.USER_QUEUE_CALLED,
+  ]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refresh nonces trigger authoritative refetches (H38).
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, liveRefresh, queueRefresh]);
   if (loading)
     return (
       <div className="flex min-h-80 items-center justify-center">
         <Spinner />
       </div>
     );
+  if (loadError) return <ContextualError message={loadError} onRetry={load} />;
   if (!project) return <EmptyState icon={FolderGitIcon} title={t("projectNotFoundTitle")} />;
   return (
     <div className="space-y-6">
       <PageHeader
         title={project.name}
-        state={
+        meta={
           project.presentation_timing_preference && (
-            <StatusBadge tone="neutral">
+            <span className="text-sm text-muted-foreground">
+              {t("workGroupTiming")}:{" "}
               {project.presentation_timing_preference === "early"
                 ? t("workGroupTimingEarly")
                 : project.presentation_timing_preference === "middle"
@@ -70,10 +97,34 @@ export default function MyProjectDetailPage() {
                   : project.presentation_timing_preference === "late"
                     ? t("workGroupTimingLate")
                     : t("workGroupTimingNone")}
-            </StatusBadge>
+            </span>
           )
         }
-        actions={<ProjectFormDialog mode={{ kind: "self-edit", repo: project }} onSaved={load} />}
+        secondaryActions={<ProjectNavigation />}
+        primaryAction={
+          group ? (
+            <WorkGroupEditor
+              key={JSON.stringify([
+                project.name,
+                group.presentation_timing_preference,
+                project.description,
+                project.github_url,
+                project.demo_url,
+              ])}
+              group={{
+                ...group,
+                name: project.name,
+                description: project.description ?? "",
+                github_url: project.github_url,
+                demo_url: project.demo_url,
+                devpost_url: project.devpost_url,
+              }}
+              onSaved={load}
+            />
+          ) : (
+            <ProjectFormDialog mode={{ kind: "self-edit", repo: project }} onSaved={load} />
+          )
+        }
       />
       <ProjectDescriptionLinks
         description={project.description}
@@ -83,16 +134,16 @@ export default function MyProjectDetailPage() {
           githubUrl: project.github_url,
         }}
       />
-      <div className="grid gap-5 xl:grid-cols-2">
+      <div className="grid gap-8 xl:grid-cols-3 xl:gap-12">
         <SectionCard
+          variant="plain"
           title={t("teamSectionTitle")}
-          icon={UsersIcon}
           action={<InviteMember projectId={project.id} onInvited={load} />}
         >
-          <ul className="space-y-3">
+          <ul className="divide-y divide-border/60">
             {project.members.map((member, index) => (
               <li
-                className="rounded-md border p-3 font-medium"
+                className="py-2 text-sm font-medium"
                 key={`${member.userId ?? "devpost"}:${member.email ?? index}`}
               >
                 {memberName(member) || t("unnamedTeamMember")}
@@ -101,25 +152,65 @@ export default function MyProjectDetailPage() {
           </ul>
         </SectionCard>
         <SectionCard
+          variant="plain"
+          className="xl:col-span-2"
           title={t("challenges")}
-          icon={TrophyIcon}
           action={<AddChallenge project={project} challenges={challenges} onAdded={load} />}
         >
-          <ul className="space-y-3">
+          <ul className="divide-y divide-border/60">
             {project.challenges.map((challenge) => (
               <li
-                className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
+                className="flex items-start justify-between gap-4 py-4 first:pt-0 last:pb-0"
                 key={challenge.id}
               >
-                <span className="font-medium">{challengeTitleText(challenge.title)}</span>
-                {challenge.status ? (
-                  <QueueStatusBadge status={challenge.status} />
-                ) : (
-                  <StatusBadge tone="neutral">{t("plannedChallenge")}</StatusBadge>
+                <div className="min-w-0 space-y-2">
+                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <h3 className="text-base font-medium text-balance">
+                      {challengeTitleText(challenge.title)}
+                    </h3>
+                    {challenge.mandatory && (
+                      <span className="text-xs text-muted-foreground">
+                        {t("mandatoryChallengeLabel")}
+                      </span>
+                    )}
+                  </div>
+                  {challenge.status ? (
+                    <PresentationStatus {...challenge} />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">{t("plannedChallenge")}</p>
+                  )}
+                </div>
+                {challenge.mandatory ? null : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={removingChallenge !== null}
+                    onClick={async () => {
+                      setRemovingChallenge(challenge.id);
+                      setChangeError(null);
+                      try {
+                        await removeMyProjectChallenge(
+                          project.id,
+                          challenge.id,
+                          crypto.randomUUID(),
+                        );
+                        await load();
+                      } catch (error) {
+                        setChangeError(
+                          error instanceof ApiError ? error.message : t("couldNotRemoveChallenge"),
+                        );
+                      } finally {
+                        setRemovingChallenge(null);
+                      }
+                    }}
+                  >
+                    {t("remove")}
+                  </Button>
                 )}
               </li>
             ))}
           </ul>
+          {changeError && <ContextualError message={changeError} />}
         </SectionCard>
       </div>
     </div>
@@ -172,19 +263,17 @@ function AddChallenge({
         <label className="text-sm font-medium" htmlFor="project-challenge">
           {t("challenges")}
         </label>
-        <select
-          className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+        <EntityCombobox
+          inDialog
           id="project-challenge"
-          onChange={(event) => setSelected(event.target.value)}
+          options={available}
+          getId={(challenge) => challenge.id}
+          getLabel={(challenge) => challengeTitleText(challenge.title)}
+          onChange={setSelected}
           value={selected}
-        >
-          <option value="">{t("selectChallengePlaceholder")}</option>
-          {available.map((challenge) => (
-            <option key={challenge.id} value={challenge.id}>
-              {challengeTitleText(challenge.title)}
-            </option>
-          ))}
-        </select>
+          disabled={saving}
+          placeholder={t("selectChallengePlaceholder")}
+        />
       </div>
     </SidePanelEditor>
   );

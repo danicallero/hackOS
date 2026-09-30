@@ -158,6 +158,7 @@ sponsor; no implicit cross-challenge win is created.
 | `POST /api/me/projects` | authenticated + idempotency | H19 | participant self-creation, gated by the event policy, admitted-participant eligibility, and the hacking window; a participant may now hold more than one project |
 | `PATCH /api/me/projects/:id` | authenticated | H19/H20 | participant self-edit of their own project's metadata — active members only |
 | `POST /api/me/projects/:id/challenges` | authenticated + idempotency | H20 | active member enrolls the project in one published challenge until judging starts; appends it to that queue |
+| `DELETE /api/me/projects/:repoId/challenges/:challengeId` | authenticated + idempotency | H20/H21 | active member withdraws an optional challenge before judging starts, using the audited queue removal transition |
 | `POST /api/me/projects/:id/invites` | authenticated + idempotency | H19/H20 | active member invites a teammate by email; pending until accepted |
 | `GET /api/me/projects/invites` | authenticated | H19/H20 | pending invites addressed to the caller |
 | `POST /api/me/projects/invites/:id/accept` \| `.../decline` | authenticated + idempotency | H19/H20 | invitee accepts (becomes an active member) or declines (row deleted) their own invite |

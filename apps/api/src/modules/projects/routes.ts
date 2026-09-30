@@ -60,6 +60,7 @@ import {
   myProjects,
   previewImport,
   removeDevpostParticipant,
+  removeMyProjectChallenge,
   removeRepoChallenge,
   removeRepoMember,
   removeRepoPrize,
@@ -112,6 +113,22 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   // Public sponsors live in the sponsors module now: GET /api/public/sponsors
   // reveals enterprises by their OWN visibility window (H45), no longer derived
   // from published challenges.
+
+  r.delete(
+    "/api/me/projects/:repoId/challenges/:challengeId",
+    {
+      ...access({ kind: "authenticated" }),
+      preHandler: [requireAuth, idempotencyGuard],
+      schema: {
+        params: repoChallengeParamsSchema,
+        summary: "Withdraw my project from an optional challenge",
+        description:
+          "An active member may withdraw their project before judging starts. Mandatory challenges cannot be withdrawn. The queue transition and audit are transactional and idempotent (H20/H21).",
+      },
+    },
+    async (q) =>
+      removeMyProjectChallenge(q.userId as number, q.params.repoId, q.params.challengeId),
+  );
 
   // ── H16: import ──────────────────────────────────────────────────────────
 
@@ -279,7 +296,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List scoped projects",
         description:
-          "Global project readers see all projects; sponsor representatives and assigned judges see only their exact challenge scope (H20, H46).",
+          "Global project readers see all projects; sponsor representatives and assigned judges see only their exact challenge scope. Challenge rows include mandatory participation, logical queue position, ETA minutes and possible rooms (H20, H38, H46).",
       },
     },
     async (req) => {
@@ -295,7 +312,8 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       schema: {
         params: repoIdParamsSchema,
         summary: "Get scoped project",
-        description: "Returns a project only after exact repository authorization (H20, H46).",
+        description:
+          "Returns project metadata, roster and challenges with logical queue positions, ETA minutes and possible rooms, only after exact repository authorization (H20, H38, H46).",
       },
     },
     async (req) => getRepoForScope(req.params.id, repositoryScopeFor(req)),

@@ -3,6 +3,39 @@
 Active reflections for hackOS. See `README.md` in this directory for the
 format, classification flow, and promotion path.
 
+## [R006] Let layout carry hierarchy before adding containers
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-09-30
+
+### Trigger
+Composing detail pages, lists, or participant workflows.
+
+### Mistake
+Nested cards surrounded every member and challenge, while badges decorated
+static metadata. The single-project participant had to navigate a catalogue.
+
+### Lesson
+Apply `docs/DESIGN.md` §3 deliberately: start with spacing, aligned headings
+and columns. Containers need a bounded purpose; badges need actual state.
+Optimize the primary layout for the common case without removing exceptions.
+
+### Action
+Use open sections for related page content, with quiet hairlines where spacing
+alone leaves row ownership ambiguous. Removing cards does not mean removing
+all boundaries. Keep static metadata as text and secondary multi-record
+navigation available without making it the default.
+
+### Validation
+Inspect real desktop and narrow screenshots, including a single record,
+multiple records, and independent simultaneous states.
+
+### Exceptions
+Dense operational tables, overlays and truly selectable/bounded objects still
+justify surfaces; meaningful changing states still justify status badges.
+
 ## [R001] Validate tests before committing
 
 Status: active

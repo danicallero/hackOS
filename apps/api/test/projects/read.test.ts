@@ -54,6 +54,91 @@ async function importFixtures(operator: number): Promise<void> {
 }
 
 describe("GET /api/repos + /api/repos/:id (PROJECTS_READ)", () => {
+  it("allows only active members to withdraw optional challenges before judging, idempotently", async () => {
+    const server = await getApp();
+    const owner = await createUser();
+    const outsider = await createUser();
+    const challengeId = await createChallenge("Optional", []);
+    const repo = (await pool.query(`INSERT INTO repos(name) VALUES('My project') RETURNING id`))
+      .rows[0].id;
+    await pool.query(`INSERT INTO submissions(repo_id,user_id) VALUES($1,$2)`, [repo, owner]);
+    await pool.query(
+      `INSERT INTO queue_entries(repo_id,challenge_id,status,position) VALUES($1,$2,'waiting',1)`,
+      [repo, challengeId],
+    );
+    const url = `/api/me/projects/${repo}/challenges/${challengeId}`;
+    expect(
+      (await server.inject({ method: "DELETE", url, headers: asUser(outsider) })).statusCode,
+    ).toBe(403);
+    await pool.query(`UPDATE challenges SET mandatory=true WHERE id=$1`, [challengeId]);
+    expect(
+      (await server.inject({ method: "DELETE", url, headers: asUser(owner) })).statusCode,
+    ).toBe(409);
+    await pool.query(`UPDATE challenges SET mandatory=false WHERE id=$1`, [challengeId]);
+    const headers = { ...asUser(owner), "idempotency-key": "self-withdraw" };
+    const first = await server.inject({ method: "DELETE", url, headers });
+    expect(first.statusCode).toBe(200);
+    expect((await server.inject({ method: "DELETE", url, headers })).json()).toEqual(first.json());
+    expect(
+      (await pool.query(`SELECT * FROM queue_history WHERE action='remove_from_challenge'`))
+        .rowCount,
+    ).toBe(1);
+    const beforeSchedule = await pool.query(
+      `SELECT schedule_start_at FROM queue_settings WHERE id=1`,
+    );
+    await pool.query(
+      `INSERT INTO queue_settings(id,schedule_start_at) VALUES(1,now()-interval '1 minute') ON CONFLICT(id) DO UPDATE SET schedule_start_at=EXCLUDED.schedule_start_at`,
+    );
+    try {
+      expect(
+        (await server.inject({ method: "DELETE", url, headers: asUser(owner) })).statusCode,
+      ).toBe(403);
+    } finally {
+      await pool.query(`UPDATE queue_settings SET schedule_start_at=$1 WHERE id=1`, [
+        beforeSchedule.rows[0]?.schedule_start_at ?? null,
+      ]);
+    }
+  });
+  it("projects logical queue rank, ETA and every possible room", async () => {
+    const server = await getApp();
+    const challengeId = await createChallenge("Presentation", []);
+    const repos = await pool.query(
+      `INSERT INTO repos(name) VALUES ('First'),('Second') RETURNING id`,
+    );
+    await pool.query(
+      `INSERT INTO queue_entries(repo_id,challenge_id,status,position) VALUES($1,$3,'waiting',10),($2,$3,'waiting',20)`,
+      [repos.rows[0].id, repos.rows[1].id, challengeId],
+    );
+    const rooms = await pool.query(
+      `INSERT INTO rooms(name) VALUES ('Room A'),('Room B') RETURNING id`,
+    );
+    for (const room of rooms.rows) {
+      await pool.query(
+        `INSERT INTO room_enterprises(room_id,enterprise_id) SELECT $1,qg.enterprise_id FROM queue_groups qg JOIN queue_group_challenges qgc ON qgc.queue_group_id=qg.id WHERE qgc.challenge_id=$2`,
+        [room.id, challengeId],
+      );
+      await pool.query(
+        `INSERT INTO room_queue_groups(room_id,queue_group_id) SELECT $1,queue_group_id FROM queue_group_challenges WHERE challenge_id=$2`,
+        [room.id, challengeId],
+      );
+      await pool.query(
+        `INSERT INTO room_queue_state(room_id,desired_minutes_per_team,is_paused) VALUES($1,6,false)`,
+        [room.id],
+      );
+    }
+    const reader = await createUserWithCapabilities([CAPABILITIES.PROJECTS_READ]);
+    const result = await server.inject({
+      method: "GET",
+      url: `/api/repos/${repos.rows[1].id}`,
+      headers: asUser(reader),
+    });
+    expect(result.statusCode).toBe(200);
+    expect(result.json().challenges[0]).toMatchObject({
+      position: 2,
+      etaMinutes: 6,
+      rooms: [{ name: "Room A" }, { name: "Room B" }],
+    });
+  });
   it("lists repos with members, prizes and challenges mapped via devpost_tags", async () => {
     const server = await getApp();
     await seedMatchableUsers();
@@ -81,10 +166,13 @@ describe("GET /api/repos + /api/repos/:id (PROJECTS_READ)", () => {
       {
         id: challengeId,
         title: "AI Challenge",
+        mandatory: false,
         status: null,
         position: null,
         assignedRoomId: null,
         assignedRoomName: null,
+        etaMinutes: null,
+        rooms: [],
         mappedPrizes: ["Best AI Hack"],
         source: "prize",
         reviewStatus: null,

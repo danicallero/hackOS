@@ -1,12 +1,15 @@
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
+import { createAuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { assertWithinParticipantSelfServiceWindow } from "../../lib/hacking-window.js";
 import { broadcast } from "../../lib/sse.js";
 import { hasEventAccess } from "../identity/role.js";
 import { notify } from "../notifications/service.js";
+import { updateLinkedWorkGroupProject } from "../projects/service.js";
 
 async function assertParticipant(db: Queryable, userId: number) {
   const { rows } = await db.query(
@@ -41,12 +44,14 @@ export async function listMine(userId: number) {
     `SELECT g.id, g.name, g.description, g.github_url, g.demo_url, g.devpost_url, g.presentation_timing_preference, g.linked_repo_id, g.created_by, g.created_at, g.updated_at,
     CASE WHEN r.id IS NULL THEN NULL ELSE jsonb_build_object('id', r.id, 'name', r.name, 'devpostUrl', r.devpost_url) END AS "linkedProject",
     coalesce(json_agg(DISTINCT jsonb_build_object('userId', m.user_id, 'name', u.name, 'surname', u.surname, 'status', m.status, 'invitedBy', m.invited_by, 'respondedAt', m.responded_at)) FILTER (WHERE m.user_id IS NOT NULL), '[]') members,
-    coalesce(json_agg(DISTINCT jsonb_build_object('id', c.id, 'title', c.title)) FILTER (WHERE c.id IS NOT NULL), '[]') challenges,
+    coalesce(json_agg(DISTINCT jsonb_build_object('id', c.id, 'title', c.title, 'mandatory', c.mandatory)) FILTER (WHERE c.id IS NOT NULL), '[]') challenges,
     NOT EXISTS (SELECT 1 FROM queue_entries qe WHERE qe.repo_id = g.linked_repo_id) AS presentation_timing_editable
-    FROM planned_work_groups g JOIN planned_work_group_members mine ON mine.group_id = g.id AND mine.user_id = $1
+    FROM planned_work_groups g JOIN planned_work_group_members mine ON mine.group_id = g.id AND mine.user_id = $1 AND mine.status IN ('active','invited')
     LEFT JOIN repos r ON r.id = g.linked_repo_id
     LEFT JOIN planned_work_group_members m ON m.group_id = g.id LEFT JOIN users u ON u.id = m.user_id
-    LEFT JOIN planned_work_group_challenges gc ON gc.group_id = g.id LEFT JOIN challenges c ON c.id = gc.challenge_id
+    LEFT JOIN challenges c ON c.is_test_account = false AND (
+      c.mandatory OR EXISTS (SELECT 1 FROM planned_work_group_challenges gc WHERE gc.group_id = g.id AND gc.challenge_id = c.id)
+    )
     -- #852/#854: linked repo is optional, so g.id does not functionally
     -- determine r.id for PostgreSQL's aggregate checker. Group it explicitly;
     -- r.id then determines the remaining projected repo fields.
@@ -60,6 +65,16 @@ export async function getMine(userId: number, groupId: number) {
   const group = groups.find((candidate) => Number(candidate.id) === groupId);
   if (!group) throw new NotFoundError("Work group not found");
   return group;
+}
+export async function canCreateGroup(userId: number) {
+  const { rows } = await pool.query<{ allowed: boolean }>(
+    `SELECT participants_can_create_projects AND (
+      (participant_self_service_starts_at IS NULL AND participant_self_service_ends_at IS NULL)
+      OR now() BETWEEN COALESCE(participant_self_service_starts_at,hacking_starts_at)
+                    AND COALESCE(participant_self_service_ends_at,hacking_ends_at)
+    ) AS allowed FROM event_config WHERE id=1`,
+  );
+  return rows[0]?.allowed === true && (await hasEventAccess(pool, userId));
 }
 export async function createGroup(userId: number, name: string, challengeIds: number[] = []) {
   return withTransaction(async (db) => {
@@ -129,7 +144,11 @@ export async function updateGroup(
     );
     if (!before[0]) throw new NotFoundError("Work group not found");
     const b = before[0];
-    if (input.presentationTimingPreference !== undefined && b.linked_repo_id != null) {
+    if (
+      input.presentationTimingPreference !== undefined &&
+      input.presentationTimingPreference !== b.presentation_timing_preference &&
+      b.linked_repo_id != null
+    ) {
       const generated = await db.query(`SELECT 1 FROM queue_entries WHERE repo_id = $1 LIMIT 1`, [
         b.linked_repo_id,
       ]);
@@ -139,7 +158,7 @@ export async function updateGroup(
     }
     const { rows } = await db.query(
       `UPDATE planned_work_groups SET name=$2,description=$3,github_url=$4,demo_url=$5,devpost_url=$6,presentation_timing_preference=$7,
-       linked_repo_id = CASE WHEN $8::text IS DISTINCT FROM $9::text THEN (
+       linked_repo_id = CASE WHEN linked_repo_id IS NOT NULL THEN linked_repo_id WHEN $8::text IS DISTINCT FROM $9::text THEN (
          SELECT id FROM repos
          WHERE lower(regexp_replace(devpost_url, '/+$', '')) = lower(regexp_replace($8, '/+$', ''))
          LIMIT 1
@@ -158,6 +177,9 @@ export async function updateGroup(
         b.devpost_url,
       ],
     );
+    if (b.linked_repo_id != null) {
+      await updateLinkedWorkGroupProject(db, userId, b.linked_repo_id, input);
+    }
     await audit(db, {
       actorId: userId,
       entityType: "planned_work_group",
@@ -491,6 +513,12 @@ export async function removeChallenge(userId: number, id: number, challengeId: n
     await assertMember(db, id, userId);
     await assertWithinParticipantSelfServiceWindow(db);
     await assertJudgingHasNotStarted(db);
+    const challenge = await db.query<{ mandatory: boolean }>(
+      `SELECT mandatory FROM challenges WHERE id = $1 FOR UPDATE`,
+      [challengeId],
+    );
+    if (challenge.rows[0]?.mandatory)
+      throw new ConflictError("Mandatory challenges cannot be withdrawn");
     const r = await db.query(
       `DELETE FROM planned_work_group_challenges WHERE group_id=$1 AND challenge_id=$2 RETURNING challenge_id`,
       [id, challengeId],
@@ -508,16 +536,41 @@ export async function removeChallenge(userId: number, id: number, challengeId: n
   });
 }
 export async function estimates(userId: number) {
-  const { rows } = await pool.query(
-    `WITH scope AS (SELECT EXISTS(SELECT 1 FROM user_effective_capabilities WHERE user_id=$1 AND capability IN ('projects:read','*')) staff), allowed AS (SELECT c.id,c.title FROM challenges c JOIN sponsors author ON author.id=c.author WHERE (SELECT staff FROM scope) OR EXISTS (SELECT 1 FROM sponsors mine WHERE mine.enterprise_id=author.enterprise_id AND mine.user_id=$1)) SELECT c.id AS "challengeId",c.title, count(DISTINCT gc.group_id)::int AS "groupCount", count(DISTINCT m.user_id) FILTER (WHERE m.status='active')::int AS "participantCount" FROM allowed c LEFT JOIN planned_work_group_challenges gc ON gc.challenge_id=c.id LEFT JOIN planned_work_group_members m ON m.group_id=gc.group_id GROUP BY c.id,c.title ORDER BY c.title`,
-    [userId],
+  const staff = await userHasCapability(
+    createAuthorizationContext(userId),
+    CAPABILITIES.PROJECTS_READ,
   );
-  const access = await pool.query(
-    `SELECT EXISTS(SELECT 1 FROM user_effective_capabilities WHERE user_id=$1 AND capability IN ('projects:read','*')) OR EXISTS(SELECT 1 FROM sponsors WHERE user_id=$1) ok`,
-    [userId],
-  );
-  if (!access.rows[0]?.ok)
+  const sponsor = await pool.query(`SELECT 1 FROM sponsors WHERE user_id=$1 LIMIT 1`, [userId]);
+  if (!staff && !sponsor.rows[0])
     throw new ForbiddenError("Not allowed to read planned participation estimates");
+  const { rows } = await pool.query(
+    `WITH allowed AS (
+       SELECT c.id,c.title,c.mandatory,c.devpost_tags FROM challenges c JOIN sponsors author ON author.id=c.author
+        WHERE c.is_test_account=false AND ($2 OR EXISTS (
+          SELECT 1 FROM sponsors mine WHERE mine.enterprise_id=author.enterprise_id AND mine.user_id=$1
+        ))
+     ), planned AS (
+       SELECT c.id AS challenge_id,g.id AS group_id,g.linked_repo_id
+         FROM allowed c JOIN planned_work_groups g ON c.mandatory OR EXISTS (
+           SELECT 1 FROM planned_work_group_challenges gc WHERE gc.group_id=g.id AND gc.challenge_id=c.id
+         )
+     ), projects AS (
+       SELECT c.id AS challenge_id,r.id AS repo_id FROM allowed c JOIN repos r ON r.is_test_account=false
+        AND (EXISTS (SELECT 1 FROM queue_entries qe WHERE qe.repo_id=r.id AND qe.challenge_id=c.id AND qe.status NOT IN ('cancelled','disqualified'))
+          OR (EXISTS (SELECT 1 FROM repo_devpost_prizes rp WHERE rp.repo_id=r.id AND c.devpost_tags ? rp.prize)
+            AND NOT EXISTS (SELECT 1 FROM queue_entries qe WHERE qe.repo_id=r.id AND qe.challenge_id=c.id AND qe.status IN ('cancelled','disqualified'))))
+     ), expected AS (
+       SELECT challenge_id, 'group:' || group_id AS identity FROM planned WHERE linked_repo_id IS NULL
+       UNION SELECT challenge_id,'repo:' || repo_id FROM projects
+     )
+     SELECT c.id AS "challengeId",c.title,
+       (SELECT count(*)::int FROM planned p WHERE p.challenge_id=c.id) AS "groupCount",
+       (SELECT count(*)::int FROM projects p WHERE p.challenge_id=c.id) AS "projectCount",
+       (SELECT count(*)::int FROM expected e WHERE e.challenge_id=c.id) AS "expectedCount",
+       (SELECT count(DISTINCT m.user_id)::int FROM planned p JOIN planned_work_group_members m ON m.group_id=p.group_id AND m.status='active' WHERE p.challenge_id=c.id) AS "participantCount"
+       FROM allowed c ORDER BY c.title`,
+    [userId, staff],
+  );
   return rows;
 }
 export async function announceChanged() {
