@@ -1,27 +1,21 @@
 "use client";
-
-import {
-  FolderGitIcon,
-  LinkIcon,
-  PencilIcon,
-  TrophyIcon,
-  UserPlusIcon,
-  UsersIcon,
-} from "lucide-react";
-import Link from "next/link";
-import { useParams } from "next/navigation";
+import { EVENTS } from "@hackos/shared/events";
+import { FolderGitIcon, UserPlusIcon } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
+import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
+import { EntityCombobox } from "@/components/common/entity-combobox";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
-import { StatusBadge } from "@/components/common/status-badge";
+import { ProjectDescriptionLinks } from "@/components/projects/project-description-links";
+import { ProjectNavigation } from "@/components/projects/project-navigation";
+import { WorkGroupField as Field, WorkGroupEditor } from "@/components/projects/work-group-editor";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import {
@@ -29,10 +23,11 @@ import {
   deleteWorkGroup,
   getMyWorkGroup,
   inviteWorkGroupMember,
+  myProjects,
   type PlannedWorkGroup,
   removeWorkGroupChallenge,
   removeWorkGroupMember,
-  updateWorkGroup,
+  respondWorkGroupInvite,
 } from "@/lib/projects";
 import { useMe } from "@/lib/session";
 import { showErrorToast, toast } from "@/lib/toast";
@@ -42,10 +37,15 @@ export default function WorkGroupDetailPage() {
   const { t } = useLocale();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
+  const router = useRouter();
+  const me = useMe();
+  const [responding, setResponding] = useState(false);
   const [group, setGroup] = useState<PlannedWorkGroup | null>(null);
   const [challenges, setChallenges] = useState<ChallengeOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       const [next, catalogue] = await Promise.all([
         getMyWorkGroup(id),
@@ -53,194 +53,109 @@ export default function WorkGroupDetailPage() {
       ]);
       setGroup(next);
       setChallenges(catalogue.items);
+      if (next.linked_repo_id != null) {
+        const mine = await myProjects();
+        if (mine.projects.some((project) => project.id === next.linked_repo_id)) {
+          router.replace(`/my-project/projects/${next.linked_repo_id}`);
+        }
+      }
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : t("couldNotLoadProject"));
+      setLoadError(error instanceof ApiError ? error.message : t("couldNotLoadProject"));
       setGroup(null);
     } finally {
       setLoading(false);
     }
-  }, [id, t]);
+  }, [id, router, t]);
+  const liveRefresh = useAutoRefresh("/api/events/stream?topic=projects", [EVENTS.DOMAIN_CHANGED]);
+  const challengeRefresh = useAutoRefresh("/api/events/stream?topic=sponsors", [
+    EVENTS.DOMAIN_CHANGED,
+  ]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: project mutations may establish the import link (#854).
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, liveRefresh, challengeRefresh]);
   if (loading)
     return (
       <div className="flex min-h-80 items-center justify-center">
         <Spinner />
       </div>
     );
+  if (loadError) return <ContextualError message={loadError} onRetry={load} />;
   if (!group) return <EmptyState icon={FolderGitIcon} title={t("projectNotFoundTitle")} />;
+  const active = group.members.some(
+    (member) => member.userId === me?.id && member.status === "active",
+  );
+  async function respond(action: "accept" | "decline") {
+    if (!group) return;
+    setResponding(true);
+    try {
+      await respondWorkGroupInvite(group.id, action, crypto.randomUUID());
+      if (action === "decline") router.replace("/my-project");
+      else await load();
+    } catch (error) {
+      setLoadError(error instanceof ApiError ? error.message : t("couldNotSaveProject"));
+    } finally {
+      setResponding(false);
+    }
+  }
   return (
     <div className="space-y-6">
       <PageHeader
         title={group.name}
-        state={
-          <StatusBadge tone={group.linked_repo_id ? "success" : "info"}>
-            {group.linked_repo_id ? t("workGroupLinked") : t("workGroupPlanned")}
-          </StatusBadge>
+        meta={`${t("workGroupTiming")}: ${t(group.presentation_timing_preference === "early" ? "workGroupTimingEarly" : group.presentation_timing_preference === "middle" ? "workGroupTimingMiddle" : group.presentation_timing_preference === "late" ? "workGroupTimingLate" : "workGroupTimingNone")}`}
+        secondaryActions={
+          active && !group.linked_repo_id ? (
+            <DeleteGroup group={group} onDeleted={() => router.replace("/my-project")} />
+          ) : (
+            <ProjectNavigation />
+          )
         }
-        actions={<WorkGroupEditor group={group} onSaved={load} />}
+        primaryAction={
+          active ? (
+            <WorkGroupEditor key={JSON.stringify(group)} group={group} onSaved={load} />
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              <Button disabled={responding} onClick={() => respond("accept")}>
+                {t("acceptInvite")}
+              </Button>
+              <Button variant="outline" disabled={responding} onClick={() => respond("decline")}>
+                {t("declineInvite")}
+              </Button>
+            </div>
+          )
+        }
       />
-      {group.description && (
-        <p className="max-w-prose whitespace-pre-wrap text-sm">{group.description}</p>
-      )}
-      {group.linkedProject && (
-        <SectionCard title={t("workGroupLinkedProject")} icon={LinkIcon}>
-          <Link className="font-medium underline" href={`/projects/${group.linkedProject.id}`}>
-            {group.linkedProject.name}
-          </Link>
-        </SectionCard>
-      )}
-      <div className="grid gap-5 xl:grid-cols-2">
-        <Members group={group} onChanged={load} />
-        <Challenges group={group} challenges={challenges} onChanged={load} />
-      </div>
-      <DeleteGroup
-        group={group}
-        onDeleted={() => {
-          window.location.assign("/my-project");
+      <ProjectDescriptionLinks
+        description={group.description}
+        links={{
+          devpostUrl: group.devpost_url,
+          demoUrl: group.demo_url,
+          githubUrl: group.github_url,
         }}
       />
+      <div className="grid gap-8 xl:grid-cols-3 xl:gap-12">
+        <Members group={group} onChanged={load} editable={active} />
+        <Challenges group={group} challenges={challenges} onChanged={load} editable={active} />
+      </div>
     </div>
   );
 }
 
-function WorkGroupEditor({
-  group,
-  onSaved,
-}: {
-  group: PlannedWorkGroup;
-  onSaved: () => Promise<void>;
-}) {
-  const { t } = useLocale();
-  const [open, setOpen] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [name, setName] = useState(group.name);
-  const [description, setDescription] = useState(group.description ?? "");
-  const [github, setGithub] = useState(group.github_url ?? "");
-  const [demo, setDemo] = useState(group.demo_url ?? "");
-  const [devpost, setDevpost] = useState(group.devpost_url ?? "");
-  const [timing, setTiming] = useState(group.presentation_timing_preference);
-  async function save() {
-    setPending(true);
-    try {
-      await updateWorkGroup(group.id, {
-        name: name.trim(),
-        description: description.trim(),
-        github_url: github.trim() || null,
-        demo_url: demo.trim() || null,
-        devpost_url: devpost.trim() || null,
-        presentation_timing_preference: timing,
-      });
-      toast.success(t("projectSaved"));
-      setOpen(false);
-      await onSaved();
-    } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : t("couldNotSaveProject"));
-    } finally {
-      setPending(false);
-    }
-  }
-  return (
-    <SidePanelEditor
-      open={open}
-      onOpenChange={setOpen}
-      trigger={
-        <Button variant="outline">
-          <PencilIcon className="size-4" />
-          {t("editProject")}
-        </Button>
-      }
-      icon={PencilIcon}
-      title={t("editProject")}
-      footer={
-        <Button disabled={pending || !name.trim()} onClick={save}>
-          {t("save")}
-        </Button>
-      }
-    >
-      <div className="space-y-4">
-        <Field id="group-name" label={t("workGroupName")} value={name} onChange={setName} />
-        <div className="space-y-2">
-          <Label htmlFor="group-description">{t("descriptionLabel")}</Label>
-          <Textarea
-            id="group-description"
-            rows={4}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </div>
-        <Field
-          id="group-devpost"
-          label={t("workGroupDevpostUrl")}
-          value={devpost}
-          onChange={setDevpost}
-          type="url"
-        />
-        <Field
-          id="group-github"
-          label={t("projectRepoUrlLabel")}
-          value={github}
-          onChange={setGithub}
-          type="url"
-        />
-        <Field
-          id="group-demo"
-          label={t("projectDemoUrlLabel")}
-          value={demo}
-          onChange={setDemo}
-          type="url"
-        />
-        <div className="space-y-2">
-          <Label htmlFor="group-timing">{t("workGroupTiming")}</Label>
-          <select
-            id="group-timing"
-            className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-            value={timing}
-            disabled={!group.presentation_timing_editable}
-            onChange={(e) => setTiming(e.target.value as typeof timing)}
-          >
-            <option value="no_preference" aria-label={t("workGroupTimingNone")} />
-            <option value="early">{t("workGroupTimingEarly")}</option>
-            <option value="middle">{t("workGroupTimingMiddle")}</option>
-            <option value="late">{t("workGroupTimingLate")}</option>
-          </select>
-        </div>
-      </div>
-    </SidePanelEditor>
-  );
-}
-function Field({
-  id,
-  label,
-  value,
-  onChange,
-  type = "text",
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  type?: string;
-}) {
-  return (
-    <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
-      <Input id={id} type={type} value={value} onChange={(e) => onChange(e.target.value)} />
-    </div>
-  );
-}
 function Members({
   group,
   onChanged,
+  editable,
 }: {
   group: PlannedWorkGroup;
   onChanged: () => Promise<void>;
+  editable: boolean;
 }) {
   const { t } = useLocale();
   const me = useMe();
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
+  const [memberError, setMemberError] = useState<string | null>(null);
   async function invite() {
     setBusy(true);
     try {
@@ -261,53 +176,72 @@ function Members({
   }
   return (
     <SectionCard
+      variant="plain"
       title={t("teamSectionTitle")}
-      icon={UsersIcon}
       action={
-        <SidePanelEditor
-          trigger={
-            <Button variant="outline" size="sm">
-              <UserPlusIcon className="size-4" />
-              {t("inviteMemberCta")}
-            </Button>
-          }
-          title={t("inviteMemberTitle")}
-          footer={
-            <Button disabled={busy || !email.trim()} onClick={invite}>
-              {t("inviteMemberCta")}
-            </Button>
-          }
-        >
-          <Field
-            id="group-invite"
-            label={t("inviteEmailLabel")}
-            value={email}
-            onChange={setEmail}
-            type="email"
-          />
-        </SidePanelEditor>
+        editable ? (
+          <SidePanelEditor
+            trigger={
+              <Button variant="outline" size="sm">
+                <UserPlusIcon className="size-4" />
+                {t("inviteMemberCta")}
+              </Button>
+            }
+            title={t("inviteMemberTitle")}
+            footer={
+              <Button disabled={busy || !email.trim()} onClick={invite}>
+                {t("inviteMemberCta")}
+              </Button>
+            }
+          >
+            <Field
+              id="group-invite"
+              label={t("inviteEmailLabel")}
+              value={email}
+              onChange={setEmail}
+              type="email"
+            />
+          </SidePanelEditor>
+        ) : undefined
       }
     >
-      <ul className="space-y-3">
+      <ul className="divide-y divide-border/60">
         {group.members.map((member) => (
           <li
-            className="flex items-center justify-between gap-3 rounded-md border p-3"
+            className="flex flex-wrap items-start justify-between gap-3 py-2 text-sm"
             key={member.userId}
           >
             <span className="font-medium">
               {[member.name, member.surname].filter(Boolean).join(" ") || t("unnamedTeamMember")}
             </span>
             <div className="flex items-center gap-2">
-              <StatusBadge tone={member.status === "active" ? "success" : "neutral"}>
-                {member.status}
-              </StatusBadge>
-              {member.userId !== me?.id && (
+              {member.status !== "active" && (
+                <span className="text-xs text-muted-foreground">
+                  {t(
+                    member.status === "invited"
+                      ? "workGroupMemberInvited"
+                      : "workGroupMemberDeclined",
+                  )}
+                </span>
+              )}
+              {editable && member.userId !== me?.id && (
                 <Button
+                  disabled={busy}
                   size="sm"
                   variant="outline"
                   onClick={async () => {
-                    await removeWorkGroupMember(group.id, member.userId, crypto.randomUUID());
-                    await onChanged();
+                    setBusy(true);
+                    setMemberError(null);
+                    try {
+                      await removeWorkGroupMember(group.id, member.userId, crypto.randomUUID());
+                      await onChanged();
+                    } catch (error) {
+                      setMemberError(
+                        error instanceof ApiError ? error.message : t("couldNotSaveProject"),
+                      );
+                    } finally {
+                      setBusy(false);
+                    }
                   }}
                 >
                   {t("remove")}
@@ -317,6 +251,7 @@ function Members({
           </li>
         ))}
       </ul>
+      {memberError && <ContextualError message={memberError} />}
     </SectionCard>
   );
 }
@@ -324,93 +259,124 @@ function Challenges({
   group,
   challenges,
   onChanged,
+  editable,
 }: {
   group: PlannedWorkGroup;
   challenges: ChallengeOption[];
   onChanged: () => Promise<void>;
+  editable: boolean;
 }) {
   const { t } = useLocale();
   const [selected, setSelected] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function change(challengeId: number, remove = false) {
+    setBusy(true);
+    setError(null);
+    try {
+      if (remove) await removeWorkGroupChallenge(group.id, challengeId, crypto.randomUUID());
+      else await addWorkGroupChallenge(group.id, challengeId, crypto.randomUUID());
+      setSelected("");
+      await onChanged();
+    } catch (error) {
+      setError(error instanceof ApiError ? error.message : t("couldNotSaveProject"));
+    } finally {
+      setBusy(false);
+    }
+  }
   const available = challenges.filter(
     (challenge) => !group.challenges.some((item) => item.id === challenge.id),
   );
   return (
     <SectionCard
+      variant="plain"
+      className="xl:col-span-2"
       title={t("challenges")}
-      icon={TrophyIcon}
       footer={
-        available.length ? (
+        editable && available.length ? (
           <div className="flex gap-2">
-            <select
-              className="h-9 min-w-0 flex-1 rounded-md border bg-background px-3 text-sm"
+            <EntityCombobox
+              className="min-w-0 flex-1"
+              options={available}
+              getId={(challenge) => challenge.id}
+              getLabel={(challenge) => challengeTitleText(challenge.title)}
               value={selected}
-              onChange={(e) => setSelected(e.target.value)}
-            >
-              <option value="">{t("selectChallengePlaceholder")}</option>
-              {available.map((challenge) => (
-                <option key={challenge.id} value={challenge.id}>
-                  {challengeTitleText(challenge.title)}
-                </option>
-              ))}
-            </select>
-            <Button
-              disabled={!selected}
-              onClick={async () => {
-                await addWorkGroupChallenge(group.id, Number(selected), crypto.randomUUID());
-                setSelected("");
-                await onChanged();
-              }}
-            >
+              placeholder={t("selectChallengePlaceholder")}
+              onChange={setSelected}
+              disabled={busy}
+            />
+            <Button disabled={busy || !selected} onClick={() => change(Number(selected))}>
               {t("addAction")}
             </Button>
           </div>
         ) : undefined
       }
     >
-      <ul className="space-y-3">
+      <ul className="divide-y divide-border/60">
         {group.challenges.map((challenge) => (
           <li
             key={challenge.id}
-            className="flex items-center justify-between gap-3 rounded-md border p-3"
+            className="flex flex-wrap items-center justify-between gap-3 py-4 first:pt-0 last:pb-0 text-sm"
           >
-            <span className="font-medium">{challengeTitleText(challenge.title)}</span>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={async () => {
-                await removeWorkGroupChallenge(group.id, challenge.id, crypto.randomUUID());
-                await onChanged();
-              }}
-            >
-              {t("remove")}
-            </Button>
+            <h3 className="text-base font-medium text-balance">
+              {challengeTitleText(challenge.title)}
+            </h3>
+            {challenge.mandatory ? (
+              <span className="text-xs text-muted-foreground">{t("mandatoryChallengeLabel")}</span>
+            ) : editable ? (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() => change(challenge.id, true)}
+              >
+                {t("remove")}
+              </Button>
+            ) : null}
           </li>
         ))}
       </ul>
+      {error && <ContextualError message={error} />}
     </SectionCard>
   );
 }
 function DeleteGroup({ group, onDeleted }: { group: PlannedWorkGroup; onDeleted: () => void }) {
   const { t } = useLocale();
   const [pending, setPending] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   return (
-    <AlertModal
-      title={t("deleteWorkGroupTitle")}
-      description={t("deleteWorkGroupDesc")}
-      cancelLabel={t("cancel")}
-      confirmLabel={t("deleteWorkGroupCta")}
-      destructive
-      pending={pending}
-      trigger={<Button variant="outline">{t("deleteWorkGroupCta")}</Button>}
-      onConfirm={async () => {
-        setPending(true);
-        try {
-          await deleteWorkGroup(group.id, crypto.randomUUID());
-          onDeleted();
-        } finally {
-          setPending(false);
-        }
-      }}
-    />
+    <>
+      <ProjectNavigation
+        onDelete={() => {
+          setError(null);
+          setOpen(true);
+        }}
+      />
+      <AlertModal
+        open={open}
+        onOpenChange={setOpen}
+        title={t("deleteWorkGroupTitle")}
+        description={t("deleteWorkGroupDesc")}
+        cancelLabel={t("cancel")}
+        confirmLabel={t("deleteWorkGroupCta")}
+        destructive
+        pending={pending}
+        onConfirm={async () => {
+          setPending(true);
+          try {
+            await deleteWorkGroup(group.id, crypto.randomUUID());
+            setOpen(false);
+            onDeleted();
+          } catch (error) {
+            setError(error instanceof ApiError ? error.message : t("couldNotDeleteProject"));
+          } finally {
+            setPending(false);
+          }
+        }}
+      >
+        {error && <ContextualError message={error} />}
+      </AlertModal>
+    </>
   );
 }

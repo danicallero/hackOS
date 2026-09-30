@@ -179,6 +179,11 @@ Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
 `QrCode`, `MultiSelect`, `TemplateFieldControl`, `FileUploadField`, `UserPicker`,
 `EntityCombobox`, `ActionGroup`, `IconButton`.
 
+`SectionCard variant="plain"` keeps the shared section heading/actions without
+card chrome. Use it when page spacing and columns explain the structure; reserve
+the default bordered surface for genuinely bounded groups. Static metadata is
+text, not a badge. See `docs/DESIGN.md` §3.
+
 `SidePanelEditor` is the focused-record counterpart to `Modal`: it opens a
 right-side editor over the current workspace, with a fixed title/actions area
 and independently scrollable form body. Use it for a single record's details;

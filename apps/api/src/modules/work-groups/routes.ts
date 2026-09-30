@@ -11,6 +11,7 @@ import {
 } from "./schemas.js";
 import {
   addChallenge,
+  canCreateGroup,
   createGroup,
   deleteGroup,
   estimates,
@@ -34,10 +35,13 @@ export function registerWorkGroupsRoutes(app: FastifyInstance) {
       schema: {
         summary: "List my planned work groups",
         description:
-          "Pre-event planning groups, their invitation state, and intended challenges. They never create operational projects or queue entries (#852).",
+          "Planning groups, invitation state, intended and mandatory challenges, and canCreate reflecting event policy and the participant editing window. Planning never creates operational queue entries (#852).",
       },
     },
-    async (q) => ({ groups: await listMine(q.userId as number) }),
+    async (q) => ({
+      groups: await listMine(q.userId as number),
+      canCreate: await canCreateGroup(q.userId as number),
+    }),
   );
   r.get(
     "/api/me/work-groups/:id",
@@ -91,7 +95,7 @@ export function registerWorkGroupsRoutes(app: FastifyInstance) {
         body: updateGroupBody,
         summary: "Update a planned work group",
         description:
-          "Updates planning metadata only. devpostUrl and presentationTimingPreference are stable contracts for #854 and #853; this route does not link imports or order queues.",
+          "Updates project planning metadata and presentation preference. For an active member of the linked project, metadata changes update that project in the same audited transaction. Established links remain stable; preference changes are refused after queue generation (#853/#854).",
       },
     },
     async (q) => updateGroup(q.userId as number, q.params.id, q.body),
@@ -151,7 +155,8 @@ export function registerWorkGroupsRoutes(app: FastifyInstance) {
       schema: {
         params: groupParams.extend({ challengeId: groupParams.shape.id }),
         summary: "Remove an intended challenge",
-        description: "Removes planned interest only before judging starts (#852).",
+        description:
+          "Removes optional planned interest before judging starts. Mandatory challenges cannot be withdrawn (#852).",
       },
     },
     async (q) => removeChallenge(q.userId as number, q.params.id, q.params.challengeId),
@@ -178,7 +183,7 @@ export function registerWorkGroupsRoutes(app: FastifyInstance) {
       schema: {
         summary: "Read planned challenge participation estimates",
         description:
-          "Staff with project-read access see all estimates; sponsor representatives see only their enterprise’s challenges. This is the stable aggregate recipient boundary for #856, without sending notifications.",
+          "Staff with project-read access see all estimates; sponsor representatives see only their enterprise's challenges. Counts include mandatory intent, submitted projects and a deduplicated expectedCount across groups and projects (#852/#854).",
       },
     },
     async (q) => ({ estimates: await estimates(q.userId as number) }),

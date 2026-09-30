@@ -4,17 +4,17 @@
 // planned work groups and their queue status are one model, not destinations to
 // reconcile mentally (H19, H20, H38, #852).
 import { EVENTS } from "@hackos/shared/events";
-import { FolderGitIcon, MailIcon, MapPinIcon, UsersIcon } from "lucide-react";
+import { FolderGitIcon, MailIcon } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { type ComponentProps, useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { MultiSelect, type MultiSelectOption } from "@/components/common/multi-select";
 import { PageHeader } from "@/components/common/page-header";
-import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
-import { StatusBadge } from "@/components/common/status-badge";
+import { PresentationStatus } from "@/components/projects/presentation-status";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
@@ -32,7 +32,6 @@ import {
 } from "@/lib/projects";
 import { getMyQueue, type MyQueueEntry } from "@/lib/queue";
 import { toast } from "@/lib/toast";
-import { ProjectFormDialog } from "../projects/project-form-dialog";
 import {
   type ChallengeOption,
   challengeTitleText,
@@ -42,12 +41,14 @@ import {
 
 export default function MyProjectPage() {
   const { t } = useLocale();
+  const router = useRouter();
   const [projects, setProjects] = useState<ProjectRepo[]>([]);
   const [groups, setGroups] = useState<PlannedWorkGroup[]>([]);
   const [queue, setQueue] = useState<MyQueueEntry[]>([]);
   const [invites, setInvites] = useState<PendingInvite[]>([]);
   const [canCreate, setCanCreate] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [redirecting, setRedirecting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -60,20 +61,39 @@ export default function MyProjectPage() {
       setProjects(projectsRes.projects.map(toProjectRepo));
       setGroups(groupsRes.groups);
       setInvites(invitesRes.invites);
-      setCanCreate(projectsRes.canCreate);
+      setCanCreate(groupsRes.canCreate);
       setQueue(queueRes);
+      const unlinkedGroups = groupsRes.groups.filter(
+        (group) => !projectsRes.projects.some((project) => project.id === group.linked_repo_id),
+      );
+      if (
+        new URLSearchParams(window.location.search).get("view") !== "all" &&
+        invitesRes.invites.length === 0 &&
+        projectsRes.projects.length + unlinkedGroups.length === 1
+      ) {
+        setRedirecting(true);
+        router.replace(
+          projectsRes.projects.length === 1
+            ? `/my-project/projects/${projectsRes.projects[0].id}`
+            : `/my-project/work-groups/${unlinkedGroups[0].id}`,
+        );
+      }
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : t("couldNotLoadProject"));
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [router, t]);
 
   const liveRefresh = useAutoRefresh("/api/events/stream?topic=projects", [EVENTS.DOMAIN_CHANGED]);
+  const queueRefresh = useAutoRefresh("/api/queue/me/stream", [
+    EVENTS.USER_QUEUE_CHANGED,
+    EVENTS.USER_QUEUE_CALLED,
+  ]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce.
   useEffect(() => {
     void load();
-  }, [load, liveRefresh]);
+  }, [load, liveRefresh, queueRefresh]);
 
   const queueByProject = useMemo(() => {
     const result = new Map<number, MyQueueEntry[]>();
@@ -82,7 +102,7 @@ export default function MyProjectPage() {
     return result;
   }, [queue]);
 
-  if (loading)
+  if (loading || redirecting)
     return (
       <div className="flex min-h-80 items-center justify-center">
         <Spinner />
@@ -93,12 +113,7 @@ export default function MyProjectPage() {
     <div className="space-y-6">
       <PageHeader
         title={t("myProjects")}
-        primaryAction={
-          <div className="flex flex-wrap gap-2">
-            <CreateWorkGroup onCreated={load} />
-            {canCreate && <ProjectFormDialog mode={{ kind: "self" }} onSaved={load} />}
-          </div>
-        }
+        primaryAction={canCreate ? <CreateWorkGroup onCreated={load} /> : undefined}
       />
       {invites.length > 0 && <PendingInvitesCard invites={invites} onChanged={load} />}
       {projects.length === 0 && groups.length === 0 ? (
@@ -108,7 +123,7 @@ export default function MyProjectPage() {
           description={canCreate ? t("myProjectCanCreateDesc") : t("myProjectEmptyDesc")}
         />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-8">
           {projects.map((project) => (
             <ProjectCard
               entries={queueByProject.get(project.id) ?? []}
@@ -166,17 +181,17 @@ function CreateWorkGroup({ onCreated }: { onCreated: () => Promise<void> }) {
     <SidePanelEditor
       open={open}
       onOpenChange={setOpen}
-      trigger={<Button variant="outline">{t("createWorkGroup")}</Button>}
-      title={t("createWorkGroup")}
+      trigger={<Button>{t("createMyProjectCta")}</Button>}
+      title={t("createMyProjectCta")}
       footer={
         <Button disabled={saving || !name.trim()} onClick={create}>
-          {t("createWorkGroup")}
+          {t("createMyProjectCta")}
         </Button>
       }
     >
       <div className="space-y-2">
         <label className="text-sm font-medium" htmlFor="work-group-name">
-          {t("workGroupName")}
+          {t("projectNameLabel")}
         </label>
         <Input
           id="work-group-name"
@@ -212,14 +227,13 @@ function ProjectCard({ project, entries }: { project: ProjectRepo; entries: MyQu
   return (
     <SectionCard
       title={project.name}
-      icon={FolderGitIcon}
       action={
         <Button asChild size="sm" variant="outline">
           <Link href={`/my-project/projects/${project.id}`}>{t("openProject")}</Link>
         </Button>
       }
     >
-      <div className="space-y-3">
+      <div className="divide-y divide-border/60">
         {entries.map((entry) => (
           <QueueChallengeRow entry={entry} key={entry.entryId} />
         ))}
@@ -229,7 +243,7 @@ function ProjectCard({ project, entries }: { project: ProjectRepo; entries: MyQu
             <ChallengeRow
               key={challenge.id}
               title={challengeTitleText(challenge.title)}
-              status={challenge.status}
+              presentation={challenge}
             />
           ))}
         {project.challenges.length === 0 && entries.length === 0 && (
@@ -246,12 +260,6 @@ function WorkGroupCard({ group }: { group: PlannedWorkGroup }) {
   return (
     <SectionCard
       title={group.name}
-      icon={UsersIcon}
-      state={
-        <StatusBadge tone={group.linked_repo_id ? "success" : "neutral"}>
-          {group.linked_repo_id ? t("projectBadge") : t("workGroupBadge")}
-        </StatusBadge>
-      }
       action={
         <Button asChild size="sm" variant="outline">
           <Link href={`/my-project/work-groups/${group.id}`}>{t("openProject")}</Link>
@@ -259,7 +267,7 @@ function WorkGroupCard({ group }: { group: PlannedWorkGroup }) {
       }
     >
       <p className="text-sm text-muted-foreground">{t("workGroupMembers", { count: members })}</p>
-      <div className="mt-3 space-y-3">
+      <div className="mt-3 divide-y divide-border/60">
         {group.challenges.map((challenge) => (
           <ChallengeRow key={challenge.id} title={challengeTitleText(challenge.title)} />
         ))}
@@ -271,42 +279,33 @@ function WorkGroupCard({ group }: { group: PlannedWorkGroup }) {
   );
 }
 
-function ChallengeRow({ title, status }: { title: string; status?: string | null }) {
+function ChallengeRow({
+  title,
+  presentation,
+}: {
+  title: string;
+  presentation?: ComponentProps<typeof PresentationStatus>;
+}) {
   const { t } = useLocale();
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
+    <div className="flex flex-wrap items-center justify-between gap-3 py-2">
       <span className="min-w-0 truncate font-medium">{title}</span>
-      {status ? (
-        <QueueStatusBadge status={status} />
+      {presentation?.status ? (
+        <PresentationStatus {...presentation} />
       ) : (
-        <StatusBadge tone="neutral">{t("plannedChallenge")}</StatusBadge>
+        <span className="text-sm text-muted-foreground">{t("plannedChallenge")}</span>
       )}
     </div>
   );
 }
 
 function QueueChallengeRow({ entry }: { entry: MyQueueEntry }) {
-  const { t } = useLocale();
-  const room = entry.status === "waiting" ? entry.rooms[0] : entry.room;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
+    <div className="flex flex-wrap items-center justify-between gap-3 py-2">
       <span className="min-w-0 truncate font-medium">
         {challengeTitleText(entry.challengeTitle)}
       </span>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-        {entry.status === "waiting" && entry.position != null && (
-          <span className="tabular-nums">
-            {t("position")} #{entry.position}
-          </span>
-        )}
-        {room && (
-          <span className="inline-flex items-center gap-1">
-            <MapPinIcon className="size-3.5" />
-            {room.name}
-          </span>
-        )}
-        <QueueStatusBadge status={entry.status} />
-      </div>
+      <PresentationStatus {...entry} assignedRoomName={entry.room?.name} />
     </div>
   );
 }
@@ -333,11 +332,11 @@ function PendingInvitesCard({
     }
   }
   return (
-    <SectionCard title={t("pendingInvitesTitle")} icon={MailIcon}>
+    <SectionCard variant="plain" title={t("pendingInvitesTitle")} icon={MailIcon}>
       <ul className="space-y-3">
         {invites.map((invite) => (
           <li
-            className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
+            className="flex flex-wrap items-center justify-between gap-3 py-2"
             key={invite.repoId}
           >
             <p className="min-w-0 truncate text-sm">

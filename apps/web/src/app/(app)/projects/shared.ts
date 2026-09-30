@@ -35,10 +35,13 @@ export interface RepoMember {
 export interface RepoChallenge {
   id: number;
   title: string;
+  mandatory: boolean;
   status: string | null;
   position: number | null;
   assignedRoomId: number | null;
   assignedRoomName: string | null;
+  etaMinutes: number | null;
+  rooms: { id: number; name: string; location: string | null }[];
   mappedPrizes: string[];
   source: "queue" | "prize" | "queue_and_prize";
   /** H36 evaluation status for this challenge — null when the viewer has no
