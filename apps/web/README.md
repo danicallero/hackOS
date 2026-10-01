@@ -68,6 +68,17 @@ Use an action only when it has a real consequence (for example, Undo). Keep
 critical failures inline with a retry path; a toast should confirm or guide,
 not be the only error surface.
 
+## Collaborative judging saves (H36)
+
+The live judging form saves locally edited fields; submission also includes
+displayed defaults for unanswered non-text criteria. Untouched notes and
+text answers do not require an editing lease or overwrite another judge's
+answers. Unsaved text retains its lease on blur; saving refreshes the lease,
+then releases fields that are no longer focused after their edits commit.
+Edits made during a save remain pending for the next autosave. A failed save
+keeps those edits and displays one inline error; Save draft or Submit review
+retries it. Autosave resumes after another edit or a successful retry.
+
 ## Local development
 
 ```sh

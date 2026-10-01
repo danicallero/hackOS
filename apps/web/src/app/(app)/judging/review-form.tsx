@@ -13,7 +13,7 @@ import {
   ListChecksIcon,
   WifiOffIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { type Answers, normalizeAnswers, QuestionField } from "@/components/common/question-field";
 import { ReviewStatusBadge } from "@/components/common/review-status-badge";
 import { SectionCard } from "@/components/common/section-card";
@@ -71,6 +71,7 @@ export function ReviewForm({
   onCloseExisting?: () => void;
 }) {
   const { t } = useLocale();
+  const entryId = entry?.id;
   const panel = roomPanel ?? challenge?.judging_panel_criteria ?? EMPTY_PANEL;
   const [scores, setScores] = useState<Answers>({});
   const [notes, setNotes] = useState("");
@@ -84,6 +85,8 @@ export function ReviewForm({
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const dirtyRef = useRef(false);
+  const savedScoresRef = useRef<Record<string, unknown>>({});
+  const pendingFieldsRef = useRef(new Map<string, unknown>());
   const savingRef = useRef(false);
   const reviewStampRef = useRef<string | null>(null);
   const [conflict, setConflict] = useState(false);
@@ -106,12 +109,12 @@ export function ReviewForm({
 
   const loadRemote = useCallback(
     async (external = false) => {
-      if (!entry) return;
+      if (!entryId) return;
       const [review, activeSessions, reviewVersions, activeLeases] = await Promise.all([
-        getReview(entry.id),
-        getSessions(entry.id),
-        getReviewVersions(entry.id),
-        getReviewFieldLeases(entry.id),
+        getReview(entryId),
+        getSessions(entryId),
+        getReviewVersions(entryId),
+        getReviewFieldLeases(entryId),
       ]);
       setSessions(activeSessions);
       setVersions(reviewVersions);
@@ -122,10 +125,12 @@ export function ReviewForm({
         setConflict(true);
         return;
       }
+      savedScoresRef.current = review.scores ?? {};
       setScores(normalizeAnswers(panel, review.scores));
       setNotes(review.notes ?? "");
       setStatus(review.status);
       reviewStampRef.current = remoteStamp;
+      pendingFieldsRef.current.clear();
       dirtyRef.current = false;
       setDirty(false);
       setConflict(false);
@@ -136,11 +141,13 @@ export function ReviewForm({
         );
       }
     },
-    [fieldLabel, entry, panel, t],
+    [fieldLabel, entryId, panel, t],
   );
 
+  const loadInitialReview = useEffectEvent(() => loadRemote());
+
   useEffect(() => {
-    if (!entry) return;
+    if (!entryId) return;
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Data-fetch-on-mount.
     setLoading(true);
@@ -148,9 +155,9 @@ export function ReviewForm({
     setOwnedFields(new Set());
     setFocusedField(null);
     void Promise.all([
-      loadRemote(),
+      loadInitialReview(),
       canJudge
-        ? openSession(entry.id, roomId ?? undefined).catch(() => null)
+        ? openSession(entryId, roomId ?? undefined).catch(() => null)
         : Promise.resolve(null),
     ])
       .catch((err) => setSaveError(errorMessage(err, t("couldNotLoadReview"))))
@@ -159,16 +166,16 @@ export function ReviewForm({
       });
     return () => {
       cancelled = true;
-      if (canJudge) void closeSession(entry.id).catch(() => undefined);
+      if (canJudge) void closeSession(entryId).catch(() => undefined);
     };
-  }, [entry, canJudge, loadRemote, roomId, t]);
+  }, [entryId, canJudge, roomId, t]);
 
   const acquireField = useCallback(
     async (field: string) => {
-      if (!entry || !canJudge) return;
+      if (!entryId || !canJudge) return;
       setFocusedField(field);
       try {
-        const lease = await acquireReviewFieldLease(entry.id, field);
+        const lease = await acquireReviewFieldLease(entryId, field);
         setLeases((current) => [...current.filter((item) => item.field !== field), lease]);
         setOwnedFields((current) => new Set(current).add(field));
       } catch {
@@ -177,43 +184,45 @@ export function ReviewForm({
           next.delete(field);
           return next;
         });
-        void getReviewFieldLeases(entry.id)
+        void getReviewFieldLeases(entryId)
           .then(setLeases)
           .catch(() => undefined);
       }
     },
-    [canJudge, entry],
+    [canJudge, entryId],
   );
 
   const releaseField = useCallback(
     async (field: string) => {
-      if (!entry) return;
+      if (!entryId) return;
       setFocusedField((current) => (current === field ? null : current));
+      // H36: blur must not release a text edit before its autosave commits.
+      if (pendingFieldsRef.current.has(field)) return;
       setOwnedFields((current) => {
         const next = new Set(current);
         next.delete(field);
         return next;
       });
       try {
-        await releaseReviewFieldLease(entry.id, field);
+        await releaseReviewFieldLease(entryId, field);
       } finally {
-        void getReviewFieldLeases(entry.id)
+        void getReviewFieldLeases(entryId)
           .then(setLeases)
           .catch(() => undefined);
       }
     },
-    [entry],
+    [entryId],
   );
 
   // Refresh only the focused lease. PostgreSQL owns expiry, so this stops on
   // an abandoned tab and another judge can acquire the field within 30s.
   useEffect(() => {
-    if (!entry || !focusedField || !ownedFields.has(focusedField)) return;
+    if (!entryId || !focusedField || !ownedFields.has(focusedField)) return;
     const timer = window.setInterval(() => void acquireField(focusedField), 10_000);
     return () => window.clearInterval(timer);
-  }, [acquireField, entry, focusedField, ownedFields]);
+  }, [acquireField, entryId, focusedField, ownedFields]);
 
-  useEventSource(entry ? `/api/queue/entries/${entry.id}/stream` : "", {
+  useEventSource(entry ? `/api/queue/entries/${entryId}/stream` : "", {
     events: [EVENTS.QUEUE_REVIEW_CHANGED],
     enabled: entry != null,
     onEvent: () => void loadRemote(true),
@@ -221,45 +230,71 @@ export function ReviewForm({
 
   const save = useCallback(
     async (submit = false, announce = true) => {
-      if (!entry || !online) return;
+      if (!entryId || !online || savingRef.current) return;
       savingRef.current = true;
       setSaving(true);
       setSaveError(null);
       try {
-        const review = await saveReview(entry.id, {
-          scores,
-          notes,
+        // H36: send only local edits so untouched fields never require a
+        // lease or overwrite another judge's answers. Reclaim expired leases
+        // before retrying; an active owner still blocks the write.
+        const pending = new Map(pendingFieldsRef.current);
+        const scorePatch: Answers = {};
+        if (submit) {
+          for (const question of panel) {
+            if (!isTextQuestion(question) && savedScoresRef.current[question.key] === undefined) {
+              scorePatch[question.key] = scores[question.key];
+            }
+          }
+        }
+        const textFields = [...pending.keys()].filter(
+          (field) =>
+            field === "notes" ||
+            panel.some(
+              (question) => isTextQuestion(question) && field === `scores.${question.key}`,
+            ),
+        );
+        for (const field of textFields) await acquireReviewFieldLease(entryId, field);
+        for (const [field, value] of pending) {
+          if (field.startsWith("scores.")) scorePatch[field.slice(7)] = value as Answers[string];
+        }
+        const review = await saveReview(entryId, {
+          scores: scorePatch,
+          ...(pending.has("notes") ? { notes: pending.get("notes") } : {}),
           submit,
-          releaseLeases: announce,
         });
+        for (const [field, value] of pending) {
+          if (pendingFieldsRef.current.get(field) === value) pendingFieldsRef.current.delete(field);
+        }
+        savedScoresRef.current = review.scores ?? savedScoresRef.current;
         setStatus(review.status);
         reviewStampRef.current = review.updated_at ?? review.created_at ?? JSON.stringify(review);
-        dirtyRef.current = false;
-        setDirty(false);
+        dirtyRef.current = pendingFieldsRef.current.size > 0;
+        setDirty(dirtyRef.current);
         setConflict(false);
-        setVersions(await getReviewVersions(entry.id));
-        if (announce && focusedField) await releaseField(focusedField);
+        for (const field of textFields) {
+          if (field !== focusedField) await releaseField(field);
+        }
+        setVersions(await getReviewVersions(entryId));
         if (announce) toast.success(submit ? t("reviewSubmitted") : t("draftSaved"));
       } catch (err) {
         const fallback = t("couldNotSaveReview");
         const message = errorMessage(err, fallback);
         setSaveError(message);
-        if (announce) {
-          toast.error(fallback, message === fallback ? undefined : { description: message });
-        }
       } finally {
         savingRef.current = false;
         setSaving(false);
       }
     },
-    [entry, focusedField, notes, online, releaseField, scores, t],
+    [entryId, focusedField, online, panel, releaseField, scores, t],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: H36 notes edits restart the debounce while already dirty.
   useEffect(() => {
-    if (!dirty || !online || !canJudge || conflict) return;
+    if (!dirty || saving || saveError || !online || !canJudge || conflict) return;
     const timer = window.setTimeout(() => void save(false, false), 800);
     return () => window.clearTimeout(timer);
-  }, [canJudge, conflict, dirty, online, save]);
+  }, [canJudge, conflict, dirty, online, save, saveError, saving, notes]);
 
   const syncState = collaborationState({ online, saving, conflict, dirty });
   const syncLabel = {
@@ -281,7 +316,7 @@ export function ReviewForm({
   };
   const textFieldReadOnly = (field: string) => canJudge && !ownedFields.has(field);
 
-  if (!entry) {
+  if (!entryId) {
     return (
       <SectionCard
         title={t("scoring")}
@@ -327,7 +362,7 @@ export function ReviewForm({
             className="shadow-sm"
             variant="outline"
             size="sm"
-            disabled={!canJudge || saving || loading}
+            disabled={!canJudge || !online || saving || loading}
             onClick={() => save(false)}
           >
             {status === "submitted" ? t("saveCorrection") : t("saveDraft")}
@@ -336,7 +371,7 @@ export function ReviewForm({
             <Button
               className="shadow-sm"
               size="sm"
-              disabled={!canJudge || saving || loading || requiredUnansweredCount > 0}
+              disabled={!canJudge || !online || saving || loading || requiredUnansweredCount > 0}
               onClick={() => save(true)}
             >
               <CheckCircle2Icon className="size-4" />
@@ -436,6 +471,8 @@ export function ReviewForm({
               }
               onChange={(value) => {
                 setScores((current) => ({ ...current, [question.key]: value }));
+                pendingFieldsRef.current.set(`scores.${question.key}`, value);
+                setSaveError(null);
                 dirtyRef.current = true;
                 setDirty(true);
                 setExternalUpdate(null);
@@ -452,6 +489,8 @@ export function ReviewForm({
               onBlur={() => void releaseField("notes")}
               onChange={(event) => {
                 setNotes(event.target.value);
+                pendingFieldsRef.current.set("notes", event.target.value);
+                setSaveError(null);
                 dirtyRef.current = true;
                 setDirty(true);
               }}
