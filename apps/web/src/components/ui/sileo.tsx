@@ -25,6 +25,7 @@ function useToastTargets(rootRef: React.RefObject<HTMLDivElement | null>) {
     const sync = () => {
       const next = Array.from(root.querySelectorAll<HTMLElement>("[data-sileo-toast]"))
         .map((node) => {
+          node.querySelector("[data-sileo-svg]")?.setAttribute("preserveAspectRatio", "none");
           const id = readToastId(node);
           const header = node.querySelector<HTMLElement>("[data-sileo-header]");
           return id && header ? { id, node } : null;

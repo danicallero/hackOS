@@ -47,7 +47,7 @@ export function WorkGroupEditor({
         devpost_url: devpost.trim() || null,
         presentation_timing_preference: group.presentation_timing_editable ? timing : undefined,
       });
-      toast.success(t("projectSaved"));
+      toast.success(t("projectSaved"), { compactTitle: t("toastSaveProject") });
       setOpen(false);
       await onSaved();
     } catch (error) {

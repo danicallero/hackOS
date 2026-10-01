@@ -1,11 +1,13 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { createElement, type ReactNode } from "react";
 import { type SileoOptions, type SileoPosition, sileo } from "sileo";
 import { isLanguage, translateMessage } from "./i18n";
 import type { Language } from "./types";
 
 export interface ToastOptions {
+  /** Localized action/event heading used when the feedback message cannot fit. */
+  compactTitle?: string;
   autopilot?: SileoOptions["autopilot"];
   description?: SileoOptions["description"];
   duration?: SileoOptions["duration"];
@@ -27,6 +29,7 @@ export type ToastIconOptions = ToastOptions & {
 };
 
 export interface ToastPromiseOptions<T> {
+  compactTitle?: string;
   loading: ToastPromiseContent;
   success: ToastPromiseContent | ((value: T) => ToastPromiseContent);
   error: ToastPromiseContent | ((error: unknown) => ToastPromiseContent);
@@ -36,6 +39,10 @@ export interface ToastPromiseOptions<T> {
 
 type ToastMessage = ReactNode;
 type ToastMethod = (message: ToastMessage, options?: ToastOptions) => string;
+type ToastErrorMethod = (
+  message: ToastMessage,
+  compactTitleOrOptions?: string | ToastOptions,
+) => string;
 type ToastIconMethod = (message: ToastMessage, options: ToastIconOptions) => string;
 type SileoOptionsWithId = SileoOptions & { id: string };
 type ToastState = "success" | "error" | "warning" | "info" | "action";
@@ -58,10 +65,18 @@ const DEFAULT_DURATIONS: Record<ToastState, number> = {
 const DEFAULT_POSITION: SileoPosition = "top-right";
 const MAX_VISIBLE_TOASTS = 3;
 const TOAST_EXIT_BUFFER_MS = 700;
-// Longest closed-form title any current `toast.error/warning` uses as its sole
-// message is ~77 chars; past here a single-line Sileo title clips anyway, so
-// spill the text into the expandable description instead of losing it.
-const TITLE_SPILL_CHARS = 80;
+function titleFits(title: string) {
+  if (title.includes("\n")) return false;
+  if (typeof document === "undefined") return title.length <= 36;
+  const probe = document.createElement("span");
+  probe.style.cssText =
+    "position:fixed;visibility:hidden;white-space:pre;font-family:var(--font-sans);font-size:var(--font-size-body);font-weight:600";
+  probe.textContent = title;
+  document.body.append(probe);
+  const width = probe.getBoundingClientRect().width;
+  probe.remove();
+  return width ? width <= Math.min(350, window.innerWidth - 32) - 80 : title.length <= 36;
+}
 
 type TrackedToast = {
   createdAt: number;
@@ -195,7 +210,7 @@ function nextToastId() {
 }
 
 function withButton(options: ToastOptions): Omit<SileoOptions, "type"> {
-  const { action, title, ...rest } = options;
+  const { action, title, compactTitle: _compactTitle, ...rest } = options;
   return {
     ...(title ? { title } : {}),
     ...rest,
@@ -219,7 +234,8 @@ function normalizeMessage(
   const isTextMessage = typeof message === "string";
   const resolvedTitle = title ?? (isTextMessage ? message : undefined);
   const resolvedDescription =
-    description ?? (title && isTextMessage ? message : isTextMessage ? undefined : message);
+    description ??
+    (title && isTextMessage && message !== title ? message : isTextMessage ? undefined : message);
 
   return {
     id,
@@ -233,10 +249,13 @@ function normalizePromiseContent(
   content: ToastPromiseContent,
   id: string,
   defaultDuration?: number,
+  state: ToastState | "loading" = "loading",
 ): SileoOptionsWithId {
   const options = { id, ...withButton(content) };
+  const spilled = spillLongTitle(state, options, content.compactTitle);
   const hasExpandableContent = Boolean(options.description) || Boolean(options.button);
-  if (hasExpandableContent && content.autopilot === undefined) options.autopilot = false;
+  if (hasExpandableContent && content.autopilot === undefined && !spilled)
+    options.autopilot = false;
   if (options.duration === undefined && defaultDuration !== undefined) {
     options.duration = defaultDuration;
   }
@@ -248,25 +267,30 @@ function currentLanguage(): Language {
   return isLanguage(document.documentElement.lang) ? document.documentElement.lang : "es";
 }
 
-/**
- * Sileo renders titles on a single clipped line and only expands toasts that
- * carry a `description`/`button`. A long error message passed as a sole
- * `toast.error|warning` argument (e.g. an API error detail) was therefore
- * truncated with no way to read the rest. Spill such a title into the
- * expandable description behind a short generic one so the full text is always
- * readable — and, because the spill keeps Sileo's default autopilot, the toast
- * auto-expands to show it.
- */
 function spillLongTitle(
-  method: "success" | "error" | "warning" | "info",
+  method: ToastState | "loading",
   options: SileoOptionsWithId,
+  compactTitle?: string,
 ) {
-  if (method !== "error" && method !== "warning") return false;
-  if (typeof options.title !== "string" || options.title.length <= TITLE_SPILL_CHARS) return false;
-  if (options.description !== undefined || options.button) return false;
+  if (typeof options.title !== "string" || titleFits(options.title)) return false;
   const longText = options.title;
-  options.title = translateMessage(currentLanguage(), "actionFailedGeneric");
-  options.description = longText;
+  const titleKey =
+    method === "error"
+      ? "actionFailedGeneric"
+      : method === "loading"
+        ? "loading"
+        : method === "success"
+          ? "done"
+          : "batchResultTitle";
+  options.title = compactTitle ?? translateMessage(currentLanguage(), titleKey);
+  options.description =
+    options.description === undefined
+      ? longText
+      : typeof options.description === "string"
+        ? `${longText}\n\n${options.description}`
+        : createElement("div", null, createElement("p", null, longText), options.description);
+  if (options.autopilot === undefined) options.autopilot = { expand: 150, collapse: 60_000 };
+  if (options.duration === undefined) options.duration = 8_000;
   return true;
 }
 
@@ -277,7 +301,7 @@ function show(
 ) {
   const id = nextToastId();
   const sileoOptions = normalizeMessage(message, options, id);
-  const spilled = spillLongTitle(method, sileoOptions);
+  const spilled = spillLongTitle(method, sileoOptions, options?.compactTitle);
   const key = dedupeKey(method, sileoOptions);
   const existingId = findDedupedToast(key);
   if (existingId) return existingId;
@@ -299,6 +323,7 @@ function showLoading(message: ToastMessage, options?: ToastOptions) {
     type: "loading",
     duration: options?.duration === undefined ? null : options.duration,
   } satisfies SileoOptionsWithId;
+  spillLongTitle("loading", sileoOptions, options?.compactTitle);
   const result = sileo.show(sileoOptions);
   trackToast(result, sileoOptions, "loading");
   return result;
@@ -307,7 +332,8 @@ function showLoading(message: ToastMessage, options?: ToastOptions) {
 function showAction(message: ToastMessage, options?: ToastOptions) {
   const id = nextToastId();
   const sileoOptions = normalizeMessage(message, options, id);
-  if (options?.autopilot === undefined) sileoOptions.autopilot = false;
+  const spilled = spillLongTitle("action", sileoOptions, options?.compactTitle);
+  if (options?.autopilot === undefined && !spilled) sileoOptions.autopilot = false;
   if (sileoOptions.duration === undefined) sileoOptions.duration = DEFAULT_DURATIONS.action;
   const result = sileo.action(sileoOptions);
   trackToast(result, sileoOptions, "action");
@@ -317,8 +343,10 @@ function showAction(message: ToastMessage, options?: ToastOptions) {
 function showIcon(message: ToastMessage, options: ToastIconOptions) {
   const id = nextToastId();
   const sileoOptions = normalizeMessage(message, options, id);
+  const spilled = spillLongTitle("success", sileoOptions, options.compactTitle);
   const hasExpandableContent = Boolean(sileoOptions.description) || Boolean(sileoOptions.button);
-  if (hasExpandableContent && options.autopilot === undefined) sileoOptions.autopilot = false;
+  if (hasExpandableContent && options.autopilot === undefined && !spilled)
+    sileoOptions.autopilot = false;
   if (sileoOptions.duration === undefined) sileoOptions.duration = DEFAULT_DURATIONS.success;
 
   const result = sileo.show({ ...sileoOptions, icon: options.icon });
@@ -332,17 +360,41 @@ function showPromise<T>(promise: Promise<T> | (() => Promise<T>), options: Toast
     content: ToastPromiseContent | ((value: TValue) => ToastPromiseContent),
     value: TValue,
   ) => (typeof content === "function" ? content(value) : content);
+  let settledDuration: number | null | undefined;
+  const normalizeResult = (content: ToastPromiseContent, state: ToastState) => {
+    const normalized = normalizePromiseContent(
+      { compactTitle: options.compactTitle, ...content },
+      id,
+      DEFAULT_DURATIONS[state],
+      state,
+    );
+    settledDuration = normalized.duration;
+    return normalized;
+  };
   const nativeOptions: NativePromiseOptions<T> = {
     position: options.position,
-    loading: { ...normalizePromiseContent(options.loading, id), duration: null },
-    success: (value) =>
-      normalizePromiseContent(resolve(options.success, value), id, DEFAULT_DURATIONS.success),
-    error: (error) =>
-      normalizePromiseContent(resolve(options.error, error), id, DEFAULT_DURATIONS.error),
+    loading: {
+      ...normalizePromiseContent({ compactTitle: options.compactTitle, ...options.loading }, id),
+      duration: null,
+    },
+    success: (value) => normalizeResult(resolve(options.success, value), "success"),
+    error: (error) => {
+      const content = resolve(options.error, error);
+      const compactTitle = content.compactTitle ?? options.compactTitle;
+      return normalizeResult(
+        compactTitle
+          ? {
+              ...content,
+              compactTitle,
+              title: error instanceof Error ? error.message : content.title,
+            }
+          : content,
+        "error",
+      );
+    },
     ...(options.action
       ? {
-          action: (value: T) =>
-            normalizePromiseContent(resolve(options.action!, value), id, DEFAULT_DURATIONS.action),
+          action: (value: T) => normalizeResult(resolve(options.action!, value), "action"),
         }
       : {}),
   };
@@ -351,26 +403,19 @@ function showPromise<T>(promise: Promise<T> | (() => Promise<T>), options: Toast
 
   void result.then(
     () => {
-      const content = options.action ?? options.success;
       const state: ToastState = options.action ? "action" : "success";
-      const fallback = DEFAULT_DURATIONS[state];
-      const duration =
-        typeof content === "function"
-          ? fallback
-          : content.duration === undefined
-            ? fallback
-            : content.duration;
-      settlePromiseToast(id, duration, state);
+      settlePromiseToast(
+        id,
+        settledDuration === undefined ? DEFAULT_DURATIONS[state] : settledDuration,
+        state,
+      );
     },
     () => {
-      const content = options.error;
-      const duration =
-        typeof content === "function"
-          ? DEFAULT_DURATIONS.error
-          : content.duration === undefined
-            ? DEFAULT_DURATIONS.error
-            : content.duration;
-      settlePromiseToast(id, duration, "error");
+      settlePromiseToast(
+        id,
+        settledDuration === undefined ? DEFAULT_DURATIONS.error : settledDuration,
+        "error",
+      );
     },
   );
   return result;
@@ -379,7 +424,7 @@ function showPromise<T>(promise: Promise<T> | (() => Promise<T>), options: Toast
 interface ToastApi {
   (message: ToastMessage, options?: ToastOptions): string;
   success: ToastMethod;
-  error: ToastMethod;
+  error: ToastErrorMethod;
   warning: ToastMethod;
   info: ToastMethod;
   loading: ToastMethod;
@@ -394,7 +439,14 @@ export const toast: ToastApi = Object.assign(
   (message: ToastMessage, options?: ToastOptions) => show("info", message, options),
   {
     success: (message: ToastMessage, options?: ToastOptions) => show("success", message, options),
-    error: (message: ToastMessage, options?: ToastOptions) => show("error", message, options),
+    error: (message: ToastMessage, compactTitleOrOptions?: string | ToastOptions) =>
+      show(
+        "error",
+        message,
+        typeof compactTitleOrOptions === "string"
+          ? { compactTitle: compactTitleOrOptions }
+          : compactTitleOrOptions,
+      ),
     warning: (message: ToastMessage, options?: ToastOptions) => show("warning", message, options),
     info: (message: ToastMessage, options?: ToastOptions) => show("info", message, options),
     loading: showLoading,
@@ -421,8 +473,16 @@ export function showErrorToast(error: unknown, title: string, options?: ToastOpt
   const description =
     options?.description ??
     (error instanceof Error && error.message !== title ? error.message : undefined);
-  return toast.error(title, {
+  if (options?.description !== undefined) {
+    return toast.error(title, {
+      ...options,
+      title: options.compactTitle ?? title,
+      autopilot: options.autopilot ?? { expand: 150, collapse: 60_000 },
+      duration: options.duration === undefined ? 8_000 : options.duration,
+    });
+  }
+  return toast.error(description ?? title, {
     ...options,
-    ...(description !== undefined ? { description } : {}),
+    compactTitle: options?.compactTitle ?? title,
   });
 }

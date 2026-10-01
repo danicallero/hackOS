@@ -78,7 +78,7 @@ export function ProjectFormDialog({
           mode.kind === "edit"
             ? await updateRepo(mode.repo.id, patch)
             : await updateMyProject(mode.repo.id, patch);
-        toast.success(t("projectSaved"));
+        toast.success(t("projectSaved"), { compactTitle: t("toastSaveProject") });
         setOpen(false);
         await onSaved(updated.id as number);
       } else {
@@ -92,13 +92,16 @@ export function ProjectFormDialog({
           mode.kind === "create"
             ? await createRepo(input, crypto.randomUUID())
             : await createMyProject(input, crypto.randomUUID());
-        toast.success(t("projectCreated"));
+        toast.success(t("projectCreated"), { compactTitle: t("toastCreateProject") });
         setOpen(false);
         resetToInitial();
         await onSaved(created.repo.id as number);
       }
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveProject"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveProject"),
+        t("toastSaveProject"),
+      );
     } finally {
       setPending(false);
     }

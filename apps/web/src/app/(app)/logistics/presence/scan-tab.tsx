@@ -185,7 +185,9 @@ export function ScanTab({
         badgeId: assignBadgeId.trim(),
         method,
       });
-      toast.success(t("badgeAssigned", { badgeId: result.badgeId, name: personName(result) }));
+      toast.success(t("badgeAssigned", { badgeId: result.badgeId, name: personName(result) }), {
+        compactTitle: t("assignBadgeAction"),
+      });
       onAccredited();
       setAccCard({ ...accCard, alreadyAccredited: true, currentBadge: result.badgeId });
       setAssignBadgeId("");
@@ -207,7 +209,9 @@ export function ScanTab({
         newBadgeId: newBadgeId.trim(),
         reason: reason.trim(),
       });
-      toast.success(t("badgeRotatedTo", { badge: result.newBadge }));
+      toast.success(t("badgeRotatedTo", { badge: result.newBadge }), {
+        compactTitle: t("toastReplaceBadge"),
+      });
       setAccCard({ ...accCard, alreadyAccredited: true, currentBadge: result.newBadge });
       setNewBadgeId("");
       setReason("");
@@ -226,7 +230,9 @@ export function ScanTab({
     try {
       const result = await logisticsApi.presenceScan({ badgeId: presCard.badgeId, kind });
       setRecentScan({ kind, person: personName(presCard), at: result.scannedAt });
-      toast.success(kind === "in" ? t("entryRecorded") : t("exitRecorded"));
+      toast.success(kind === "in" ? t("entryRecorded") : t("exitRecorded"), {
+        compactTitle: t("toastRecordPresence"),
+      });
       reset();
       onPresenceScanned();
     } catch (err) {
@@ -248,7 +254,7 @@ export function ScanTab({
         scannedAt: new Date(manualScannedAt).toISOString(),
       });
       setRecentScan({ kind, person: personName(presCard), at: result.scannedAt });
-      toast.success(t("manualRecordAdded"));
+      toast.success(t("manualRecordAdded"), { compactTitle: t("toastRecordPresence") });
       reset();
       onPresenceScanned();
     } catch (err) {

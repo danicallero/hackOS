@@ -80,7 +80,7 @@ export function UniversitiesManager() {
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("couldNotLoadDirectory");
       setLoadError(message);
-      toast.error(message);
+      toast.error(message, t("universitiesTab"));
     } finally {
       setLoading(false);
     }
@@ -108,15 +108,18 @@ export function UniversitiesManager() {
     try {
       if (editing) {
         await api.patch<University>(`/api/universities/${editing.id}`, { name });
-        toast.success(t("universityRenamed"));
+        toast.success(t("universityRenamed"), { compactTitle: t("toastSaveUniversity") });
       } else {
         await api.post<University>("/api/universities", { name });
-        toast.success(t("universityAdded"));
+        toast.success(t("universityAdded"), { compactTitle: t("toastSaveUniversity") });
       }
       setEditing(undefined);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveUniversity"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveUniversity"),
+        t("toastSaveUniversity"),
+      );
     }
   }
 
@@ -125,11 +128,14 @@ export function UniversitiesManager() {
     setDeleting(true);
     try {
       await api.delete(`/api/universities/${deleteTarget.id}`);
-      toast.success(t("universityDeleted"));
+      toast.success(t("universityDeleted"), { compactTitle: t("deleteUniversityTitle") });
       setDeleteTarget(null);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteUniversity"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotDeleteUniversity"),
+        t("deleteUniversityTitle"),
+      );
     } finally {
       setDeleting(false);
     }
@@ -150,7 +156,7 @@ export function UniversitiesManager() {
       await api.post(`/api/universities/${normalizationSource.id}/normalize`, {
         targetId: Number(normalizationTargetId),
       });
-      toast.success(t("universitiesNormalized"));
+      toast.success(t("universitiesNormalized"), { compactTitle: t("normalizeUniversityTitle") });
       setNormalizationSource(null);
       setNormalizationTargetId("");
       await load();

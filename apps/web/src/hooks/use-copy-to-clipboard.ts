@@ -13,10 +13,11 @@ export function useCopyToClipboard() {
     try {
       await navigator.clipboard.writeText(value);
       toast.icon(t("copied"), {
+        compactTitle: t("toastCopyLink"),
         icon: createElement(ClipboardCheckIcon, { "aria-hidden": true }),
       });
     } catch {
-      toast.error(t("couldNotCopyLink"));
+      toast.error(t("couldNotCopyLink"), t("toastCopyLink"));
     }
   };
 }

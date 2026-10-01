@@ -28,11 +28,11 @@ export function useVerificationResend(email: string, callbackURL?: string) {
         email,
         ...(callbackURL ? { callbackURL } : {}),
       });
-      toast.success(t("verificationEmailSent"));
+      toast.success(t("verificationEmailSent"), { compactTitle: t("toastVerifyEmail") });
       setCooldown(60);
     } catch (error) {
       if (error instanceof ApiError && error.status === 429) setCooldown(error.retryAfter ?? 60);
-      toast.error(t("couldNotSendVerificationEmail"));
+      toast.error(t("couldNotSendVerificationEmail"), t("toastVerifyEmail"));
     } finally {
       setResending(false);
     }

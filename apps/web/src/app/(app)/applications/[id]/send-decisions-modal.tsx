@@ -48,10 +48,13 @@ export function SendDecisionsModal({
           : tokenCount > 0
             ? t("sentDecisionsWithLinks", { sent, tokenCount })
             : t("sentDecisions", { sent });
-      toast.success(msg);
+      toast.success(msg, { compactTitle: t("sendDecisions") });
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSendDecisions"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSendDecisions"),
+        t("sendDecisions"),
+      );
     } finally {
       setBusy(false);
     }

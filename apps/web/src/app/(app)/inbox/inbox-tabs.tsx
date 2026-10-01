@@ -173,7 +173,10 @@ export function MessagesTab() {
       notifyNotificationsRead();
       refetch();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotMarkRead"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotMarkRead"),
+        t("toastMarkRead"),
+      );
     }
   }
 
@@ -200,7 +203,7 @@ export function MessagesTab() {
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("couldNotDeleteNotification");
       setDeleteError(message);
-      toast.error(message);
+      toast.error(message, t("toastDeleteMessage"));
     } finally {
       setDeleteBusy(false);
     }
@@ -409,7 +412,10 @@ export function PreferencesTab() {
       setPrefs(prefsRes);
       setScheduleItems(scheduleRes.items);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadPreferencesToast"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotLoadPreferencesToast"),
+        t("toastNotificationSettings"),
+      );
     } finally {
       setLoading(false);
     }
@@ -427,7 +433,10 @@ export function PreferencesTab() {
       const next = await notificationsApi.setPreferences([{ category, channel, enabled }]);
       setPrefs(next);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSavePreference"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSavePreference"),
+        t("toastNotificationSettings"),
+      );
     } finally {
       setBusy(false);
     }
@@ -444,9 +453,12 @@ export function PreferencesTab() {
       const next = await notificationsApi.setPreferences(items);
       setPrefs(next);
       setReminderPickerOpen(false);
-      toast.success(t("reminderAdded"));
+      toast.success(t("reminderAdded"), { compactTitle: t("addReminder") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotAddReminder"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotAddReminder"),
+        t("addReminder"),
+      );
     } finally {
       setBusy(false);
     }
@@ -463,9 +475,12 @@ export function PreferencesTab() {
       const next = await notificationsApi.setPreferences(items);
       setPrefs(next);
       setReminderPickerOpen(false);
-      toast.success(t("reminderAdded"));
+      toast.success(t("reminderAdded"), { compactTitle: t("addReminder") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotAddReminder"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotAddReminder"),
+        t("addReminder"),
+      );
     } finally {
       setBusy(false);
     }
@@ -493,7 +508,10 @@ export function PreferencesTab() {
         });
       } catch (err) {
         setRemovalStates((current) => ({ ...current, [operation.category]: "failed" }));
-        toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveReminder"));
+        toast.error(
+          err instanceof ApiError ? err.message : t("couldNotRemoveReminder"),
+          t("toastRemoveReminder"),
+        );
       } finally {
         queuedRemovalCategories.current.delete(operation.category);
       }

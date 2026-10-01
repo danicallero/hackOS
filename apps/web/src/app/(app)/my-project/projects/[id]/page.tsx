@@ -59,7 +59,10 @@ export default function MyProjectDetailPage() {
       setChallenges(catalogue.items);
       setGroup(planned.groups.find((item) => item.linked_repo_id === Number(id)) ?? null);
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : t("couldNotLoadProject"));
+      toast.error(
+        error instanceof ApiError ? error.message : t("couldNotLoadProject"),
+        t("projectLabel"),
+      );
       setLoadError(error instanceof ApiError ? error.message : t("couldNotLoadProject"));
     } finally {
       setLoading(false);
@@ -240,7 +243,10 @@ function AddChallenge({
       setSelected("");
       await onAdded();
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : t("couldNotSaveProject"));
+      toast.error(
+        error instanceof ApiError ? error.message : t("couldNotSaveProject"),
+        t("addChallengeLabel"),
+      );
     } finally {
       setSaving(false);
     }
@@ -298,10 +304,14 @@ function InviteMember({
     } catch (error) {
       if (error instanceof ApiError && (error.status === 404 || error.status === 403)) {
         showErrorToast(error, t("couldNotInvite"), {
+          compactTitle: t("toastSendInvite"),
           description: t("inviteAcceptedParticipantRequired"),
         });
       } else {
-        toast.error(error instanceof ApiError ? error.message : t("couldNotSendInvite"));
+        toast.error(
+          error instanceof ApiError ? error.message : t("couldNotSendInvite"),
+          t("toastSendInvite"),
+        );
       }
     } finally {
       setSaving(false);

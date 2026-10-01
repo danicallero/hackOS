@@ -131,7 +131,7 @@ export function ApplicationExportPanel({
     } catch (error) {
       const message = errorMessage(error, t("applicationExportCatalogFailed"));
       setCatalogError(message);
-      toast.error(message);
+      toast.error(message, t("toastExportApplications"));
     } finally {
       setCatalogLoading(false);
     }
@@ -303,12 +303,18 @@ export function ApplicationExportPanel({
       link.remove();
       URL.revokeObjectURL(url);
       setMissingFiles(report);
-      toast.success(t("applicationExportDownloaded"));
-      if (report) toast.error(t("applicationExportMissingFilesDesc", { count: report.total }));
+      toast.success(t("applicationExportDownloaded"), {
+        compactTitle: t("toastExportApplications"),
+      });
+      if (report)
+        toast.error(
+          t("applicationExportMissingFilesDesc", { count: report.total }),
+          t("exportFiles"),
+        );
     } catch (error) {
       const message = errorMessage(error, t("applicationExportFailed"));
       setExportError(message);
-      toast.error(message);
+      toast.error(message, t("toastExportApplications"));
     } finally {
       setExporting(false);
     }

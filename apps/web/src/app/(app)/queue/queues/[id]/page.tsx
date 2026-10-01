@@ -149,9 +149,9 @@ export default function QueueDetailPage() {
       const updated = await updateQueueGroup(queueGroupId, { displayName: name.trim() });
       setMeta(updated);
       setName(updated.displayName);
-      toast.success(t("queueRenamed"));
+      toast.success(t("queueRenamed"), { compactTitle: t("toastRenameQueue") });
     } catch (err) {
-      showErrorToast(err, t("couldNotSaveQueue"));
+      showErrorToast(err, t("couldNotSaveQueue"), { compactTitle: t("toastRenameQueue") });
     } finally {
       setBusy(false);
     }
@@ -167,10 +167,10 @@ export default function QueueDetailPage() {
     try {
       const updated = await setQueueGroupRooms(queueGroupId, next);
       setMeta(updated);
-      toast.success(t("queueRoomsSaved"));
+      toast.success(t("queueRoomsSaved"), { compactTitle: t("toastAssignRooms") });
     } catch (err) {
       setRoomIds(previous);
-      showErrorToast(err, t("couldNotSaveQueueRooms"));
+      showErrorToast(err, t("couldNotSaveQueueRooms"), { compactTitle: t("toastAssignRooms") });
     } finally {
       setRoomsBusy(false);
     }
@@ -183,9 +183,9 @@ export default function QueueDetailPage() {
       const updated = await updateQueueGroup(queueGroupId, { criteria: normalized });
       setMeta(updated);
       setCriteria(updated.criteria ?? []);
-      toast.success(t("queueCriteriaSaved"));
+      toast.success(t("queueCriteriaSaved"), { compactTitle: t("toastSaveCriteria") });
     } catch (err) {
-      showErrorToast(err, t("couldNotSaveQueueCriteria"));
+      showErrorToast(err, t("couldNotSaveQueueCriteria"), { compactTitle: t("toastSaveCriteria") });
     } finally {
       setCriteriaBusy(false);
     }
@@ -198,9 +198,9 @@ export default function QueueDetailPage() {
     try {
       await moveQueueEntry(entryId, position);
       await load();
-      toast.success(t("queueTeamMoved"));
+      toast.success(t("queueTeamMoved"), { compactTitle: t("toastQueueAction") });
     } catch (err) {
-      showErrorToast(err, t("couldNotMoveQueueTeam"));
+      showErrorToast(err, t("couldNotMoveQueueTeam"), { compactTitle: t("toastQueueAction") });
     } finally {
       setBusy(false);
     }
@@ -213,9 +213,9 @@ export default function QueueDetailPage() {
       // The API clamps out-of-range ranks to the queue's last position.
       await moveQueueEntry(entryId, 1_000_000_000);
       await load();
-      toast.success(t("queueTeamSentToEnd"));
+      toast.success(t("queueTeamSentToEnd"), { compactTitle: t("sendToEnd") });
     } catch (err) {
-      showErrorToast(err, t("couldNotMoveQueueTeam"));
+      showErrorToast(err, t("couldNotMoveQueueTeam"), { compactTitle: t("sendToEnd") });
     } finally {
       setBusy(false);
     }

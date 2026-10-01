@@ -1,8 +1,7 @@
 "use client";
 
-// Participant application detail (H12, H15): render one form's template, let the
-// owner save a draft, submit it, see the masked status, and — once accepted and
-// the decision has been sent — confirm or decline their place.
+// H12/H15: draft, submit and view an application; confirm or decline a place
+// only after the acceptance decision has been sent.
 //
 // Endpoints (applicant-only):
 //   GET  /api/public/applications/:id          → the open form + template
@@ -293,7 +292,7 @@ export default function MyApplicationDetailPage() {
 
   async function handleSubmit() {
     if (!checkRequired()) {
-      toast.warning(t("fillRequiredFields"));
+      toast.warning(t("fillRequiredFields"), { compactTitle: t("submitApplication") });
       return;
     }
     setSubmitting(true);
@@ -332,7 +331,7 @@ export default function MyApplicationDetailPage() {
       setSaveState("saved");
       setActionError(null);
       setSubmissionNoticeOpen(true);
-      toast.success(t("applicationSubmitted"));
+      toast.success(t("applicationSubmitted"), { compactTitle: t("submitApplication") });
     } catch (err) {
       setSaveState("error");
       if (err instanceof ApiError) {
@@ -346,10 +345,8 @@ export default function MyApplicationDetailPage() {
         }
         const summary = validationErrorSummary(nextErrors, template, lang);
         const isTemplateValidation = err.code === "validation_error";
-        showErrorToast(
-          err,
-          t("couldNotSubmitApplication"),
-          summary
+        showErrorToast(err, t("couldNotSubmitApplication"), {
+          ...(summary
             ? {
                 description: `${err.message}\n${summary}`,
                 duration: 12_000,
@@ -362,14 +359,17 @@ export default function MyApplicationDetailPage() {
                   autopilot: { expand: 0, collapse: 0 },
                   action: { label: t("retry"), onClick: () => void handleSubmit() },
                 }
-              : undefined,
-        );
+              : undefined),
+          compactTitle: t("submitApplication"),
+        });
         if (!isTemplateValidation) {
           setActionError({ action: "submit", message: err.message });
         }
       } else {
         setActionError({ action: "submit", message: t("couldNotSubmitApplication") });
-        showErrorToast(err, t("couldNotSubmitApplication"));
+        showErrorToast(err, t("couldNotSubmitApplication"), {
+          compactTitle: t("submitApplication"),
+        });
       }
     } finally {
       setSubmitting(false);
@@ -394,7 +394,7 @@ export default function MyApplicationDetailPage() {
       await api.post(`/api/me/responses/${response.id}/confirm`, undefined, {
         headers: { "Idempotency-Key": confirmKeyRef.current.key },
       });
-      toast.success(t("placeConfirmedSeeYou"));
+      toast.success(t("placeConfirmedSeeYou"), { compactTitle: t("confirmPlace") });
       await load();
     } catch (err) {
       if (isConfirmationExpiredError(err)) {
@@ -430,7 +430,7 @@ export default function MyApplicationDetailPage() {
       await api.post(`/api/me/responses/${response.id}/decline`, undefined, {
         headers: { "Idempotency-Key": declineKeyRef.current.key },
       });
-      toast.success(t("placeReleasedMsg"));
+      toast.success(t("placeReleasedMsg"), { compactTitle: t("toastReleasePlace") });
       setReleaseOpen(false);
       await load();
     } catch (err) {

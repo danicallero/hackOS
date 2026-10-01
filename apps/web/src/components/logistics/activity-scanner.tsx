@@ -140,7 +140,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
 
   const pickFound = (person: PersonSearchResult) => {
     if (!person.badgeId) {
-      toast.error(t("noBadge"));
+      toast.error(t("noBadge"), t("toastScanBadge"));
       return;
     }
     setBadgeId(person.badgeId);
@@ -202,7 +202,9 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
       });
       setResult(scan);
       setTransactionState("confirmed");
-      toast.success(scan.firstTime ? t("scanRegistered") : t("repeatRegistered"));
+      toast.success(scan.firstTime ? t("scanRegistered") : t("repeatRegistered"), {
+        compactTitle: t("toastRecordScan"),
+      });
       setBadgeId("");
       setRepeatPrompt(null);
       activities.refetch();
@@ -246,7 +248,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
       );
       setBadgeId("");
       setTransactionState("saved");
-      toast.success(t("scanQueuedLocally"));
+      toast.success(t("scanQueuedLocally"), { compactTitle: t("toastOfflineScan") });
     } catch {
       if (isCurrentOwner(capturedOwnerId, capturedEpoch)) {
         setTransactionState("attention");

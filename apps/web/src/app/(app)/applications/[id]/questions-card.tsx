@@ -481,7 +481,7 @@ export function QuestionsCard({
   function save() {
     const err = validate();
     if (err) {
-      toast.error(err);
+      toast.error(err, t("saveQuestions"));
       return;
     }
     // Nudge (not block) toward wiring up the reserved profile-autofill keys
@@ -514,10 +514,13 @@ export function QuestionsCard({
       });
       await onSaved();
       setSaveState("saved");
-      toast.success(t("questionsSaved"));
+      toast.success(t("questionsSaved"), { compactTitle: t("saveQuestions") });
     } catch (e) {
       setSaveState("error");
-      toast.error(e instanceof ApiError ? e.message : t("couldNotSaveQuestions"));
+      toast.error(
+        e instanceof ApiError ? e.message : t("couldNotSaveQuestions"),
+        t("saveQuestions"),
+      );
     } finally {
       setSaving(false);
     }

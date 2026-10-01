@@ -100,7 +100,7 @@ export function QueuesPanel() {
     try {
       setGroups(await listQueueGroups());
     } catch (err) {
-      showErrorToast(err, t("couldNotLoadQueues"));
+      showErrorToast(err, t("couldNotLoadQueues"), { compactTitle: t("queueTeamQueues") });
       setGroups([]);
     }
   }, [t]);
@@ -176,7 +176,7 @@ function EnterpriseQueuesCard({
       await action();
       await onChanged();
     } catch (err) {
-      showErrorToast(err, t("couldNotSaveQueue"));
+      showErrorToast(err, t("couldNotSaveQueue"), { compactTitle: t("toastSaveQueue") });
     } finally {
       setBusy(false);
     }
@@ -202,7 +202,7 @@ function EnterpriseQueuesCard({
         await updateQueueGroup(merged.id, { criteria: normalized });
       }
       setStage("idle");
-      toast.success(t("sharedQueueCreated"));
+      toast.success(t("sharedQueueCreated"), { compactTitle: t("toastShareQueue") });
     });
 
   const generateOneQueue = async (queueId: number) => {
@@ -210,9 +210,11 @@ function EnterpriseQueuesCard({
     try {
       const result = await generateQueue(queueId);
       await onChanged();
-      toast.success(t("queueGenerated", { count: result.inserted + result.revived }));
+      toast.success(t("queueGenerated", { count: result.inserted + result.revived }), {
+        compactTitle: t("generateQueues"),
+      });
     } catch (err) {
-      showErrorToast(err, t("couldNotGenerateQueues"));
+      showErrorToast(err, t("couldNotGenerateQueues"), { compactTitle: t("generateQueues") });
     } finally {
       setQueueActionBusyId(null);
     }
@@ -226,9 +228,9 @@ function EnterpriseQueuesCard({
       await clearQueue(queueId);
       setClearQueueId(null);
       await onChanged();
-      toast.success(t("queueCleared"));
+      toast.success(t("queueCleared"), { compactTitle: t("clearQueue") });
     } catch (err) {
-      showErrorToast(err, t("couldNotClearQueue"));
+      showErrorToast(err, t("couldNotClearQueue"), { compactTitle: t("clearQueue") });
     } finally {
       setQueueActionBusyId(null);
     }

@@ -291,7 +291,10 @@ export function InvitationsScreen() {
       setSelected(null);
       await load();
     } catch (cause) {
-      toast.error(cause instanceof ApiError ? cause.message : t("couldNotWithdrawLink"));
+      toast.error(
+        cause instanceof ApiError ? cause.message : t("couldNotWithdrawLink"),
+        t("toastWithdrawInvite"),
+      );
     } finally {
       setExpiring(false);
     }
@@ -302,9 +305,12 @@ export function InvitationsScreen() {
     setResending(true);
     try {
       await api.post(`/api/invites/${selected.id}/resend`);
-      toast.success(t("inviteResent"));
+      toast.success(t("inviteResent"), { compactTitle: t("toastSendInvite") });
     } catch (cause) {
-      toast.error(cause instanceof ApiError ? cause.message : t("couldNotInviteAction"));
+      toast.error(
+        cause instanceof ApiError ? cause.message : t("couldNotInviteAction"),
+        t("toastSendInvite"),
+      );
     } finally {
       setResending(false);
     }

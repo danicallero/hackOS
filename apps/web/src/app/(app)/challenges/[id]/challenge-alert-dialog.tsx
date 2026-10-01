@@ -57,12 +57,17 @@ export function ChallengeAlertDialog({
         },
         { headers: { "idempotency-key": crypto.randomUUID() } },
       );
-      toast.success(t("challengeAlertSent", { count: result.recipients }));
+      toast.success(t("challengeAlertSent", { count: result.recipients }), {
+        compactTitle: t("sendChallengeAlert"),
+      });
       setOpen(false);
       setTitle(empty);
       setBody(empty);
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : t("couldNotSendChallengeAlert"));
+      toast.error(
+        error instanceof ApiError ? error.message : t("couldNotSendChallengeAlert"),
+        t("sendChallengeAlert"),
+      );
     } finally {
       setSending(false);
     }
