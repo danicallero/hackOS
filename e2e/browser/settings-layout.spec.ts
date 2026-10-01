@@ -49,7 +49,9 @@ test("opens password fields on demand and clears dismissed secrets", async ({ pa
   await page.goto("/settings/profile");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   const cookies = page.locator('aside[aria-labelledby="cookie-notice-title"]');
-  if (await cookies.isVisible()) await cookies.locator("button").first().click();
+  await expect(cookies).toBeVisible();
+  await cookies.locator("button").first().click();
+  await expect(cookies).toBeHidden();
   await expect(page.getByLabel("Current password", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Update password", exact: true }).click();
   await page.getByLabel("Current password", { exact: true }).fill("discard-this-secret");
@@ -68,7 +70,9 @@ test("opens password fields on demand and clears dismissed secrets", async ({ pa
 test("changes optional channels while queue calls stay mandatory", async ({ page }) => {
   await page.goto("/inbox?tab=preferences");
   const cookies = page.locator('aside[aria-labelledby="cookie-notice-title"]');
-  if (await cookies.isVisible()) await cookies.locator("button").first().click();
+  await expect(cookies).toBeVisible();
+  await cookies.locator("button").first().click();
+  await expect(cookies).toBeHidden();
   const trigger = page.getByRole("button", { name: /Notification channels for Announcements/i });
   await expect(trigger).toBeVisible();
   await trigger.click();
@@ -91,7 +95,9 @@ test("changes optional channels while queue calls stay mandatory", async ({ page
 test("event settings fit the viewport", async ({ page }) => {
   await page.goto("/settings/event");
   const cookies = page.locator('aside[aria-labelledby="cookie-notice-title"]');
-  if (await cookies.isVisible()) await cookies.locator("button").first().click();
+  await expect(cookies).toBeVisible();
+  await cookies.locator("button").first().click();
+  await expect(cookies).toBeHidden();
   await expect(page.getByRole("textbox").first()).toHaveValue("HackUDC");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
@@ -127,7 +133,9 @@ test("searches activities and subscribes from the reminder dialog", async ({ pag
   );
   await page.goto("/inbox?tab=preferences");
   const cookies = page.locator('aside[aria-labelledby="cookie-notice-title"]');
-  if (await cookies.isVisible()) await cookies.locator("button").first().click();
+  await expect(cookies).toBeVisible();
+  await cookies.locator("button").first().click();
+  await expect(cookies).toBeHidden();
   await page.getByRole("button", { name: "Add reminder", exact: true }).click();
   await page.getByRole("combobox", { name: "Activity", exact: true }).click();
   await page.getByPlaceholder("Type to filter…").fill("sensors");
@@ -197,7 +205,9 @@ test("expands a message and keeps deletion behind confirmation", async ({ page }
   );
   await page.goto("/inbox");
   const cookies = page.locator('aside[aria-labelledby="cookie-notice-title"]');
-  if (await cookies.isVisible()) await cookies.locator("button").first().click();
+  await expect(cookies).toBeVisible();
+  await cookies.locator("button").first().click();
+  await expect(cookies).toBeHidden();
   const message = page.getByRole("button", { name: /Dinner is ready/ });
   await expect(message).toHaveAttribute("aria-expanded", "false");
   await page.screenshot({
