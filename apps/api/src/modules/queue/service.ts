@@ -1163,11 +1163,10 @@ type QueueGenerationOutcome = {
 type PresentationTimingPreference = "no_preference" | "early" | "middle" | "late";
 
 /**
- * A planned group's timing is a best-effort input only while a queue is first
+ * A project's timing is a best-effort input only while a queue is first
  * populated.  Once it has entries, their order is operational state: a later
  * generation must append/revive without moving a team an operator has already
- * ordered.  Keep unlinked groups out of this lookup; linking a Devpost project
- * to its planned group remains the projects boundary (#854).
+ * ordered. Inheriting a planning preference remains the projects boundary (#854).
  */
 async function presentationTimingPreferences(
   client: pg.PoolClient,
@@ -1175,17 +1174,17 @@ async function presentationTimingPreferences(
 ): Promise<Map<number, PresentationTimingPreference>> {
   if (repoIds.length === 0) return new Map();
   const { rows } = await client.query(
-    `SELECT linked_repo_id, presentation_timing_preference
-       FROM planned_work_groups
-      WHERE linked_repo_id = ANY($1::int[])`,
+    `SELECT id, presentation_timing_preference
+       FROM repos
+      WHERE id = ANY($1::int[])`,
     [repoIds],
   );
   return new Map(
     rows.map(
-      (row: {
-        linked_repo_id: number;
-        presentation_timing_preference: PresentationTimingPreference;
-      }) => [Number(row.linked_repo_id), row.presentation_timing_preference],
+      (row: { id: number; presentation_timing_preference: PresentationTimingPreference }) => [
+        Number(row.id),
+        row.presentation_timing_preference,
+      ],
     ),
   );
 }

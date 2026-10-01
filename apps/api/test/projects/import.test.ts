@@ -192,11 +192,68 @@ describe("POST /api/devpost/imports/confirm (H16)", () => {
     );
     expect(linked.rows).toEqual([
       {
-        description: "Keep this planning record",
+        description: "An AI that roasts your coffee and your code.",
         presentation_timing_preference: "late",
         repo_name: "Neural Beans",
       },
     ]);
+  });
+
+  it("merges resolved export aliases and accepted planners without duplicating email matches (#854)", async () => {
+    const server = await getApp();
+    const { aliceId, bobId } = await seedMatchableUsers();
+    const extra = await createUser();
+    const invited = await createUser();
+    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_IMPORT]);
+    const { pool } = await import("../../src/db/pool.js");
+    const group = await pool.query(
+      `INSERT INTO planned_work_groups
+      (name,created_by,devpost_url,devpost_canonical_url,presentation_timing_preference)
+      VALUES ('Planning name',$1,'https://event.devpost.com/submissions/954962-beans',$2,'early') RETURNING id`,
+      [extra, PROJECT_URLS.neuralBeans],
+    );
+    await pool.query(
+      `INSERT INTO planned_work_group_members (group_id,user_id,status)
+      VALUES ($1,$2,'active'),($1,$3,'active'),($1,$4,'active'),($1,$5,'invited')`,
+      [group.rows[0].id, extra, aliceId, bobId, invited],
+    );
+    // The resolved alias is durable: importing does not depend on Devpost being online.
+    const res = await server.inject({
+      method: "POST",
+      url: "/api/devpost/imports/confirm",
+      headers: asUser(operator),
+      payload: payload(),
+    });
+    expect(res.statusCode).toBe(200);
+    const repoId = res
+      .json()
+      .repos.find((repo: { title: string }) => repo.title === "Neural Beans").id;
+    expect(
+      (
+        await pool.query(
+          `SELECT user_id,status FROM submissions WHERE repo_id=$1 ORDER BY user_id`,
+          [repoId],
+        )
+      ).rows,
+    ).toEqual(
+      [aliceId, bobId, extra]
+        .sort((a, b) => a - b)
+        .map((user_id) => ({ user_id, status: "active" })),
+    );
+    expect(
+      (await pool.query(`SELECT presentation_timing_preference FROM repos WHERE id=$1`, [repoId]))
+        .rows[0].presentation_timing_preference,
+    ).toBe("early");
+    await server.inject({
+      method: "POST",
+      url: "/api/devpost/imports/confirm",
+      headers: asUser(operator),
+      payload: payload(),
+    });
+    expect(
+      (await pool.query(`SELECT count(*)::int n FROM submissions WHERE repo_id=$1`, [repoId]))
+        .rows[0].n,
+    ).toBe(3);
   });
 
   it("links a URL-less planned group only for a complete roster and intended-challenge match (#854)", async () => {

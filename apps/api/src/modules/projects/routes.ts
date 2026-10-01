@@ -374,9 +374,9 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_EDIT }),
       preHandler: requireCapability(CAPABILITIES.PROJECTS_EDIT),
       schema: {
-        summary: "Edit a project's metadata (H18): name, description, links.",
+        summary: "Edit a project's metadata and judging preference (H18).",
         description:
-          "Updates only the fields present in the body. Team membership and challenge lineup have their own H21 routes. Audited with before/after.",
+          "Updates only the fields present in the body. Judging preference cannot change after queue generation. Team membership and challenge lineup have their own H21 routes. Audited with before/after.",
         params: repoIdParamsSchema,
         body: updateRepoBodySchema,
       },
@@ -571,7 +571,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
         body: updateRepoBodySchema,
         summary: "Edit my own project (H19/H20) — active members only.",
         description:
-          "Updates only the fields present in the body. 403 if the caller isn't an active member of this project or the hacking window is closed. Audited (source: participant).",
+          "Updates only the fields present in the body, including judging preference until queue generation. 403 if the caller isn't an active member of this project or the hacking window is closed. Audited (source: participant).",
       },
     },
     async (req) => updateMyProject(req.userId as number, req.params.id, req.body),

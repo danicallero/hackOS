@@ -9,6 +9,7 @@ import { assertWithinParticipantSelfServiceWindow } from "../../lib/hacking-wind
 import { broadcast } from "../../lib/sse.js";
 import { hasEventAccess } from "../identity/role.js";
 import { notify } from "../notifications/service.js";
+import { resolveDevpostUrls } from "../projects/devpost-url.js";
 import { updateLinkedWorkGroupProject } from "../projects/service.js";
 
 async function assertParticipant(db: Queryable, userId: number) {
@@ -41,7 +42,7 @@ async function assertJudgingHasNotStarted(db: Queryable) {
 }
 export async function listMine(userId: number) {
   const { rows } = await pool.query(
-    `SELECT g.id, g.name, g.description, g.github_url, g.demo_url, g.devpost_url, g.presentation_timing_preference, g.linked_repo_id, g.created_by, g.created_at, g.updated_at,
+    `SELECT g.id, g.name, g.description, g.github_url, g.demo_url, g.devpost_url, COALESCE(r.presentation_timing_preference,g.presentation_timing_preference) AS presentation_timing_preference, g.linked_repo_id, g.created_by, g.created_at, g.updated_at,
     CASE WHEN r.id IS NULL THEN NULL ELSE jsonb_build_object('id', r.id, 'name', r.name, 'devpostUrl', r.devpost_url) END AS "linkedProject",
     coalesce(json_agg(DISTINCT jsonb_build_object('userId', m.user_id, 'name', u.name, 'surname', u.surname, 'status', m.status, 'invitedBy', m.invited_by, 'respondedAt', m.responded_at)) FILTER (WHERE m.user_id IS NOT NULL), '[]') members,
     coalesce(json_agg(DISTINCT jsonb_build_object('id', c.id, 'title', c.title, 'mandatory', c.mandatory)) FILTER (WHERE c.id IS NOT NULL), '[]') challenges,
@@ -134,12 +135,32 @@ export async function updateGroup(
     presentationTimingPreference?: string;
   },
 ) {
+  const existingRepos =
+    input.devpostUrl === undefined
+      ? []
+      : (
+          await pool.query<{
+            id: number;
+            devpost_url: string | null;
+            devpost_canonical_url: string | null;
+          }>(
+            `SELECT id, devpost_url, devpost_canonical_url FROM repos WHERE is_test_account = false AND devpost_url IS NOT NULL`,
+          )
+        ).rows;
+  const identities = await resolveDevpostUrls([
+    input.devpostUrl ?? null,
+    ...existingRepos
+      .filter((repo) => repo.devpost_canonical_url === null)
+      .map((repo) => repo.devpost_url),
+  ]);
   return withTransaction(async (db) => {
     await assertParticipant(db, userId);
     await assertMember(db, id, userId);
     await assertWithinParticipantSelfServiceWindow(db);
     const { rows: before } = await db.query(
-      `SELECT name,description,github_url,demo_url,devpost_url,presentation_timing_preference,linked_repo_id FROM planned_work_groups WHERE id=$1 FOR UPDATE`,
+      `SELECT name,description,github_url,demo_url,devpost_url,
+       COALESCE((SELECT r.presentation_timing_preference FROM repos r WHERE r.id = linked_repo_id),presentation_timing_preference) AS presentation_timing_preference,
+       linked_repo_id FROM planned_work_groups WHERE id=$1 FOR UPDATE`,
       [id],
     );
     if (!before[0]) throw new NotFoundError("Work group not found");
@@ -156,13 +177,11 @@ export async function updateGroup(
         throw new ConflictError("Presentation timing cannot be changed after queues are generated");
       }
     }
-    const { rows } = await db.query(
+    await db.query(
       `UPDATE planned_work_groups SET name=$2,description=$3,github_url=$4,demo_url=$5,devpost_url=$6,presentation_timing_preference=$7,
-       linked_repo_id = CASE WHEN linked_repo_id IS NOT NULL THEN linked_repo_id WHEN $8::text IS DISTINCT FROM $9::text THEN (
-         SELECT id FROM repos
-         WHERE lower(regexp_replace(devpost_url, '/+$', '')) = lower(regexp_replace($8, '/+$', ''))
-         LIMIT 1
-       ) ELSE linked_repo_id END
+       devpost_canonical_url = CASE WHEN $8 THEN
+         CASE WHEN devpost_url IS NOT DISTINCT FROM $6 THEN COALESCE($9,devpost_canonical_url) ELSE $9 END
+         ELSE devpost_canonical_url END
        WHERE id=$1
        RETURNING planned_work_groups.id,planned_work_groups.name,planned_work_groups.description,planned_work_groups.github_url,planned_work_groups.demo_url,planned_work_groups.devpost_url,planned_work_groups.presentation_timing_preference,planned_work_groups.linked_repo_id`,
       [
@@ -173,23 +192,45 @@ export async function updateGroup(
         input.demoUrl === undefined ? b.demo_url : input.demoUrl,
         input.devpostUrl === undefined ? b.devpost_url : input.devpostUrl,
         input.presentationTimingPreference ?? b.presentation_timing_preference,
-        input.devpostUrl === undefined ? b.devpost_url : input.devpostUrl,
-        b.devpost_url,
+        input.devpostUrl !== undefined,
+        identities.get(input.devpostUrl ?? "") ?? null,
       ],
     );
     if (b.linked_repo_id != null) {
       await updateLinkedWorkGroupProject(db, userId, b.linked_repo_id, input);
     }
+    for (const repo of existingRepos) {
+      const canonical = identities.get(repo.devpost_url ?? "");
+      if (canonical)
+        await db.query(
+          `UPDATE repos SET devpost_canonical_url = $2 WHERE id = $1 AND devpost_url = $3`,
+          [repo.id, canonical, repo.devpost_url],
+        );
+    }
+    if (b.linked_repo_id == null && existingRepos.length) {
+      await linkDevpostImports(
+        db,
+        userId,
+        existingRepos.map((repo) => repo.id),
+        id,
+      );
+    }
+    const after = (
+      await db.query(
+        `SELECT id,name,description,github_url,demo_url,devpost_url,presentation_timing_preference,linked_repo_id FROM planned_work_groups WHERE id=$1`,
+        [id],
+      )
+    ).rows[0];
     await audit(db, {
       actorId: userId,
       entityType: "planned_work_group",
       entityId: id,
       action: "update",
       before: b,
-      after: rows[0],
+      after,
       source: "participant",
     });
-    return rows[0];
+    return after;
   });
 }
 export async function removeMember(userId: number, id: number, memberId: number) {
@@ -250,19 +291,30 @@ export async function deleteGroup(userId: number, id: number) {
  * matched rosters AND exactly the same non-empty challenge set. Candidate
  * uniqueness on both sides is intentional: any tie stays for manual review.
  */
-export async function linkDevpostImports(db: Queryable, actorId: number, repoIds: number[]) {
+export async function linkDevpostImports(
+  db: Queryable,
+  actorId: number,
+  repoIds: number[],
+  groupId?: number,
+) {
   if (!repoIds.length) return;
+  const source = groupId === undefined ? "admin" : "participant";
   const validDevpostUrl =
     "^https?://([a-z0-9-]+\\.)?devpost\\.com/(software|submissions)/[^/?#]+/?(?:[?#].*)?$";
   const exact = await db.query(
     `WITH candidates AS (
        SELECT g.id AS group_id, r.id AS repo_id
        FROM planned_work_groups g
-       JOIN repos r ON lower(regexp_replace(g.devpost_url, '/+$', '')) = lower(regexp_replace(r.devpost_url, '/+$', ''))
+       JOIN repos r ON (
+         (g.devpost_canonical_url IS NOT NULL AND g.devpost_canonical_url = r.devpost_canonical_url)
+         OR lower(regexp_replace(split_part(split_part(g.devpost_url, '?', 1), '#', 1), '/+$', '')) = lower(regexp_replace(split_part(split_part(r.devpost_url, '?', 1), '#', 1), '/+$', ''))
+       )
        WHERE g.linked_repo_id IS NULL
          AND r.id = ANY($1::int[])
          AND g.devpost_url ~* $2
          AND r.devpost_url ~* $2
+         AND r.is_test_account = false
+         AND NOT EXISTS (SELECT 1 FROM planned_work_groups linked WHERE linked.linked_repo_id = r.id)
      ), scored_candidates AS (
        SELECT group_id, repo_id,
               count(*) OVER (PARTITION BY group_id) AS groups_per_repo,
@@ -276,8 +328,9 @@ export async function linkDevpostImports(db: Queryable, actorId: number, repoIds
      SET linked_repo_id = c.repo_id
      FROM unique_candidates c
      WHERE g.id = c.group_id AND g.linked_repo_id IS NULL
+       AND ($3::bigint IS NULL OR g.id = $3)
      RETURNING g.id, c.repo_id`,
-    [repoIds, validDevpostUrl],
+    [repoIds, validDevpostUrl, groupId ?? null],
   );
   for (const row of exact.rows) {
     await audit(db, {
@@ -286,9 +339,9 @@ export async function linkDevpostImports(db: Queryable, actorId: number, repoIds
       entityId: row.id,
       action: "link_exact_devpost_import",
       after: { repoId: row.repo_id },
-      source: "admin",
+      source,
     });
-    await inviteLinkedWorkGroupMembers(db, actorId, Number(row.id), Number(row.repo_id));
+    await mergeLinkedWorkGroup(db, actorId, Number(row.id), Number(row.repo_id), source);
   }
 
   const highConfidence = await db.query(
@@ -297,6 +350,7 @@ export async function linkDevpostImports(db: Queryable, actorId: number, repoIds
        FROM planned_work_groups g
        JOIN repos r ON r.id = ANY($1::int[])
        WHERE g.linked_repo_id IS NULL
+         AND r.is_test_account = false
          -- A supplied valid Devpost URL is authoritative; never fall back to inference.
          AND (g.devpost_url IS NULL OR g.devpost_url !~* $2)
          -- Each active planner appears in the imported roster exactly once,
@@ -349,11 +403,12 @@ export async function linkDevpostImports(db: Queryable, actorId: number, repoIds
      SET linked_repo_id = c.repo_id
      FROM unique_candidates c
      WHERE g.id = c.group_id AND g.linked_repo_id IS NULL
+       AND ($3::bigint IS NULL OR g.id = $3)
        AND NOT EXISTS (
          SELECT 1 FROM planned_work_groups already_linked WHERE already_linked.linked_repo_id = c.repo_id
        )
      RETURNING g.id, c.repo_id`,
-    [repoIds, validDevpostUrl],
+    [repoIds, validDevpostUrl, groupId ?? null],
   );
   for (const row of highConfidence.rows) {
     await audit(db, {
@@ -362,58 +417,66 @@ export async function linkDevpostImports(db: Queryable, actorId: number, repoIds
       entityId: row.id,
       action: "link_high_confidence_devpost_import",
       after: { repoId: row.repo_id },
-      source: "admin",
+      source,
     });
-    await inviteLinkedWorkGroupMembers(db, actorId, Number(row.id), Number(row.repo_id));
+    await mergeLinkedWorkGroup(db, actorId, Number(row.id), Number(row.repo_id), source);
   }
 }
 
-/** #854: carry the planned roster into the imported project as real pending
- * invitations. Existing imported/active members are left untouched. */
-async function inviteLinkedWorkGroupMembers(
+/** #854: accepted planning memberships remain accepted after import. */
+async function mergeLinkedWorkGroup(
   db: Queryable,
   actorId: number,
   groupId: number,
   repoId: number,
+  source: "admin" | "participant",
 ) {
-  const project = await db.query<{ name: string }>(`SELECT name FROM repos WHERE id = $1`, [
-    repoId,
-  ]);
-  if (!project.rows[0]) return;
+  const before = await db.query(
+    `SELECT name,description,github_url,demo_url,presentation_timing_preference FROM repos WHERE id = $1 FOR UPDATE`,
+    [repoId],
+  );
+  const after = await db.query(
+    `UPDATE repos r SET presentation_timing_preference = g.presentation_timing_preference,
+     github_url=COALESCE(r.github_url,g.github_url), demo_url=COALESCE(r.demo_url,g.demo_url)
+    FROM planned_work_groups g WHERE g.id = $1 AND r.id = $2
+    RETURNING r.name,r.description,r.github_url,r.demo_url,r.presentation_timing_preference`,
+    [groupId, repoId],
+  );
+  await audit(db, {
+    actorId,
+    entityType: "repo",
+    entityId: repoId,
+    action: "merge_work_group",
+    before: before.rows[0],
+    after: { ...after.rows[0], groupId },
+    source,
+  });
+  await db.query(
+    `UPDATE planned_work_groups g SET name=r.name, description=r.description,
+    github_url=COALESCE(r.github_url,g.github_url), demo_url=COALESCE(r.demo_url,g.demo_url)
+    FROM repos r WHERE g.id=$1 AND r.id=$2`,
+    [groupId, repoId],
+  );
   const inserted = await db.query<{ user_id: number }>(
-    `INSERT INTO submissions (repo_id, user_id, imported_from, status, invited_by)
-     SELECT $1, m.user_id, 'manual', 'invited', $2
+    `INSERT INTO submissions (repo_id, user_id, imported_from, status, invited_by, responded_at)
+     SELECT $1, m.user_id, 'manual', 'active', $2, COALESCE(m.responded_at,now())
        FROM planned_work_group_members m
        JOIN users u ON u.id = m.user_id
       WHERE m.group_id = $3 AND m.status = 'active'
         AND u.account_state = 'active' AND u.anonymized_at IS NULL
-        AND NOT EXISTS (
-          SELECT 1 FROM submissions s WHERE s.repo_id = $1 AND s.user_id = m.user_id
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM devpost_participants dp WHERE dp.repo_id = $1 AND dp.user_id = m.user_id
-        )
-     ON CONFLICT (repo_id, user_id) DO NOTHING
+     ON CONFLICT (repo_id, user_id) DO UPDATE SET status='active', responded_at=EXCLUDED.responded_at
+       WHERE submissions.status='invited'
      RETURNING user_id`,
     [repoId, actorId, groupId],
   );
   for (const row of inserted.rows) {
-    await notify(db, {
-      userId: Number(row.user_id),
-      actorId,
-      category: "project",
-      payload: {
-        template: "project.invite",
-        vars: { projectName: project.rows[0].name, inviterName: "" },
-      },
-    });
     await audit(db, {
       actorId,
       entityType: "repo",
       entityId: repoId,
-      action: "member.invite",
-      after: { invitedUserId: Number(row.user_id), source: "linked_work_group", groupId },
-      source: "admin",
+      action: "member.add_from_work_group",
+      after: { userId: Number(row.user_id), source: "linked_work_group", groupId },
+      source,
     });
   }
 }
