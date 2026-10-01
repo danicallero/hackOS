@@ -47,6 +47,8 @@ const schema = z.object({
   tagline: z.string().max(500),
   timezone: z.string().min(1, "Required").max(100),
   participantsCanCreateProjects: z.boolean(),
+  participantSelfServiceStartsAt: z.string(),
+  participantSelfServiceEndsAt: z.string(),
   eventStartsAt: z.string(),
   eventEndsAt: z.string(),
   hackingStartsAt: z.string(),
@@ -62,6 +64,8 @@ function fromConfig(cfg: EventConfig): Values {
     tagline: cfg.tagline ?? "",
     timezone: cfg.timezone || "Europe/Madrid",
     participantsCanCreateProjects: cfg.participantsCanCreateProjects,
+    participantSelfServiceStartsAt: toLocalInputValue(cfg.participantSelfServiceStartsAt),
+    participantSelfServiceEndsAt: toLocalInputValue(cfg.participantSelfServiceEndsAt),
     eventStartsAt: toLocalInputValue(cfg.eventStartsAt),
     eventEndsAt: toLocalInputValue(cfg.eventEndsAt),
     hackingStartsAt: toLocalInputValue(cfg.hackingStartsAt),
@@ -119,6 +123,8 @@ export function EventTab({
       tagline: "",
       timezone: "Europe/Madrid",
       participantsCanCreateProjects: false,
+      participantSelfServiceStartsAt: "",
+      participantSelfServiceEndsAt: "",
       eventStartsAt: "",
       eventEndsAt: "",
       hackingStartsAt: "",
@@ -142,6 +148,8 @@ export function EventTab({
         tagline: values.tagline.trim() || null,
         timezone: values.timezone.trim(),
         participantsCanCreateProjects: values.participantsCanCreateProjects,
+        participantSelfServiceStartsAt: fromLocalInputValue(values.participantSelfServiceStartsAt),
+        participantSelfServiceEndsAt: fromLocalInputValue(values.participantSelfServiceEndsAt),
         eventStartsAt: fromLocalInputValue(values.eventStartsAt),
         eventEndsAt: fromLocalInputValue(values.eventEndsAt),
         hackingStartsAt: fromLocalInputValue(values.hackingStartsAt),
@@ -246,6 +254,40 @@ export function EventTab({
                 </FormControl>
                 <ZonedTimePreview value={field.value} timezone={timezone} />
                 <FormDescription>{t("eventStartsDesc")}</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <div className="border-t pt-4">
+            <h3 className="text-balance text-sm font-semibold">
+              {t("participantSelfServiceTitle")}
+            </h3>
+            <p className="text-muted-foreground mt-1 text-sm">{t("participantSelfServiceDesc")}</p>
+          </div>
+          <FormField
+            control={form.control}
+            name="participantSelfServiceStartsAt"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("participantSelfServiceStartsLabel")}</FormLabel>
+                <FormControl>
+                  <DateTimeInput value={field.value} onChange={field.onChange} />
+                </FormControl>
+                <FormDescription>{t("participantSelfServiceBlankDesc")}</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="participantSelfServiceEndsAt"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t("participantSelfServiceEndsLabel")}</FormLabel>
+                <FormControl>
+                  <DateTimeInput value={field.value} onChange={field.onChange} />
+                </FormControl>
+                <FormDescription>{t("participantSelfServiceBlankDesc")}</FormDescription>
                 <FormMessage />
               </FormItem>
             )}

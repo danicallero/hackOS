@@ -13,10 +13,10 @@ describe("final route-policy ledger", () => {
   it("has the exact classified rows, allowlists, and sole Better Auth exemption", async () => {
     app = await buildTestApp();
     const rows = app.routePolicyLedger.filter((row) => row.method !== "HEAD");
-    expect(rows).toHaveLength(356);
-    expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(18);
+    expect(rows).toHaveLength(385);
+    expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(19);
     expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(12);
-    expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(53);
+    expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(68);
     // +2 (H8): GET .../seed-diff and POST .../reset-to-default, both gated
     // by permissions:manage like every other role-mutation route.
     // +4 (H8): GET/POST /api/role-grant-rules and PATCH/DELETE
@@ -29,12 +29,12 @@ describe("final route-policy ledger", () => {
     // logistics scan+people-finder view.
     // +1 (H44): DELETE /api/challenges/:id, gated like publish/unpublish —
     // capability-only, deliberately not the owner-inclusive edit policy.
-    // +1 (H12): POST /api/universities/:id/normalize, the staff-only
-    // consolidation of duplicate university rows.
+    // +2 (H12, #846): staff-only consolidation of duplicate university and
+    // degree rows.
     // +6 (H27): the generic scope catalog, aggregate query, safe CSV export,
     // and generic scope visibility GET/PUT/DELETE routes.
-    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(206);
-    expect(rows.filter((row) => row.policy.kind === "contextual")).toHaveLength(67);
+    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(215);
+    expect(rows.filter((row) => row.policy.kind === "contextual")).toHaveLength(71);
     expect(app.routePolicyExemptions).toEqual([
       { url: "/api/auth/*", exemption: "better-auth-generated" },
     ]);
@@ -50,6 +50,7 @@ describe("final route-policy ledger", () => {
       "GET /api/public/applications",
       "GET /api/public/applications/:id",
       "GET /api/public/challenges",
+      "GET /api/public/degrees",
       "GET /api/public/event",
       "GET /api/public/food-intolerances",
       "GET /api/public/sponsors",

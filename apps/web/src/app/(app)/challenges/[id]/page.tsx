@@ -24,14 +24,20 @@ type DevpostPrize = {
   mappedChallengeTitle: string | null;
 };
 
+import { ChallengeAlertDialog } from "./challenge-alert-dialog";
 import { EditCard } from "./challenge-cards";
 
 export default function ChallengeDetailPage() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const { t } = useLocale();
-  const { can, canAny } = useSessionContext();
-  const canAdmin = canAny(CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN);
+  const { can, canAny, me } = useSessionContext();
+  const canAdmin = canAny(
+    CAPABILITIES.SPONSORS_MANAGE,
+    CAPABILITIES.QUEUE_ADMIN,
+    CAPABILITIES.CHALLENGES_MANAGE,
+  );
+  const canAlert = canAdmin || Boolean(me?.isSponsorRep);
   const canMapPrizes = can(CAPABILITIES.QUEUE_ADMIN);
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [devpostPrizes, setDevpostPrizes] = useState<DevpostPrize[]>([]);
@@ -97,6 +103,11 @@ export default function ChallengeDetailPage() {
     <div className="space-y-6">
       <PageHeader
         title={textForDisplay(challenge.title)}
+        primaryAction={
+          canAlert ? (
+            <ChallengeAlertDialog challengeId={id} canTargetParticipants={canAdmin} />
+          ) : undefined
+        }
         state={
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge tone={visibilityTone(challenge.visibility)} className="capitalize">

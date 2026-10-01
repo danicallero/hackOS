@@ -8,10 +8,13 @@ import {
   assertFixtureQueueScope,
   isSyntheticOperator,
 } from "../logistics/review-fixture-scope.js";
+import { notify } from "../notifications/service.js";
+import { announceQueueOutcomes, enrollReposInMandatoryChallenges } from "../projects/service.js";
 import { challengePanelLocked } from "../queue/evaluation-lock.js";
 import type { ChallengeAccess } from "./access.js";
 import {
   CHALLENGE_GENERAL_FIELDS,
+  type ChallengeAlertBody,
   type CreateChallengeBody,
   type PublishChallengeBody,
   type UpdateChallengeBody,
@@ -38,6 +41,7 @@ function snapshotOf(row: Record<string, unknown>) {
     judging_panel_criteria: row.judging_panel_criteria,
     max_presentation_seconds: row.max_presentation_seconds,
     max_in_waiting_area: row.max_in_waiting_area,
+    mandatory: row.mandatory,
     visibility: row.visibility,
     available_from: row.available_from,
   };
@@ -45,16 +49,16 @@ function snapshotOf(row: Record<string, unknown>) {
 
 const EDITABLE_COLUMNS = `id, title, title_i18n, description, description_i18n, criteria,
   criteria_i18n, prizes, devpost_tags, judging_panel_criteria, max_presentation_seconds,
-  max_in_waiting_area, visibility, available_from, created_at, updated_at`;
+  max_in_waiting_area, mandatory, visibility, available_from, created_at, updated_at`;
 
 const EDITABLE_COLUMNS_FROM_CHALLENGE = `c.id, c.title, c.title_i18n, c.description,
   c.description_i18n, c.criteria, c.criteria_i18n, c.prizes, c.devpost_tags, c.judging_panel_criteria,
-  c.max_presentation_seconds, c.max_in_waiting_area, c.visibility, c.available_from,
+  c.max_presentation_seconds, c.max_in_waiting_area, c.mandatory, c.visibility, c.available_from,
   c.created_at, c.updated_at`;
 
 const CREATE_RETURNING_COLUMNS = `id, author, title, title_i18n, description, description_i18n,
   criteria, criteria_i18n, prizes, devpost_tags, judging_panel_criteria, max_presentation_seconds,
-  max_in_waiting_area, visibility, available_from, created_at, updated_at`;
+  max_in_waiting_area, mandatory, visibility, available_from, created_at, updated_at`;
 
 function translationsOf(i18n: unknown, fallback: string | null): TranslationMap {
   const translations: TranslationMap = {};
@@ -106,6 +110,93 @@ export async function getChallenge(challengeId: number, fixtureMarker = false) {
   );
   if (!rows[0]) throw new NotFoundError("Challenge not found", { challengeId });
   return challengeReadModel(rows[0]);
+}
+
+/**
+ * #856: resolve a challenge's active project roster and active planned-work-group
+ * roster together. UNION (not UNION ALL) is intentional: a participant who is
+ * both planning and already entered receives one alert per selected channel.
+ */
+async function alertRecipients(
+  db: Queryable,
+  challengeId: number,
+  target: ChallengeAlertBody["target"],
+  fixtureMarker: boolean,
+): Promise<Array<{ id: number; language: string | null }>> {
+  const sql =
+    target === "participants"
+      ? `SELECT u.id, u.language
+           FROM users u
+          WHERE u.is_test_account = $1
+            AND EXISTS (SELECT 1 FROM user_event_access event_access WHERE event_access.user_id = u.id)
+          ORDER BY u.id
+          FOR SHARE`
+      : `WITH recipients AS (
+           SELECT m.user_id
+             FROM queue_entries qe
+             JOIN submissions m ON m.repo_id = qe.repo_id AND m.status = 'active'
+            WHERE qe.challenge_id = $2
+           UNION
+           SELECT m.user_id
+             FROM planned_work_group_challenges gc
+             JOIN planned_work_group_members m ON m.group_id = gc.group_id AND m.status = 'active'
+            WHERE gc.challenge_id = $2
+         )
+         SELECT u.id, u.language
+           FROM users u JOIN recipients r ON r.user_id = u.id
+          WHERE u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = $1
+          ORDER BY u.id
+          FOR SHARE`;
+  const { rows } = await db.query<{ id: number; language: string | null }>(
+    sql,
+    target === "participants" ? [fixtureMarker] : [fixtureMarker, challengeId],
+  );
+  return rows;
+}
+
+/** Sends an audited #856 operational alert through each recipient's H51 preferences. */
+export async function sendChallengeAlert(
+  challengeId: number,
+  actorId: number,
+  input: ChallengeAlertBody,
+  access: ChallengeAccess,
+): Promise<{ recipients: number }> {
+  if (input.target === "participants" && access !== "admin") {
+    throw new ForbiddenError("Only staff can alert all event participants");
+  }
+  return withTransaction(async (db) => {
+    const fixtureMarker = await isSyntheticOperator(db, actorId);
+    const { rows: challengeRows } = await db.query<{ id: number }>(
+      `SELECT id FROM challenges WHERE id = $1 AND is_test_account = $2 FOR SHARE`,
+      [challengeId, fixtureMarker],
+    );
+    if (!challengeRows[0]) throw new NotFoundError("Challenge not found", { challengeId });
+    const recipients = await alertRecipients(db, challengeId, input.target, fixtureMarker);
+    for (const recipient of recipients) {
+      const language =
+        recipient.language === "es" || recipient.language === "gl" ? recipient.language : "en";
+      await notify(db, {
+        userId: recipient.id,
+        actorId,
+        fixtureMarker,
+        category: "challenge",
+        payload: {
+          subject: input.title[language],
+          body: input.body[language],
+          vars: { challengeId, target: input.target },
+        },
+      });
+    }
+    await audit(db, {
+      actorId,
+      entityType: "challenge",
+      entityId: challengeId,
+      action: "alert.send",
+      after: { target: input.target, recipientCount: recipients.length },
+      source: access === "owner" ? "sponsor" : "staff",
+    });
+    return { recipients: recipients.length };
+  });
 }
 
 export async function listDevpostPrizes(fixtureMarker = false) {
@@ -206,7 +297,7 @@ async function ensureEnterpriseSponsorAnchor(db: Queryable, enterpriseId: number
 
 /** Admin-created challenge template bound to an enterprise (H43/H44). */
 export async function createChallenge(input: CreateChallengeBody, actorId: number) {
-  return withTransaction(async (client) => {
+  const result = await withTransaction(async (client) => {
     await assertFixtureEnterpriseScope(client, actorId, input.enterpriseId);
     const fixtureMarker = await isSyntheticOperator(client, actorId);
     const authorId = await ensureEnterpriseSponsorAnchor(client, input.enterpriseId);
@@ -223,9 +314,9 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
       `INSERT INTO challenges
          (author, title, title_i18n, description, description_i18n, criteria, criteria_i18n,
           prizes, devpost_tags, judging_panel_criteria, max_presentation_seconds, max_in_waiting_area,
-          visibility, available_from, is_test_account)
+          mandatory, visibility, available_from, is_test_account)
        VALUES ($1, $2, $3::jsonb, $4, $5::jsonb, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12,
-               'hidden', $13, $14)
+               $13, 'hidden', $14, $15)
        RETURNING ${CREATE_RETURNING_COLUMNS}`,
       [
         authorId,
@@ -242,6 +333,7 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
           : JSON.stringify(input.judgingPanelCriteria),
         input.maxPresentationSeconds ?? null,
         input.maxInWaitingArea ?? 2,
+        input.mandatory ?? false,
         input.availableFrom ?? null,
         fixtureMarker,
       ],
@@ -266,8 +358,18 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
       },
     });
 
-    return created;
+    const repoIds = input.mandatory
+      ? (
+          await client.query(`SELECT id FROM repos WHERE is_test_account = $1 ORDER BY id`, [
+            fixtureMarker,
+          ])
+        ).rows.map((row: { id: number }) => Number(row.id))
+      : [];
+    const outcomes = await enrollReposInMandatoryChallenges(client, actorId, repoIds, [created.id]);
+    return { created, outcomes };
   });
+  await announceQueueOutcomes(result.outcomes);
+  return result.created;
 }
 
 /**
@@ -421,7 +523,7 @@ export async function updateChallenge(
     });
   }
 
-  return withTransaction(async (client) => {
+  const result = await withTransaction(async (client) => {
     await assertFixtureQueueScope(client, editorId, "challenge", challengeId);
     const { rows: currentRows } = await client.query(
       `SELECT ${EDITABLE_COLUMNS} FROM challenges WHERE id = $1 FOR UPDATE`,
@@ -503,6 +605,7 @@ export async function updateChallenge(
     if (patch.maxPresentationSeconds !== undefined)
       put("max_presentation_seconds", patch.maxPresentationSeconds);
     if (patch.maxInWaitingArea !== undefined) put("max_in_waiting_area", patch.maxInWaitingArea);
+    if (patch.mandatory !== undefined) put("mandatory", patch.mandatory);
     if (patch.visibility !== undefined) put("visibility", patch.visibility);
     if (patch.availableFrom !== undefined) put("available_from", patch.availableFrom ?? null);
 
@@ -546,8 +649,21 @@ export async function updateChallenge(
       after: { title: after.title, fields: Object.keys(patch) },
     });
 
-    return after;
+    const repoIds =
+      patch.mandatory === true && before.mandatory !== true
+        ? (
+            await client.query(`SELECT id FROM repos WHERE is_test_account = $1 ORDER BY id`, [
+              await isSyntheticOperator(client, editorId),
+            ])
+          ).rows.map((row: { id: number }) => Number(row.id))
+        : [];
+    const outcomes = await enrollReposInMandatoryChallenges(client, editorId, repoIds, [
+      challengeId,
+    ]);
+    return { after, outcomes };
   });
+  await announceQueueOutcomes(result.outcomes);
+  return result.after;
 }
 
 /**

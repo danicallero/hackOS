@@ -99,7 +99,13 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.message : fallback;
 }
 
-export function ApplicationExportPanel({ trigger }: { trigger?: ReactNode }) {
+export function ApplicationExportPanel({
+  trigger,
+  applicationId,
+}: {
+  trigger?: ReactNode;
+  applicationId?: number;
+}) {
   const { language, t } = useLocale();
   const [open, setOpen] = useState(false);
   const [catalog, setCatalog] = useState<ExportCatalog | null>(null);
@@ -117,7 +123,9 @@ export function ApplicationExportPanel({ trigger }: { trigger?: ReactNode }) {
     setCatalogLoading(true);
     setCatalogError(null);
     try {
-      const next = await api.get<ExportCatalog>("/api/exports/applications/catalog");
+      const next = await api.get<ExportCatalog>("/api/exports/applications/catalog", {
+        query: applicationId ? { application_id: applicationId } : undefined,
+      });
       setCatalog(next);
       setSelectedFields(allFieldIds(next));
     } catch (error) {
@@ -127,7 +135,7 @@ export function ApplicationExportPanel({ trigger }: { trigger?: ReactNode }) {
     } finally {
       setCatalogLoading(false);
     }
-  }, [t]);
+  }, [applicationId, t]);
 
   const onOpenChange = (next: boolean) => {
     setOpen(next);
@@ -262,6 +270,7 @@ export function ApplicationExportPanel({ trigger }: { trigger?: ReactNode }) {
         body: JSON.stringify({
           statuses: selectedStatuses,
           fields: selected.map((option) => option.selection),
+          ...(applicationId ? { application_ids: [applicationId] } : {}),
           documents,
           language,
         }),

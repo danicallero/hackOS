@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import type { Column } from "@/components/common/data-table";
 import { DataTable } from "@/components/common/data-table";
+import { DegreePicker } from "@/components/common/degree-picker";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,10 @@ export function DegreesManager() {
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<Degree | null>(null);
+  const [normalizationSource, setNormalizationSource] = useState<Degree | null>(null);
+  const [normalizationTargetId, setNormalizationTargetId] = useState("");
+  const [normalizing, setNormalizing] = useState(false);
+  const [normalizationError, setNormalizationError] = useState<string | null>(null);
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -93,6 +98,33 @@ export function DegreesManager() {
       setSaving(false);
     }
   }
+  async function normalizeDegree() {
+    if (!normalizationSource || !normalizationTargetId) {
+      setNormalizationError(t("chooseDegreeToKeep"));
+      return;
+    }
+    if (normalizationTargetId === String(normalizationSource.id)) {
+      setNormalizationError(t("chooseDifferentDegree"));
+      return;
+    }
+    setNormalizing(true);
+    setNormalizationError(null);
+    try {
+      await api.post(`/api/degrees/${normalizationSource.id}/normalize`, {
+        targetId: Number(normalizationTargetId),
+      });
+      toast.success(t("degreesNormalized"), { compactTitle: t("toastSaveDegree") });
+      setNormalizationSource(null);
+      setNormalizationTargetId("");
+      await load();
+    } catch (cause) {
+      setNormalizationError(
+        cause instanceof ApiError ? cause.message : t("couldNotNormalizeDegrees"),
+      );
+    } finally {
+      setNormalizing(false);
+    }
+  }
   const columns: Column<Degree>[] = [
     {
       id: "name",
@@ -137,6 +169,15 @@ export function DegreesManager() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={() => openEditor(row)}>{t("rename")}</DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  setNormalizationSource(row);
+                  setNormalizationTargetId("");
+                  setNormalizationError(null);
+                }}
+              >
+                {t("normalizeDegree")}
+              </DropdownMenuItem>
               <DropdownMenuItem variant="destructive" onSelect={() => setDeleting(row)}>
                 {t("deleteAction")}
               </DropdownMenuItem>
@@ -176,6 +217,45 @@ export function DegreesManager() {
         pending={saving}
         onConfirm={remove}
       />
+      <AlertModal
+        open={normalizationSource !== null}
+        onOpenChange={(open) => {
+          if (!open && !normalizing) {
+            setNormalizationSource(null);
+            setNormalizationTargetId("");
+            setNormalizationError(null);
+          }
+        }}
+        title={t("normalizeDegreeTitle")}
+        description={
+          normalizationSource ? t("normalizeDegreeDesc", { name: normalizationSource.name }) : ""
+        }
+        cancelLabel={t("cancel")}
+        confirmLabel={t("normalizeDegree")}
+        destructive
+        pending={normalizing}
+        onConfirm={normalizeDegree}
+      >
+        <div className="space-y-2">
+          <label htmlFor="degree-normalization-target" className="text-sm font-medium">
+            {t("degreeToKeep")}
+          </label>
+          <DegreePicker
+            id="degree-normalization-target"
+            value={normalizationTargetId}
+            onChange={(value) => {
+              setNormalizationTargetId(value);
+              setNormalizationError(null);
+            }}
+            inDialog
+          />
+          {normalizationError && (
+            <p role="alert" className="text-destructive text-sm">
+              {normalizationError}
+            </p>
+          )}
+        </div>
+      </AlertModal>
     </div>
   );
 }

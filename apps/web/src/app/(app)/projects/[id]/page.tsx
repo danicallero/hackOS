@@ -4,25 +4,19 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS } from "@hackos/shared/events";
-import {
-  ArrowLeftIcon,
-  ExternalLinkIcon,
-  FolderGitIcon,
-  TrophyIcon,
-  UsersIcon,
-} from "lucide-react";
+import { ArrowLeftIcon, FolderGitIcon, TrophyIcon, UsersIcon } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
-import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { ReviewStatusBadge } from "@/components/common/review-status-badge";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
-import { ProjectDescription } from "@/components/projects/project-description";
+import { PresentationStatus } from "@/components/projects/presentation-status";
+import { ProjectDescriptionLinks } from "@/components/projects/project-description-links";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api } from "@/lib/api";
@@ -115,12 +109,13 @@ export default function ProjectDetailPage() {
   // Soft, in-place refresh instead of a hard reload when this project
   // changes elsewhere.
   const liveRefresh = useAutoRefresh("/api/events/stream?topic=projects", [EVENTS.DOMAIN_CHANGED]);
+  const queueRefresh = useAutoRefresh("/api/tv/stream", [EVENTS.DATA_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetching project/challenge data from API (external-system sync)
     void load();
-  }, [load, liveRefresh]);
+  }, [load, liveRefresh, queueRefresh]);
 
   const queueChallengeIds = useMemo(
     () =>
@@ -184,19 +179,13 @@ export default function ProjectDetailPage() {
         }
       />
 
-      {repo.description && (
-        <div className="max-w-prose">
-          <ProjectDescription text={repo.description} />
-        </div>
-      )}
+      <ProjectDescriptionLinks
+        description={repo.description}
+        links={{ devpostUrl: repo.devpost_url, demoUrl: repo.demo_url, githubUrl: repo.github_url }}
+      />
 
-      <div className="grid gap-5 xl:grid-cols-2">
-        <SectionCard
-          title={t("teamSectionTitle")}
-          description={t("teamSectionDesc")}
-          icon={UsersIcon}
-          bodyClassName="space-y-4"
-        >
+      <div className="grid gap-8 xl:grid-cols-3 xl:gap-12">
+        <SectionCard variant="plain" title={t("teamSectionTitle")} bodyClassName="space-y-4">
           {repo.members.length === 0 ? (
             <EmptyState
               icon={UsersIcon}
@@ -204,12 +193,9 @@ export default function ProjectDetailPage() {
               description={t("addUserVisibleDesc")}
             />
           ) : (
-            <ul className="space-y-3">
+            <ul className="divide-y divide-border/60">
               {repo.members.map((member) => (
-                <li
-                  key={`${member.userId ?? "devpost"}:${member.email}`}
-                  className="rounded-md border p-3"
-                >
+                <li key={`${member.userId ?? "devpost"}:${member.email}`} className="py-2">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate font-medium">{memberName(member)}</p>
@@ -266,7 +252,12 @@ export default function ProjectDetailPage() {
           )}
         </SectionCard>
 
-        <SectionCard title={t("challenges")} icon={TrophyIcon} bodyClassName="space-y-4">
+        <SectionCard
+          variant="plain"
+          className="xl:col-span-2"
+          title={t("challenges")}
+          bodyClassName="space-y-4"
+        >
           {unifiedEntries.length === 0 ? (
             <EmptyState
               icon={TrophyIcon}
@@ -274,42 +265,48 @@ export default function ProjectDetailPage() {
               description={t("addChallengeQueueDesc")}
             />
           ) : (
-            <ul className="space-y-3">
+            <ul className="divide-y divide-border/60">
               {unifiedEntries.map((entry) =>
                 entry.kind === "challenge" ? (
-                  <li key={`challenge-${entry.challenge.id}`} className="rounded-md border p-3">
+                  <li
+                    key={`challenge-${entry.challenge.id}`}
+                    className="space-y-2 py-4 first:pt-0 last:pb-0"
+                  >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate font-medium">
+                        <h3 className="text-base font-medium text-balance">
                           {challengeTitleText(entry.challenge.title)}
-                        </p>
-                        <p className="text-muted-foreground text-xs">
-                          {entry.challenge.status
-                            ? entry.challenge.assignedRoomName
-                              ? t("roomColon", { room: entry.challenge.assignedRoomName })
-                              : t("noRoomAssigned")
-                            : entry.challenge.mappedPrizes.length === 1
+                        </h3>
+                        {!entry.challenge.status && (
+                          <p className="text-muted-foreground text-xs">
+                            {entry.challenge.mappedPrizes.length === 1
                               ? t("linkedByPrizeOne", {
                                   count: entry.challenge.mappedPrizes.length,
                                 })
                               : t("linkedByPrizeOther", {
                                   count: entry.challenge.mappedPrizes.length,
                                 })}
-                        </p>
+                          </p>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
-                        {entry.challenge.status ? (
-                          <QueueStatusBadge status={entry.challenge.status} />
-                        ) : (
-                          <StatusBadge tone="info">{t("prizeBadge")}</StatusBadge>
+                        {entry.challenge.status && entry.challenge.reviewStatus === null && (
+                          <span className="text-xs text-muted-foreground">
+                            {t("challengeReviewNotStarted")}
+                          </span>
                         )}
-                        {entry.challenge.status && (
+                        {entry.challenge.status && entry.challenge.reviewStatus !== null && (
                           <ReviewStatusBadge
                             status={entry.challenge.reviewStatus}
                             score={entry.challenge.nota}
                           />
                         )}
-                        {canEdit && entry.challenge.status && (
+                        {entry.challenge.mandatory && (
+                          <span className="text-xs text-muted-foreground">
+                            {t("mandatoryChallengeLabel")}
+                          </span>
+                        )}
+                        {canEdit && entry.challenge.status && !entry.challenge.mandatory && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -335,9 +332,10 @@ export default function ProjectDetailPage() {
                         )}
                       </div>
                     </div>
+                    {entry.challenge.status && <PresentationStatus {...entry.challenge} />}
                   </li>
                 ) : (
-                  <li key={`prize-${entry.prize}`} className="rounded-md border p-3">
+                  <li key={`prize-${entry.prize}`} className="py-2">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate font-medium">{entry.prize}</p>
@@ -387,38 +385,6 @@ export default function ProjectDetailPage() {
           )}
         </SectionCard>
       </div>
-
-      <SectionCard title={t("linksTitle")} icon={ExternalLinkIcon}>
-        <div className="flex flex-wrap gap-2">
-          {repo.devpost_url && (
-            <Button variant="outline" asChild>
-              <a href={repo.devpost_url} target="_blank" rel="noreferrer">
-                <ExternalLinkIcon className="size-4" />
-                Devpost
-              </a>
-            </Button>
-          )}
-          {repo.demo_url && (
-            <Button variant="outline" asChild>
-              <a href={repo.demo_url} target="_blank" rel="noreferrer">
-                <ExternalLinkIcon className="size-4" />
-                Demo
-              </a>
-            </Button>
-          )}
-          {repo.github_url && (
-            <Button variant="outline" asChild>
-              <a href={repo.github_url} target="_blank" rel="noreferrer">
-                <ExternalLinkIcon className="size-4" />
-                Repository
-              </a>
-            </Button>
-          )}
-          {!repo.devpost_url && !repo.demo_url && !repo.github_url && (
-            <p className="text-muted-foreground text-sm">{t("noLinksProject")}</p>
-          )}
-        </div>
-      </SectionCard>
     </div>
   );
 }

@@ -35,10 +35,13 @@ export interface RepoMember {
 export interface RepoChallenge {
   id: number;
   title: string;
+  mandatory: boolean;
   status: string | null;
   position: number | null;
   assignedRoomId: number | null;
   assignedRoomName: string | null;
+  etaMinutes: number | null;
+  rooms: { id: number; name: string; location: string | null }[];
   mappedPrizes: string[];
   source: "queue" | "prize" | "queue_and_prize";
   /** H36 evaluation status for this challenge — null when the viewer has no
@@ -60,6 +63,7 @@ export interface ProjectRepo {
   prizes: string[];
   unmappedPrizes: string[];
   challenges: RepoChallenge[];
+  presentation_timing_preference?: "no_preference" | "early" | "middle" | "late";
 }
 
 export function toProjectRepo(repo: RepoWithExtras): ProjectRepo {
@@ -141,6 +145,11 @@ export interface PlanPrize {
   mappedChallengeTitle: string | null;
 }
 
+export interface PlanChallenge {
+  id: number;
+  title: string;
+}
+
 /** One row from `csv.ts` DevpostParticipantRow (plan.unassignedParticipants). */
 export interface UnassignedRow {
   email: string;
@@ -153,6 +162,7 @@ export interface UnassignedRow {
 export interface ImportPlanView {
   repos: PlanRepo[];
   prizes: PlanPrize[];
+  challenges: PlanChallenge[];
   unassignedParticipants: UnassignedRow[];
   totals: ImportPlan["totals"];
 }

@@ -129,7 +129,7 @@ describe("processDataSubjectRequest (H54)", () => {
         .account_state,
     ).toBe("removal_pending");
     await expect(
-      pool.query(`UPDATE application_responses SET staff_notes = 'late mutation' WHERE id = $1`, [
+      pool.query(`UPDATE application_responses SET responses = '{}'::jsonb WHERE id = $1`, [
         responses[0].id,
       ]),
     ).rejects.toMatchObject({ code: "23514" });

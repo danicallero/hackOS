@@ -149,7 +149,7 @@ src/
                        lives here and each route keeps only its shell
     providers.tsx      theme + session + tooltip + toaster
   lib/
-    api.ts             credentialed fetch wrapper → ApiError
+    api.ts             fetch wrapper: anonymous public reads + credentialed private calls → ApiError
     auth-client.ts     Better Auth browser client
     session.tsx        SessionProvider + useSessionContext/useMe/useCan
     nav.ts             sidebar model: PERSONAL_NAV + capability-gated
@@ -194,6 +194,11 @@ Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
 `CapabilityGate`, `AccessDenied`, `Spinner`, `SubmitButton`, `PasswordInput`,
 `QrCode`, `MultiSelect`, `TemplateFieldControl`, `FileUploadField`, `UserPicker`,
 `EntityCombobox`, `ActionGroup`, `IconButton`.
+
+`SectionCard variant="plain"` keeps the shared section heading/actions without
+card chrome. Use it when page spacing and columns explain the structure; reserve
+the default bordered surface for genuinely bounded groups. Static metadata is
+text, not a badge. See `docs/DESIGN.md` §3.
 
 `SidePanelEditor` is the focused-record counterpart to `Modal`: it opens a
 right-side editor over the current workspace, with a fixed title/actions area

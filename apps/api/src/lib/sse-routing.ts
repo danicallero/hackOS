@@ -26,6 +26,7 @@ export function mutationDomainForPath(url: string): string | null {
     matches("/api/repos") ||
     matches("/api/devpost") ||
     matches("/api/me/projects") ||
+    matches("/api/me/work-groups") ||
     /^\/api\/challenges\/[^/]+\/repos(?:\/|$)/.test(path)
   ) {
     return SSE_TOPICS.PROJECTS;

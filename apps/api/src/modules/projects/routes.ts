@@ -34,6 +34,7 @@ import {
 } from "./schemas.js";
 import {
   acceptProjectInvite,
+  addMyProjectChallenge,
   addRepoChallenge,
   addRepoMember,
   bulkAddRepoChallenge,
@@ -44,6 +45,7 @@ import {
   createRepoNative,
   declineProjectInvite,
   deleteMyProject,
+  deleteRepo,
   getRepoForScope,
   inviteProjectMember,
   leaveMyProject,
@@ -58,6 +60,7 @@ import {
   myProjects,
   previewImport,
   removeDevpostParticipant,
+  removeMyProjectChallenge,
   removeRepoChallenge,
   removeRepoMember,
   removeRepoPrize,
@@ -111,6 +114,22 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   // reveals enterprises by their OWN visibility window (H45), no longer derived
   // from published challenges.
 
+  r.delete(
+    "/api/me/projects/:repoId/challenges/:challengeId",
+    {
+      ...access({ kind: "authenticated" }),
+      preHandler: [requireAuth, idempotencyGuard],
+      schema: {
+        params: repoChallengeParamsSchema,
+        summary: "Withdraw my project from an optional challenge",
+        description:
+          "An active member may withdraw their project before judging starts. Mandatory challenges cannot be withdrawn. The queue transition and audit are transactional and idempotent (H20/H21).",
+      },
+    },
+    async (q) =>
+      removeMyProjectChallenge(q.userId as number, q.params.repoId, q.params.challengeId),
+  );
+
   // ── H16: import ──────────────────────────────────────────────────────────
 
   // Pure/read-only preview: parses both CSVs and reports what confirm would do.
@@ -146,7 +165,12 @@ export function registerProjectRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       // requireCapability guarantees userId is set
-      return confirmImport(req.userId as number, req.body.projectsCsv, req.body.participantsCsv);
+      return confirmImport(
+        req.userId as number,
+        req.body.projectsCsv,
+        req.body.participantsCsv,
+        req.body.tagMappings,
+      );
     },
   );
 
@@ -272,7 +296,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List scoped projects",
         description:
-          "Global project readers see all projects; sponsor representatives and assigned judges see only their exact challenge scope (H20, H46).",
+          "Global project readers see all projects; sponsor representatives and assigned judges see only their exact challenge scope. Challenge rows include mandatory participation, logical queue position, ETA minutes and possible rooms (H20, H38, H46).",
       },
     },
     async (req) => {
@@ -288,7 +312,8 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       schema: {
         params: repoIdParamsSchema,
         summary: "Get scoped project",
-        description: "Returns a project only after exact repository authorization (H20, H46).",
+        description:
+          "Returns project metadata, roster and challenges with logical queue positions, ETA minutes and possible rooms, only after exact repository authorization (H20, H38, H46).",
       },
     },
     async (req) => getRepoForScope(req.params.id, repositoryScopeFor(req)),
@@ -349,9 +374,9 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_EDIT }),
       preHandler: requireCapability(CAPABILITIES.PROJECTS_EDIT),
       schema: {
-        summary: "Edit a project's metadata (H18): name, description, links.",
+        summary: "Edit a project's metadata and judging preference (H18).",
         description:
-          "Updates only the fields present in the body. Team membership and challenge lineup have their own H21 routes. Audited with before/after.",
+          "Updates only the fields present in the body. Judging preference cannot change after queue generation. Team membership and challenge lineup have their own H21 routes. Audited with before/after.",
         params: repoIdParamsSchema,
         body: updateRepoBodySchema,
       },
@@ -373,6 +398,21 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => addRepoMember(req.userId as number, req.params.repoId, req.body.userId),
+  );
+
+  r.delete(
+    "/api/repos/:id",
+    {
+      ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_EDIT }),
+      preHandler: [requireCapability(CAPABILITIES.PROJECTS_EDIT), idempotencyGuard],
+      schema: {
+        params: repoIdParamsSchema,
+        summary: "Delete a project",
+        description:
+          "A project editor can permanently delete any project and its dependent queue, judging, roster and Devpost rows in one audited transaction.",
+      },
+    },
+    async (req) => deleteRepo(req.userId as number, req.params.id),
   );
 
   r.delete(
@@ -531,7 +571,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
         body: updateRepoBodySchema,
         summary: "Edit my own project (H19/H20) — active members only.",
         description:
-          "Updates only the fields present in the body. 403 if the caller isn't an active member of this project or the hacking window is closed. Audited (source: participant).",
+          "Updates only the fields present in the body, including judging preference until queue generation. 403 if the caller isn't an active member of this project or the hacking window is closed. Audited (source: participant).",
       },
     },
     async (req) => updateMyProject(req.userId as number, req.params.id, req.body),
@@ -551,6 +591,22 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => inviteProjectMember(req.userId as number, req.params.id, req.body.email),
+  );
+
+  r.post(
+    "/api/me/projects/:id/challenges",
+    {
+      ...access({ kind: "authenticated" }),
+      preHandler: [requireAuth, idempotencyGuard],
+      schema: {
+        params: repoIdParamsSchema,
+        body: repoChallengeBodySchema,
+        summary: "Enter my project in a challenge.",
+        description:
+          "An active project member can add one published challenge until judging starts. The project is appended to that challenge's queue; the transition is audited and idempotent.",
+      },
+    },
+    async (req) => addMyProjectChallenge(req.userId as number, req.params.id, req.body.challengeId),
   );
 
   r.get(
@@ -621,7 +677,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
         params: repoIdParamsSchema,
         summary: "Delete my own project (H19/H20) — sole member only.",
         description:
-          "Deletes the project outright, including its queue entries, judging data and roster. Only allowed when the caller is the project's sole remaining active member; 409 otherwise. 403 outside the hacking window.",
+          "Deletes the project outright, including its queue entries, judging data and roster. Only allowed when the caller is the project's sole remaining active member and judging has not started; 409 otherwise. 403 outside the hacking window.",
       },
     },
     async (req) => deleteMyProject(req.userId as number, req.params.id),

@@ -684,6 +684,9 @@ describe("concurrency and idempotency", () => {
         criteria: [scale("replacement", "Replacement")],
         actorId: adminId,
       });
+      // The concurrent update may reject as soon as the submission commits,
+      // before the assertion below gets a chance to await it.
+      void editing.catch(() => {});
       await waitForBlockedQuery("SELECT id FROM queue_groups WHERE id");
       synchronizationComplete = true;
     } finally {

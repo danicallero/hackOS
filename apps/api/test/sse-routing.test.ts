@@ -51,11 +51,12 @@ describe("domain mutation routing", () => {
     expect(mutationDomainForPath("/api/responses/batch/decide")).toBe(SSE_TOPICS.APPLICATIONS);
     expect(mutationDomainForPath("/api/projects/4")).toBe(SSE_TOPICS.PROJECTS);
     expect(mutationDomainForPath("/api/me/projects/4/invites")).toBe(SSE_TOPICS.PROJECTS);
+    expect(mutationDomainForPath("/api/me/work-groups/4/challenges")).toBe(SSE_TOPICS.PROJECTS);
     expect(mutationDomainForPath("/api/challenges/3/repos/bulk-add")).toBe(SSE_TOPICS.PROJECTS);
   });
 
   it("routes identity, sponsor and catalogue writes without treating reads as mutations", () => {
-    expect(mutationDomainForPath("/api/permission-groups/2/members")).toBe(SSE_TOPICS.IDENTITY);
+    expect(mutationDomainForPath("/api/users/2")).toBe(SSE_TOPICS.IDENTITY);
     expect(mutationDomainForPath("/api/enterprises/4/judges/9")).toBe(SSE_TOPICS.SPONSORS);
     expect(mutationDomainForPath("/api/invites/enterprise-links/4/withdraw")).toBe(
       SSE_TOPICS.SPONSORS,

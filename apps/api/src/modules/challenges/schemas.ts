@@ -30,6 +30,7 @@ export const updateChallengeBody = z
     judgingPanelCriteria: questionnaireSchema.optional(),
     maxPresentationSeconds: z.number().int().positive().nullable().optional(),
     maxInWaitingArea: z.number().int().min(0).nullable().optional(),
+    mandatory: z.boolean().optional(),
     visibility: visibilityEnum.optional(),
     availableFrom: z.coerce.date().nullish(),
   })
@@ -56,6 +57,7 @@ export const CHALLENGE_GENERAL_FIELDS = [
   "devpostTags",
   "visibility",
   "availableFrom",
+  "mandatory",
 ] as const;
 
 /**
@@ -77,6 +79,7 @@ export const createChallengeBody = z
     judgingPanelCriteria: questionnaireSchema.optional(),
     maxPresentationSeconds: z.number().int().positive().nullable().optional(),
     maxInWaitingArea: z.number().int().min(0).nullable().optional(),
+    mandatory: z.boolean().optional(),
     availableFrom: z.coerce.date().nullish(),
   })
   .strict();
@@ -113,6 +116,21 @@ export const winnerRankParam = z.object({
   id: z.coerce.number().int().positive(),
   rank: z.coerce.number().int().min(1),
 });
+
+/** A direct operational alert, scoped to a challenge or (for staff) all admitted participants. */
+export const challengeAlertBody = z
+  .object({
+    title: i18nTextSchema.refine((value) => Object.values(value).every((text) => text.trim()), {
+      message: "Provide the alert title in English, Spanish, and Galician",
+    }),
+    body: i18nTextSchema.refine((value) => Object.values(value).every((text) => text.trim()), {
+      message: "Provide the alert message in English, Spanish, and Galician",
+    }),
+    target: z.enum(["challenge", "participants"]).default("challenge"),
+  })
+  .strict();
+
+export type ChallengeAlertBody = z.infer<typeof challengeAlertBody>;
 
 export const setWinnerBody = z
   .object({

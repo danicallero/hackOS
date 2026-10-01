@@ -67,6 +67,14 @@ Key facts that drive every design decision below:
   `devpost_participants`, and primary/verified-secondary email matches. This
   keeps judging safe while legacy imports are being reconciled and matches the
   membership relation used by queue roster and notification reads.
+- **Mandatory challenges (issue #851) materialize participation in
+  `queue_entries`.** Enabling the audited `challenges.mandatory` setting enters
+  every existing project, while Devpost imports and native projects enter every
+  mandatory challenge in their creation transaction. The `(challenge_id,
+  repo_id)` uniqueness invariant remains the deduplication boundary; shared
+  queue reads continue to render one project line even if more than one of the
+  group's challenges is mandatory. Mandatory entries cannot be withdrawn until
+  the setting is disabled.
 
 ### 1.2 Challenges module (`apps/api/src/modules/challenges/`)
 
@@ -85,6 +93,7 @@ challenge content and judging panel under the H44/H45 rules below.
 | `PATCH /api/challenges/:id` | contextual `challenge-edit` | H44 | global admins or the owning sponsor enterprise may edit within the panel/public-field locks; every edit gets a version snapshot + audit |
 | `POST /api/challenges/:id/publish` | `sponsors:manage` OR `queue:admin` | H45 | publish immediately or schedule reveal |
 | `POST /api/challenges/:id/unpublish` | `sponsors:manage` OR `queue:admin` | H45 | hide a mistakenly published challenge |
+| `POST /api/challenges/:id/alerts` | contextual `challenge-edit` | #856 / H51 / H53 | sponsor reps alert only active project/work-group participants for an owned challenge; staff may select all admitted participants; delivery follows preferences and is audited |
 | `GET /api/challenges/:id/panel/preview` | contextual `challenge-access` | H44/H46 | global admins, `SPONSORS_MANAGE`/`QUEUE_ADMIN`/`JUDGE_PANEL`/`QUEUE_OPERATE`, the owning sponsor enterprise, or an assigned judge |
 | `GET /api/challenges/:id/versions` | contextual `challenge-edit` | H44 | global admins or the owning sponsor enterprise may read immutable edit history |
 
@@ -129,8 +138,8 @@ sponsor; no implicit cross-challenge win is created.
 | Method & path | Capability | Story | Behaviour |
 |---|---|---|---|
 | `GET /api/public/challenges` | public | H49 | published + visible + revealed challenges w/ prizes |
-| `POST /api/devpost/imports/preview` | `projects:import` | H16 | pure read-only import plan |
-| `POST /api/devpost/imports/confirm` | `projects:import` + idempotency | H16 | transactional upsert |
+| `POST /api/devpost/imports/preview` | `projects:import` | H16 | pure read-only import plan, including detected tags and internal challenge choices |
+| `POST /api/devpost/imports/confirm` | `projects:import` + idempotency | H16 | transactional upsert and selected preview-tag persistence |
 | `GET /api/devpost/imports/unmatched` | `projects:import` | H17 | participants no email matched |
 | `POST /api/devpost/imports/link` | `projects:import` | H17 | manually link participant → account |
 | `POST /api/devpost/imports/link-secondary` | `projects:import` | H6/H17 | request secondary verification; link activates only after verification |
@@ -141,12 +150,15 @@ sponsor; no implicit cross-challenge win is created.
 | `GET /api/projects/member-candidates` | `projects:edit` | H21 | minimal account search for team editors |
 | `POST /api/repos` | `projects:edit` + idempotency | H18 | native creation: metadata + members + challenge lineup in one transaction |
 | `PATCH /api/repos/:id` | `projects:edit` | H18 | metadata edit (name, description, links), audited before/after |
+| `DELETE /api/repos/:id` | `projects:edit` + idempotency | H18/H21 | administrator deletion of any project; cascades roster, queue and judging rows transactionally, then invalidates affected queue reads |
 | `POST /api/repos/:id/members` / `DELETE …/members/:userId` | `projects:edit` | H21 | hot-edit manually-added membership |
 | `DELETE /api/repos/:id/devpost-participants/:email` | `projects:edit` | H21 | remove one exact imported roster row |
 | `POST /api/repos/:id/challenges` / `DELETE …/challenges/:challengeId` | `projects:edit` | H21 | enqueue at queue bottom / remove + compact positions |
 | `GET /api/me/projects` | authenticated | H20 | participant self-view: team roster (teammate emails redacted to `null`), challenges, live queue status, plus `canCreate` (H19 policy ∧ admitted participant ∧ hacking window open) |
 | `POST /api/me/projects` | authenticated + idempotency | H19 | participant self-creation, gated by the event policy, admitted-participant eligibility, and the hacking window; a participant may now hold more than one project |
 | `PATCH /api/me/projects/:id` | authenticated | H19/H20 | participant self-edit of their own project's metadata — active members only |
+| `POST /api/me/projects/:id/challenges` | authenticated + idempotency | H20 | active member enrolls the project in one published challenge until judging starts; appends it to that queue |
+| `DELETE /api/me/projects/:repoId/challenges/:challengeId` | authenticated + idempotency | H20/H21 | active member withdraws an optional challenge before judging starts, using the audited queue removal transition |
 | `POST /api/me/projects/:id/invites` | authenticated + idempotency | H19/H20 | active member invites a teammate by email; pending until accepted |
 | `GET /api/me/projects/invites` | authenticated | H19/H20 | pending invites addressed to the caller |
 | `POST /api/me/projects/invites/:id/accept` \| `.../decline` | authenticated + idempotency | H19/H20 | invitee accepts (becomes an active member) or declines (row deleted) their own invite |
@@ -242,16 +254,32 @@ Planning (`plan.ts::buildImportPlan`) is **pure and read-only** so `preview` and
 4. Compute the repo action (`create`/`update`) using the *same* key as the
    `repos_devpost_url_key` partial unique index, so planning and the
    `ON CONFLICT (devpost_url)` upsert always agree on the same row.
+   Before confirmation opens its transaction, Devpost-only redirects resolve
+   event `/submissions/` URLs to public `/software/` identities for planning-group
+   linkage. The original export URL remains the import deduplication key.
+   Successful identities are cached; failures leave matching best-effort.
 5. For each distinct prize name, look up challenges whose `devpost_tags`
    contains it (`devpost_tags ?| $1::text[]`) and attach the mapped challenge to
-   the plan. **This is the reconciliation:** the importer never duplicates
-   challenge data — it only records the prize string on the repo and resolves the
-   challenge by tag membership at read time.
+   the plan, alongside the internal challenge choices. The operator may choose a
+   destination for each detected tag or explicitly leave it unmapped before
+   confirmation. `confirm` accepts only mappings for tags in that exact export,
+   validates each target again, and appends the selected tags in the same
+   transaction as the import. **This is the reconciliation:** the importer never
+   duplicates challenge data — it only records the prize string on the repo and
+   resolves the challenge by tag membership at read time.
 
 `mapPrizeToChallenge` is the operator action that closes the loop: it appends a
 prize name to a challenge's `devpost_tags` (idempotently) and reports how many
 already-imported repos now resolve to that challenge — **without** creating any
 queue entries (enqueueing is the queue workstream's decision).
+
+### 2.1 Importer → queue boundary (#854)
+
+The importer owns CSV parsing, the preview mapping selector, and persistence of
+`challenges.devpost_tags`. It does **not** create, update, reorder, or broadcast
+`queue_entries`; an unmapped tag remains visible as such after confirmation.
+The queue workstream may consume the persisted tag relation in #854, but must
+own its own enqueue transition, history/audit, idempotency, and SSE contract.
 
 ---
 
@@ -307,7 +335,7 @@ the email out of band. So the boundary is:
 | Handled synchronously (API controller, in-transaction) | Handled asynchronously (worker) |
 |---|---|
 | CSV parse, join, account matching (`preview`) | claim-email delivery via `notification_outbox` |
-| repo/participant/prize/submission upsert (`confirm`) | — |
+| repo/participant/prize/submission upsert and selected tag persistence (`confirm`) | — |
 | manual link, prize→challenge mapping | — |
 | audit + version snapshots | — |
 
