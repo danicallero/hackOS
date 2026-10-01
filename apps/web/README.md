@@ -181,7 +181,10 @@ Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
 
 `SectionCard variant="plain"` keeps the shared section heading/actions without
 card chrome. Use it when page spacing and columns explain the structure; reserve
-the default bordered surface for genuinely bounded groups. Static metadata is
+the default bordered surface for genuinely bounded groups. Event settings and My profile use open sections within a constrained reading
+width, with save actions at the start of each section footer. Inbox preferences
+use category rows with channel menus; mandatory queue delivery stays read-only.
+Password changes open a focused modal from the profile section. Static metadata is
 text, not a badge. See `docs/DESIGN.md` §3.
 
 `SidePanelEditor` is the focused-record counterpart to `Modal`: it opens a

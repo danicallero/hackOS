@@ -82,6 +82,8 @@ export function ResetJudgingDataTab({ icon: Icon }: { icon: LucideIcon }) {
   return (
     <>
       <SectionCard
+        variant="plain"
+        footerClassName="justify-start"
         icon={Icon}
         title={t("resetJudgingDataTitle")}
         description={t("resetJudgingDataDescription")}

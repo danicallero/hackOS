@@ -57,7 +57,12 @@ export function EmailCard() {
   const hasPendingSecondary = me.secondaryEmail && !me.secondaryEmailVerified;
 
   return (
-    <SectionCard icon={MailIcon} title={t("emailAddressesTitle")}>
+    <SectionCard
+      variant="plain"
+      footerClassName="justify-start"
+      icon={MailIcon}
+      title={t("emailAddressesTitle")}
+    >
       {/* Primary */}
       <div className="space-y-2">
         <Label htmlFor="primary-email">{t("primaryEmailLabel")}</Label>

@@ -91,6 +91,8 @@ export function PresenceTab({
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
         <SectionCard
+          variant="plain"
+          footerClassName="justify-start"
           icon={icon}
           title={t("presencePolicyTitle")}
           state={<SaveStatus state={saveState} />}
