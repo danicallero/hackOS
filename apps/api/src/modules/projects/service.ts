@@ -28,6 +28,7 @@ import { notifyChallengeQueueChanged, repoMemberIds } from "../queue/notify.js";
 import { compactQueueGroupPositions, nextBottomPosition } from "../queue/ordering.js";
 import { linkDevpostImports } from "../work-groups/service.js";
 import { type RepositoryAccessScope, repositoryIdsForScope } from "./access.js";
+import { resolveDevpostUrls } from "./devpost-url.js";
 import { buildImportPlan, type ImportPlan } from "./plan.js";
 import { reconcileDevpostParticipantsForUser } from "./reconciliation.js";
 
@@ -67,6 +68,14 @@ export async function confirmImport(
   participantsCsv: string,
   tagMappings: Array<{ tag: string; challengeId: number }> = [],
 ): Promise<ConfirmImportResult> {
+  const preview = await buildImportPlan(pool, projectsCsv, participantsCsv);
+  const groups = await pool.query<{ devpost_url: string | null }>(
+    `SELECT devpost_url FROM planned_work_groups WHERE linked_repo_id IS NULL AND devpost_canonical_url IS NULL`,
+  );
+  const identities = await resolveDevpostUrls([
+    ...preview.repos.map((repo) => repo.url),
+    ...groups.rows.map((group) => group.devpost_url),
+  ]);
   const result = await withTransaction(async (client) => {
     if (await isSyntheticOperator(client, actorId)) {
       throw new ForbiddenError("Review-fixture operators cannot run real Devpost imports", {
@@ -74,6 +83,13 @@ export async function confirmImport(
       });
     }
     const plan = await buildImportPlan(client, projectsCsv, participantsCsv);
+    for (const [url, canonical] of identities) {
+      if (canonical)
+        await client.query(
+          `UPDATE planned_work_groups SET devpost_canonical_url = $2 WHERE devpost_url = $1`,
+          [url, canonical],
+        );
+    }
     const batchId = `dp_${randomUUID()}`;
 
     await persistPreviewTagMappings(client, actorId, plan, tagMappings);
@@ -91,15 +107,16 @@ export async function confirmImport(
       const { rows } = await client.query(
         `WITH incoming AS (
            SELECT * FROM jsonb_to_recordset($1::jsonb)
-             AS v(ordinal int, name text, description text, devpost_url text, demo_url text, github_url text)
+             AS v(ordinal int, name text, description text, devpost_url text, demo_url text, github_url text, devpost_canonical_url text)
          )
-         INSERT INTO repos (name, description, devpost_url, demo_url, github_url)
-         SELECT name, description, devpost_url, demo_url, github_url FROM incoming
+         INSERT INTO repos (name, description, devpost_url, demo_url, github_url, devpost_canonical_url)
+         SELECT name, description, devpost_url, demo_url, github_url, devpost_canonical_url FROM incoming
          ON CONFLICT (devpost_url) WHERE devpost_url IS NOT NULL DO UPDATE
            SET name = EXCLUDED.name,
                description = EXCLUDED.description,
                demo_url = EXCLUDED.demo_url,
                github_url = COALESCE(EXCLUDED.github_url, repos.github_url),
+               devpost_canonical_url = COALESCE(EXCLUDED.devpost_canonical_url, repos.devpost_canonical_url),
                updated_at = now()
            WHERE repos.is_test_account = false
          RETURNING id, devpost_url, (xmax = 0) AS was_insert`,
@@ -112,6 +129,7 @@ export async function confirmImport(
               devpost_url: repo.url,
               demo_url: repo.demoUrl,
               github_url: repo.githubUrl,
+              devpost_canonical_url: identities.get(repo.url as string) ?? null,
             })),
           ),
         ],
@@ -769,6 +787,7 @@ interface RepoRow {
   devpost_url: string | null;
   demo_url: string | null;
   source: "devpost" | "native";
+  presentation_timing_preference: string;
 }
 
 interface RepoMember {
@@ -1110,7 +1129,7 @@ async function attachMembersAndPrizes(
   });
 }
 
-const REPO_SELECT = `SELECT id, name, description, github_url, devpost_url, demo_url, source FROM repos`;
+const REPO_SELECT = `SELECT id, name, description, github_url, devpost_url, demo_url, source, presentation_timing_preference FROM repos`;
 
 /** PROJECTS_READ: repos with members, prizes, and mapped challenges. */
 export async function listRepos(fixtureMarker = false): Promise<RepoWithExtras[]> {
@@ -1209,9 +1228,7 @@ export async function myProjects(userId: number): Promise<RepoWithExtras[]> {
   const fixtureMarker = userRows[0]?.is_test_account === true;
   const { rows } = await pool.query(
     `SELECT r.id, r.name, r.description, r.github_url, r.devpost_url, r.demo_url, r.source,
-            COALESCE((SELECT g.presentation_timing_preference
-                        FROM planned_work_groups g
-                       WHERE g.linked_repo_id = r.id), 'no_preference') AS presentation_timing_preference
+            r.presentation_timing_preference
      FROM repos r
      WHERE r.is_test_account = $2 AND r.id IN (
        -- H19/H20: a project the caller was merely invited to (status='invited')
@@ -2035,7 +2052,7 @@ async function insertNativeRepo(
   const { rows } = await client.query(
     `INSERT INTO repos (name, description, github_url, demo_url, source, created_by, is_test_account)
      VALUES ($1, $2, $3, $4, 'native', $5, $6)
-     RETURNING id, name, description, github_url, devpost_url, demo_url, source`,
+     RETURNING id, name, description, github_url, devpost_url, demo_url, source, presentation_timing_preference`,
     [input.name, input.description, input.githubUrl, input.demoUrl, createdBy, fixtureMarker],
   );
   return rows[0];
@@ -2117,6 +2134,7 @@ export interface UpdateRepoPatch {
   githubUrl?: string | null;
   demoUrl?: string | null;
   devpostUrl?: string | null;
+  presentationTimingPreference?: string;
 }
 
 /**
@@ -2133,6 +2151,16 @@ async function applyRepoUpdate(
   const existing = await client.query(`${REPO_SELECT} WHERE id = $1 FOR UPDATE`, [repoId]);
   const before = existing.rows[0] as RepoRow | undefined;
   if (!before) throw new NotFoundError(`Repo ${repoId} not found`);
+  if (
+    patch.presentationTimingPreference !== undefined &&
+    patch.presentationTimingPreference !== before.presentation_timing_preference
+  ) {
+    const generated = await client.query(`SELECT 1 FROM queue_entries WHERE repo_id = $1 LIMIT 1`, [
+      repoId,
+    ]);
+    if (generated.rows[0])
+      throw new ConflictError("Presentation timing cannot be changed after queues are generated");
+  }
 
   const next = {
     name: patch.name ?? before.name,
@@ -2140,12 +2168,23 @@ async function applyRepoUpdate(
     github_url: patch.githubUrl === undefined ? before.github_url : patch.githubUrl,
     demo_url: patch.demoUrl === undefined ? before.demo_url : patch.demoUrl,
     devpost_url: patch.devpostUrl === undefined ? before.devpost_url : patch.devpostUrl,
+    presentation_timing_preference:
+      patch.presentationTimingPreference ?? before.presentation_timing_preference,
   };
   const { rows } = await client.query(
-    `UPDATE repos SET name = $2, description = $3, github_url = $4, demo_url = $5, devpost_url=$6
+    `UPDATE repos SET name = $2, description = $3, github_url = $4, demo_url = $5, devpost_url=$6, presentation_timing_preference=$7,
+      devpost_canonical_url = CASE WHEN devpost_url IS DISTINCT FROM $6 THEN NULL ELSE devpost_canonical_url END
       WHERE id = $1
-      RETURNING id, name, description, github_url, devpost_url, demo_url, source`,
-    [repoId, next.name, next.description, next.github_url, next.demo_url, next.devpost_url],
+      RETURNING id, name, description, github_url, devpost_url, demo_url, source, presentation_timing_preference`,
+    [
+      repoId,
+      next.name,
+      next.description,
+      next.github_url,
+      next.demo_url,
+      next.devpost_url,
+      next.presentation_timing_preference,
+    ],
   );
   return { before, after: rows[0] as RepoRow };
 }
@@ -2157,6 +2196,7 @@ function repoAuditFields(repo: RepoRow) {
     githubUrl: repo.github_url,
     demoUrl: repo.demo_url,
     devpostUrl: repo.devpost_url,
+    presentationTimingPreference: repo.presentation_timing_preference,
   };
 }
 

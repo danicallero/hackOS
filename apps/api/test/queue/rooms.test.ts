@@ -551,7 +551,7 @@ describe("enqueue a challenge (H29 admin)", () => {
     ]);
   });
 
-  it("uses linked work-group early, middle and late preferences on first generation", async () => {
+  it("uses project early, middle and late preferences on first generation", async () => {
     const challengeId = await createChallenge({ devpostTags: ["Timing"] });
     const { repoId: late } = await createRepoWithTeam();
     const { repoId: middle } = await createRepoWithTeam();
@@ -562,9 +562,8 @@ describe("enqueue a challenge (H29 admin)", () => {
       [late, middle, early, "Timing"],
     );
     await pool.query(
-      `INSERT INTO planned_work_groups (name, created_by, linked_repo_id, presentation_timing_preference)
-       VALUES ('late', $1, $2, 'late'), ('middle', $1, $3, 'middle'), ('early', $1, $4, 'early')`,
-      [adminId, late, middle, early],
+      `UPDATE repos SET presentation_timing_preference = CASE id WHEN $1 THEN 'late' WHEN $2 THEN 'middle' ELSE 'early' END WHERE id=ANY($3::int[])`,
+      [late, middle, [late, middle, early]],
     );
 
     const generated = await app.inject({
@@ -598,11 +597,9 @@ describe("enqueue a challenge (H29 admin)", () => {
       `INSERT INTO queue_entries (challenge_id, repo_id, status, position) VALUES ($1, $2, 'waiting', 1)`,
       [challengeId, existing],
     );
-    await pool.query(
-      `INSERT INTO planned_work_groups (name, created_by, linked_repo_id, presentation_timing_preference)
-       VALUES ('early', $1, $2, 'early')`,
-      [adminId, early],
-    );
+    await pool.query(`UPDATE repos SET presentation_timing_preference='early' WHERE id=$1`, [
+      early,
+    ]);
 
     const generated = await app.inject({
       method: "POST",
@@ -620,7 +617,7 @@ describe("enqueue a challenge (H29 admin)", () => {
     ]);
   });
 
-  it("uses each linked preference once in a shared queue while keeping one visible repo entry", async () => {
+  it("uses each project preference once in a shared queue while keeping one visible repo entry", async () => {
     const { challengeIds } = await createEnterpriseChallenges(2);
     const [firstChallengeId, secondChallengeId] = challengeIds;
     const queueGroupId = await mergeChallengesIntoOneGroup(challengeIds);
@@ -636,9 +633,8 @@ describe("enqueue a challenge (H29 admin)", () => {
       [late, early],
     );
     await pool.query(
-      `INSERT INTO planned_work_groups (name, created_by, linked_repo_id, presentation_timing_preference)
-       VALUES ('late', $1, $2, 'late'), ('early', $1, $3, 'early')`,
-      [adminId, late, early],
+      `UPDATE repos SET presentation_timing_preference=CASE id WHEN $1 THEN 'late' ELSE 'early' END WHERE id=ANY($2::int[])`,
+      [late, [late, early]],
     );
 
     const generated = await app.inject({
