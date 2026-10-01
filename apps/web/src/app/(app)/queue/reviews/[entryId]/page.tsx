@@ -91,6 +91,7 @@ export default function ReviewDetailPage() {
         await toast.promise(
           saveReviewFromOverview(detail.entryId, { scores: answers, notes, submit }),
           {
+            compactTitle: t("saveReview"),
             loading: { title: submit ? t("submitReview") : t("saveReview") },
             success: { title: submit ? t("reviewSubmitted") : t("evaluationUpdated") },
             error: { title: t("couldNotSaveReview") },
@@ -111,6 +112,7 @@ export default function ReviewDetailPage() {
     setSending(true);
     try {
       await toast.promise(messageReviewTeam(detail.entryId, message.trim()), {
+        compactTitle: t("toastMessageTeam"),
         loading: { title: t("sending") },
         success: ({ recipients }) => ({
           title: t("teamMessageSent", { count: recipients }),

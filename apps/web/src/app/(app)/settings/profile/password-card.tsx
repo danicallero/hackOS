@@ -65,7 +65,7 @@ export function PasswordCard() {
     }
 
     form.reset();
-    toast.success(t("passwordChanged"));
+    toast.success(t("passwordChanged"), { compactTitle: t("toastChangePassword") });
   }
 
   return (

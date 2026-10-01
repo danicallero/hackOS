@@ -79,7 +79,10 @@ export default function MyProjectPage() {
         );
       }
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : t("couldNotLoadProject"));
+      toast.error(
+        error instanceof ApiError ? error.message : t("couldNotLoadProject"),
+        t("projectLabel"),
+      );
     } finally {
       setLoading(false);
     }
@@ -172,7 +175,10 @@ function CreateWorkGroup({ onCreated }: { onCreated: () => Promise<void> }) {
       setOpen(false);
       await onCreated();
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : t("couldNotCreateWorkGroup"));
+      toast.error(
+        error instanceof ApiError ? error.message : t("couldNotCreateWorkGroup"),
+        t("toastCreateProject"),
+      );
     } finally {
       setSaving(false);
     }
@@ -326,7 +332,10 @@ function PendingInvitesCard({
       else await declineProjectInvite(repoId, crypto.randomUUID());
       await onChanged();
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : t("couldNotLoadProject"));
+      toast.error(
+        error instanceof ApiError ? error.message : t("couldNotLoadProject"),
+        t("toastReplyInvite"),
+      );
     } finally {
       setBusy(null);
     }

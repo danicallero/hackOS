@@ -114,9 +114,12 @@ function ProfileForm({ me, intolerances }: { me: Me; intolerances: Intolerance[]
         foodIntoleranceNotes: values.foodIntoleranceNotes || null,
       });
       await refresh();
-      toast.success(t("profileUpdated"));
+      toast.success(t("profileUpdated"), { compactTitle: t("toastSaveProfile") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveProfile"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveProfile"),
+        t("toastSaveProfile"),
+      );
     }
   }
 

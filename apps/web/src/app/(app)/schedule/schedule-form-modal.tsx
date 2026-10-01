@@ -239,7 +239,10 @@ export function ScheduleFormModal({
       });
       setTranslations((prev) => ({ ...prev, ...result }));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotTranslate"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotTranslate"),
+        t("toastTranslate"),
+      );
     } finally {
       setTranslating(false);
     }
@@ -260,7 +263,10 @@ export function ScheduleFormModal({
         await logisticsApi.saveScheduleTranslations(result.id, translations);
       }
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveScheduleItem"),
+        t("toastSaveActivity"),
+      );
     } finally {
       setPending(false);
     }
@@ -614,8 +620,9 @@ function PendingOwnersField({
       const r = await logisticsApi.scheduleOwnerCandidates(query);
       return r.users.filter((u) => !ownerIds.has(u.id));
     } catch (err) {
-      if (err instanceof ApiError && err.status === 403) toast.error(t("needScheduleManageSearch"));
-      else toast.error(t("searchFailed"));
+      if (err instanceof ApiError && err.status === 403)
+        toast.error(t("needScheduleManageSearch"), t("toastFindUsers"));
+      else toast.error(t("searchFailed"), t("toastFindUsers"));
       return [];
     }
   }
@@ -725,8 +732,9 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
       const r = await logisticsApi.scheduleOwnerCandidates(query);
       return r.users.filter((u) => !ownerUserIds.has(u.id));
     } catch (err) {
-      if (err instanceof ApiError && err.status === 403) toast.error(t("needScheduleManageSearch"));
-      else toast.error(t("searchFailed"));
+      if (err instanceof ApiError && err.status === 403)
+        toast.error(t("needScheduleManageSearch"), t("toastFindUsers"));
+      else toast.error(t("searchFailed"), t("toastFindUsers"));
       return [];
     }
   }
@@ -738,9 +746,9 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
       setSelectedUserId("");
       setFreeTextName("");
       await loadOwners();
-      toast.success(t("userAffiliated"));
+      toast.success(t("userAffiliated"), { compactTitle: t("toastAddOwner") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotAddUser"));
+      toast.error(err instanceof ApiError ? err.message : t("couldNotAddUser"), t("toastAddOwner"));
     } finally {
       setBusy(false);
     }
@@ -751,9 +759,12 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
     try {
       await logisticsApi.removeScheduleOwner(scheduleId, ownerId);
       await loadOwners();
-      toast.success(t("affiliationRemoved"));
+      toast.success(t("affiliationRemoved"), { compactTitle: t("toastRemoveOwner") });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveUser"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotRemoveUser"),
+        t("toastRemoveOwner"),
+      );
     } finally {
       setBusy(false);
     }

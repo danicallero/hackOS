@@ -126,7 +126,10 @@ export function JudgingWindowTab() {
         setLoaded(true);
       })
       .catch((err) =>
-        toast.error(err instanceof ApiError ? err.message : t("couldNotLoadJudgingWindow")),
+        toast.error(
+          err instanceof ApiError ? err.message : t("couldNotLoadJudgingWindow"),
+          t("toastJudgingHours"),
+        ),
       );
   }, [reset, t]);
 
@@ -141,7 +144,10 @@ export function JudgingWindowTab() {
       setSaveState("saved");
     } catch (err) {
       setSaveState("error");
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveJudgingWindow"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveJudgingWindow"),
+        t("toastJudgingHours"),
+      );
     }
   }
 

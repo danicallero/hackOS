@@ -46,10 +46,13 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
         await api.post(`/api/roles/${roleId}/users/${user.id}`, {});
         added.push(roleId);
       }
-      toast.success(t("rolesAdded"));
+      toast.success(t("rolesAdded"), { compactTitle: t("toastAssignRole") });
       setRoleIdsToAdd([]);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotAddRole"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotAddRole"),
+        t("toastAssignRole"),
+      );
     } finally {
       if (added.length > 0) {
         setRoleIdsToAdd((current) => current.filter((roleId) => !added.includes(roleId)));
@@ -63,10 +66,13 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
     setBusy(true);
     try {
       await api.delete(`/api/roles/${roleId}/users/${user.id}`);
-      toast.success(t("roleRemoved"));
+      toast.success(t("roleRemoved"), { compactTitle: t("toastRemoveRole") });
       onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotRemoveRole"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotRemoveRole"),
+        t("toastRemoveRole"),
+      );
     } finally {
       setBusy(false);
     }
@@ -191,11 +197,14 @@ export function EnterpriseMemberships({
     setBusy(true);
     try {
       await api.post(`/api/enterprises/${enterpriseId}/members`, { userId });
-      toast.success(t("enterpriseAdded"));
+      toast.success(t("enterpriseAdded"), { compactTitle: t("toastJoinCompany") });
       loadMemberships();
       await onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotAddEnterprise"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotAddEnterprise"),
+        t("toastJoinCompany"),
+      );
     } finally {
       setBusy(false);
     }

@@ -81,7 +81,7 @@ export function RoomFormPanel({
     try {
       await onSubmit({ ...values, name, location: values.location.trim() });
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveRoom"));
+      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveRoom"), t("saveRoom"));
     } finally {
       setPending(false);
     }

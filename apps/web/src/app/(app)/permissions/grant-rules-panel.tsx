@@ -144,7 +144,7 @@ export function GrantRulesPanel({
       ),
     ]);
     if (rulesResult.status === "fulfilled") setRules(rulesResult.value);
-    else toast.error(t("couldNotLoadGrantRules"));
+    else toast.error(t("couldNotLoadGrantRules"), t("toastGrantRules"));
     // Enterprise scoping is optional; an actor without sponsor-facing access
     // simply doesn't get the enterprise picker populated.
     if (enterprisesResult.status === "fulfilled")
@@ -193,10 +193,10 @@ export function GrantRulesPanel({
     try {
       if (editing) {
         await api.patch<RoleGrantRule>(`/api/role-grant-rules/${editing.id}`, payload);
-        toast.success(t("grantRuleUpdated"));
+        toast.success(t("grantRuleUpdated"), { compactTitle: t("toastSaveGrantRule") });
       } else {
         await api.post<RoleGrantRule>("/api/role-grant-rules", payload);
-        toast.success(t("grantRuleCreated"));
+        toast.success(t("grantRuleCreated"), { compactTitle: t("toastSaveGrantRule") });
       }
       setModalOpen(false);
       await load();
@@ -205,6 +205,7 @@ export function GrantRulesPanel({
         err instanceof ApiError
           ? err.message
           : t(editing ? "couldNotSaveGrantRule" : "couldNotCreateGrantRule"),
+        t("toastSaveGrantRule"),
       );
     }
   }
@@ -216,7 +217,10 @@ export function GrantRulesPanel({
       await api.patch<RoleGrantRule>(`/api/role-grant-rules/${rule.id}`, { enabled });
     } catch (err) {
       setRules(before);
-      toast.error(err instanceof ApiError ? err.message : t("couldNotSaveGrantRule"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotSaveGrantRule"),
+        t("toastSaveGrantRule"),
+      );
     }
   }
 
@@ -225,11 +229,14 @@ export function GrantRulesPanel({
     setDeleting(true);
     try {
       await api.delete(`/api/role-grant-rules/${deleteTarget.id}`);
-      toast.success(t("grantRuleDeleted"));
+      toast.success(t("grantRuleDeleted"), { compactTitle: t("deleteGrantRule") });
       setDeleteTarget(null);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotDeleteGrantRule"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotDeleteGrantRule"),
+        t("deleteGrantRule"),
+      );
     } finally {
       setDeleting(false);
     }

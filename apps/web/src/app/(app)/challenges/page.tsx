@@ -115,7 +115,7 @@ export default function ChallengesPage() {
       setChallenges([]);
       const message = err instanceof ApiError ? err.message : t("couldNotLoadChallenges");
       setLoadError(message);
-      toast.error(message);
+      toast.error(message, t("challenges"));
     } finally {
       setLoading(false);
     }
@@ -136,10 +136,14 @@ export default function ChallengesPage() {
             : ids.length === 1
               ? t("hidCountOne", { count: ids.length })
               : t("hidCountOther", { count: ids.length }),
+          { compactTitle: t("toastChallengeVisibility") },
         );
         await load();
       } catch (err) {
-        toast.error(err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"));
+        toast.error(
+          err instanceof ApiError ? err.message : t("couldNotUpdateVisibility"),
+          t("toastChallengeVisibility"),
+        );
       } finally {
         setBulkBusy(false);
       }

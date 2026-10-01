@@ -60,7 +60,10 @@ export default function WorkGroupDetailPage() {
         }
       }
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : t("couldNotLoadProject"));
+      toast.error(
+        error instanceof ApiError ? error.message : t("couldNotLoadProject"),
+        t("projectLabel"),
+      );
       setLoadError(error instanceof ApiError ? error.message : t("couldNotLoadProject"));
       setGroup(null);
     } finally {
@@ -165,10 +168,14 @@ function Members({
     } catch (error) {
       if (error instanceof ApiError && (error.status === 404 || error.status === 403)) {
         showErrorToast(error, t("couldNotInvite"), {
+          compactTitle: t("toastSendInvite"),
           description: t("inviteAcceptedParticipantRequired"),
         });
       } else {
-        toast.error(error instanceof ApiError ? error.message : t("couldNotSendInvite"));
+        toast.error(
+          error instanceof ApiError ? error.message : t("couldNotSendInvite"),
+          t("toastSendInvite"),
+        );
       }
     } finally {
       setBusy(false);

@@ -102,7 +102,7 @@ export default function AnnouncementsPage() {
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements");
       setLoadError(message);
-      toast.error(message);
+      toast.error(message, t("announcements"));
     } finally {
       setLoading(false);
     }
@@ -124,7 +124,10 @@ export default function AnnouncementsPage() {
       const full = await notificationsApi.getAnnouncement(item.id);
       setEditingItem(full);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotLoadAnnouncements"),
+        t("announcements"),
+      );
     }
   }
 
@@ -133,13 +136,13 @@ export default function AnnouncementsPage() {
     setDeleteError(null);
     try {
       await notificationsApi.deleteAnnouncement(item.id);
-      toast.success(t("announcementDeleted"));
+      toast.success(t("announcementDeleted"), { compactTitle: t("deleteAnnouncementAria") });
       setDeleting(null);
       await load();
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("couldNotDeleteAnnouncement");
       setDeleteError(message);
-      toast.error(message);
+      toast.error(message, t("deleteAnnouncementAria"));
     } finally {
       setBusy(false);
     }
@@ -300,7 +303,7 @@ export default function AnnouncementsPage() {
         submitLabel={t("publishAnnouncement")}
         onSubmit={async (values: AnnouncementInput) => {
           await notificationsApi.createAnnouncement(values);
-          toast.success(t("announcementCreated"));
+          toast.success(t("announcementCreated"), { compactTitle: t("toastCreateAnnouncement") });
           setCreateOpen(false);
           await load();
         }}
@@ -319,7 +322,7 @@ export default function AnnouncementsPage() {
           submitLabel={t("saveChanges")}
           onSubmit={async (values: AnnouncementInput) => {
             await notificationsApi.updateAnnouncement(editingItem.id, values);
-            toast.success(t("announcementUpdated"));
+            toast.success(t("announcementUpdated"), { compactTitle: t("publishAnnouncement") });
             setEditingItem(null);
             await load();
           }}

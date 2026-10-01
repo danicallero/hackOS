@@ -117,11 +117,11 @@ export function ActivityExportPanel({ trigger }: { trigger?: ReactNode }) {
     setError(null);
     try {
       await downloadActivityExport(selectedIds.map(Number), mode, language);
-      toast.success(t("activityExportDownloaded"));
+      toast.success(t("activityExportDownloaded"), { compactTitle: t("toastExportActivities") });
     } catch (exportError) {
       const message = errorMessage(exportError, t("activityExportFailed"));
       setError(message);
-      toast.error(message);
+      toast.error(message, t("toastExportActivities"));
     } finally {
       setExporting(false);
     }

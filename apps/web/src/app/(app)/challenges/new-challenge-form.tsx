@@ -110,7 +110,7 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
   async function onSubmit(values: CreateValues) {
     const title = titleI18n.en.trim();
     if (!title) {
-      toast.error(t("englishTitleRequired"));
+      toast.error(t("englishTitleRequired"), t("toastCreateChallenge"));
       setStep("basics");
       return;
     }
@@ -133,10 +133,13 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
           : null,
         maxInWaitingArea: values.maxInWaitingArea ? Number(values.maxInWaitingArea) : null,
       });
-      toast.success(t("challengeCreated"));
+      toast.success(t("challengeCreated"), { compactTitle: t("toastCreateChallenge") });
       onCreated(created);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("checkBuilderFields"));
+      toast.error(
+        error instanceof Error ? error.message : t("checkBuilderFields"),
+        t("toastCreateChallenge"),
+      );
     }
   }
 

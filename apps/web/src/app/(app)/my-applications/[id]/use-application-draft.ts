@@ -75,7 +75,7 @@ export function useApplicationDraft({
       hasLocalEdits.current = false;
       setValues(saved.responses ?? {});
       setSaveState("saved");
-      toast.success(t("draftSaved"));
+      toast.success(t("draftSaved"), { compactTitle: t("saveDraft") });
     } catch (error) {
       if (latestAnswerRevision.current !== savedRevision) {
         setSaveState("unsaved");
@@ -84,7 +84,7 @@ export function useApplicationDraft({
       setSaveState("error");
       const message = error instanceof ApiError ? error.message : t("couldNotSaveDraft");
       setActionError({ action: "save", message });
-      toast.error(message);
+      toast.error(message, t("saveDraft"));
     } finally {
       setSaving(false);
     }

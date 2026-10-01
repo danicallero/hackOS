@@ -52,7 +52,10 @@ export function GrantRulesOverviewModal({
     try {
       setRules(await api.get<RoleGrantRule[]>("/api/role-grant-rules"));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadGrantRules"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotLoadGrantRules"),
+        t("toastGrantRules"),
+      );
     } finally {
       setLoading(false);
     }

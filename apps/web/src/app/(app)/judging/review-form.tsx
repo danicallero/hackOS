@@ -239,13 +239,16 @@ export function ReviewForm({
         setConflict(false);
         setVersions(await getReviewVersions(entry.id));
         if (announce && focusedField) await releaseField(focusedField);
-        if (announce) toast.success(submit ? t("reviewSubmitted") : t("draftSaved"));
+        if (announce)
+          toast.success(submit ? t("reviewSubmitted") : t("draftSaved"), {
+            compactTitle: t("saveReview"),
+          });
       } catch (err) {
         const fallback = t("couldNotSaveReview");
         const message = errorMessage(err, fallback);
         setSaveError(message);
         if (announce) {
-          toast.error(fallback, message === fallback ? undefined : { description: message });
+          toast.error(message, t("saveReview"));
         }
       } finally {
         savingRef.current = false;

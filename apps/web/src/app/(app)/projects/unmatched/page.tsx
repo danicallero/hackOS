@@ -90,7 +90,10 @@ export default function UnmatchedProjectsPage() {
       setPrizes(devpostPrizes.prizes);
       setChallenges(publicChallenges.items);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : t("couldNotLoadUnmatched"));
+      toast.error(
+        err instanceof ApiError ? err.message : t("couldNotLoadUnmatched"),
+        t("resolveImports"),
+      );
     } finally {
       setLoading(false);
     }
@@ -118,10 +121,13 @@ export default function UnmatchedProjectsPage() {
       setBusy(key);
       try {
         await action();
-        toast.success(success);
+        toast.success(success, { compactTitle: t("resolveImports") });
         await load();
       } catch (err) {
-        toast.error(err instanceof ApiError ? err.message : t("actionFailedGeneric"));
+        toast.error(
+          err instanceof ApiError ? err.message : t("actionFailedGeneric"),
+          t("resolveImports"),
+        );
       } finally {
         setBusy(null);
       }

@@ -64,13 +64,13 @@ export function FileUploadField({
     if (allowedTypes?.length && !allowedTypes.includes(ext)) {
       const message = t("fileTypeNotAllowed", { ext, allowed: allowedTypes.join(", ") });
       setUploadError(message);
-      toast.error(message);
+      toast.error(message, t("toastUploadFile"));
       return;
     }
     if (file.size > maxMb * 1024 * 1024) {
       const message = t("fileTooLarge", { maxMb });
       setUploadError(message);
-      toast.error(message);
+      toast.error(message, t("toastUploadFile"));
       return;
     }
     setUploading(true);
@@ -83,6 +83,7 @@ export function FileUploadField({
           body,
         ),
         {
+          compactTitle: t("toastUploadFile"),
           loading: { title: t("uploading"), description: file.name },
           success: { title: t("fileUploaded"), description: file.name },
           error: (error) => ({
